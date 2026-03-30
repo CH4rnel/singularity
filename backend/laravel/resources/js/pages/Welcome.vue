@@ -7,7 +7,18 @@ withDefaults(
     defineProps<{
         canRegister: boolean;
         yesOrNo: {
-            answer: string
+            answer: string;
+        },
+        cataas: {
+            cat: string;
+            catById: string;
+            catByIdSays: string;
+            catByTag: string;
+            catByTagSays: string;
+            catSays: string;
+            cats: Array<any>;
+            count: null;
+            tags: Array<string>
         }
     }>(),
     {
@@ -61,8 +72,13 @@ const dashboardUrl = computed(() => {
         <div
             class="w-full items-center justify-center opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0 text-white"
         >
-        <p>yesno.answer: {{ yesOrNo.answer }}</p>
-        <p><img src="storage/cat.jpg" alt="cat" /></p>
+            <p>yesno.answer: {{ yesOrNo.answer }}</p>
+            <p><img :src="cataas.cat" alt="cat" /></p>
+            <p><img :src="cataas.catSays" alt="cat" /></p>
+            <p><img :src="cataas.catById" alt="cat" /></p>
+            <p><img :src="cataas.catByIdSays" alt="cat" /></p>
+            <p><img :src="cataas.catByTag" alt="cat" /></p>
+            <p><img :src="cataas.catByTagSays" alt="cat" /></p>
         </div>
         <div class="hidden h-14.5 lg:block"></div>
     </div>
