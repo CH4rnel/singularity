@@ -1,4 +1,42 @@
 # README
+Addind daemon to systemd:
+
+/etc/systemd/system/singularity-daemon.service:
+```
+[Unit]
+Description=Singularity Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/sbcl --noinform --load /home/lain/random/singularity/services/lisp/daemon.lisp --eval "(singularity-daemon:main)"
+Restart=always
+RestartSec=3
+
+Environment=DAEMON_MODE=prod
+
+StandardOutput=journal
+StandardError=journal
+
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```
+sudo systemctl daemon-reload
+sudo systemctl start singularity-daemon.service
+sudo systemctl status singularity-daemon.service
+```
+Autoloading:
+```
+sudo systemctl enable singularity-daemon.service
+```
+Logs:
+```
+journalctl -u singularity-daemon.service -f
+```
 
 ## Project Status
 
