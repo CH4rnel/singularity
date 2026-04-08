@@ -1,4 +1,6 @@
 # README
+Token: https://pump.fun/coin/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump
+
 Addind daemon to systemd:
 
 /etc/systemd/system/singularity-daemon.service:
