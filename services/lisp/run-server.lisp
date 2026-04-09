@@ -1,37 +1,39 @@
 (load "/home/lain/quicklisp/setup.lisp")
+(ql:quickload :hunchentoot :silent t)
+(ql:quickload :sqlite :silent t)
 (load "modules/yggdrasil.lisp")
 (load "modules/ipfs.lisp")
 (load "modules/ollama.lisp")
-(ql:quickload :hunchentoot :silent t)
+(load "modules/sqlite.lisp")
+
+(defparameter *url-price* "https://api.dexscreener.com/latest/dex/tokens/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump")
+
+(defun get-json ()
+  (let ((r (make-string-output-stream)) (e (make-string-output-stream)))
+    (sb-ext:run-program "/usr/bin/curl" (list "-s" *url-price*) :output r :error e :wait t)
+    (get-output-stream-string r)))
+
+(defun extract-price (json which)
+  (let ((needle (cond ((eq which 'usd) "\"priceUsd\":\"") (t "\"priceNative\":\""))))
+    (let ((pos (search needle json)))
+      (when pos
+        (let ((start (+ pos (length needle))))
+          (let ((end (position #\" json :start start)))
+            (when end (subseq json start end))))))))
 
 (hunchentoot:define-easy-handler (status :uri "/status") ()
   (setf (hunchentoot:content-type*) "text/plain; charset=utf-8")
-  (format nil "~%((yggdrasil ~A)~% (ipfs ~A))~%"
-    (singularity.modules.yggdrasil:get-ipv6)
-    (singularity.modules.ipfs:get-peer-id)))
-
-(hunchentoot:define-easy-handler (generate :uri "/generate" :default-request-type :post) ()
-  (setf (hunchentoot:content-type*) "text/plain; charset=utf-8")
-  (let* ((prompt (hunchentoot:parameter "prompt"))
-         (model (or (hunchentoot:parameter "model") "deepseek-r1:1.5b")))
-    (handler-case
-        (progn
-          (when (or (null prompt) (string= prompt ""))
-            (return-from generate "~%((error empty prompt))~%"))
-          (let* ((text (singularity.modules.ollama:generate prompt model))
-                 (timestamp (format nil "~A" (get-universal-time)))
-                 (filename (format nil "response-~A.txt" timestamp))
-                 (ipfs-hash (singularity.modules.ipfs:add-file text filename)))
-            (format nil "~%((text ~A)~% (ipfs ~A))~%" text ipfs-hash)))
-      (error (e)
-        (format nil "~%((error ~A))~%" e)))))
-
-(hunchentoot:define-easy-handler (pins :uri "/pins") ()
-  (setf (hunchentoot:content-type*) "text/plain; charset=utf-8")
-  (singularity.modules.ipfs:list-pins))
+  (let ((json (get-json)))
+    (let ((price-usd (or (extract-price json 'usd) "N/A")))
+      (let ((price-sol (or (extract-price json 'native) "N/A")))
+        (format nil "~%((yggdrasil ~A)~% (ipfs ~A)~% (price-sol ~A)~% (price-usd ~A))~%"
+          (singularity.modules.yggdrasil:get-ipv6)
+          (singularity.modules.ipfs:get-peer-id)
+          price-sol
+          price-usd)))))
 
 (format t "~A [HTTP] Server starting...~%" (get-universal-time))
-(defvar *acceptor* (hunchentoot:start (make-instance 'hunchentoot:easy-acceptor :port 49406 :address "::")))
+(defvar *acceptor* (hunchentoot:start (make-instance (quote hunchentoot:easy-acceptor) :port 49406 :address "::")))
 (format t "~A [HTTP] Server started on port 49406~%" (get-universal-time))
 
 (loop (sleep 100))

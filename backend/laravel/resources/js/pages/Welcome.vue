@@ -9,6 +9,10 @@ withDefaults(
         yesOrNo: {
             answer: string;
         },
+        price: {
+            priceSol: string | null;
+            priceUsd: string | null;
+        } | null;
         cataas: {
             cat: string;
             catById: string;
@@ -23,6 +27,7 @@ withDefaults(
     }>(),
     {
         canRegister: true,
+        price: null,
     },
 );
 
@@ -72,6 +77,11 @@ const dashboardUrl = computed(() => {
         <div
             class="w-full items-center justify-center opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0 text-white"
         >
+            <div v-if="price" class="mb-4 p-4 bg-gray-800 rounded">
+                <p class="text-lg font-bold">CYBER Token</p>
+                <p>Price SOL: {{ price.priceSol }}</p>
+                <p>Price USD: {{ price.priceUsd }}</p>
+            </div>
             <p>yesno.answer: {{ yesOrNo.answer }}</p>
             <p><img :src="cataas.cat" alt="cat" /></p>
             <p><img :src="cataas.catSays" alt="cat" /></p>

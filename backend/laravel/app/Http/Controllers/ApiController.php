@@ -1,24 +1,27 @@
 <?php
+
 namespace App\Http\Controllers;
 
+use App\Services\CataasApiService;
+use App\Services\CyberPriceService;
+use App\Services\YesNoApiService;
+use Illuminate\Support\Arr;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
-use App\Services\YesNoApiService;
-use App\Services\CataasApiService;
-use Illuminate\Support\Arr;
 
-class ApiController extends Controller 
+class ApiController extends Controller
 {
-
-    public function index(YesNoApiService $yesNo, CataasApiService $cataas)
+    public function index(YesNoApiService $yesNo, CataasApiService $cataas, CyberPriceService $cyber)
     {
         $cats = $cataas->cats();
         $yesOrNo = $yesNo->get();
         $tags = $cataas->tags();
+        $price = $cyber->get();
 
-        return Inertia::render("Welcome", [
+        return Inertia::render('Welcome', [
             'canRegister' => Features::enabled(Features::registration()),
             'yesOrNo' => $yesOrNo,
+            'price' => $price,
             'cataas' => [
                 'cat' => $cataas->cat(),
                 'catSays' => $cataas->catSays($yesOrNo->answer),
@@ -29,7 +32,7 @@ class ApiController extends Controller
                 'cats' => $cats,
                 'count' => $cataas->count(),
                 'tags' => $tags,
-            ]
+            ],
         ]);
     }
 }
