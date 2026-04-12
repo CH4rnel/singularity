@@ -4,6 +4,12 @@
 - Telegram channel: https://t.me/cyberia_network
 - Telegram chat: https://t.me/cyberia_network_chat
 
+# Network config
+network name: cyberia
+URL RPC: http://195.166.164.94:8545
+Chain ID: 49406
+Token: CYBER
+
 # Singularity
 
 Unified backend for integrating and interacting with multiple public APIs.

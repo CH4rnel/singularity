@@ -104,8 +104,53 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start - start receiving TG\n"
         "/set_wallet <address> - set your wallet\n"
         "/stop - stop receiving\n"
-        "/balance - check balance"
+        "/balance - check balance\n"
+        "/github <username> <address> - link GitHub for GITHUB token airdrop\n"
+        "/website - project website"
     )
+
+
+async def website_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("https://cyberia-temple.github.io")
+
+
+async def github_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            "Usage: /github <github_username> <wallet_address>\n"
+            "Example: /github octocat 0x1234...abcd\n\n"
+            "Star https://github.com/cyberia-temple/singularity and "
+            "follow https://github.com/cyberia-temple to earn GITHUB tokens!"
+        )
+        return
+
+    github_username = args[0].strip().lstrip("@").lower()
+    address = args[1].strip()
+
+    if not is_valid_eth_address(address):
+        await update.message.reply_text("Invalid wallet address. Expected 0x...")
+        return
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO github_wallets (github_username, wallet_address)
+                    VALUES (:user, :wallet)
+                    ON CONFLICT(github_username) DO UPDATE SET wallet_address = :wallet
+                """),
+                {"user": github_username, "wallet": address},
+            )
+            conn.commit()
+
+        await update.message.reply_text(
+            f"Linked GitHub @{github_username} -> {address[:6]}...{address[-4:]}\n\n"
+            f"Now star the repo and follow the org to receive GITHUB tokens!"
+        )
+    except Exception as e:
+        logger.error(f"Error in github command: {e}")
+        await update.message.reply_text("Error saving. Try again.")
 
 
 async def set_wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -225,6 +270,7 @@ def run_dispatcher():
     application.add_handler(CommandHandler("set_wallet", set_wallet_command))
     application.add_handler(CommandHandler("stop", stop_command))
     application.add_handler(CommandHandler("balance", balance_command))
+    application.add_handler(CommandHandler("website", website_command))
 
     application.add_error_handler(error_handler)
 
