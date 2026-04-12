@@ -3,6 +3,7 @@
 - X/Twitter: https://x.com/cyberia_chain
 - Telegram channel: https://t.me/cyberia_network
 - Telegram chat: https://t.me/cyberia_network_chat
+- CYBER.sol CA: E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump
 
 # Network config
 network name: cyberia
