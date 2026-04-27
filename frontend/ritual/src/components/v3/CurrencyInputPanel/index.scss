@@ -1,0 +1,71 @@
+@use 'styles/variables' as *;
+@use 'styles/breakpoints' as *;
+
+.v3-currency-input-panel {
+  position: relative;
+}
+
+.v3-currency-input-lock-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: $secondary1;
+  border-radius: 12px;
+  opacity: 0.9;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  & small {
+    margin-top: 8px;
+  }
+}
+
+.v3-currency-input-usd-value {
+  max-width: 50%;
+  display: flex;
+  margin-left: 8px;
+  & small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    text-align: right;
+  }
+}
+
+.swapBox {
+  padding: 16px;
+  z-index: 1;
+  position: relative;
+  text-align: left;
+  & > p {
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+  & > div {
+    display: flex;
+    align-items: center;
+    & .inputWrapper {
+      flex: 1;
+      position: relative;
+      padding-left: 8px;
+      & input {
+        color: #fff;
+      }
+    }
+    & .maxWrapper {
+      border-radius: 5px; 
+      border: solid 1px #448aff;
+      padding: 0px 6px;
+      line-height: 1.2;
+      cursor: pointer;
+      & small {
+        color: $primary;
+        font-size: 10px;
+      }
+    }
+  }
+}

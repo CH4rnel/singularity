@@ -31,6 +31,9 @@ contract CyberBridge is Ownable {
 
     uint64 public lockNonce;
 
+    /// @notice Fee rate in basis points (100 = 1%).
+    uint256 public feeBps = 100;
+
     // --- Events ---
 
     /// @notice Emitted when a user locks native CYBER to bridge to Solana.
@@ -119,16 +122,34 @@ contract CyberBridge is Ownable {
     }
 
     /// @notice Burn wCYBER.sol to redeem original CYBER.sol on Solana.
-    /// @param amount           Amount to burn (18 decimals on EVM side).
+    ///         A fee (feeBps basis points) is transferred to the contract owner;
+    ///         the remainder is burned and the relayer unlocks that net amount on Solana.
+    /// @param amount           Total amount of wCYBER.sol (18 decimals).
     /// @param solanaRecipient  32-byte Solana pubkey to receive unlocked CYBER.sol.
     function redeemCyberSol(uint256 amount, bytes32 solanaRecipient) external {
         require(amount > 0, "Bridge: zero amount");
         require(solanaRecipient != bytes32(0), "Bridge: zero recipient");
 
+        uint256 fee = (amount * feeBps) / 10000;
+        uint256 netAmount = amount - fee;
+
+        // Burn the full amount from the user
         wrappedCyberSol.burn(msg.sender, amount);
 
+        if (fee > 0) {
+            // Mint the fee portion to the contract owner
+            wrappedCyberSol.mint(owner(), fee);
+        }
+
         uint64 nonce = lockNonce++;
-        emit RedeemCyberSol(msg.sender, amount, solanaRecipient, nonce);
+        emit RedeemCyberSol(msg.sender, netAmount, solanaRecipient, nonce);
+    }
+
+    /// @notice Update the bridge fee rate.
+    /// @param _feeBps New fee in basis points (e.g. 100 = 1%). Max 1000 (10%).
+    function setFeeBps(uint256 _feeBps) external onlyOwner {
+        require(_feeBps <= 1000, "Bridge: fee too high");
+        feeBps = _feeBps;
     }
 
     function rescueERC20(

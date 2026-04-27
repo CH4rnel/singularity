@@ -58,8 +58,9 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('wallets/evm/detach', [WalletAttachController::class, 'detachEvm'])->name('wallets.evm.detach');
     Route::delete('wallets/solana/detach', [WalletAttachController::class, 'detachSolana'])->name('wallets.solana.detach');
 
-    // Bridge
-    Route::post('bridge/submit', [BridgeController::class, 'submit'])->name('bridge.submit');
 });
+
+// Bridge (public — no auth required, controller handles optional user)
+Route::post('bridge/submit', [BridgeController::class, 'submit'])->name('bridge.submit');
 
 require __DIR__.'/settings.php';

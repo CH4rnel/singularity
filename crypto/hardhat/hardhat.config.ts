@@ -13,16 +13,43 @@ export default defineConfig({
   solidity: {
     profiles: {
       default: {
-        version: "0.8.19",
+        compilers: [
+          { version: "0.8.19" },
+          {
+            version: "0.6.6",
+            settings: {
+              optimizer: { enabled: true, runs: 200 },
+            },
+          },
+          {
+            version: "0.5.16",
+            settings: {
+              optimizer: { enabled: true, runs: 200 },
+            },
+          },
+        ],
       },
       production: {
-        version: "0.8.19",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
+        compilers: [
+          {
+            version: "0.8.19",
+            settings: {
+              optimizer: { enabled: true, runs: 200 },
+            },
           },
-        },
+          {
+            version: "0.6.6",
+            settings: {
+              optimizer: { enabled: true, runs: 200 },
+            },
+          },
+          {
+            version: "0.5.16",
+            settings: {
+              optimizer: { enabled: true, runs: 200 },
+            },
+          },
+        ],
       },
     },
   },

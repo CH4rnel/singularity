@@ -1,0 +1,89 @@
+{
+  "v4": false,
+  "v3": true,
+  "v2": false,
+  "rpc": "https://rpc.public.zkevm-test.net",
+  "blockExplorer": "https://testnet-zkevm.polygonscan.com",
+  "networkName": "Polygon zkEVM Testnet",
+  "chainId": 1442,
+  "nativeCurrencyImage": "/zkevm.png",
+  "nativeCurrency": {
+    "name": "Ether",
+    "symbol": "ETH",
+    "decimals": 18
+  },
+  "bridge": {
+    "available": true
+  },
+  "swap": {
+    "available": true,
+    "bestTrade": false,
+    "proMode": false,
+    "limitOrder": false,
+    "liquidityHub": false,
+    "crossChain": false
+  },
+  "pools": {
+    "available": true
+  },
+  "farm": {
+    "quickswap": false,
+    "merkl": false,
+    "available": false
+  },
+  "lair": {
+    "available": false,
+    "oldLair": false,
+    "newLair": false,
+    "syrup": false
+  },
+  "convert": {
+    "available": false
+  },
+  "predictions": {
+    "available": false
+  },
+  "analytics": {
+    "liquidityHub": false,
+    "available": false
+  },
+  "lending": {
+    "available": false
+  },
+  "migrate": {
+    "available": false
+  },
+  "gamingHub": {
+    "available": false
+  },
+  "leaderboard": {
+    "available": false
+  },
+  "safe": {
+    "available": false
+  },
+  "perps": {
+    "available": false
+  },
+  "hydra": {
+    "available": false
+  },
+  "perpsV2": {
+    "available": false
+  },
+  "steer": {
+    "available": false
+  },
+  "dappos": {
+    "available": false
+  },
+  "ichi": {
+    "available": false
+  },
+  "defiedge": {
+    "available": false
+  },
+  "lpLock": {
+    "available": false
+  }
+}

@@ -16,7 +16,7 @@ import { useWalletAuth } from '@/composables/useWalletAuth';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useBridge } from '@/composables/useBridge';
 import { dashboard } from '@/routes';
-import { set } from '@vueuse/core';
+
 
 type BridgeHistoryItem = {
     id: number;
@@ -262,8 +262,9 @@ const handleBridgeSubmit = async () => {
         }
 
         bridgeAmount.value = '';
-        refreshBalances();
         router.reload();
+        // Allow chain state to settle, then refresh on-chain balances
+        setTimeout(() => refreshBalances(), 3000);
     } catch (err) {
         feedbackError.value =
             err instanceof Error ? err.message : 'Bridge transaction failed';
@@ -272,7 +273,7 @@ const handleBridgeSubmit = async () => {
     }
 };
 
-// --- EVM wallet: login or attach ---
+// --- EVM wallet: connect (client-side only) or attach (if authenticated) ---
 const handleEvmConnect = async () => {
     feedbackError.value = null;
     feedbackSuccess.value = null;
@@ -291,26 +292,15 @@ const handleEvmConnect = async () => {
                 feedbackSuccess.value = 'EVM wallet attached';
                 router.reload();
             }
-        } else {
-            const { nonce } = await walletAuth.generateNonce(address);
-            const message = `Sign this message to authenticate with your wallet. Nonce: ${nonce}`;
-            const signature = await evmWallet.signMessage(message);
-
-            if (signature) {
-                const response = await walletAuth.verifySignature(
-                    address,
-                    signature,
-                );
-                router.post('/login/web3', { token: response.token });
-            }
         }
+        // Unauthenticated: wallet is already connected client-side, nothing else needed
     } catch (err) {
         feedbackError.value =
             err instanceof Error ? err.message : 'EVM wallet operation failed';
     }
 };
 
-// --- Solana wallet: login or attach ---
+// --- Solana wallet: connect (client-side only) or attach (if authenticated) ---
 const handleSolanaConnect = async () => {
     feedbackError.value = null;
     feedbackSuccess.value = null;
@@ -329,19 +319,8 @@ const handleSolanaConnect = async () => {
                 feedbackSuccess.value = 'Solana wallet attached';
                 router.reload();
             }
-        } else {
-            const { nonce } = await walletAuth.generateSolanaNonce(address);
-            const message = `Sign this message to authenticate with your wallet. Nonce: ${nonce}`;
-            const signature = await solanaWallet.signMessage(message);
-
-            if (signature) {
-                const response = await walletAuth.verifySolanaSignature(
-                    address,
-                    signature,
-                );
-                router.post('/login/web3', { token: response.token });
-            }
         }
+        // Unauthenticated: wallet is already connected client-side, nothing else needed
     } catch (err) {
         feedbackError.value =
             err instanceof Error
@@ -460,7 +439,7 @@ const statusColor = (status: string) => {
             <!-- Feedback messages -->
             <div
                 v-if="feedbackError"
-                class="w-full rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400"
+                class="w-full rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400 overflow-hidden"
             >
                 {{ feedbackError }}
             </div>
@@ -475,7 +454,7 @@ const statusColor = (status: string) => {
             <div class="flex w-full gap-3">
                 <!-- EVM Wallet -->
                 <div
-                    class="flex flex-1 items-center gap-2 rounded-lg border border-[#19140035] p-3 dark:border-[#3E3E3A]"
+                    class="flex flex-1 flex-wrap items-center gap-2 rounded-lg border border-[#19140035] p-3 dark:border-[#3E3E3A]"
                 >
                     <Wallet
                         class="h-4 w-4 shrink-0 text-[#1b1b18] dark:text-[#EDEDEC]"
@@ -484,7 +463,7 @@ const statusColor = (status: string) => {
                         <p
                             class="text-xs font-medium text-[#1b1b18] dark:text-[#EDEDEC]"
                         >
-                            EVM
+                            Metamask (EVM)
                         </p>
                         <p
                             v-if="
@@ -507,19 +486,22 @@ const statusColor = (status: string) => {
                         </p>
                     </div>
                     <button
-                        v-if="
-                            isAuthenticated &&
-                            user?.wallet_address &&
-                            evmWallet.isConnected.value
-                        "
+                        v-if="evmWallet.isConnected.value && isAuthenticated && user?.wallet_address"
                         class="shrink-0 rounded p-1 text-red-500 hover:bg-red-500/10"
                         @click="handleEvmDetach"
                     >
                         <Unplug class="h-3 w-3" />
                     </button>
                     <button
+                        v-else-if="evmWallet.isConnected.value"
+                        class="shrink-0 rounded p-1 text-red-500 hover:bg-red-500/10"
+                        @click="evmWallet.disconnect()"
+                    >
+                        <Unplug class="h-3 w-3" />
+                    </button>
+                    <button
                         v-if="!evmWallet.isConnected.value"
-                        class="shrink-0 rounded border border-[#19140035] px-2 py-1 text-xs text-[#1b1b18] hover:border-[#1915014a] disabled:opacity-50 dark:border-[#3E3E3A] dark:text-[#EDEDEC]"
+                        class="w-full shrink-0 rounded border border-[#19140035] px-2 py-1 text-xs text-[#1b1b18] hover:border-[#1915014a] disabled:opacity-50 sm:w-auto dark:border-[#3E3E3A] dark:text-[#EDEDEC]"
                         :disabled="evmWallet.isConnecting.value"
                         @click="handleEvmConnect"
                     >
@@ -533,7 +515,7 @@ const statusColor = (status: string) => {
 
                 <!-- Solana Wallet -->
                 <div
-                    class="flex flex-1 items-center gap-2 rounded-lg border border-[#19140035] p-3 dark:border-[#3E3E3A]"
+                    class="flex flex-1 flex-wrap items-center gap-2 rounded-lg border border-[#19140035] p-3 dark:border-[#3E3E3A]"
                 >
                     <Wallet
                         class="h-4 w-4 shrink-0 text-[#1b1b18] dark:text-[#EDEDEC]"
@@ -542,7 +524,7 @@ const statusColor = (status: string) => {
                         <p
                             class="text-xs font-medium text-[#1b1b18] dark:text-[#EDEDEC]"
                         >
-                            Solana
+                            Phantom (Solana)
                         </p>
                         <p
                             v-if="
@@ -565,19 +547,22 @@ const statusColor = (status: string) => {
                         </p>
                     </div>
                     <button
-                        v-if="
-                            isAuthenticated &&
-                            user?.solana_wallet_address &&
-                            solanaWallet.isConnected.value
-                        "
+                        v-if="solanaWallet.isConnected.value && isAuthenticated && user?.solana_wallet_address"
                         class="shrink-0 rounded p-1 text-red-500 hover:bg-red-500/10"
                         @click="handleSolanaDetach"
                     >
                         <Unplug class="h-3 w-3" />
                     </button>
                     <button
+                        v-else-if="solanaWallet.isConnected.value"
+                        class="shrink-0 rounded p-1 text-red-500 hover:bg-red-500/10"
+                        @click="solanaWallet.disconnect()"
+                    >
+                        <Unplug class="h-3 w-3" />
+                    </button>
+                    <button
                         v-if="!solanaWallet.isConnected.value"
-                        class="shrink-0 rounded border border-[#19140035] px-2 py-1 text-xs text-[#1b1b18] hover:border-[#1915014a] disabled:opacity-50 dark:border-[#3E3E3A] dark:text-[#EDEDEC]"
+                        class="w-full shrink-0 rounded border border-[#19140035] px-2 py-1 text-xs text-[#1b1b18] hover:border-[#1915014a] disabled:opacity-50 sm:w-auto dark:border-[#3E3E3A] dark:text-[#EDEDEC]"
                         :disabled="solanaWallet.isConnecting.value"
                         @click="handleSolanaConnect"
                     >
@@ -675,7 +660,8 @@ const statusColor = (status: string) => {
 
                 <!-- Destination -->
                 <div
-                    class="rounded-t-lg bg-[#f5f5f4] p-4 dark:bg-[#1a1a1a]"
+                    class="bg-[#f5f5f4] p-4 dark:bg-[#1a1a1a]"
+                    :class="bridgeFee ? 'rounded-t-lg' : 'rounded-lg'"
                 >
                     <div class="mb-2 flex items-center justify-between">
                         <span

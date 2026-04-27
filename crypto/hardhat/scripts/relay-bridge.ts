@@ -16,7 +16,7 @@ if (!DEPLOYER_PK) { console.error("DEPLOYER_PK not set"); process.exit(1); }
 const pk = (DEPLOYER_PK.startsWith("0x") ? DEPLOYER_PK : `0x${DEPLOYER_PK}`) as `0x${string}`;
 const account = privateKeyToAccount(pk);
 
-const BRIDGE_ADDRESS = "0x9dA2781a1b71950EEd25C84Dc26AB683AE63aa39" as const;
+const BRIDGE_ADDRESS = "0x0065AA95709ABB09dA8293F469FA9713f79544Eb" as const;
 
 const RPC_URL = process.env.CYBERIA_RPC_URL || "http://polygon-edge:8545";
 

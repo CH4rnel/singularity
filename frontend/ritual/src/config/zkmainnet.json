@@ -1,0 +1,114 @@
+{
+  "v4": false,
+  "v3": true,
+  "v2": false,
+  "rpc": "https://zkevm-rpc.com",
+  "blockExplorer": "https://zkevm.polygonscan.com",
+  "bridgeUrl": "https://portal.polygon.technology/bridge",
+  "networkName": "Polygon zkEVM",
+  "aprAPINetwork": "zkevm",
+  "chainId": 1101,
+  "isMainnet": true,
+  "visible": true,
+  "nativeCurrencyImage": "/polygon-zkevm/image.png",
+  "nativeCurrency": {
+    "name": "Ether",
+    "symbol": "ETH",
+    "decimals": 18
+  },
+  "bridge": {
+    "available": true,
+    "bridgeCoverImg": "/bridge/polygon_cover_img.webp",
+    "supportedChains": [
+      "/bridge/eth.svg",
+      "/bridge/polygon.svg",
+      "/bridge/zkevm.webp"
+    ],
+    "isBigCoverImg": true
+  },
+  "swap": {
+    "available": true,
+    "bestTrade": true,
+    "proMode": false,
+    "limitOrder": false,
+    "liquidityHub": true,
+    "crossChain": false
+  },
+  "pools": {
+    "available": true
+  },
+  "farm": {
+    "quickswap": true,
+    "merkl": true,
+    "available": true
+  },
+  "lair": {
+    "available": false,
+    "oldLair": false,
+    "newLair": false,
+    "syrup": false
+  },
+  "convert": {
+    "available": false
+  },
+  "predictions": {
+    "available": false
+  },
+  "analytics": {
+    "liquidityHub": false,
+    "available": true
+  },
+  "lending": {
+    "available": false
+  },
+  "migrate": {
+    "available": false
+  },
+  "gamingHub": {
+    "available": false
+  },
+  "leaderboard": {
+    "available": true
+  },
+  "safe": {
+    "available": true
+  },
+  "perps": {
+    "available": true
+  },
+  "hydra": {
+    "available": true
+  },
+  "perpsV2": {
+    "available": false
+  },
+  "bos": {
+    "available": true
+  },
+  "gamma": {
+    "available": true
+  },
+  "unipilot": {
+    "available": false
+  },
+  "bonds": {
+    "available": false
+  },
+  "steer": {
+    "available": false
+  },
+  "dappos": {
+    "available": false
+  },
+  "ichi": {
+    "available": true
+  },
+  "defiedge": {
+    "available": false
+  },
+  "lpLock": {
+    "available": false
+  },
+  "maxChunks": 70,
+  "blocksPerFetch": 25
+}

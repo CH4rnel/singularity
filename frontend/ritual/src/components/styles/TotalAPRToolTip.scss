@@ -1,0 +1,16 @@
+@use 'styles/variables' as *;
+
+.totalAPRTooltipWrapper {
+  background-color: $bgPalette;
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 16px 20px;
+  width: 230px;
+  & > div {
+    display: flex;
+    justify-content: space-between;
+    &:last-child {
+      border-top: 1px solid $grey34;
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "Ritual Token List",
+  "timestamp": "2026-04-23T12:00:00.000Z",
+  "version": {
+    "major": 1,
+    "minor": 0,
+    "patch": 0
+  },
+  "tags": {},
+  "logoURI": "/logo_circle.png",
+  "keywords": [
+    "Ritual",
+    "Cyberia",
+    "default"
+  ],
+  "tokens": [
+    {
+      "name": "Wrapped CYBER",
+      "address": "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9",
+      "symbol": "WCYBER",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/cyberia.png"
+    },
+    {
+      "name": "Ash",
+      "address": "0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86",
+      "symbol": "ASH",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/logo_circle.png"
+    }
+  ]
+}

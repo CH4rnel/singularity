@@ -2,3 +2,9 @@ x_bot.log
 x_cookies.json
 bot.log
 github_bot.log
+
+bin/
+lib/
+lib64
+pyvenv.cfg
+__pycache__/

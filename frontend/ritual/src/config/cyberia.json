@@ -1,0 +1,108 @@
+{
+  "v4": false,
+  "v3": false,
+  "v2": true,
+  "rpc": "https://rpc.cyberia.church",
+  "blockExplorer": "https://explorer.cyberia.church",
+  "chainId": 49406,
+  "isMainnet": true,
+  "visible": true,
+  "networkName": "Cyberia",
+  "nativeCurrencyImage": "/cyberia.png",
+  "nativeCurrency": {
+    "name": "Cyber",
+    "symbol": "CYBER",
+    "decimals": 18
+  },
+  "bridge": {
+    "available": false
+  },
+  "swap": {
+    "available": true,
+    "bestTrade": false,
+    "proMode": false,
+    "limitOrder": false,
+    "liquidityHub": false,
+    "twapOrder": false,
+    "crossChain": false
+  },
+  "pools": {
+    "available": true
+  },
+  "farm": {
+    "quickswap": false,
+    "merkl": false,
+    "available": false
+  },
+  "lair": {
+    "available": false,
+    "oldLair": false,
+    "newLair": false,
+    "syrup": false
+  },
+  "convert": {
+    "available": false
+  },
+  "predictions": {
+    "available": false
+  },
+  "analytics": {
+    "liquidityHub": false,
+    "available": false
+  },
+  "lending": {
+    "available": false
+  },
+  "migrate": {
+    "available": false
+  },
+  "gamingHub": {
+    "available": false
+  },
+  "leaderboard": {
+    "available": false
+  },
+  "safe": {
+    "available": false
+  },
+  "perps": {
+    "available": false
+  },
+  "hydra": {
+    "available": false
+  },
+  "perpsV2": {
+    "available": false
+  },
+  "bos": {
+    "available": false
+  },
+  "gamma": {
+    "available": false
+  },
+  "unipilot": {
+    "available": false
+  },
+  "defiedge": {
+    "available": false
+  },
+  "bonds": {
+    "available": false
+  },
+  "steer": {
+    "available": false
+  },
+  "dappos": {
+    "available": false
+  },
+  "ichi": {
+    "available": false
+  },
+  "lpLock": {
+    "available": false
+  },
+  "poolInitCodeHash": "0x927cde9487326a3f34732433099d68bf5a9880cdbb4316b3b80960c66e094580",
+  "maxHops": 3,
+  "maxChunks": 200,
+  "blocksPerFetch": 30
+}

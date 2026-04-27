@@ -1,0 +1,76 @@
+@use "styles/variables" as *;
+
+.footer {
+  border-top: 1px solid $divider;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  z-index: 10;
+}
+
+.footerContainer {
+  max-width: 1296px;
+  width: 100%;
+  overflow: hidden;
+  padding: 0 24px;
+  & img {
+    height: 20px;
+    &.logo {
+      height: 40px;
+    }
+  }
+}
+
+.socialMenuWrapper {
+  padding: 40px 0;
+}
+
+.copyrightWrapper {
+  border-top: 1px solid $divider;
+  display: flex;
+  padding: 16px 0;
+  align-items: center;
+  justify-content: space-between;
+  color: #6880a3;
+}
+
+.copyright-mobile {
+  // justify-content: space-between;
+  margin-bottom: 64px;
+  border-bottom: 1px solid $divider;
+}
+
+.fake-community-container {
+  min-width: 680px;
+  background-color: transparent;
+}
+
+a.footer-link {
+  color: $textSecondary;
+  text-decoration: none;
+}
+
+.newsletterInput {
+  border: 1px solid $divider;
+  border-radius: 8px;
+  max-width: 300px;
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0px 16px 4px 16px;
+  height: 40px;
+  & input {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    outline: none;
+    color: $textPrimary;
+    flex: 1;
+  }
+  & button {
+    // background: linear-gradient(90deg, $blue9 0%, $purple3 100%);
+    & span {
+      font-size: 11px;
+    }
+  }
+}

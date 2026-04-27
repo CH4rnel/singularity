@@ -32,8 +32,8 @@ const BRIDGE_HOT_WALLET = new PublicKey('E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu
 
 // EVM (Cyberia) — only CYBER.sol (bridged token)
 // TODO: Update after redeploying EVM contracts with deploy-all.ts
-const BRIDGE_ADDRESS = '0x9dA2781a1b71950EEd25C84Dc26AB683AE63aa39';
-const CYBERSOL_ERC20_ADDRESS = '0x609Ac374eAF2561b3d52B78D0B6ec41CECD365D9';
+const BRIDGE_ADDRESS = '0x0065AA95709ABB09dA8293F469FA9713f79544Eb';
+const CYBERSOL_ERC20_ADDRESS = '0x98e3bC45CE5275caBB752F8e3c632C1d0fa0BF7E';
 
 const ERC20_ABI = [
     'function balanceOf(address) view returns (uint256)',

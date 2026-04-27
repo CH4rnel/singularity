@@ -1,0 +1,40 @@
+@use 'styles/variables' as *;
+@use 'styles/breakpoints' as *;
+
+.customSelectorWrapper {
+  display: flex;
+  align-items: center;
+  // border: 2px solid $divider;
+  border-radius: 8px;
+}
+
+.customSelectorSeparator {
+  width: 1px;
+  background-color: $textSecondary;
+}
+
+.customSelector {
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  & small {
+    color: $textSecondary;
+  }
+  @include media('screen', '<tablet') {
+    padding: 0 8px;
+  }
+  @include media('screen', '<phone') {
+    & small {
+      font-size: 12px;
+    }
+  }
+}
+
+.selectedCustomSelector {
+  background-color: #282d3d;
+  border-radius: 8px;
+  & small {
+    color: rgba(255, 255, 255, 0.8);
+  }
+}

@@ -1,0 +1,56 @@
+name: Release
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  create_release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build the bundle
+        run: npm run build
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.ACCOUNT_ID }}
+          projectName: ${{ secrets.PROJECT_NAME }}
+          directory: './build'
+          # Optional: Enable this if you want to have GitHub Deployments triggered
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+  telegram_message:
+    name: Send telegram message on push to master and dev branches
+    if: ${{ github.event_name == 'push' && (github.ref_name == 'master' || github.ref_name == 'dev2')}}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    needs: create_release
+    steps:
+    - name: send telegram message on push
+      uses: appleboy/telegram-action@master
+      with:
+        to: ${{ secrets.TELEGRAM_TO }}
+        token: ${{ secrets.TELEGRAM_TOKEN }}
+        message: |
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Author: ${{ github.actor }}
+          Commit message: ${{ github.event.commits[0].message }}
+          See changes: https://github.com/${{ github.repository }}/commit/${{github.sha}}      

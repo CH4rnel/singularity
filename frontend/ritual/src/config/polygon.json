@@ -1,0 +1,115 @@
+{
+  "v4": false,
+  "v3": true,
+  "v2": true,
+  "rpc": "https://polygon-rpc.com/",
+  "blockExplorer": "https://polygonscan.com",
+  "bridgeUrl": "https://portal.polygon.technology/bridge",
+  "chainId": 137,
+  "isMainnet": true,
+  "visible": true,
+  "networkName": "Polygon",
+  "nativeCurrencyImage": "/polygon/polygon_new.webp",
+  "nativeCurrency": {
+    "name": "Matic Token",
+    "symbol": "MATIC",
+    "decimals": 18
+  },
+  "bridge": {
+    "available": true,
+    "bridgeCoverImg": "/bridge/polygon_cover_img.webp",
+    "supportedChains": [
+      "/bridge/eth.svg",
+      "/bridge/polygon.svg",
+      "/bridge/zkevm.webp"
+    ],
+    "isBigCoverImg": true
+  },
+  "swap": {
+    "available": true,
+    "bestTrade": true,
+    "proMode": true,
+    "limitOrder": true,
+    "liquidityHub": true,
+    "twapOrder": true,
+    "crossChain": true
+  },
+  "pools": {
+    "available": true
+  },
+  "farm": {
+    "quickswap": true,
+    "merkl": true,
+    "available": true
+  },
+  "lair": {
+    "available": true,
+    "oldLair": true,
+    "newLair": true,
+    "syrup": true
+  },
+  "convert": {
+    "available": true
+  },
+  "predictions": {
+    "available": true
+  },
+  "analytics": {
+    "liquidityHub": true,
+    "available": true
+  },
+  "lending": {
+    "available": false
+  },
+  "migrate": {
+    "available": true
+  },
+  "gamingHub": {
+    "available": true
+  },
+  "leaderboard": {
+    "available": true
+  },
+  "safe": {
+    "available": false
+  },
+  "perps": {
+    "available": false
+  },
+  "hydra": {
+    "available": false
+  },
+  "perpsV2": {
+    "available": true
+  },
+  "bos": {
+    "available": false
+  },
+  "gamma": {
+    "available": true
+  },
+  "unipilot": {
+    "available": false
+  },
+  "defiedge": {
+    "available": true
+  },
+  "bonds": {
+    "available": true
+  },
+  "steer": {
+    "available": true
+  },
+  "dappos": {
+    "available": true
+  },
+  "ichi": {
+    "available": true
+  },
+  "lpLock": {
+    "available": true
+  },
+  "maxHops": 3,
+  "maxChunks": 400,
+  "blocksPerFetch": 30
+}
