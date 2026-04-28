@@ -386,7 +386,7 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
                     fontSize: 22,
                     fontWeight: 700,
                     color: '#fff',
-                    letterSpacing: '0.04em'
+                    letterSpacing: '0.04em',
                   }}
                 >
                   Ritual

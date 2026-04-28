@@ -44,8 +44,10 @@ const WrapPage: React.FC = () => {
   const buttonLabel = useMemo(() => {
     if (!account) return t('connectWallet');
     if (inputError) return inputError;
-    if (wrapType === WrapType.WRAPPING) return t('wrappingMATIC', { symbol: native?.symbol ?? '' });
-    if (wrapType === WrapType.UNWRAPPING) return t('unwrappingMATIC', { symbol: wrapped?.symbol ?? '' });
+    if (wrapType === WrapType.WRAPPING)
+      return t('wrappingMATIC', { symbol: native?.symbol ?? '' });
+    if (wrapType === WrapType.UNWRAPPING)
+      return t('unwrappingMATIC', { symbol: wrapped?.symbol ?? '' });
     return isWrap
       ? t('wrapMATIC', { symbol: native?.symbol ?? '' })
       : t('unwrapMATIC', { symbol: wrapped?.symbol ?? '' });
@@ -86,15 +88,30 @@ const WrapPage: React.FC = () => {
           border: '1px solid #242938',
         }}
       >
-        <Box mb={2} display='flex' alignItems='center' justifyContent='space-between'>
+        <Box
+          mb={2}
+          display='flex'
+          alignItems='center'
+          justifyContent='space-between'
+        >
           <h5 style={{ margin: 0, color: '#fff' }}>{t('wrap')}</h5>
           <small className='text-secondary'>
-            {isWrap ? `${native?.symbol} → ${wrapped?.symbol}` : `${wrapped?.symbol} → ${native?.symbol}`}
+            {isWrap
+              ? `${native?.symbol} → ${wrapped?.symbol}`
+              : `${wrapped?.symbol} → ${native?.symbol}`}
           </small>
         </Box>
 
-        <Box className='swapBox' sx={{ padding: 2, borderRadius: 12, bgcolor: '#12131a' }}>
-          <Box display='flex' justifyContent='space-between' alignItems='center' mb={1}>
+        <Box
+          className='swapBox'
+          sx={{ padding: 2, borderRadius: 12, bgcolor: '#12131a' }}
+        >
+          <Box
+            display='flex'
+            justifyContent='space-between'
+            alignItems='center'
+            mb={1}
+          >
             <small className='text-secondary'>{t('from')}</small>
             <Box display='flex' alignItems='center' gridGap={8}>
               <small className='text-secondary'>
@@ -111,7 +128,11 @@ const WrapPage: React.FC = () => {
               )}
             </Box>
           </Box>
-          <Box display='flex' justifyContent='space-between' alignItems='center'>
+          <Box
+            display='flex'
+            justifyContent='space-between'
+            alignItems='center'
+          >
             <NumericalInput
               value={typedValue}
               onUserInput={setTypedValue}
@@ -146,12 +167,21 @@ const WrapPage: React.FC = () => {
           </Button>
         </Box>
 
-        <Box className='swapBox' sx={{ padding: 2, borderRadius: 12, bgcolor: '#12131a' }}>
+        <Box
+          className='swapBox'
+          sx={{ padding: 2, borderRadius: 12, bgcolor: '#12131a' }}
+        >
           <Box mb={1}>
             <small className='text-secondary'>{t('to')}</small>
           </Box>
-          <Box display='flex' justifyContent='space-between' alignItems='center'>
-            <Box style={{ fontSize: 24, color: '#fff' }}>{typedValue || '0.0'}</Box>
+          <Box
+            display='flex'
+            justifyContent='space-between'
+            alignItems='center'
+          >
+            <Box style={{ fontSize: 24, color: '#fff' }}>
+              {typedValue || '0.0'}
+            </Box>
             <Box
               sx={{
                 minWidth: 80,

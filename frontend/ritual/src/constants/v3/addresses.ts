@@ -1576,10 +1576,7 @@ export const V2_BASES_TO_CHECK_TRADES_AGAINST: {
     DD[ChainId.DOGECHAIN],
   ],
   [ChainId.ZKEVM]: [],
-  [ChainId.CYBERIA]: [
-    WETH[ChainId.CYBERIA],
-    NEW_QUICK[ChainId.CYBERIA],
-  ],
+  [ChainId.CYBERIA]: [WETH[ChainId.CYBERIA], NEW_QUICK[ChainId.CYBERIA]],
 };
 
 // Some tokens can only be swapped via certain pairs, so we override the list of bases that are considered for these tokens.

@@ -1,5 +1,5 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import ReactGA from 'react-ga';
 import { isMobile } from 'react-device-detect';
 import App from './App';
@@ -30,13 +30,18 @@ window.addEventListener('error', (error) => {
   });
 });
 
-ReactDOM.render(
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error('Root element not found');
+}
+
+createRoot(rootElement).render(
   <React.StrictMode>
     <HashRouter>
       <App />
     </HashRouter>
   </React.StrictMode>,
-  document.getElementById('root'),
 );
 
 if (process.env.REACT_APP_SERVICE_WORKER !== 'false') {

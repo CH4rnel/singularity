@@ -34,24 +34,27 @@ services:
     links:
       - db:database
     environment:
-        ETHEREUM_JSONRPC_HTTP_URL: https://rpc.cyberia.church
-        ETHEREUM_JSONRPC_TRACE_URL: https://rpc.cyberia.church
-        ETHEREUM_JSONRPC_WS_URL: wss://rpc.cyberia.church
+        ETHEREUM_JSONRPC_HTTP_URL: http://host.docker.internal:8545/
+        ETHEREUM_JSONRPC_TRACE_URL: http://host.docker.internal:8545/
+        ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545/
         CHAIN_ID: '49406'
-        COIN: CYBER
-        COIN_NAME: CYBER
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
-  # nft_media_handler:
-  #   depends_on:
-  #     - backend
-  #   extends:
-  #     file: ./services/nft_media_handler.yml
-  #     service: nft_media_handler
-  #   build:
-  #     context: ..
-  #     dockerfile: ./docker/Dockerfile
-  #     args:
-  #       RELEASE_VERSION: 9.0.2
+  nft_media_handler:
+    depends_on:
+      - backend
+    extends:
+      file: ./services/nft_media_handler.yml
+      service: nft_media_handler
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+      args:
+        RELEASE_VERSION: 9.0.2
 
   visualizer:
     extends:
@@ -107,3 +110,35 @@ services:
     extends:
       file: ./services/nginx.yml
       service: proxy
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - /root/certbot/conf:/etc/letsencrypt
+      - /root/certbot/www:/var/www/certbot
+
+  polygon-edge:
+    image: 0xpolygon/polygon-edge:latest
+    container_name: polygon-edge
+    restart: unless-stopped
+    user: "0:0"
+    volumes:
+      - /root/polygon-edge-validators:/data
+      - /root/id/docker/polygon-edge/genesis.json:/genesis.json:ro
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "1337:1337"
+    environment:
+      - POLYGON_EDGE_DATA_DIR=/data
+    command: >
+      server
+      --data-dir=/data
+      --chain=/genesis.json
+      --jsonrpc=0.0.0.0:8545
+      --access-control-allow-origins=*
+      --json-rpc-block-range-limit=1000
+      --block-gas-target=0x1C9C380
+      --libp2p=0.0.0.0:1337
+      --seal
+      --price-limit=1000000000

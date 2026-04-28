@@ -12,7 +12,6 @@ interface MobileNavItemProps {
 const MobileNavItem: React.FC<MobileNavItemProps> = ({ navItem }) => {
   const [isActive, setIsActive] = useState(false);
 
-
   return (
     <>
       {navItem.items ? (

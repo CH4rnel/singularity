@@ -86,7 +86,8 @@ const projectId = process.env.REACT_APP_WALLETCONNECT_PROJECT_ID ?? '';
 
 const metadata = {
   name: 'Ritual',
-  description: 'The sacrificial DEX on Cyberia. Every swap burns an offering — out of the fire rises Ash.',
+  description:
+    'The sacrificial DEX on Cyberia. Every swap burns an offering — out of the fire rises Ash.',
   url: 'https://ritual.cyberia.church',
   icons: ['/logo_circle.png'],
 };
