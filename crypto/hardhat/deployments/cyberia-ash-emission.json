@@ -1,0 +1,33 @@
+{
+  "chainId": 49406,
+  "chainName": "Cyberia",
+  "rpc": "https://rpc.cyberia.church",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "Ash": "0x992Fca0a89DD95afb17751f6CC233Adb9B089df5",
+  "MasterChef": "0xd540DEa828567160FFDe5e792ca359aDD1f6B03D",
+  "rewardPerBlock": "5057870370370370",
+  "rewardPerDayApprox": 437,
+  "startBlock": "6374644",
+  "pools": {
+    "lp": {
+      "pid": 1,
+      "lpToken": "0xB3b6d8f38beC836e5629848223f1848A324188f0",
+      "allocPoint": "80"
+    },
+    "ashSolo": {
+      "pid": 0,
+      "lpToken": "0x992Fca0a89DD95afb17751f6CC233Adb9B089df5",
+      "allocPoint": "20"
+    }
+  },
+  "totalAllocPoint": "100",
+  "timestamp": "2026-04-28T10:21:24.146Z",
+  "lpPair": {
+    "address": "0xB3b6d8f38beC836e5629848223f1848A324188f0",
+    "token0": "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9",
+    "token1": "0x992Fca0a89DD95afb17751f6CC233Adb9B089df5",
+    "reserve0": "50000000000000000",
+    "reserve1": "500000000000000000"
+  },
+  "timestamp_lp": "2026-04-28T10:22:40.787Z"
+}
