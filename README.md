@@ -49,10 +49,10 @@ composer run dev
 ## Public API
 
 PublicDrop Crypto API:
-curl https://publicdrop.in/APIv3/coins?page=1
+`curl https://publicdrop.in/APIv3/coins?page=1
 curl https://publicdrop.in/APIv3/details?sym=BTC
 curl https://publicdrop.in/APIv3/search?q=ethereum
-curl https://publicdrop.in/APIv3/status
+curl https://publicdrop.in/APIv3/status`
 
 CoinLore API:
 curl https://api.coinlore.net/api/tickers/
