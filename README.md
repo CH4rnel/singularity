@@ -50,35 +50,44 @@ composer run dev
 
 PublicDrop Crypto API:
 
-`curl https://publicdrop.in/APIv3/coins?page=1
+```
+curl https://publicdrop.in/APIv3/coins?page=1
 curl https://publicdrop.in/APIv3/details?sym=BTC
 curl https://publicdrop.in/APIv3/search?q=ethereum
-curl https://publicdrop.in/APIv3/status`
+curl https://publicdrop.in/APIv3/status
+```
 
 CoinLore API:
 
-`curl https://api.coinlore.net/api/tickers/
+```
+curl https://api.coinlore.net/api/tickers/
 curl https://api.coinlore.net/api/ticker/?id=90
-curl https://api.coinlore.net/api/global/`
+curl https://api.coinlore.net/api/global/
+```
 
 CoinGecko Public API:
 
-`curl https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd
+```
+curl https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd
 curl https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc
-curl https://api.coingecko.com/api/v3/global`
+curl https://api.coingecko.com/api/v3/global
+```
 
 Binance Public API:
 
-`curl https://api.binance.com/api/v3/ticker/price
+```
+curl https://api.binance.com/api/v3/ticker/price
 curl https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT
-curl https://api.binance.com/api/v3/depth?symbol=BTCUSDT`
+curl https://api.binance.com/api/v3/depth?symbol=BTCUSDT
+```
 
 Kraken Public API: 
 
-`curl https://api.kraken.com/0/public/Ticker?pair=XBTUSD
+```
+curl https://api.kraken.com/0/public/Ticker?pair=XBTUSD
 curl https://api.kraken.com/0/public/OHLC?pair=XBTUSD
-curl https://api.kraken.com/0/public/Assets`
-
+curl https://api.kraken.com/0/public/Assets
+```
 ---
 
 ## Daemon Service
