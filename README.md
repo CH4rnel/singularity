@@ -46,6 +46,12 @@ composer run dev
 ```
 ---
 
+## Daemon Service
+
+The Lisp daemon runs via systemd. See service configuration in README or `cli.sh`.
+
+---
+
 ## Public API
 
 PublicDrop Crypto API:
@@ -88,12 +94,6 @@ curl https://api.kraken.com/0/public/Ticker?pair=XBTUSD
 curl https://api.kraken.com/0/public/OHLC?pair=XBTUSD
 curl https://api.kraken.com/0/public/Assets
 ```
----
-
-## Daemon Service
-
-The Lisp daemon runs via systemd. See service configuration in README or `cli.sh`.
-
 ---
 
 ## License
