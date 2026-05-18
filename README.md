@@ -46,100 +46,33 @@ composer run dev
 ```
 ---
 
-## Public Key
+## Public API
 
-## CoinGecko API
+PublicDrop Crypto API:
+curl https://publicdrop.in/APIv3/coins?page=1
+curl https://publicdrop.in/APIv3/details?sym=BTC
+curl https://publicdrop.in/APIv3/search?q=ethereum
+curl https://publicdrop.in/APIv3/status
 
-This project uses the CoinGecko API for cryptocurrency market data.
+CoinLore API:
+curl https://api.coinlore.net/api/tickers/
+curl https://api.coinlore.net/api/ticker/?id=90
+curl https://api.coinlore.net/api/global/
 
-Documentation:
-https://www.coingecko.com/en/api
+CoinGecko Public API: 
+curl https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd
+curl https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc
+curl https://api.coingecko.com/api/v3/global
 
-Example request:
+Binance Public API: 
+curl https://api.binance.com/api/v3/ticker/price
+curl https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT
+curl https://api.binance.com/api/v3/depth?symbol=BTCUSDT
 
-```bash
-curl -X GET "https://api.coingecko.com/api/v3/ping"
-```
-
-Example response:
-
-```json
-{
-  "gecko_says": "(V3) To the Moon!"
-}
-```
-
-## PumpFunData API
-
-Documentation:
-https://pumpfundata.com/docs
-
-Example request:
-
-```bash
-curl -X GET "https://pumpfundata.com/api/endpoint" \
-  -H "Authorization: Bearer YOUR_API_KEY"
-```
-
-
-## CoinAPI Integration
-
-This project uses the CoinAPI Market Data API.
-
-Documentation:
-https://www.coinapi.io/products/market-data-api/docs
-
-### Example Request
-
-```bash
-curl -H "X-CoinAPI-Key: YOUR_API_KEY" \
-https://rest.coinapi.io/v1/exchangerate/BTC/USD
-```
-
-### Example Response
-
-```json
-{
-  "time": "2026-05-18T12:00:00.0000000Z",
-  "asset_id_base": "BTC",
-  "asset_id_quote": "USD",
-  "rate": 103421.12
-}
-```
-## 1inch API
-
-Website: https://1inch.com/
-
-Example request:
-
-```bash
-curl -X GET "https://api.1inch.dev/swap/v6.0/1/quote?src=ETH&dst=USDC&amount=1000000000000000000" \
-  -H "Authorization: Bearer YOUR_API_KEY"
-```
-
-Documentation:
-https://portal.1inch.dev/documentation/apis/swap/introduction
-
-## CoinAPI Setup
-
-1. Create `.env`
-
-```env
-COINAPI_KEY=your_api_key_here
-```
-
-2. Get API key from:
-https://www.coinapi.io/
-
-3. Example request:
-
-```js
-fetch("https://rest.coinapi.io/v1/exchangerate/BTC/USD", {
-  headers: {
-    "X-CoinAPI-Key": process.env.COINAPI_KEY
-  }
-});
-```
+Kraken Public API: 
+curl https://api.kraken.com/0/public/Ticker?pair=XBTUSD
+curl https://api.kraken.com/0/public/OHLC?pair=XBTUSD
+curl https://api.kraken.com/0/public/Assets
 
 ---
 
