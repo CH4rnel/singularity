@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [ApiController::class, 'index'])->name('home');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/lending', 'Lending')->name('lending');
+Route::inertia('/slots', 'Slots')->name('slots');
 Route::get('dao', [DaoController::class, 'index'])->name('dao.index');
 Route::get('dao/{dao}', [DaoController::class, 'show'])->name('dao.show');
 Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('proposals.show');

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
+use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\WalletAuthController;
 use Illuminate\Http\Request;
@@ -23,6 +24,13 @@ Route::prefix('solana-wallet')->group(function () {
 // Bridge (public)
 Route::get('bridge/{bridgeRequest}/status', [BridgeController::class, 'status']);
 Route::post('bridge/events', [BridgeEventController::class, 'store'])->middleware('throttle:60,1');
+
+// Slot machine ("одноручный бандит") — Solana-only, decoupled from bridge.
+Route::prefix('slots')->group(function () {
+    Route::get('pool', [SlotsController::class, 'pool']);
+    Route::post('spin/prepare', [SlotsController::class, 'prepare'])->middleware('throttle:6,1');
+    Route::post('spin/confirm', [SlotsController::class, 'confirm'])->middleware('throttle:30,1');
+});
 
 // Cyberia RPC proxy (avoids mixed content on HTTPS sites)
 Route::post('rpc/cyberia', function (Request $request) {

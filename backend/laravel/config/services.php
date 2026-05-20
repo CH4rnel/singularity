@@ -55,4 +55,26 @@ return [
         'solana_bridge_program' => env('BRIDGE_SOLANA_PROGRAM_ID'),
     ],
 
+    'slots' => [
+        'hot_wallet_address' => env('SLOT_HOT_WALLET_ADDRESS'),
+        'hot_wallet_keypair_path' => env('SLOT_HOT_WALLET_KEYPAIR_PATH'),
+        'cluster' => env('SLOT_CLUSTER', 'devnet'),
+        'rpc_url' => env('SLOT_RPC_URL') ?: (env('SLOT_CLUSTER', 'devnet') === 'mainnet'
+            ? 'https://api.mainnet-beta.solana.com'
+            : 'https://api.devnet.solana.com'),
+        'burn_bps' => env('SLOT_BURN_BPS', 200),
+        'house_edge_bps' => env('SLOT_HOUSE_EDGE_BPS', 400),
+        'jackpot_threshold_bps' => env('SLOT_JACKPOT_THRESHOLD_BPS', 10),
+        'max_single_win_bps' => env('SLOT_MAX_SINGLE_WIN_BPS', 2000),
+        'max_bet_usd' => env('SLOT_MAX_BET_USD', 50),
+        'metadata_ttl_hours' => env('SLOT_METADATA_TTL_HOURS', 24),
+        'prepare_ttl_minutes' => env('SLOT_PREPARE_TTL_MINUTES', 5),
+        // Pump.fun auto-whitelist (Phase 2).
+        'pumpfun_api_base' => env('SLOT_PUMPFUN_API_BASE', 'https://frontend-api-v3.pump.fun'),
+        'pumpfun_auto_enable' => env('SLOT_PUMPFUN_AUTO_ENABLE', true),
+        'pumpfun_min_mcap_usd' => env('SLOT_PUMPFUN_MIN_MCAP_USD', 10000),
+        'pumpfun_lazy_enabled' => env('SLOT_PUMPFUN_LAZY_ENABLED', true),
+        'pumpfun_bulk_top_n' => env('SLOT_PUMPFUN_BULK_TOP_N', 200),
+    ],
+
 ];
