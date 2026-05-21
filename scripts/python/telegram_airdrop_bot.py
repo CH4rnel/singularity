@@ -1252,6 +1252,115 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+ADMIN_USERNAME = "rtutin"
+
+
+async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/whois <address> — admin-only. Show the Telegram user(s) linked to a
+    wallet address, the chats they belong to, any GitHub link, and pending
+    rewards. Restricted to @rtutin."""
+    user = update.effective_user
+    if user is None or (user.username or "").lower() != ADMIN_USERNAME:
+        logger.warning(
+            "Unauthorized /whois attempt by user_id=%s username=%s",
+            user.id if user else None,
+            user.username if user else None,
+        )
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text("Usage: /whois <wallet_address>")
+        return
+
+    address = args[0].strip()
+    if not is_valid_eth_address(address):
+        await update.message.reply_text("Invalid address. Expected 0x followed by 40 hex characters.")
+        return
+
+    address_lower = address.lower()
+
+    with engine.connect() as conn:
+        wallets = conn.execute(
+            text("SELECT user_id, address, created_at FROM tg_wallets WHERE LOWER(address) = :a"),
+            {"a": address_lower},
+        ).fetchall()
+
+        github_links = []
+        try:
+            github_links = conn.execute(
+                text("SELECT github_username FROM github_wallets WHERE LOWER(wallet_address) = :a"),
+                {"a": address_lower},
+            ).fetchall()
+        except Exception as e:
+            logger.debug(f"whois: github_wallets lookup failed: {e}")
+
+    if not wallets and not github_links:
+        await update.message.reply_text(f"No user is linked to {address}.")
+        return
+
+    lines = [f"Wallet: {address}"]
+
+    if github_links:
+        gh = ", ".join(f"@{row[0]}" for row in github_links)
+        lines.append(f"GitHub: {gh}")
+
+    for user_id, addr, created_at in wallets:
+        lines.append("")
+        lines.append(f"Telegram user_id: {user_id}")
+        lines.append(f"Linked at: {created_at}")
+
+        try:
+            tg_user = await context.bot.get_chat(user_id)
+            uname = f"@{tg_user.username}" if tg_user.username else "(no username)"
+            full_name = " ".join(
+                p for p in (tg_user.first_name, tg_user.last_name) if p
+            ) or "(no name)"
+            lines.append(f"Name: {full_name} {uname}")
+        except TelegramError as e:
+            lines.append(f"Name: (lookup failed: {e})")
+
+        with engine.connect() as conn:
+            chats = conn.execute(
+                text("""
+                    SELECT cm.chat_id, t.name, t.symbol, cm.first_seen, cm.last_seen
+                    FROM chat_members cm
+                    LEFT JOIN chat_tokens t ON t.chat_id = cm.chat_id
+                    WHERE cm.user_id = :u
+                    ORDER BY cm.last_seen DESC
+                """),
+                {"u": user_id},
+            ).fetchall()
+            pending = conn.execute(
+                text("""
+                    SELECT t.symbol, p.amount
+                    FROM pending_rewards p
+                    JOIN chat_tokens t ON t.chat_id = p.chat_id
+                    WHERE p.user_id = :u
+                      AND CAST(p.amount AS INTEGER) > 0
+                """),
+                {"u": user_id},
+            ).fetchall()
+
+        if chats:
+            lines.append(f"Chats ({len(chats)}):")
+            for chat_id, name, symbol, first_seen, last_seen in chats:
+                label = f"{name} ({symbol})" if name else "(no token)"
+                lines.append(
+                    f"  {chat_id} {label} — seen {first_seen}..{last_seen}"
+                )
+        else:
+            lines.append("Chats: none tracked")
+
+        if pending:
+            lines.append("Pending rewards:")
+            for symbol, amount_str in pending:
+                human = int(amount_str) / 10**18
+                lines.append(f"  {human:g} {symbol}")
+
+    await update.message.reply_text("\n".join(lines))
+
+
 async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show this chat's reward token details and an explorer link."""
     chat = update.effective_chat
@@ -1416,6 +1525,7 @@ def run_dispatcher():
     application.add_handler(CommandHandler("create_token", create_token_command))
     application.add_handler(CommandHandler("set_rewards_interval", set_rewards_interval_command))
     application.add_handler(CommandHandler("reward_now", reward_now_command))
+    application.add_handler(CommandHandler("whois", whois_command))
 
     # Capture the "next message is the address" reply after a bare /set_wallet
     # in DMs. Restricted to private chats so the bot never hijacks ordinary
