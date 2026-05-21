@@ -1,0 +1,38 @@
+{
+  "chainId": 49406,
+  "chainName": "Cyberia",
+  "rpc": "https://rpc.cyberia.church",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "LendingComptroller": "0xe66aa9842dc74F1c10ede19cA20Ece6E08F1CC88",
+  "JumpRateModel": "0xb8Bbc65916ABd83B0264E886a24A57836D2bF42f",
+  "blocksPerYear": "15768000",
+  "closeFactorMantissa": "500000000000000000",
+  "liquidationIncentiveMantissa": "1080000000000000000",
+  "markets": {
+    "WCYBER": {
+      "address": "0x5ea7cFE8971cCbD521F0f9db6Da7E019dBe2Ab8d",
+      "underlying": "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9"
+    },
+    "ASH": {
+      "address": "0x6956c6feb62448ED059CC73BB3f461D97537D808",
+      "underlying": "0x992Fca0a89DD95afb17751f6CC233Adb9B089df5"
+    },
+    "CYBER": {
+      "address": "0x6AdD4E2Cf9Aab6D66B611a64C73270f18323C709",
+      "underlying": "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA"
+    },
+    "ASH_legacy": {
+      "address": "0x663a7ED665D97c2dC3B43947bC842Ee60d6fb43D",
+      "underlying": "0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86"
+    },
+    "CYBER_legacy": {
+      "address": "0xF697D741BF663878571d9F36E0FE3E100A7Faa52",
+      "underlying": "0x0D1FF5C35DB9c399f2385C8E5C166622e7b12086"
+    }
+  },
+  "timestamp": "2026-05-21T11:40:28.279Z",
+  "QuickswapPriceOracle": "0x8fEA279fb70D3D1B20a0E50cbC649c83C41Dc4D1",
+  "SimplePriceOracle_legacy": "0x8eA212E3D8Ea63738B3eCaD0dA5c1683f711F4af",
+  "LendingComptroller_legacy": "0xF1d1c79C535dBCf7F68784B3bCb91d9030A970e1",
+  "note": "Comptroller v2 with fixed liquidateCalculateSeizeShares (1e18 scale bug). Users must enterMarkets again for collateral to be counted."
+}

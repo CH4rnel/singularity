@@ -23,7 +23,6 @@ import { useActiveWeb3React } from 'hooks';
 import { useV3TokenAllowance } from './useTokenAllowance';
 import { calculateGasMargin } from 'utils';
 import { MergedZap } from 'state/zap/actions';
-import { useIsInfiniteApproval } from 'state/user/hooks';
 import { TransactionType } from 'models/enums';
 import { ChainId } from '@uniswap/sdk';
 
@@ -70,7 +69,6 @@ export function useApproveCallback(
 
   const tokenContract = useTokenContract(token?.address);
   const addTransaction = useTransactionAdder();
-  const [isInfiniteApproval] = useIsInfiniteApproval();
 
   const approve = useCallback(async (): Promise<void> => {
     if (approvalState !== ApprovalState.NOT_APPROVED) {
@@ -102,16 +100,12 @@ export function useApproveCallback(
       return;
     }
 
-    const approveAmount =
-      isInfiniteApproval || chainId === ChainId.SONEIUM
-        ? MaxUint256.toString()
-        : amountToApprove.quotient.toString();
-
+    // Always request unlimited approval. Falls back to exact-amount only if
+    // the token rejects MaxUint256.
     let useExact = false;
     const estimatedGas = await tokenContract.estimateGas
-      .approve(spender, approveAmount)
+      .approve(spender, MaxUint256.toString())
       .catch(() => {
-        // general fallback for tokens who restrict approval amounts
         useExact = true;
         return tokenContract.estimateGas.approve(
           spender,
@@ -122,9 +116,7 @@ export function useApproveCallback(
     return tokenContract
       .approve(
         spender,
-        useExact || (!isInfiniteApproval && chainId !== ChainId.SONEIUM)
-          ? amountToApprove.quotient.toString()
-          : approveAmount,
+        useExact ? amountToApprove.quotient.toString() : MaxUint256.toString(),
         {
           gasLimit: calculateGasMargin(estimatedGas),
         },
@@ -156,7 +148,6 @@ export function useApproveCallback(
     tokenContract,
     amountToApprove,
     spender,
-    isInfiniteApproval,
     addTransaction,
   ]);
 

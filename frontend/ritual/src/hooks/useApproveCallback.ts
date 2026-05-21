@@ -35,7 +35,6 @@ import {
 } from 'constants/v3/addresses';
 import { OptimalRate } from '@paraswap/sdk';
 import { ONE } from 'v3lib/utils';
-import { useIsInfiniteApproval } from 'state/user/hooks';
 import { useSingleCallResult } from 'state/multicall/v3/hooks';
 import { TransactionType } from 'models/enums';
 import { wrappedCurrency } from 'utils/wrappedCurrency';
@@ -106,8 +105,6 @@ export function useApproveCallback(
   const tokenContract = useTokenContract(token?.address);
   const addTransaction = useTransactionAdder();
 
-  const [isInfiniteApproval] = useIsInfiniteApproval();
-
   const approve = useCallback(async (): Promise<void> => {
     if (approvalState !== ApprovalState.NOT_APPROVED) {
       console.error('approve was called unnecessarily');
@@ -133,15 +130,13 @@ export function useApproveCallback(
       return;
     }
 
-    const approveAmount = isInfiniteApproval
-      ? MaxUint256.toString()
-      : amountToApprove.raw.toString();
-
+    // Always request unlimited approval so users don't get stuck re-approving
+    // every time they swap a different amount. Tokens that reject MaxUint256
+    // fall back to an exact-amount approve via the `useExact` branch below.
     let useExact = false;
     const estimatedGas = await tokenContract.estimateGas
-      .approve(spender, approveAmount)
+      .approve(spender, MaxUint256.toString())
       .catch(() => {
-        // general fallback for tokens who restrict approval amounts
         useExact = true;
         return tokenContract.estimateGas.approve(
           spender,
@@ -152,9 +147,7 @@ export function useApproveCallback(
     return tokenContract
       .approve(
         spender,
-        useExact || !isInfiniteApproval
-          ? amountToApprove.raw.toString()
-          : approveAmount,
+        useExact ? amountToApprove.raw.toString() : MaxUint256.toString(),
         {
           gasLimit: calculateGasMargin(estimatedGas),
         },
@@ -185,7 +178,6 @@ export function useApproveCallback(
     tokenContract,
     amountToApprove,
     spender,
-    isInfiniteApproval,
     addTransaction,
   ]);
 
@@ -327,7 +319,6 @@ export function useApproveCallbackV3(
 
   const tokenContract = useTokenContract(token?.address);
   const addTransaction = useTransactionAdder();
-  const [isInfiniteApproval] = useIsInfiniteApproval();
 
   const approve = useCallback(async (): Promise<void> => {
     if (approvalState !== ApprovalState.NOT_APPROVED) {
@@ -359,14 +350,12 @@ export function useApproveCallbackV3(
       return;
     }
 
-    const approveAmount = isInfiniteApproval
-      ? MaxUint256.toString()
-      : amountToApprove.quotient.toString();
+    // Always request unlimited approval; fall back to exact-amount only when
+    // the token rejects MaxUint256 (e.g. some legacy ERC20 implementations).
     let useExact = false;
     const estimatedGas = await tokenContract.estimateGas
-      .approve(spender, approveAmount)
+      .approve(spender, MaxUint256.toString())
       .catch(() => {
-        // general fallback for tokens who restrict approval amounts
         useExact = true;
         return tokenContract.estimateGas.approve(
           spender,
@@ -377,9 +366,7 @@ export function useApproveCallbackV3(
     return tokenContract
       .approve(
         spender,
-        useExact || !isInfiniteApproval
-          ? amountToApprove.quotient.toString()
-          : approveAmount,
+        useExact ? amountToApprove.quotient.toString() : MaxUint256.toString(),
         {
           gasLimit: isBonusRoute
             ? calculateGasMarginBonus(estimatedGas)
@@ -412,7 +399,6 @@ export function useApproveCallbackV3(
     tokenContract,
     amountToApprove,
     spender,
-    isInfiniteApproval,
     isBonusRoute,
     addTransaction,
   ]);
