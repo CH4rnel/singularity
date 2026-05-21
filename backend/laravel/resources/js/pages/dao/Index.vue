@@ -8,6 +8,7 @@ import {
 } from '@inertiajs/vue3';
 import { Edit, Plus, Trash2, Vote } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import Header from '@/components/Header.vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -116,30 +117,7 @@ defineOptions({
     <Head class="m-3" title="DAO" />
 
     <div class="min-h-screen bg-background text-foreground">
-        <header class="border-b">
-            <nav
-                class="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-4 text-sm"
-            >
-                <InertiaLink href="/" class="font-medium hover:underline"
-                    >Cyberia</InertiaLink
-                >
-                <InertiaLink href="/dao" class="font-medium hover:underline"
-                    >DAO</InertiaLink
-                >
-                <InertiaLink
-                    href="/market"
-                    class="text-muted-foreground hover:text-foreground"
-                >
-                    NFT Market
-                </InertiaLink>
-                <InertiaLink
-                    href="/lending"
-                    class="text-muted-foreground hover:text-foreground"
-                >
-                    Lending
-                </InertiaLink>
-            </nav>
-        </header>
+        <Header />
 
         <main class="mx-auto flex max-w-5xl flex-col space-y-6 px-4 py-8">
             <div class="flex items-center justify-between">

@@ -17,6 +17,7 @@ import {
     Wallet,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import Header from '@/components/Header.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import { Badge } from '@/components/ui/badge';
@@ -182,30 +183,7 @@ defineOptions({
     <Head :title="props.proposal.title" />
 
     <div class="min-h-screen bg-background text-foreground">
-        <header class="border-b">
-            <nav
-                class="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-4 text-sm"
-            >
-                <InertiaLink href="/" class="font-medium hover:underline"
-                    >Cyberia</InertiaLink
-                >
-                <InertiaLink href="/dao" class="font-medium hover:underline"
-                    >DAO</InertiaLink
-                >
-                <InertiaLink
-                    href="/market"
-                    class="text-muted-foreground hover:text-foreground"
-                >
-                    NFT Market
-                </InertiaLink>
-                <InertiaLink
-                    href="/lending"
-                    class="text-muted-foreground hover:text-foreground"
-                >
-                    Lending
-                </InertiaLink>
-            </nav>
-        </header>
+        <Header />
 
         <main class="mx-auto flex max-w-5xl flex-col space-y-6 px-4 py-8">
             <!-- Proposal header -->
@@ -257,10 +235,7 @@ defineOptions({
                                 <ThumbsUp class="h-4 w-4 text-green-500" /> For
                             </span>
                             <span class="text-muted-foreground">
-                                {{ formatPower(powerFor) }} tokens ({{
-                                    props.proposal.votes_for_count || 0
-                                }}
-                                votes)
+                                {{ formatPower(powerFor) }} tokens
                             </span>
                         </div>
                         <div
@@ -286,10 +261,7 @@ defineOptions({
                                 Against
                             </span>
                             <span class="text-muted-foreground">
-                                {{ formatPower(powerAgainst) }} tokens ({{
-                                    props.proposal.votes_against_count || 0
-                                }}
-                                votes)
+                                {{ formatPower(powerAgainst) }} tokens
                             </span>
                         </div>
                         <div

@@ -16,6 +16,7 @@ import {
     Vote,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import Header from '@/components/Header.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import { Badge } from '@/components/ui/badge';
@@ -112,6 +113,30 @@ function deleteProposal(proposal: Proposal) {
     }
 }
 
+function formatPower(power: string | undefined): string {
+    const value = parseFloat(power || '0');
+
+    if (value === 0) {
+        return '0';
+    }
+
+    if (value < 0.0001) {
+        return value.toExponential(2);
+    }
+
+    const truncated = Math.trunc(value * 10000) / 10000;
+
+    if (truncated < 1) {
+        return truncated.toString();
+    }
+
+    if (truncated < 1000) {
+        return truncated.toFixed(4).replace(/\.?0+$/, '');
+    }
+
+    return truncated.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
 defineOptions({
     layout: null,
 });
@@ -121,30 +146,7 @@ defineOptions({
     <Head :title="`DAO: ${props.dao.name}`" />
 
     <div class="min-h-screen bg-background text-foreground">
-        <header class="border-b">
-            <nav
-                class="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-4 text-sm"
-            >
-                <InertiaLink href="/" class="font-medium hover:underline"
-                    >Cyberia</InertiaLink
-                >
-                <InertiaLink href="/dao" class="font-medium hover:underline"
-                    >DAO</InertiaLink
-                >
-                <InertiaLink
-                    href="/market"
-                    class="text-muted-foreground hover:text-foreground"
-                >
-                    NFT Market
-                </InertiaLink>
-                <InertiaLink
-                    href="/lending"
-                    class="text-muted-foreground hover:text-foreground"
-                >
-                    Lending
-                </InertiaLink>
-            </nav>
-        </header>
+        <Header />
 
         <main class="mx-auto flex max-w-5xl flex-col space-y-6 px-4 py-8">
             <!-- DAO Header -->
@@ -292,11 +294,11 @@ defineOptions({
                                 >
                                 <span class="flex items-center gap-1">
                                     <ThumbsUp class="h-3 w-3 text-green-500" />
-                                    {{ proposal.votes_for_count || 0 }}
+                                    {{ formatPower(proposal.power_for) }}
                                 </span>
                                 <span class="flex items-center gap-1">
                                     <ThumbsDown class="h-3 w-3 text-red-500" />
-                                    {{ proposal.votes_against_count || 0 }}
+                                    {{ formatPower(proposal.power_against) }}
                                 </span>
                                 <span class="flex items-center gap-1">
                                     <MessageSquare class="h-3 w-3" />

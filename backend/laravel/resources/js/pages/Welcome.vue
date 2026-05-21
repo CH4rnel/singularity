@@ -9,11 +9,10 @@ import {
     CheckCircle2,
     XCircle,
     Clock,
-    ExternalLink,
-    Network,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
 import BridgeWizard from '@/components/bridge/BridgeWizard.vue';
+import Header from '@/components/Header.vue';
 import { useBridge } from '@/composables/useBridge';
 import { useBridgeAnalytics } from '@/composables/useBridgeAnalytics';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
@@ -68,10 +67,6 @@ const analytics = useBridgeAnalytics();
 
 const feedbackError = ref<string | null>(null);
 const feedbackSuccess = ref<string | null>(null);
-
-const CYBERIA_RPC = 'https://rpc.cyberia.church';
-const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = `0x${CYBERIA_CHAIN_ID.toString(16)}`;
 
 // Bridge state
 const bridgeDirection = ref<'sol_to_evm' | 'evm_to_sol'>('sol_to_evm');
@@ -494,61 +489,6 @@ const handleSolanaDetach = async () => {
     }
 };
 
-const handleCyberiaRpcConnect = async () => {
-    feedbackError.value = null;
-    feedbackSuccess.value = null;
-
-    if (!window.ethereum) {
-        feedbackError.value =
-            'MetaMask or another EVM wallet is required to add Cyberia RPC';
-
-        return;
-    }
-
-    try {
-        await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: CYBERIA_CHAIN_ID_HEX }],
-        });
-        feedbackSuccess.value = 'Cyberia RPC network connected';
-    } catch (err) {
-        const error = err as { code?: number; message?: string };
-
-        if (error.code !== 4902) {
-            feedbackError.value =
-                error.message || 'Failed to switch to Cyberia RPC';
-
-            return;
-        }
-
-        try {
-            await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [
-                    {
-                        chainId: CYBERIA_CHAIN_ID_HEX,
-                        chainName: 'Cyberia',
-                        nativeCurrency: {
-                            name: 'Cyber',
-                            symbol: 'CYBER',
-                            decimals: 18,
-                        },
-                        rpcUrls: [CYBERIA_RPC],
-                        blockExplorerUrls: ['https://explorer.cyberia.church'],
-                        iconUrls: ['https://swap.cyberia.church/CYBER.png'],
-                    },
-                ],
-            });
-            feedbackSuccess.value = 'Cyberia RPC network added';
-        } catch (addErr) {
-            feedbackError.value =
-                addErr instanceof Error
-                    ? addErr.message
-                    : 'Failed to add Cyberia RPC';
-        }
-    }
-};
-
 const formatAddr = (addr: string) =>
     addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
 
@@ -585,83 +525,20 @@ const statusColor = (status: string) => {
         <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
     </Head>
     <div
-        class="flex min-h-screen flex-col items-center bg-[#FDFDFC] p-6 text-[#1b1b18] lg:justify-center lg:p-8 dark:bg-[#0a0a0a]"
+        class="flex min-h-screen flex-col items-center bg-background text-foreground"
     >
-        <header class="mb-6 w-full text-sm">
-            <nav
-                class="mx-auto flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                aria-label="Cyberia navigation"
-            >
-                <div
-                    class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 sm:justify-start"
+        <Header class="w-full">
+            <template v-if="$page.props.auth.user" #actions>
+                <Link
+                    :href="dashboardUrl"
+                    class="inline-block rounded-sm border border-input px-5 py-1.5 text-sm leading-normal hover:bg-accent"
                 >
-                    <a
-                        href="https://cyberia.church"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="inline-flex items-center gap-1 text-[#1b1b18] hover:text-[#706f6c] dark:text-[#EDEDEC] dark:hover:text-[#A1A09A]"
-                    >
-                        cyberia.church
-                        <ExternalLink class="h-3 w-3" />
-                    </a>
-                    <a
-                        href="https://swap.cyberia.church"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="inline-flex items-center gap-1 text-[#1b1b18] hover:text-[#706f6c] dark:text-[#EDEDEC] dark:hover:text-[#A1A09A]"
-                    >
-                        swap.cyberia.church
-                        <ExternalLink class="h-3 w-3" />
-                    </a>
-                    <a
-                        href="https://explorer.cyberia.church"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="inline-flex items-center gap-1 text-[#1b1b18] hover:text-[#706f6c] dark:text-[#EDEDEC] dark:hover:text-[#A1A09A]"
-                    >
-                        explorer.cyberia.church
-                        <ExternalLink class="h-3 w-3" />
-                    </a>
-                    <Link
-                        href="/market"
-                        class="inline-flex items-center gap-1 text-[#1b1b18] hover:text-[#706f6c] dark:text-[#EDEDEC] dark:hover:text-[#A1A09A]"
-                    >
-                        NFT Market
-                    </Link>
-                    <Link
-                        href="/lending"
-                        class="inline-flex items-center gap-1 text-[#1b1b18] hover:text-[#706f6c] dark:text-[#EDEDEC] dark:hover:text-[#A1A09A]"
-                    >
-                        Lending
-                    </Link>
-                    <Link
-                        href="/dao"
-                        class="inline-flex items-center gap-1 text-[#1b1b18] hover:text-[#706f6c] dark:text-[#EDEDEC] dark:hover:text-[#A1A09A]"
-                    >
-                        DAO
-                    </Link>
-                </div>
-                <div
-                    class="flex flex-wrap items-center justify-center gap-3 sm:justify-end"
-                >
-                    <button
-                        class="inline-flex items-center gap-2 rounded-sm border border-[#19140035] px-4 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#1915014a] disabled:opacity-50 dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
-                        type="button"
-                        @click="handleCyberiaRpcConnect"
-                    >
-                        <Network class="h-4 w-4" />
-                        Connect RPC
-                    </button>
-                    <Link
-                        v-if="$page.props.auth.user"
-                        :href="dashboardUrl"
-                        class="inline-block rounded-sm border border-[#19140035] px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
-                    >
-                        Dashboard
-                    </Link>
-                </div>
-            </nav>
-        </header>
+                    Dashboard
+                </Link>
+            </template>
+        </Header>
+
+        <div class="flex flex-1 w-full flex-col items-center p-6 lg:justify-center lg:p-8">
 
         <div
             class="flex w-full max-w-lg flex-col items-center gap-6 opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0"
@@ -1090,5 +967,6 @@ const statusColor = (status: string) => {
             </div>
         </div>
         <div class="hidden h-14.5 lg:block"></div>
+        </div>
     </div>
 </template>
