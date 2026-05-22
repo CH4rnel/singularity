@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import sys
@@ -93,6 +94,21 @@ TOKEN_CREATED_TOPIC = Web3.keccak(text="TokenCreated(address,address,string,stri
 
 MIN_REWARDS_INTERVAL_SECONDS = int(os.environ.get("MIN_REWARDS_INTERVAL_SECONDS", "60"))
 MAX_REWARDS_INTERVAL_SECONDS = int(os.environ.get("MAX_REWARDS_INTERVAL_SECONDS", str(30 * 24 * 3600)))
+
+# Public chat where successful bridge txs are announced.
+BRIDGE_ANNOUNCE_CHAT = os.environ.get("BRIDGE_ANNOUNCE_CHAT", "@cyberia_network_chat")
+BRIDGE_POLL_SECONDS = int(os.environ.get("BRIDGE_POLL_SECONDS", "30"))
+SOLSCAN_URL = os.environ.get("SOLSCAN_URL", "https://solscan.io").rstrip("/")
+
+# Ritual DEX (Quickswap V2 fork on Cyberia) swap announcer.
+SWAP_ANNOUNCE_CHAT = os.environ.get("SWAP_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+SWAP_POLL_SECONDS = int(os.environ.get("SWAP_POLL_SECONDS", "30"))
+RITUAL_V2_ROUTER = os.environ.get(
+    "RITUAL_V2_ROUTER", "0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62"
+)
+# Bound the per-tick block range so eth_getLogs stays well under provider limits
+# even if the bot was stopped for a while.
+SWAP_MAX_BLOCK_RANGE = int(os.environ.get("SWAP_MAX_BLOCK_RANGE", "2000"))
 
 LOG_FILE = Path(__file__).parent / "bot.log"
 
@@ -273,9 +289,38 @@ def ensure_chat_token_schema():
                 PRIMARY KEY (chat_id, user_id)
             )
         """))
+        # Small key/value store for the bot's own state, separate from the
+        # Laravel-owned tables. Used to track the last bridge_requests.id we
+        # already announced in BRIDGE_ANNOUNCE_CHAT.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bot_kv (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """))
 
 
 ensure_chat_token_schema()
+
+
+def _kv_get(key: str, default: str | None = None) -> str | None:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT value FROM bot_kv WHERE key = :k"),
+            {"k": key},
+        ).fetchone()
+    return row[0] if row else default
+
+
+def _kv_set(key: str, value: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO bot_kv (key, value) VALUES (:k, :v)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """),
+            {"k": key, "v": value},
+        )
 
 
 async def is_chat_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -1467,6 +1512,346 @@ async def on_chat_member_update(update: Update, context: ContextTypes.DEFAULT_TY
         logger.debug(f"on_chat_member_update failed: {e}")
 
 
+def _short_addr(addr: str | None) -> str:
+    if not addr:
+        return "?"
+    if len(addr) <= 12:
+        return addr
+    return f"{addr[:6]}...{addr[-4:]}"
+
+
+def _format_decimal_amount(value) -> str:
+    """bridge_requests.amount is a DECIMAL(_,18). Strip trailing zeros for display."""
+    s = str(value or "0")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
+
+
+def _bridge_tx_links(direction: str, source_tx: str, dest_tx: str | None) -> tuple[str, str | None]:
+    """Return (source_link, dest_link). Direction tells us which chain each tx is on."""
+    if direction == "sol_to_evm":
+        src = f"{SOLSCAN_URL}/tx/{source_tx}" if source_tx else ""
+        dst = f"{EXPLORER_URL}/tx/{dest_tx}" if dest_tx else None
+    else:  # evm_to_sol (and anything else falls back to this layout)
+        src = f"{EXPLORER_URL}/tx/{source_tx}" if source_tx else ""
+        dst = f"{SOLSCAN_URL}/tx/{dest_tx}" if dest_tx else None
+    return src, dst
+
+
+def _direction_label(direction: str) -> str:
+    return {
+        "sol_to_evm": "Solana → Cyberia",
+        "evm_to_sol": "Cyberia → Solana",
+    }.get(direction, direction)
+
+
+async def _announce_bridge_tick(bot) -> None:
+    """Find newly-completed bridge_requests and announce them in BRIDGE_ANNOUNCE_CHAT.
+
+    Advances `last_announced_bridge_id` only when send_message succeeds, so a
+    transient Telegram failure is retried on the next tick.
+    """
+    last_id = int(_kv_get("last_announced_bridge_id", "0") or "0")
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT id, direction, token, source_tx_hash, sender_address,
+                       recipient_address, amount, destination_tx_hash
+                FROM bridge_requests
+                WHERE status = 'completed'
+                  AND id > :last
+                ORDER BY id ASC
+                LIMIT 50
+            """),
+            {"last": last_id},
+        ).fetchall()
+
+    for row in rows:
+        (req_id, direction, token, source_tx, sender, recipient,
+         amount, dest_tx) = row
+        src_link, dst_link = _bridge_tx_links(direction, source_tx or "", dest_tx)
+        lines = [
+            f"🌉 Bridge: {_direction_label(direction)}",
+            f"Amount: {_format_decimal_amount(amount)} {token}",
+            f"From: {_short_addr(sender)}",
+            f"To: {_short_addr(recipient)}",
+        ]
+        if src_link:
+            lines.append(f"Source: {src_link}")
+        if dst_link:
+            lines.append(f"Destination: {dst_link}")
+        try:
+            await bot.send_message(
+                chat_id=BRIDGE_ANNOUNCE_CHAT,
+                text="\n".join(lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"announce_bridge: send failed for id={req_id}: {e}")
+            return
+        _kv_set("last_announced_bridge_id", str(req_id))
+        logger.info(f"announce_bridge: posted bridge id={req_id} ({direction})")
+
+
+async def bridge_announcer_loop(application: Application) -> None:
+    """Background loop that polls bridge_requests every BRIDGE_POLL_SECONDS."""
+    # Bootstrap: on a fresh install we skip historical completed bridges so the
+    # chat doesn't get spammed with the entire history on first run.
+    if _kv_get("last_announced_bridge_id") is None:
+        try:
+            with engine.connect() as conn:
+                max_id = conn.execute(
+                    text("SELECT COALESCE(MAX(id), 0) FROM bridge_requests WHERE status = 'completed'"),
+                ).scalar() or 0
+        except Exception as e:
+            logger.warning(f"bridge_announcer: bootstrap query failed: {e}")
+            max_id = 0
+        _kv_set("last_announced_bridge_id", str(max_id))
+        logger.info(f"bridge_announcer: bootstrapped last_announced_bridge_id={max_id}")
+
+    while True:
+        try:
+            await _announce_bridge_tick(application.bot)
+        except Exception as e:
+            logger.error(f"bridge_announcer_loop: {e}")
+        await asyncio.sleep(BRIDGE_POLL_SECONDS)
+
+
+# --- Ritual DEX swap announcer ---------------------------------------------
+
+# keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").
+# Normalize to "0x..." since hexbytes' `.hex()` adds the prefix in 1.x but not
+# in older releases, and eth_getLogs expects 0x-prefixed topic hex.
+_swap_topic_hex = Web3.keccak(
+    text="Swap(address,uint256,uint256,uint256,uint256,address)"
+).hex()
+SWAP_EVENT_TOPIC = "0x" + _swap_topic_hex.removeprefix("0x").removeprefix("0X")
+
+PAIR_ABI = [
+    {"inputs": [], "name": "token0",
+     "outputs": [{"name": "", "type": "address"}],
+     "stateMutability": "view", "type": "function"},
+    {"inputs": [], "name": "token1",
+     "outputs": [{"name": "", "type": "address"}],
+     "stateMutability": "view", "type": "function"},
+]
+ERC20_META_ABI = [
+    {"inputs": [], "name": "symbol",
+     "outputs": [{"name": "", "type": "string"}],
+     "stateMutability": "view", "type": "function"},
+    {"inputs": [], "name": "decimals",
+     "outputs": [{"name": "", "type": "uint8"}],
+     "stateMutability": "view", "type": "function"},
+]
+
+# Long-lived process: caching pair→tokens and token→(symbol,decimals) cuts the
+# RPC chatter from "4 calls per swap" to ~zero once the active set is warm.
+_pair_token_cache: dict[str, tuple[str, str]] = {}
+_token_meta_cache: dict[str, tuple[str, int]] = {}
+
+
+def _get_pair_tokens(w3: Web3, pair_addr: str) -> tuple[str, str] | None:
+    addr = Web3.to_checksum_address(pair_addr)
+    cached = _pair_token_cache.get(addr)
+    if cached is not None:
+        return cached
+    try:
+        pair = w3.eth.contract(address=addr, abi=PAIR_ABI)
+        t0 = pair.functions.token0().call()
+        t1 = pair.functions.token1().call()
+    except Exception as e:
+        logger.warning(f"swap_announcer: pair {addr} token0/1 failed: {e}")
+        return None
+    _pair_token_cache[addr] = (t0, t1)
+    return t0, t1
+
+
+def _get_token_meta(w3: Web3, token_addr: str) -> tuple[str, int]:
+    addr = Web3.to_checksum_address(token_addr)
+    cached = _token_meta_cache.get(addr)
+    if cached is not None:
+        return cached
+    c = w3.eth.contract(address=addr, abi=ERC20_META_ABI)
+    try:
+        sym = c.functions.symbol().call()
+    except Exception:
+        sym = addr[:6] + "..." + addr[-4:]
+    try:
+        dec = int(c.functions.decimals().call())
+    except Exception:
+        dec = 18
+    meta = (sym, dec)
+    _token_meta_cache[addr] = meta
+    return meta
+
+
+def _hex_no_prefix(value) -> str:
+    if isinstance(value, (bytes, bytearray)):
+        return value.hex()
+    s = str(value)
+    if s.startswith("0x") or s.startswith("0X"):
+        return s[2:]
+    return s
+
+
+def _decode_topic_address(topic) -> str:
+    h = _hex_no_prefix(topic).lower()
+    return Web3.to_checksum_address("0x" + h[-40:])
+
+
+def _decode_swap_data(data) -> tuple[int, int, int, int]:
+    """V2 Swap data: four uint256 words — amount0In, amount1In, amount0Out, amount1Out."""
+    h = _hex_no_prefix(data)
+    return (
+        int(h[0:64], 16),
+        int(h[64:128], 16),
+        int(h[128:192], 16),
+        int(h[192:256], 16),
+    )
+
+
+def _format_token_amount(amount: int, decimals: int) -> str:
+    if amount == 0:
+        return "0"
+    if decimals <= 0:
+        return str(amount)
+    # 6 fractional digits is enough for human-readable; trim trailing zeros.
+    s = f"{amount / 10**decimals:.6f}"
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
+
+
+def _router_topic_hex() -> str:
+    return "0x" + RITUAL_V2_ROUTER.lower().replace("0x", "").rjust(64, "0")
+
+
+def _get_swap_cursor() -> tuple[int, int] | None:
+    raw = _kv_get("last_announced_swap_cursor")
+    if raw is None:
+        return None
+    try:
+        block_str, idx_str = raw.split(":", 1)
+        return int(block_str), int(idx_str)
+    except Exception:
+        return None
+
+
+def _set_swap_cursor(block: int, log_index: int) -> None:
+    _kv_set("last_announced_swap_cursor", f"{block}:{log_index}")
+
+
+async def _announce_swap_tick(bot) -> None:
+    """Scan new Swap events from the Ritual V2 router and post one msg per swap.
+
+    Cursor is stored as `block:log_index` so a mid-tick Telegram failure
+    resumes exactly where it stopped without duplicating earlier sends.
+    """
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    try:
+        latest = w3.eth.block_number
+    except Exception as e:
+        logger.error(f"swap_announcer: block_number failed: {e}")
+        return
+
+    cursor = _get_swap_cursor()
+    if cursor is None:
+        # Don't backfill historical swaps on first run.
+        _set_swap_cursor(latest, 10**9)
+        logger.info(f"swap_announcer: bootstrapped cursor to head block={latest}")
+        return
+    cur_block, cur_idx = cursor
+
+    if cur_block > latest:
+        return
+
+    end = min(cur_block + SWAP_MAX_BLOCK_RANGE - 1, latest)
+
+    try:
+        logs = w3.eth.get_logs({
+            "fromBlock": cur_block,
+            "toBlock": end,
+            "topics": [SWAP_EVENT_TOPIC, _router_topic_hex()],
+        })
+    except Exception as e:
+        logger.error(f"swap_announcer: get_logs {cur_block}..{end}: {e}")
+        return
+
+    for log in logs:
+        blk = int(log["blockNumber"])
+        idx = int(log["logIndex"])
+        if (blk, idx) <= (cur_block, cur_idx):
+            continue
+
+        try:
+            pair_addr = log["address"]
+            tokens = _get_pair_tokens(w3, pair_addr)
+            if not tokens:
+                _set_swap_cursor(blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            t0, t1 = tokens
+            sym0, dec0 = _get_token_meta(w3, t0)
+            sym1, dec1 = _get_token_meta(w3, t1)
+            a0in, a1in, a0out, a1out = _decode_swap_data(log["data"])
+
+            if a0in > 0 and a1out > 0:
+                in_sym, in_amt, in_dec = sym0, a0in, dec0
+                out_sym, out_amt, out_dec = sym1, a1out, dec1
+            elif a1in > 0 and a0out > 0:
+                in_sym, in_amt, in_dec = sym1, a1in, dec1
+                out_sym, out_amt, out_dec = sym0, a0out, dec0
+            else:
+                _set_swap_cursor(blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+
+            to_addr = _decode_topic_address(log["topics"][2])
+            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            text_lines = [
+                "🔄 Swap on Ritual",
+                f"{_format_token_amount(in_amt, in_dec)} {in_sym} → "
+                f"{_format_token_amount(out_amt, out_dec)} {out_sym}",
+                f"User: {_short_addr(to_addr)}",
+                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+            ]
+        except Exception as e:
+            logger.error(f"swap_announcer: decode failed block={blk} idx={idx}: {e}")
+            _set_swap_cursor(blk, idx)
+            cur_block, cur_idx = blk, idx
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=SWAP_ANNOUNCE_CHAT,
+                text="\n".join(text_lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"swap_announcer: send failed block={blk} idx={idx}: {e}")
+            return  # leave cursor at last successful; retry next tick
+
+        _set_swap_cursor(blk, idx)
+        cur_block, cur_idx = blk, idx
+        logger.info(f"swap_announcer: posted swap block={blk} idx={idx} tx={tx_hash}")
+
+    # Empty range, or fully drained — advance past the scanned window so we
+    # don't refetch the same blocks indefinitely.
+    if end > cur_block:
+        _set_swap_cursor(end, 10**9)
+
+
+async def swap_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_swap_tick(application.bot)
+        except Exception as e:
+            logger.error(f"swap_announcer_loop: {e}")
+        await asyncio.sleep(SWAP_POLL_SECONDS)
+
+
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
@@ -1490,6 +1875,19 @@ async def post_init(application: Application):
         ]
     )
     logger.info("Bot commands published to Telegram")
+
+    # Background loop that announces successful bridge txs in the public chat.
+    application.create_task(bridge_announcer_loop(application))
+    logger.info(
+        f"Bridge announcer started: chat={BRIDGE_ANNOUNCE_CHAT} interval={BRIDGE_POLL_SECONDS}s"
+    )
+
+    # Background loop that announces Ritual DEX swaps in the public chat.
+    application.create_task(swap_announcer_loop(application))
+    logger.info(
+        f"Swap announcer started: chat={SWAP_ANNOUNCE_CHAT} "
+        f"router={RITUAL_V2_ROUTER} interval={SWAP_POLL_SECONDS}s"
+    )
 
 
 def run_dispatcher():

@@ -1,0 +1,91 @@
+{
+  "chainId": 49406,
+  "rpc": "https://rpc.cyberia.church",
+  "_doc": "Registry of OZ-style mintable/burnable ERC20s on Cyberia. Fill in 'address' after each deploy; entries without an address are hidden from token-admin.ts.",
+  "tokens": [
+    {
+      "symbol": "CYBER",
+      "contract": "CyberToken",
+      "artifact": "contracts/CyberToken.sol/CyberToken.json",
+      "address": null,
+      "burnable": false
+    },
+    {
+      "symbol": "USDC",
+      "contract": "USDC",
+      "artifact": "contracts/USDC.sol/USDC.json",
+      "address": "0xdc25597B19799010047F17e9591EFE08EFd40077",
+      "burnable": true
+    },
+    {
+      "symbol": "USDT",
+      "contract": "USDT",
+      "artifact": "contracts/USDT.sol/USDT.json",
+      "address": "0x94845aF24a3E431593A2b941b2b31836dE45185D",
+      "burnable": true
+    },
+    {
+      "symbol": "BTC",
+      "contract": "BTC",
+      "artifact": "contracts/BTC.sol/BTC.json",
+      "address": "0x9332081f308BC978fe259237850fA253131b46Fa",
+      "burnable": true
+    },
+    {
+      "symbol": "LTC",
+      "contract": "LTC",
+      "artifact": "contracts/LTC.sol/LTC.json",
+      "address": "0x001AFD19C9d890b0cf0fcd6D654f9BFe4f264F14",
+      "burnable": true
+    },
+    {
+      "symbol": "SOL",
+      "contract": "SOL",
+      "artifact": "contracts/SOL.sol/SOL.json",
+      "address": "0x53450B1d205f1e41d10B653FBBDEa74160dafFf4",
+      "burnable": true
+    },
+    {
+      "symbol": "RUB",
+      "contract": "RUB",
+      "artifact": "contracts/RUB.sol/RUB.json",
+      "address": "0x3cE7d8E486E16baD2Fb1487Fe1da4dC33237d923",
+      "burnable": true
+    },
+    {
+      "symbol": "SILVER",
+      "contract": "SILVER",
+      "artifact": "contracts/SILVER.sol/SILVER.json",
+      "address": "0xAd9dfef9D671aFCF29Dbdd7Df360E7cA8D5ac40b",
+      "burnable": true
+    },
+    {
+      "symbol": "TRUR",
+      "contract": "TRUR",
+      "artifact": "contracts/TRUR.sol/TRUR.json",
+      "address": "0x6D056e56f5D90ed5680f0335D80E112799a735C8",
+      "burnable": true
+    },
+    {
+      "symbol": "TGLD",
+      "contract": "TGLD",
+      "artifact": "contracts/TGLD.sol/TGLD.json",
+      "address": "0xE2A45069C3e7897CAB592bEd389764e6eCf3b8a5",
+      "burnable": true
+    },
+    {
+      "symbol": "TMOS",
+      "contract": "TMOS",
+      "artifact": "contracts/TMOS.sol/TMOS.json",
+      "address": "0x3352254390526624a140B06E7D2dDA8BA85a9E89",
+      "burnable": true
+    },
+    {
+      "symbol": "TOFZ",
+      "contract": "TOFZ",
+      "artifact": "contracts/TOFZ.sol/TOFZ.json",
+      "address": "0x46A6f512885De25AaefBf5A5F842ba378700Fe22",
+      "burnable": true
+    }
+  ]
+}

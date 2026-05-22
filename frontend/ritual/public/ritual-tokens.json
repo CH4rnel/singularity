@@ -85,6 +85,14 @@
       "decimals": 9,
       "chainId": 49406,
       "logoURI": "/sol.svg"
+    },
+    {
+      "name": "Silver",
+      "address": "0xAd9dfef9D671aFCF29Dbdd7Df360E7cA8D5ac40b",
+      "symbol": "SILVER",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/silver.png"
     }
   ]
 }
