@@ -145,8 +145,8 @@ services:
     env_file:
       - /root/singularity/backend/laravel/.env
     environment:
-      APP_URL: https://bridge.cyberia.church
-      ASSET_URL: https://bridge.cyberia.church
+      APP_URL: https://cyberia.church
+      ASSET_URL: https://cyberia.church
 
   polygon-edge:
     image: 0xpolygon/polygon-edge:latest

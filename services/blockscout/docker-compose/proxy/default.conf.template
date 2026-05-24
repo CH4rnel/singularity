@@ -30,15 +30,42 @@ server {
 server {
     listen 443 ssl http2;
     server_name cyberia.church;
+    resolver 127.0.0.11 valid=30s ipv6=off;
 
     ssl_certificate /etc/letsencrypt/live/cyberia.church/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/cyberia.church/privkey.pem;
 
-    root /usr/share/nginx/landing;
-    index index.html;
-
     location / {
-        try_files $uri $uri/ /index.html;
+        set                   $cyberia_church_upstream cyberia_church:9001;
+        proxy_pass            http://$cyberia_church_upstream;
+
+        # `php artisan serve` is the single-threaded PHP built-in dev server.
+        # It does NOT support HTTP/1.1 keep-alive — reusing a connection (or
+        # sending Connection: upgrade) makes it drop the socket and nginx then
+        # returns 502. Force HTTP/1.0 with a fresh, closed connection per
+        # request, and give it room to answer instead of failing instantly.
+        proxy_http_version    1.0;
+        proxy_set_header      Connection "";
+
+        proxy_set_header      Host $host;
+        proxy_set_header      X-Real-IP $remote_addr;
+        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header      X-Forwarded-Proto https;
+
+        proxy_connect_timeout 10s;
+        proxy_read_timeout    120s;
+        proxy_send_timeout    120s;
+
+        # Inertia routes (/lending, /dao …) emit large response headers — the
+        # X-Inertia payload marker plus several big Set-Cookie values. The
+        # default 4k/8k header buffer overflows ("upstream sent too big
+        # header") and nginx returns 502. Give the response headers more room.
+        proxy_buffer_size        32k;
+        proxy_buffers            8 32k;
+        proxy_busy_buffers_size  64k;
+
+        # Retry the next attempt if the dev server drops a connection mid-flight.
+        proxy_next_upstream   error timeout http_502 http_503;
     }
 }
 
@@ -58,23 +85,12 @@ server {
 server {
     listen 443 ssl http2;
     server_name bridge.cyberia.church;
-    proxy_http_version 1.1;
-    resolver 127.0.0.11 valid=30s ipv6=off;
 
     ssl_certificate /etc/letsencrypt/live/bridge.cyberia.church/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/bridge.cyberia.church/privkey.pem;
 
     location / {
-        set                   $cyberia_church_upstream cyberia_church:9001;
-        proxy_pass            http://$cyberia_church_upstream;
-        proxy_http_version    1.1;
-        proxy_set_header      Host $host;
-        proxy_set_header      X-Real-IP $remote_addr;
-        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header      X-Forwarded-Proto https;
-        proxy_set_header      Upgrade $http_upgrade;
-        proxy_set_header      Connection $connection_upgrade;
-        proxy_cache_bypass    $http_upgrade;
+        return 301 https://cyberia.church/bridge;
     }
 }
 
