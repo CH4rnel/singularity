@@ -184,7 +184,10 @@ function signOut() {
             class="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-4 text-sm"
             aria-label="Cyberia navigation"
         >
-            <InertiaLink href="/" :class="linkClass('/')">Cyberia</InertiaLink>
+            <a href="/" :class="linkClass('/')">Cyberia</a>
+            <InertiaLink href="/bridge" :class="linkClass('/bridge')"
+                >Bridge</InertiaLink
+            >
             <InertiaLink href="/dao" :class="linkClass('/dao')"
                 >DAO</InertiaLink
             >

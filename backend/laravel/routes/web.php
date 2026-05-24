@@ -16,7 +16,8 @@ use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureTeamMembership;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', [ApiController::class, 'index'])->name('home');
+Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
+Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/lending', 'Lending')->name('lending');
 Route::inertia('/slots', 'Slots')->name('slots');

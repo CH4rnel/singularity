@@ -1567,6 +1567,16 @@ export const DLDQUICK: { [chainId: number]: Token } = {
   [ChainId.DOGECHAIN]: dDD[ChainId.DOGECHAIN],
 };
 
+export const SILVER: { [chainId: number]: Token } = {
+  [ChainId.CYBERIA]: new Token(
+    ChainId.CYBERIA,
+    '0xAd9dfef9D671aFCF29Dbdd7Df360E7cA8D5ac40b',
+    18,
+    'SILVER',
+    'Silver',
+  ),
+};
+
 export const V2_BASES_TO_CHECK_TRADES_AGAINST: {
   [ChainId: number]: Token[];
 } = {
@@ -1596,6 +1606,9 @@ export const V2_BASES_TO_CHECK_TRADES_AGAINST: {
     NEW_QUICK[ChainId.CYBERIA],
     USDC[ChainId.CYBERIA],
     USDT[ChainId.CYBERIA],
+    // SILVER is the only liquid pair for RUB (RUB↔SILVER, SILVER↔CYBER),
+    // so it must be a routing base for multi-hop swaps into/out of RUB.
+    SILVER[ChainId.CYBERIA],
   ],
 };
 
@@ -1801,6 +1814,7 @@ export const V2_BASES_TO_TRACK_LIQUIDITY_FOR: {
     NEW_QUICK[ChainId.CYBERIA],
     USDC[ChainId.CYBERIA],
     USDT[ChainId.CYBERIA],
+    SILVER[ChainId.CYBERIA],
   ],
 };
 

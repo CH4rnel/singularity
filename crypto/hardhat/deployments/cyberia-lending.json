@@ -28,9 +28,13 @@
     "CYBER_legacy": {
       "address": "0xF697D741BF663878571d9F36E0FE3E100A7Faa52",
       "underlying": "0x0D1FF5C35DB9c399f2385C8E5C166622e7b12086"
+    },
+    "RUB": {
+      "address": "0x63c3267072f8165b6E2bb300a3ab0968D5B5bfEb",
+      "underlying": "0x3cE7d8E486E16baD2Fb1487Fe1da4dC33237d923"
     }
   },
-  "timestamp": "2026-05-21T11:40:28.279Z",
+  "timestamp": "2026-05-24T00:52:04.891Z",
   "QuickswapPriceOracle": "0x8fEA279fb70D3D1B20a0E50cbC649c83C41Dc4D1",
   "SimplePriceOracle_legacy": "0x8eA212E3D8Ea63738B3eCaD0dA5c1683f711F4af",
   "LendingComptroller_legacy": "0xF1d1c79C535dBCf7F68784B3bCb91d9030A970e1",

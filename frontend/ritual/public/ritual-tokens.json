@@ -93,6 +93,14 @@
       "decimals": 18,
       "chainId": 49406,
       "logoURI": "/silver.png"
+    },
+    {
+      "name": "Russian Ruble",
+      "address": "0x3cE7d8E486E16baD2Fb1487Fe1da4dC33237d923",
+      "symbol": "RUB",
+      "decimals": 2,
+      "chainId": 49406,
+      "logoURI": "/rub.png"
     }
   ]
 }

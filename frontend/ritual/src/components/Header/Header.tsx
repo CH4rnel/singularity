@@ -28,6 +28,14 @@ import AccountDetailsModal from 'components/AccountDetails/AccountDetailsModal';
 
 const cyberiaExternalLinks: HeaderMenuItem[] = [
   {
+    link: '/lending',
+    text: 'Lending',
+    id: 'cyberia-lending-link',
+    isExternal: true,
+    target: '_blank',
+    externalLink: 'https://bridge.cyberia.church/lending',
+  },
+  {
     link: '/cyberia',
     text: 'Cyberia',
     id: 'cyberia-site-link',

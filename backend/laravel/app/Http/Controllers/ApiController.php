@@ -32,7 +32,7 @@ class ApiController extends Controller
 
         $useNewUx = config('bridge.new_ux', true) && ! $request->boolean('legacy');
 
-        return Inertia::render('Welcome', [
+        return Inertia::render('Bridge', [
             'price' => $price,
             'bridgeHistory' => $bridgeHistory,
             'useNewUx' => $useNewUx,
