@@ -18,6 +18,7 @@ import { ref } from 'vue';
 
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenInfo, BridgeTokenSymbol } from '@/lib/bridgeTokens';
+import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 const CYBERIA_RPC = 'https://rpc.cyberia.church';
 const CYBERIA_CHAIN_ID = 49406;
@@ -168,12 +169,14 @@ export const useBridge = () => {
     // ---------------------------------------------------------------
 
     const ensureCyberiaNetwork = async (): Promise<boolean> => {
-        if (!window.ethereum) {
+        const injected = getMetaMaskProvider();
+
+        if (!injected) {
             return false;
         }
 
         try {
-            const chainIdHex = (await window.ethereum.request({
+            const chainIdHex = (await injected.request({
                 method: 'eth_chainId',
             })) as string;
 
@@ -184,7 +187,7 @@ export const useBridge = () => {
             }
 
             try {
-                await window.ethereum.request({
+                await injected.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: '0x' + CYBERIA_CHAIN_ID.toString(16) }],
                 });
@@ -193,7 +196,7 @@ export const useBridge = () => {
                 return true;
             } catch {
                 try {
-                    await window.ethereum.request({
+                    await injected.request({
                         method: 'wallet_addEthereumChain',
                         params: [
                             {
@@ -234,7 +237,9 @@ export const useBridge = () => {
         amount: string,
         solanaRecipientBase58: string,
     ): Promise<{ txHash: string; nonce: number } | null> => {
-        if (!window.ethereum) {
+        const injected = getMetaMaskProvider();
+
+        if (!injected) {
             return null;
         }
 
@@ -242,7 +247,7 @@ export const useBridge = () => {
             throw new Error('Please switch to Cyberia network');
         }
 
-        const provider = new BrowserProvider(window.ethereum);
+        const provider = new BrowserProvider(injected);
         const signer = await provider.getSigner();
         const amountWei = parseUnits(String(amount), cyberSolDecimals.value);
         const solRecipient = solanaBase58ToBytes32(solanaRecipientBase58);
@@ -448,7 +453,9 @@ export const useBridge = () => {
         amount: string,
         relayerEvmAddress: string,
     ): Promise<{ txHash: string; nonce: number } | null> => {
-        if (!window.ethereum) {
+        const injected = getMetaMaskProvider();
+
+        if (!injected) {
             return null;
         }
 
@@ -457,7 +464,7 @@ export const useBridge = () => {
         }
 
         const token = BRIDGE_TOKENS[symbol];
-        const provider = new BrowserProvider(window.ethereum);
+        const provider = new BrowserProvider(injected);
         const signer = await provider.getSigner();
         const contract = new Contract(token.evmAddress, ERC20_ABI, signer);
         const amountRaw = parseUnits(String(amount), token.evmDecimals);

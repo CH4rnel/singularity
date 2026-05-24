@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
+import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 type MarketAction = 'supply' | 'withdraw' | 'borrow' | 'repay';
 
@@ -128,7 +129,11 @@ async function rpcCall<T>(method: string, params: unknown[]): Promise<T> {
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
     });
     const json = (await res.json()) as { result?: T; error?: { message: string } };
-    if (json.error) throw new Error(json.error.message);
+
+    if (json.error) {
+throw new Error(json.error.message);
+}
+
     return json.result as T;
 }
 
@@ -142,6 +147,7 @@ async function multicall(calls: Call[]): Promise<{ success: boolean; returnData:
         'latest',
     ]);
     const [decoded] = mcIface.decodeFunctionResult('aggregate3', result);
+
     return (decoded as Array<[boolean, string]>).map(([success, returnData]) => ({
         success,
         returnData,
@@ -228,14 +234,26 @@ const isReady = computed(
 /// Converts a fractional rate (e.g. 6.5% APR = 0.065) into a per-period
 /// underlying-token delta using simple compounding (`(1+APR)^(t/year) - 1`).
 function projectInterest(market: MarketView, periodSeconds: number): bigint {
-    if (market.userBorrow === 0n) return 0n;
+    if (market.userBorrow === 0n) {
+return 0n;
+}
+
     const apr = market.borrowApy / 100;
-    if (!isFinite(apr) || apr <= 0) return 0n;
+
+    if (!isFinite(apr) || apr <= 0) {
+return 0n;
+}
+
     const growth = Math.pow(1 + apr, periodSeconds / (365 * 24 * 3600)) - 1;
-    if (!isFinite(growth) || growth <= 0) return 0n;
+
+    if (!isFinite(growth) || growth <= 0) {
+return 0n;
+}
+
     // Convert growth to a bigint share of userBorrow with 12 decimals of
     // precision; that's more than enough given Math.pow's float resolution.
     const scaled = BigInt(Math.round(growth * 1e12));
+
     return (market.userBorrow * scaled) / 10n ** 12n;
 }
 
@@ -248,9 +266,13 @@ function perHourInterest(market: MarketView): bigint {
 }
 
 function rateToApy(ratePerBlock: bigint, blocksPerYear: bigint): number {
-    if (blocksPerYear === 0n) return 0;
+    if (blocksPerYear === 0n) {
+return 0;
+}
+
     // APY ≈ (1 + r)^n - 1, but n is very large; use continuous compounding for stability.
     const r = Number(ratePerBlock) / 1e18;
+
     return (Math.exp(r * Number(blocksPerYear)) - 1) * 100;
 }
 
@@ -268,9 +290,13 @@ function decodeAddressArray(iface: Interface, fn: string, data: string): string[
 
 async function loadMarkets() {
     error.value = null;
-    if (!isReady.value) return;
+
+    if (!isReady.value) {
+return;
+}
 
     loading.value = true;
+
     try {
         const account = getAddress(queryAddress.value!);
         const comptrollerAddr = getAddress(comptrollerAddress.value);
@@ -298,13 +324,16 @@ async function loadMarkets() {
 
         // --- Round 2: each market's underlying address + rate model ----------
         const round2: Call[] = [];
+
         for (const m of allMarkets) {
             round2.push({ target: m, allowFailure: false, callData: marketIface.encodeFunctionData('underlying') });
             round2.push({ target: m, allowFailure: false, callData: marketIface.encodeFunctionData('interestRateModel') });
         }
+
         const r2 = await multicall(round2);
         const underlyings: string[] = [];
         const rateModels: string[] = [];
+
         for (let i = 0; i < allMarkets.length; i++) {
             underlyings.push(decodeAddress(marketIface, 'underlying', r2[2 * i].returnData));
             rateModels.push(decodeAddress(marketIface, 'interestRateModel', r2[2 * i + 1].returnData));
@@ -312,6 +341,7 @@ async function loadMarkets() {
 
         // --- Round 3: per-market data --------------------------------------
         const calls: Call[] = [];
+
         for (let i = 0; i < allMarkets.length; i++) {
             const m = allMarkets[i];
             const u = underlyings[i];
@@ -336,12 +366,14 @@ async function loadMarkets() {
                 { target: rm,            allowFailure: false, callData: rateModelIface.encodeFunctionData('blocksPerYear') },
             );
         }
+
         const r3 = await multicall(calls);
 
         // After we have cash/borrows/reserveFactor we compute the rate-model calls in round 4.
         const stride = 14;
         const partial = allMarkets.map((m, i) => {
             const base = i * stride;
+
             return {
                 marketAddress: m,
                 underlyingAddress: underlyings[i],
@@ -365,17 +397,20 @@ async function loadMarkets() {
 
         // --- Round 4: borrow + supply rates (depend on cash/borrows/reserveFactor)
         const round4: Call[] = [];
+
         for (const p of partial) {
             round4.push(
                 { target: p.rateModel, allowFailure: false, callData: rateModelIface.encodeFunctionData('getBorrowRate', [p.cash, p.borrows, 0n]) },
                 { target: p.rateModel, allowFailure: false, callData: rateModelIface.encodeFunctionData('getSupplyRate', [p.cash, p.borrows, 0n, p.reserveFactor]) },
             );
         }
+
         const r4 = await multicall(round4);
 
         markets.value = partial.map((p, i) => {
             const borrowRate = decodeBigint(rateModelIface, 'getBorrowRate', r4[2 * i].returnData);
             const supplyRate = decodeBigint(rateModelIface, 'getSupplyRate', r4[2 * i + 1].returnData);
+
             return <MarketView>{
                 address: p.marketAddress,
                 underlying: p.underlyingAddress,
@@ -408,20 +443,34 @@ async function loadMarkets() {
 }
 
 function formatToken(raw: bigint, decimals: number, digits = 4): string {
-    if (raw === 0n) return '0';
+    if (raw === 0n) {
+return '0';
+}
+
     const n = Number(formatUnits(raw, decimals));
-    if (n < 0.0001) return '<0.0001';
+
+    if (n < 0.0001) {
+return '<0.0001';
+}
+
     return n.toLocaleString('en', {
         maximumFractionDigits: digits,
     });
 }
 
 function formatUsd(raw: bigint, priceMantissa: bigint): string {
-    if (raw === 0n) return '$0';
+    if (raw === 0n) {
+return '$0';
+}
+
     // raw is in underlying units; priceMantissa is normalized to 1e(36 - decimals)
     // so price * raw / 1e36 = USD. Divide by 1e32 then by 1e4 to keep 4 USD decimals.
     const usd = Number((raw * priceMantissa) / 10n ** 32n) / 1e4;
-    if (usd < 0.01) return '<$0.01';
+
+    if (usd < 0.01) {
+return '<$0.01';
+}
+
     return '$' + usd.toLocaleString('en', { maximumFractionDigits: 2 });
 }
 
@@ -435,47 +484,72 @@ function openAction(market: MarketView, type: MarketAction) {
 /// normalized so that price * underlying / 1e18 = USD (also mantissa 1e18).
 function maxBorrowUnderlying(view: MarketView): bigint {
     const usdLiquidity = liquidity.value?.liquidity ?? 0n;
-    if (usdLiquidity === 0n || view.priceMantissa === 0n) return 0n;
+
+    if (usdLiquidity === 0n || view.priceMantissa === 0n) {
+return 0n;
+}
+
     return (usdLiquidity * MANTISSA) / view.priceMantissa;
 }
 
 function maxFor(view: MarketView, type: MarketAction): bigint {
-    if (type === 'supply') return view.userUnderlyingBalance;
-    if (type === 'withdraw') return view.userSupplyUnderlying;
+    if (type === 'supply') {
+return view.userUnderlyingBalance;
+}
+
+    if (type === 'withdraw') {
+return view.userSupplyUnderlying;
+}
+
     if (type === 'repay') {
         return view.userBorrow < view.userUnderlyingBalance
             ? view.userBorrow
             : view.userUnderlyingBalance;
     }
+
     // Borrow capped by the smaller of (a) market cash and (b) the user's
     // remaining collateral-backed borrow power.
     const power = maxBorrowUnderlying(view);
+
     return power < view.cash ? power : view.cash;
 }
 
 function setMax() {
-    if (!action.value) return;
+    if (!action.value) {
+return;
+}
+
     const max = maxFor(action.value.market, action.value.type);
     amountInput.value = formatUnits(max, action.value.market.decimals);
 }
 
 async function ensureCyberia(): Promise<void> {
-    if (!window.ethereum) throw new Error('No EVM provider');
-    const current = (await window.ethereum.request({
+    const injected = getMetaMaskProvider();
+
+    if (!injected) {
+throw new Error('MetaMask not detected');
+}
+
+    const current = (await injected.request({
         method: 'eth_chainId',
     })) as string;
-    if (parseInt(current, 16) === CYBERIA_CHAIN_ID) return;
+
+    if (parseInt(current, 16) === CYBERIA_CHAIN_ID) {
+return;
+}
 
     const hex = '0x' + CYBERIA_CHAIN_ID.toString(16);
+
     try {
-        await window.ethereum.request({
+        await injected.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: hex }],
         });
     } catch (err) {
         const code = (err as { code?: number })?.code;
+
         if (code === 4902) {
-            await window.ethereum.request({
+            await injected.request({
                 method: 'wallet_addEthereumChain',
                 params: [
                     {
@@ -508,22 +582,31 @@ const LOG_CHUNK_DEFAULT = 9_999;
 async function findDeploymentBlock(addr: string, latest: number): Promise<number> {
     const cacheKey = `lending:deployBlock:${addr.toLowerCase()}`;
     const cached = localStorage.getItem(cacheKey);
+
     if (cached) {
         const n = Number(cached);
-        if (Number.isFinite(n) && n >= 0 && n <= latest) return n;
+
+        if (Number.isFinite(n) && n >= 0 && n <= latest) {
+return n;
+}
     }
+
     let lo = 0;
     let hi = latest;
+
     while (lo < hi) {
         const mid = Math.floor((lo + hi) / 2);
         const code = await rpcCall<string>('eth_getCode', [addr, '0x' + mid.toString(16)]);
+
         if (code === '0x' || code === '0x0') {
             lo = mid + 1;
         } else {
             hi = mid;
         }
     }
+
     localStorage.setItem(cacheKey, String(lo));
+
     return lo;
 }
 
@@ -538,8 +621,10 @@ async function getLogsChunked(
     const out: Array<{ topics: string[] }> = [];
     let chunk = initialChunk;
     let cursor = from;
+
     while (cursor <= to) {
         const end = Math.min(cursor + chunk - 1, to);
+
         try {
             const logs = await rpcCall<Array<{ topics: string[] }>>('eth_getLogs', [
                 {
@@ -554,13 +639,16 @@ async function getLogsChunked(
             onProgress(cursor);
         } catch (e) {
             const msg = e instanceof Error ? e.message.toLowerCase() : '';
+
             if (chunk > 100 && (msg.includes('range') || msg.includes('limit') || msg.includes('too'))) {
                 chunk = Math.floor(chunk / 2);
                 continue;
             }
+
             throw e;
         }
     }
+
     return out;
 }
 
@@ -569,11 +657,15 @@ async function scanLiquidatable() {
     underwater.value = [];
     allBorrowers.value = [];
     scanProgress.value = { done: 0, total: 0 };
+
     if (markets.value.length === 0) {
         scanError.value = 'Markets not loaded yet';
+
         return;
     }
+
     scanning.value = true;
+
     try {
         const eventsIface = new Interface(MARKET_EVENTS_ABI);
         const borrowTopic = eventsIface.getEvent('Borrow')!.topicHash;
@@ -584,6 +676,7 @@ async function scanLiquidatable() {
         // Resolve each market's deployment block first; this lets us scan
         // only ~thousands of blocks instead of all 8M+ on Cyberia.
         const deployBlocks: number[] = [];
+
         for (const m of markets.value) {
             deployBlocks.push(await findDeploymentBlock(m.address, latest));
         }
@@ -596,6 +689,7 @@ async function scanLiquidatable() {
 
         const seen = new Set<string>();
         let scannedFromPreviousMarkets = 0;
+
         for (let i = 0; i < markets.value.length; i++) {
             const m = markets.value[i];
             const from = deployBlocks[i];
@@ -615,16 +709,23 @@ async function scanLiquidatable() {
                 },
             );
             scannedFromPreviousMarkets += range;
+
             for (const log of logs) {
                 const padded = log.topics[1];
-                if (!padded) continue;
+
+                if (!padded) {
+continue;
+}
+
                 seen.add(getAddress('0x' + padded.slice(26)));
             }
         }
+
         allBorrowers.value = [...seen];
 
         if (seen.size === 0) {
             scanning.value = false;
+
             return;
         }
 
@@ -638,14 +739,20 @@ async function scanLiquidatable() {
 
         const list: UnderwaterAccount[] = [];
         [...seen].forEach((addr, i) => {
-            if (!results[i].success) return;
+            if (!results[i].success) {
+return;
+}
+
             const decoded = comptrollerIface.decodeFunctionResult(
                 'getAccountLiquidity',
                 results[i].returnData,
             );
             const liq = decoded[1] as bigint;
             const sf = decoded[2] as bigint;
-            if (sf > 0n) list.push({ address: addr, liquidity: liq, shortfall: sf });
+
+            if (sf > 0n) {
+list.push({ address: addr, liquidity: liq, shortfall: sf });
+}
         });
 
         // Sort biggest shortfall first — those are the juiciest.
@@ -668,17 +775,23 @@ async function inspectBorrower() {
     liquidationError.value = null;
     expectedSeize.value = 0n;
     let target: string;
+
     try {
         target = getAddress(borrowerInput.value.trim());
     } catch {
         liquidationError.value = 'Invalid address';
+
         return;
     }
+
     if (markets.value.length === 0) {
         liquidationError.value = 'Markets not loaded yet';
+
         return;
     }
+
     inspectingBorrower.value = true;
+
     try {
         const comptrollerAddr = getAddress(comptrollerAddress.value);
         const calls: Call[] = [
@@ -686,6 +799,7 @@ async function inspectBorrower() {
             { target: comptrollerAddr, allowFailure: false, callData: comptrollerIface.encodeFunctionData('closeFactorMantissa') },
             { target: comptrollerAddr, allowFailure: false, callData: comptrollerIface.encodeFunctionData('liquidationIncentiveMantissa') },
         ];
+
         for (const m of markets.value) {
             calls.push(
                 { target: m.address, allowFailure: true, callData: marketIface.encodeFunctionData('balanceOf', [target]) },
@@ -693,15 +807,18 @@ async function inspectBorrower() {
                 { target: m.address, allowFailure: false, callData: marketIface.encodeFunctionData('exchangeRateStored') },
             );
         }
+
         const r = await multicall(calls);
 
         let liq = 0n;
         let sf = 0n;
+
         if (r[0].success) {
             const decoded = comptrollerIface.decodeFunctionResult('getAccountLiquidity', r[0].returnData);
             liq = decoded[1] as bigint;
             sf = decoded[2] as bigint;
         }
+
         const closeFactor = decodeBigint(comptrollerIface, 'closeFactorMantissa', r[1].returnData);
         const liquidationIncentive = decodeBigint(comptrollerIface, 'liquidationIncentiveMantissa', r[2].returnData);
 
@@ -710,6 +827,7 @@ async function inspectBorrower() {
             const shares = r[base].success ? decodeBigint(marketIface, 'balanceOf', r[base].returnData) : 0n;
             const borrow = r[base + 1].success ? decodeBigint(marketIface, 'borrowBalanceCurrent', r[base + 1].returnData) : 0n;
             const exchangeRate = decodeBigint(marketIface, 'exchangeRateStored', r[base + 2].returnData);
+
             return {
                 market,
                 supplyShares: shares,
@@ -748,13 +866,19 @@ const borrowerCollaterals = computed(() =>
 );
 
 const repayMarket = computed<MarketView | null>(() => {
-    if (!borrowerData.value) return null;
+    if (!borrowerData.value) {
+return null;
+}
+
     return (
         borrowerBorrows.value.find((p) => p.market.address === selectedRepayMarket.value)?.market ?? null
     );
 });
 const collateralMarket = computed<MarketView | null>(() => {
-    if (!borrowerData.value) return null;
+    if (!borrowerData.value) {
+return null;
+}
+
     return (
         borrowerCollaterals.value.find((p) => p.market.address === selectedCollateralMarket.value)?.market ?? null
     );
@@ -766,22 +890,38 @@ const collateralMarket = computed<MarketView | null>(() => {
 /// inside `_seize` with «burn amount exceeds balance» — what happens after
 /// successive liquidations that have already drained most of the collateral.
 const maxRepay = computed<bigint>(() => {
-    if (!repayMarket.value || !borrowerData.value) return 0n;
+    if (!repayMarket.value || !borrowerData.value) {
+return 0n;
+}
+
     const position = borrowerBorrows.value.find((p) => p.market.address === repayMarket.value!.address);
-    if (!position) return 0n;
+
+    if (!position) {
+return 0n;
+}
+
     const closeFactorMax = (position.borrow * borrowerData.value.closeFactor) / MANTISSA;
 
-    if (!collateralMarket.value) return closeFactorMax;
+    if (!collateralMarket.value) {
+return closeFactorMax;
+}
+
     const collateral = borrowerCollaterals.value.find(
         (p) => p.market.address === collateralMarket.value!.address,
     );
-    if (!collateral || collateral.supplyShares === 0n) return closeFactorMax;
+
+    if (!collateral || collateral.supplyShares === 0n) {
+return closeFactorMax;
+}
 
     const incentive = borrowerData.value.liquidationIncentive;
     const priceBorrowed = repayMarket.value.priceMantissa;
     const priceCollateral = collateralMarket.value.priceMantissa;
     const exchangeRate = collateralMarket.value.exchangeRate;
-    if (priceBorrowed === 0n || incentive === 0n) return closeFactorMax;
+
+    if (priceBorrowed === 0n || incentive === 0n) {
+return closeFactorMax;
+}
 
     // Invert the seize formula:
     //   seizeShares = repay * incentive * priceBorrowed / (priceCollateral * exchangeRate)
@@ -796,28 +936,45 @@ const maxRepay = computed<bigint>(() => {
 });
 
 const maxRepayReason = computed<'closeFactor' | 'collateral' | null>(() => {
-    if (!repayMarket.value || !borrowerData.value) return null;
+    if (!repayMarket.value || !borrowerData.value) {
+return null;
+}
+
     const position = borrowerBorrows.value.find((p) => p.market.address === repayMarket.value!.address);
-    if (!position) return null;
+
+    if (!position) {
+return null;
+}
+
     const closeFactorMax = (position.borrow * borrowerData.value.closeFactor) / MANTISSA;
+
     return maxRepay.value < closeFactorMax ? 'collateral' : 'closeFactor';
 });
 
 async function previewSeize() {
     expectedSeize.value = 0n;
-    if (!repayMarket.value || !collateralMarket.value || !repayInput.value) return;
+
+    if (!repayMarket.value || !collateralMarket.value || !repayInput.value) {
+return;
+}
+
     let amount: bigint;
+
     try {
         amount = parseUnits(String(repayInput.value).trim() || '0', repayMarket.value.decimals);
     } catch {
         return;
     }
-    if (amount === 0n) return;
+
+    if (amount === 0n) {
+return;
+}
 
     const data = new Interface(COMPTROLLER_LIQ_ABI).encodeFunctionData(
         'liquidateCalculateSeizeShares',
         [repayMarket.value.address, collateralMarket.value.address, amount],
     );
+
     try {
         const raw = await rpcCall<string>('eth_call', [
             { to: comptrollerAddress.value, data },
@@ -838,38 +995,52 @@ watch([repayInput, selectedRepayMarket, selectedCollateralMarket], () => {
 });
 
 async function liquidate() {
-    if (!borrowerData.value || !repayMarket.value || !collateralMarket.value || !window.ethereum) return;
+    const injected = getMetaMaskProvider();
+
+    if (!borrowerData.value || !repayMarket.value || !collateralMarket.value || !injected) {
+return;
+}
+
     liquidationError.value = null;
 
     let amount: bigint;
+
     try {
         amount = parseUnits(String(repayInput.value).trim() || '0', repayMarket.value.decimals);
     } catch {
         liquidationError.value = 'Invalid repay amount';
+
         return;
     }
+
     if (amount === 0n) {
         liquidationError.value = 'Repay amount must be positive';
+
         return;
     }
+
     if (amount > maxRepay.value) {
         const reason = maxRepayReason.value === 'collateral' ? 'borrower\'s remaining collateral' : 'closeFactor';
         liquidationError.value = `Exceeds ${reason} cap — max repay is ${formatToken(maxRepay.value, repayMarket.value.decimals)} ${repayMarket.value.symbol}`;
+
         return;
     }
 
     liquidating.value = true;
+
     try {
         await ensureCyberia();
-        const provider = new BrowserProvider(window.ethereum);
+        const provider = new BrowserProvider(injected);
         const signer = await provider.getSigner();
         const liquidator = await signer.getAddress();
+
         if (liquidator.toLowerCase() === borrowerData.value.address.toLowerCase()) {
             throw new Error('Cannot liquidate yourself');
         }
 
         const underlying = new Contract(repayMarket.value.underlying, ERC20_ABI, signer);
         const allowance: bigint = await underlying.allowance(liquidator, repayMarket.value.address);
+
         if (allowance < amount) {
             const txA = await underlying.approve(repayMarket.value.address, MaxUint256);
             await txA.wait();
@@ -895,12 +1066,20 @@ async function liquidate() {
 }
 
 function setMaxRepay() {
-    if (!repayMarket.value) return;
+    if (!repayMarket.value) {
+return;
+}
+
     repayInput.value = formatUnits(maxRepay.value, repayMarket.value.decimals);
 }
 
 async function submitAction() {
-    if (!action.value || !window.ethereum) return;
+    const injected = getMetaMaskProvider();
+
+    if (!action.value || !injected) {
+return;
+}
+
     const { market, type } = action.value;
     const decimals = market.decimals;
 
@@ -908,42 +1087,56 @@ async function submitAction() {
     // ethers v6 strictly requires a string. Normalize before parsing.
     const raw = String(amountInput.value ?? '').trim();
     let amountRaw: bigint;
+
     try {
         amountRaw = parseUnits(raw || '0', decimals);
     } catch (e) {
         console.error('[lending] parseUnits failed', { raw, decimals, e });
         error.value = `Invalid amount: "${raw}"`;
+
         return;
     }
+
     if (amountRaw <= 0n) {
         error.value = 'Amount must be positive';
+
         return;
     }
+
     if (type === 'borrow') {
         if (market.cash === 0n) {
             error.value = `No ${market.symbol} liquidity in the pool — someone has to supply ${market.symbol} before it can be borrowed.`;
+
             return;
         }
+
         if (amountRaw > market.cash) {
             error.value = `Only ${formatToken(market.cash, market.decimals)} ${market.symbol} available to borrow.`;
+
             return;
         }
+
         const power = maxBorrowUnderlying(market);
+
         if (amountRaw > power) {
             error.value = `Exceeds your borrow power (${formatToken(power, market.decimals)} ${market.symbol}). Supply more collateral or borrow less.`;
+
             return;
         }
     }
+
     if (type === 'withdraw' && amountRaw > market.cash) {
         error.value = `Only ${formatToken(market.cash, market.decimals)} ${market.symbol} of cash left in the pool — withdraw less or wait for borrowers to repay.`;
+
         return;
     }
 
     submitting.value = true;
     error.value = null;
+
     try {
         await ensureCyberia();
-        const provider = new BrowserProvider(window.ethereum);
+        const provider = new BrowserProvider(injected);
         const signer = await provider.getSigner();
         const marketContract = new Contract(market.address, MARKET_ABI, signer);
 
@@ -960,8 +1153,10 @@ async function submitAction() {
                 );
                 await approveTx.wait();
             }
+
             const tx = await marketContract.mint(amountRaw);
             await tx.wait();
+
             // First supply also enrolls the user in this market so the deposit
             // counts toward their borrow power. Compound makes this opt-in via
             // enterMarkets — without this call `getAccountLiquidity` still
@@ -988,10 +1183,12 @@ async function submitAction() {
             const toEnter = markets.value
                 .filter((m) => !m.entered && m.userSupplyShares > 0n)
                 .map((m) => m.address);
+
             if (toEnter.length > 0) {
                 const enterTx = await comptroller.enterMarkets(toEnter);
                 await enterTx.wait();
             }
+
             const tx = await marketContract.borrow(amountRaw);
             await tx.wait();
         } else if (type === 'repay') {
@@ -1007,6 +1204,7 @@ async function submitAction() {
                 );
                 await approveTx.wait();
             }
+
             const tx = await marketContract.repayBorrow(amountRaw);
             await tx.wait();
         }
@@ -1022,12 +1220,18 @@ async function submitAction() {
 }
 
 async function toggleMembership(market: MarketView) {
-    if (!window.ethereum) return;
+    const injected = getMetaMaskProvider();
+
+    if (!injected) {
+return;
+}
+
     submitting.value = true;
     error.value = null;
+
     try {
         await ensureCyberia();
-        const provider = new BrowserProvider(window.ethereum);
+        const provider = new BrowserProvider(injected);
         const signer = await provider.getSigner();
         const comptroller = new Contract(
             comptrollerAddress.value,
@@ -1047,7 +1251,10 @@ async function toggleMembership(market: MarketView) {
 }
 
 function setComptroller() {
-    if (!inputComptroller.value) return;
+    if (!inputComptroller.value) {
+return;
+}
+
     comptrollerAddress.value = inputComptroller.value.trim();
     loadMarkets();
 }
@@ -1058,7 +1265,11 @@ function setComptroller() {
 const visibleMarkets = computed(() =>
     markets.value.filter((m) => {
         const deprecated = m.collateralFactor === 0 && m.totalBorrows === 0n;
-        if (!deprecated) return true;
+
+        if (!deprecated) {
+return true;
+}
+
         return m.userSupplyShares > 0n || m.userBorrow > 0n;
     }),
 );
@@ -1087,13 +1298,16 @@ const totalBorrowUsd = computed(() =>
 );
 
 watch(queryAddress, async (addr) => {
-    if (addr) await loadMarkets();
+    if (addr) {
+await loadMarkets();
+}
 });
 
 onMounted(async () => {
     // Trigger silent reconnect via MetaMask in case the user landed on /lending
     // directly (AppSidebar/Welcome would normally do this).
     await wallet.restore(authUser.value?.wallet_address ?? null);
+
     if (queryAddress.value) {
         await loadMarkets();
     }

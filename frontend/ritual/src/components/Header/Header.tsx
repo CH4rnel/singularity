@@ -36,14 +36,6 @@ const cyberiaExternalLinks: HeaderMenuItem[] = [
     externalLink: 'https://bridge.cyberia.church/lending',
   },
   {
-    link: '/cyberia',
-    text: 'Cyberia',
-    id: 'cyberia-site-link',
-    isExternal: true,
-    target: '_blank',
-    externalLink: 'https://cyberia.church',
-  },
-  {
     link: '/cyberia-bridge',
     text: 'Bridge',
     id: 'cyberia-bridge-link',

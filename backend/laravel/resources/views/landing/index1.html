@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyberia — Thesis</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Söhne:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F6F4EE;
+    --ink: #0A0D12;
+    --ink-soft: #2A2E38;
+    --rule: #D4CFC1;
+    --rule-soft: #E8E3D4;
+    --muted: #7A7468;
+    --accent: #0F3D2E;
+    --accent-soft: #1A6047;
+    --highlight: #C8E8D6;
+
+    --serif: 'Fraunces', 'Times New Roman', serif;
+    --sans: 'Söhne', -apple-system, 'Helvetica Neue', sans-serif;
+    --mono: 'JetBrains Mono', 'Menlo', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "ss02";
+  }
+
+  /* Subtle paper texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(200, 195, 175, 0.15) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(180, 175, 155, 0.1) 0%, transparent 40%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 80px 72px 120px;
+  }
+
+  /* MASTHEAD */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 8px;
+  }
+
+  .masthead-title {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .masthead-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+
+  .masthead-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .masthead-links {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .masthead-links a,
+  .colophon a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .masthead-links a:hover,
+  .colophon a:hover {
+    color: var(--accent-soft);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .masthead-sub {
+    padding: 8px 0 40px;
+    border-bottom: 3px double var(--ink);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .masthead-sub span:nth-child(2) { text-align: center; }
+  .masthead-sub span:nth-child(3) { text-align: right; }
+
+  /* HEADLINE */
+  .thesis-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent-soft);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin: 80px 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .thesis-eyebrow::before {
+    content: '§';
+    font-family: var(--serif);
+    font-size: 20px;
+    color: var(--accent);
+  }
+
+  .thesis-headline {
+    font-family: var(--serif);
+    font-size: clamp(44px, 7vw, 88px);
+    font-weight: 300;
+    line-height: 1.02;
+    letter-spacing: -2px;
+    color: var(--ink);
+    margin-bottom: 32px;
+  }
+
+  .thesis-headline em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+  }
+
+  .thesis-deck {
+    font-family: var(--serif);
+    font-size: 22px;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    max-width: 640px;
+    margin-bottom: 80px;
+    font-weight: 400;
+  }
+
+  .byline-rule {
+    height: 1px;
+    background: var(--ink);
+    margin: 40px 0 80px;
+    position: relative;
+  }
+
+  .byline-rule::after {
+    content: '◆';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--paper);
+    padding: 0 16px;
+    font-size: 10px;
+    color: var(--accent);
+  }
+
+  /* SECTION */
+  .section {
+    margin-bottom: 80px;
+  }
+
+  .section-marker {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent-soft);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: -0.8px;
+    color: var(--ink);
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .section-title em {
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  /* PROSE */
+  .prose {
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+  }
+
+  .prose p {
+    margin-bottom: 20px;
+  }
+
+  .prose p:last-child { margin-bottom: 0; }
+
+  .prose p.lead {
+    font-size: 22px;
+    line-height: 1.5;
+    color: var(--ink);
+    font-weight: 400;
+  }
+
+  .prose strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .prose em {
+    font-style: italic;
+  }
+
+  .drop-cap::first-letter {
+    font-family: var(--serif);
+    font-size: 84px;
+    font-weight: 500;
+    float: left;
+    line-height: 0.85;
+    padding: 8px 12px 0 0;
+    color: var(--accent);
+  }
+
+  /* PULL QUOTE */
+  .pullquote {
+    margin: 48px -24px;
+    padding: 40px 48px;
+    border-left: 3px solid var(--accent);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    background: linear-gradient(90deg, rgba(15, 61, 46, 0.03), transparent);
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1.35;
+    letter-spacing: -0.5px;
+    color: var(--ink);
+    font-style: italic;
+  }
+
+  .pullquote::before {
+    content: '"';
+    font-family: var(--serif);
+    font-size: 64px;
+    color: var(--accent);
+    line-height: 0;
+    margin-right: 8px;
+    vertical-align: -20px;
+    font-style: normal;
+  }
+
+  /* DEFINITION BOX */
+  .definition {
+    margin: 40px 0;
+    padding: 32px 40px;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    position: relative;
+  }
+
+  .definition-label {
+    position: absolute;
+    top: -10px;
+    left: 24px;
+    background: var(--paper);
+    padding: 0 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .definition-term {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  .definition-term em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .definition-body {
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+
+  /* THREE-COLUMN (for audiences / pillars) */
+  .triad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 32px 0;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+  }
+
+  .triad-col {
+    padding: 32px 24px 32px 0;
+    border-right: 1px solid var(--rule);
+  }
+
+  .triad-col:not(:first-child) { padding-left: 24px; }
+  .triad-col:last-child { border-right: none; padding-right: 0; }
+
+  .triad-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  .triad-title {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 10px;
+    letter-spacing: -0.3px;
+    line-height: 1.2;
+  }
+
+  .triad-body {
+    font-family: var(--serif);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+
+  /* NUMBERED LIST */
+  .numbered {
+    counter-reset: item;
+    list-style: none;
+    margin: 32px 0;
+  }
+
+  .numbered li {
+    counter-increment: item;
+    padding-left: 56px;
+    position: relative;
+    margin-bottom: 28px;
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+
+  .numbered li::before {
+    content: counter(item, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 2px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    padding-top: 4px;
+    padding-right: 20px;
+    border-right: 1px solid var(--rule);
+    width: 40px;
+  }
+
+  .numbered li strong {
+    display: block;
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  /* DATA ROW */
+  .data-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 24px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--serif);
+    font-size: 15px;
+  }
+
+  .data-row:last-child { border-bottom: none; }
+
+  .data-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding-top: 4px;
+  }
+
+  .data-value {
+    color: var(--ink);
+    line-height: 1.5;
+  }
+
+  .data-value code {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+  }
+
+  /* FOOTER / COLOPHON */
+  .colophon {
+    margin-top: 120px;
+    padding-top: 40px;
+    border-top: 3px double var(--ink);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    line-height: 1.8;
+  }
+
+  .colophon-right {
+    text-align: right;
+  }
+
+  .colophon strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .signature {
+    font-family: var(--serif);
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--ink);
+    font-style: italic;
+    margin-bottom: 8px;
+  }
+
+  .signature span { color: var(--accent); }
+
+  @media (max-width: 680px) {
+    .page { padding: 40px 24px 80px; }
+    .masthead { grid-template-columns: 1fr; gap: 14px; }
+    .masthead-actions { align-items: flex-start; }
+    .masthead-sub { grid-template-columns: 1fr; gap: 6px; }
+    .masthead-sub span:nth-child(2),
+    .masthead-sub span:nth-child(3) { text-align: left; }
+    .triad { grid-template-columns: 1fr; }
+    .triad-col { border-right: none; border-bottom: 1px solid var(--rule); padding: 24px 0; }
+    .triad-col:last-child { border-bottom: none; }
+    .data-row { grid-template-columns: 1fr; gap: 6px; }
+    .pullquote { margin: 32px 0; padding: 24px; font-size: 22px; }
+    .colophon { grid-template-columns: 1fr; }
+    .colophon-right { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- MASTHEAD -->
+  <div class="masthead">
+    <div class="masthead-title">Cyberia — A Thesis</div>
+    <div class="masthead-actions">
+      <div class="masthead-meta">Document 01 / 06</div>
+      <nav class="masthead-links" aria-label="Cyberia links">
+        <a href="https://cyberia.church" target="_blank" rel="noopener noreferrer">Cyberia</a>
+        <a href="https://swap.cyberia.church" target="_blank" rel="noopener noreferrer">Swap</a>
+        <a href="https://bridge.cyberia.church" target="_blank" rel="noopener noreferrer">Bridge</a>
+        <a href="https://explorer.cyberia.church" target="_blank" rel="noopener noreferrer">Explorer</a>
+      </nav>
+    </div>
+  </div>
+  <div class="masthead-sub">
+    <span>Positioning Foundation</span>
+    <span>First Publication · April 2026</span>
+    <span>Version 1.0</span>
+  </div>
+
+  <!-- HEADLINE -->
+  <div class="thesis-eyebrow">The Founding Argument</div>
+  <h1 class="thesis-headline">
+    Open source built the world.<br>
+    The world forgot<br>
+    to <em>pay it back.</em>
+  </h1>
+  <p class="thesis-deck">
+    Cyberia is a settlement layer for open-source work — a blockchain designed to make every act of contribution economically legible, verifiable, and rewardable. This is the founding document.
+  </p>
+
+  <div class="byline-rule"></div>
+
+  <!-- I. THE PROBLEM -->
+  <div class="section">
+    <div class="section-marker">I · The Problem We Are Naming</div>
+    <h2 class="section-title">A <em>trillion-dollar</em> economy built on unpaid labor.</h2>
+    <div class="prose">
+      <p class="lead drop-cap">Open-source software runs the modern world. Every bank, every hospital, every government agency, every artificial intelligence model, every smartphone — all of it is held up by code written and maintained by people who are, for the most part, not paid for it.</p>
+      <p>The numbers are well-documented. Researchers at Harvard Business School estimated the demand-side value of open-source software at roughly <strong>$8.8 trillion</strong>. The supply side — what maintainers actually receive — is a rounding error on that figure. Critical packages with billions of downloads are maintained by single individuals working unpaid evenings. Entire security incidents trace back to a burned-out volunteer who finally walked away.</p>
+      <p>This is not a failure of goodwill. It is a failure of <em>infrastructure</em>.</p>
+      <p>We have built a global economy that depends on a particular kind of work, then declined to build the machinery to compensate it. Sponsors, grants, foundations, bounties, Patreon tiers — these are patches on a structural problem. The problem is that open-source contribution has no native financial rail. There is no settlement layer for the work itself.</p>
+    </div>
+  </div>
+
+  <div class="pullquote">
+    The bridge between open source and the economy it supports was never built. Cyberia is that bridge.
+  </div>
+
+  <!-- II. THE INSIGHT -->
+  <div class="section">
+    <div class="section-marker">II · The Strategic Insight</div>
+    <h2 class="section-title">The issue is not willingness. It is <em>legibility.</em></h2>
+    <div class="prose">
+      <p>People are willing to pay for open source. Companies fund it when they can find a mechanism. Users tip maintainers when a channel exists. The friction is not desire — it is measurement and settlement.</p>
+      <p>A maintainer who ships a critical patch cannot easily prove, at the speed of the network, what their contribution was worth. A user who relies on a package daily cannot easily route a fraction of a cent toward the authors who made it possible. A project that grows from ten contributors to ten thousand cannot coordinate attribution without collapsing under administrative weight.</p>
+      <p>Every other mature economic sector has its settlement infrastructure. Capital markets have clearing houses. Commerce has payment networks. Real estate has title registries. Open-source work has none of this. Contribution flows in one direction; value flows everywhere else.</p>
+      <p><strong>The missing primitive is not money. It is an economic substrate that treats open-source work as a first-class, settleable event.</strong></p>
+    </div>
+  </div>
+
+  <!-- III. THE ANSWER -->
+  <div class="section">
+    <div class="section-marker">III · The Answer</div>
+    <h2 class="section-title">A chain where every contribution <em>settles on-chain.</em></h2>
+
+    <div class="definition">
+      <span class="definition-label">Def · Positioning</span>
+      <div class="definition-term">Cyberia <em>/saɪˈbɪəriə/</em> — noun.</div>
+      <div class="definition-body">
+        A public, EVM-compatible Layer 1 blockchain functioning as the settlement layer for open-source work. Contributions — code, content, moderation, capital — are recorded, verified, and rewarded as native on-chain events. The network is built in public under GPL-3.0, developed on daily livestream, and governed by its participants.
+      </div>
+    </div>
+
+    <div class="prose">
+      <p>Cyberia is not a developer tool. It is not a funding platform. It is not a DAO framework. These are applications that can be built on top of what Cyberia provides.</p>
+      <p>What Cyberia provides is the underlying substrate: a chain where the act of contributing to an open-source project — starring a repository, merging a pull request, moderating a channel, funding a maintainer — is a native economic event, as legible as a token transfer and as verifiable as a block confirmation.</p>
+      <p>This is not a theoretical claim. The network is live. The first contribution-settlement primitives are shipping weekly. The work is open for inspection at every level — from the commit log to the running mainnet.</p>
+    </div>
+  </div>
+
+  <!-- IV. PRINCIPLES -->
+  <div class="section">
+    <div class="section-marker">IV · Operating Principles</div>
+    <h2 class="section-title">Four commitments that <em>will not change.</em></h2>
+
+    <ol class="numbered">
+      <li>
+        <strong>Built in public. Always.</strong>
+        Every line of code is written on live-streamed sessions. Every decision is logged. There is no private repo, no off-the-record roadmap, no information asymmetry between the team and the community. Transparency is not a marketing posture — it is the production environment.
+      </li>
+      <li>
+        <strong>Contribution is measured. Value flows accordingly.</strong>
+        The protocol is neutral about who contributes and what form their contribution takes. It is not neutral about whether contribution is rewarded. Economic legibility is the core invariant: if work was done, it is recorded; if value was created, it can be settled.
+      </li>
+      <li>
+        <strong>Infrastructure first. Hype never.</strong>
+        Cyberia will grow more slowly than its speculative-first competitors, and that is the intent. Foundational infrastructure accumulates value through durability, not virality. The network is built to still be running in 2036.
+      </li>
+      <li>
+        <strong>Sovereign by default. Forkable by design.</strong>
+        The chain is GPL-3.0. The clients are open. The community is independent. If any party — including the founder — attempts to compromise the network, the stack can be forked without friction. This is not a feature; it is the architecture.
+      </li>
+    </ol>
+  </div>
+
+  <!-- V. WHO THIS IS FOR -->
+  <div class="section">
+    <div class="section-marker">V · For Whom This Is Built</div>
+    <h2 class="section-title">Three audiences, <em>in sequence.</em></h2>
+    <div class="prose">
+      <p>Cyberia is not trying to be for everyone on day one. Mature networks are built in concentric rings, starting with the audience most able to recognize what is being offered and expanding outward.</p>
+    </div>
+
+    <div class="triad">
+      <div class="triad-col">
+        <div class="triad-num">Ring · 01</div>
+        <div class="triad-title">Builders of open systems.</div>
+        <div class="triad-body">Developers, maintainers, OSS contributors, and the people who have lived the funding problem firsthand. The earliest and most committed users. They do not need the thesis explained — they need the infrastructure to exist.</div>
+      </div>
+      <div class="triad-col">
+        <div class="triad-num">Ring · 02</div>
+        <div class="triad-title">Capital with conviction.</div>
+        <div class="triad-body">Individuals and funds exhausted by hype-driven crypto and looking for networks with durable technical substance. The pitch is unusual for the space: slower growth, real code, verifiable progress. This audience finds that clarifying.</div>
+      </div>
+      <div class="triad-col">
+        <div class="triad-num">Ring · 03</div>
+        <div class="triad-title">Ecosystems that need rails.</div>
+        <div class="triad-body">Protocols, DAOs, and communities seeking neutral infrastructure to run their own contributor economies. Cyberia is built to be used — not just joined — by other networks.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VI. WHAT IS ALREADY TRUE -->
+  <div class="section">
+    <div class="section-marker">VI · Verifiable Today</div>
+    <h2 class="section-title">The network is <em>already live.</em></h2>
+    <div class="prose">
+      <p>This thesis is unusual for a blockchain project in one respect: most of it is already shipping. Not promised, not roadmapped — running.</p>
+    </div>
+
+    <div style="margin-top: 32px; border-top: 1px solid var(--rule);">
+      <div class="data-row">
+        <div class="data-label">Network</div>
+        <div class="data-value">EVM-compatible L1 · Chain ID <code>49406</code> · mainnet operational</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Native Asset</div>
+        <div class="data-value">CYBER · with contribution-derived tokens (GITHUB, TG, X) live on mainnet</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">License</div>
+        <div class="data-value">GPL-3.0 · entire stack open source, including consensus, clients, and tooling</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Contribution Rails</div>
+        <div class="data-value">Automated settlement bots active across GitHub, Telegram, and X — minting to wallets on verifiable engagement</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Development Cadence</div>
+        <div class="data-value">Daily public commits · sessions livestreamed · no private repositories</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Roadmap, Near-Term</div>
+        <div class="data-value">Native DEX, lending primitives, and a contribution-weighted governance system</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Roadmap, Structural</div>
+        <div class="data-value">Bridge from Solana · sovereign client stack · independent validator set</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VII. THE ASK -->
+  <div class="section">
+    <div class="section-marker">VII · The Invitation</div>
+    <h2 class="section-title">What we ask of readers who made it here.</h2>
+    <div class="prose">
+      <p>If this thesis resonates, the next step is not to buy a token. It is to verify the claims. Add the RPC to your wallet. Read the commit log. Watch a livestream. Clone the repository and run it locally.</p>
+      <p>Then — if what you found matches what we said — bring your work. Contribute, build a project on the rails, port an existing codebase, or simply hold a position in the network you intend to be part of. The one thing Cyberia asks of participants is <em>participation</em>. Observers are welcome; the work is meant for the engaged.</p>
+      <p>Open source built the world. This is an attempt to build the part that pays it back.</p>
+    </div>
+  </div>
+
+  <!-- COLOPHON -->
+  <div class="colophon">
+    <div>
+      <div class="signature">Cyberia<span>.</span></div>
+      <strong>FOUNDING THESIS</strong><br>
+      First published April 2026<br>
+      Document 01 of 06 · Positioning Foundation<br>
+      Prepared for public distribution
+    </div>
+    <div class="colophon-right">
+      <strong>VERIFY</strong><br>
+      <a href="https://github.com/cyberia-temple/singularity" target="_blank" rel="noopener noreferrer">github.com/cyberia-temple/singularity</a><br>
+      <a href="https://cyberia.church" target="_blank" rel="noopener noreferrer">cyberia.church</a><br>
+      <a href="https://swap.cyberia.church" target="_blank" rel="noopener noreferrer">swap.cyberia.church</a><br>
+      <a href="https://bridge.cyberia.church" target="_blank" rel="noopener noreferrer">bridge.cyberia.church</a><br>
+      <a href="https://explorer.cyberia.church" target="_blank" rel="noopener noreferrer">explorer.cyberia.church</a><br>
+      Chain ID 49406 · GPL-3.0<br>
+      <br>
+      <em style="font-style: italic; font-family: var(--serif); color: var(--ink-soft);">"Built in the open. Settled on-chain."</em>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

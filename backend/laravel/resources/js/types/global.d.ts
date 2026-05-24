@@ -1,8 +1,11 @@
 import type { Auth } from '@/types/auth';
 import type { Team } from '@/types/teams';
 
-type EthereumProvider = {
+export type EthereumProvider = {
     isMetaMask?: boolean;
+    isPhantom?: boolean;
+    // Legacy multi-wallet array some extensions expose on window.ethereum.
+    providers?: EthereumProvider[];
     request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     on: (event: string, listener: (...args: unknown[]) => void) => void;
     removeListener: (

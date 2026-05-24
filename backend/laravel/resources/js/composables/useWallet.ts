@@ -1,5 +1,7 @@
 import { BrowserProvider, Contract, formatEther, formatUnits } from 'ethers';
 import { ref } from 'vue';
+import { getMetaMaskProvider } from '@/lib/evmProvider';
+import type { EthereumProvider } from '@/types/global';
 
 export type WalletState = {
     isConnected: boolean;
@@ -35,13 +37,15 @@ const cyberBalance = ref<TokenBalance | null>(null);
 let listenersSetup = false;
 let restored = false;
 
-export const useWallet = () => {
-    // Any EIP-1193 provider works — MetaMask, Phantom-on-EVM, Rabby, Coinbase, etc.
-    const isEvmProviderInstalled = (): boolean => {
-        return typeof window !== 'undefined' && !!window.ethereum;
-    };
+// The MetaMask provider, resolved via EIP-6963 so we never fall through to
+// Phantom (or another wallet) when several are installed.
+const getProvider = (): EthereumProvider | null => getMetaMaskProvider();
 
-    const isMetaMaskInstalled = isEvmProviderInstalled;
+export const useWallet = () => {
+    const isMetaMaskInstalled = (): boolean => getProvider() !== null;
+
+    // Kept for callers that only care that *some* EVM wallet exists.
+    const isEvmProviderInstalled = isMetaMaskInstalled;
 
     /**
      * Restore wallet state from the authenticated user's saved wallet_address
@@ -63,9 +67,11 @@ export const useWallet = () => {
         }
 
         // Try silent reconnect through MetaMask (no popup)
-        if (isMetaMaskInstalled()) {
+        const provider = getProvider();
+
+        if (provider) {
             try {
-                const accounts = (await window.ethereum!.request({
+                const accounts = (await provider.request({
                     method: 'eth_accounts',
                 })) as string[];
 
@@ -85,9 +91,11 @@ export const useWallet = () => {
     };
 
     const connect = async (): Promise<string | null> => {
-        if (!isEvmProviderInstalled()) {
+        const provider = getProvider();
+
+        if (!provider) {
             error.value =
-                'No EVM wallet detected. Install MetaMask, Phantom, or another EIP-1193 wallet.';
+                'MetaMask not detected. Install MetaMask, or disable other wallets that hijack the EVM provider.';
 
             return null;
         }
@@ -96,7 +104,7 @@ export const useWallet = () => {
         isConnecting.value = true;
 
         try {
-            const accounts = (await window.ethereum!.request({
+            const accounts = (await provider.request({
                 method: 'eth_requestAccounts',
             })) as string[];
 
@@ -137,12 +145,14 @@ export const useWallet = () => {
     };
 
     const fetchBalance = async (): Promise<void> => {
-        if (!address.value || !window.ethereum) {
+        const injected = getProvider();
+
+        if (!address.value || !injected) {
             return;
         }
 
         try {
-            const provider = new BrowserProvider(window.ethereum);
+            const provider = new BrowserProvider(injected);
             const balanceBigInt = await provider.getBalance(address.value);
             balance.value = formatEther(balanceBigInt);
         } catch {
@@ -151,12 +161,14 @@ export const useWallet = () => {
     };
 
     const fetchCyberBalance = async (): Promise<void> => {
-        if (!address.value || !window.ethereum) {
+        const injected = getProvider();
+
+        if (!address.value || !injected) {
             return;
         }
 
         try {
-            const provider = new BrowserProvider(window.ethereum);
+            const provider = new BrowserProvider(injected);
             const contract = new Contract(CYBER_CONTRACT, ERC20_ABI, provider);
 
             const balanceRaw = (await contract.balanceOf(
@@ -178,12 +190,14 @@ export const useWallet = () => {
     };
 
     const fetchChainId = async (): Promise<void> => {
-        if (!window.ethereum) {
+        const injected = getProvider();
+
+        if (!injected) {
             return;
         }
 
         try {
-            const chainIdHex = (await window.ethereum.request({
+            const chainIdHex = (await injected.request({
                 method: 'eth_chainId',
             })) as string;
             chainId.value = parseInt(chainIdHex, 16);
@@ -193,14 +207,16 @@ export const useWallet = () => {
     };
 
     const signMessage = async (message: string): Promise<string | null> => {
-        if (!address.value || !window.ethereum) {
+        const injected = getProvider();
+
+        if (!address.value || !injected) {
             error.value = 'Wallet not connected';
 
             return null;
         }
 
         try {
-            const provider = new BrowserProvider(window.ethereum);
+            const provider = new BrowserProvider(injected);
             const signer = await provider.getSigner();
 
             const signature = await signer.signMessage(message);
@@ -215,13 +231,15 @@ export const useWallet = () => {
     };
 
     const setupListeners = (): void => {
-        if (!window.ethereum || listenersSetup) {
+        const injected = getProvider();
+
+        if (!injected || listenersSetup) {
             return;
         }
 
         listenersSetup = true;
 
-        window.ethereum.on('accountsChanged', (accounts: unknown) => {
+        injected.on('accountsChanged', (accounts: unknown) => {
             const accs = accounts as string[];
 
             if (accs.length === 0) {
@@ -233,27 +251,29 @@ export const useWallet = () => {
             }
         });
 
-        window.ethereum.on('chainChanged', () => {
+        injected.on('chainChanged', () => {
             fetchChainId();
             fetchBalance();
             fetchCyberBalance();
         });
 
-        window.ethereum.on('disconnect', () => {
+        injected.on('disconnect', () => {
             disconnect();
         });
     };
 
     const removeListeners = (): void => {
-        if (!window.ethereum) {
+        const injected = getProvider();
+
+        if (!injected) {
             return;
         }
 
         listenersSetup = false;
 
-        window.ethereum.removeAllListeners?.('accountsChanged');
-        window.ethereum.removeAllListeners?.('chainChanged');
-        window.ethereum.removeAllListeners?.('disconnect');
+        injected.removeAllListeners?.('accountsChanged');
+        injected.removeAllListeners?.('chainChanged');
+        injected.removeAllListeners?.('disconnect');
     };
 
     const formatAddress = (addr: string, chars = 4): string => {

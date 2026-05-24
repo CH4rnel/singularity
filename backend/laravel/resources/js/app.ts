@@ -1,5 +1,10 @@
-import { Buffer } from 'buffer';
-globalThis.Buffer = Buffer;
+// The `buffer` userland polyfill uses CommonJS `require`, which breaks under
+// Vite's SSR ESM runner. Node already provides a native Buffer, so only load
+// the polyfill in the browser.
+if (!import.meta.env.SSR) {
+    const { Buffer } = await import('buffer');
+    globalThis.Buffer = Buffer;
+}
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { initializeTheme } from '@/composables/useAppearance';
