@@ -110,6 +110,22 @@ RITUAL_V2_ROUTER = os.environ.get(
 # even if the bot was stopped for a while.
 SWAP_MAX_BLOCK_RANGE = int(os.environ.get("SWAP_MAX_BLOCK_RANGE", "2000"))
 
+# Ritual DEX liquidity (V2 Mint/Burn) announcer. Same router filter as swaps:
+# addLiquidity/removeLiquidity go through the router, so the pair's Mint/Burn
+# `sender` topic equals the router address.
+LIQUIDITY_ANNOUNCE_CHAT = os.environ.get("LIQUIDITY_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+LIQUIDITY_POLL_SECONDS = int(os.environ.get("LIQUIDITY_POLL_SECONDS", str(SWAP_POLL_SECONDS)))
+LIQUIDITY_MAX_BLOCK_RANGE = int(os.environ.get("LIQUIDITY_MAX_BLOCK_RANGE", str(SWAP_MAX_BLOCK_RANGE)))
+
+# Lending (Compound-style markets) announcer. Markets are enumerated from the
+# comptroller's getAllMarkets(); supply/withdraw/borrow/repay are announced.
+LENDING_ANNOUNCE_CHAT = os.environ.get("LENDING_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+LENDING_POLL_SECONDS = int(os.environ.get("LENDING_POLL_SECONDS", str(SWAP_POLL_SECONDS)))
+LENDING_MAX_BLOCK_RANGE = int(os.environ.get("LENDING_MAX_BLOCK_RANGE", str(SWAP_MAX_BLOCK_RANGE)))
+# Same value the DEX frontend reads as VITE_LENDING_COMPTROLLER. Without it the
+# lending announcer stays dormant.
+LENDING_COMPTROLLER = (os.environ.get("LENDING_COMPTROLLER", "") or "").strip()
+
 LOG_FILE = Path(__file__).parent / "bot.log"
 
 logging.basicConfig(
@@ -1728,8 +1744,15 @@ def _router_topic_hex() -> str:
     return "0x" + RITUAL_V2_ROUTER.lower().replace("0x", "").rjust(64, "0")
 
 
-def _get_swap_cursor() -> tuple[int, int] | None:
-    raw = _kv_get("last_announced_swap_cursor")
+def _decode_data_words(data, n: int) -> list[int]:
+    """Decode the first `n` 32-byte words of an event's data blob to ints."""
+    h = _hex_no_prefix(data)
+    return [int(h[i * 64:(i + 1) * 64], 16) for i in range(n)]
+
+
+def _get_block_cursor(key: str) -> tuple[int, int] | None:
+    """Read a `block:log_index` cursor stored in bot_kv under `key`."""
+    raw = _kv_get(key)
     if raw is None:
         return None
     try:
@@ -1739,8 +1762,16 @@ def _get_swap_cursor() -> tuple[int, int] | None:
         return None
 
 
+def _set_block_cursor(key: str, block: int, log_index: int) -> None:
+    _kv_set(key, f"{block}:{log_index}")
+
+
+def _get_swap_cursor() -> tuple[int, int] | None:
+    return _get_block_cursor("last_announced_swap_cursor")
+
+
 def _set_swap_cursor(block: int, log_index: int) -> None:
-    _kv_set("last_announced_swap_cursor", f"{block}:{log_index}")
+    _set_block_cursor("last_announced_swap_cursor", block, log_index)
 
 
 async def _announce_swap_tick(bot) -> None:
@@ -1852,6 +1883,303 @@ async def swap_announcer_loop(application: Application) -> None:
         await asyncio.sleep(SWAP_POLL_SECONDS)
 
 
+# --- Ritual DEX liquidity announcer (V2 Mint/Burn) -------------------------
+
+def _event_topic(signature: str) -> str:
+    """0x-prefixed keccak topic for an event signature. Normalizes the prefix
+    since hexbytes' `.hex()` adds `0x` in 1.x but not in older releases."""
+    return "0x" + Web3.keccak(text=signature).hex().removeprefix("0x").removeprefix("0X")
+
+
+# keccak256("Mint(address,uint256,uint256)") / "Burn(address,uint256,uint256,address)".
+LP_MINT_TOPIC = _event_topic("Mint(address,uint256,uint256)")
+LP_BURN_TOPIC = _event_topic("Burn(address,uint256,uint256,address)")
+
+# Cache tx hash → initiating EOA so re-scanned/multi-event txs cost one lookup.
+_tx_sender_cache: dict[str, str] = {}
+
+
+def _get_tx_sender(w3: Web3, tx_hash: str) -> str | None:
+    cached = _tx_sender_cache.get(tx_hash)
+    if cached is not None:
+        return cached
+    try:
+        tx = w3.eth.get_transaction(tx_hash)
+        sender = Web3.to_checksum_address(tx["from"])
+    except Exception as e:
+        logger.warning(f"liquidity_announcer: get_transaction {tx_hash} failed: {e}")
+        return None
+    _tx_sender_cache[tx_hash] = sender
+    return sender
+
+
+async def _announce_liquidity_tick(bot) -> None:
+    """Scan V2 Mint/Burn events routed through the Ritual router and announce
+    each add/remove. Mirrors the swap announcer's cursor handling."""
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    try:
+        latest = w3.eth.block_number
+    except Exception as e:
+        logger.error(f"liquidity_announcer: block_number failed: {e}")
+        return
+
+    cursor = _get_block_cursor("last_announced_liq_cursor")
+    if cursor is None:
+        _set_block_cursor("last_announced_liq_cursor", latest, 10**9)
+        logger.info(f"liquidity_announcer: bootstrapped cursor to head block={latest}")
+        return
+    cur_block, cur_idx = cursor
+    if cur_block > latest:
+        return
+    end = min(cur_block + LIQUIDITY_MAX_BLOCK_RANGE - 1, latest)
+
+    try:
+        logs = w3.eth.get_logs({
+            "fromBlock": cur_block,
+            "toBlock": end,
+            "topics": [[LP_MINT_TOPIC, LP_BURN_TOPIC], _router_topic_hex()],
+        })
+    except Exception as e:
+        logger.error(f"liquidity_announcer: get_logs {cur_block}..{end}: {e}")
+        return
+
+    for log in sorted(logs, key=lambda l: (int(l["blockNumber"]), int(l["logIndex"]))):
+        blk = int(log["blockNumber"])
+        idx = int(log["logIndex"])
+        if (blk, idx) <= (cur_block, cur_idx):
+            continue
+
+        try:
+            topic0 = "0x" + _hex_no_prefix(log["topics"][0]).lower()
+            is_add = topic0 == LP_MINT_TOPIC.lower()
+            tokens = _get_pair_tokens(w3, log["address"])
+            if not tokens:
+                _set_block_cursor("last_announced_liq_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            t0, t1 = tokens
+            sym0, dec0 = _get_token_meta(w3, t0)
+            sym1, dec1 = _get_token_meta(w3, t1)
+            # Both Mint and Burn carry (amount0, amount1) as the first two words.
+            words = _decode_data_words(log["data"], 2)
+            amount0, amount1 = words[0], words[1]
+
+            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            # Burn carries the LP recipient in topics[2]; for Mint we fall back
+            # to the tx initiator (the EOA that called the router).
+            if not is_add and len(log["topics"]) > 2:
+                user = _decode_topic_address(log["topics"][2])
+            else:
+                user = _get_tx_sender(w3, tx_hash) or "?"
+
+            verb = "added" if is_add else "removed"
+            sign = "+" if is_add else "-"
+            text_lines = [
+                f"💧 Liquidity {verb} on Ritual",
+                f"{sign}{_format_token_amount(amount0, dec0)} {sym0} + "
+                f"{sign}{_format_token_amount(amount1, dec1)} {sym1}",
+                f"User: {_short_addr(user)}",
+                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+            ]
+        except Exception as e:
+            logger.error(f"liquidity_announcer: decode failed block={blk} idx={idx}: {e}")
+            _set_block_cursor("last_announced_liq_cursor", blk, idx)
+            cur_block, cur_idx = blk, idx
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=LIQUIDITY_ANNOUNCE_CHAT,
+                text="\n".join(text_lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"liquidity_announcer: send failed block={blk} idx={idx}: {e}")
+            return
+
+        _set_block_cursor("last_announced_liq_cursor", blk, idx)
+        cur_block, cur_idx = blk, idx
+        logger.info(f"liquidity_announcer: posted {verb} block={blk} idx={idx} tx={tx_hash}")
+
+    if end > cur_block:
+        _set_block_cursor("last_announced_liq_cursor", end, 10**9)
+
+
+async def liquidity_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_liquidity_tick(application.bot)
+        except Exception as e:
+            logger.error(f"liquidity_announcer_loop: {e}")
+        await asyncio.sleep(LIQUIDITY_POLL_SECONDS)
+
+
+# --- Lending announcer (Compound-style markets) ----------------------------
+
+# Market event topics. Note Mint(address,uint256,uint256) collides with the V2
+# pair Mint signature, but the two announcers filter disjoint address sets
+# (lending markets vs. router-routed pairs), so they never cross-fire.
+LEND_MINT_TOPIC = _event_topic("Mint(address,uint256,uint256)")
+LEND_REDEEM_TOPIC = _event_topic("Redeem(address,uint256,uint256)")
+LEND_BORROW_TOPIC = _event_topic("Borrow(address,uint256,uint256,uint256)")
+LEND_REPAY_TOPIC = _event_topic("RepayBorrow(address,address,uint256,uint256,uint256)")
+
+_LEND_ACTION = {
+    LEND_MINT_TOPIC.lower():   ("supplied", "🏦"),
+    LEND_REDEEM_TOPIC.lower(): ("withdrew", "🏦"),
+    LEND_BORROW_TOPIC.lower(): ("borrowed", "💸"),
+    LEND_REPAY_TOPIC.lower():  ("repaid",   "💵"),
+}
+
+GET_ALL_MARKETS_ABI = [{
+    "inputs": [], "name": "getAllMarkets",
+    "outputs": [{"name": "", "type": "address[]"}],
+    "stateMutability": "view", "type": "function",
+}]
+UNDERLYING_ABI = [{
+    "inputs": [], "name": "underlying",
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view", "type": "function",
+}]
+
+# market address (checksummed) → underlying ERC20 address.
+_market_underlying_cache: dict[str, str] = {}
+
+
+def _get_lending_markets(w3: Web3) -> list[str]:
+    c = w3.eth.contract(
+        address=Web3.to_checksum_address(LENDING_COMPTROLLER), abi=GET_ALL_MARKETS_ABI
+    )
+    return [Web3.to_checksum_address(m) for m in c.functions.getAllMarkets().call()]
+
+
+def _get_market_underlying(w3: Web3, market_addr: str) -> str | None:
+    addr = Web3.to_checksum_address(market_addr)
+    cached = _market_underlying_cache.get(addr)
+    if cached is not None:
+        return cached
+    try:
+        c = w3.eth.contract(address=addr, abi=UNDERLYING_ABI)
+        underlying = Web3.to_checksum_address(c.functions.underlying().call())
+    except Exception as e:
+        logger.warning(f"lending_announcer: underlying() failed for {addr}: {e}")
+        return None
+    _market_underlying_cache[addr] = underlying
+    return underlying
+
+
+async def _announce_lending_tick(bot) -> None:
+    """Scan supply/withdraw/borrow/repay events from every lending market and
+    announce them. Amounts are in underlying-token units."""
+    if not LENDING_COMPTROLLER:
+        return
+
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    try:
+        latest = w3.eth.block_number
+    except Exception as e:
+        logger.error(f"lending_announcer: block_number failed: {e}")
+        return
+
+    cursor = _get_block_cursor("last_announced_lend_cursor")
+    if cursor is None:
+        _set_block_cursor("last_announced_lend_cursor", latest, 10**9)
+        logger.info(f"lending_announcer: bootstrapped cursor to head block={latest}")
+        return
+    cur_block, cur_idx = cursor
+    if cur_block > latest:
+        return
+    end = min(cur_block + LENDING_MAX_BLOCK_RANGE - 1, latest)
+
+    try:
+        markets = _get_lending_markets(w3)
+    except Exception as e:
+        logger.error(f"lending_announcer: getAllMarkets failed: {e}")
+        return
+    if not markets:
+        return
+
+    try:
+        logs = w3.eth.get_logs({
+            "fromBlock": cur_block,
+            "toBlock": end,
+            "address": markets,
+            "topics": [[LEND_MINT_TOPIC, LEND_REDEEM_TOPIC, LEND_BORROW_TOPIC, LEND_REPAY_TOPIC]],
+        })
+    except Exception as e:
+        logger.error(f"lending_announcer: get_logs {cur_block}..{end}: {e}")
+        return
+
+    for log in sorted(logs, key=lambda l: (int(l["blockNumber"]), int(l["logIndex"]))):
+        blk = int(log["blockNumber"])
+        idx = int(log["logIndex"])
+        if (blk, idx) <= (cur_block, cur_idx):
+            continue
+
+        try:
+            topic0 = "0x" + _hex_no_prefix(log["topics"][0]).lower()
+            action = _LEND_ACTION.get(topic0)
+            if action is None:
+                _set_block_cursor("last_announced_lend_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            verb, emoji = action
+
+            underlying = _get_market_underlying(w3, log["address"])
+            if underlying is None:
+                _set_block_cursor("last_announced_lend_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            sym, dec = _get_token_meta(w3, underlying)
+
+            # First data word is always the underlying amount (mint/redeem/borrow/
+            # repay all lead with it). The acting user is the first indexed arg,
+            # except RepayBorrow where topics[1]=payer and topics[2]=borrower.
+            amount = _decode_data_words(log["data"], 1)[0]
+            if topic0 == LEND_REPAY_TOPIC.lower() and len(log["topics"]) > 2:
+                user = _decode_topic_address(log["topics"][2])
+            else:
+                user = _decode_topic_address(log["topics"][1])
+
+            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            text_lines = [
+                f"{emoji} Lending: {verb} {_format_token_amount(amount, dec)} {sym}",
+                f"User: {_short_addr(user)}",
+                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+            ]
+        except Exception as e:
+            logger.error(f"lending_announcer: decode failed block={blk} idx={idx}: {e}")
+            _set_block_cursor("last_announced_lend_cursor", blk, idx)
+            cur_block, cur_idx = blk, idx
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=LENDING_ANNOUNCE_CHAT,
+                text="\n".join(text_lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"lending_announcer: send failed block={blk} idx={idx}: {e}")
+            return
+
+        _set_block_cursor("last_announced_lend_cursor", blk, idx)
+        cur_block, cur_idx = blk, idx
+        logger.info(f"lending_announcer: posted {verb} block={blk} idx={idx} tx={tx_hash}")
+
+    if end > cur_block:
+        _set_block_cursor("last_announced_lend_cursor", end, 10**9)
+
+
+async def lending_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_lending_tick(application.bot)
+        except Exception as e:
+            logger.error(f"lending_announcer_loop: {e}")
+        await asyncio.sleep(LENDING_POLL_SECONDS)
+
+
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
@@ -1888,6 +2216,23 @@ async def post_init(application: Application):
         f"Swap announcer started: chat={SWAP_ANNOUNCE_CHAT} "
         f"router={RITUAL_V2_ROUTER} interval={SWAP_POLL_SECONDS}s"
     )
+
+    # Background loop that announces Ritual DEX liquidity add/remove.
+    application.create_task(liquidity_announcer_loop(application))
+    logger.info(
+        f"Liquidity announcer started: chat={LIQUIDITY_ANNOUNCE_CHAT} "
+        f"router={RITUAL_V2_ROUTER} interval={LIQUIDITY_POLL_SECONDS}s"
+    )
+
+    # Background loop that announces lending supply/withdraw/borrow/repay.
+    if LENDING_COMPTROLLER:
+        application.create_task(lending_announcer_loop(application))
+        logger.info(
+            f"Lending announcer started: chat={LENDING_ANNOUNCE_CHAT} "
+            f"comptroller={LENDING_COMPTROLLER} interval={LENDING_POLL_SECONDS}s"
+        )
+    else:
+        logger.info("Lending announcer disabled: LENDING_COMPTROLLER not set")
 
 
 def run_dispatcher():

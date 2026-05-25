@@ -261,8 +261,12 @@ function perDayInterest(market: MarketView): bigint {
     return projectInterest(market, 86_400);
 }
 
-function perHourInterest(market: MarketView): bigint {
-    return projectInterest(market, 3600);
+function perWeekInterest(market: MarketView): bigint {
+    return projectInterest(market, 7 * 86_400);
+}
+
+function perMonthInterest(market: MarketView): bigint {
+    return projectInterest(market, 30 * 86_400);
 }
 
 function rateToApy(ratePerBlock: bigint, blocksPerYear: bigint): number {
@@ -1432,8 +1436,9 @@ onMounted(async () => {
                                 <th class="px-4 py-2 text-left">Asset</th>
                                 <th class="px-4 py-2 text-right">Owed (live)</th>
                                 <th class="px-4 py-2 text-right">APR</th>
+                                <th class="px-4 py-2 text-right">Per month</th>
+                                <th class="px-4 py-2 text-right">Per week</th>
                                 <th class="px-4 py-2 text-right">Per day</th>
-                                <th class="px-4 py-2 text-right">Per hour</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1450,10 +1455,13 @@ onMounted(async () => {
                                     {{ m.borrowApy.toFixed(2) }}%
                                 </td>
                                 <td class="px-4 py-2 text-right font-mono">
-                                    +{{ formatToken(perDayInterest(m), m.decimals, 8) }}
+                                    +{{ formatToken(perMonthInterest(m), m.decimals, 8) }}
                                 </td>
                                 <td class="px-4 py-2 text-right font-mono">
-                                    +{{ formatToken(perHourInterest(m), m.decimals, 8) }}
+                                    +{{ formatToken(perWeekInterest(m), m.decimals, 8) }}
+                                </td>
+                                <td class="px-4 py-2 text-right font-mono">
+                                    +{{ formatToken(perDayInterest(m), m.decimals, 8) }}
                                 </td>
                             </tr>
                         </tbody>
@@ -1461,8 +1469,8 @@ onMounted(async () => {
                     <p class="px-4 py-2 text-[11px] text-muted-foreground">
                         Owed values are live, recomputed on every refresh
                         (Multicall3 forces <code>accrueInterest</code> in a
-                        simulated call). The «per day / per hour» columns are
-                        projections based on the current borrow APR.
+                        simulated call). The «per month / per week / per day»
+                        columns are projections based on the current borrow APR.
                     </p>
                 </div>
 
