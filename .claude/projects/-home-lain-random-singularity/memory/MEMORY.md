@@ -1,0 +1,2 @@
+- [Blockscout explorer logo](blockscout-logo-external-asset-download.md) — logo/icon are downloaded at frontend container start from NEXT_PUBLIC_NETWORK_LOGO; URL must be reachable from inside the container (not the own explorer domain); repo/old-UI edits do nothing
+- [Blockscout explorer nginx upstream](blockscout-explorer-nginx-static-upstream.md) — recreating only the frontend 502s the explorer because the proxy caches a stale container IP (static proxy_pass, no resolver)
