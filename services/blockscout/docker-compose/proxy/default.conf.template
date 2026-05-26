@@ -185,6 +185,16 @@ server {
         proxy_set_header      Upgrade $http_upgrade;
         proxy_set_header      Connection $connection_upgrade;
         proxy_cache_bypass    $http_upgrade;
+
+        # Force the network logo display size. Blockscout exposes no env for the
+        # logo dimensions — it scales the source image into a fixed-height
+        # container — so we override the CSS by injecting a <style> tag.
+        # Accept-Encoding is cleared so the upstream HTML is uncompressed and
+        # sub_filter can match it.
+        proxy_set_header      Accept-Encoding "";
+        sub_filter_once       off;
+        sub_filter_types      text/html;
+        sub_filter '</head>' '<style>img[src*="/assets/configs/network_logo"]{width:140px!important;height:50px!important;max-width:140px!important;object-fit:contain!important}:has(>img[src*="/assets/configs/network_logo"]){height:50px!important;max-height:none!important;width:auto!important;overflow:visible!important}</style></head>';
     }
 }
 

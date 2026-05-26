@@ -19,6 +19,19 @@ export const RITUAL_TOTAL_DAILY_ASH = 437;
 /** Block time on Cyberia (~1 s) — used to convert rewardPerBlock to per-day. */
 export const RITUAL_BLOCK_TIME_SECONDS = 1;
 
+/**
+ * Reward token (ASH) and the stablecoins used as USD price anchors when
+ * deriving token/LP prices from on-chain AMM reserves. All lowercased so they
+ * can be compared directly against pair.token0()/token1() results.
+ */
+export const RITUAL_ASH_ADDRESS = '0x992Fca0a89DD95afb17751f6CC233Adb9B089df5'.toLowerCase();
+
+/** Tokens worth $1 — the roots of the price-propagation graph. */
+export const RITUAL_USD_ANCHORS: { [address: string]: number } = {
+  ['0xdc25597B19799010047F17e9591EFE08EFd40077'.toLowerCase()]: 1, // USDC
+  ['0x94845aF24a3E431593A2b941b2b31836dE45185D'.toLowerCase()]: 1, // USDT
+};
+
 export interface RitualFarmPool {
   pid: number;
   /** LP token address (or ASH itself for the solo pool). */
@@ -29,6 +42,8 @@ export interface RitualFarmPool {
   description: string;
   /** Whether the staked token is itself the reward token. */
   isSolo: boolean;
+  /** Token logos shown on the pool card (paths served from /public). */
+  icons: string[];
 }
 
 export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
@@ -39,6 +54,7 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       label: 'ASH',
       description: 'Stake ASH directly',
       isSolo: true,
+      icons: ['/ash.png'],
     },
     {
       pid: 1,
@@ -46,6 +62,7 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       label: 'ASH / WCYBER LP',
       description: 'Stake LP from the ASH/WCYBER pair',
       isSolo: false,
+      icons: ['/ash.png', '/CYBER.png'],
     },
     {
       pid: 2,
@@ -53,6 +70,7 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       label: 'CYBER.sol',
       description: 'Stake CYBER.sol directly',
       isSolo: true,
+      icons: ['/CYBER.png'],
     },
     {
       pid: 3,
@@ -60,6 +78,7 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       label: 'CYBER.sol / CYBER LP',
       description: 'Stake LP from the CYBER.sol/CYBER pair',
       isSolo: false,
+      icons: ['/CYBER.png', '/cyberia.png'],
     },
     {
       pid: 4,
@@ -67,6 +86,7 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       label: 'USDT / USDC LP',
       description: 'Stake LP from the USDT/USDC pair',
       isSolo: false,
+      icons: ['/usdt.svg', '/usdc.svg'],
     },
     {
       pid: 5,
@@ -74,6 +94,7 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       label: 'CYBER / USDT LP',
       description: 'Stake LP from the CYBER/USDT pair',
       isSolo: false,
+      icons: ['/cyberia.png', '/usdt.svg'],
     },
     {
       pid: 6,
@@ -81,6 +102,7 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       label: 'CYBER / USDC LP',
       description: 'Stake LP from the CYBER/USDC pair',
       isSolo: false,
+      icons: ['/cyberia.png', '/usdc.svg'],
     },
   ],
 };

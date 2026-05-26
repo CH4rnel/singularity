@@ -9,6 +9,8 @@ import {
   RITUAL_FARM_POOLS,
   RITUAL_TOTAL_DAILY_ASH,
   RITUAL_BLOCK_TIME_SECONDS,
+  RITUAL_ASH_ADDRESS,
+  RITUAL_USD_ANCHORS,
   RitualFarmPool,
 } from 'constants/ritualFarms';
 import { useActiveWeb3React, useConnectWallet } from 'hooks';
@@ -22,10 +24,34 @@ import './RitualFarmPage.scss';
  *
  * Reads pool/user state from the v1 MasterChef on Cyberia.
  * Lets users approve, deposit, withdraw, and harvest (via deposit(_, 0)).
+ *
+ * Cyberia has no price oracle, so token/LP USD prices are derived directly
+ * from the AMM pair reserves: stablecoins anchor at $1 and prices propagate
+ * across pairs (see `buildPriceMap`). Those feed the APY% and USD figures.
  */
 
 const ZERO = BigNumber.from(0);
 const ACC_PRECISION = BigNumber.from('1000000000000'); // 1e12 — MasterChef internal scale
+
+// Minimal human-readable ABI for reading AMM pair reserves.
+const PAIR_ABI = [
+  'function token0() view returns (address)',
+  'function token1() view returns (address)',
+  'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+  'function totalSupply() view returns (uint256)',
+];
+
+interface PairInfo {
+  token0: string; // lowercased
+  token1: string; // lowercased
+  reserve0: BigNumber;
+  reserve1: BigNumber;
+  decimals0: number;
+  decimals1: number;
+  symbol0: string;
+  symbol1: string;
+  totalSupply: BigNumber; // LP tokens are 18-decimal
+}
 
 interface PoolState {
   allocPoint: BigNumber;
@@ -35,6 +61,8 @@ interface PoolState {
   userBalance: BigNumber;
   allowance: BigNumber;
   decimals: number;
+  tokenAddress: string; // lowercased lpToken/staked-token address
+  pair?: PairInfo; // present for LP pools, used for pricing
   // Fields needed to project pending forward between RPC reads.
   lastRewardBlock: BigNumber;
   accRewardPerShare: BigNumber;
@@ -67,6 +95,7 @@ const RitualFarmPage: React.FC = () => {
   const [poolStates, setPoolStates] = useState<Record<number, PoolState>>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [busyPid, setBusyPid] = useState<number | null>(null);
+  const [harvestingAll, setHarvestingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Frame counter — bumped 5×/sec to drive smooth pending-reward animation.
   // Reading `tick` keeps it in the dependency graph so the projector below
@@ -146,9 +175,7 @@ const RitualFarmPage: React.FC = () => {
             lp.decimals().catch(() => 18),
           ]);
           const pending = account
-            ? await chefRead
-                .pendingReward(pool.pid, account)
-                .catch(() => ZERO)
+            ? await chefRead.pendingReward(pool.pid, account).catch(() => ZERO)
             : ZERO;
           const userBalance = account
             ? await lp.balanceOf(account).catch(() => ZERO)
@@ -156,6 +183,38 @@ const RitualFarmPage: React.FC = () => {
           const allowance = account
             ? await lp.allowance(account, chefAddress).catch(() => ZERO)
             : ZERO;
+
+          // For LP pools, read pair reserves so we can value the LP token.
+          let pair: PairInfo | undefined;
+          if (!pool.isSolo) {
+            try {
+              const pairContract = new Contract(pool.lpToken, PAIR_ABI, rpc);
+              const [t0, t1, reserves, totalSupply] = await Promise.all([
+                pairContract.token0(),
+                pairContract.token1(),
+                pairContract.getReserves(),
+                pairContract.totalSupply(),
+              ]);
+              const e0 = new Contract(t0, ERC20_ABI, rpc);
+              const e1 = new Contract(t1, ERC20_ABI, rpc);
+              const [d0, d1] = await Promise.all([
+                e0.decimals().catch(() => 18),
+                e1.decimals().catch(() => 18),
+              ]);
+              pair = {
+                token0: String(t0).toLowerCase(),
+                token1: String(t1).toLowerCase(),
+                reserve0: reserves[0],
+                reserve1: reserves[1],
+                decimals0: d0,
+                decimals1: d1,
+                totalSupply,
+              };
+            } catch {
+              // not an AMM pair / not deployed — leave unpriced
+            }
+          }
+
           next[pool.pid] = {
             allocPoint: info.allocPoint ?? info[1],
             totalStaked,
@@ -164,6 +223,8 @@ const RitualFarmPage: React.FC = () => {
             userBalance,
             allowance,
             decimals,
+            tokenAddress: pool.lpToken.toLowerCase(),
+            pair,
             lastRewardBlock: info.lastRewardBlock ?? info[2],
             accRewardPerShare: info.accRewardPerShare ?? info[3],
             rewardDebt: user.rewardDebt ?? user[1],
@@ -180,6 +241,10 @@ const RitualFarmPage: React.FC = () => {
     };
   }, [chainId, chefAddress, pools, account, refreshKey]);
 
+  // USD price map derived from the pools' AMM reserves.
+  const prices = useMemo(() => buildPriceMap(poolStates), [poolStates]);
+  const ashPriceUsd = prices[RITUAL_ASH_ADDRESS];
+
   const handleApprove = async (pool: RitualFarmPool): Promise<boolean> => {
     if (!chef || !chefAddress || !account) return false;
     setBusyPid(pool.pid);
@@ -195,7 +260,7 @@ const RitualFarmPage: React.FC = () => {
       await tx.wait();
       refresh();
       return true;
-    } catch (e: any) {
+    } catch (e) {
       setError(e?.message ?? String(e));
       return false;
     } finally {
@@ -217,7 +282,7 @@ const RitualFarmPage: React.FC = () => {
       await tx.wait();
       refresh();
       return true;
-    } catch (e: any) {
+    } catch (e) {
       setError(e?.message ?? String(e));
       return false;
     } finally {
@@ -239,7 +304,7 @@ const RitualFarmPage: React.FC = () => {
       await tx.wait();
       refresh();
       return true;
-    } catch (e: any) {
+    } catch (e) {
       setError(e?.message ?? String(e));
       return false;
     } finally {
@@ -256,11 +321,42 @@ const RitualFarmPage: React.FC = () => {
       await tx.wait();
       refresh();
       return true;
-    } catch (e: any) {
+    } catch (e) {
       setError(e?.message ?? String(e));
       return false;
     } finally {
       setBusyPid(null);
+    }
+  };
+
+  // Pools with a non-zero pending balance — the targets for "Harvest all".
+  const harvestablePids = useMemo(
+    () =>
+      pools
+        .filter((p) => {
+          const live = computeLivePending(poolStates[p.pid], globals);
+          const amt = live ?? poolStates[p.pid]?.pending;
+          return amt && amt.gt(0);
+        })
+        .map((p) => p.pid),
+    [pools, poolStates, globals],
+  );
+
+  const handleHarvestAll = async () => {
+    if (!chef || !account || harvestablePids.length === 0) return;
+    setHarvestingAll(true);
+    setError(null);
+    try {
+      // MasterChef has no batch claim — harvest each pool with rewards in turn.
+      for (const pid of harvestablePids) {
+        const tx = await chef.deposit(pid, 0);
+        await tx.wait();
+      }
+      refresh();
+    } catch (e) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setHarvestingAll(false);
     }
   };
 
@@ -287,7 +383,25 @@ const RitualFarmPage: React.FC = () => {
           <div className='subtitle'>
             {RITUAL_TOTAL_DAILY_ASH} ASH minted per day, split between pools by
             allocPoint. Block ≈ {RITUAL_BLOCK_TIME_SECONDS}s.
+            {ashPriceUsd ? ` ASH ≈ $${formatUsdPrice(ashPriceUsd)}.` : ''}
           </div>
+          {account && (
+            <Box className='harvestAllRow'>
+              <Button
+                className='actionBtn harvestAllBtn'
+                disabled={harvestingAll || harvestablePids.length === 0}
+                onClick={handleHarvestAll}
+              >
+                {harvestingAll ? (
+                  <CircularProgress size={18} />
+                ) : (
+                  `Harvest all${
+                    harvestablePids.length ? ` (${harvestablePids.length})` : ''
+                  }`
+                )}
+              </Button>
+            </Box>
+          )}
         </Box>
 
         {error && <Box className='ritualFarmError'>{error}</Box>}
@@ -296,12 +410,33 @@ const RitualFarmPage: React.FC = () => {
           const st = poolStates[pool.pid];
           const allocShare =
             globals && st && globals.totalAllocPoint.gt(0)
-              ? st.allocPoint.mul(10000).div(globals.totalAllocPoint).toNumber() /
-                100
+              ? st.allocPoint
+                  .mul(10000)
+                  .div(globals.totalAllocPoint)
+                  .toNumber() / 100
               : 0;
           const dailyAshForPool =
             allocShare > 0 ? (RITUAL_TOTAL_DAILY_ASH * allocShare) / 100 : 0;
           const livePending = computeLivePending(st, globals);
+
+          // USD price of one staked unit (the solo token, or one LP token).
+          const stakedUsdPrice = pool.isSolo
+            ? prices[pool.lpToken.toLowerCase()]
+            : st?.pair
+            ? lpUsdPrice(st.pair, prices)
+            : undefined;
+          const totalStakedWhole = st
+            ? Number(formatUnits(st.totalStaked, st.decimals))
+            : 0;
+          const tvlUsd =
+            stakedUsdPrice != null
+              ? totalStakedWhole * stakedUsdPrice
+              : undefined;
+          const apy =
+            tvlUsd && tvlUsd > 0 && ashPriceUsd != null
+              ? ((dailyAshForPool * ashPriceUsd * 365) / tvlUsd) * 100
+              : undefined;
+
           return (
             <PoolCard
               key={pool.pid}
@@ -310,8 +445,12 @@ const RitualFarmPage: React.FC = () => {
               livePending={livePending}
               allocSharePct={allocShare}
               dailyAsh={dailyAshForPool}
+              apy={apy}
+              stakedUsdPrice={stakedUsdPrice}
+              tvlUsd={tvlUsd}
+              ashPriceUsd={ashPriceUsd}
               account={account ?? null}
-              busy={busyPid === pool.pid}
+              busy={busyPid === pool.pid || harvestingAll}
               onConnect={() => connectWallet()}
               onApprove={() => handleApprove(pool)}
               onDeposit={(v) => handleDeposit(pool, v)}
@@ -333,6 +472,10 @@ interface PoolCardProps {
   livePending: BigNumber | undefined;
   allocSharePct: number;
   dailyAsh: number;
+  apy: number | undefined;
+  stakedUsdPrice: number | undefined;
+  tvlUsd: number | undefined;
+  ashPriceUsd: number | undefined;
   account: string | null;
   busy: boolean;
   onConnect: () => void;
@@ -348,6 +491,10 @@ const PoolCard: React.FC<PoolCardProps> = ({
   livePending,
   allocSharePct,
   dailyAsh,
+  apy,
+  stakedUsdPrice,
+  tvlUsd,
+  ashPriceUsd,
   account,
   busy,
   onConnect,
@@ -365,38 +512,75 @@ const PoolCard: React.FC<PoolCardProps> = ({
   const fmtAsh = (b?: BigNumber) =>
     b ? Number(formatUnits(b, 18)).toFixed(6) : '—';
 
+  // USD subtext for an amount of the staked token.
+  const usdStaked = (b?: BigNumber): string | undefined => {
+    if (!b || stakedUsdPrice == null) return undefined;
+    return formatUsd(Number(formatUnits(b, decimals)) * stakedUsdPrice);
+  };
+  // USD subtext for an ASH amount.
+  const usdAsh = (b?: BigNumber): string | undefined => {
+    if (!b || ashPriceUsd == null) return undefined;
+    return formatUsd(Number(formatUnits(b, 18)) * ashPriceUsd);
+  };
+
   const depositBn = parseAmount(depositValue, decimals);
-  const needsApprove = !!state && depositBn.gt(0) && state.allowance.lt(depositBn);
+  const needsApprove =
+    !!state && depositBn.gt(0) && state.allowance.lt(depositBn);
 
   return (
     <Box className='poolCard'>
       <Box className='poolCardHeader'>
-        <Box>
-          <div className='poolTitle'>
-            {pool.label}
-            <span className='pidTag'>pid={pool.pid}</span>
-          </div>
-          <div className='poolDescription'>{pool.description}</div>
+        <Box className='poolTitleWrap'>
+          <TokenIcons icons={pool.icons} label={pool.label} />
+          <Box>
+            <div className='poolTitle'>
+              {pool.label}
+              <span className='pidTag'>pid={pool.pid}</span>
+            </div>
+            <div className='poolDescription'>{pool.description}</div>
+          </Box>
         </Box>
         <Box className='poolEmission'>
+          {apy != null && (
+            <div className='apy' title='Estimated APY from ASH emissions'>
+              {formatApy(apy)} APY
+            </div>
+          )}
           <div className='alloc'>{allocSharePct.toFixed(0)}% emission</div>
           <div className='rate'>≈ {dailyAsh.toFixed(2)} ASH/day</div>
         </Box>
       </Box>
 
       <Box className='poolStats'>
-        <Stat label='Total staked' value={fmt(state?.totalStaked)} />
-        <Stat label='Your stake' value={fmt(state?.userStaked)} />
-        <Stat label='Wallet balance' value={fmt(state?.userBalance)} />
+        <Stat
+          label='Total staked'
+          value={fmt(state?.totalStaked)}
+          sub={tvlUsd != null ? formatUsd(tvlUsd) : undefined}
+        />
+        <Stat
+          label='Your stake'
+          value={fmt(state?.userStaked)}
+          sub={usdStaked(state?.userStaked)}
+        />
+        <Stat
+          label='Wallet balance'
+          value={fmt(state?.userBalance)}
+          sub={usdStaked(state?.userBalance)}
+        />
         <Stat
           label='Pending ASH'
           value={fmtAsh(livePending ?? state?.pending)}
+          sub={usdAsh(livePending ?? state?.pending)}
         />
       </Box>
 
       {!account ? (
         <Box className='poolActionsConnect'>
-          <Button onClick={onConnect} className='actionBtn' style={{ minWidth: 180 }}>
+          <Button
+            onClick={onConnect}
+            className='actionBtn'
+            style={{ minWidth: 180 }}
+          >
             Connect wallet
           </Button>
         </Box>
@@ -415,7 +599,8 @@ const PoolCard: React.FC<PoolCardProps> = ({
             <Button
               className='secondaryBtn'
               onClick={() =>
-                state && setDepositValue(formatUnits(state.userBalance, decimals))
+                state &&
+                setDepositValue(formatUnits(state.userBalance, decimals))
               }
             >
               Max
@@ -455,7 +640,8 @@ const PoolCard: React.FC<PoolCardProps> = ({
             <Button
               className='secondaryBtn'
               onClick={() =>
-                state && setWithdrawValue(formatUnits(state.userStaked, decimals))
+                state &&
+                setWithdrawValue(formatUnits(state.userStaked, decimals))
               }
             >
               Max
@@ -488,12 +674,126 @@ const PoolCard: React.FC<PoolCardProps> = ({
   );
 };
 
-const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+const TokenIcons: React.FC<{ icons: string[]; label: string }> = ({
+  icons,
+  label,
+}) => {
+  const [broken, setBroken] = useState<Record<number, boolean>>({});
+  if (!icons.length) return null;
+  return (
+    <Box className='tokenIcons'>
+      {icons.map((src, i) =>
+        broken[i] ? (
+          <span key={i} className='tokenIconFallback'>
+            {label.charAt(0)}
+          </span>
+        ) : (
+          <img
+            key={i}
+            src={src}
+            alt=''
+            className='tokenIcon'
+            onError={() => setBroken((b) => ({ ...b, [i]: true }))}
+          />
+        ),
+      )}
+    </Box>
+  );
+};
+
+const Stat: React.FC<{ label: string; value: string; sub?: string }> = ({
+  label,
+  value,
+  sub,
+}) => (
   <Box className='statCell'>
     <div className='statLabel'>{label}</div>
     <div className='statValue'>{value}</div>
+    {sub && <div className='statSub'>{sub}</div>}
   </Box>
 );
+
+/**
+ * Build a USD price map keyed by lowercased token address. Stablecoins anchor
+ * at $1; prices then propagate across the farm's AMM pairs until no new token
+ * can be priced (a few passes suffice for the Cyberia token graph).
+ */
+function buildPriceMap(
+  states: Record<number, PoolState>,
+): Record<string, number> {
+  const prices: Record<string, number> = { ...RITUAL_USD_ANCHORS };
+  const pairs = Object.values(states)
+    .map((s) => s.pair)
+    .filter((p): p is PairInfo => !!p);
+
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (const p of pairs) {
+      const r0 = Number(formatUnits(p.reserve0, p.decimals0));
+      const r1 = Number(formatUnits(p.reserve1, p.decimals1));
+      if (r0 <= 0 || r1 <= 0) continue;
+      const p0 = prices[p.token0];
+      const p1 = prices[p.token1];
+      if (p0 != null && p1 == null) {
+        prices[p.token1] = (r0 * p0) / r1;
+        changed = true;
+      } else if (p1 != null && p0 == null) {
+        prices[p.token0] = (r1 * p1) / r0;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return prices;
+}
+
+/** USD value of a single LP token from its reserves and total supply. */
+function lpUsdPrice(
+  p: PairInfo,
+  prices: Record<string, number>,
+): number | undefined {
+  const supply = Number(formatUnits(p.totalSupply, 18));
+  if (supply <= 0) return undefined;
+  const p0 = prices[p.token0];
+  const p1 = prices[p.token1];
+  const r0 = Number(formatUnits(p.reserve0, p.decimals0));
+  const r1 = Number(formatUnits(p.reserve1, p.decimals1));
+  // Value the sides we can price; if only one side is known, double it
+  // (a constant-product pool holds equal USD value on each side).
+  if (p0 != null && p1 != null) return (r0 * p0 + r1 * p1) / supply;
+  if (p0 != null) return (2 * r0 * p0) / supply;
+  if (p1 != null) return (2 * r1 * p1) / supply;
+  return undefined;
+}
+
+function formatUsd(v: number): string {
+  if (!isFinite(v)) return '—';
+  if (v === 0) return '$0';
+  if (v < 0.01) return '<$0.01';
+  if (v >= 1_000_000)
+    return `$${(v / 1_000_000).toLocaleString(undefined, {
+      maximumFractionDigits: 2,
+    })}M`;
+  if (v >= 1_000)
+    return `$${(v / 1_000).toLocaleString(undefined, {
+      maximumFractionDigits: 2,
+    })}K`;
+  return `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function formatUsdPrice(v: number): string {
+  if (!isFinite(v) || v <= 0) return '0';
+  if (v < 0.0001) return v.toExponential(2);
+  if (v < 1) return v.toPrecision(3);
+  return v.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function formatApy(v: number): string {
+  if (!isFinite(v)) return '∞';
+  if (v >= 100_000) return `${(v / 1000).toFixed(0)}K%`;
+  if (v >= 1000) return `${v.toFixed(0)}%`;
+  return `${v.toFixed(1)}%`;
+}
 
 /**
  * Mirror MasterChef.pendingReward but with a virtual current block,

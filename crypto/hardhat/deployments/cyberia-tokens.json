@@ -114,6 +114,20 @@
       "artifact": "contracts/OPENCLAW.sol/OPENCLAW.json",
       "address": "0xe09fe2F1c993aa9cf0fF8119e9dC561E34a0020F",
       "burnable": true
+    },
+    {
+      "symbol": "GOLD",
+      "contract": "GOLD",
+      "artifact": "contracts/GOLD.sol/GOLD.json",
+      "address": "0x38297140d60B48f746aD83D851b852Fd23eF9871",
+      "burnable": true
+    },
+    {
+      "symbol": "XMR",
+      "contract": "XMR",
+      "artifact": "contracts/XMR.sol/XMR.json",
+      "address": "0xe2E8D51C18d6e0FDDbb9Ff4BF63235D688dd00Ae",
+      "burnable": true
     }
   ]
 }

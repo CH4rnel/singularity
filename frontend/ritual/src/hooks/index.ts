@@ -24,6 +24,30 @@ import { BigNumber, providers } from 'ethers';
 import { formatUnits } from 'ethers/lib/utils';
 import { useOpenNetworkSelection } from 'state/application/hooks';
 
+// One ethers Web3Provider per underlying EIP-1193 wallet object. Without this
+// cache every component that calls useActiveWeb3React spins up its own
+// Web3Provider on each render, and each instance independently polls MetaMask
+// (detectNetwork + block polling). That request storm makes MetaMask throttle
+// and intermittently drop the session ("Connect" button reappears). A WeakMap
+// keyed on the wallet object lets every consumer share a single provider and
+// keys off the connection's natural lifetime (entry is GC'd on disconnect).
+const web3ProviderCache = new WeakMap<object, providers.Web3Provider>();
+
+function getSharedWeb3Provider(
+  walletProvider: unknown,
+): providers.Web3Provider | undefined {
+  if (!walletProvider || typeof walletProvider !== 'object') return undefined;
+  const key = walletProvider as object;
+  const cached = web3ProviderCache.get(key);
+  if (cached) return cached;
+  const provider = new providers.Web3Provider(walletProvider as any, 'any');
+  // Poll the wallet for new blocks at a relaxed cadence instead of the 4s
+  // ethers default — further cuts request pressure on the injected provider.
+  provider.pollingInterval = 15000;
+  web3ProviderCache.set(key, provider);
+  return provider;
+}
+
 export function useActiveWeb3React() {
   const {
     chainId: web3ModalChainId,
@@ -53,13 +77,9 @@ export function useActiveWeb3React() {
     }
   }, [web3ModalChainId]);
 
-  const provider = useMemo(
-    () =>
-      walletProvider
-        ? new providers.Web3Provider(walletProvider, 'any')
-        : undefined,
-    [walletProvider],
-  );
+  const provider = useMemo(() => getSharedWeb3Provider(walletProvider), [
+    walletProvider,
+  ]);
 
   return {
     account: address,

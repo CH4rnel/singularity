@@ -205,45 +205,65 @@ async function main() {
     return;
   }
 
-  console.log("Deployed tokens:");
-  const token = await pickFromList(deployed, (t) => `${t.symbol.padEnd(7)} ${t.address}`);
-
-  const artifact = loadArtifact(token.artifact);
-  const meta = await readMeta(token, artifact.abi);
-
-  console.log(`\n${meta.name} (${meta.symbol})`);
-  console.log(`  address:      ${token.address}`);
-  console.log(`  decimals:     ${meta.decimals}`);
-  console.log(`  owner:        ${meta.owner}`);
-  console.log(`  totalSupply:  ${formatUnits(meta.totalSupply, meta.decimals)} ${meta.symbol}`);
-
-  if (meta.owner.toLowerCase() !== account.address.toLowerCase()) {
-    console.log(
-      `\n  ! Caller is not the token owner. Mint and owner-burn will revert.`,
+  // Outer loop: keep returning to the token picker so several tokens can be
+  // managed in one session. The picker carries its own "quit" entry.
+  const QUIT = Symbol("quit");
+  while (true) {
+    console.log("\nDeployed tokens:");
+    const choices: (TokenEntry | typeof QUIT)[] = [...deployed, QUIT];
+    const picked = await pickFromList(choices, (c) =>
+      c === QUIT ? "quit" : `${c.symbol.padEnd(7)} ${c.address}`,
     );
-  }
+    if (picked === QUIT) break;
+    const token = picked;
 
-  console.log("\nAction:");
-  const actions = [
-    { key: "mint", label: "mint" },
-    ...(token.burnable ? [{ key: "burn", label: "burn (owner-bypass burnFrom)" }] : []),
-    { key: "balance", label: "check balance" },
-    { key: "quit", label: "quit" },
-  ];
-  const action = await pickFromList(actions, (a) => a.label);
+    const artifact = loadArtifact(token.artifact);
+    const meta = await readMeta(token, artifact.abi);
 
-  switch (action.key) {
-    case "mint":
-      await mint(token, artifact.abi, meta.decimals, meta.symbol);
-      break;
-    case "burn":
-      await burn(token, artifact.abi, meta.decimals, meta.symbol);
-      break;
-    case "balance":
-      await balanceOf(token, artifact.abi, meta.decimals, meta.symbol);
-      break;
-    case "quit":
-      break;
+    console.log(`\n${meta.name} (${meta.symbol})`);
+    console.log(`  address:      ${token.address}`);
+    console.log(`  decimals:     ${meta.decimals}`);
+    console.log(`  owner:        ${meta.owner}`);
+    console.log(`  totalSupply:  ${formatUnits(meta.totalSupply, meta.decimals)} ${meta.symbol}`);
+
+    if (meta.owner.toLowerCase() !== account.address.toLowerCase()) {
+      console.log(
+        `\n  ! Caller is not the token owner. Mint and owner-burn will revert.`,
+      );
+    }
+
+    // Inner loop: run several actions on the same token before going back to
+    // the picker (or quitting the whole session).
+    let backToPicker = false;
+    while (!backToPicker) {
+      console.log("\nAction:");
+      const actions = [
+        { key: "mint", label: "mint" },
+        ...(token.burnable ? [{ key: "burn", label: "burn (owner-bypass burnFrom)" }] : []),
+        { key: "balance", label: "check balance" },
+        { key: "back", label: "← back to token list" },
+        { key: "quit", label: "quit" },
+      ];
+      const action = await pickFromList(actions, (a) => a.label);
+
+      switch (action.key) {
+        case "mint":
+          await mint(token, artifact.abi, meta.decimals, meta.symbol);
+          break;
+        case "burn":
+          await burn(token, artifact.abi, meta.decimals, meta.symbol);
+          break;
+        case "balance":
+          await balanceOf(token, artifact.abi, meta.decimals, meta.symbol);
+          break;
+        case "back":
+          backToPicker = true;
+          break;
+        case "quit":
+          rl.close();
+          return;
+      }
+    }
   }
 
   rl.close();
