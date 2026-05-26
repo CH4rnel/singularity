@@ -181,6 +181,13 @@
           margin-top: 4px;
           word-break: break-all;
         }
+        & .statBreakdown {
+          color: $textPrimary;
+          font-size: 11px;
+          margin-top: 3px;
+          opacity: 0.85;
+          word-break: break-word;
+        }
         & .statSub {
           color: $textSecondary;
           font-size: 11px;

@@ -15,6 +15,7 @@ import {
 } from 'constants/ritualFarms';
 import { useActiveWeb3React, useConnectWallet } from 'hooks';
 import { useContract } from 'hooks/useContract';
+import { useIsSupportedNetwork } from 'utils';
 import { useBlockNumber } from 'state/application/hooks';
 import { RPC_PROVIDERS } from 'constants/providers';
 import './RitualFarmPage.scss';
@@ -80,7 +81,8 @@ interface Globals {
 
 const RitualFarmPage: React.FC = () => {
   const { chainId, account } = useActiveWeb3React();
-  const { connectWallet } = useConnectWallet(false);
+  const isSupportedNetwork = useIsSupportedNetwork();
+  const { connectWallet } = useConnectWallet(isSupportedNetwork);
   const blockNumber = useBlockNumber();
 
   const chefAddress = chainId ? RITUAL_MASTERCHEF_ADDRESS[chainId] : undefined;
@@ -197,9 +199,11 @@ const RitualFarmPage: React.FC = () => {
               ]);
               const e0 = new Contract(t0, ERC20_ABI, rpc);
               const e1 = new Contract(t1, ERC20_ABI, rpc);
-              const [d0, d1] = await Promise.all([
+              const [d0, d1, s0, s1] = await Promise.all([
                 e0.decimals().catch(() => 18),
                 e1.decimals().catch(() => 18),
+                e0.symbol().catch(() => '?'),
+                e1.symbol().catch(() => '?'),
               ]);
               pair = {
                 token0: String(t0).toLowerCase(),
@@ -208,6 +212,8 @@ const RitualFarmPage: React.FC = () => {
                 reserve1: reserves[1],
                 decimals0: d0,
                 decimals1: d1,
+                symbol0: String(s0),
+                symbol1: String(s1),
                 totalSupply,
               };
             } catch {
@@ -523,6 +529,10 @@ const PoolCard: React.FC<PoolCardProps> = ({
     return formatUsd(Number(formatUnits(b, 18)) * ashPriceUsd);
   };
 
+  // For LP pools, show what each LP balance is actually composed of.
+  const breakdown = (b?: BigNumber): string | undefined =>
+    !pool.isSolo && state?.pair ? lpBreakdown(state.pair, b) : undefined;
+
   const depositBn = parseAmount(depositValue, decimals);
   const needsApprove =
     !!state && depositBn.gt(0) && state.allowance.lt(depositBn);
@@ -555,16 +565,19 @@ const PoolCard: React.FC<PoolCardProps> = ({
         <Stat
           label='Total staked'
           value={fmt(state?.totalStaked)}
+          breakdown={breakdown(state?.totalStaked)}
           sub={tvlUsd != null ? formatUsd(tvlUsd) : undefined}
         />
         <Stat
           label='Your stake'
           value={fmt(state?.userStaked)}
+          breakdown={breakdown(state?.userStaked)}
           sub={usdStaked(state?.userStaked)}
         />
         <Stat
           label='Wallet balance'
           value={fmt(state?.userBalance)}
+          breakdown={breakdown(state?.userBalance)}
           sub={usdStaked(state?.userBalance)}
         />
         <Stat
@@ -701,14 +714,16 @@ const TokenIcons: React.FC<{ icons: string[]; label: string }> = ({
   );
 };
 
-const Stat: React.FC<{ label: string; value: string; sub?: string }> = ({
-  label,
-  value,
-  sub,
-}) => (
+const Stat: React.FC<{
+  label: string;
+  value: string;
+  sub?: string;
+  breakdown?: string;
+}> = ({ label, value, sub, breakdown }) => (
   <Box className='statCell'>
     <div className='statLabel'>{label}</div>
     <div className='statValue'>{value}</div>
+    {breakdown && <div className='statBreakdown'>{breakdown}</div>}
     {sub && <div className='statSub'>{sub}</div>}
   </Box>
 );
@@ -764,6 +779,35 @@ function lpUsdPrice(
   if (p0 != null) return (2 * r0 * p0) / supply;
   if (p1 != null) return (2 * r1 * p1) / supply;
   return undefined;
+}
+
+/**
+ * Underlying token amounts represented by `lpAmount` LP tokens, formatted as
+ * e.g. "12.34 ASH · 56.78 WCYBER". Lets users see what a stake of LP tokens is
+ * actually composed of without having to crack open the pair themselves.
+ */
+function lpBreakdown(
+  pair: PairInfo,
+  lpAmount: BigNumber | undefined,
+): string | undefined {
+  if (!lpAmount || lpAmount.isZero() || pair.totalSupply.isZero())
+    return undefined;
+  const amount0 = lpAmount.mul(pair.reserve0).div(pair.totalSupply);
+  const amount1 = lpAmount.mul(pair.reserve1).div(pair.totalSupply);
+  const a0 = Number(formatUnits(amount0, pair.decimals0));
+  const a1 = Number(formatUnits(amount1, pair.decimals1));
+  return `${formatTokenAmount(a0)} ${pair.symbol0} · ${formatTokenAmount(
+    a1,
+  )} ${pair.symbol1}`;
+}
+
+function formatTokenAmount(v: number): string {
+  if (!isFinite(v)) return '—';
+  if (v === 0) return '0';
+  if (v < 0.0001) return '<0.0001';
+  if (v >= 1000)
+    return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return v.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
 function formatUsd(v: number): string {
