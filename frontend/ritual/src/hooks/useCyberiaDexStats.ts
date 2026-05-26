@@ -51,7 +51,9 @@ export function useCyberiaDexStats(chainId?: ChainId) {
       if (!factory || !rpc) return null;
 
       const factoryContract = new Contract(factory, FACTORY_ABI, rpc);
-      const length: number = (await factoryContract.allPairsLength()).toNumber();
+      const length: number = (
+        await factoryContract.allPairsLength()
+      ).toNumber();
       if (length === 0) return { tvlUSD: 0, pairCount: 0, tokenCount: 0 };
 
       const count = Math.min(length, MAX_PAIRS);

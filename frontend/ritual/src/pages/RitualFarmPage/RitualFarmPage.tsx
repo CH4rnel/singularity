@@ -796,9 +796,9 @@ function lpBreakdown(
   const amount1 = lpAmount.mul(pair.reserve1).div(pair.totalSupply);
   const a0 = Number(formatUnits(amount0, pair.decimals0));
   const a1 = Number(formatUnits(amount1, pair.decimals1));
-  return `${formatTokenAmount(a0)} ${pair.symbol0} · ${formatTokenAmount(
-    a1,
-  )} ${pair.symbol1}`;
+  return `${formatTokenAmount(a0)} ${pair.symbol0} · ${formatTokenAmount(a1)} ${
+    pair.symbol1
+  }`;
 }
 
 function formatTokenAmount(v: number): string {
