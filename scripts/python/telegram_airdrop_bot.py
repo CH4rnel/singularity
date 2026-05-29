@@ -111,9 +111,9 @@ RITUAL_V2_FACTORY = os.environ.get(
 )
 
 # Don't announce swap/liquidity events whose USD volume is below this. Set to 0
-# to disable the filter. Default: $5 — drops the noise from cheap launchpad
+# to disable the filter. Default: $1 — drops dust noise from cheap launchpad
 # memecoins paired against CYBER.sol.
-MIN_ANNOUNCE_USD = float(os.environ.get("MIN_ANNOUNCE_USD", "5.0"))
+MIN_ANNOUNCE_USD = float(os.environ.get("MIN_ANNOUNCE_USD", "1.0"))
 
 # Tokens pegged to $1 — anchor points for the price walker. Comma-separated
 # addresses. Default: USDC + USDT on Cyberia.

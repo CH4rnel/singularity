@@ -21,6 +21,9 @@ Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/lending', 'Lending')->name('lending');
 Route::inertia('/launchpad', 'Launchpad')->name('launchpad');
+Route::get('/launchpad/sites/{address}', [\App\Http\Controllers\Api\LaunchpadController::class, 'showSite'])
+    ->where('address', '0x[a-fA-F0-9]{40}')
+    ->name('launchpad.site');
 Route::inertia('/slots', 'Slots')->name('slots');
 Route::get('dao', [DaoController::class, 'index'])->name('dao.index');
 Route::get('dao/{dao}', [DaoController::class, 'show'])->name('dao.show');

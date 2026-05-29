@@ -77,6 +77,7 @@ type LaunchedToken = {
     // Enriched off-chain.
     description?: string | null;
     imageUrl?: string | null;
+    siteUrl?: string | null;
     // Enriched from pair reserves (price quoted in CYBER.sol per 1 token).
     priceCyber?: number | null;
     marketCapCyber?: number | null;
@@ -89,6 +90,7 @@ type LaunchpadMetadata = {
     symbol: string | null;
     description: string | null;
     image_url: string | null;
+    site_url: string | null;
 };
 
 const wallet = useWallet();
@@ -100,10 +102,37 @@ const cyberSolLiquidity = ref('10000');
 const description = ref('');
 const imageFile = ref<File | null>(null);
 const imagePreview = ref<string | null>(null);
+const htmlFile = ref<File | null>(null);
+const htmlFileName = ref<string | null>(null);
+
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
+
+const onHtmlChange = (event: Event): void => {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0] ?? null;
+    error.value = null;
+    if (file && file.size > MAX_HTML_BYTES) {
+        error.value = `HTML page must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        target.value = '';
+        htmlFile.value = null;
+        htmlFileName.value = null;
+        return;
+    }
+    htmlFile.value = file;
+    htmlFileName.value = file?.name ?? null;
+};
 
 const onImageChange = (event: Event): void => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0] ?? null;
+    error.value = null;
+    if (file && file.size > MAX_IMAGE_BYTES) {
+        error.value = `Image must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        target.value = '';
+        imageFile.value = null;
+        return;
+    }
     imageFile.value = file;
     if (imagePreview.value) {
         URL.revokeObjectURL(imagePreview.value);
@@ -335,6 +364,7 @@ const loadRecent = async (): Promise<void> => {
                 cyberSolLiquidity: d.reserveCyber,
                 description: md?.description ?? null,
                 imageUrl: md?.image_url ?? null,
+                siteUrl: md?.site_url ?? null,
                 priceCyber: d.priceCyber,
                 marketCapCyber: d.priceCyber != null ? d.priceCyber * supplyWhole : null,
             };
@@ -344,15 +374,29 @@ const loadRecent = async (): Promise<void> => {
     }
 };
 
+const buildMetadataMessage = (tokenAddress: string): string =>
+    `Edit Cyberia Launchpad metadata for ${tokenAddress.toLowerCase()} at ${new Date().toISOString()}`;
+
+const signMetadataMessage = async (tokenAddress: string): Promise<{ message: string; signature: string }> => {
+    const provider = await ensureCyberiaNetwork();
+    const signer = await provider.getSigner();
+    const message = buildMetadataMessage(tokenAddress);
+    const signature = await signer.signMessage(message);
+    return { message, signature };
+};
+
 const submitMetadata = async (tokenAddress: string): Promise<void> => {
-    if (!description.value.trim() && !imageFile.value) return;
+    if (!description.value.trim() && !imageFile.value && !htmlFile.value) return;
+    const { message, signature } = await signMetadataMessage(tokenAddress);
     const form = new FormData();
     form.append('address', tokenAddress);
-    if (wallet.address.value) form.append('creator', wallet.address.value);
+    form.append('message', message);
+    form.append('signature', signature);
     if (name.value.trim()) form.append('name', name.value.trim());
     if (symbol.value.trim()) form.append('symbol', symbol.value.trim());
     if (description.value.trim()) form.append('description', description.value.trim());
     if (imageFile.value) form.append('image', imageFile.value);
+    if (htmlFile.value) form.append('html', htmlFile.value);
     const res = await fetch('/api/launchpad/tokens', {
         method: 'POST',
         headers: { Accept: 'application/json' },
@@ -367,11 +411,22 @@ const submitMetadata = async (tokenAddress: string): Promise<void> => {
 const swapUrlFor = (tokenAddress: string): string =>
     `${SWAP_BASE_URL}?inputCurrency=${CYBER_SOL_ADDRESS}&outputCurrency=${tokenAddress}`;
 
+// Only the creator can edit. If no creator is set yet (unclaimed metadata),
+// any connected wallet is allowed to take the first turn — the backend records
+// the first signer as the canonical creator.
+const canEdit = (t: LaunchedToken): boolean => {
+    if (!wallet.isConnected.value || !wallet.address.value) return false;
+    if (!t.creator) return true;
+    return t.creator.toLowerCase() === wallet.address.value.toLowerCase();
+};
+
 // Per-row inline editor state for attaching metadata to already-launched tokens.
 const editingToken = ref<string | null>(null);
 const editDescription = ref('');
 const editImageFile = ref<File | null>(null);
 const editImagePreview = ref<string | null>(null);
+const editHtmlFile = ref<File | null>(null);
+const editHtmlFileName = ref<string | null>(null);
 const editBusy = ref(false);
 const editError = ref<string | null>(null);
 
@@ -379,6 +434,8 @@ const openEditor = (t: LaunchedToken): void => {
     editingToken.value = t.token;
     editDescription.value = t.description ?? '';
     editImageFile.value = null;
+    editHtmlFile.value = null;
+    editHtmlFileName.value = null;
     if (editImagePreview.value) {
         URL.revokeObjectURL(editImagePreview.value);
         editImagePreview.value = null;
@@ -390,6 +447,8 @@ const closeEditor = (): void => {
     editingToken.value = null;
     editDescription.value = '';
     editImageFile.value = null;
+    editHtmlFile.value = null;
+    editHtmlFileName.value = null;
     if (editImagePreview.value) {
         URL.revokeObjectURL(editImagePreview.value);
         editImagePreview.value = null;
@@ -397,9 +456,31 @@ const closeEditor = (): void => {
     editError.value = null;
 };
 
+const onEditHtmlChange = (event: Event): void => {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0] ?? null;
+    editError.value = null;
+    if (file && file.size > MAX_HTML_BYTES) {
+        editError.value = `HTML page must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        target.value = '';
+        editHtmlFile.value = null;
+        editHtmlFileName.value = null;
+        return;
+    }
+    editHtmlFile.value = file;
+    editHtmlFileName.value = file?.name ?? null;
+};
+
 const onEditImageChange = (event: Event): void => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0] ?? null;
+    editError.value = null;
+    if (file && file.size > MAX_IMAGE_BYTES) {
+        editError.value = `Image must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        target.value = '';
+        editImageFile.value = null;
+        return;
+    }
     editImageFile.value = file;
     if (editImagePreview.value) {
         URL.revokeObjectURL(editImagePreview.value);
@@ -412,13 +493,19 @@ const saveEditor = async (t: LaunchedToken): Promise<void> => {
     editBusy.value = true;
     editError.value = null;
     try {
+        if (!wallet.isConnected.value) {
+            throw new Error('Connect your wallet first — editing requires a signature from the token creator.');
+        }
+        const { message, signature } = await signMetadataMessage(t.token);
         const form = new FormData();
         form.append('address', t.token);
-        if (wallet.address.value) form.append('creator', wallet.address.value);
+        form.append('message', message);
+        form.append('signature', signature);
         if (t.name) form.append('name', t.name);
         if (t.symbol) form.append('symbol', t.symbol);
         form.append('description', editDescription.value.trim());
         if (editImageFile.value) form.append('image', editImageFile.value);
+        if (editHtmlFile.value) form.append('html', editHtmlFile.value);
         const res = await fetch('/api/launchpad/tokens', {
             method: 'POST',
             headers: { Accept: 'application/json' },
@@ -493,7 +580,7 @@ const handleLaunch = async (): Promise<void> => {
             }
         }
 
-        if (description.value.trim() || imageFile.value) {
+        if (description.value.trim() || imageFile.value || htmlFile.value) {
             if (!newTokenAddress) {
                 throw new Error(
                     'Launch succeeded but the TokenLaunched event was not found in the receipt — metadata not uploaded.',
@@ -508,6 +595,8 @@ const handleLaunch = async (): Promise<void> => {
         symbol.value = '';
         description.value = '';
         imageFile.value = null;
+        htmlFile.value = null;
+        htmlFileName.value = null;
         if (imagePreview.value) {
             URL.revokeObjectURL(imagePreview.value);
             imagePreview.value = null;
@@ -581,9 +670,11 @@ onMounted(async () => {
 
 <template>
     <Head title="Launchpad" />
-    <Header />
 
-    <div class="launchpad">
+    <div class="launchpad-page">
+        <Header />
+
+        <div class="launchpad">
         <header class="intro">
             <h1>Launchpad</h1>
             <p>
@@ -629,7 +720,7 @@ onMounted(async () => {
                     ></textarea>
                 </label>
                 <label class="full">
-                    <span>Image (optional, ≤ 4 MB)</span>
+                    <span>Image (optional, ≤ 2 MB)</span>
                     <input
                         type="file"
                         accept="image/*"
@@ -637,6 +728,16 @@ onMounted(async () => {
                         @change="onImageChange"
                     />
                     <img v-if="imagePreview" :src="imagePreview" class="preview" />
+                </label>
+                <label class="full">
+                    <span>HTML page (optional, ≤ 2 MB) — sandboxed static site</span>
+                    <input
+                        type="file"
+                        accept=".html,.htm,text/html"
+                        class="file"
+                        @change="onHtmlChange"
+                    />
+                    <span v-if="htmlFileName" class="small muted">{{ htmlFileName }}</span>
                 </label>
             </div>
 
@@ -715,12 +816,22 @@ onMounted(async () => {
                             </div>
                             <div class="rowActions">
                                 <button
+                                    v-if="canEdit(t)"
                                     class="editBtn"
                                     type="button"
                                     @click="openEditor(t)"
                                 >
                                     Edit
                                 </button>
+                                <a
+                                    v-if="t.siteUrl"
+                                    class="siteBtn"
+                                    :href="t.siteUrl"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    Site →
+                                </a>
                                 <a
                                     class="swapBtn"
                                     :href="swapUrlFor(t.token)"
@@ -782,7 +893,7 @@ onMounted(async () => {
                                 ></textarea>
                             </label>
                             <label>
-                                <span>Image (≤ 4 MB)</span>
+                                <span>Image (≤ 2 MB)</span>
                                 <input
                                     type="file"
                                     accept="image/*"
@@ -790,6 +901,16 @@ onMounted(async () => {
                                     @change="onEditImageChange"
                                 />
                                 <img v-if="editImagePreview" :src="editImagePreview" class="preview" />
+                            </label>
+                            <label>
+                                <span>HTML page (≤ 2 MB) — sandboxed static site</span>
+                                <input
+                                    type="file"
+                                    accept=".html,.htm,text/html"
+                                    class="file"
+                                    @change="onEditHtmlChange"
+                                />
+                                <span v-if="editHtmlFileName" class="small muted">{{ editHtmlFileName }}</span>
                             </label>
                             <div v-if="editError" class="hint hint--err">{{ editError }}</div>
                             <div class="editorActions">
@@ -814,10 +935,16 @@ onMounted(async () => {
                 </li>
             </ul>
         </section>
+        </div>
     </div>
 </template>
 
 <style scoped>
+.launchpad-page {
+    min-height: 100vh;
+    background: var(--background, #0d0d0d);
+    color: var(--foreground, #e5e7eb);
+}
 .launchpad {
     max-width: 900px;
     margin: 0 auto;
@@ -987,7 +1114,8 @@ onMounted(async () => {
     flex-shrink: 0;
 }
 .swapBtn,
-.editBtn {
+.editBtn,
+.siteBtn {
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: rgba(255, 255, 255, 0.04);
     color: var(--foreground, #e5e7eb);
@@ -998,6 +1126,14 @@ onMounted(async () => {
     white-space: nowrap;
     cursor: pointer;
     font: inherit;
+}
+.siteBtn {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #86efac;
+}
+.siteBtn:hover {
+    background: rgba(34, 197, 94, 0.25);
 }
 .swapBtn {
     background: rgba(59, 130, 246, 0.15);

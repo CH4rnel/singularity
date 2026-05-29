@@ -19,5 +19,6 @@ class LaunchpadToken extends Model
         'symbol',
         'description',
         'image_path',
+        'html_path',
     ];
 }
