@@ -1189,6 +1189,17 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is eligible for, and any pending (claimable on /set_wallet) amounts."""
     user_id = update.effective_user.id
 
+    # Without admin rights the bot doesn't receive chat_member updates, so
+    # silent observers never end up in chat_members. Treat /balance in a group
+    # as proof-of-presence: record the caller so they (and the chat owner who
+    # almost certainly also runs /balance) actually start accruing rewards.
+    chat = update.effective_chat
+    if chat is not None and chat.type in ("group", "supergroup"):
+        try:
+            _record_chat_member(chat.id, user_id)
+        except Exception as e:
+            logger.debug(f"balance member tracking failed: {e}")
+
     with engine.connect() as conn:
         row = conn.execute(
             text("SELECT address FROM tg_wallets WHERE user_id = :u"),
@@ -1432,6 +1443,16 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Use this command inside the group chat whose token you want to inspect."
         )
         return
+    # Same reasoning as in /balance: running /token in the group is concrete
+    # proof the caller belongs here, so use it to backfill chat_members when
+    # the bot lacks admin rights to receive chat_member updates.
+    user = update.effective_user
+    if user is not None and not user.is_bot:
+        try:
+            _record_chat_member(chat.id, user.id)
+        except Exception as e:
+            logger.debug(f"token member tracking failed: {e}")
+
     chat_token = get_chat_token(chat.id)
     if chat_token is None:
         await update.message.reply_text(
