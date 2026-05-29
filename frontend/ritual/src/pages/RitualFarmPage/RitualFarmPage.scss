@@ -27,6 +27,39 @@
       font-size: 13px;
     }
 
+    & .sortRow {
+      margin-top: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+
+      & .sortLabel {
+        color: $textSecondary;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+
+      & button.sortBtn {
+        height: 32px;
+        min-width: 64px;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 8px;
+        padding: 0 12px;
+        background: transparent;
+        border: 1px solid $divider;
+        color: $textSecondary;
+        text-transform: none;
+        &.active {
+          background-image: linear-gradient(to bottom, $primary, $blue1);
+          color: white;
+          border-color: transparent;
+        }
+      }
+    }
+
     & .harvestAllRow {
       margin-top: 12px;
       display: flex;

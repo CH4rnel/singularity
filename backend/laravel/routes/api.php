@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
+use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\WalletAuthController;
@@ -30,6 +31,12 @@ Route::prefix('slots')->group(function () {
     Route::get('pool', [SlotsController::class, 'pool']);
     Route::post('spin/prepare', [SlotsController::class, 'prepare'])->middleware('throttle:6,1');
     Route::post('spin/confirm', [SlotsController::class, 'confirm'])->middleware('throttle:30,1');
+});
+
+// Launchpad off-chain metadata (description + image)
+Route::prefix('launchpad')->group(function () {
+    Route::get('tokens', [LaunchpadController::class, 'index']);
+    Route::post('tokens', [LaunchpadController::class, 'store'])->middleware('throttle:30,1');
 });
 
 // Cyberia RPC proxy (avoids mixed content on HTTPS sites)

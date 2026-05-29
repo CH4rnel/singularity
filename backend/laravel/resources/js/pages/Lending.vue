@@ -1743,8 +1743,8 @@ onMounted(async () => {
                     No markets listed at <code class="font-mono">{{ comptrollerAddress }}</code>.
                 </div>
 
-                <div v-else class="overflow-hidden rounded-lg border">
-                    <table class="w-full text-sm">
+                <div v-else class="overflow-x-auto rounded-lg border">
+                    <table class="w-full min-w-[760px] text-sm">
                         <thead class="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th class="px-4 py-3 text-left">Asset</th>
@@ -1826,7 +1826,7 @@ onMounted(async () => {
                                     </button>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <div class="flex justify-end gap-1">
+                                    <div class="flex justify-end gap-1 whitespace-nowrap">
                                         <Button variant="outline" size="sm" @click="openAction(market, 'supply')">
                                             Supply
                                         </Button>

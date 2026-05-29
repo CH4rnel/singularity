@@ -99,6 +99,7 @@ const RitualFarmPage: React.FC = () => {
   const [busyPid, setBusyPid] = useState<number | null>(null);
   const [harvestingAll, setHarvestingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'tvl' | 'apy'>('tvl');
   // Frame counter — bumped 5×/sec to drive smooth pending-reward animation.
   // Reading `tick` keeps it in the dependency graph so the projector below
   // recomputes on every interval tick.
@@ -366,6 +367,53 @@ const RitualFarmPage: React.FC = () => {
     }
   };
 
+  const sortedPools = useMemo(() => {
+    const items = pools.map((pool) => {
+      const st = poolStates[pool.pid];
+      const allocShare =
+        globals && st && globals.totalAllocPoint.gt(0)
+          ? st.allocPoint
+              .mul(10000)
+              .div(globals.totalAllocPoint)
+              .toNumber() / 100
+          : 0;
+      const dailyAshForPool =
+        allocShare > 0 ? (RITUAL_TOTAL_DAILY_ASH * allocShare) / 100 : 0;
+      const stakedUsdPrice = pool.isSolo
+        ? prices[pool.lpToken.toLowerCase()]
+        : st?.pair
+        ? lpUsdPrice(st.pair, prices)
+        : undefined;
+      const totalStakedWhole = st
+        ? Number(formatUnits(st.totalStaked, st.decimals))
+        : 0;
+      const tvlUsd =
+        stakedUsdPrice != null ? totalStakedWhole * stakedUsdPrice : undefined;
+      const apy =
+        tvlUsd && tvlUsd > 0 && ashPriceUsd != null
+          ? ((dailyAshForPool * ashPriceUsd * 365) / tvlUsd) * 100
+          : undefined;
+      return {
+        pool,
+        state: st,
+        allocShare,
+        dailyAsh: dailyAshForPool,
+        stakedUsdPrice,
+        tvlUsd,
+        apy,
+      };
+    });
+    const key = sortBy === 'tvl' ? 'tvlUsd' : 'apy';
+    return [...items].sort((a, b) => {
+      const av = a[key];
+      const bv = b[key];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return bv - av;
+    });
+  }, [pools, poolStates, globals, prices, ashPriceUsd, sortBy]);
+
   if (!chefAddress) {
     return (
       <Box className='ritualFarmPage'>
@@ -391,6 +439,21 @@ const RitualFarmPage: React.FC = () => {
             allocPoint. Block ≈ {RITUAL_BLOCK_TIME_SECONDS}s.
             {ashPriceUsd ? ` ASH ≈ $${formatUsdPrice(ashPriceUsd)}.` : ''}
           </div>
+          <Box className='sortRow'>
+            <span className='sortLabel'>Sort by</span>
+            <Button
+              className={`sortBtn${sortBy === 'tvl' ? ' active' : ''}`}
+              onClick={() => setSortBy('tvl')}
+            >
+              TVL
+            </Button>
+            <Button
+              className={`sortBtn${sortBy === 'apy' ? ' active' : ''}`}
+              onClick={() => setSortBy('apy')}
+            >
+              APY%
+            </Button>
+          </Box>
           {account && (
             <Box className='harvestAllRow'>
               <Button
@@ -412,36 +475,9 @@ const RitualFarmPage: React.FC = () => {
 
         {error && <Box className='ritualFarmError'>{error}</Box>}
 
-        {pools.map((pool) => {
-          const st = poolStates[pool.pid];
-          const allocShare =
-            globals && st && globals.totalAllocPoint.gt(0)
-              ? st.allocPoint
-                  .mul(10000)
-                  .div(globals.totalAllocPoint)
-                  .toNumber() / 100
-              : 0;
-          const dailyAshForPool =
-            allocShare > 0 ? (RITUAL_TOTAL_DAILY_ASH * allocShare) / 100 : 0;
+        {sortedPools.map(
+          ({ pool, state: st, allocShare, dailyAsh, stakedUsdPrice, tvlUsd, apy }) => {
           const livePending = computeLivePending(st, globals);
-
-          // USD price of one staked unit (the solo token, or one LP token).
-          const stakedUsdPrice = pool.isSolo
-            ? prices[pool.lpToken.toLowerCase()]
-            : st?.pair
-            ? lpUsdPrice(st.pair, prices)
-            : undefined;
-          const totalStakedWhole = st
-            ? Number(formatUnits(st.totalStaked, st.decimals))
-            : 0;
-          const tvlUsd =
-            stakedUsdPrice != null
-              ? totalStakedWhole * stakedUsdPrice
-              : undefined;
-          const apy =
-            tvlUsd && tvlUsd > 0 && ashPriceUsd != null
-              ? ((dailyAshForPool * ashPriceUsd * 365) / tvlUsd) * 100
-              : undefined;
 
           return (
             <PoolCard
@@ -450,7 +486,7 @@ const RitualFarmPage: React.FC = () => {
               state={st}
               livePending={livePending}
               allocSharePct={allocShare}
-              dailyAsh={dailyAshForPool}
+              dailyAsh={dailyAsh}
               apy={apy}
               stakedUsdPrice={stakedUsdPrice}
               tvlUsd={tvlUsd}
@@ -464,7 +500,8 @@ const RitualFarmPage: React.FC = () => {
               onHarvest={() => handleHarvest(pool)}
             />
           );
-        })}
+        },
+        )}
 
         <div className='ritualFarmFooter'>MasterChef: {chefAddress}</div>
       </Box>

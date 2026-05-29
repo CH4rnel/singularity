@@ -106,6 +106,38 @@ SWAP_POLL_SECONDS = int(os.environ.get("SWAP_POLL_SECONDS", "30"))
 RITUAL_V2_ROUTER = os.environ.get(
     "RITUAL_V2_ROUTER", "0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62"
 )
+RITUAL_V2_FACTORY = os.environ.get(
+    "RITUAL_V2_FACTORY", "0xB0aC30907c04b61F1482e62eA66eF4562a690917"
+)
+
+# Don't announce swap/liquidity events whose USD volume is below this. Set to 0
+# to disable the filter. Default: $5 — drops the noise from cheap launchpad
+# memecoins paired against CYBER.sol.
+MIN_ANNOUNCE_USD = float(os.environ.get("MIN_ANNOUNCE_USD", "5.0"))
+
+# Tokens pegged to $1 — anchor points for the price walker. Comma-separated
+# addresses. Default: USDC + USDT on Cyberia.
+USD_ANCHORS = {
+    a.strip().lower()
+    for a in os.environ.get(
+        "USD_ANCHORS",
+        "0xdc25597B19799010047F17e9591EFE08EFd40077,"
+        "0x94845aF24a3E431593A2b941b2b31836dE45185D",
+    ).split(",")
+    if a.strip()
+}
+
+# Relay tokens used to price assets that have no direct stablecoin pair.
+# Default: WCYBER and CYBER.sol — together they reach the long tail of pairs.
+PRICE_RELAY_TOKENS = [
+    a.strip().lower()
+    for a in os.environ.get(
+        "PRICE_RELAY_TOKENS",
+        "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9,"
+        "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA",
+    ).split(",")
+    if a.strip()
+]
 # Bound the per-tick block range so eth_getLogs stays well under provider limits
 # even if the bot was stopped for a while.
 SWAP_MAX_BLOCK_RANGE = int(os.environ.get("SWAP_MAX_BLOCK_RANGE", "2000"))
@@ -1749,6 +1781,141 @@ def _decode_swap_data(data) -> tuple[int, int, int, int]:
     )
 
 
+FACTORY_GET_PAIR_ABI = [{
+    "inputs": [
+        {"name": "tokenA", "type": "address"},
+        {"name": "tokenB", "type": "address"},
+    ],
+    "name": "getPair",
+    "outputs": [{"name": "pair", "type": "address"}],
+    "stateMutability": "view", "type": "function",
+}]
+
+PAIR_RESERVES_ABI = [{
+    "inputs": [], "name": "getReserves",
+    "outputs": [
+        {"name": "reserve0", "type": "uint112"},
+        {"name": "reserve1", "type": "uint112"},
+        {"name": "blockTimestampLast", "type": "uint32"},
+    ],
+    "stateMutability": "view", "type": "function",
+}]
+
+# token_addr_lower → (usd_price | None, fetched_at_ts). `None` means "looked
+# up but no priceable route" — cached to avoid retrying every block.
+_token_usd_price_cache: dict[str, tuple[float | None, float]] = {}
+_TOKEN_USD_TTL_SECONDS = 300.0
+
+
+def _get_token_usd_price(w3: Web3, token_addr: str, _depth: int = 0) -> float | None:
+    """USD price of one whole token. Anchors return 1.0; otherwise walks at
+    most one hop via a relay token to reach an anchor. Cached for 5 min."""
+    addr = token_addr.lower()
+    if addr in USD_ANCHORS:
+        return 1.0
+    now = time.time()
+    cached = _token_usd_price_cache.get(addr)
+    if cached is not None and now - cached[1] < _TOKEN_USD_TTL_SECONDS:
+        return cached[0]
+    if _depth >= 2:
+        return None
+
+    factory = w3.eth.contract(
+        address=Web3.to_checksum_address(RITUAL_V2_FACTORY), abi=FACTORY_GET_PAIR_ABI
+    )
+
+    def price_via(target_addr: str, target_price_usd: float) -> float | None:
+        try:
+            pair_addr = factory.functions.getPair(
+                Web3.to_checksum_address(token_addr),
+                Web3.to_checksum_address(target_addr),
+            ).call()
+        except Exception:
+            return None
+        if not pair_addr or int(pair_addr, 16) == 0:
+            return None
+        try:
+            pair = w3.eth.contract(
+                address=Web3.to_checksum_address(pair_addr), abi=PAIR_RESERVES_ABI
+            )
+            reserves = pair.functions.getReserves().call()
+        except Exception:
+            return None
+        tokens = _get_pair_tokens(w3, pair_addr)
+        if tokens is None:
+            return None
+        t0, _t1 = tokens
+        _, dec_token = _get_token_meta(w3, token_addr)
+        _, dec_target = _get_token_meta(w3, target_addr)
+        if t0.lower() == addr:
+            r_token, r_target = reserves[0], reserves[1]
+        else:
+            r_token, r_target = reserves[1], reserves[0]
+        if r_token <= 0 or r_target <= 0:
+            return None
+        return (r_target / 10**dec_target) / (r_token / 10**dec_token) * target_price_usd
+
+    # Direct stable pair.
+    for anchor in USD_ANCHORS:
+        p = price_via(anchor, 1.0)
+        if p is not None and p > 0:
+            _token_usd_price_cache[addr] = (p, now)
+            return p
+
+    # One hop via a relay.
+    for relay in PRICE_RELAY_TOKENS:
+        if relay == addr:
+            continue
+        relay_price = _get_token_usd_price(w3, relay, _depth=_depth + 1)
+        if relay_price is None or relay_price <= 0:
+            continue
+        p = price_via(relay, relay_price)
+        if p is not None and p > 0:
+            _token_usd_price_cache[addr] = (p, now)
+            return p
+
+    _token_usd_price_cache[addr] = (None, now)
+    return None
+
+
+def _swap_usd_volume(
+    w3: Web3,
+    in_addr: str, in_amt: int, in_dec: int,
+    out_addr: str, out_amt: int, out_dec: int,
+) -> float | None:
+    """USD value of a swap. Prefers pricing the input side (closer to user
+    intent), falls back to the output side. Returns None if neither can be
+    priced — caller decides whether to allow through."""
+    in_price = _get_token_usd_price(w3, in_addr)
+    if in_price is not None:
+        return (in_amt / 10**in_dec) * in_price
+    out_price = _get_token_usd_price(w3, out_addr)
+    if out_price is not None:
+        return (out_amt / 10**out_dec) * out_price
+    return None
+
+
+def _liquidity_usd_volume(
+    w3: Web3,
+    t0_addr: str, t1_addr: str,
+    dec0: int, dec1: int,
+    amount0: int, amount1: int,
+) -> float | None:
+    """USD value of a Mint/Burn. Both sides equal in a constant-product pool,
+    so if only one side can be priced we double it."""
+    p0 = _get_token_usd_price(w3, t0_addr)
+    p1 = _get_token_usd_price(w3, t1_addr)
+    val0 = (amount0 / 10**dec0) * p0 if p0 is not None else None
+    val1 = (amount1 / 10**dec1) * p1 if p1 is not None else None
+    if val0 is None and val1 is None:
+        return None
+    if val0 is None:
+        return val1 * 2  # type: ignore[operator]
+    if val1 is None:
+        return val0 * 2
+    return val0 + val1
+
+
 def _format_token_amount(amount: int, decimals: int) -> str:
     if amount == 0:
         return "0"
@@ -1850,15 +2017,31 @@ async def _announce_swap_tick(bot) -> None:
             a0in, a1in, a0out, a1out = _decode_swap_data(log["data"])
 
             if a0in > 0 and a1out > 0:
-                in_sym, in_amt, in_dec = sym0, a0in, dec0
-                out_sym, out_amt, out_dec = sym1, a1out, dec1
+                in_addr, in_sym, in_amt, in_dec = t0, sym0, a0in, dec0
+                out_addr, out_sym, out_amt, out_dec = t1, sym1, a1out, dec1
             elif a1in > 0 and a0out > 0:
-                in_sym, in_amt, in_dec = sym1, a1in, dec1
-                out_sym, out_amt, out_dec = sym0, a0out, dec0
+                in_addr, in_sym, in_amt, in_dec = t1, sym1, a1in, dec1
+                out_addr, out_sym, out_amt, out_dec = t0, sym0, a0out, dec0
             else:
                 _set_swap_cursor(blk, idx)
                 cur_block, cur_idx = blk, idx
                 continue
+
+            # Skip dust swaps. Known-USD volume below the threshold is dropped;
+            # unprice-able swaps pass through (better than going silent on novel
+            # pairs that the price walker can't reach yet).
+            if MIN_ANNOUNCE_USD > 0:
+                usd = _swap_usd_volume(
+                    w3, in_addr, in_amt, in_dec, out_addr, out_amt, out_dec
+                )
+                if usd is not None and usd < MIN_ANNOUNCE_USD:
+                    logger.info(
+                        f"swap_announcer: skip block={blk} idx={idx} "
+                        f"usd={usd:.4f} < {MIN_ANNOUNCE_USD}"
+                    )
+                    _set_swap_cursor(blk, idx)
+                    cur_block, cur_idx = blk, idx
+                    continue
 
             to_addr = _decode_topic_address(log["topics"][2])
             tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
@@ -1984,6 +2167,19 @@ async def _announce_liquidity_tick(bot) -> None:
             # Both Mint and Burn carry (amount0, amount1) as the first two words.
             words = _decode_data_words(log["data"], 2)
             amount0, amount1 = words[0], words[1]
+
+            if MIN_ANNOUNCE_USD > 0:
+                usd = _liquidity_usd_volume(
+                    w3, t0, t1, dec0, dec1, amount0, amount1
+                )
+                if usd is not None and usd < MIN_ANNOUNCE_USD:
+                    logger.info(
+                        f"liquidity_announcer: skip block={blk} idx={idx} "
+                        f"usd={usd:.4f} < {MIN_ANNOUNCE_USD}"
+                    )
+                    _set_block_cursor("last_announced_liq_cursor", blk, idx)
+                    cur_block, cur_idx = blk, idx
+                    continue
 
             tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
             # Burn carries the LP recipient in topics[2]; for Mint we fall back

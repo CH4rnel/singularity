@@ -1,0 +1,11 @@
+{
+  "chainId": 49406,
+  "rpc": "https://rpc.cyberia.church",
+  "Launchpad": "0x81109192ADC2A9814E49288C5329a78485e1e64f",
+  "cyberSol": "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA",
+  "router": "0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62",
+  "minLiquidity": "10000000000000000000000",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployTx": "0x46b8663a16fa7dbc2bc662c3f42ce718dbf6708d08368e3cc5f93dace3790b14",
+  "timestamp": "2026-05-29T10:48:36.245Z"
+}

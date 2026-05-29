@@ -21,6 +21,7 @@ createInertiaApp({
             case name === 'Bridge':
             case name === 'Market':
             case name === 'Lending':
+            case name === 'Launchpad':
             case name === 'Slots':
             case name.startsWith('dao/'):
             case name.startsWith('proposals/'):

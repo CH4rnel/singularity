@@ -20,6 +20,7 @@ Route::get('/', fn () => response()->file(resource_path('views/landing/index.htm
 Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/lending', 'Lending')->name('lending');
+Route::inertia('/launchpad', 'Launchpad')->name('launchpad');
 Route::inertia('/slots', 'Slots')->name('slots');
 Route::get('dao', [DaoController::class, 'index'])->name('dao.index');
 Route::get('dao/{dao}', [DaoController::class, 'show'])->name('dao.show');
