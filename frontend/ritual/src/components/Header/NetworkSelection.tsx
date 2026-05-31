@@ -18,7 +18,10 @@ export const NetworkSelection: React.FC = () => {
 
   return (
     <div className='headerDropdownWrapper'>
-      <Box className='headerDropdown' style={{ cursor: 'default' }}>
+      <Box
+        className='headerDropdown'
+        style={{ cursor: 'default' }}
+      >
         {isSupportedNetwork && (
           <Box className='networkSelectionImage'>
             {chainId && (

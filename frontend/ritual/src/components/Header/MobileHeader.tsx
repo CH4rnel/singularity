@@ -91,9 +91,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
           </Box>
         </Box>
         {govermance.length > 0 && (
-          <Box
-            style={{ paddingTop: '12px', borderBottom: '1px solid #242938' }}
-          >
+          <Box style={{ paddingTop: '12px', borderBottom: '1px solid #242938' }}>
             <Typography
               style={{
                 color: '#686c80',
@@ -103,9 +101,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
             >
               Governance
             </Typography>
-            <Box
-              style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
-            >
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {govermance.map((item, index) => (
                 <Box
                   key={index}
@@ -144,9 +140,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
             >
               Developers
             </Typography>
-            <Box
-              style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
-            >
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {developers.map((item, index) => (
                 <Box
                   key={index}

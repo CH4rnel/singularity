@@ -288,10 +288,7 @@ const SwapMain: React.FC = () => {
                 }}
               >
                 {tab.id === 'market' ? (
-                  <small
-                    className='tab activeTab'
-                    style={{ padding: '8px 16px' }}
-                  >
+                  <small className='tab activeTab' style={{ padding: '8px 16px' }}>
                     {t('swap')}
                   </small>
                 ) : (
