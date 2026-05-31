@@ -10,6 +10,7 @@
 - URL RPC: https://rpc.cyberia.church
 - Chain ID: 49406
 - Token: CYBER
+- Explorer: https://explorer.cyberia.church/
 
 # Singularity
 
