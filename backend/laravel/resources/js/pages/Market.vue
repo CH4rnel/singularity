@@ -1,25 +1,832 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import {
+    BrowserProvider,
+    Contract,
+    JsonRpcProvider,
+    MaxUint256,
+    formatUnits,
+    parseUnits,
+} from 'ethers';
+import { Loader2 } from 'lucide-vue-next';
+import { computed, onMounted, ref, watch } from 'vue';
 import Header from '@/components/Header.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useWallet } from '@/composables/useWallet';
+import { getMetaMaskProvider } from '@/lib/evmProvider';
+
+const CYBERIA_CHAIN_ID = 49406;
+const CYBERIA_CHAIN_ID_HEX = '0xc11e';
+const CYBERIA_RPC = '/api/rpc/cyberia';
+const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
+
+const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+const NFT_CONTRACT = env.VITE_NFT_CONTRACT ?? '';
+const NFT_MARKET = env.VITE_NFT_MARKET ?? '';
+const IPFS_GATEWAY = env.VITE_IPFS_GATEWAY ?? 'https://ipfs.io/ipfs/';
+const CYBER_SOL_ADDRESS = '0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA';
+
+const NFT_ABI = [
+    'function nextId() view returns (uint256)',
+    'function ownerOf(uint256) view returns (address)',
+    'function tokenURI(uint256) view returns (string)',
+    'function getApproved(uint256) view returns (address)',
+    'function isApprovedForAll(address,address) view returns (bool)',
+    'function approve(address,uint256)',
+    'function setApprovalForAll(address,bool)',
+    'function mint(string) returns (uint256)',
+];
+
+const MARKET_ABI = [
+    'function listingsLength() view returns (uint256)',
+    'function listings(uint256) view returns (address nft, uint256 tokenId, address seller, address paymentToken, uint256 price, bool active)',
+    'function list(address,uint256,address,uint256) returns (uint256)',
+    'function updatePrice(uint256,uint256)',
+    'function cancel(uint256)',
+    'function buy(uint256)',
+    'function feeBps() view returns (uint256)',
+];
+
+const ERC20_ABI = [
+    'function balanceOf(address) view returns (uint256)',
+    'function allowance(address,address) view returns (uint256)',
+    'function approve(address,uint256) returns (bool)',
+    'function decimals() view returns (uint8)',
+    'function symbol() view returns (string)',
+];
+
+type NFTMetadata = {
+    name?: string;
+    description?: string;
+    image?: string;
+};
+
+type Listing = {
+    listingId: number;
+    nft: string;
+    tokenId: bigint;
+    seller: string;
+    paymentToken: string;
+    price: bigint;
+    active: boolean;
+    paymentSymbol?: string;
+    paymentDecimals?: number;
+};
+
+type NFTItem = {
+    tokenId: bigint;
+    owner: string;
+    tokenURI: string;
+    metadata?: NFTMetadata;
+    imageUrl?: string;
+    listing?: Listing;
+};
+
+const wallet = useWallet();
+
+const items = ref<NFTItem[]>([]);
+const loading = ref(false);
+const status = ref<string | null>(null);
+const error = ref<string | null>(null);
+
+const mintName = ref('');
+const mintDescription = ref('');
+const mintImage = ref<File | null>(null);
+const mintImagePreview = ref<string | null>(null);
+const mintBusy = ref(false);
+const mintError = ref<string | null>(null);
+
+const listForms = ref<
+    Record<string, { token: string; price: string; busy: boolean; error: string | null }>
+>({});
+const buyBusy = ref<Record<string, boolean>>({});
+
+const isConfigured = computed(() => !!NFT_CONTRACT && !!NFT_MARKET);
+
+const readRpcUrl =
+    typeof window !== 'undefined' ? window.location.origin + CYBERIA_RPC : CYBERIA_PUBLIC_RPC;
+const readProvider = new JsonRpcProvider(readRpcUrl, {
+    chainId: CYBERIA_CHAIN_ID,
+    name: 'cyberia',
+});
+
+const ipfsToHttp = (uri: string): string => {
+    if (uri.startsWith('ipfs://')) return IPFS_GATEWAY + uri.replace(/^ipfs:\/\//, '');
+    return uri;
+};
+
+const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
+    const eth = getMetaMaskProvider();
+    if (!eth) throw new Error('MetaMask not found');
+    const provider = new BrowserProvider(eth);
+    const net = await provider.getNetwork();
+    if (Number(net.chainId) !== CYBERIA_CHAIN_ID) {
+        try {
+            await eth.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: CYBERIA_CHAIN_ID_HEX }],
+            });
+        } catch (e) {
+            if ((e as { code?: number }).code === 4902) {
+                await eth.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [
+                        {
+                            chainId: CYBERIA_CHAIN_ID_HEX,
+                            chainName: 'Cyberia',
+                            nativeCurrency: { name: 'Cyber', symbol: 'CYBER', decimals: 18 },
+                            rpcUrls: [CYBERIA_PUBLIC_RPC, CYBERIA_RPC],
+                        },
+                    ],
+                });
+            } else {
+                throw e;
+            }
+        }
+        return new BrowserProvider(eth);
+    }
+    return provider;
+};
+
+const fetchJson = async (url: string): Promise<NFTMetadata | undefined> => {
+    try {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) return undefined;
+        return (await res.json()) as NFTMetadata;
+    } catch {
+        return undefined;
+    }
+};
+
+const erc20Cache = new Map<string, { symbol: string; decimals: number }>();
+const getErc20 = async (addr: string): Promise<{ symbol: string; decimals: number }> => {
+    const key = addr.toLowerCase();
+    const cached = erc20Cache.get(key);
+    if (cached) return cached;
+    try {
+        const c = new Contract(addr, ERC20_ABI, readProvider);
+        const [symbol, decimals] = await Promise.all([
+            c.symbol().catch(() => '?'),
+            c.decimals().catch(() => 18),
+        ]);
+        const meta = { symbol: String(symbol), decimals: Number(decimals) };
+        erc20Cache.set(key, meta);
+        return meta;
+    } catch {
+        const meta = { symbol: '?', decimals: 18 };
+        erc20Cache.set(key, meta);
+        return meta;
+    }
+};
+
+const loadGallery = async (): Promise<void> => {
+    if (!isConfigured.value) return;
+    loading.value = true;
+    error.value = null;
+    try {
+        const nft = new Contract(NFT_CONTRACT, NFT_ABI, readProvider);
+        const market = new Contract(NFT_MARKET, MARKET_ABI, readProvider);
+
+        const [nextIdBn, listingsLenBn] = await Promise.all([
+            nft.nextId(),
+            market.listingsLength(),
+        ]);
+        const nextId = Number(nextIdBn);
+        const listingsLen = Number(listingsLenBn);
+
+        const tokenIds = Array.from({ length: nextId }, (_, i) => BigInt(i + 1));
+        const tokens = await Promise.all(
+            tokenIds.map(async (id) => {
+                try {
+                    const [owner, uri] = await Promise.all([
+                        nft.ownerOf(id),
+                        nft.tokenURI(id),
+                    ]);
+                    return { tokenId: id, owner, tokenURI: uri } as NFTItem;
+                } catch {
+                    return null;
+                }
+            }),
+        );
+
+        const withMetadata = await Promise.all(
+            tokens.filter((t): t is NFTItem => !!t).map(async (t) => {
+                const httpUri = ipfsToHttp(t.tokenURI);
+                const md = await fetchJson(httpUri);
+                return {
+                    ...t,
+                    metadata: md,
+                    imageUrl: md?.image ? ipfsToHttp(md.image) : undefined,
+                };
+            }),
+        );
+
+        const rawListings = await Promise.all(
+            Array.from({ length: listingsLen }, (_, i) => market.listings(i)),
+        );
+        const activeListings: Listing[] = [];
+        for (let i = 0; i < rawListings.length; i++) {
+            const r = rawListings[i];
+            if (!r.active) continue;
+            if (String(r.nft).toLowerCase() !== NFT_CONTRACT.toLowerCase()) continue;
+            const meta = await getErc20(r.paymentToken);
+            activeListings.push({
+                listingId: i,
+                nft: r.nft,
+                tokenId: r.tokenId,
+                seller: r.seller,
+                paymentToken: r.paymentToken,
+                price: r.price,
+                active: true,
+                paymentSymbol: meta.symbol,
+                paymentDecimals: meta.decimals,
+            });
+        }
+        const byTokenId = new Map<string, Listing>();
+        for (const l of activeListings) byTokenId.set(l.tokenId.toString(), l);
+
+        items.value = withMetadata
+            .map((t) => ({ ...t, listing: byTokenId.get(t.tokenId.toString()) }))
+            .reverse();
+    } catch (e) {
+        error.value = (e as Error).message ?? String(e);
+    } finally {
+        loading.value = false;
+    }
+};
+
+watch(() => wallet.address.value, loadGallery);
+onMounted(() => {
+    loadGallery();
+});
+
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+const onMintImageChange = (event: Event): void => {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0] ?? null;
+    mintError.value = null;
+    if (file && file.size > MAX_IMAGE_BYTES) {
+        mintError.value = `Image must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        target.value = '';
+        mintImage.value = null;
+        return;
+    }
+    mintImage.value = file;
+    if (mintImagePreview.value) URL.revokeObjectURL(mintImagePreview.value);
+    mintImagePreview.value = file ? URL.createObjectURL(file) : null;
+};
+
+const handleMint = async (): Promise<void> => {
+    mintError.value = null;
+    if (!mintName.value.trim()) {
+        mintError.value = 'Name is required';
+        return;
+    }
+    if (!mintImage.value) {
+        mintError.value = 'Image is required';
+        return;
+    }
+    mintBusy.value = true;
+    try {
+        status.value = 'Uploading metadata…';
+        const form = new FormData();
+        form.append('name', mintName.value.trim());
+        form.append('description', mintDescription.value.trim());
+        form.append('image', mintImage.value);
+        const res = await fetch('/api/nft/upload', {
+            method: 'POST',
+            headers: { Accept: 'application/json' },
+            body: form,
+        });
+        if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(`Upload failed: HTTP ${res.status} ${t.slice(0, 200)}`);
+        }
+        const { token_uri: tokenUri } = (await res.json()) as { token_uri: string };
+
+        status.value = 'Confirm mint() in your wallet…';
+        const provider = await ensureCyberiaNetwork();
+        const signer = await provider.getSigner();
+        const nft = new Contract(NFT_CONTRACT, NFT_ABI, signer);
+        const tx = await nft.mint(tokenUri);
+        status.value = 'Waiting for block…';
+        await tx.wait();
+
+        status.value = 'Minted!';
+        mintName.value = '';
+        mintDescription.value = '';
+        mintImage.value = null;
+        if (mintImagePreview.value) {
+            URL.revokeObjectURL(mintImagePreview.value);
+            mintImagePreview.value = null;
+        }
+        await loadGallery();
+    } catch (e) {
+        mintError.value = (e as Error).message ?? String(e);
+    } finally {
+        mintBusy.value = false;
+    }
+};
+
+const openListForm = (item: NFTItem): void => {
+    listForms.value[item.tokenId.toString()] = {
+        token: CYBER_SOL_ADDRESS,
+        price: '1',
+        busy: false,
+        error: null,
+    };
+};
+
+const closeListForm = (item: NFTItem): void => {
+    delete listForms.value[item.tokenId.toString()];
+};
+
+const handleList = async (item: NFTItem): Promise<void> => {
+    const key = item.tokenId.toString();
+    const form = listForms.value[key];
+    if (!form) return;
+    form.error = null;
+    form.busy = true;
+    try {
+        const provider = await ensureCyberiaNetwork();
+        const signer = await provider.getSigner();
+        const nft = new Contract(NFT_CONTRACT, NFT_ABI, signer);
+
+        const approved = await nft.getApproved(item.tokenId);
+        if (String(approved).toLowerCase() !== NFT_MARKET.toLowerCase()) {
+            status.value = 'Approving NFT for market…';
+            const tx = await nft.approve(NFT_MARKET, item.tokenId);
+            await tx.wait();
+        }
+
+        const erc20 = await getErc20(form.token);
+        const price = parseUnits(form.price || '0', erc20.decimals);
+        if (price <= 0n) throw new Error('Price must be > 0');
+
+        const market = new Contract(NFT_MARKET, MARKET_ABI, signer);
+        status.value = 'Listing NFT…';
+        const tx = await market.list(NFT_CONTRACT, item.tokenId, form.token, price);
+        await tx.wait();
+
+        status.value = 'Listed.';
+        closeListForm(item);
+        await loadGallery();
+    } catch (e) {
+        form.error = (e as Error).message ?? String(e);
+    } finally {
+        form.busy = false;
+    }
+};
+
+const handleCancel = async (item: NFTItem): Promise<void> => {
+    if (!item.listing) return;
+    buyBusy.value[item.tokenId.toString()] = true;
+    try {
+        const provider = await ensureCyberiaNetwork();
+        const signer = await provider.getSigner();
+        const market = new Contract(NFT_MARKET, MARKET_ABI, signer);
+        status.value = 'Cancelling…';
+        const tx = await market.cancel(item.listing.listingId);
+        await tx.wait();
+        status.value = 'Cancelled.';
+        await loadGallery();
+    } catch (e) {
+        error.value = (e as Error).message ?? String(e);
+    } finally {
+        buyBusy.value[item.tokenId.toString()] = false;
+    }
+};
+
+const handleBuy = async (item: NFTItem): Promise<void> => {
+    if (!item.listing) return;
+    buyBusy.value[item.tokenId.toString()] = true;
+    try {
+        const provider = await ensureCyberiaNetwork();
+        const signer = await provider.getSigner();
+        const signerAddr = await signer.getAddress();
+        const pay = new Contract(item.listing.paymentToken, ERC20_ABI, signer);
+
+        const allowance = (await pay.allowance(signerAddr, NFT_MARKET)) as bigint;
+        if (allowance < item.listing.price) {
+            status.value = `Approving ${item.listing.paymentSymbol ?? 'token'}…`;
+            const tx = await pay.approve(NFT_MARKET, MaxUint256);
+            await tx.wait();
+        }
+
+        const market = new Contract(NFT_MARKET, MARKET_ABI, signer);
+        status.value = 'Buying…';
+        const tx = await market.buy(item.listing.listingId);
+        await tx.wait();
+        status.value = 'Bought!';
+        await loadGallery();
+    } catch (e) {
+        error.value = (e as Error).message ?? String(e);
+    } finally {
+        buyBusy.value[item.tokenId.toString()] = false;
+    }
+};
+
+const isMine = (addr: string): boolean =>
+    !!wallet.address.value &&
+    wallet.address.value.toLowerCase() === addr.toLowerCase();
+
+const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
+
+const formatPrice = (p: bigint, decimals: number): string => {
+    const v = Number(formatUnits(p, decimals));
+    if (!isFinite(v)) return '—';
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+    if (v >= 1_000) return `${(v / 1_000).toFixed(2)}K`;
+    return v.toLocaleString(undefined, { maximumFractionDigits: 4 });
+};
 </script>
 
 <template>
     <Head title="Cyberia NFT Market" />
 
-    <div class="min-h-screen bg-background text-foreground">
+    <div class="market-page">
         <Header />
 
-        <main class="mx-auto flex w-full max-w-5xl flex-1 items-center px-4 py-24">
-            <div>
-                <p
-                    class="mb-3 text-xs tracking-[0.24em] text-muted-foreground uppercase"
-                >
-                    Cyberia product
+        <div class="market">
+            <header class="intro">
+                <h1>NFT Market</h1>
+                <p>
+                    Shared Cyberia NFT collection (ERC-721). Anyone can mint, listings
+                    are fixed-price in any ERC-20. The market takes a 1% fee.
                 </p>
-                <h1 class="text-4xl font-semibold tracking-tight">
-                    NFT Market
-                </h1>
+            </header>
+
+            <div v-if="!isConfigured" class="banner banner--warn">
+                Set <code>VITE_NFT_CONTRACT</code> and <code>VITE_NFT_MARKET</code> in
+                <code>.env</code> and rebuild the frontend.
             </div>
-        </main>
+
+            <section class="card">
+                <h2>Mint NFT</h2>
+                <div class="grid">
+                    <label>
+                        <span>Name</span>
+                        <Input v-model="mintName" placeholder="e.g. Cyberial Sunset" />
+                    </label>
+                    <label>
+                        <span>Image (≤ 2 MB)</span>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            class="file"
+                            @change="onMintImageChange"
+                        />
+                        <img v-if="mintImagePreview" :src="mintImagePreview" class="preview" />
+                    </label>
+                    <label class="full">
+                        <span>Description</span>
+                        <textarea
+                            v-model="mintDescription"
+                            rows="2"
+                            maxlength="2000"
+                            class="textarea"
+                        ></textarea>
+                    </label>
+                </div>
+                <div class="actions">
+                    <Button v-if="!wallet.isConnected.value" @click="wallet.connect()">
+                        Connect MetaMask
+                    </Button>
+                    <Button
+                        v-else
+                        :disabled="mintBusy || !mintName || !mintImage"
+                        @click="handleMint"
+                    >
+                        <Loader2 v-if="mintBusy" class="spin" />
+                        Mint
+                    </Button>
+                </div>
+                <div v-if="mintError" class="hint hint--err">{{ mintError }}</div>
+            </section>
+
+            <section class="card">
+                <div class="cardHead">
+                    <h2>Gallery</h2>
+                    <button class="reloadBtn" :disabled="loading" @click="loadGallery">
+                        {{ loading ? 'Loading…' : 'Reload' }}
+                    </button>
+                </div>
+                <div v-if="status" class="hint">{{ status }}</div>
+                <div v-if="error" class="hint hint--err">{{ error }}</div>
+
+                <div v-if="!items.length && !loading" class="muted small">
+                    No NFTs minted yet.
+                </div>
+
+                <div class="grid-cards">
+                    <div v-for="item in items" :key="item.tokenId.toString()" class="nftCard">
+                        <div class="nftImg">
+                            <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.metadata?.name" />
+                            <span v-else class="nftImgFallback">#{{ item.tokenId.toString() }}</span>
+                        </div>
+                        <div class="nftBody">
+                            <div class="nftTitle">
+                                {{ item.metadata?.name || `Token #${item.tokenId.toString()}` }}
+                            </div>
+                            <div class="muted small">
+                                Owner: <code>{{ short(item.owner) }}</code>
+                            </div>
+                            <div v-if="item.metadata?.description" class="nftDesc">
+                                {{ item.metadata.description }}
+                            </div>
+
+                            <div v-if="item.listing" class="priceRow">
+                                <strong>
+                                    {{ formatPrice(item.listing.price, item.listing.paymentDecimals ?? 18) }}
+                                    {{ item.listing.paymentSymbol ?? '?' }}
+                                </strong>
+                            </div>
+
+                            <div class="actions">
+                                <template v-if="item.listing">
+                                    <Button
+                                        v-if="isMine(item.listing.seller)"
+                                        :disabled="!!buyBusy[item.tokenId.toString()]"
+                                        @click="handleCancel(item)"
+                                    >
+                                        Cancel listing
+                                    </Button>
+                                    <Button
+                                        v-else-if="wallet.isConnected.value"
+                                        :disabled="!!buyBusy[item.tokenId.toString()]"
+                                        @click="handleBuy(item)"
+                                    >
+                                        <Loader2 v-if="buyBusy[item.tokenId.toString()]" class="spin" />
+                                        Buy
+                                    </Button>
+                                </template>
+                                <template v-else-if="isMine(item.owner)">
+                                    <Button
+                                        v-if="!listForms[item.tokenId.toString()]"
+                                        @click="openListForm(item)"
+                                    >
+                                        List for sale
+                                    </Button>
+                                </template>
+                            </div>
+
+                            <div
+                                v-if="!item.listing && listForms[item.tokenId.toString()]"
+                                class="listForm"
+                            >
+                                <label>
+                                    <span>Payment token (ERC-20 address)</span>
+                                    <Input
+                                        v-model="listForms[item.tokenId.toString()].token"
+                                        placeholder="0x…"
+                                    />
+                                </label>
+                                <label>
+                                    <span>Price</span>
+                                    <Input
+                                        v-model="listForms[item.tokenId.toString()].price"
+                                        type="text"
+                                        inputmode="decimal"
+                                    />
+                                </label>
+                                <div
+                                    v-if="listForms[item.tokenId.toString()].error"
+                                    class="hint hint--err"
+                                >
+                                    {{ listForms[item.tokenId.toString()].error }}
+                                </div>
+                                <div class="actions">
+                                    <Button
+                                        :disabled="listForms[item.tokenId.toString()].busy"
+                                        @click="handleList(item)"
+                                    >
+                                        <Loader2
+                                            v-if="listForms[item.tokenId.toString()].busy"
+                                            class="spin"
+                                        />
+                                        Confirm listing
+                                    </Button>
+                                    <button
+                                        type="button"
+                                        class="editBtn"
+                                        :disabled="listForms[item.tokenId.toString()].busy"
+                                        @click="closeListForm(item)"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
     </div>
 </template>
+
+<style scoped>
+.market-page {
+    min-height: 100vh;
+    background: var(--background, #0d0d0d);
+    color: var(--foreground, #e5e7eb);
+}
+.market {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 16px 64px;
+}
+.intro h1 {
+    margin: 0 0 6px;
+    font-size: 28px;
+    font-weight: 700;
+}
+.intro p {
+    color: var(--muted-foreground, #94a3b8);
+    margin: 0 0 24px;
+    line-height: 1.5;
+    max-width: 720px;
+}
+.banner {
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+.banner--warn {
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.4);
+    color: #facc15;
+}
+.card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.cardHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+}
+.card h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+.reloadBtn {
+    background: transparent;
+    color: var(--muted-foreground, #94a3b8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+.grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted-foreground, #94a3b8);
+}
+.grid label.full {
+    grid-column: 1 / -1;
+}
+.textarea {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--foreground, #e5e7eb);
+    font: inherit;
+    resize: vertical;
+}
+.file {
+    color: var(--muted-foreground, #94a3b8);
+    font-size: 13px;
+}
+.preview {
+    margin-top: 8px;
+    max-width: 160px;
+    max-height: 160px;
+    border-radius: 12px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+.hint {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--muted-foreground, #94a3b8);
+    word-break: break-all;
+}
+.hint--err {
+    color: #f87171;
+}
+.spin {
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    animation: spin 0.8s linear infinite;
+}
+.muted {
+    color: var(--muted-foreground, #94a3b8);
+}
+.small {
+    font-size: 11px;
+}
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+.grid-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+}
+.nftCard {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.nftImg {
+    aspect-ratio: 1 / 1;
+    background: rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.nftImg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.nftImgFallback {
+    color: var(--muted-foreground, #94a3b8);
+    font-weight: 700;
+}
+.nftBody {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.nftTitle {
+    font-weight: 600;
+    font-size: 15px;
+}
+.nftDesc {
+    font-size: 12px;
+    color: var(--foreground, #e5e7eb);
+    line-height: 1.4;
+    max-height: 4.2em;
+    overflow: hidden;
+}
+.priceRow {
+    margin-top: 4px;
+    color: #86efac;
+    font-size: 15px;
+}
+.listForm {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted-foreground, #94a3b8);
+}
+.editBtn {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: transparent;
+    color: var(--foreground, #e5e7eb);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+}
+@media (max-width: 640px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>

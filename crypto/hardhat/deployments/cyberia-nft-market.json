@@ -1,0 +1,14 @@
+{
+  "chainId": 49406,
+  "rpc": "https://rpc.cyberia.church",
+  "CyberiaNFT": "0x1C2A8655489701989CBa5774c74631d0dB9089Ac",
+  "NFTMarket": "0x12C3EC2019E814be06Bf6386df0F22aBB673Db90",
+  "feeRecipient": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "feeBps": "100",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployTxs": {
+    "nft": "0x5753d696d5de2bb2c790e6ebe39740bfe6605ec794308f3387f8dd7acc635679",
+    "market": "0x753478a188cbce8d17f7f58891730c183c359fd40fa69fce0a45ad33707c202f"
+  },
+  "timestamp": "2026-05-30T05:08:39.334Z"
+}
