@@ -88,7 +88,7 @@ class NFTController extends Controller
 
     private function pinToIpfs(string $path, string $filename, string $mime): string
     {
-        $apiUrl = rtrim(env('IPFS_API_URL', 'http://127.0.0.1:5001'), '/');
+        $apiUrl = rtrim(env('IPFS_API_URL', 'http://127.0.0.1:8881'), '/');
         $endpoint = $apiUrl.'/api/v0/add?pin=true&cid-version=1';
 
         $res = Http::timeout(30)

@@ -130,23 +130,11 @@ services:
       sh -lc "if [ ! -f vendor/autoload.php ]; then
         composer install --no-interaction --prefer-dist --no-progress;
       fi &&
-      if [ ! -f public/build/manifest.json ]; then
-        npm install && npm run build;
-      fi &&
-      if [ ! -d /singularity/crypto/hardhat/node_modules/dotenv ]; then
-        npm ci --prefix /singularity/crypto/hardhat;
-      fi &&
-      if [ ! -d /singularity/crypto/anchor/node_modules/@solana/web3.js ]; then
-        npm ci --prefix /singularity/crypto/anchor;
-      fi &&
       php artisan serve --host=0.0.0.0 --port=9001"
     ports:
       - "9001:9001"
     env_file:
       - /root/singularity/backend/laravel/.env
-    environment:
-      APP_URL: https://cyberia.church
-      ASSET_URL: https://cyberia.church
 
   polygon-edge:
     image: 0xpolygon/polygon-edge:latest
@@ -173,3 +161,31 @@ services:
       --libp2p=0.0.0.0:1337
       --seal
       --price-limit=1000000000
+
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: ipfs
+    restart: unless-stopped
+    environment:
+      # Disable mDNS/local discovery — appropriate for a datacenter node.
+      - IPFS_PROFILE=server
+    volumes:
+      - ipfs-data:/data/ipfs
+      # Kubo runs scripts in /container-init.d/ once, after `ipfs init`,
+      # before the daemon starts. Used here to open the API to siblings.
+      - ./ipfs/001-bind-api.sh:/container-init.d/001-bind-api.sh:ro
+    ports:
+      # libp2p swarm — peer connectivity, must be reachable for content to
+      # propagate to public gateways (e.g. ipfs.io).
+      - "4001:4001"
+      - "4001:4001/udp"
+      # Kubo API (pinning). Bound to localhost on the host so it is NOT exposed
+      # publicly; sibling containers reach it in-network at http://ipfs:5001.
+      - "127.0.0.1:5001:5001"
+      # Read gateway, localhost only — handy for debugging pinned content.
+      # Host port 8080 is taken by the Blockscout proxy (services/nginx.yml),
+      # so it is published on 8081 here; the container still serves on 8080.
+      - "127.0.0.1:8881:8080"
+
+volumes:
+  ipfs-data:
