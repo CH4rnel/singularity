@@ -92,6 +92,7 @@ const error = ref<string | null>(null);
 
 const mintName = ref('');
 const mintDescription = ref('');
+const mintExternalUrl = ref('');
 const mintImage = ref<File | null>(null);
 const mintImagePreview = ref<string | null>(null);
 const mintBusy = ref(false);
@@ -284,17 +285,18 @@ const handleMint = async (): Promise<void> => {
         mintError.value = 'Name is required';
         return;
     }
-    if (!mintImage.value) {
-        mintError.value = 'Image is required';
-        return;
-    }
     mintBusy.value = true;
     try {
         status.value = 'Uploading metadata…';
         const form = new FormData();
         form.append('name', mintName.value.trim());
         form.append('description', mintDescription.value.trim());
-        form.append('image', mintImage.value);
+        if (mintExternalUrl.value.trim()) {
+            form.append('external_url', mintExternalUrl.value.trim());
+        }
+        if (mintImage.value) {
+            form.append('image', mintImage.value);
+        }
         const res = await fetch('/api/nft/upload', {
             method: 'POST',
             headers: { Accept: 'application/json' },
@@ -317,6 +319,7 @@ const handleMint = async (): Promise<void> => {
         status.value = 'Minted!';
         mintName.value = '';
         mintDescription.value = '';
+        mintExternalUrl.value = '';
         mintImage.value = null;
         if (mintImagePreview.value) {
             URL.revokeObjectURL(mintImagePreview.value);
@@ -453,8 +456,9 @@ const formatPrice = (p: bigint, decimals: number): string => {
             <header class="intro">
                 <h1>NFT Market</h1>
                 <p>
-                    Shared Cyberia NFT collection (ERC-721). Anyone can mint, listings
-                    are fixed-price in any ERC-20. The market takes a 1% fee.
+                    Shared NFT collection (ERC-721). Anyone can mint — with an image,
+                    or just a link or a piece of text. Listings are fixed-price in any
+                    ERC-20. The market takes a 1% fee.
                 </p>
             </header>
 
@@ -471,7 +475,7 @@ const formatPrice = (p: bigint, decimals: number): string => {
                         <Input v-model="mintName" placeholder="e.g. Cyberial Sunset" />
                     </label>
                     <label>
-                        <span>Image (≤ 2 MB)</span>
+                        <span>Image (optional, ≤ 2 MB)</span>
                         <input
                             type="file"
                             accept="image/*"
@@ -481,7 +485,15 @@ const formatPrice = (p: bigint, decimals: number): string => {
                         <img v-if="mintImagePreview" :src="mintImagePreview" class="preview" />
                     </label>
                     <label class="full">
-                        <span>Description</span>
+                        <span>Link (optional)</span>
+                        <Input
+                            v-model="mintExternalUrl"
+                            type="url"
+                            placeholder="https://… (an NFT can be just a link)"
+                        />
+                    </label>
+                    <label class="full">
+                        <span>Description / text</span>
                         <textarea
                             v-model="mintDescription"
                             rows="2"
@@ -496,7 +508,7 @@ const formatPrice = (p: bigint, decimals: number): string => {
                     </Button>
                     <Button
                         v-else
-                        :disabled="mintBusy || !mintName || !mintImage"
+                        :disabled="mintBusy || !mintName"
                         @click="handleMint"
                     >
                         <Loader2 v-if="mintBusy" class="spin" />

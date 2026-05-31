@@ -30,7 +30,8 @@ class NFTController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'image' => ['required', 'image', 'max:2048'],
+            // Image is optional — an NFT can be just a link or a piece of text.
+            'image' => ['nullable', 'image', 'max:2048'],
             // Optional ERC-721 metadata extras.
             'external_url' => ['nullable', 'url', 'max:300'],
             'attributes' => ['nullable', 'string', 'max:5000'], // JSON-encoded array
@@ -40,21 +41,23 @@ class NFTController extends Controller
         $imageFile = $request->file('image');
 
         try {
-            if ($driver === 'local') {
-                $imageUri = $this->storeLocal($imageFile, 'nft/images');
-            } else {
-                $imageUri = $this->pinToIpfs(
-                    $imageFile->getRealPath(),
-                    $imageFile->getClientOriginalName() ?: 'image',
-                    $imageFile->getMimeType() ?: 'application/octet-stream',
-                );
-            }
-
             $metadata = [
                 'name' => $data['name'],
                 'description' => $data['description'] ?? '',
-                'image' => $imageUri,
             ];
+
+            if ($imageFile !== null) {
+                if ($driver === 'local') {
+                    $metadata['image'] = $this->storeLocal($imageFile, 'nft/images');
+                } else {
+                    $metadata['image'] = $this->pinToIpfs(
+                        $imageFile->getRealPath(),
+                        $imageFile->getClientOriginalName() ?: 'image',
+                        $imageFile->getMimeType() ?: 'application/octet-stream',
+                    );
+                }
+            }
+
             if (! empty($data['external_url'])) {
                 $metadata['external_url'] = $data['external_url'];
             }

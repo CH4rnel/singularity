@@ -1,0 +1,33 @@
+# Kubo (go-ipfs) node backing the NFT marketplace metadata pinning.
+#
+# The Laravel backend (NFTController, driver `ipfs`) pins images + ERC-721
+# metadata JSON to the HTTP API on 5001 and returns `ipfs://CID`.
+#
+#   docker compose up -d
+#   docker compose logs -f ipfs
+#
+# The API (5001) is privileged — it can run arbitrary node commands — so it is
+# bound to localhost only. The read gateway (8080) is also localhost; public
+# reads go through a public gateway (VITE_IPFS_GATEWAY). 4001 is the public
+# swarm port so the node can announce pinned CIDs to the DHT.
+
+services:
+  ipfs:
+    image: ipfs/kubo:v0.30.0
+    container_name: cyberia-ipfs
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5001:5001" # HTTP API (privileged — localhost only)
+      - "127.0.0.1:8080:8080" # read-only gateway (localhost)
+      - "4001:4001" # libp2p swarm (TCP)
+      - "4001:4001/udp" # libp2p swarm (QUIC)
+    volumes:
+      - ipfs_data:/data/ipfs
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ipfs_data:
