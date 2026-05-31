@@ -163,7 +163,7 @@ const CurrencySearch: React.FC<CurrencySearchProps> = ({
     let updatedTokens = Object.values(allTokens);
 
     if (tab === 'favorites') {
-      updatedTokens = [...favoriteCurrencies];
+      updatedTokens = [...favoriteCurrencies] as Token[];
     } else if (tab === 'trending') {
       updatedTokens = updatedTokens.filter(
         (t) => (t as any).tokenInfo?.trending,
