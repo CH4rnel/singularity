@@ -1,7 +1,7 @@
 import { Currency, Token } from '@uniswap/sdk-core';
 import { useCallback, useState } from 'react';
 import { useActiveWeb3React } from 'hooks';
-import { getTokenLogoURL } from 'utils/getTokenLogoURL';
+import { getMetamaskTokenImage } from 'utils/getTokenLogoURL';
 
 export default function useAddTokenToMetamask(
   currencyToAdd: Currency | undefined,
@@ -33,7 +33,7 @@ export default function useAddTokenToMetamask(
               address: token.address,
               symbol: token.symbol,
               decimals: token.decimals,
-              image: getTokenLogoURL(token.address),
+              image: getMetamaskTokenImage(currencyToAdd as any),
             },
           },
         })

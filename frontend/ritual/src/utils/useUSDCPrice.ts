@@ -42,7 +42,7 @@ export default function useUSDCPrice(currency?: Currency): Price | undefined {
   const { data: priceUsd } = useFetchEthereumPrice(token?.address);
 
   const amountOut = chainId
-    ? tryParseAmount(chainId, '1', USDC[chainId])
+    ? tryParseAmount(chainId, '0.001', USDC[chainId])
     : undefined;
 
   const allowedPairs = useAllCommonPairs(currency, USDC[chainId]);
@@ -111,7 +111,7 @@ const useFetchEthereumPrice = (address?: string) => {
 
   return useQuery({
     queryKey: ['useFetchEthereumPrice', address, chainId],
-    queryFn: () => fetchEthereumPrice(address!),
+    queryFn: () => (address ? fetchEthereumPrice(address) : null),
     enabled: !!address && chainId === ChainId.ETHEREUM,
   });
 };
@@ -125,6 +125,8 @@ const getUSDPricesFromAddresses = async (
   let pricesV3: any[] = [],
     pricesV2: any[] = [];
   const config = getConfig(chainId);
+  if (!config?.leaderboard?.available) return [];
+
   const v2 = config['v2'] && !onlyV3;
   const addresses = addressStr.split('_');
 
@@ -384,24 +386,24 @@ export function useUSDCPrices(currencies: Currency[]): (Price | undefined)[] {
       chainId ? WETH[chainId] : undefined,
     ]);
     tokenPairs.push([
-      wrapped?.equals(oldQuickToken) ? undefined : wrapped,
+      oldQuickToken && wrapped?.equals(oldQuickToken) ? undefined : wrapped,
       chainId === ChainId.MATIC ? oldQuickToken : undefined,
     ]);
     tokenPairs.push([
-      wrapped?.equals(usdcToken) ? undefined : wrapped,
-      chainId === ChainId.MATIC ? usdcToken : undefined,
+      usdcToken && wrapped?.equals(usdcToken) ? undefined : wrapped,
+      usdcToken,
     ]);
     tokenPairs.push([
-      wrapped?.equals(usdtToken) ? undefined : wrapped,
-      chainId === ChainId.MATIC ? usdtToken : undefined,
+      usdtToken && wrapped?.equals(usdtToken) ? undefined : wrapped,
+      usdtToken,
     ]);
     tokenPairs.push([
-      wrapped?.equals(daiToken) ? undefined : wrapped,
+      daiToken && wrapped?.equals(daiToken) ? undefined : wrapped,
       chainId === ChainId.MATIC ? daiToken : undefined,
     ]);
     tokenPairs.push([
       chainId ? WETH[chainId] : undefined,
-      chainId === ChainId.MATIC ? usdcToken : undefined,
+      usdcToken,
     ]);
     tokenPairs.push([
       chainId ? oldQuickToken : undefined,
@@ -442,7 +444,7 @@ export function useUSDCPrices(currencies: Currency[]): (Price | undefined)[] {
       }
     }
     // handle usdc
-    if (wrapped.equals(usdcToken)) {
+    if (usdcToken && wrapped.equals(usdcToken)) {
       return new Price(usdcToken, usdcToken, '1', '1');
     }
 
@@ -530,14 +532,10 @@ export function useUSDCPricesToken(tokens: Token[], chainId?: ChainId) {
     })
     .filter(
       (token) =>
-        oldQuickToken &&
-        newQuickToken &&
-        oldDQuickToken &&
-        newDQuickToken &&
-        !token.equals(oldQuickToken) &&
-        !token.equals(newQuickToken) &&
-        !token.equals(oldDQuickToken) &&
-        !token.equals(newDQuickToken),
+        (!oldQuickToken || !token.equals(oldQuickToken)) &&
+        (!newQuickToken || !token.equals(newQuickToken)) &&
+        (!oldDQuickToken || !token.equals(oldDQuickToken)) &&
+        (!newDQuickToken || !token.equals(newDQuickToken)),
     );
   const currencies = filteredTokens.map((token) => unwrappedToken(token));
   const usdPrices = useUSDCPrices(currencies);
@@ -551,7 +549,7 @@ export function useUSDCPricesToken(tokens: Token[], chainId?: ChainId) {
       return quickPrice;
     } else if (token && newDQuickToken && token.equals(newDQuickToken)) {
       return newdQuickTonewQuick * newQuickPrice * 1000;
-    } else if (token && newQuickToken && token.equals(newQuickToken)) {
+    } else if (token && newQuickToken && token.equals(newQuickToken) && newQuickPrice > 0) {
       return newQuickPrice;
     } else {
       const priceObj = usdPricesWithToken.find(

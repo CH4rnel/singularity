@@ -1,0 +1,1167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Cyberia — Change the perception</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  :root{
+    --bg:#ffffff;
+    --ink:#0a0a0a;
+    --ink-2:#202327;
+    --muted:#6b7075;
+    --rule:#e9ebee;
+    --cyan:#00e5d1;          /* primary accent */
+    --cyan-strong:#00c8b8;
+    --magenta:#ff2bd6;       /* glitch shadow */
+    --max:1180px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Manrope',ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  a{color:inherit;text-decoration:none}
+  img{display:block;max-width:100%}
+  ::selection{background:var(--cyan);color:#000}
+
+  /* ====== NAV ====== */
+  .nav{
+    position:sticky;top:0;z-index:50;background:rgba(255,255,255,.86);
+    backdrop-filter:saturate(140%) blur(10px);
+    border-bottom:1px solid transparent;
+  }
+  .nav.scrolled{border-bottom-color:var(--rule)}
+  .nav-inner{max-width:var(--max);margin:0 auto;padding:28px 40px;display:flex;align-items:center;justify-content:space-between;gap:48px}
+  .logo{
+    position:relative;
+    font-weight:800;letter-spacing:.18em;font-size:15px;color:var(--ink);
+    padding-bottom:6px;
+    cursor:pointer;user-select:none;
+  }
+  .logo::after{
+    content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--cyan);
+    transform-origin:left center;
+  }
+  .nav-links{display:flex;align-items:center;gap:54px}
+  .nav-links a{
+    font-size:15px;color:var(--ink-2);font-weight:400;
+    position:relative;padding:6px 0;transition:color .2s;
+  }
+  .nav-links a:hover{color:#000}
+  .nav-links a::after{
+    content:"";position:absolute;left:50%;right:50%;bottom:0;height:2px;background:var(--cyan);
+    transition:left .25s,right .25s;
+  }
+  .nav-links a:hover::after{left:0;right:0}
+  .nav-links a.nav-cta{
+    color:var(--ink);font-weight:600;
+    padding:8px 14px;border:1px solid var(--ink);border-radius:2px;
+    transition:background .15s,color .15s;
+  }
+  .nav-links a.nav-cta:hover{background:var(--ink);color:#fff}
+  .nav-links a.nav-cta::after{display:none}
+
+  /* ====== GLITCH TEXT ======
+     Discrete, event-driven glitches: hard band slices + RGB tear.
+     No continuous side-to-side jitter — bursts are short and snap.
+     `isolation: isolate` keeps the blend context independent of parents —
+     editor overlays / wrappers used to swallow the effect. */
+  .glitch{position:relative;display:inline-block;line-height:inherit;isolation:isolate}
+  .glitch .layer{position:relative;display:inline-block}
+  .glitch .g-cyan,.glitch .g-mag{
+    position:absolute;left:0;top:0;width:100%;
+    pointer-events:none;
+    opacity:0;
+    clip-path:inset(0 0 100% 0);
+  }
+  /* Solid color layers — no blend mode required. Drop-shadow adds a glow halo
+     so the slice still reads against light backgrounds. */
+  .glitch .g-cyan{color:var(--cyan);filter:drop-shadow(0 0 1px rgba(0,229,209,.5));}
+  .glitch .g-mag{color:var(--magenta);filter:drop-shadow(0 0 1px rgba(255,43,214,.5));}
+
+  /* When .glitching is on, run a 0.45s sequence with discrete keyframes (steps).
+     Each keyframe is a different band displacement — no smooth tween. */
+  .glitch.glitching .g-cyan{animation:gtxCyan .45s steps(1,end) 1}
+  .glitch.glitching .g-mag{animation:gtxMag .45s steps(1,end) 1}
+  .glitch.glitching .layer.base{animation:gtxBase .45s steps(1,end) 1}
+
+  @keyframes gtxCyan{
+    0%   { opacity:1;   clip-path:inset(8%  0 70% 0); transform:translateX(-12px); }
+    14%  { opacity:1;   clip-path:inset(55% 0 30% 0); transform:translateX(-18px); }
+    28%  { opacity:.95; clip-path:inset(30% 0 50% 0); transform:translateX(-8px); }
+    42%  { opacity:.95; clip-path:inset(78% 0 8%  0); transform:translateX(-14px); }
+    56%  { opacity:.85; clip-path:inset(22% 0 60% 0); transform:translateX(-6px); }
+    70%  { opacity:.75; clip-path:inset(45% 0 40% 0); transform:translateX(-10px); }
+    100% { opacity:0;   clip-path:inset(0 0 100% 0); transform:translateX(0); }
+  }
+  @keyframes gtxMag{
+    0%   { opacity:.95; clip-path:inset(45% 0 35% 0); transform:translateX(12px); }
+    14%  { opacity:1;   clip-path:inset(15% 0 65% 0); transform:translateX(18px); }
+    28%  { opacity:.9;  clip-path:inset(65% 0 18% 0); transform:translateX(7px); }
+    42%  { opacity:.95; clip-path:inset(8%  0 78% 0); transform:translateX(14px); }
+    56%  { opacity:.85; clip-path:inset(50% 0 30% 0); transform:translateX(9px); }
+    70%  { opacity:.75; clip-path:inset(28% 0 55% 0); transform:translateX(11px); }
+    100% { opacity:0;   clip-path:inset(0 0 100% 0); transform:translateX(0); }
+  }
+  /* Base layer: stays put except one or two hard band-slip moments */
+  @keyframes gtxBase{
+    0%, 27%   { clip-path:none; transform:translateX(0); }
+    28%       { clip-path:inset(35% 0 45% 0); transform:translateX(8px); }
+    34%       { clip-path:none; transform:translateX(0); }
+    55%       { clip-path:inset(65% 0 15% 0); transform:translateX(-6px); }
+    61%, 100% { clip-path:none; transform:translateX(0); }
+  }
+
+  /* Rotating word: same glitch system but ALWAYS layered, plus a scramble swap */
+  .rot{position:relative;display:inline-block;color:var(--cyan-strong);font-weight:700;text-align:left;vertical-align:baseline;isolation:isolate}
+  /* Spacer reserves layout space for the LONGEST phrase so shorter ones don't reflow */
+  .rot .rot-spacer{display:inline-block;visibility:hidden;white-space:nowrap}
+  .rot .layer{position:absolute;left:0;top:0;width:100%;display:inline-block;white-space:nowrap}
+  .rot .r-cyan,.rot .r-mag{pointer-events:none;opacity:0;clip-path:inset(0 0 100% 0);}
+  .rot .r-cyan{color:var(--cyan);filter:drop-shadow(0 0 1px rgba(0,229,209,.5));}
+  .rot .r-mag{color:var(--magenta);filter:drop-shadow(0 0 1px rgba(255,43,214,.5));}
+  .rot .r-cyan{color:var(--cyan)}
+  .rot .r-mag{color:var(--magenta)}
+  .rot.glitching .r-cyan{animation:gtxCyan .5s steps(1,end) 1}
+  .rot.glitching .r-mag{animation:gtxMag .5s steps(1,end) 1}
+  .rot.glitching .layer.base{animation:gtxBase .5s steps(1,end) 1}
+
+  /* ====== HERO ====== */
+  .hero{
+    position:relative;
+    min-height:calc(100vh - 88px);
+    max-width:var(--max);margin:0 auto;
+    padding:30px 40px 80px;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  }
+  .cube-wrap{
+    position:relative;width:100%;display:flex;justify-content:center;align-items:center;
+    margin-top:30px;
+  }
+  .cube-stage{
+    position:relative;width:620px;max-width:88vw;
+    aspect-ratio:1/1;
+    display:flex;align-items:center;justify-content:center;
+    isolation:isolate;
+  }
+  .cube-stack{position:relative;width:82%;aspect-ratio:1/1;
+    animation:float 7s ease-in-out infinite;
+    will-change:transform;
+    isolation:isolate;
+  }
+  /* Cube has transparent bg; no mask. */
+  .cube-stack img.cube{
+    position:absolute;inset:0;width:100%;height:100%;display:block;
+  }
+  .cube-stack img.cube.cyan,
+  .cube-stack img.cube.mag{
+    mix-blend-mode:screen;
+    opacity:0;
+    transform:translate(0,0);
+  }
+  .cube-stack img.cube.cyan{filter:drop-shadow(0 0 0 var(--cyan));}
+  .cube-stack img.cube.mag{filter:drop-shadow(0 0 0 var(--magenta));}
+
+  /* Cube glitch event — hard discrete band slices, snap-stepped (no smooth shake). */
+  .cube-stage.glitching .cube-main{animation:cubeMain .42s steps(1,end) 1}
+  .cube-stage.glitching .cube-stack img.cube.cyan{animation:cubeC .42s steps(1,end) 1}
+  .cube-stage.glitching .cube-stack img.cube.mag{animation:cubeM .42s steps(1,end) 1}
+  @keyframes cubeMain{
+    0%   { clip-path:inset(0 0 72% 0); transform:translateX(12px); }
+    16%  { clip-path:inset(58% 0 22% 0); transform:translateX(-16px); }
+    32%  { clip-path:none; transform:translateX(0); }
+    48%  { clip-path:inset(36% 0 46% 0); transform:translateX(10px); }
+    64%  { clip-path:none; transform:translateX(0); }
+    80%  { clip-path:inset(80% 0 6% 0); transform:translateX(-8px); }
+    100% { clip-path:none; transform:translateX(0); }
+  }
+  @keyframes cubeC{
+    0%   { opacity:.7; clip-path:inset(10% 0 65% 0); transform:translateX(-20px); }
+    16%  { opacity:.8; clip-path:inset(54% 0 26% 0); transform:translateX(-26px); }
+    32%  { opacity:.6; clip-path:inset(30% 0 52% 0); transform:translateX(-14px); }
+    48%  { opacity:.75; clip-path:inset(74% 0 12% 0); transform:translateX(-22px); }
+    64%  { opacity:.55; clip-path:inset(20% 0 62% 0); transform:translateX(-12px); }
+    80%, 100% { opacity:0; clip-path:inset(0 0 100% 0); transform:translateX(0); }
+  }
+  @keyframes cubeM{
+    0%   { opacity:.65; clip-path:inset(46% 0 30% 0); transform:translateX(20px); }
+    16%  { opacity:.75; clip-path:inset(18% 0 60% 0); transform:translateX(26px); }
+    32%  { opacity:.6; clip-path:inset(60% 0 22% 0); transform:translateX(14px); }
+    48%  { opacity:.7; clip-path:inset(8% 0 76% 0); transform:translateX(22px); }
+    64%  { opacity:.5; clip-path:inset(48% 0 32% 0); transform:translateX(12px); }
+    80%, 100% { opacity:0; clip-path:inset(0 0 100% 0); transform:translateX(0); }
+  }
+  @keyframes float{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-10px)}
+  }
+  /* Horizontal slice trails — band copies that fly sideways during a glitch event */
+  .slice-trails{position:absolute;inset:-4% -22% -4% -22%;pointer-events:none;overflow:hidden;}
+  .slice-trails .slice{
+    position:absolute;left:50%;
+    width:82%;aspect-ratio:1/1;
+    background-image:url('assets/cube.png');
+    background-size:contain;background-repeat:no-repeat;background-position:center;
+    opacity:0;
+    transform:translate(-50%,0);
+    will-change:transform,opacity,clip-path,filter;
+  }
+  .cube-stage.glitching .slice.s1{ top:14%; animation:trailA .42s steps(1,end) 1; }
+  .cube-stage.glitching .slice.s2{ top:14%; animation:trailB .42s steps(1,end) 1; }
+  .cube-stage.glitching .slice.s3{ top:14%; animation:trailC .42s steps(1,end) 1; }
+  .cube-stage.glitching .slice.s4{ top:14%; animation:trailD .42s steps(1,end) 1; }
+  .cube-stage.glitching .slice.s5{ top:14%; animation:trailE .42s steps(1,end) 1; }
+  @keyframes trailA{
+    0%   { opacity:.9; clip-path:inset(18% 0 76% 0); transform:translate(calc(-50% - 70px),0); filter:drop-shadow(-8px 0 0 var(--cyan)); }
+    33%  { opacity:.85; clip-path:inset(22% 0 72% 0); transform:translate(calc(-50% - 130px),0); filter:drop-shadow(-14px 0 0 var(--cyan)); }
+    66%  { opacity:.55; clip-path:inset(18% 0 76% 0); transform:translate(calc(-50% - 200px),0); filter:drop-shadow(-6px 0 0 var(--cyan)); }
+    100% { opacity:0; transform:translate(-50%,0); }
+  }
+  @keyframes trailB{
+    0%   { opacity:.75; clip-path:inset(32% 0 60% 0); transform:translate(calc(-50% + 90px),0); filter:drop-shadow(10px 0 0 var(--magenta)); }
+    33%  { opacity:.85; clip-path:inset(36% 0 56% 0); transform:translate(calc(-50% + 150px),0); filter:drop-shadow(16px 0 0 var(--magenta)); }
+    66%  { opacity:.55; clip-path:inset(32% 0 60% 0); transform:translate(calc(-50% + 210px),0); filter:drop-shadow(8px 0 0 var(--magenta)); }
+    100% { opacity:0; transform:translate(-50%,0); }
+  }
+  @keyframes trailC{
+    0%   { opacity:.9; clip-path:inset(48% 0 46% 0); transform:translate(calc(-50% - 130px),0); filter:drop-shadow(-12px 0 0 var(--cyan)); }
+    33%  { opacity:.95; clip-path:inset(52% 0 42% 0); transform:translate(calc(-50% - 200px),0); filter:drop-shadow(-18px 0 0 var(--cyan)); }
+    66%  { opacity:.6; clip-path:inset(48% 0 46% 0); transform:translate(calc(-50% - 260px),0); filter:drop-shadow(-8px 0 0 var(--cyan)); }
+    100% { opacity:0; transform:translate(-50%,0); }
+  }
+  @keyframes trailD{
+    0%   { opacity:.7; clip-path:inset(62% 0 32% 0); transform:translate(calc(-50% + 70px),0); filter:drop-shadow(8px 0 0 var(--magenta)); }
+    33%  { opacity:.8; clip-path:inset(66% 0 28% 0); transform:translate(calc(-50% + 130px),0); filter:drop-shadow(14px 0 0 var(--magenta)); }
+    66%  { opacity:.5; clip-path:inset(62% 0 32% 0); transform:translate(calc(-50% + 190px),0); filter:drop-shadow(6px 0 0 var(--magenta)); }
+    100% { opacity:0; transform:translate(-50%,0); }
+  }
+  @keyframes trailE{
+    0%   { opacity:.85; clip-path:inset(78% 0 16% 0); transform:translate(calc(-50% - 60px),0); filter:drop-shadow(-6px 0 0 var(--cyan)); }
+    33%  { opacity:.9; clip-path:inset(82% 0 12% 0); transform:translate(calc(-50% - 120px),0); filter:drop-shadow(-12px 0 0 var(--cyan)); }
+    66%  { opacity:.55; clip-path:inset(78% 0 16% 0); transform:translate(calc(-50% - 170px),0); filter:drop-shadow(-4px 0 0 var(--cyan)); }
+    100% { opacity:0; transform:translate(-50%,0); }
+  }
+  /* Scanline flash overlay — stepped, no continuous motion */
+  .scanlines{
+    position:absolute;inset:6% 14%;
+    pointer-events:none;opacity:0;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0,
+      rgba(0,0,0,0) 2px,
+      rgba(0,229,209,.08) 3px,
+      rgba(0,0,0,0) 4px
+    );
+    mix-blend-mode:multiply;
+  }
+  .cube-stage.glitching .scanlines{animation:scanFlash .42s steps(1,end) 1}
+  @keyframes scanFlash{
+    0%   { opacity:.85; transform:translateY(-5px); }
+    25%  { opacity:.4; transform:translateY(4px); }
+    50%  { opacity:.8; transform:translateY(-3px); }
+    75%  { opacity:.5; transform:translateY(5px); }
+    100% { opacity:0; transform:translateY(0); }
+  }
+  .cube-stage .shadow{
+    position:absolute;left:50%;bottom:6%;transform:translateX(-50%);
+    width:46%;height:30px;border-radius:50%;
+    background:radial-gradient(closest-side, rgba(15,15,20,.18), rgba(15,15,20,0) 70%);
+    filter:blur(6px);
+    animation:shadowPulse 7s ease-in-out infinite;
+    z-index:-1;
+  }
+  @keyframes shadowPulse{
+    0%,100%{transform:translateX(-50%) scale(1);opacity:.9}
+    50%{transform:translateX(-50%) scale(.9);opacity:.65}
+  }
+
+  .tagline{
+    margin-top:46px;text-align:center;color:var(--ink-2);
+    font-size:30px;line-height:1.35;font-weight:400;letter-spacing:-.005em;
+    max-width:720px;
+  }
+  .hero-ctas{
+    display:flex;gap:14px;margin-top:36px;flex-wrap:wrap;justify-content:center;
+  }
+  .hero-stats{
+    margin-top:64px;width:100%;max-width:880px;
+    display:grid;grid-template-columns:repeat(4,1fr);
+    border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  }
+  .hero-stats .stat{
+    padding:24px 18px;text-align:center;
+    border-right:1px solid var(--rule);
+    display:flex;flex-direction:column;gap:6px;
+  }
+  .hero-stats .stat:last-child{border-right:none}
+  .hero-stats .sv{
+    font-size:24px;font-weight:700;letter-spacing:-.01em;color:var(--ink);
+    font-feature-settings:"tnum";
+  }
+  .hero-stats .sk{
+    font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;
+  }
+
+  /* Utility grid in the Token section */
+  .util-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    border:1px solid var(--ink);
+    margin:40px 0 8px;
+  }
+  .util{
+    padding:24px 26px;
+    border-right:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+  }
+  .util:nth-child(3n){border-right:none}
+  .util:nth-last-child(-n+3){border-bottom:none}
+  .util-k{
+    font-size:11px;color:var(--cyan-strong);
+    text-transform:uppercase;letter-spacing:.16em;font-weight:700;
+    margin-bottom:8px;
+  }
+  .util-v{
+    font-size:14.5px;line-height:1.55;color:var(--ink);font-weight:400;
+  }
+
+  /* ====== SECTION SHELL ====== */
+  section{max-width:var(--max);margin:0 auto;padding:120px 40px}
+  .eyebrow{
+    text-align:center;color:var(--muted);font-size:14px;letter-spacing:.04em;
+    font-weight:500;
+  }
+  .eyebrow .dash{display:inline-block;width:22px;height:1px;background:var(--muted);vertical-align:middle;margin:0 12px}
+
+  .founding h1{
+    margin:28px auto 28px;text-align:center;
+    font-size:64px;line-height:1.08;letter-spacing:-.02em;font-weight:400;
+    color:var(--ink);
+    max-width:1000px;
+  }
+  .founding h1 .b1{display:block}
+  .founding h1 .b2{display:block}
+  .founding .lede{
+    text-align:center;color:var(--ink-2);max-width:560px;margin:0 auto;
+    font-size:16px;line-height:1.6;font-weight:400;
+  }
+
+  /* Subsection 1 */
+  .chapter-index{
+    display:flex;align-items:baseline;gap:36px;color:var(--ink-2);
+    font-size:15px;font-weight:500;margin-bottom:64px;
+    padding-left:6px;
+  }
+  .chapter-index .num{color:var(--muted);font-weight:500;width:18px}
+  .chapter-h{
+    font-size:38px;line-height:1.18;font-weight:700;letter-spacing:-.015em;
+    color:var(--ink);margin:0 0 40px;max-width:760px;
+  }
+  .chapter-h .glitch{display:block}
+  .body{max-width:760px}
+  .body p{
+    font-size:17px;line-height:1.6;color:var(--ink-2);font-weight:400;
+    margin:0 0 22px;
+  }
+  .body p.small{font-size:13.5px;color:#3a3f44;line-height:1.65}
+  .body p.lead{font-size:18px;color:var(--ink);font-weight:500}
+  .quote{
+    margin:48px 0 0;
+    border:1px solid var(--cyan);
+    padding:42px 56px;
+    color:var(--ink);
+    font-size:18px;line-height:1.55;font-weight:400;
+    text-align:center;
+    max-width:760px;
+    position:relative;
+  }
+  .quote::before{
+    content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;background:var(--cyan);
+    opacity:0;
+  }
+
+  /* ====== FOOTER / CHANNELS ====== */
+  .footer{
+    border-top:1px solid var(--rule);
+    background:#fff;
+  }
+  .channels-inner{
+    max-width:var(--max);margin:0 auto;padding:120px 40px 64px;
+  }
+  .channels-head{margin-bottom:64px}
+  .ch-h{
+    font-size:44px;line-height:1.1;letter-spacing:-.02em;font-weight:700;
+    color:var(--ink);margin:18px 0 0;max-width:780px;
+  }
+  .channels-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    border:1px solid var(--ink);
+  }
+  .channel{
+    display:flex;align-items:center;gap:18px;
+    padding:24px 26px;
+    border-right:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+    text-decoration:none;color:var(--ink);
+    position:relative;
+    transition:background .15s,color .15s;
+    min-height:88px;
+  }
+  .channel:hover{background:var(--ink);color:#fff}
+  .channel:hover .ch-handle{color:rgba(255,255,255,.7)}
+  .channel:hover .ch-icon{color:var(--cyan)}
+  .channel:hover .ch-arr{transform:translate(2px,-2px)}
+  /* Borders: 3 cols → kill right border on every 3rd; kill bottom on last row */
+  .channel:nth-child(3n){border-right:none}
+  .channel:nth-last-child(-n+2){border-bottom:none}
+  .channel:nth-last-child(-n+2):nth-child(3n+1) ~ .channel{border-bottom:none}
+  /* The 5-item layout: 3 + 2. Items 4-5 are last row. */
+  .channels-grid > .channel:nth-child(4),
+  .channels-grid > .channel:nth-child(5){border-bottom:none}
+  .ch-icon{
+    width:38px;height:38px;flex:0 0 38px;
+    display:inline-flex;align-items:center;justify-content:center;
+    color:var(--ink-2);
+    transition:color .15s;
+  }
+  .ch-icon svg{width:22px;height:22px}
+  .ch-meta{flex:1 1 auto;min-width:0}
+  .ch-label{
+    font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:4px;
+  }
+  .channel:hover .ch-label{color:rgba(255,255,255,.55)}
+  .ch-handle{
+    font-size:16px;font-weight:500;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    transition:color .15s;
+  }
+  .ch-arr{
+    flex:0 0 auto;color:inherit;opacity:.5;
+    transition:transform .15s,opacity .15s;
+  }
+  .channel:hover .ch-arr{opacity:1}
+
+  .channels-foot{
+    display:flex;align-items:baseline;justify-content:space-between;gap:24px;
+    margin-top:48px;padding-top:28px;
+    border-top:1px solid var(--rule);
+  }
+  .logo-mark{
+    font-weight:800;letter-spacing:.18em;font-size:14px;
+  }
+  .colophon{font-size:13px;color:var(--muted);display:flex;gap:10px;align-items:center}
+  .colophon .sep{opacity:.4}
+
+  @media (max-width:880px){
+    .channels-inner{padding:80px 22px 48px}
+    .ch-h{font-size:28px}
+    .channels-grid{grid-template-columns:1fr}
+    .channel{border-right:none !important;border-bottom:1px solid var(--rule) !important}
+    .channels-grid > .channel:last-child{border-bottom:none !important}
+    .channels-foot{flex-direction:column;align-items:flex-start;gap:14px}
+  }
+
+  /* ====== NETWORK / RITE SECTION ====== */
+  .rite{
+    border-top:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+    background:
+      radial-gradient(circle at 12% 0%, rgba(0,229,209,.07), transparent 40%),
+      radial-gradient(circle at 88% 100%, rgba(255,43,214,.05), transparent 42%),
+      #fff;
+  }
+  .rite-inner{max-width:var(--max);margin:0 auto;padding:120px 40px}
+  .rite h2{
+    font-size:44px;line-height:1.1;letter-spacing:-.02em;font-weight:700;
+    color:var(--ink);margin:18px 0 28px;max-width:780px;
+  }
+  .rite .lede{max-width:680px;color:var(--ink-2);font-size:17px;line-height:1.6;margin-bottom:56px}
+  .params{
+    border:1px solid var(--ink);
+    background:#fff;
+    display:grid;grid-template-columns:1fr 1fr;
+  }
+  .param{
+    padding:24px 28px;
+    border-right:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+    display:flex;flex-direction:column;gap:8px;
+    position:relative;
+  }
+  .param:nth-child(2n){border-right:none}
+  .param:nth-last-child(-n+2){border-bottom:none}
+  .param .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+  .param .v{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:17px;color:var(--ink);font-weight:500;
+    word-break:break-all;
+    padding-right:48px;
+  }
+  .param .copy{
+    position:absolute;top:18px;right:16px;
+    width:32px;height:32px;border-radius:4px;
+    border:1px solid var(--rule);background:#fff;
+    display:inline-flex;align-items:center;justify-content:center;
+    cursor:pointer;color:var(--muted);
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .param .copy:hover{border-color:var(--ink);color:var(--ink)}
+  .param .copy.ok{border-color:var(--cyan);background:var(--cyan);color:#000}
+  .param .copy svg{width:14px;height:14px}
+  .rite-actions{display:flex;gap:14px;margin-top:36px;flex-wrap:wrap}
+  .btn{
+    display:inline-flex;align-items:center;gap:10px;
+    padding:16px 22px;font:inherit;font-size:14.5px;font-weight:600;
+    border-radius:2px;cursor:pointer;letter-spacing:.01em;
+    border:1px solid var(--ink);background:var(--ink);color:#fff;
+    transition:background .15s,color .15s,transform .05s;
+  }
+  .btn:hover{background:#000}
+  .btn:active{transform:translateY(1px)}
+  .btn.ghost{background:transparent;color:var(--ink)}
+  .btn.ghost:hover{background:var(--ink);color:#fff}
+  .btn .arr{transition:transform .15s}
+  .btn:hover .arr{transform:translateX(3px)}
+
+  /* The pump.fun buy button — primary CTA, visually loud */
+  .btn-buy{
+    background:linear-gradient(180deg,#0f0f10 0%,#000 100%);
+    color:#fff;border:1px solid #000;
+    padding:18px 24px;
+    box-shadow: 0 0 0 1px rgba(0,229,209,.0), 0 8px 28px rgba(0,229,209,.18);
+    position:relative;
+    overflow:hidden;
+  }
+  .btn-buy::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+    background:linear-gradient(180deg,var(--cyan),var(--magenta));
+  }
+  .btn-buy:hover{
+    background:linear-gradient(180deg,#0f0f10 0%,#000 100%);
+    box-shadow: 0 0 0 1px rgba(0,229,209,.5), 0 10px 36px rgba(0,229,209,.32);
+  }
+  .btn-buy-pre{opacity:.75;font-weight:500;margin-right:2px}
+  .btn-buy-tick{
+    font-weight:800;letter-spacing:.01em;
+    background:linear-gradient(90deg,var(--cyan),#fff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .btn-buy-chain{
+    opacity:.6;font-weight:500;font-size:13px;margin-left:6px;
+    border-left:1px solid rgba(255,255,255,.2);padding-left:10px;
+  }
+
+  /* Token contract card — bottom of the thesis section */
+  .token-card{
+    margin-top:48px;border:1px solid var(--ink);background:#fff;
+    display:grid;grid-template-columns:auto 1fr auto;gap:0;
+    align-items:stretch;
+  }
+  .tc-head{
+    padding:22px 26px;border-right:1px solid var(--rule);
+    display:flex;flex-direction:column;gap:4px;justify-content:center;
+    min-width:220px;
+  }
+  .tc-tick{font-size:22px;font-weight:800;letter-spacing:.01em;color:var(--ink)}
+  .tc-chain{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+  .tc-ca{
+    padding:22px 26px;border-right:1px solid var(--rule);
+    display:flex;flex-direction:column;gap:6px;justify-content:center;
+    position:relative;min-width:0;
+  }
+  .tc-k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+  .tc-v{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:14.5px;color:var(--ink);word-break:break-all;padding-right:44px;
+  }
+  .tc-ca .copy{position:absolute;top:18px;right:16px}
+  .tc-actions{
+    display:flex;align-items:center;padding:14px 16px;
+  }
+  .tc-actions .btn-buy{margin:0}
+
+  @media (max-width: 880px){
+    .token-card{grid-template-columns:1fr}
+    .tc-head,.tc-ca{border-right:none;border-bottom:1px solid var(--rule)}
+    .tc-actions{padding:18px;justify-content:stretch}
+    .tc-actions .btn-buy{flex:1;justify-content:center}
+  }
+  .toast{
+    margin-top:18px;
+    font-size:14px;color:var(--cyan-strong);
+    opacity:0;transform:translateY(-4px);
+    transition:opacity .2s,transform .2s;
+  }
+  .toast.show{opacity:1;transform:translateY(0)}
+
+  /* ====== DOCTRINE LIST ====== */
+  .creed{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:0;
+    border-top:1px solid var(--rule);
+    margin-top:64px;
+  }
+  .creed .tenet{
+    border-right:1px solid var(--rule);
+    padding:36px 32px 40px;
+  }
+  .creed .tenet:last-child{border-right:none}
+  .creed .tenet .num{
+    font-family:ui-monospace,monospace;font-size:12px;color:var(--cyan-strong);
+    letter-spacing:.18em;margin-bottom:18px;
+  }
+  .creed .tenet h3{
+    font-size:20px;font-weight:700;letter-spacing:-.01em;margin:0 0 12px;color:var(--ink);
+    line-height:1.25;
+  }
+  .creed .tenet p{font-size:14.5px;line-height:1.55;color:var(--ink-2);margin:0}
+
+  /* ====== Responsive ====== */
+  @media (max-width: 880px){
+    .nav-inner{padding:18px 22px;gap:18px}
+    .nav-links{gap:18px;flex-wrap:wrap;justify-content:flex-end}
+    .nav-links a{font-size:13px}
+    .hero{padding:10px 20px 60px}
+    .tagline{font-size:22px;margin-top:30px}
+    .hero-stats{grid-template-columns:1fr 1fr;max-width:100%}
+    .hero-stats .stat{border-right:1px solid var(--rule)}
+    .hero-stats .stat:nth-child(2n){border-right:none}
+    .hero-stats .stat:nth-child(-n+2){border-bottom:1px solid var(--rule)}
+    .util-grid{grid-template-columns:1fr}
+    .util{border-right:none !important;border-bottom:1px solid var(--rule) !important}
+    .util-grid > .util:last-child{border-bottom:none !important}
+    section{padding:80px 22px}
+    .founding h1{font-size:38px}
+    .chapter-h{font-size:26px}
+    .rite-inner{padding:80px 22px}
+    .rite h2{font-size:30px}
+    .params{grid-template-columns:1fr}
+    .param{border-right:none}
+    .param:not(:last-child){border-bottom:1px solid var(--rule)}
+    .creed{grid-template-columns:1fr}
+    .creed .tenet{border-right:none;border-bottom:1px solid var(--rule)}
+    .creed .tenet:last-child{border-bottom:none}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="env,react">
+const { useEffect, useRef, useState, useMemo } = React;
+
+/* ------------ Glitch text utilities ------------ */
+// Drives a discrete glitch event by toggling a .glitching class on/off.
+// One CSS keyframe sequence runs per event, with hard stepped frames.
+function Glitch({ children, mode='auto', className='', minGap=2200, maxGap=4200 }){
+  const [glitching, setGlitching] = useState(false);
+  useEffect(()=>{
+    if(mode!=='auto') return;
+    let alive=true;
+    let t1, t2;
+    const fire = ()=>{
+      if(!alive) return;
+      setGlitching(true);
+      t1 = setTimeout(()=> alive && setGlitching(false), 470);
+      // 30% chance of a quick follow-up burst, otherwise a long pause
+      const gap = Math.random() < .25 ? 280 : (minGap + Math.random()*(maxGap-minGap));
+      t2 = setTimeout(fire, gap);
+    };
+    t1 = setTimeout(fire, 800 + Math.random()*1800);
+    return ()=>{ alive=false; clearTimeout(t1); clearTimeout(t2); };
+  }, [mode, minGap, maxGap]);
+  return (
+    <span className={`glitch ${glitching?'glitching':''} ${className}`}>
+      <span className="layer g-mag" aria-hidden="true">{children}</span>
+      <span className="layer g-cyan" aria-hidden="true">{children}</span>
+      <span className="layer base">{children}</span>
+    </span>
+  );
+}
+
+// Rotating word — cycles through phrases with a scramble + hard band glitch
+function GlitchRotator({ words, interval=2800 }){
+  const [i, setI] = useState(0);
+  const [glitching, setGlitching] = useState(false);
+  const [scrambled, setScrambled] = useState(null);
+  useEffect(()=>{
+    let alive = true;
+    let scramTimer;
+    const t = setTimeout(()=>{
+      if(!alive) return;
+      setGlitching(true);
+      const target = words[(i+1) % words.length];
+      const chars = "abcdefghijklmnopqrstuvwxyz0123456789#%&@<>/\\";
+      let frame = 0;
+      scramTimer = setInterval(()=>{
+        if(!alive) return;
+        frame++;
+        const s = target.split('').map(c => c===' ' ? ' ' : chars[Math.floor(Math.random()*chars.length)]).join('');
+        setScrambled(s);
+        if(frame >= 3){
+          clearInterval(scramTimer);
+          setScrambled(null);
+          setI(prev => (prev+1) % words.length);
+        }
+      }, 70);
+      setTimeout(()=>{ if(alive) setGlitching(false); }, 480);
+    }, interval);
+    return ()=>{ alive=false; clearTimeout(t); clearInterval(scramTimer); };
+  }, [i]);
+  const text = scrambled ?? words[i];
+  // Find the longest phrase to reserve layout space — prevents reflow when shorter
+  // phrases shrink the line and push following content up/down.
+  const longest = useMemo(() =>
+    words.reduce((a, b) => b.length > a.length ? b : a, ''), [words]);
+  return (
+    <span className={`rot ${glitching?'glitching':''}`}>
+      {/* Invisible spacer sized to the longest phrase */}
+      <span className="rot-spacer" aria-hidden="true">{longest}</span>
+      <span className="layer r-mag" aria-hidden="true">{text}</span>
+      <span className="layer r-cyan" aria-hidden="true">{text}</span>
+      <span className="layer base">{text}</span>
+    </span>
+  );
+}
+
+/* ------------ Logo with periodic glitch ------------ */
+function CyberiaLogo(){
+  return (
+    <a href="#" className="logo" aria-label="Cyberia home">
+      <Glitch minGap={3200} maxGap={6000}>CYBERIA</Glitch>
+    </a>
+  );
+}
+
+/* ------------ Cube with periodic full-on glitch ------------ */
+function Cube(){
+  const [glitching, setGlitching] = useState(false);
+  useEffect(()=>{
+    let alive=true;
+    const loop = ()=>{
+      if(!alive) return;
+      setGlitching(true);
+      const dur = 260 + Math.random()*220;
+      setTimeout(()=> alive && setGlitching(false), dur);
+      // schedule next glitch — quick bursts most of the time, occasional pauses
+      const gap = Math.random() < .35 ? 800 + Math.random()*600 : 2400 + Math.random()*2200;
+      setTimeout(loop, gap);
+    };
+    const t = setTimeout(loop, 1200);
+    return ()=>{ alive=false; clearTimeout(t); };
+  },[]);
+  return (
+    <div className={`cube-stage ${glitching?'glitching':''}`}>
+      <div className="slice-trails" aria-hidden="true">
+        <div className="slice s1"></div>
+        <div className="slice s2"></div>
+        <div className="slice s3"></div>
+        <div className="slice s4"></div>
+        <div className="slice s5"></div>
+      </div>
+      <div className="cube-stack">
+        <img className="cube cyan" src="assets/cube.png" alt="" aria-hidden="true" />
+        <img className="cube mag" src="assets/cube.png" alt="" aria-hidden="true" />
+        <img className="cube cube-main" src="assets/cube.png" alt="Cyberia cube" />
+        <div className="scanlines" aria-hidden="true"></div>
+      </div>
+      <div className="shadow" aria-hidden="true"></div>
+    </div>
+  );
+}
+
+/* ------------ Nav ------------ */
+function Nav(){
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(()=>{
+    const onScroll = ()=> setScrolled(window.scrollY>8);
+    window.addEventListener('scroll', onScroll, {passive:true});
+    onScroll();
+    return ()=> window.removeEventListener('scroll', onScroll);
+  },[]);
+  return (
+    <header className={`nav ${scrolled?'scrolled':''}`}>
+      <div className="nav-inner">
+        <CyberiaLogo />
+        <nav className="nav-links">
+          <a href="#doctrine">Doctrine</a>
+          <a href="/dao">DAO</a>
+          <a href="/lending">Lending</a>
+          <a href="/bridge">Bridge</a>
+          <a href="https://swap.cyberia.church" target="_blank" rel="noopener">Swap</a>
+          <a href="https://explorer.cyberia.church/" target="_blank" rel="noopener">Explorer</a>
+          <a href="#join" className="nav-cta">Connect</a>
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+/* ------------ Sections ------------ */
+function Hero(){
+  return (
+    <main className="hero" data-screen-label="01 Hero">
+      <div className="cube-wrap"><Cube/></div>
+      <p className="tagline">
+        Change the perception,<br/>and the whole world will change
+      </p>
+      <div className="hero-ctas">
+        <a className="btn btn-buy" href={SOL_TOKEN.pumpFun} target="_blank" rel="noopener">
+          <span className="btn-buy-pre">Buy</span>
+          <span className="btn-buy-tick">$CYBER.sol</span>
+          <span className="btn-buy-chain">on pump.fun</span>
+          <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+        <a className="btn ghost" href="#token">
+          The thesis
+        </a>
+      </div>
+      <div className="hero-stats" aria-label="Network stats">
+        <div className="stat">
+          <div className="sv">$CYBER.sol</div>
+          <div className="sk">Solana · live now</div>
+        </div>
+        <div className="stat">
+          <div className="sv">pump.fun</div>
+          <div className="sk">Trading venue</div>
+        </div>
+        <div className="stat">
+          <div className="sv">L1</div>
+          <div className="sk">Cyberia mainnet</div>
+        </div>
+        <div className="stat">
+          <div className="sv">CYBER</div>
+          <div className="sk">L1 native gas</div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Doctrine(){
+  return (
+    <section className="founding" id="doctrine" data-screen-label="02 Why $CYBER.sol">
+      <div className="eyebrow"><span className="dash"></span>Why $CYBER.sol<span className="dash"></span></div>
+      <h1>
+        <span className="b1">A Solana token from</span>
+        <span className="b2"><GlitchRotator words={[
+          "a real L1 project",
+          "a working chain",
+          "a cybernetic cult",
+          "people who ship code",
+          "the next cycle"
+        ]} /></span>
+      </h1>
+      <p className="lede">
+        $CYBER.sol is the community asset of the Cyberia project — a sovereign,
+        EVM‑compatible Layer 1 already running at chain ID {NETWORK.chainIdDec}. The
+        chain has its own native gas token (CYBER). $CYBER.sol is what trades.
+      </p>
+
+      <div className="creed" aria-label="Why Cyberia">
+        <div className="tenet">
+          <div className="num">— 01</div>
+          <h3><Glitch minGap={5200} maxGap={9000}>Live, not vapor.</Glitch></h3>
+          <p>$CYBER.sol trades on pump.fun right now. No waitlist, no presale, no team chair. You can be holding it 60 seconds after reading this.</p>
+        </div>
+        <div className="tenet">
+          <div className="num">— 02</div>
+          <h3><Glitch minGap={5800} maxGap={9600}>An L1 behind the cult.</Glitch></h3>
+          <p>Most pump.fun tickers are jpegs. Cyberia ships an EVM Layer 1, a DAO, lending, swap, bridge and explorer. The deck is software you can audit.</p>
+        </div>
+        <div className="tenet">
+          <div className="num">— 03</div>
+          <h3><Glitch minGap={6400} maxGap={10200}>Cult, on purpose.</Glitch></h3>
+          <p>Cybersecurity and cybernetic culture, not committee theatre. Built in the open by people who would run it whether or not you bought. The cult is the moat.</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Problem(){
+  return (
+    <section className="problem" id="token" data-screen-label="03 $CYBER.sol">
+      <div className="chapter-index">
+        <span className="num">¤</span>
+        <span>$CYBER.sol — the community asset</span>
+      </div>
+      <h2 className="chapter-h">
+        <Glitch>The cult has a ticker.</Glitch>
+        <Glitch>It trades on Solana.</Glitch>
+      </h2>
+      <div className="body">
+        <p className="lead">
+          $CYBER.sol is the public asset of the Cyberia cult — the way the
+          internet at large gets a seat in this project. It is a Solana SPL
+          token, freely tradeable on pump.fun. It is not the L1 gas token. It
+          is what the market holds while the chain grows up around it.
+        </p>
+
+        <div className="util-grid">
+          <div className="util">
+            <div className="util-k">Liquid on Solana</div>
+            <div className="util-v">Live on pump.fun today. Buy from Phantom, Backpack, Solflare in under a minute. No KYC, no allowlist.</div>
+          </div>
+          <div className="util">
+            <div className="util-k">Memetic capital</div>
+            <div className="util-v">$CYBER.sol carries the brand. One ticker, one cube, one cult. Every meme is marketing for the chain.</div>
+          </div>
+          <div className="util">
+            <div className="util-k">Bonding curve</div>
+            <div className="util-v">Pump.fun price action reflects belief, not insider unlocks. Early on the curve is early on the project.</div>
+          </div>
+          <div className="util">
+            <div className="util-k">Fair launch</div>
+            <div className="util-v">No team allocation, no advisor bag, no VC cliff. The cap table is whoever showed up on pump.fun.</div>
+          </div>
+          <div className="util">
+            <div className="util-k">Cult signal</div>
+            <div className="util-v">Holding $CYBER.sol is the public way to say you are with the project. Holders get a voice in the DAO and the front of the line on L1 distributions.</div>
+          </div>
+          <div className="util">
+            <div className="util-k">Backed by software</div>
+            <div className="util-v">Not a jpeg. Behind the ticker sits a running L1, DAO, lending, swap, bridge and explorer. Open‑source, auditable, live.</div>
+          </div>
+        </div>
+      </div>
+      <blockquote className="quote">
+        “The ticker is how the market joins the cult.<br/>
+        The chain is what the cult is building.”
+      </blockquote>
+
+      <div className="token-card">
+        <div className="tc-head">
+          <div className="tc-tick">$CYBER.sol</div>
+          <div className="tc-chain">Solana SPL · pump.fun</div>
+        </div>
+        <div className="tc-ca">
+          <div className="tc-k">Contract</div>
+          <div className="tc-v">{SOL_TOKEN.contract}</div>
+          <CopyBtn text={SOL_TOKEN.contract} />
+        </div>
+        <div className="tc-actions">
+          <a className="btn btn-buy" href={SOL_TOKEN.pumpFun} target="_blank" rel="noopener">
+            <span className="btn-buy-pre">Buy</span>
+            <span className="btn-buy-tick">$CYBER.sol</span>
+            <span className="btn-buy-chain">on pump.fun</span>
+            <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const NETWORK = {
+  name: "Cyberia",
+  rpc: "https://rpc.cyberia.church",
+  chainIdDec: "49406",
+  chainIdHex: "0xC0FE",
+  symbol: "CYBER",          // native gas/stake token on Cyberia L1
+  explorer: "https://explorer.cyberia.church/",
+};
+
+// Multi-wallet disambiguation. When MetaMask AND Phantom are both installed,
+// they fight over window.ethereum and the loser silently hijacks it — so a
+// "MetaMask" click can pop up Phantom. EIP-6963 lets each wallet announce
+// itself by a stable rdns, so we can pick the one the user actually wants.
+const _eip6963 = {};
+window.addEventListener('eip6963:announceProvider', (e)=>{
+  const d = e.detail;
+  if(d && d.info && d.info.rdns){ _eip6963[d.info.rdns] = d.provider; }
+});
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+function getMetaMaskProvider(){
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
+  if(_eip6963['io.metamask']) return _eip6963['io.metamask'];
+  const eth = window.ethereum;
+  if(!eth) return null;
+  // Legacy: real MetaMask sets isMetaMask and is not Phantom in disguise.
+  if(Array.isArray(eth.providers)){
+    return eth.providers.find(p => p && p.isMetaMask && !p.isPhantom) || null;
+  }
+  return (eth.isMetaMask && !eth.isPhantom) ? eth : null;
+}
+
+// Separate asset on Solana — the live pump.fun token. NOT the L1 native.
+const SOL_TOKEN = {
+  ticker: "$CYBER.sol",
+  short: "CYBER.sol",
+  pumpFun: "https://pump.fun/coin/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+  contract: "E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+};
+
+function CopyBtn({ text }){
+  const [ok, setOk] = useState(false);
+  const copy = async ()=>{
+    try{
+      await navigator.clipboard.writeText(text);
+      setOk(true);
+      setTimeout(()=> setOk(false), 1400);
+    }catch(e){}
+  };
+  return (
+    ""
+  );
+}
+
+function Rite(){
+  const [msg, setMsg] = useState('');
+  const [show, setShow] = useState(false);
+  const flash = (m)=>{ setMsg(m); setShow(true); setTimeout(()=> setShow(false), 2800); };
+  const add = async ()=>{
+    const eth = getMetaMaskProvider();
+    if(!eth || !eth.request){
+      flash('MetaMask not detected. Install MetaMask, or disable other wallets that hijack the EVM provider.');
+      return;
+    }
+    try{
+      await eth.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: NETWORK.chainIdHex,
+          chainName: NETWORK.name,
+          nativeCurrency: { name: NETWORK.symbol, symbol: NETWORK.symbol, decimals: 18 },
+          rpcUrls: [NETWORK.rpc],
+          blockExplorerUrls: [NETWORK.explorer]
+        }]
+      });
+      flash('Cyberia added to wallet.');
+    }catch(e){
+      flash(e && e.message ? e.message : 'Wallet rejected the request.');
+    }
+  };
+  return (
+    <section className="rite" id="join" data-screen-label="04 The L1">
+      <div className="rite-inner">
+        <div className="eyebrow"><span className="dash"></span>The L1<span className="dash"></span></div>
+        <h2>
+          <Glitch>The chain behind the cult.</Glitch><br/>
+          <Glitch>Cyberia L1, live at chain ID {NETWORK.chainIdDec}.</Glitch>
+        </h2>
+        <p className="lede">
+          Cyberia is an EVM-compatible Layer 1 with its own native gas token (CYBER —
+          separate from the Solana asset above). DAO, lending, swap, bridge and explorer
+          run on this chain. Add it to your wallet to use the apps.
+        </p>
+
+        <div className="params">
+          <div className="param">
+            <div className="k">Network name</div>
+            <div className="v">{NETWORK.name}</div>
+            <CopyBtn text={NETWORK.name} />
+          </div>
+          <div className="param">
+            <div className="k">RPC URL</div>
+            <div className="v">{NETWORK.rpc}</div>
+            <CopyBtn text={NETWORK.rpc} />
+          </div>
+          <div className="param">
+            <div className="k">Chain ID</div>
+            <div className="v">{NETWORK.chainIdDec} <span style={{color:'#9a9ea3',fontWeight:400}}>· {NETWORK.chainIdHex}</span></div>
+            <CopyBtn text={NETWORK.chainIdDec} />
+          </div>
+          <div className="param">
+            <div className="k">Currency symbol</div>
+            <div className="v">{NETWORK.symbol}</div>
+            <CopyBtn text={NETWORK.symbol} />
+          </div>
+          <div className="param" style={{gridColumn:'1 / -1',borderRight:'none'}}>
+            <div className="k">Block explorer</div>
+            <div className="v">{NETWORK.explorer}</div>
+            <CopyBtn text={NETWORK.explorer} />
+          </div>
+        </div>
+
+        <div className="rite-actions">
+          <button className="btn" onClick={add}>
+            Add Cyberia to wallet
+            <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </button>
+          <a className="btn ghost" href={NETWORK.explorer} target="_blank" rel="noopener">
+            Open explorer
+            <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M9 7h8v8"/></svg>
+          </a>
+          <a className="btn ghost" href="https://swap.cyberia.church" target="_blank" rel="noopener">
+            Enter Swap
+            <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M9 7h8v8"/></svg>
+          </a>
+        </div>
+        <div className={`toast ${show?'show':''}`} role="status">{msg}</div>
+      </div>
+    </section>
+  );
+}
+
+function Contact(){
+  const channels = [
+    { label: 'X',           handle: '@cyberia_temple',   href: 'https://x.com/cyberia_temple',
+      icon: (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26L23 21.75h-6.66l-5.214-6.817L5.156 21.75H1.845l7.73-8.835L1 2.25h6.828l4.713 6.231 5.703-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644z"/></svg>) },
+    { label: 'X community', handle: 'Group chat',        href: 'https://x.com/i/chat/group_join/g2052379607618179294/V3aEe965FJ',
+      icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="9" cy="10" r="3"/><circle cx="17" cy="8" r="2.2"/><path d="M3 20c.6-3 3-5 6-5s5.4 2 6 5"/><path d="M14 18c.4-2 2-3.6 4-3.6 1.6 0 3 .8 3.6 2.6"/></svg>) },
+    { label: 'Discord',     handle: 'discord.gg/J7H5VNhnW', href: 'https://discord.gg/J7H5VNhnW',
+      icon: (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 4.6A17 17 0 0 0 15.3 3.3l-.2.4a14 14 0 0 0-5 0l-.2-.4A17 17 0 0 0 4.5 4.6 18 18 0 0 0 2 16.5a16 16 0 0 0 5.5 2.8l.6-1c-.8-.3-1.5-.7-2.1-1.1.2-.2.4-.3.6-.5a13 13 0 0 0 11 0c.2.2.4.3.6.5-.6.4-1.4.8-2.1 1.1l.6 1c2-.5 3.9-1.4 5.5-2.8.3-4.5-1-8.4-2.6-11.9zM9.2 14.4c-1 0-2-1-2-2.2 0-1.3 1-2.3 2-2.3s2 1 2 2.3-.9 2.2-2 2.2zm5.6 0c-1 0-2-1-2-2.2 0-1.3 1-2.3 2-2.3s2 1 2 2.3c0 1.2-.9 2.2-2 2.2z"/></svg>) },
+    { label: 'GitHub',      handle: 'cyberia-temple/singularity', href: 'https://github.com/cyberia-temple/singularity/',
+      icon: (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5 3.3 9.3 7.9 10.8.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2.9-.3 1.9-.4 2.9-.4s2 .1 2.9.4c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.5 4.6-1.5 7.9-5.8 7.9-10.8C23.5 5.7 18.3.5 12 .5z"/></svg>) },
+    { label: 'Blog',        handle: 'cyberia-temple.github.io', href: 'https://cyberia-temple.github.io',
+      icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 5h12a3 3 0 0 1 3 3v11H7a3 3 0 0 1-3-3V5z"/><path d="M19 19a3 3 0 0 1-3-3V5"/><path d="M8 9h7M8 13h7M8 17h4"/></svg>) },
+  ];
+  return (
+    <footer className="footer" id="contact" data-screen-label="05 Channels">
+      <div className="channels-inner">
+        <div className="channels-head">
+          <div className="eyebrow"><span className="dash"></span>Channels<span className="dash"></span></div>
+          <h2 className="ch-h">
+            <Glitch>Join the temple.</Glitch><br/>
+            <Glitch>The signal is already live.</Glitch>
+          </h2>
+        </div>
+        <div className="channels-grid">
+          {channels.map((c)=>(
+            <a key={c.label} className="channel" href={c.href} target="_blank" rel="noopener">
+              <div className="ch-icon" aria-hidden="true">{c.icon}</div>
+              <div className="ch-meta">
+                <div className="ch-label">{c.label}</div>
+                <div className="ch-handle">{c.handle}</div>
+              </div>
+              <div className="ch-arr" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M9 7h8v8"/></svg>
+              </div>
+            </a>
+          ))}
+        </div>
+        <div className="channels-foot">
+          <div className="logo-mark"><Glitch minGap={4800} maxGap={9000}>CYBERIA</Glitch></div>
+          <div className="colophon">
+            <span>L1 · Chain ID {NETWORK.chainIdDec}</span>
+            <span className="sep">·</span>
+            <span>The rite continues.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function App(){
+  return (
+    <>
+      <Nav />
+      <Hero />
+      <Doctrine />
+      <Problem />
+      <Rite />
+      <Contact />
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

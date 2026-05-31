@@ -7,10 +7,11 @@ import {
   updateUserAmlScore,
 } from './actions';
 import { useActiveWeb3React } from 'hooks';
+import { getConfig } from 'config/index';
 
 export default function Updater(): null {
   const dispatch = useDispatch<AppDispatch>();
-  const { account } = useActiveWeb3React();
+  const { account, chainId } = useActiveWeb3React();
 
   // keep dark mode in sync with the system
   useEffect(() => {
@@ -21,6 +22,10 @@ export default function Updater(): null {
   // Refetch user aml score on page refresh
   useEffect(() => {
     const fetchAmlScore = async () => {
+      if (!chainId || !getConfig(chainId)?.leaderboard?.available) {
+        dispatch(updateUserAmlScore({ score: 0 }));
+        return;
+      }
       try {
         const res = await fetch(
           `${process.env.REACT_APP_LEADERBOARD_APP_URL}/utils/qr-screen?address=${account}`,
@@ -36,7 +41,7 @@ export default function Updater(): null {
     } else {
       dispatch(updateUserAmlScore({ score: 0 }));
     }
-  }, [account, dispatch]);
+  }, [account, chainId, dispatch]);
 
   return null;
 }

@@ -11,9 +11,14 @@ interface PhantomProvider {
     isPhantom: boolean;
     publicKey: { toBase58(): string; toBytes(): Uint8Array } | null;
     isConnected: boolean;
-    connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toBase58(): string } }>;
+    connect(opts?: {
+        onlyIfTrusted?: boolean;
+    }): Promise<{ publicKey: { toBase58(): string } }>;
     disconnect(): Promise<void>;
-    signMessage(message: Uint8Array, encoding?: string): Promise<{ signature: Uint8Array; publicKey: { toBase58(): string } }>;
+    signMessage(
+        message: Uint8Array,
+        encoding?: string,
+    ): Promise<{ signature: Uint8Array; publicKey: { toBase58(): string } }>;
     on(event: string, handler: (...args: unknown[]) => void): void;
     off(event: string, handler: (...args: unknown[]) => void): void;
 }
@@ -31,7 +36,8 @@ const getPhantom = (): PhantomProvider | null => {
 
     // Phantom injects at window.phantom.solana or window.solana
     const provider =
-        (window as unknown as { phantom?: { solana?: PhantomProvider } }).phantom?.solana ??
+        (window as unknown as { phantom?: { solana?: PhantomProvider } })
+            .phantom?.solana ??
         (window as unknown as { solana?: PhantomProvider }).solana;
 
     if (provider?.isPhantom) {
@@ -48,13 +54,19 @@ const getPhantom = (): PhantomProvider | null => {
 const waitForPhantom = (timeoutMs = 3000): Promise<PhantomProvider | null> => {
     return new Promise((resolve) => {
         const existing = getPhantom();
-        if (existing) { resolve(existing); return; }
+        if (existing) {
+            resolve(existing);
+            return;
+        }
 
         let resolved = false;
         const handler = () => {
             if (resolved) return;
             const p = getPhantom();
-            if (p) { resolved = true; resolve(p); }
+            if (p) {
+                resolved = true;
+                resolve(p);
+            }
         };
 
         window.addEventListener('phanton#initialized', handler);
@@ -132,7 +144,9 @@ export const useSolanaWallet = () => {
             return address.value;
         } catch (err) {
             error.value =
-                err instanceof Error ? err.message : 'Failed to connect Phantom wallet';
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to connect Phantom wallet';
             isConnected.value = false;
             address.value = null;
             return null;
@@ -162,7 +176,10 @@ export const useSolanaWallet = () => {
 
         try {
             const encodedMessage = new TextEncoder().encode(message);
-            const { signature } = await phantom.signMessage(encodedMessage, 'utf8');
+            const { signature } = await phantom.signMessage(
+                encodedMessage,
+                'utf8',
+            );
 
             // Convert Uint8Array to base64 for transport
             return btoa(String.fromCharCode(...signature));

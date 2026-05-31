@@ -19,7 +19,7 @@ const client = createWalletClient({
     name: "Cyberia",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   },
-  transport: http("http://195.166.164.94:8545"),
+  transport: http("https://rpc.cyberia.church"),
   account,
 });
 
@@ -35,7 +35,7 @@ console.log("Transaction hash:", hash);
 
 const publicClient = createPublicClient({
   chain: { ...mainnet, id: 49406, name: "Cyberia" },
-  transport: http("http://195.166.164.94:8545"),
+  transport: http("https://rpc.cyberia.church"),
 });
 
 const receipt = await publicClient.waitForTransactionReceipt({ hash });

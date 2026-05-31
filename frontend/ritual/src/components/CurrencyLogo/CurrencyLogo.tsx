@@ -91,7 +91,7 @@ const CurrencyLogo: React.FC<CurrencyLogoProps> = ({
       width={size}
       height={size}
       borderRadius={withoutBg ? 0 : size}
-      className={`currencyLogo${withoutBg ? '' : ' bg-white'}`}
+      className={`currencyLogo${withoutBg ? '' : ''}`}
     >
       <Logo
         srcs={srcs}

@@ -32,6 +32,8 @@ const LiquidityPools: React.FC<{
 
   const fetchLiquidityPools = async () => {
     const config = getConfig(token1.chainId);
+    if (!config?.leaderboard?.available) return [];
+
     const v2 = config['v2'];
     let pairData: any[] = [];
     if (v2) {
@@ -67,6 +69,7 @@ const LiquidityPools: React.FC<{
   const { isLoading, data: tokenPairs } = useQuery({
     queryKey: ['fetchSwapTokenPairs', token1Address, token2Address],
     queryFn: fetchLiquidityPools,
+    enabled: Boolean(getConfig(token1.chainId)?.leaderboard?.available),
     refetchInterval: 300000,
   });
 

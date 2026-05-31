@@ -27,13 +27,13 @@ const chain = {
 
 const client = createWalletClient({
   chain,
-  transport: http("http://195.166.164.94:8545"),
+  transport: http("https://rpc.cyberia.church"),
   account,
 });
 
 const publicClient = createPublicClient({
   chain,
-  transport: http("http://195.166.164.94:8545"),
+  transport: http("https://rpc.cyberia.church"),
 });
 
 console.log("Deploying CyberBridge from:", client.account.address);

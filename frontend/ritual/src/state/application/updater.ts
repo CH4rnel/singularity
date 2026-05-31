@@ -18,7 +18,7 @@ export default function Updater(): null {
     account,
   } = useActiveWeb3React();
   const libraryFromChain = RPC_PROVIDERS[chainId];
-  const library = web3ModalLibrary ?? libraryFromChain;
+  const library = libraryFromChain ?? web3ModalLibrary;
 
   const dispatch = useDispatch();
 
@@ -28,30 +28,30 @@ export default function Updater(): null {
     chainId: number | undefined;
     blockNumber: number | null;
   }>({
-    chainId: currentChainId,
+    chainId,
     blockNumber: null,
   });
 
   const blockNumberCallback = useCallback(
     (blockNumber: number) => {
       setState((state) => {
-        if (currentChainId === state.chainId) {
+        if (chainId === state.chainId) {
           if (typeof state.blockNumber !== 'number')
-            return { chainId: currentChainId, blockNumber };
+            return { chainId, blockNumber };
           return {
-            chainId: currentChainId,
+            chainId,
             blockNumber,
           };
         }
         return state;
       });
     },
-    [currentChainId, setState],
+    [chainId, setState],
   );
 
   // attach/detach listeners
   useEffect(() => {
-    setState({ chainId: currentChainId, blockNumber: null });
+    setState({ chainId, blockNumber: null });
     if (!library || !windowVisible) return undefined;
 
     library
@@ -66,27 +66,8 @@ export default function Updater(): null {
 
     library.on('block', blockNumberCallback);
 
-    if (web3ModalLibrary) {
-      web3ModalLibrary.on('network', (newNetwork) => {
-        if (state.chainId && newNetwork.chainId !== state.chainId) {
-          setTimeout(() => {
-            document.location.reload();
-          }, 1500);
-        }
-      });
-    }
-
     return () => {
       library.removeListener('block', blockNumberCallback);
-      if (web3ModalLibrary) {
-        web3ModalLibrary.removeListener('network', (newNetwork) => {
-          if (state.chainId && newNetwork.chainId !== state.chainId) {
-            setTimeout(() => {
-              document.location.reload();
-            }, 1500);
-          }
-        });
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChainId, chainId, windowVisible]);

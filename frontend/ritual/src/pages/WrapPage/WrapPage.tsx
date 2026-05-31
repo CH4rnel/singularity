@@ -1,221 +1,211 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Button } from '@material-ui/core';
 import { SwapVert } from '@material-ui/icons';
 import { ETHER, WETH } from '@uniswap/sdk';
+import { BigNumber, Contract } from 'ethers';
+import { formatUnits, parseUnits } from 'ethers/lib/utils';
 import { useActiveWeb3React, useConnectWallet } from 'hooks';
-import { useCurrencyBalance } from 'state/wallet/hooks';
+import { useWETHContract } from 'hooks/useContract';
 import { NumericalInput } from 'components';
-import useWrapCallback, { WrapType } from 'hooks/useWrapCallback';
-import { formatTokenAmount } from 'utils';
 import { useTranslation } from 'react-i18next';
-import 'pages/styles/swap.scss';
+import { useBlockNumber } from 'state/application/hooks';
+import { RPC_PROVIDERS } from 'constants/providers';
+import ERC20_ABI from 'constants/abis/erc20.json';
+import './WrapPage.scss';
 
 /**
- * Dedicated native ↔ wrapped-native conversion page.
- * Uses the existing useWrapCallback hook (WETH9-style deposit/withdraw).
+ * Native ↔ wrapped-native conversion page.
+ *
+ * Talks to the WETH9-style wrapped-native contract directly via ethers
+ * (deposit() to wrap, withdraw(amount) to unwrap). Balances are read
+ * straight from the chain RPC every new block, so the page works even
+ * when the wallet is connected to a different network.
  */
 const WrapPage: React.FC = () => {
   const { chainId, account } = useActiveWeb3React();
   const { connectWallet } = useConnectWallet(false);
   const { t } = useTranslation();
+  const blockNumber = useBlockNumber();
 
-  // true = CYBER -> WCYBER (wrap), false = WCYBER -> CYBER (unwrap)
+  // true = native -> wrapped (wrap); false = wrapped -> native (unwrap)
   const [isWrap, setIsWrap] = useState(true);
   const [typedValue, setTypedValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const native = chainId ? ETHER[chainId] : undefined;
   const wrapped = chainId ? WETH[chainId] : undefined;
 
-  const inputCurrency = isWrap ? native : wrapped;
-  const outputCurrency = isWrap ? wrapped : native;
+  const inputSymbol = isWrap ? native?.symbol : wrapped?.symbol;
+  const outputSymbol = isWrap ? wrapped?.symbol : native?.symbol;
 
-  const balance = useCurrencyBalance(account ?? undefined, inputCurrency);
+  const wethContract = useWETHContract();
 
-  const { wrapType, execute, inputError } = useWrapCallback(
-    inputCurrency,
-    outputCurrency,
-    typedValue,
-  );
+  const [nativeBalance, setNativeBalance] = useState<BigNumber>(BigNumber.from(0));
+  const [wrappedBalance, setWrappedBalance] = useState<BigNumber>(BigNumber.from(0));
 
-  const busy =
-    wrapType === WrapType.WRAPPING || wrapType === WrapType.UNWRAPPING;
-  const disabled = !typedValue || !execute || busy;
+  // Read balances from the chain's own RPC (works irrespective of wallet net).
+  useEffect(() => {
+    let cancelled = false;
+    if (!account || !chainId || !wrapped?.address) return;
+    const rpc = RPC_PROVIDERS[chainId];
+    if (!rpc) return;
+    (async () => {
+      try {
+        const wrappedRead = new Contract(wrapped.address, ERC20_ABI, rpc);
+        const [n, w] = await Promise.all([
+          rpc.getBalance(account),
+          wrappedRead.balanceOf(account),
+        ]);
+        if (!cancelled) {
+          setNativeBalance(n);
+          setWrappedBalance(w);
+        }
+      } catch {
+        // RPC hiccup — retry next block
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [account, chainId, wrapped?.address, blockNumber]);
+
+  const inputBalance = isWrap ? nativeBalance : wrappedBalance;
+
+  const inputAmount = useMemo(() => {
+    if (!typedValue) return null;
+    try {
+      return parseUnits(typedValue, 18);
+    } catch {
+      return null;
+    }
+  }, [typedValue]);
+
+  const sufficient = !!inputAmount && inputBalance.gte(inputAmount);
 
   const buttonLabel = useMemo(() => {
     if (!account) return t('connectWallet');
-    if (inputError) return inputError;
-    if (wrapType === WrapType.WRAPPING)
-      return t('wrappingMATIC', { symbol: native?.symbol ?? '' });
-    if (wrapType === WrapType.UNWRAPPING)
-      return t('unwrappingMATIC', { symbol: wrapped?.symbol ?? '' });
-    return isWrap
-      ? t('wrapMATIC', { symbol: native?.symbol ?? '' })
-      : t('unwrapMATIC', { symbol: wrapped?.symbol ?? '' });
-  }, [account, inputError, wrapType, isWrap, native, wrapped, t]);
+    if (busy)
+      return isWrap
+        ? `Wrapping ${inputSymbol}…`
+        : `Unwrapping ${inputSymbol}…`;
+    if (!inputAmount || inputAmount.isZero()) return 'Enter amount';
+    if (!sufficient) return `Insufficient ${inputSymbol}`;
+    return isWrap ? `Wrap ${inputSymbol}` : `Unwrap ${inputSymbol}`;
+  }, [account, busy, inputSymbol, inputAmount, sufficient, isWrap, t]);
 
   const handleMax = () => {
-    if (balance) {
-      // Leave a dust reserve for gas when wrapping native currency.
-      setTypedValue(balance.toExact());
+    if (isWrap) {
+      const reserve = parseUnits('0.005', 18);
+      const max = inputBalance.gt(reserve)
+        ? inputBalance.sub(reserve)
+        : BigNumber.from(0);
+      setTypedValue(formatUnits(max, 18));
+    } else {
+      setTypedValue(formatUnits(inputBalance, 18));
     }
   };
 
   const flip = () => {
     setIsWrap((v) => !v);
     setTypedValue('');
+    setError(null);
   };
 
   const handleClick = async () => {
+    setError(null);
     if (!account) {
       connectWallet();
       return;
     }
-    if (execute) {
-      await execute();
+    if (!wethContract || !inputAmount || inputAmount.isZero() || !sufficient)
+      return;
+    setBusy(true);
+    try {
+      const tx = isWrap
+        ? await wethContract.deposit({ value: inputAmount })
+        : await wethContract.withdraw(inputAmount);
+      await tx.wait();
       setTypedValue('');
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
     }
   };
 
+  const disabled = account
+    ? !inputAmount || inputAmount.isZero() || !sufficient || busy
+    : false;
+
   return (
-    <Box width='100%' mb={3} id='wrap-page'>
-      <Box
-        sx={{
-          maxWidth: 560,
-          margin: '24px auto',
-          padding: 3,
-          borderRadius: 16,
-          bgcolor: '#1b1e29',
-          border: '1px solid #242938',
-        }}
-      >
-        <Box
-          mb={2}
-          display='flex'
-          alignItems='center'
-          justifyContent='space-between'
-        >
-          <h5 style={{ margin: 0, color: '#fff' }}>{t('wrap')}</h5>
-          <small className='text-secondary'>
+    <Box className='wrapPage'>
+      <Box className='wrapCard'>
+        <Box className='wrapHeader'>
+          <h5>{t('wrap')}</h5>
+          <small>
             {isWrap
               ? `${native?.symbol} → ${wrapped?.symbol}`
               : `${wrapped?.symbol} → ${native?.symbol}`}
           </small>
         </Box>
 
-        <Box
-          className='swapBox'
-          sx={{ padding: 2, borderRadius: 12, bgcolor: '#12131a' }}
-        >
-          <Box
-            display='flex'
-            justifyContent='space-between'
-            alignItems='center'
-            mb={1}
-          >
-            <small className='text-secondary'>{t('from')}</small>
-            <Box display='flex' alignItems='center' gridGap={8}>
-              <small className='text-secondary'>
-                {t('balance')}: {balance ? formatTokenAmount(balance) : '—'}
+        <Box className='wrapInputBox'>
+          <Box className='wrapInputRow'>
+            <small>{t('from')}</small>
+            <Box className='balanceWrap'>
+              <small>
+                {t('balance')}:{' '}
+                {Number(formatUnits(inputBalance, 18)).toFixed(6)}
               </small>
-              {balance && (
-                <Button
-                  size='small'
-                  onClick={handleMax}
-                  style={{ minWidth: 0, padding: '2px 8px', fontSize: 12 }}
-                >
-                  {t('max')}
-                </Button>
-              )}
+              <button className='maxBtn' onClick={handleMax} type='button'>
+                {t('max')}
+              </button>
             </Box>
           </Box>
-          <Box
-            display='flex'
-            justifyContent='space-between'
-            alignItems='center'
-          >
+          <Box className='wrapAmountRow'>
             <NumericalInput
               value={typedValue}
               onUserInput={setTypedValue}
-              fontSize={24}
+              fontSize={28}
               align='left'
               placeholder='0.0'
             />
-            <Box
-              sx={{
-                minWidth: 80,
-                textAlign: 'right',
-                color: '#fff',
-                fontWeight: 600,
-              }}
-            >
-              {inputCurrency?.symbol}
-            </Box>
+            <span className='symbol'>{inputSymbol}</span>
           </Box>
         </Box>
 
-        <Box display='flex' justifyContent='center' my={1}>
-          <Button
-            onClick={flip}
-            style={{
-              minWidth: 0,
-              padding: 8,
-              borderRadius: '50%',
-              background: '#242938',
-            }}
-          >
-            <SwapVert style={{ color: '#fff' }} />
-          </Button>
-        </Box>
-
-        <Box
-          className='swapBox'
-          sx={{ padding: 2, borderRadius: 12, bgcolor: '#12131a' }}
-        >
-          <Box mb={1}>
-            <small className='text-secondary'>{t('to')}</small>
-          </Box>
-          <Box
-            display='flex'
-            justifyContent='space-between'
-            alignItems='center'
-          >
-            <Box style={{ fontSize: 24, color: '#fff' }}>
-              {typedValue || '0.0'}
-            </Box>
-            <Box
-              sx={{
-                minWidth: 80,
-                textAlign: 'right',
-                color: '#fff',
-                fontWeight: 600,
-              }}
-            >
-              {outputCurrency?.symbol}
-            </Box>
+        <Box className='wrapSwitcher'>
+          <Box className='switcherInner' onClick={flip}>
+            <SwapVert />
           </Box>
         </Box>
 
-        <Box mt={3}>
-          <Button
-            fullWidth
-            onClick={handleClick}
-            disabled={account ? disabled : false}
-            style={{
-              height: 56,
-              fontSize: 16,
-              fontWeight: 600,
-              borderRadius: 12,
-            }}
-          >
+        <Box className='wrapInputBox'>
+          <Box className='wrapInputRow'>
+            <small>{t('to')}</small>
+          </Box>
+          <Box className='wrapAmountRow'>
+            <span className='amountStatic'>{typedValue || '0.0'}</span>
+            <span className='symbol'>{outputSymbol}</span>
+          </Box>
+        </Box>
+
+        {error && (
+          <Box className='wrapErrorBox'>
+            <small>{error}</small>
+          </Box>
+        )}
+
+        <Box className='wrapAction'>
+          <Button onClick={handleClick} disabled={disabled}>
             {buttonLabel}
           </Button>
         </Box>
 
-        <Box mt={2} textAlign='center'>
-          <small className='text-secondary'>
-            {t('wrap')} 1:1 — {native?.symbol} ↔ {wrapped?.symbol}
-          </small>
-        </Box>
+        <div className='wrapHint'>
+          {t('wrap')} 1:1 — {native?.symbol} ↔ {wrapped?.symbol}
+        </div>
       </Box>
     </Box>
   );

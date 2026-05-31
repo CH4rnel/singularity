@@ -57,34 +57,6 @@ const GlobalSection: React.FC = () => {
       <Box className='flex tradingInfo' style={{ marginBottom: '45px' }}>
         <TradingInfo />
       </Box>
-      <Box
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: '134px',
-        }}
-      >
-        <Link
-          to='/analytics'
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '4px',
-            color: '#ccd8e7',
-            textDecoration: 'none',
-            fontSize: '14px',
-            fontWeight: 'normal',
-          }}
-        >
-          {t('viewAnalytics')}
-          <KeyboardArrowDown
-            style={{ transform: 'rotate(-90deg)', color: '#448aff' }}
-          />
-        </Link>
-      </Box>
     </>
   );
 };

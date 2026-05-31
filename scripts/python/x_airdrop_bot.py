@@ -34,7 +34,7 @@ TOKEN_ABI = [
     {"inputs": [{"name": "account", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
 ]
 
-RPC_URL = "http://195.166.164.94:8545"
+RPC_URL = "https://rpc.cyberia.church"
 CHAIN_ID = 49406
 MINT_AMOUNT = Web3.to_wei(1, "ether")
 POLL_INTERVAL = 120  # seconds

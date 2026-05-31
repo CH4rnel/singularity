@@ -5,7 +5,7 @@ import { Close } from '@material-ui/icons';
 import { useTheme } from '@material-ui/core/styles';
 import { useSwitchNetwork, useWalletInfo } from '@web3modal/ethers5/react';
 import { useActiveWeb3React, useConnectWallet } from 'hooks';
-import QuickIcon from 'assets/images/quickIcon.svg';
+import QuickIcon from 'assets/images/ash.png';
 import QuickLogo from 'assets/images/quickLogo.png';
 import QuickLogoWebP from 'assets/images/quickLogo.webp';
 import QuickPerpsLogo from 'assets/images/quickPerpsLogo.webp';
@@ -23,13 +23,37 @@ import { HeaderDesktopItem } from './HeaderDesktopItem';
 import MobileHeader from './MobileHeader';
 import KeyboardArrowDownIcon from '@material-ui/icons/KeyboardArrowDown';
 import { NetworkSelection } from './NetworkSelection';
-import { OrderlyPoints } from './OrderlyPoints';
 import { shortenAddress, useIsSupportedNetwork } from 'utils';
 import AccountDetailsModal from 'components/AccountDetails/AccountDetailsModal';
 
-const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
-  onUpdateNewsletter,
-}) => {
+const cyberiaExternalLinks: HeaderMenuItem[] = [
+  {
+    link: '/lending',
+    text: 'Lending',
+    id: 'cyberia-lending-link',
+    isExternal: true,
+    target: '_blank',
+    externalLink: 'https://bridge.cyberia.church/lending',
+  },
+  {
+    link: '/cyberia-bridge',
+    text: 'Bridge',
+    id: 'cyberia-bridge-link',
+    isExternal: true,
+    target: '_blank',
+    externalLink: 'https://bridge.cyberia.church',
+  },
+  {
+    link: '/cyberia-explorer',
+    text: 'Explorer',
+    id: 'cyberia-explorer-link',
+    isExternal: true,
+    target: '_blank',
+    externalLink: 'https://explorer.cyberia.church',
+  },
+];
+
+const Header: React.FC<{ onUpdateNewsletter?: (val: boolean) => void }> = () => {
   const { t } = useTranslation();
   const history = useHistory();
   const { chainId, account } = useActiveWeb3React();
@@ -37,7 +61,6 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
   const { walletInfo } = useWalletInfo();
   const isSupportedNetwork = useIsSupportedNetwork();
   const { connectWallet } = useConnectWallet(isSupportedNetwork);
-  const [showNewsletter, setShowNewsletter] = useState(false);
   const [showAccountDetailsModal, setShowAccountDetailsModal] = useState(false);
 
   const theme = useTheme();
@@ -46,11 +69,6 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
   const mobileWindowSize = useMediaQuery(theme.breakpoints.down('xs'));
   const deviceWidth = useDeviceWidth();
   const [headerClass, setHeaderClass] = useState('');
-
-  const handleShowNewsletter = (val: boolean) => {
-    setShowNewsletter(val);
-    onUpdateNewsletter(val);
-  };
 
   const changeHeaderBg = () => {
     if (window.scrollY > 0) {
@@ -86,24 +104,11 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
   const showSwap = config['swap']['available'];
   const showPool = config['pools']['available'];
   const showFarm = config['farm']['available'];
-  const showLair = config['lair']['available'];
   const showBridge = config['bridge']['available'];
-  const showConvert = config['convert']['available'];
-  const showAnalytics = config['analytics']['available'];
   const showLending = config['lending']['available'];
   const showDappOs = config['dappos']['available'];
   const showGamingHub = config['gamingHub']['available'];
-  const showLeaderboard = config['leaderboard']['available'];
-  const showPerps = config['perps']['available'];
-  const showHydra = config['hydra']['available'];
-  const showPerpsV2 = config['perpsV2']['available'];
-  const showBonds = config['bonds']['available'];
-  const showEarn = showFarm && showBonds;
   const menuItems: Array<HeaderMenuItem> = [];
-  const isPerpsDropdown =
-    (showPerpsV2 && showPerps) ||
-    (showHydra && showPerps) ||
-    (showPerpsV2 && showHydra);
 
   const swapCurrencyStr = useMemo(() => {
     if (!chainId) return '';
@@ -131,77 +136,6 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
     }
   }
 
-  const perpsTab: HeaderMenuItem = {
-    text: t('Perps'),
-    id: 'earn-tab',
-    link: '/',
-    items: [],
-    isNew: true,
-  };
-  if (isPerpsDropdown) {
-    menuItems.push(perpsTab);
-  }
-  const perpsItem = {
-    link: '/perps',
-    text: 'Perps V1',
-    id: 'perps-page-link',
-    isExternal: true,
-    externalLink: process?.env?.REACT_APP_PERPS_URL || '',
-    onClick: async () => {
-      if (chainId !== ChainId.ZKEVM) {
-        switchNetwork(ChainId.ZKEVM);
-      }
-      if (process.env.REACT_APP_PERPS_URL) {
-        window.open(process.env.REACT_APP_PERPS_URL, '_blank');
-      }
-    },
-  };
-  const hydraItem = {
-    link: '/hydra',
-    text: chainId === ChainId.ZKEVM ? 'Hydra' : 'Perps',
-    id: 'hydra-page-link',
-    isExternal: true,
-    externalLink: process?.env?.REACT_APP_HYDRA_URL || '',
-    onClick: async () => {
-      if (!showHydra) {
-        switchNetwork(ChainId.ZKEVM);
-      }
-      if (process.env.REACT_APP_HYDRA_URL) {
-        window.open(process.env.REACT_APP_HYDRA_URL, '_blank');
-      }
-    },
-  };
-  if (showPerpsV2) {
-    if (showPerps) {
-      perpsTab.items?.push({
-        link: `/falkor`,
-        text: 'Perps',
-        id: 'perps-page-link',
-      });
-    } else {
-      menuItems.push({
-        link: `/falkor`,
-        text: 'Perps',
-        id: 'perps-page-link',
-        isNew: true,
-      });
-    }
-  }
-  if (showHydra) {
-    if (showPerps || showPerpsV2) {
-      perpsTab.items?.push(hydraItem);
-    } else {
-      menuItems.push(hydraItem);
-    }
-  }
-  if (showPerps && process.env.NODE_ENV !== 'production') {
-    if (showHydra || showPerpsV2) {
-      perpsTab.items?.push(perpsItem);
-    } else {
-      menuItems.push(perpsItem);
-    }
-  }
-
   if (showPool) {
     menuItems.push({
       link: `/pools`,
@@ -209,62 +143,11 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
       id: 'pools-page-link',
     });
   }
-  const earnTab: HeaderMenuItem = {
-    text: t('Earn'),
-    id: 'earn-tab',
-    link: '/',
-    items: [],
-  };
-
-  if (showEarn) {
-    menuItems.push(earnTab);
-  }
   if (showFarm) {
-    if (showEarn) {
-      earnTab.items?.push({
-        link: `/farm`,
-        text: t('farm') as string,
-        id: 'farm-page-link',
-      });
-    } else {
-      menuItems.push({
-        link: `/farm`,
-        text: t('farm') as string,
-        id: 'farm-page-link',
-      });
-    }
-  }
-  if (showBonds) {
-    if (showEarn) {
-      earnTab.items?.push({
-        link: `/bonds`,
-        text: t('bonds'),
-        id: 'bonds-page-link',
-      });
-    } else {
-      menuItems.push({
-        link: `/bonds`,
-        text: t('bonds'),
-        id: 'bonds-page-link',
-      });
-    }
-  }
-  if (chainId === ChainId.ZKEVM) {
     menuItems.push({
-      link: '/safe',
-      text: 'Safe',
-      id: 'safe-page-link',
-      isExternal: true,
-      target: '_blank',
-      externalLink: process?.env?.REACT_APP_SAFE_URL || '',
-      isNew: true,
-    });
-  }
-  if (showLair) {
-    menuItems.push({
-      link: '/dragons',
-      text: t('dragonLair'),
-      id: 'dragons-page-link',
+      link: `/farm`,
+      text: t('farm') as string,
+      id: 'farm-page-link',
     });
   }
 
@@ -285,22 +168,6 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
       externalLink: process?.env?.REACT_APP_GAMEHUB_URL || '',
     });
   }
-  if (showLeaderboard) {
-    menuItems.push({
-      link: '/leader-board',
-      text: 'Leaderboard',
-      id: 'contest-page-link',
-      isNew: false,
-    });
-  }
-  if (showConvert) {
-    menuItems.push({
-      link: '/convert',
-      text: t('convert'),
-      id: 'convert-quick',
-    });
-  }
-
   if (showDappOs) {
     menuItems.push({
       link: '/dappOS',
@@ -320,13 +187,8 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
       isNew: true,
     });
   }
-  if (showAnalytics) {
-    menuItems.push({
-      link: `/analytics`,
-      text: t('analytics'),
-      id: 'analytics-page-link',
-    });
-  }
+
+  menuItems.push(...cyberiaExternalLinks);
 
   const parsedQuery = useParsedQueryString();
   const parsedChain =
@@ -343,24 +205,8 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chainId, parsedChain]);
 
-  const isPerpsPage = history.location.pathname === '/falkor';
-
   return (
     <Box className='header'>
-      {showNewsletter && (
-        <Box className='newsletterBar'>
-          <small className='text-white'>{t('signupnewsletterTopDesc')}</small>
-          <Button onClick={() => history.push('/newsletter')}>
-            {t('signup')}
-          </Button>
-          <Box
-            className='cursor-pointer'
-            onClick={() => handleShowNewsletter(false)}
-          >
-            <Close />
-          </Box>
-        </Box>
-      )}
       <Box className={`menuBar ${tabletWindowSize ? '' : headerClass}`}>
         <AccountDetailsModal
           open={showAccountDetailsModal}
@@ -369,7 +215,7 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
         <Box style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <Link to='/'>
             {mobileWindowSize && (
-              <img src={QuickIcon} alt='Ritual' height={32} />
+              <img src={QuickIcon} alt='Ritual' height={32} width={32} />
             )}
             {!mobileWindowSize && (
               <Box
@@ -380,7 +226,7 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
                   textDecoration: 'none',
                 }}
               >
-                <img src={QuickIcon} alt='Ritual' height={32} />
+                <img src={QuickIcon} alt='Ritual' height={32} width={32} />
                 <span
                   style={{
                     fontSize: 22,
@@ -421,7 +267,6 @@ const Header: React.FC<{ onUpdateNewsletter: (val: boolean) => void }> = ({
           )}
         </Box>
         <Box>
-          {isPerpsPage && !mobileWindowSize && <OrderlyPoints />}
           <Box style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <NetworkSelection />
             {!!account ? (

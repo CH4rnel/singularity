@@ -14,29 +14,17 @@ const acct = privateKeyToAccount(pk as `0x${string}`);
 const pub = createPublicClient({ chain: cyberia, transport: http(RPC) });
 const wallet = createWalletClient({ chain: cyberia, transport: http(RPC), account: acct });
 
-// The chatId from the failed tx: fffffffffffffffffffffffffffffffffffffffffffffffffffffffec868c619
-// That is -20488679 as int64. Parse from two's-complement-256 -> int64:
-const chatId = -20488679n;
 console.log("caller:", acct.address);
-console.log("chatId:", chatId.toString());
-
-// Check if already minted
-const existing = await pub.readContract({ address: FACTORY, abi: artifact.abi, functionName: "tokenOfChat", args: [chatId] });
-console.log("existing tokenOfChat:", existing);
-if (existing !== "0x0000000000000000000000000000000000000000") {
-  console.log("Already exists, bailing.");
-  process.exit(0);
-}
 
 const estimated = await pub.estimateContractGas({
   address: FACTORY, abi: artifact.abi, functionName: "createToken",
-  args: ["Bots", "BOTS", chatId, acct.address], account: acct,
+  args: ["Bots", "BOTS", acct.address], account: acct,
 });
 console.log("estimated gas:", estimated.toString());
 
 const { request } = await pub.simulateContract({
   address: FACTORY, abi: artifact.abi, functionName: "createToken",
-  args: ["Bots", "BOTS", chatId, acct.address], account: acct,
+  args: ["Bots", "BOTS", acct.address], account: acct,
   gas: estimated * 125n / 100n + 50_000n,
 });
 const hash = await wallet.writeContract(request);

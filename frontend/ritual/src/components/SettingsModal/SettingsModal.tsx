@@ -17,7 +17,6 @@ import {
   useSlippageManuallySet,
   useUserSlippageAuto,
   useUserSingleHopOnly,
-  useIsInfiniteApproval,
 } from 'state/user/hooks';
 import { ReactComponent as CloseIcon } from 'assets/images/CloseIcon.svg';
 import 'components/styles/SettingsModal.scss';
@@ -73,7 +72,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [expertMode, toggleExpertMode] = useExpertModeManager();
   const [bonusRouterDisabled, toggleSetBonusRouter] = useBonusRouterManager();
   const [singleHopOnly, setSingleHopOnly] = useUserSingleHopOnly();
-  const [isInfiniteApproval, setIsInfiniteApproval] = useIsInfiniteApproval();
 
   const [slippageInput, setSlippageInput] = useState('');
   const [deadlineInput, setDeadlineInput] = useState('');
@@ -390,14 +388,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <ToggleSwitch
             toggled={singleHopOnly}
             onToggle={() => setSingleHopOnly(!singleHopOnly)}
-          />
-        </Box>
-        <Divider />
-        <Box my={2.5} className='flex items-center justify-between'>
-          <p>{t('infiniteApproval')}</p>
-          <ToggleSwitch
-            toggled={isInfiniteApproval}
-            onToggle={() => setIsInfiniteApproval(!isInfiniteApproval)}
           />
         </Box>
         <Divider />

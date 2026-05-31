@@ -4,7 +4,7 @@ export const useWalletAuth = () => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
+                Accept: 'application/json',
             },
             body: JSON.stringify({ wallet_address: walletAddress }),
         });
@@ -16,12 +16,15 @@ export const useWalletAuth = () => {
         return response.json() as Promise<{ nonce: string; message: string }>;
     };
 
-    const verifySignature = async (walletAddress: string, signature: string) => {
+    const verifySignature = async (
+        walletAddress: string,
+        signature: string,
+    ) => {
         const response = await fetch('/api/wallet/verify', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
+                Accept: 'application/json',
             },
             body: JSON.stringify({ wallet_address: walletAddress, signature }),
         });
@@ -48,7 +51,7 @@ export const useWalletAuth = () => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
+                Accept: 'application/json',
             },
             body: JSON.stringify({ wallet_address: walletAddress }),
         });
@@ -68,7 +71,7 @@ export const useWalletAuth = () => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
+                Accept: 'application/json',
             },
             body: JSON.stringify({
                 wallet_address: walletAddress,
@@ -101,7 +104,7 @@ export const useWalletAuth = () => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
+                Accept: 'application/json',
                 'X-XSRF-TOKEN': getCsrfToken(),
             },
             credentials: 'same-origin',
@@ -130,7 +133,7 @@ export const useWalletAuth = () => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
+                Accept: 'application/json',
                 'X-XSRF-TOKEN': getCsrfToken(),
             },
             credentials: 'same-origin',
@@ -142,9 +145,7 @@ export const useWalletAuth = () => {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(
-                error.message || 'Failed to attach Solana wallet',
-            );
+            throw new Error(error.message || 'Failed to attach Solana wallet');
         }
 
         return response.json() as Promise<{
@@ -157,7 +158,7 @@ export const useWalletAuth = () => {
         const response = await fetch('/wallets/evm/detach', {
             method: 'DELETE',
             headers: {
-                'Accept': 'application/json',
+                Accept: 'application/json',
                 'X-XSRF-TOKEN': getCsrfToken(),
             },
             credentials: 'same-origin',
@@ -174,7 +175,7 @@ export const useWalletAuth = () => {
         const response = await fetch('/wallets/solana/detach', {
             method: 'DELETE',
             headers: {
-                'Accept': 'application/json',
+                Accept: 'application/json',
                 'X-XSRF-TOKEN': getCsrfToken(),
             },
             credentials: 'same-origin',

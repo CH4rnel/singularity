@@ -48,11 +48,14 @@ const filteredLinks = computed(() => {
     if (selectedCategoryId.value === null) {
         return props.links;
     }
-    return props.links.filter(link => link.category_id === selectedCategoryId.value);
+    return props.links.filter(
+        (link) => link.category_id === selectedCategoryId.value,
+    );
 });
 
 function filterByCategory(categoryId: number | null) {
-    selectedCategoryId.value = categoryId === selectedCategoryId.value ? null : categoryId;
+    selectedCategoryId.value =
+        categoryId === selectedCategoryId.value ? null : categoryId;
 }
 
 const createForm = useForm({
@@ -93,7 +96,7 @@ function submitCreate() {
 
 function submitEdit() {
     if (!editingLink.value) return;
-    
+
     editForm.put(`/links/${editingLink.value.id}`, {
         onSuccess: () => {
             showForm.value = false;
@@ -139,12 +142,14 @@ defineOptions({
 <template>
     <Head class="m-3" title="Links" />
 
-    <div class="flex flex-col space-y-6 m-2">
+    <div class="m-2 flex flex-col space-y-6">
         <div class="flex items-center justify-between">
-            <Heading variant="small" title="Links" description="Manage your monitored links" />
-            <Button @click="openCreate">
-                <Plus /> Add Link
-            </Button>
+            <Heading
+                variant="small"
+                title="Links"
+                description="Manage your monitored links"
+            />
+            <Button @click="openCreate"> <Plus /> Add Link </Button>
         </div>
 
         <div v-if="showForm" class="rounded-lg border p-4">
@@ -152,7 +157,11 @@ defineOptions({
                 {{ editingLink ? 'Edit Link' : 'Add New Link' }}
             </h3>
 
-            <form v-if="!editingLink" @submit.prevent="submitCreate" class="space-y-4">
+            <form
+                v-if="!editingLink"
+                @submit.prevent="submitCreate"
+                class="space-y-4"
+            >
                 <div>
                     <label class="text-sm font-medium">Name</label>
                     <Input v-model="createForm.name" class="mt-1" required />
@@ -160,33 +169,65 @@ defineOptions({
 
                 <div>
                     <label class="text-sm font-medium">URLs (mirrors)</label>
-                    <div class="space-y-2 mt-1">
-                        <div v-for="(_, i) in createForm.urls" :key="i" class="flex gap-2">
-                            <Input v-model="createForm.urls[i]" placeholder="https://..." />
-                            <Button type="button" variant="ghost" size="icon" @click="removeUrl(i)" :disabled="createForm.urls.length <= 1">
+                    <div class="mt-1 space-y-2">
+                        <div
+                            v-for="(_, i) in createForm.urls"
+                            :key="i"
+                            class="flex gap-2"
+                        >
+                            <Input
+                                v-model="createForm.urls[i]"
+                                placeholder="https://..."
+                            />
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                @click="removeUrl(i)"
+                                :disabled="createForm.urls.length <= 1"
+                            >
                                 <Trash2 class="h-4 w-4" />
                             </Button>
                         </div>
                     </div>
-                    <Button type="button" variant="outline" size="sm" class="mt-2" @click="addUrl">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        class="mt-2"
+                        @click="addUrl"
+                    >
                         <Plus class="mr-1 h-4 w-4" /> Add URL
                     </Button>
                 </div>
 
                 <div>
                     <label class="text-sm font-medium">Category</label>
-                    <select v-model="createForm.category_id" class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                    <select
+                        v-model="createForm.category_id"
+                        class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
                         <option :value="null">No category</option>
-                        <option v-for="category in props.categories" :key="category.id" :value="category.id">
+                        <option
+                            v-for="category in props.categories"
+                            :key="category.id"
+                            :value="category.id"
+                        >
                             {{ category.name }}
                         </option>
                     </select>
                 </div>
 
-
                 <div class="flex gap-2">
-                    <Button type="submit" :disabled="createForm.processing">Create</Button>
-                    <Button type="button" variant="outline" @click="showForm = false">Cancel</Button>
+                    <Button type="submit" :disabled="createForm.processing"
+                        >Create</Button
+                    >
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="showForm = false"
+                        >Cancel</Button
+                    >
                 </div>
             </form>
 
@@ -198,40 +239,71 @@ defineOptions({
 
                 <div>
                     <label class="text-sm font-medium">URLs (mirrors)</label>
-                    <div class="space-y-2 mt-1">
-                        <div v-for="(_, i) in editForm.urls" :key="i" class="flex gap-2">
-                            <Input v-model="editForm.urls[i]" placeholder="https://..." />
-                            <Button type="button" variant="ghost" size="icon" @click="removeUrl(i)" :disabled="editForm.urls.length <= 1">
+                    <div class="mt-1 space-y-2">
+                        <div
+                            v-for="(_, i) in editForm.urls"
+                            :key="i"
+                            class="flex gap-2"
+                        >
+                            <Input
+                                v-model="editForm.urls[i]"
+                                placeholder="https://..."
+                            />
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                @click="removeUrl(i)"
+                                :disabled="editForm.urls.length <= 1"
+                            >
                                 <Trash2 class="h-4 w-4" />
                             </Button>
                         </div>
                     </div>
-                    <Button type="button" variant="outline" size="sm" class="mt-2" @click="addUrl">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        class="mt-2"
+                        @click="addUrl"
+                    >
                         <Plus class="mr-1 h-4 w-4" /> Add URL
                     </Button>
                 </div>
 
                 <div>
                     <label class="text-sm font-medium">Category</label>
-                    <select v-model="editForm.category_id" class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                    <select
+                        v-model="editForm.category_id"
+                        class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
                         <option :value="null">No category</option>
-                        <option v-for="category in props.categories" :key="category.id" :value="category.id">
+                        <option
+                            v-for="category in props.categories"
+                            :key="category.id"
+                            :value="category.id"
+                        >
                             {{ category.name }}
                         </option>
                     </select>
                 </div>
 
-
-
                 <div class="flex gap-2">
-                    <Button type="submit" :disabled="editForm.processing">Update</Button>
-                    <Button type="button" variant="outline" @click="showForm = false">Cancel</Button>
+                    <Button type="submit" :disabled="editForm.processing"
+                        >Update</Button
+                    >
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="showForm = false"
+                        >Cancel</Button
+                    >
                 </div>
             </form>
         </div>
 
-        <div class="flex flex-wrap gap-2 mb-4">
-            <Badge 
+        <div class="mb-4 flex flex-wrap gap-2">
+            <Badge
                 v-if="selectedCategoryId !== null"
                 variant="destructive"
                 class="cursor-pointer hover:opacity-80"
@@ -239,10 +311,12 @@ defineOptions({
             >
                 Clear filter
             </Badge>
-            <Badge 
-                v-for="category in props.categories" 
+            <Badge
+                v-for="category in props.categories"
                 :key="category.id"
-                :variant="selectedCategoryId === category.id ? 'default' : 'secondary'"
+                :variant="
+                    selectedCategoryId === category.id ? 'default' : 'secondary'
+                "
                 class="cursor-pointer hover:opacity-80"
                 @click="filterByCategory(category.id)"
             >
@@ -251,37 +325,53 @@ defineOptions({
         </div>
 
         <div class="space-y-3">
-            <div v-for="link in filteredLinks" :key="link.id" class="flex items-center justify-between rounded-lg border p-4">
+            <div
+                v-for="link in filteredLinks"
+                :key="link.id"
+                class="flex items-center justify-between rounded-lg border p-4"
+            >
                 <div class="flex items-center gap-4">
-                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                    <div
+                        class="flex h-10 w-10 items-center justify-center rounded-full bg-muted"
+                    >
                         <LinkIcon class="h-5 w-5" />
                     </div>
                     <div>
                         <div class="flex items-center gap-2">
-                            <a 
-                                v-if="link.urls && link.urls.length > 0" 
-                                :href="formatUrl(link.urls[0])" 
-                                target="_blank" 
+                            <a
+                                v-if="link.urls && link.urls.length > 0"
+                                :href="formatUrl(link.urls[0])"
+                                target="_blank"
                                 class="font-medium text-blue-500 hover:underline"
                             >
                                 {{ link.name }}
                             </a>
-                            <span v-else class="font-medium">{{ link.name }}</span>
-                            <Badge variant="secondary">{{ link.urls?.length || 0 }} mirrors</Badge>
-                            <Badge 
+                            <span v-else class="font-medium">{{
+                                link.name
+                            }}</span>
+                            <Badge variant="secondary"
+                                >{{ link.urls?.length || 0 }} mirrors</Badge
+                            >
+                            <Badge
                                 v-if="link.category"
-                                :variant="selectedCategoryId === link.category.id ? 'default' : 'outline'"
+                                :variant="
+                                    selectedCategoryId === link.category.id
+                                        ? 'default'
+                                        : 'outline'
+                                "
                                 class="cursor-pointer hover:opacity-80"
-                                @click.stop="filterByCategory(link.category!.id)"
+                                @click.stop="
+                                    filterByCategory(link.category!.id)
+                                "
                             >
                                 {{ link.category.name }}
                             </Badge>
-                            <a 
-                                v-for="(url, idx) in link.urls?.slice(1)" 
+                            <a
+                                v-for="(url, idx) in link.urls?.slice(1)"
                                 :key="idx"
-                                :href="formatUrl(url)" 
-                                target="_blank" 
-                                class="text-blue-500 hover:underline text-sm"
+                                :href="formatUrl(url)"
+                                target="_blank"
+                                class="text-sm text-blue-500 hover:underline"
                             >
                                 [{{ idx + 1 }}]
                             </a>
@@ -293,7 +383,11 @@ defineOptions({
                     <div class="flex items-center gap-2">
                         <Tooltip>
                             <TooltipTrigger as-child>
-                                <Button variant="ghost" size="sm" @click="openEdit(link)">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="openEdit(link)"
+                                >
                                     <Edit class="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
@@ -302,7 +396,11 @@ defineOptions({
 
                         <Tooltip>
                             <TooltipTrigger as-child>
-                                <Button variant="ghost" size="sm" @click="deleteLink(link)">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="deleteLink(link)"
+                                >
                                     <Trash2 class="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
@@ -312,7 +410,10 @@ defineOptions({
                 </TooltipProvider>
             </div>
 
-            <p v-if="props.links.length === 0" class="py-8 text-center text-muted-foreground">
+            <p
+                v-if="props.links.length === 0"
+                class="py-8 text-center text-muted-foreground"
+            >
                 No links yet. Add one to get started.
             </p>
         </div>

@@ -386,7 +386,7 @@ const SwapV3Page: React.FC = () => {
           finalizedTransaction(receipt, {
             summary,
           });
-          dispatch(updateUserBalance());
+          dispatch(updateUserBalance(receipt.blockNumber));
           setSwapState({
             attemptingTxn: false,
             txPending: false,

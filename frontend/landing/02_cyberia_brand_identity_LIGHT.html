@@ -1,0 +1,3451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyberia — Brand Identity System · Light</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,800;9..144,900&family=Inter+Tight:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* ============ LIGHT PALETTE ============ */
+    --paper: #F6F4EE;
+    --paper-soft: #EEEAE0;
+    --bone: #FAFBFD;
+    --cream: #FBF9F2;
+    --ink: #0A0D12;
+    --ink-soft: #2A2E38;
+    --graphite: #3A3F4C;
+
+    --rule: #D4CFC1;
+    --rule-soft: #E4DFD0;
+    --muted: #7A7468;
+    --fog: #6A6458;
+
+    /* Signal - forest green (institutional) */
+    --signal: #0F3D2E;
+    --signal-light: #1A6047;
+    --signal-accent: #00946C;
+    --signal-pale: #C8E8D6;
+    --signal-wash: #E8F2EC;
+
+    /* Semantic */
+    --warn: #A07523;
+    --error: #9D2836;
+    --info: #2F4E66;
+
+    /* Typography */
+    --serif: 'Fraunces', 'Times New Roman', serif;
+    --sans: 'Inter Tight', -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', 'Menlo', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink-soft);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv11";
+    overflow-x: hidden;
+  }
+
+  /* Paper texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(200, 195, 175, 0.12) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(180, 175, 155, 0.08) 0%, transparent 40%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ============ STRUCTURE ============ */
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 0 56px;
+  }
+
+  section {
+    padding: 160px 0;
+    border-top: 1px solid var(--rule);
+    position: relative;
+  }
+
+  section:first-of-type { border-top: none; }
+
+  /* ============ NAV ============ */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(24px);
+    background: rgba(246, 244, 238, 0.85);
+    border-bottom: 1px solid var(--rule);
+    padding: 18px 0;
+  }
+
+  .nav-inner {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 0 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: -0.3px;
+    font-style: italic;
+  }
+
+  .nav-brand svg { width: 22px; height: 22px; }
+
+  .nav-links {
+    display: flex;
+    gap: 36px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .nav-links a {
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--signal); }
+
+  /* ============ COVER ============ */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 100px 0 80px;
+    position: relative;
+  }
+
+  .cover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 80% 30%, rgba(15, 61, 46, 0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(0, 148, 108, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .cover-inner { position: relative; z-index: 1; }
+
+  .cover-meta-top {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 120px;
+  }
+
+  .cover-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 48px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .cover-eyebrow::before {
+    content: '';
+    width: 40px;
+    height: 1px;
+    background: var(--signal);
+  }
+
+  .cover-title {
+    font-family: var(--serif);
+    font-size: clamp(80px, 13vw, 200px);
+    font-weight: 300;
+    line-height: 0.88;
+    letter-spacing: -4px;
+    color: var(--ink);
+    margin-bottom: 40px;
+  }
+
+  .cover-title em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--signal);
+  }
+
+  .cover-subtitle {
+    font-family: var(--serif);
+    font-size: clamp(20px, 2vw, 28px);
+    font-weight: 300;
+    line-height: 1.4;
+    color: var(--ink-soft);
+    max-width: 680px;
+    font-style: italic;
+    margin-bottom: 120px;
+  }
+
+  .cover-meta-bottom {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 40px;
+    padding-top: 32px;
+    border-top: 1px solid var(--rule);
+  }
+
+  .cover-meta-block-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .cover-meta-block-value {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  /* ============ SECTION HEADER ============ */
+  .section-head {
+    display: grid;
+    grid-template-columns: 120px 1fr 480px;
+    gap: 60px;
+    align-items: start;
+    padding-bottom: 64px;
+    margin-bottom: 100px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .section-number {
+    font-family: var(--serif);
+    font-size: 84px;
+    font-weight: 300;
+    color: var(--signal);
+    line-height: 1;
+    font-style: italic;
+  }
+
+  .section-title-block {
+    padding-top: 12px;
+  }
+
+  .section-kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: var(--serif);
+    font-size: clamp(40px, 5vw, 64px);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -1.5px;
+    color: var(--ink);
+  }
+
+  .section-title em {
+    font-style: italic;
+    color: var(--signal);
+    font-weight: 300;
+  }
+
+  .section-desc {
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--fog);
+    padding-top: 20px;
+    font-style: italic;
+  }
+
+  /* ============ 01 · BRAND PLATFORM ============ */
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 80px;
+  }
+
+  .platform-cell {
+    padding: 48px 36px;
+    background: var(--cream);
+    min-height: 340px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .platform-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .platform-content {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--ink);
+    letter-spacing: -0.3px;
+    flex: 1;
+  }
+
+  .platform-content em {
+    font-style: italic;
+    color: var(--signal);
+  }
+
+  .values-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+
+  .value-card {
+    padding: 48px;
+    background: var(--cream);
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+
+  .value-num {
+    font-family: var(--serif);
+    font-size: 48px;
+    font-weight: 300;
+    font-style: italic;
+    color: var(--signal);
+    line-height: 1;
+  }
+
+  .value-title {
+    font-family: var(--serif);
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+
+  .value-body {
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+  }
+
+  /* ============ 02 · LOGO SYSTEM ============ */
+  .logo-stage {
+    background: var(--cream);
+    border: 1px solid var(--rule);
+    padding: 120px 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 480px;
+    position: relative;
+    margin-bottom: 24px;
+  }
+
+  .logo-stage-label {
+    position: absolute;
+    top: 24px;
+    left: 32px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+  }
+
+  .logo-master {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+  }
+
+  .logo-master svg {
+    width: 120px;
+    height: 120px;
+  }
+
+  .logo-master-type {
+    font-family: var(--serif);
+    font-size: 96px;
+    font-weight: 400;
+    color: var(--ink);
+    letter-spacing: -3px;
+    line-height: 1;
+    font-style: italic;
+  }
+
+  .logo-master-type span {
+    color: var(--signal);
+    font-style: normal;
+  }
+
+  .logo-construction-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 2px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 80px;
+  }
+
+  .construction-visual-cell {
+    background: var(--cream);
+    padding: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 500px;
+  }
+
+  .construction-notes-cell {
+    background: var(--cream);
+    padding: 60px 48px;
+  }
+
+  .construction-notes-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 32px;
+  }
+
+  .construction-note {
+    padding: 20px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+
+  .construction-note:last-child { border-bottom: none; }
+
+  .construction-note-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .construction-note-body {
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  .logo-variations-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 80px;
+  }
+
+  .variant-tile {
+    aspect-ratio: 4/3;
+    border: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .variant-tile.ink { background: var(--ink); }
+  .variant-tile.paper { background: var(--paper); }
+  .variant-tile.cream { background: var(--cream); }
+  .variant-tile.signal { background: var(--signal); }
+  .variant-tile.pale { background: var(--signal-pale); }
+  .variant-tile.wash { background: var(--signal-wash); }
+
+  .variant-label {
+    position: absolute;
+    bottom: 16px;
+    left: 20px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .variant-tile.ink .variant-label { color: rgba(255,255,255,0.5); }
+  .variant-tile.signal .variant-label { color: rgba(200, 232, 214, 0.7); }
+
+  /* Logo don'ts */
+  .donts-head {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .donts-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  .dont-tile {
+    aspect-ratio: 1;
+    background: var(--cream);
+    border: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .dont-tile::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 10%;
+    right: 10%;
+    height: 2px;
+    background: var(--error);
+    transform: rotate(-15deg);
+    opacity: 0.7;
+  }
+
+  .dont-label {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--error);
+    text-transform: uppercase;
+    z-index: 2;
+  }
+
+  /* ============ 03 · COLOR SYSTEM ============ */
+  .color-primary-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    min-height: 440px;
+    margin-bottom: 48px;
+    border: 1px solid var(--rule);
+  }
+
+  .color-cell {
+    padding: 40px 36px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border-right: 1px solid rgba(0, 0, 0, 0.06);
+    position: relative;
+  }
+
+  .color-cell:last-child { border-right: none; }
+
+  .color-cell-top {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .color-cell-name {
+    font-family: var(--serif);
+    font-size: 48px;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: -1px;
+    line-height: 1;
+    margin-bottom: 16px;
+  }
+
+  .color-cell-specs {
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.9;
+    letter-spacing: 0.5px;
+  }
+
+  .color-secondary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  .color-card {
+    border: 1px solid var(--rule);
+  }
+
+  .color-swatch {
+    height: 140px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .color-card-body {
+    padding: 20px 24px;
+    background: var(--cream);
+  }
+
+  .color-card-name {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+  }
+
+  .color-card-hex {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--signal);
+    letter-spacing: 0.5px;
+  }
+
+  .color-card-role {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--fog);
+    margin-top: 8px;
+  }
+
+  /* Accessibility */
+  .access-section {
+    margin-top: 80px;
+  }
+
+  .access-head {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .access-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .access-card {
+    padding: 32px;
+    border: 1px solid var(--rule);
+    background: var(--cream);
+  }
+
+  .access-pair {
+    height: 80px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif);
+    font-size: 24px;
+    font-style: italic;
+    margin-bottom: 16px;
+  }
+
+  .access-info {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fog);
+    line-height: 1.7;
+  }
+
+  .access-info strong { color: var(--ink); }
+
+  /* ============ 04 · TYPOGRAPHY ============ */
+  .type-card {
+    background: var(--cream);
+    border: 1px solid var(--rule);
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+
+  .type-card-head {
+    padding: 24px 40px;
+    background: var(--paper-soft);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .type-card-role {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+  }
+
+  .type-card-family {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-style: italic;
+    color: var(--ink);
+    letter-spacing: -0.3px;
+  }
+
+  .type-card-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .type-card-body {
+    padding: 60px;
+  }
+
+  .type-display-1 {
+    font-family: var(--serif);
+    font-size: clamp(56px, 8vw, 120px);
+    font-weight: 300;
+    line-height: 0.95;
+    letter-spacing: -3px;
+    color: var(--ink);
+    margin-bottom: 32px;
+  }
+
+  .type-display-1 em {
+    font-style: italic;
+    color: var(--signal);
+    font-weight: 400;
+  }
+
+  .type-display-2 {
+    font-family: var(--serif);
+    font-size: 48px;
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -1px;
+    color: var(--ink);
+    margin-bottom: 24px;
+  }
+
+  .type-body-demo {
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    max-width: 680px;
+  }
+
+  .type-mono-demo {
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.9;
+    color: var(--signal);
+  }
+
+  .type-scale-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 32px;
+  }
+
+  .type-scale-table th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .type-scale-table td {
+    padding: 20px;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: middle;
+  }
+
+  .type-scale-table td:first-child {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fog);
+    letter-spacing: 1px;
+  }
+
+  .type-scale-table td:last-child {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .type-scale-sample {
+    font-family: var(--serif);
+    color: var(--ink);
+    font-weight: 400;
+  }
+
+  /* ============ 05 · ICONOGRAPHY ============ */
+  .icon-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+
+  .icon-cell {
+    aspect-ratio: 1;
+    background: var(--cream);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .icon-cell svg {
+    width: 48px;
+    height: 48px;
+    stroke: var(--ink);
+    stroke-width: 1.5;
+    fill: none;
+  }
+
+  .icon-name {
+    position: absolute;
+    bottom: 12px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .patterns-section {
+    margin-top: 80px;
+  }
+
+  .patterns-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .pattern-card {
+    aspect-ratio: 4/3;
+    border: 1px solid var(--rule);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .pattern-label {
+    position: absolute;
+    bottom: 16px;
+    left: 20px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--fog);
+    z-index: 5;
+    background: rgba(246, 244, 238, 0.85);
+    padding: 4px 8px;
+  }
+
+  /* ============ 06 · VOICE ============ */
+  .voice-triad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 80px;
+  }
+
+  .voice-card {
+    padding: 56px 40px;
+    background: var(--cream);
+  }
+
+  .voice-quote-mark {
+    font-family: var(--serif);
+    font-size: 80px;
+    font-style: italic;
+    color: var(--signal);
+    line-height: 0.3;
+    margin-bottom: 32px;
+  }
+
+  .voice-card-title {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 20px;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+
+  .voice-card-body {
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+  }
+
+  .vocab-head {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .vocab-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 80px;
+  }
+
+  .vocab-col {
+    background: var(--cream);
+  }
+
+  .vocab-col-head {
+    padding: 20px 32px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .vocab-col-head.use { color: var(--signal); background: var(--signal-wash); }
+  .vocab-col-head.avoid { color: var(--error); background: #F5E4E6; }
+
+  .vocab-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--rule-soft);
+    font-family: var(--sans);
+    font-size: 15px;
+  }
+
+  .vocab-row:last-child { border-bottom: none; }
+
+  .vocab-term { color: var(--ink); }
+  .vocab-context { color: var(--fog); font-size: 13px; font-style: italic; }
+
+  .voice-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+
+  .voice-compare-col {
+    background: var(--cream);
+  }
+
+  .voice-compare-head {
+    padding: 24px 32px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .voice-compare-head.do {
+    color: var(--signal);
+    background: var(--signal-wash);
+  }
+
+  .voice-compare-head.dont {
+    color: var(--error);
+    background: #F5E4E6;
+  }
+
+  .voice-example {
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--rule-soft);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    font-weight: 400;
+  }
+
+  .voice-example:last-child { border-bottom: none; }
+  .voice-example em { font-style: italic; color: var(--signal); }
+
+  /* ============ 07 · MESSAGING ============ */
+  .pitch-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 80px;
+  }
+
+  .pitch-card {
+    padding: 48px 40px;
+    background: var(--cream);
+  }
+
+  .pitch-length {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 32px;
+  }
+
+  .pitch-body {
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink);
+    font-weight: 400;
+  }
+
+  .pitch-body.short {
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: -0.5px;
+    line-height: 1.25;
+  }
+
+  .pitch-body em {
+    font-style: italic;
+    color: var(--signal);
+  }
+
+  .tagline-big {
+    margin: 60px 0;
+    padding: 80px 48px;
+    background: var(--cream);
+    border: 1px solid var(--rule);
+    text-align: center;
+    position: relative;
+  }
+
+  .tagline-big::before, .tagline-big::after {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--signal);
+  }
+
+  .tagline-big::before {
+    top: 16px;
+    left: 16px;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .tagline-big::after {
+    bottom: 16px;
+    right: 16px;
+    border-left: none;
+    border-top: none;
+  }
+
+  .tagline-role {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 24px;
+  }
+
+  .tagline-primary {
+    font-family: var(--serif);
+    font-size: clamp(40px, 6vw, 72px);
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -1.5px;
+    color: var(--ink);
+  }
+
+  .tagline-primary em {
+    font-style: italic;
+    color: var(--signal);
+    font-weight: 400;
+  }
+
+  .tagline-alternates {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .tagline-alt {
+    padding: 32px 36px;
+    background: var(--cream);
+    border: 1px solid var(--rule);
+  }
+
+  .tagline-alt-role {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .tagline-alt-text {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+    color: var(--ink);
+  }
+
+  .tagline-alt-text em { font-style: italic; color: var(--signal); }
+
+  .boilerplate-box {
+    margin-top: 40px;
+    padding: 48px 56px;
+    background: var(--cream);
+    border-left: 4px solid var(--signal);
+    border-top: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .boilerplate-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 20px;
+  }
+
+  .boilerplate-text {
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+  }
+
+  /* ============ 08 · SOCIAL TEMPLATES ============ */
+  .templates-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+
+  .template {
+    aspect-ratio: 1;
+    border: 1px solid var(--rule);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .template-label {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    padding: 6px 10px;
+    background: rgba(246, 244, 238, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--rule);
+    text-transform: uppercase;
+    z-index: 10;
+  }
+
+  /* Template A: Editorial (paper) */
+  .tpl-editorial {
+    background: var(--paper);
+    color: var(--ink);
+    padding: 56px 56px 48px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tpl-ed-masthead {
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 4px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .tpl-ed-sub {
+    padding-bottom: 32px;
+    border-bottom: 3px double var(--ink);
+    margin-bottom: 48px;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+  }
+
+  .tpl-ed-eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 16px;
+  }
+
+  .tpl-ed-headline {
+    font-family: var(--serif);
+    font-size: 44px;
+    font-weight: 300;
+    line-height: 0.95;
+    letter-spacing: -1.5px;
+    color: var(--ink);
+    margin-bottom: 20px;
+  }
+
+  .tpl-ed-headline em {
+    font-style: italic;
+    color: var(--signal);
+  }
+
+  .tpl-ed-deck {
+    font-family: var(--serif);
+    font-size: 15px;
+    font-style: italic;
+    color: var(--muted);
+    line-height: 1.4;
+    margin-top: auto;
+  }
+
+  .tpl-ed-footer {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .tpl-ed-brand {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-style: italic;
+    color: var(--ink);
+  }
+
+  .tpl-ed-brand span { color: var(--signal); }
+
+  .tpl-ed-meta {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+
+  /* Template B: Data reveal (cream) */
+  .tpl-data {
+    background: var(--cream);
+    padding: 56px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .tpl-data::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 85% 15%, rgba(15, 61, 46, 0.06), transparent 50%);
+    pointer-events: none;
+  }
+
+  .tpl-data-content { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+
+  .tpl-data-eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 24px;
+  }
+
+  .tpl-data-label {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-style: italic;
+    color: var(--fog);
+    margin-bottom: 8px;
+  }
+
+  .tpl-data-big {
+    font-family: var(--serif);
+    font-size: 140px;
+    font-weight: 300;
+    letter-spacing: -6px;
+    line-height: 0.9;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+
+  .tpl-data-big em {
+    font-style: italic;
+    color: var(--signal);
+    font-size: 60px;
+    letter-spacing: -2px;
+  }
+
+  .tpl-data-context {
+    font-family: var(--sans);
+    font-size: 15px;
+    color: var(--fog);
+    margin-top: auto;
+    padding-top: 32px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .tpl-data-context strong { color: var(--ink); font-weight: 600; font-family: var(--mono); font-size: 12px; letter-spacing: 1px; }
+
+  /* Template C: Quote (signal green) */
+  .tpl-quote {
+    background: var(--signal);
+    color: var(--signal-pale);
+    padding: 64px 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .tpl-quote-mark {
+    font-family: var(--serif);
+    font-size: 140px;
+    font-style: italic;
+    line-height: 0.4;
+    color: var(--signal-pale);
+    margin-bottom: 24px;
+    opacity: 0.6;
+  }
+
+  .tpl-quote-text {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -1px;
+    color: var(--bone);
+    margin-bottom: 40px;
+  }
+
+  .tpl-quote-text em {
+    font-style: italic;
+    color: var(--signal-pale);
+  }
+
+  .tpl-quote-attr {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--signal-pale);
+    padding-top: 24px;
+    border-top: 1px solid rgba(200, 232, 214, 0.3);
+    opacity: 0.8;
+  }
+
+  /* Template D: Stamp (bone) */
+  .tpl-stamp {
+    background: var(--bone);
+    color: var(--ink);
+    padding: 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .tpl-stamp-top {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--ink);
+  }
+
+  .tpl-stamp-main {
+    margin-top: auto;
+  }
+
+  .tpl-stamp-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 16px;
+  }
+
+  .tpl-stamp-title {
+    font-family: var(--serif);
+    font-size: 56px;
+    font-weight: 300;
+    line-height: 0.95;
+    letter-spacing: -2px;
+    color: var(--ink);
+    margin-bottom: 24px;
+  }
+
+  .tpl-stamp-title em {
+    font-style: italic;
+    color: var(--signal);
+  }
+
+  .tpl-stamp-foot {
+    padding-top: 24px;
+    border-top: 1px solid var(--ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .tpl-stamp-brand {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .tpl-stamp-brand span { color: var(--signal); }
+
+  /* Stories */
+  .stories-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 48px;
+  }
+
+  .story {
+    aspect-ratio: 9/16;
+    border: 1px solid var(--rule);
+    position: relative;
+    overflow: hidden;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .story-1 { background: var(--cream); color: var(--ink); }
+  .story-2 { background: var(--signal); color: var(--signal-pale); }
+  .story-3 { background: var(--paper); color: var(--ink); }
+
+  .story-eyebrow {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .story-1 .story-eyebrow { color: var(--signal); }
+  .story-2 .story-eyebrow { color: var(--signal-pale); }
+  .story-3 .story-eyebrow { color: var(--signal); }
+
+  .story-headline {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -1px;
+    margin-bottom: 16px;
+  }
+
+  .story-1 .story-headline { color: var(--ink); }
+  .story-2 .story-headline { color: var(--bone); }
+  .story-3 .story-headline { color: var(--ink); }
+
+  .story-headline em {
+    font-style: italic;
+    color: var(--signal);
+  }
+
+  .story-2 .story-headline em { color: var(--signal-pale); }
+
+  .story-body {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-style: italic;
+    line-height: 1.4;
+  }
+  .story-1 .story-body { color: var(--fog); }
+  .story-2 .story-body { color: var(--signal-pale); opacity: 0.8; }
+  .story-3 .story-body { color: var(--muted); }
+
+  .story-foot {
+    margin-top: auto;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .story-1 .story-foot { color: var(--muted); }
+  .story-2 .story-foot { color: var(--signal-pale); opacity: 0.7; }
+  .story-3 .story-foot { color: var(--muted); }
+
+  /* Banner ads */
+  .banners-section { margin-top: 80px; }
+
+  .banner-head {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 24px;
+  }
+
+  .banner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 40px 56px;
+    background: var(--cream);
+    border: 1px solid var(--rule);
+    margin-bottom: 16px;
+    gap: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .banner-bg {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 40%;
+    background:
+      radial-gradient(circle at 80% 50%, rgba(15, 61, 46, 0.08), transparent 70%);
+    pointer-events: none;
+  }
+
+  .banner-content { position: relative; z-index: 2; }
+
+  .banner-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--signal);
+    margin-bottom: 10px;
+  }
+
+  .banner-headline {
+    font-family: var(--serif);
+    font-size: 32px;
+    font-weight: 400;
+    letter-spacing: -0.8px;
+    color: var(--ink);
+    line-height: 1.1;
+    margin-bottom: 6px;
+  }
+
+  .banner-headline em {
+    font-style: italic;
+    color: var(--signal);
+  }
+
+  .banner-sub {
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--fog);
+  }
+
+  .banner-cta {
+    position: relative;
+    z-index: 2;
+    padding: 16px 32px;
+    background: var(--signal);
+    color: var(--bone);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  /* ============ 09 · STATIONERY ============ */
+  .stationery-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+
+  .letterhead {
+    background: var(--paper);
+    color: var(--ink);
+    aspect-ratio: 0.77;
+    padding: 48px 56px 40px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--rule);
+  }
+
+  .letterhead-top {
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .letterhead-brand {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--ink);
+    letter-spacing: -1px;
+  }
+
+  .letterhead-brand span { color: var(--signal); }
+
+  .letterhead-meta {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.7;
+  }
+
+  .letterhead-body {
+    font-family: var(--serif);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink);
+    flex: 1;
+  }
+
+  .letterhead-body p {
+    margin-bottom: 12px;
+  }
+
+  .letterhead-body em {
+    font-style: italic;
+  }
+
+  .letterhead-sig {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .biz-card-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    justify-content: center;
+  }
+
+  .biz-card {
+    aspect-ratio: 1.75;
+    padding: 32px 36px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border: 1px solid var(--rule);
+  }
+
+  .biz-card.front { background: var(--cream); }
+  .biz-card.back { background: var(--signal); }
+
+  .biz-card-logo {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-style: italic;
+    color: var(--ink);
+    letter-spacing: -0.5px;
+  }
+
+  .biz-card-logo span { color: var(--signal); }
+
+  .biz-card-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: end;
+  }
+
+  .biz-card-left {
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--ink);
+    font-style: italic;
+  }
+
+  .biz-card-left-role {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--fog);
+    letter-spacing: 1px;
+    margin-top: 4px;
+    font-style: normal;
+  }
+
+  .biz-card-right {
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.7;
+    letter-spacing: 0.5px;
+    color: var(--ink-soft);
+    text-align: right;
+  }
+
+  .biz-card-right a { color: var(--signal); text-decoration: none; }
+
+  .biz-card.back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .biz-card.back .biz-card-logo {
+    font-size: 48px;
+    color: var(--bone);
+  }
+
+  .biz-card.back .biz-card-logo span { color: var(--signal-pale); }
+
+  /* Email signature */
+  .email-sig {
+    margin-top: 48px;
+    padding: 48px 56px;
+    background: var(--cream);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+  }
+
+  .email-sig-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin-bottom: 28px;
+  }
+
+  .email-sig-body {
+    padding: 24px 28px;
+    background: var(--bone);
+    border-left: 3px solid var(--signal);
+  }
+
+  .email-sig-name {
+    font-family: var(--serif);
+    font-size: 18px;
+    font-weight: 500;
+    font-style: italic;
+    margin-bottom: 2px;
+    color: var(--ink);
+  }
+
+  .email-sig-role {
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--sans);
+  }
+
+  .email-sig-divider {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 12px 0;
+  }
+
+  .email-sig-links {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+
+  .email-sig-links a {
+    color: var(--signal);
+    text-decoration: none;
+  }
+
+  /* ============ 10 · PRODUCT UI (LIGHT) ============ */
+  .product-mock {
+    border: 1px solid var(--rule);
+    background: var(--cream);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .product-chrome {
+    padding: 14px 20px;
+    background: var(--paper-soft);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .chrome-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .chrome-dot:nth-child(1) { background: #E85A6B; }
+  .chrome-dot:nth-child(2) { background: #E8B44A; }
+  .chrome-dot:nth-child(3) { background: #5AC88F; }
+
+  .chrome-url {
+    margin-left: 16px;
+    padding: 6px 14px;
+    background: var(--bone);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fog);
+  }
+
+  .product-body {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: 640px;
+  }
+
+  .product-sidebar {
+    padding: 32px 24px;
+    border-right: 1px solid var(--rule);
+    background: var(--paper);
+  }
+
+  .product-sidebar-brand {
+    font-family: var(--serif);
+    font-size: 24px;
+    font-weight: 500;
+    font-style: italic;
+    color: var(--ink);
+    margin-bottom: 40px;
+    letter-spacing: -0.5px;
+  }
+
+  .product-sidebar-brand span { color: var(--signal); }
+
+  .sidebar-group {
+    margin-bottom: 32px;
+  }
+
+  .sidebar-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .sidebar-item {
+    padding: 10px 14px;
+    margin: 0 -14px;
+    font-size: 14px;
+    color: var(--fog);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+  }
+
+  .sidebar-item.active {
+    background: var(--signal-wash);
+    color: var(--signal);
+  }
+
+  .sidebar-item-dot {
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    border-radius: 50%;
+  }
+
+  .product-main {
+    padding: 40px;
+    background: var(--cream);
+  }
+
+  .product-main-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 40px;
+  }
+
+  .product-main-title {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 400;
+    color: var(--ink);
+    letter-spacing: -1px;
+    margin-bottom: 6px;
+  }
+
+  .product-main-subtitle {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fog);
+    letter-spacing: 1px;
+  }
+
+  .product-connect {
+    padding: 12px 24px;
+    background: var(--signal);
+    color: var(--bone);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 4px;
+  }
+
+  .product-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 32px;
+  }
+
+  .product-stat {
+    padding: 24px;
+    background: var(--bone);
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .stat-value {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 400;
+    color: var(--ink);
+    letter-spacing: -0.8px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .stat-value em {
+    font-style: italic;
+    color: var(--signal);
+    font-size: 20px;
+  }
+
+  .stat-delta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--signal);
+  }
+
+  .product-table {
+    background: var(--bone);
+    border: 1px solid var(--rule);
+  }
+
+  .table-head {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: 1.5fr 2fr 1fr 100px;
+    gap: 20px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .table-row {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--rule-soft);
+    display: grid;
+    grid-template-columns: 1.5fr 2fr 1fr 100px;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .table-row:last-child { border-bottom: none; }
+
+  .table-row .sym {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--signal);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .table-row .name {
+    font-family: var(--serif);
+    font-size: 15px;
+    font-style: italic;
+    color: var(--fog);
+  }
+
+  .table-row .addr {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fog);
+  }
+
+  .table-row .type {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .status-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 4px 10px;
+    background: var(--signal-wash);
+    color: var(--signal);
+    letter-spacing: 1.5px;
+    border-radius: 2px;
+    display: inline-block;
+    width: fit-content;
+  }
+
+  /* ============ FOOTER ============ */
+  .footer {
+    border-top: 1px solid var(--rule);
+    padding: 120px 0 60px;
+    margin-top: 120px;
+  }
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 60px;
+    margin-bottom: 80px;
+  }
+
+  .footer-brand-block {
+    padding-right: 40px;
+  }
+
+  .footer-brand {
+    font-family: var(--serif);
+    font-size: 64px;
+    font-weight: 300;
+    font-style: italic;
+    color: var(--ink);
+    letter-spacing: -2px;
+    line-height: 1;
+    margin-bottom: 24px;
+  }
+
+  .footer-brand span { color: var(--signal); }
+
+  .footer-tagline {
+    font-family: var(--serif);
+    font-size: 18px;
+    font-style: italic;
+    color: var(--fog);
+    max-width: 320px;
+    line-height: 1.4;
+  }
+
+  .footer-col-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--signal);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .footer-col a {
+    display: block;
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--fog);
+    text-decoration: none;
+    margin-bottom: 12px;
+    transition: color 0.2s;
+  }
+
+  .footer-col a:hover { color: var(--signal); }
+
+  .footer-bottom {
+    padding-top: 40px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .container, .nav-inner { padding: 0 28px; }
+    .section-head { grid-template-columns: 1fr; gap: 24px; }
+    .platform-grid, .values-grid { grid-template-columns: 1fr; }
+    .logo-construction-grid { grid-template-columns: 1fr; }
+    .logo-variations-grid { grid-template-columns: 1fr; }
+    .color-primary-grid { grid-template-columns: 1fr 1fr; }
+    .color-secondary-grid { grid-template-columns: 1fr 1fr; }
+    .templates-grid { grid-template-columns: 1fr; }
+    .stories-grid { grid-template-columns: 1fr 1fr; }
+    .stationery-grid { grid-template-columns: 1fr; }
+    .product-body { grid-template-columns: 1fr; }
+    .product-sidebar { display: none; }
+    .product-stats { grid-template-columns: 1fr 1fr; }
+    .voice-triad, .pitch-cards { grid-template-columns: 1fr; }
+    .vocab-grid, .voice-compare { grid-template-columns: 1fr; }
+    .cover-meta-bottom { grid-template-columns: 1fr 1fr; }
+    .footer-grid { grid-template-columns: 1fr; gap: 40px; }
+    .icon-grid { grid-template-columns: repeat(3, 1fr); }
+    .donts-grid { grid-template-columns: 1fr 1fr; }
+    .tagline-alternates { grid-template-columns: 1fr; }
+    .access-grid { grid-template-columns: 1fr; }
+    .patterns-grid { grid-template-columns: 1fr 1fr; }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <svg viewBox="0 0 100 100" fill="none">
+        <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#0F3D2E" stroke-width="4" fill="none"/>
+        <path d="M68 33 L38 50 L68 67" stroke="#0A0D12" stroke-width="6" fill="none"/>
+      </svg>
+      Cyberia
+    </div>
+    <div class="nav-links">
+      <a href="#platform">Platform</a>
+      <a href="#logo">Logo</a>
+      <a href="#color">Color</a>
+      <a href="#type">Type</a>
+      <a href="#voice">Voice</a>
+      <a href="#social">Social</a>
+      <a href="#ui">UI</a>
+    </div>
+  </div>
+</nav>
+
+<!-- COVER -->
+<section class="cover" style="padding-top: 0;">
+  <div class="container cover-inner">
+    <div class="cover-meta-top">
+      <span>Cyberia — Brand Identity System · Light</span>
+      <span>Document 02L / 06</span>
+      <span>Version 1.0 · April 2026</span>
+    </div>
+    <div>
+      <div class="cover-eyebrow">The Complete Brand System</div>
+      <h1 class="cover-title">The <em>settlement</em><br>layer for<br>open-source work.</h1>
+      <p class="cover-subtitle">A brand identity system for an institutional-grade Layer 1 blockchain. Every asset, rule, and pattern required to take Cyberia to market — designed to age well and scale without losing coherence.</p>
+    </div>
+    <div class="cover-meta-bottom">
+      <div>
+        <div class="cover-meta-block-label">Category</div>
+        <div class="cover-meta-block-value">Public Infrastructure</div>
+      </div>
+      <div>
+        <div class="cover-meta-block-label">Positioning</div>
+        <div class="cover-meta-block-value">Institutional · Earned</div>
+      </div>
+      <div>
+        <div class="cover-meta-block-label">Tonal Register</div>
+        <div class="cover-meta-block-value">Ethereum Foundation</div>
+      </div>
+      <div>
+        <div class="cover-meta-block-label">Aesthetic</div>
+        <div class="cover-meta-block-value">Editorial · Technical</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 01. PLATFORM -->
+<section id="platform">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">01</div>
+      <div class="section-title-block">
+        <div class="section-kicker">The Platform</div>
+        <h2 class="section-title">Mission, vision,<br>and <em>the four</em><br>commitments.</h2>
+      </div>
+      <p class="section-desc">Every decision in this document derives from the four statements below. When the system is ambiguous — when a designer or writer must choose between two plausible paths — the platform is the tiebreaker.</p>
+    </div>
+
+    <div class="platform-grid">
+      <div class="platform-cell">
+        <div class="platform-label">Mission</div>
+        <div class="platform-content">To build the <em>settlement layer</em> that allows open-source work to flow at the speed of the economy it powers.</div>
+      </div>
+      <div class="platform-cell">
+        <div class="platform-label">Vision</div>
+        <div class="platform-content">A world where contribution is a first-class <em>economic event</em> — measured, rewarded, and settled on neutral rails.</div>
+      </div>
+      <div class="platform-cell">
+        <div class="platform-label">Promise</div>
+        <div class="platform-content">Every claim this network makes is <em>verifiable on-chain</em> or in the open repository. If you cannot verify it, we did not say it.</div>
+      </div>
+      <div class="platform-cell">
+        <div class="platform-label">Position</div>
+        <div class="platform-content">Cyberia is not a product you use. It is <em>infrastructure you build on</em>. A public good with durable economics.</div>
+      </div>
+    </div>
+
+    <div class="values-grid">
+      <div class="value-card">
+        <div class="value-num">i.</div>
+        <div>
+          <div class="value-title">Sovereignty over spectacle.</div>
+          <div class="value-body">The network and its participants remain self-determined. We decline permissioning, hype cycles, and gatekeepers — including our own. Every component is open, forkable, and independently operable.</div>
+        </div>
+      </div>
+      <div class="value-card">
+        <div class="value-num">ii.</div>
+        <div>
+          <div class="value-title">Proof over promise.</div>
+          <div class="value-body">Roadmaps describe what is being built, not what will be sold. Claims link to code. Numbers link to transactions. The brand's credibility compounds through verification, not marketing.</div>
+        </div>
+      </div>
+      <div class="value-card">
+        <div class="value-num">iii.</div>
+        <div>
+          <div class="value-title">Contribution, not consumption.</div>
+          <div class="value-body">Cyberia favors participants over audiences. The design of every touchpoint — from documentation to interface — assumes the reader may one day become a contributor.</div>
+        </div>
+      </div>
+      <div class="value-card">
+        <div class="value-num">iv.</div>
+        <div>
+          <div class="value-title">Durable over viral.</div>
+          <div class="value-body">We optimize for being alive in a decade, not for being trending this week. Growth that requires betraying the thesis is not growth we pursue.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02. LOGO -->
+<section id="logo">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">02</div>
+      <div class="section-title-block">
+        <div class="section-kicker">The Mark</div>
+        <h2 class="section-title">A <em>hexagonal</em><br>shield, containing<br>a recessed C.</h2>
+      </div>
+      <p class="section-desc">The geometry is deliberate. The hexagon references network topology and block structure. The inward-facing C reads as contribution being drawn in and settled within. The mark is silent, precise, and entirely functional — no decoration.</p>
+    </div>
+
+    <div class="logo-stage">
+      <div class="logo-stage-label">PRIMARY LOCKUP · MASTER</div>
+      <div class="logo-master">
+        <svg viewBox="0 0 100 100" fill="none">
+          <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#0F3D2E" stroke-width="3" fill="none"/>
+          <path d="M68 33 L38 50 L68 67" stroke="#0A0D12" stroke-width="6" fill="none" stroke-linecap="square" stroke-linejoin="miter"/>
+        </svg>
+        <div class="logo-master-type">Cyberia<span>.</span></div>
+      </div>
+    </div>
+
+    <div class="logo-construction-grid">
+      <div class="construction-visual-cell">
+        <svg width="340" height="340" viewBox="0 0 220 220" fill="none">
+          <g opacity="0.2">
+            <line x1="0" y1="55" x2="220" y2="55" stroke="#7A7468" stroke-width="0.5"/>
+            <line x1="0" y1="110" x2="220" y2="110" stroke="#7A7468" stroke-width="0.5"/>
+            <line x1="0" y1="165" x2="220" y2="165" stroke="#7A7468" stroke-width="0.5"/>
+            <line x1="55" y1="0" x2="55" y2="220" stroke="#7A7468" stroke-width="0.5"/>
+            <line x1="110" y1="0" x2="110" y2="220" stroke="#7A7468" stroke-width="0.5"/>
+            <line x1="165" y1="0" x2="165" y2="220" stroke="#7A7468" stroke-width="0.5"/>
+          </g>
+          <circle cx="110" cy="110" r="95" stroke="#7A7468" stroke-width="0.5" stroke-dasharray="3,3"/>
+          <path d="M110 25 L185 65 L185 155 L110 195 L35 155 L35 65 Z" stroke="#0F3D2E" stroke-width="2.5" fill="none"/>
+          <path d="M145 65 L75 110 L145 155" stroke="#0A0D12" stroke-width="5" fill="none"/>
+          <line x1="35" y1="205" x2="185" y2="205" stroke="#7A7468" stroke-width="0.5"/>
+          <line x1="35" y1="200" x2="35" y2="210" stroke="#7A7468" stroke-width="0.5"/>
+          <line x1="185" y1="200" x2="185" y2="210" stroke="#7A7468" stroke-width="0.5"/>
+          <text x="110" y="215" text-anchor="middle" fill="#7A7468" font-family="JetBrains Mono" font-size="9">6X BASE UNIT</text>
+          <line x1="10" y1="25" x2="10" y2="195" stroke="#7A7468" stroke-width="0.5"/>
+          <line x1="5" y1="25" x2="15" y2="25" stroke="#7A7468" stroke-width="0.5"/>
+          <line x1="5" y1="195" x2="15" y2="195" stroke="#7A7468" stroke-width="0.5"/>
+          <text x="22" y="114" fill="#7A7468" font-family="JetBrains Mono" font-size="9" transform="rotate(-90 22 114)">6X</text>
+        </svg>
+      </div>
+      <div class="construction-notes-cell">
+        <div class="construction-notes-title">Construction Specification</div>
+
+        <div class="construction-note">
+          <div class="construction-note-label">Geometry</div>
+          <div class="construction-note-body">Regular hexagon. All sides equal. Interior angles 120°. Fits a 1:1 bounding square.</div>
+        </div>
+
+        <div class="construction-note">
+          <div class="construction-note-label">Base Unit</div>
+          <div class="construction-note-body">Mark height = 6 units. All measurements proportional. No fixed pixel values.</div>
+        </div>
+
+        <div class="construction-note">
+          <div class="construction-note-label">Stroke Weight</div>
+          <div class="construction-note-body">Outer hexagon: 0.125x · Inner glyph: 0.25x · Ratio 1:2 maintained at all sizes.</div>
+        </div>
+
+        <div class="construction-note">
+          <div class="construction-note-label">Clear Space</div>
+          <div class="construction-note-body">Minimum 0.25x (25% of mark height) on all four sides. Never violated.</div>
+        </div>
+
+        <div class="construction-note">
+          <div class="construction-note-label">Minimum Size</div>
+          <div class="construction-note-body">Digital: 24px. Print: 8mm. Below these, favicon-style simplification is used.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="logo-variations-grid">
+      <div class="variant-tile cream">
+        <svg width="96" height="96" viewBox="0 0 100 100" fill="none">
+          <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#0F3D2E" stroke-width="3" fill="none"/>
+          <path d="M68 33 L38 50 L68 67" stroke="#0A0D12" stroke-width="6" fill="none"/>
+        </svg>
+        <span class="variant-label">01 · Primary on Cream</span>
+      </div>
+      <div class="variant-tile paper">
+        <svg width="96" height="96" viewBox="0 0 100 100" fill="none">
+          <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#0F3D2E" stroke-width="3" fill="none"/>
+          <path d="M68 33 L38 50 L68 67" stroke="#0A0D12" stroke-width="6" fill="none"/>
+        </svg>
+        <span class="variant-label">02 · On Paper</span>
+      </div>
+      <div class="variant-tile ink">
+        <svg width="96" height="96" viewBox="0 0 100 100" fill="none">
+          <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#00C896" stroke-width="3" fill="none"/>
+          <path d="M68 33 L38 50 L68 67" stroke="#FAFBFD" stroke-width="6" fill="none"/>
+        </svg>
+        <span class="variant-label">03 · Reversed</span>
+      </div>
+      <div class="variant-tile signal">
+        <svg width="96" height="96" viewBox="0 0 100 100" fill="none">
+          <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#C8E8D6" stroke-width="3" fill="none"/>
+          <path d="M68 33 L38 50 L68 67" stroke="#FAFBFD" stroke-width="6" fill="none"/>
+        </svg>
+        <span class="variant-label">04 · On Signal</span>
+      </div>
+      <div class="variant-tile pale">
+        <svg width="96" height="96" viewBox="0 0 100 100" fill="none">
+          <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#0F3D2E" stroke-width="3" fill="none"/>
+          <path d="M68 33 L38 50 L68 67" stroke="#0F3D2E" stroke-width="6" fill="none"/>
+        </svg>
+        <span class="variant-label">05 · On Pale</span>
+      </div>
+      <div class="variant-tile wash">
+        <svg width="96" height="96" viewBox="0 0 100 100" fill="none">
+          <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" fill="#0F3D2E"/>
+          <path d="M68 33 L38 50 L68 67" stroke="#F6F4EE" stroke-width="6" fill="none"/>
+        </svg>
+        <span class="variant-label">06 · Solid Fill</span>
+      </div>
+    </div>
+
+    <div style="margin-top: 80px;">
+      <div class="donts-head">Logo — Prohibited Usage</div>
+      <div class="donts-grid">
+        <div class="dont-tile">
+          <svg width="70" height="70" viewBox="0 0 100 100" fill="none" style="transform: scaleX(1.6);">
+            <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#0F3D2E" stroke-width="3" fill="none"/>
+            <path d="M68 33 L38 50 L68 67" stroke="#0A0D12" stroke-width="6" fill="none"/>
+          </svg>
+          <span class="dont-label">Do not stretch</span>
+        </div>
+        <div class="dont-tile">
+          <svg width="70" height="70" viewBox="0 0 100 100" fill="none" style="transform: rotate(30deg);">
+            <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#0F3D2E" stroke-width="3" fill="none"/>
+            <path d="M68 33 L38 50 L68 67" stroke="#0A0D12" stroke-width="6" fill="none"/>
+          </svg>
+          <span class="dont-label">Do not rotate</span>
+        </div>
+        <div class="dont-tile" style="background: linear-gradient(135deg, #B84FFF, #FF7A3D);">
+          <svg width="70" height="70" viewBox="0 0 100 100" fill="none">
+            <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#FAFBFD" stroke-width="3" fill="none"/>
+            <path d="M68 33 L38 50 L68 67" stroke="#FAFBFD" stroke-width="6" fill="none"/>
+          </svg>
+          <span class="dont-label">No busy backgrounds</span>
+        </div>
+        <div class="dont-tile">
+          <svg width="70" height="70" viewBox="0 0 100 100" fill="none">
+            <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#FF40A0" stroke-width="3" fill="none"/>
+            <path d="M68 33 L38 50 L68 67" stroke="#FFB020" stroke-width="6" fill="none"/>
+          </svg>
+          <span class="dont-label">Do not recolor</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03. COLOR -->
+<section id="color">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">03</div>
+      <div class="section-title-block">
+        <div class="section-kicker">The Palette</div>
+        <h2 class="section-title">Warm paper,<br>deep ink, and one<br><em>deliberate</em> green.</h2>
+      </div>
+      <p class="section-desc">The palette rejects the neon saturation of crypto-native design. It borrows from the institutional end of the spectrum — financial prospectuses, scientific journals, forest conservation reports. Signal Green is used sparingly; it should feel earned when it appears.</p>
+    </div>
+
+    <div class="color-primary-grid">
+      <div class="color-cell" style="background: #F6F4EE; color: #0A0D12;">
+        <div class="color-cell-top" style="color: #7A7468;">Primary · Paper</div>
+        <div>
+          <div class="color-cell-name" style="color: #0A0D12;">Parchment</div>
+          <div class="color-cell-specs" style="color: #7A7468;">HEX · <span style="color: #0F3D2E;">#F6F4EE</span><br>RGB · 246 244 238<br>CMYK · 0 1 3 4<br>PANTONE · 7527 C</div>
+        </div>
+      </div>
+      <div class="color-cell" style="background: #0A0D12; color: #FAFBFD;">
+        <div class="color-cell-top" style="color: rgba(250,251,253,0.6);">Primary · Ink</div>
+        <div>
+          <div class="color-cell-name">Obsidian</div>
+          <div class="color-cell-specs" style="color: #8A8E9A;">HEX · <span style="color: #00C896;">#0A0D12</span><br>RGB · 10 13 18<br>CMYK · 44 28 0 93<br>PANTONE · BLACK 6 C</div>
+        </div>
+      </div>
+      <div class="color-cell" style="background: #0F3D2E; color: #C8E8D6;">
+        <div class="color-cell-top" style="color: rgba(200, 232, 214, 0.6);">Signal · Primary</div>
+        <div>
+          <div class="color-cell-name" style="color: #FAFBFD;">Conifer</div>
+          <div class="color-cell-specs">HEX · <span style="color: #C8E8D6;">#0F3D2E</span><br>RGB · 15 61 46<br>CMYK · 75 0 25 76<br>PANTONE · 3308 C</div>
+        </div>
+      </div>
+      <div class="color-cell" style="background: #00946C; color: #FAFBFD;">
+        <div class="color-cell-top" style="color: rgba(250,251,253,0.7);">Signal · Accent</div>
+        <div>
+          <div class="color-cell-name" style="color: #FAFBFD;">Verdant</div>
+          <div class="color-cell-specs">HEX · <strong style="color: #FAFBFD;">#00946C</strong><br>RGB · 0 148 108<br>CMYK · 100 0 27 42<br>PANTONE · 3395 C</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="color-secondary-grid">
+      <div class="color-card">
+        <div class="color-swatch" style="background: #EEEAE0;"></div>
+        <div class="color-card-body">
+          <div class="color-card-name">Paper Soft</div>
+          <div class="color-card-hex">#EEEAE0</div>
+          <div class="color-card-role">Secondary surface</div>
+        </div>
+      </div>
+      <div class="color-card">
+        <div class="color-swatch" style="background: #D4CFC1;"></div>
+        <div class="color-card-body">
+          <div class="color-card-name">Rule</div>
+          <div class="color-card-hex">#D4CFC1</div>
+          <div class="color-card-role">Borders, dividers</div>
+        </div>
+      </div>
+      <div class="color-card">
+        <div class="color-swatch" style="background: #7A7468;"></div>
+        <div class="color-card-body">
+          <div class="color-card-name">Muted</div>
+          <div class="color-card-hex">#7A7468</div>
+          <div class="color-card-role">Secondary text</div>
+        </div>
+      </div>
+      <div class="color-card">
+        <div class="color-swatch" style="background: #2A2E38;"></div>
+        <div class="color-card-body">
+          <div class="color-card-name">Graphite</div>
+          <div class="color-card-hex">#2A2E38</div>
+          <div class="color-card-role">Body text</div>
+        </div>
+      </div>
+      <div class="color-card">
+        <div class="color-swatch" style="background: #C8E8D6;"></div>
+        <div class="color-card-body">
+          <div class="color-card-name">Moss</div>
+          <div class="color-card-hex">#C8E8D6</div>
+          <div class="color-card-role">Signal — subdued</div>
+        </div>
+      </div>
+      <div class="color-card">
+        <div class="color-swatch" style="background: #A07523;"></div>
+        <div class="color-card-body">
+          <div class="color-card-name">Amber</div>
+          <div class="color-card-hex">#A07523</div>
+          <div class="color-card-role">Warning state</div>
+        </div>
+      </div>
+      <div class="color-card">
+        <div class="color-swatch" style="background: #9D2836;"></div>
+        <div class="color-card-body">
+          <div class="color-card-name">Vermilion</div>
+          <div class="color-card-hex">#9D2836</div>
+          <div class="color-card-role">Error · critical</div>
+        </div>
+      </div>
+      <div class="color-card">
+        <div class="color-swatch" style="background: #2F4E66;"></div>
+        <div class="color-card-body">
+          <div class="color-card-name">Lapis</div>
+          <div class="color-card-hex">#2F4E66</div>
+          <div class="color-card-role">Informational</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="access-section">
+      <div class="access-head">Accessibility — Tested Combinations</div>
+      <div class="access-grid">
+        <div class="access-card">
+          <div class="access-pair" style="background: #F6F4EE; color: #0A0D12;"><em>Aa</em></div>
+          <div class="access-info"><strong>Obsidian on Parchment</strong><br>Contrast · 17.2 : 1<br>WCAG · AAA (all sizes)</div>
+        </div>
+        <div class="access-card">
+          <div class="access-pair" style="background: #F6F4EE; color: #0F3D2E;"><em>Aa</em></div>
+          <div class="access-info"><strong>Conifer on Parchment</strong><br>Contrast · 11.8 : 1<br>WCAG · AAA (all sizes)</div>
+        </div>
+        <div class="access-card">
+          <div class="access-pair" style="background: #0F3D2E; color: #F6F4EE;"><em>Aa</em></div>
+          <div class="access-info"><strong>Parchment on Conifer</strong><br>Contrast · 11.8 : 1<br>WCAG · AAA (all sizes)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 04. TYPOGRAPHY -->
+<section id="type">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">04</div>
+      <div class="section-title-block">
+        <div class="section-kicker">The Type System</div>
+        <h2 class="section-title">Three voices:<br><em>editorial</em>, functional,<br>technical.</h2>
+      </div>
+      <p class="section-desc">Fraunces for display — a contemporary serif with a literary, slightly mechanical personality. Inter Tight for body and UI — a geometric sans with the legibility of Helvetica and the precision of modern display faces. JetBrains Mono for all technical content.</p>
+    </div>
+
+    <div class="type-card">
+      <div class="type-card-head">
+        <div>
+          <div class="type-card-role">Display · Editorial</div>
+        </div>
+        <div>
+          <div class="type-card-family">Fraunces</div>
+          <div class="type-card-meta">Variable · 300 — 900 · Italic</div>
+        </div>
+      </div>
+      <div class="type-card-body">
+        <div class="type-display-1">Infrastructure<br>for <em>open systems.</em></div>
+        <div class="type-display-2" style="font-style: italic; color: var(--fog);">Set tight. Set in italics when emphasis matters. Set in Conifer only.</div>
+      </div>
+    </div>
+
+    <div class="type-card">
+      <div class="type-card-head">
+        <div>
+          <div class="type-card-role">Body · UI</div>
+        </div>
+        <div>
+          <div class="type-card-family" style="font-family: 'Inter Tight'; font-style: normal; font-weight: 500;">Inter Tight</div>
+          <div class="type-card-meta">Variable · 300 — 800</div>
+        </div>
+      </div>
+      <div class="type-card-body">
+        <div class="type-body-demo">
+          Inter Tight carries the interface. It is precise, modern, and institutionally neutral — capable of sitting inside a trading dashboard, a whitepaper, or a terms-of-service document without feeling out of place. We use it at body weight (400) for reading, semibold (600) for UI emphasis, and bold (700) for headings in contexts where the serif would feel too literary.
+        </div>
+      </div>
+    </div>
+
+    <div class="type-card">
+      <div class="type-card-head">
+        <div>
+          <div class="type-card-role">Technical · Mono</div>
+        </div>
+        <div>
+          <div class="type-card-family">JetBrains Mono</div>
+          <div class="type-card-meta">Variable · 300 — 700</div>
+        </div>
+      </div>
+      <div class="type-card-body">
+        <div class="type-mono-demo">
+          $ cyberia --network mainnet --verify<br>
+          chain_id: 49406 · block_height: 19,847<br>
+          contract: 0x02Bad7dCaD174D92FCE2baBBd0cE1A653b487f04<br>
+          gas: 0.00012 CYBER · status: confirmed<br>
+          → contribution settled · hash 0x1a4f...
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 48px;">
+      <div class="access-head">Display Scale · Fraunces</div>
+      <table class="type-scale-table">
+        <thead>
+          <tr>
+            <th style="width: 80px;">Token</th>
+            <th>Sample</th>
+            <th style="width: 180px;">Specification</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>d1</td>
+            <td class="type-scale-sample" style="font-size: 96px; line-height: 1; font-weight: 300; letter-spacing: -3px;">Display</td>
+            <td>96 / 92 / -3 / 300</td>
+          </tr>
+          <tr>
+            <td>d2</td>
+            <td class="type-scale-sample" style="font-size: 64px; line-height: 1.05; font-weight: 300; letter-spacing: -2px;">Display</td>
+            <td>64 / 68 / -2 / 300</td>
+          </tr>
+          <tr>
+            <td>d3</td>
+            <td class="type-scale-sample" style="font-size: 44px; line-height: 1.1; font-weight: 400; letter-spacing: -1px;">Display</td>
+            <td>44 / 48 / -1 / 400</td>
+          </tr>
+          <tr>
+            <td>h1</td>
+            <td class="type-scale-sample" style="font-size: 32px; line-height: 1.15; font-weight: 500; letter-spacing: -0.5px;">Heading</td>
+            <td>32 / 37 / -0.5 / 500</td>
+          </tr>
+          <tr>
+            <td>h2</td>
+            <td class="type-scale-sample" style="font-size: 24px; line-height: 1.2; font-weight: 500; letter-spacing: -0.3px;">Heading</td>
+            <td>24 / 29 / -0.3 / 500</td>
+          </tr>
+          <tr>
+            <td>lead</td>
+            <td class="type-scale-sample" style="font-size: 20px; line-height: 1.5; font-weight: 400; font-style: italic;">Leading paragraph</td>
+            <td>20 / 30 / 0 / 400 it</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 05. ICONOGRAPHY -->
+<section id="icons">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">05</div>
+      <div class="section-title-block">
+        <div class="section-kicker">The Iconography</div>
+        <h2 class="section-title">Precise linework.<br>No <em>illustration.</em></h2>
+      </div>
+      <p class="section-desc">Icons are drawn on a 24px grid with 1.5px strokes. They are diagrammatic — closer to technical drawings than UI friendliness. Terminals are square. Corners are not rounded. Iconography serves orientation, not personality.</p>
+    </div>
+
+    <div class="icon-grid">
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2 L20 6.5 L20 17.5 L12 22 L4 17.5 L4 6.5 Z"/>
+          <path d="M15 9 L9 12 L15 15"/>
+        </svg>
+        <span class="icon-name">Mark</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <rect x="3" y="3" width="18" height="18"/>
+          <line x1="3" y1="9" x2="21" y2="9"/>
+          <line x1="9" y1="9" x2="9" y2="21"/>
+        </svg>
+        <span class="icon-name">Block</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9"/>
+          <circle cx="12" cy="12" r="4"/>
+          <line x1="12" y1="3" x2="12" y2="8"/>
+          <line x1="12" y1="16" x2="12" y2="21"/>
+        </svg>
+        <span class="icon-name">Network</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <path d="M3 12 L7 8 L7 16 Z"/>
+          <path d="M21 12 L17 8 L17 16 Z"/>
+          <line x1="7" y1="12" x2="17" y2="12"/>
+        </svg>
+        <span class="icon-name">Bridge</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <rect x="3" y="6" width="18" height="14"/>
+          <path d="M8 6 L8 3 L16 3 L16 6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+        </svg>
+        <span class="icon-name">Vault</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <path d="M3 17 L9 11 L13 15 L21 7"/>
+          <path d="M21 7 L15 7 L21 7 L21 13"/>
+        </svg>
+        <span class="icon-name">Chart</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"/>
+          <line x1="12" y1="3" x2="12" y2="8"/>
+          <line x1="12" y1="16" x2="12" y2="21"/>
+          <line x1="3" y1="12" x2="8" y2="12"/>
+          <line x1="16" y1="12" x2="21" y2="12"/>
+        </svg>
+        <span class="icon-name">Node</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <path d="M4 4 H20 V20 H4 Z"/>
+          <path d="M8 9 L12 12 L8 15"/>
+          <line x1="13" y1="16" x2="16" y2="16"/>
+        </svg>
+        <span class="icon-name">Terminal</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <path d="M6 3 L6 12 L9 12 L9 21 L18 9 L15 9 L15 3 Z"/>
+        </svg>
+        <span class="icon-name">Settlement</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <circle cx="7" cy="7" r="3"/>
+          <circle cx="17" cy="7" r="3"/>
+          <circle cx="12" cy="17" r="3"/>
+          <line x1="9.5" y1="9" x2="10.5" y2="15"/>
+          <line x1="14.5" y1="9" x2="13.5" y2="15"/>
+          <line x1="10" y1="7" x2="14" y2="7"/>
+        </svg>
+        <span class="icon-name">Consensus</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 3 L12 13 M8 9 L12 13 L16 9"/>
+          <line x1="4" y1="19" x2="20" y2="19"/>
+        </svg>
+        <span class="icon-name">Deploy</span>
+      </div>
+      <div class="icon-cell">
+        <svg viewBox="0 0 24 24">
+          <polyline points="3 12 9 6 21 18 21 6"/>
+        </svg>
+        <span class="icon-name">Signal</span>
+      </div>
+    </div>
+
+    <div class="patterns-section">
+      <div class="access-head">Graphic Patterns · For content & backgrounds</div>
+      <div class="patterns-grid">
+        <div class="pattern-card" style="background: var(--cream);">
+          <svg width="100%" height="100%" viewBox="0 0 200 150" preserveAspectRatio="xMidYMid slice" fill="none">
+            <g stroke="#D4CFC1" stroke-width="0.5">
+              <line x1="0" y1="30" x2="200" y2="30"/>
+              <line x1="0" y1="60" x2="200" y2="60"/>
+              <line x1="0" y1="90" x2="200" y2="90"/>
+              <line x1="0" y1="120" x2="200" y2="120"/>
+              <line x1="40" y1="0" x2="40" y2="150"/>
+              <line x1="80" y1="0" x2="80" y2="150"/>
+              <line x1="120" y1="0" x2="120" y2="150"/>
+              <line x1="160" y1="0" x2="160" y2="150"/>
+            </g>
+            <g stroke="#0F3D2E" stroke-width="1.5" fill="none">
+              <circle cx="100" cy="75" r="30"/>
+              <circle cx="100" cy="75" r="50" opacity="0.5"/>
+              <circle cx="100" cy="75" r="70" opacity="0.25"/>
+            </g>
+          </svg>
+          <span class="pattern-label">01 · Radial</span>
+        </div>
+        <div class="pattern-card" style="background: var(--cream);">
+          <svg width="100%" height="100%" viewBox="0 0 200 150" preserveAspectRatio="xMidYMid slice" fill="none">
+            <g stroke="#0F3D2E" stroke-width="1" fill="none">
+              <path d="M30 30 H170 V60 H30 Z"/>
+              <path d="M30 70 H170 V100 H30 Z" opacity="0.6"/>
+              <path d="M30 110 H170 V140 H30 Z" opacity="0.3"/>
+            </g>
+            <g fill="#0A0D12" font-family="JetBrains Mono" font-size="7">
+              <text x="38" y="48">BLOCK 19847</text>
+              <text x="38" y="88" opacity="0.6">BLOCK 19846</text>
+              <text x="38" y="128" opacity="0.3">BLOCK 19845</text>
+            </g>
+          </svg>
+          <span class="pattern-label">02 · Block stack</span>
+        </div>
+        <div class="pattern-card" style="background: var(--cream);">
+          <svg width="100%" height="100%" viewBox="0 0 200 150" preserveAspectRatio="xMidYMid slice" fill="none">
+            <g stroke="#D4CFC1" stroke-width="0.5">
+              <line x1="0" y1="30" x2="200" y2="30"/>
+              <line x1="0" y1="60" x2="200" y2="60"/>
+              <line x1="0" y1="90" x2="200" y2="90"/>
+              <line x1="0" y1="120" x2="200" y2="120"/>
+            </g>
+            <polyline points="10,100 40,80 70,90 100,60 130,40 160,50 190,20" stroke="#0F3D2E" stroke-width="2" fill="none"/>
+            <circle cx="190" cy="20" r="4" fill="#0F3D2E"/>
+          </svg>
+          <span class="pattern-label">03 · Data line</span>
+        </div>
+        <div class="pattern-card" style="background: var(--signal);">
+          <svg width="60%" height="60%" viewBox="0 0 100 100" fill="none" style="display: block; margin: 20% auto;">
+            <path d="M50 5 L90 27.5 L90 72.5 L50 95 L10 72.5 L10 27.5 Z" stroke="#C8E8D6" stroke-width="3" fill="none"/>
+            <path d="M68 33 L38 50 L68 67" stroke="#FAFBFD" stroke-width="6" fill="none"/>
+          </svg>
+          <span class="pattern-label" style="color: var(--signal-pale); background: rgba(15,61,46,0.6);">04 · Mark isolated</span>
+        </div>
+        <div class="pattern-card" style="background: var(--cream);">
+          <svg width="100%" height="100%" viewBox="0 0 200 150" preserveAspectRatio="xMidYMid slice" fill="none">
+            <g font-family="JetBrains Mono" font-size="5" fill="#7A7468">
+              <text x="10" y="20">0x02Bad7dCaD174D92FCE2baBBd0cE1A653b487f04</text>
+              <text x="10" y="32">MINT · 1000 TG · BLOCK 19846 · CONFIRMED</text>
+              <text x="10" y="44" fill="#0F3D2E">0x14207CfF0880067B676B38cd17Ba7B002eeE8672</text>
+              <text x="10" y="56">TRANSFER · 50 X · GAS 0.00012 CYBER</text>
+              <text x="10" y="68">0x5db6EEDa62D04c68332B537c18ec4dfa3cB9aadd</text>
+              <text x="10" y="80">MINT · 1 GITHUB · STAR EVENT · 0x1a4f</text>
+              <text x="10" y="92" fill="#0F3D2E">BLOCK 19847 · 12 TX · 2.4 KB · PEERS 4</text>
+              <text x="10" y="104">NONCE · 0x2c · SIGNER · 0xABCDEF123456</text>
+              <text x="10" y="116">STATUS · SYNCED · HEIGHT 19847 · OK</text>
+              <text x="10" y="128">CHAIN · 49406 · GPL-3.0 · MAINNET</text>
+            </g>
+          </svg>
+          <span class="pattern-label">05 · Terminal log</span>
+        </div>
+        <div class="pattern-card" style="background: var(--cream);">
+          <svg width="100%" height="100%" viewBox="0 0 200 150" preserveAspectRatio="xMidYMid slice" fill="none">
+            <defs>
+              <pattern id="hexlight" width="34" height="30" patternUnits="userSpaceOnUse">
+                <polygon points="17,0 34,8.5 34,22.5 17,30 0,22.5 0,8.5" stroke="#D4CFC1" stroke-width="0.5" fill="none"/>
+              </pattern>
+            </defs>
+            <rect width="200" height="150" fill="url(#hexlight)"/>
+            <polygon points="100,45 117,53.5 117,67.5 100,75 83,67.5 83,53.5" stroke="#0F3D2E" stroke-width="1.5" fill="none"/>
+          </svg>
+          <span class="pattern-label">06 · Hex mesh</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 06. VOICE -->
+<section id="voice">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">06</div>
+      <div class="section-title-block">
+        <div class="section-kicker">The Voice</div>
+        <h2 class="section-title">A senior<br>developer writing<br><em>release notes.</em></h2>
+      </div>
+      <p class="section-desc">The voice is editorial, not promotional. Read it aloud and it should sound like someone with nothing to prove telling you, precisely, what they built. It is the voice of a system that has earned its confidence.</p>
+    </div>
+
+    <div class="voice-triad">
+      <div class="voice-card">
+        <div class="voice-quote-mark">"</div>
+        <div class="voice-card-title">Show the work.</div>
+        <div class="voice-card-body">Every claim arrives with evidence attached. A commit hash, a contract address, a block number, a link to live code. If a sentence cannot be verified, it does not appear. This is not a stylistic preference — it is an ethical one.</div>
+      </div>
+      <div class="voice-card">
+        <div class="voice-quote-mark">"</div>
+        <div class="voice-card-title">Stay level.</div>
+        <div class="voice-card-body">No exclamation marks. No superlatives. No "revolutionary," "game-changing," or "next-generation." The tone remains flat regardless of the news. Good launches do not need to be sold as great. The work is the claim.</div>
+      </div>
+      <div class="voice-card">
+        <div class="voice-quote-mark">"</div>
+        <div class="voice-card-title">Invite inspection.</div>
+        <div class="voice-card-body">We write as if every reader will check our math. Linking to source, commits, and explorers is a reflex, not an afterthought. The tone assumes the reader is as smart as we are — possibly smarter — and will not thank us for simplification.</div>
+      </div>
+    </div>
+
+    <div class="vocab-head">Vocabulary · Words we use, words we avoid</div>
+    <div class="vocab-grid">
+      <div class="vocab-col">
+        <div class="vocab-col-head use">◆ Use</div>
+        <div class="vocab-row"><span class="vocab-term">Settlement layer</span><span class="vocab-context">Our category</span></div>
+        <div class="vocab-row"><span class="vocab-term">Contribution</span><span class="vocab-context">Not "engagement"</span></div>
+        <div class="vocab-row"><span class="vocab-term">Infrastructure</span><span class="vocab-context">What we are</span></div>
+        <div class="vocab-row"><span class="vocab-term">Open source</span><span class="vocab-context">Never "OSS" externally</span></div>
+        <div class="vocab-row"><span class="vocab-term">Shipped</span><span class="vocab-context">Past tense, concrete</span></div>
+        <div class="vocab-row"><span class="vocab-term">Verify</span><span class="vocab-context">The reader's action</span></div>
+        <div class="vocab-row"><span class="vocab-term">Participants</span><span class="vocab-context">Not "users"</span></div>
+        <div class="vocab-row"><span class="vocab-term">Mainnet</span><span class="vocab-context">Proper noun, live system</span></div>
+        <div class="vocab-row"><span class="vocab-term">Sovereign</span><span class="vocab-context">Of the network</span></div>
+        <div class="vocab-row"><span class="vocab-term">Built in public</span><span class="vocab-context">Our method</span></div>
+      </div>
+      <div class="vocab-col">
+        <div class="vocab-col-head avoid">✕ Avoid</div>
+        <div class="vocab-row"><span class="vocab-term">Revolutionary</span><span class="vocab-context">Always hype-coded</span></div>
+        <div class="vocab-row"><span class="vocab-term">Game-changing</span><span class="vocab-context">Empty superlative</span></div>
+        <div class="vocab-row"><span class="vocab-term">Next-generation</span><span class="vocab-context">Meaningless</span></div>
+        <div class="vocab-row"><span class="vocab-term">Ecosystem</span><span class="vocab-context">Overused; prefer "network"</span></div>
+        <div class="vocab-row"><span class="vocab-term">Disrupt / disruption</span><span class="vocab-context">Speculative posture</span></div>
+        <div class="vocab-row"><span class="vocab-term">Web3</span><span class="vocab-context">Market-segment slang</span></div>
+        <div class="vocab-row"><span class="vocab-term">To the moon</span><span class="vocab-context">Never. Under any circumstance.</span></div>
+        <div class="vocab-row"><span class="vocab-term">Massive / huge</span><span class="vocab-context">Imprecise</span></div>
+        <div class="vocab-row"><span class="vocab-term">Community</span><span class="vocab-context">Prefer "participants" or "contributors"</span></div>
+        <div class="vocab-row"><span class="vocab-term">Exciting</span><span class="vocab-context">Let the reader decide</span></div>
+      </div>
+    </div>
+
+    <div class="vocab-head">Examples · Voice in application</div>
+    <div class="voice-compare">
+      <div class="voice-compare-col">
+        <div class="voice-compare-head do">◆ On-brand</div>
+        <div class="voice-example">Block 19,847 confirmed. Three contracts deployed this week. Read the commit at <em>github.com/cyberia-temple</em>.</div>
+        <div class="voice-example">The bridge to Solana is being tested in public. We will ship it when it is correct.</div>
+        <div class="voice-example">Cyberia is a settlement layer. That means contributions are <em>recorded</em>, not announced.</div>
+        <div class="voice-example">62 commits in two weeks. The log is open. Check it yourself.</div>
+      </div>
+      <div class="voice-compare-col">
+        <div class="voice-compare-head dont">✕ Off-brand</div>
+        <div class="voice-example">Huge update! Our revolutionary L1 is transforming the future of Web3! 🚀🚀🚀</div>
+        <div class="voice-example">The Solana bridge is coming SOON and it's going to be MASSIVE!</div>
+        <div class="voice-example">Join the Cyberia ecosystem — the fastest-growing community in crypto!</div>
+        <div class="voice-example">We've been shipping at an incredible pace — don't sleep on this!</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 07. MESSAGING -->
+<section id="messaging">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">07</div>
+      <div class="section-title-block">
+        <div class="section-kicker">The Messaging Architecture</div>
+        <h2 class="section-title">Taglines,<br>boilerplates, and<br><em>elevator pitches.</em></h2>
+      </div>
+      <p class="section-desc">Approved language at every length. Writers inside and outside the network should pull from this library rather than improvising. Consistency here compounds — the network reads the same across every surface.</p>
+    </div>
+
+    <div class="tagline-big">
+      <div class="tagline-role">◆ Primary Tagline</div>
+      <div class="tagline-primary">The <em>settlement layer</em><br>for open-source work.</div>
+    </div>
+
+    <div class="tagline-alternates">
+      <div class="tagline-alt">
+        <div class="tagline-alt-role">◆ Short Form</div>
+        <div class="tagline-alt-text">Where <em>contribution</em><br>becomes currency.</div>
+      </div>
+      <div class="tagline-alt">
+        <div class="tagline-alt-role">◆ Community</div>
+        <div class="tagline-alt-text">Built in the open.<br><em>Settled</em> on-chain.</div>
+      </div>
+      <div class="tagline-alt">
+        <div class="tagline-alt-role">◆ Technical</div>
+        <div class="tagline-alt-text">An <em>economic substrate</em><br>for open systems.</div>
+      </div>
+      <div class="tagline-alt">
+        <div class="tagline-alt-role">◆ Manifesto</div>
+        <div class="tagline-alt-text">Open source built the world.<br>Cyberia pays it <em>back.</em></div>
+      </div>
+    </div>
+
+    <div style="margin-top: 80px;">
+      <div class="access-head">Elevator Pitches · By length</div>
+      <div class="pitch-cards">
+        <div class="pitch-card">
+          <div class="pitch-length">◆ 10 Words</div>
+          <div class="pitch-body short">A <em>settlement</em> layer for open-source work. Live on mainnet.</div>
+        </div>
+        <div class="pitch-card">
+          <div class="pitch-length">◆ 50 Words</div>
+          <div class="pitch-body">Cyberia is a public Layer 1 blockchain that makes open-source contribution a native on-chain event. Stars, commits, and pull requests settle as verifiable transactions. Every line of code is open, every decision is logged, and every claim is provable. <em>Infrastructure for the economy that software built.</em></div>
+        </div>
+        <div class="pitch-card">
+          <div class="pitch-length">◆ 200 Words</div>
+          <div class="pitch-body" style="font-size: 15px; line-height: 1.65;">Open source runs the world. The people who build it are rarely paid. That gap — between the value created and the value returned — is a structural failure, not a problem of goodwill. Cyberia is an attempt to close it.<br><br>Cyberia is a public, EVM-compatible Layer 1 blockchain operating as the <em>settlement layer for open-source work</em>. Contributions — code, community, capital — are recorded, verified, and rewarded as native on-chain events. The first rails for this are already live: automated airdrop settlement for engagement on GitHub, Telegram, and X.<br><br>The network is being built entirely in public. Every commit is live-streamed. The entire stack is GPL-3.0. There is no private repository and no off-the-record roadmap. Near-term, the team is shipping core infrastructure: DEX, lending primitives, a contribution-weighted governance system, and a bridge to Solana.<br><br>Cyberia is not optimizing for short-term attention. It is optimizing for being alive in 2036, running real contributor economies, and serving as neutral rails for every network that needs them.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 80px;">
+      <div class="access-head">Boilerplate · For press, partnerships, and citations</div>
+      <div class="boilerplate-box">
+        <div class="boilerplate-label">◆ Approved Press Boilerplate · 55 words</div>
+        <div class="boilerplate-text">
+          <strong>Cyberia</strong> is a public, EVM-compatible Layer 1 blockchain functioning as the settlement layer for open-source work. The network makes contribution a native on-chain event — measurable, verifiable, and rewardable. Launched in 2026 and developed entirely in public under GPL-3.0, Cyberia is governed by its participants and operates on <em>Chain ID 49406</em>.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 08. SOCIAL TEMPLATES -->
+<section id="social">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">08</div>
+      <div class="section-title-block">
+        <div class="section-kicker">Social Templates</div>
+        <h2 class="section-title">Four templates,<br><em>infinite</em> content.</h2>
+      </div>
+      <p class="section-desc">A disciplined kit: an editorial announcement, a data reveal, a manifesto quote, and a minimalist stamp. All 1:1 for feed, plus 9:16 for stories. Designed to be immediately recognizable as Cyberia without needing to show the logo.</p>
+    </div>
+
+    <div class="templates-grid">
+      <div class="template tpl-editorial">
+        <div class="template-label">01 · EDITORIAL</div>
+        <div class="tpl-ed-masthead">
+          <span>Cyberia Mainnet</span>
+          <span>Apr 12 · 2026</span>
+        </div>
+        <div class="tpl-ed-sub">Network Bulletin · Chain ID 49406</div>
+
+        <div class="tpl-ed-eyebrow">◆ Shipped · Settlement Bots</div>
+        <div class="tpl-ed-headline">Contribution,<br><em>now on-chain.</em></div>
+        <div class="tpl-ed-deck">Three automated settlement bots are live across GitHub, Telegram, and X. Every star, every message, every post becomes a verifiable on-chain event.</div>
+
+        <div class="tpl-ed-footer">
+          <div class="tpl-ed-brand">Cyberia<span>.</span></div>
+          <div class="tpl-ed-meta">Verify → github.com/cyberia-temple</div>
+        </div>
+      </div>
+
+      <div class="template tpl-data">
+        <div class="template-label">02 · DATA</div>
+        <div class="tpl-data-content">
+          <div class="tpl-data-eyebrow">◆ Network Telemetry · Week 02</div>
+          <div class="tpl-data-label">Commits shipped</div>
+          <div class="tpl-data-big">62<em>/14d</em></div>
+          <div class="tpl-data-context">
+            <strong>4 CONTRIBUTORS · 3 CONTRACTS · GPL-3.0</strong>
+            <span>CYBERIA · 49406</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="template tpl-quote">
+        <div class="template-label">03 · MANIFESTO</div>
+        <div class="tpl-quote-mark">"</div>
+        <div>
+          <div class="tpl-quote-text">Open source built<br>the world. <em>The world</em><br>forgot to pay it back.</div>
+        </div>
+        <div class="tpl-quote-attr">◆ Founding Thesis · Document 01</div>
+      </div>
+
+      <div class="template tpl-stamp">
+        <div class="template-label">04 · STAMP</div>
+        <div class="tpl-stamp-top">
+          <span>Cyberia Mainnet</span>
+          <span>Live · Apr 2026</span>
+        </div>
+        <div class="tpl-stamp-main">
+          <div class="tpl-stamp-label">◆ Now Shipping</div>
+          <div class="tpl-stamp-title">The <em>DEX</em>,<br>next.</div>
+          <div class="tpl-stamp-foot">
+            <div class="tpl-stamp-brand">Cyberia<span>.</span></div>
+            <div class="tpl-ed-meta">Chain ID 49406</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="banner-head" style="margin-top: 60px;">Stories · 9:16 Vertical</div>
+      <div class="stories-grid">
+        <div class="story story-1">
+          <div class="story-eyebrow">◆ SHIPPED</div>
+          <div class="story-headline">Block<br>19,847<br><em>confirmed.</em></div>
+          <div class="story-body">Three contracts deployed this week. The log is open.</div>
+          <div class="story-foot">github.com/cyberia-temple</div>
+        </div>
+        <div class="story story-2">
+          <div class="story-eyebrow">◆ MANIFESTO</div>
+          <div class="story-headline">Built<br>in the<br><em>open.</em></div>
+          <div class="story-body">No private repos.<br>No off-the-record roadmap.</div>
+          <div class="story-foot">CYBERIA · CHAIN 49406</div>
+        </div>
+        <div class="story story-3">
+          <div class="story-eyebrow">◆ VERIFIED</div>
+          <div class="story-headline">A <em>settlement</em><br>layer for<br>open-source<br>work.</div>
+          <div class="story-body">Read the thesis.</div>
+          <div class="story-foot">CYBERIA.CHAIN</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="banners-section">
+      <div class="banner-head">Banner Units · Display advertising</div>
+      <div class="banner">
+        <div class="banner-bg"></div>
+        <div class="banner-content">
+          <div class="banner-tag">◆ NOW LIVE</div>
+          <div class="banner-headline">The network is <em>operational.</em></div>
+          <div class="banner-sub">Add Chain ID 49406. Verify what we've built.</div>
+        </div>
+        <button class="banner-cta">Verify →</button>
+      </div>
+      <div class="banner">
+        <div class="banner-bg"></div>
+        <div class="banner-content">
+          <div class="banner-tag">◆ OPEN SOURCE</div>
+          <div class="banner-headline">Read the code. <em>Then</em> decide.</div>
+          <div class="banner-sub">GPL-3.0. No hidden repos. No private roadmap.</div>
+        </div>
+        <button class="banner-cta">Open source →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 09. STATIONERY -->
+<section id="stationery">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">09</div>
+      <div class="section-title-block">
+        <div class="section-kicker">Applied Identity</div>
+        <h2 class="section-title">Stationery,<br>cards, <em>signatures.</em></h2>
+      </div>
+      <p class="section-desc">The identity applied to institutional touchpoints. Every physical or transactional surface — letter, card, email — carries the same tonal register as the brand book itself.</p>
+    </div>
+
+    <div class="stationery-grid">
+      <div class="letterhead">
+        <div class="letterhead-top">
+          <div class="letterhead-brand">Cyberia<span>.</span></div>
+          <div class="letterhead-meta">
+            CYBERIA NETWORK FOUNDATION<br>
+            MAINNET · CHAIN 49406<br>
+            CYBERIA-TEMPLE.GITHUB.IO<br>
+            GPL-3.0 · 2026
+          </div>
+        </div>
+        <div class="letterhead-body">
+          <p style="font-family: var(--mono); font-size: 10px; letter-spacing: 1px; color: var(--muted); margin-bottom: 24px;">12 APRIL 2026 · REF 0x1a4f</p>
+          <p style="font-family: var(--serif); font-size: 17px; line-height: 1.45; color: var(--ink);"><em>Dear participant,</em></p>
+          <p>This letter is addressed to anyone considering contributing to the Cyberia network. The network is live, the stack is open, and the first settlement primitives are operational on mainnet. We are writing to invite inspection before participation.</p>
+          <p>The invitation is specific. Add the RPC to your wallet. Read the commit log. Clone the repository. Run it locally. If what you find matches what we have said in public, the door is open — as a developer, contributor, or participant. If it does not match, we want to hear from you.</p>
+          <p style="font-family: var(--serif); font-style: italic; font-size: 16px;">With respect,</p>
+          <p style="font-family: var(--serif); font-size: 18px; font-weight: 500; font-style: italic; color: var(--signal);">The Cyberia Network</p>
+        </div>
+        <div class="letterhead-sig">
+          <span>CYBERIA.CHAIN</span>
+          <span>01 / 01</span>
+        </div>
+      </div>
+
+      <div class="biz-card-stack">
+        <div class="biz-card back">
+          <div class="biz-card-logo">C<span>.</span></div>
+        </div>
+        <div class="biz-card front">
+          <div class="biz-card-logo">Cyberia<span>.</span></div>
+          <div class="biz-card-info">
+            <div>
+              <div class="biz-card-left">Lev Rtutin</div>
+              <div class="biz-card-left-role">FOUNDER · OPERATOR</div>
+            </div>
+            <div class="biz-card-right">
+              cyberia-temple.github.io<br>
+              <a>@cyberia_chain</a><br>
+              CHAIN · 49406
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="email-sig">
+      <div class="email-sig-label">◆ Email Signature · Universal format</div>
+      <div class="email-sig-body">
+        <div class="email-sig-name">Lev Rtutin <span style="color: var(--signal); font-style: normal; font-size: 16px;">·</span></div>
+        <div class="email-sig-role">Founder · Cyberia Network</div>
+        <hr class="email-sig-divider">
+        <div class="email-sig-links">
+          <a>cyberia-temple.github.io</a> · <a>@cyberia_chain</a> · CHAIN 49406<br>
+          <em style="font-family: var(--serif); font-style: italic; color: var(--muted); font-size: 12px; margin-top: 8px; display: inline-block;">Built in the open. Settled on-chain.</em>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10. PRODUCT UI -->
+<section id="ui">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-number">10</div>
+      <div class="section-title-block">
+        <div class="section-kicker">Product Surface</div>
+        <h2 class="section-title">The brand,<br><em>operational.</em></h2>
+      </div>
+      <p class="section-desc">The product expression of the identity. Explorer, dashboard, and settlement interfaces all draw from the same tokens. Dense, precise, and stripped of ornamentation.</p>
+    </div>
+
+    <div class="product-mock">
+      <div class="product-chrome">
+        <div class="chrome-dot"></div>
+        <div class="chrome-dot"></div>
+        <div class="chrome-dot"></div>
+        <div class="chrome-url">explorer.cyberia.chain</div>
+      </div>
+      <div class="product-body">
+        <aside class="product-sidebar">
+          <div class="product-sidebar-brand">Cyberia<span>.</span></div>
+
+          <div class="sidebar-group">
+            <div class="sidebar-label">Network</div>
+            <div class="sidebar-item active"><div class="sidebar-item-dot"></div>Overview</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>Blocks</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>Transactions</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>Validators</div>
+          </div>
+
+          <div class="sidebar-group">
+            <div class="sidebar-label">Settlement</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>Contributions</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>Contracts</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>Bridges</div>
+          </div>
+
+          <div class="sidebar-group">
+            <div class="sidebar-label">Develop</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>RPC</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>Repository</div>
+            <div class="sidebar-item"><div class="sidebar-item-dot"></div>Livestream</div>
+          </div>
+        </aside>
+
+        <main class="product-main">
+          <div class="product-main-head">
+            <div>
+              <div class="product-main-title">Network Overview</div>
+              <div class="product-main-subtitle">chain_id: 49406 · synced · mainnet</div>
+            </div>
+            <button class="product-connect">◆ CONNECT</button>
+          </div>
+
+          <div class="product-stats">
+            <div class="product-stat">
+              <div class="stat-label">Block Height</div>
+              <div class="stat-value">19,847</div>
+              <div class="stat-delta">↑ +142 / hour</div>
+            </div>
+            <div class="product-stat">
+              <div class="stat-label">Gas Price</div>
+              <div class="stat-value">0.0001 <em>CYBER</em></div>
+              <div class="stat-delta" style="color: var(--fog);">stable</div>
+            </div>
+            <div class="product-stat">
+              <div class="stat-label">Contracts</div>
+              <div class="stat-value">3</div>
+              <div class="stat-delta">deployed</div>
+            </div>
+            <div class="product-stat">
+              <div class="stat-label">Active Wallets</div>
+              <div class="stat-value">248</div>
+              <div class="stat-delta">↑ +12 / day</div>
+            </div>
+          </div>
+
+          <div class="product-table">
+            <div class="table-head">
+              <div>Token</div>
+              <div>Address</div>
+              <div>Category</div>
+              <div>Status</div>
+            </div>
+            <div class="table-row">
+              <div>
+                <div class="sym">$TG</div>
+                <div class="name">Telegram Settlement</div>
+              </div>
+              <div class="addr">0x02Bad7dCaD174D92FCE2baBBd0cE1A653b487f04</div>
+              <div class="type">ERC20 · Airdrop</div>
+              <div><span class="status-badge">◆ LIVE</span></div>
+            </div>
+            <div class="table-row">
+              <div>
+                <div class="sym">$X</div>
+                <div class="name">X Settlement</div>
+              </div>
+              <div class="addr">0x14207CfF0880067B676B38cd17Ba7B002eeE8672</div>
+              <div class="type">ERC20 · Airdrop</div>
+              <div><span class="status-badge">◆ LIVE</span></div>
+            </div>
+            <div class="table-row">
+              <div>
+                <div class="sym">$GITHUB</div>
+                <div class="name">Repository Settlement</div>
+              </div>
+              <div class="addr">0x5db6EEDa62D04c68332B537c18ec4dfa3cB9aadd</div>
+              <div class="type">ERC20 · Airdrop</div>
+              <div><span class="status-badge">◆ LIVE</span></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand-block">
+        <div class="footer-brand">Cyberia<span>.</span></div>
+        <p class="footer-tagline">The settlement layer for open-source work. Built in public. <em>Settled</em> on-chain.</p>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-label">Network</div>
+        <a>Mainnet</a>
+        <a>Chain Info</a>
+        <a>RPC Endpoint</a>
+        <a>Explorer</a>
+        <a>Bridge</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-label">Develop</div>
+        <a>Repository</a>
+        <a>Documentation</a>
+        <a>Thesis</a>
+        <a>Livestream</a>
+        <a>Contributing</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-label">Identity</div>
+        <a>Brand Book</a>
+        <a>Logo Assets</a>
+        <a>Press Kit</a>
+        <a>Media Inquiries</a>
+        <a>Citations</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div>Cyberia · Brand Identity System · Light Edition · Version 1.0 · April 2026</div>
+      <div>GPL-3.0 · Chain 49406 · Built in the open</div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -75,24 +75,58 @@ const CurrencyInput: React.FC<CurrencyInputProps> = ({
 
   const multicallContract = useMulticallContract();
   const latestBlockNumber = useBlockNumber();
+  const balanceBlockNumber =
+    balanceUpdateSelector.blockNumber && latestBlockNumber
+      ? Math.max(balanceUpdateSelector.blockNumber, latestBlockNumber)
+      : balanceUpdateSelector.blockNumber ?? latestBlockNumber;
+  const currencyKey = currency
+    ? `${currency.symbol ?? 'currency'}-${
+        'address' in currency ? currency.address : 'native'
+      }`
+    : 'none';
 
   useEffect(() => {
-    if (updatedSelectedCurrencyBalance == undefined) {
+    let cancelled = false;
+
+    if (!multicallContract || !balanceBlockNumber || !account || !chainId) {
       setUpdatedSelectedCurrencyBalance(selectedCurrencyBalance);
-    } else {
-      if (!multicallContract || !latestBlockNumber || !account) return;
-      getCurrencyBalanceImmediately(
-        multicallContract,
-        chainId,
-        latestBlockNumber,
-        account,
-        currency,
-      ).then((value) => {
-        setUpdatedSelectedCurrencyBalance(value);
-      });
+      return undefined;
     }
+
+    getCurrencyBalanceImmediately(
+      multicallContract,
+      chainId,
+      balanceBlockNumber,
+      account,
+      currency,
+    )
+      .then((value) => {
+        if (!cancelled) {
+          setUpdatedSelectedCurrencyBalance(value);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUpdatedSelectedCurrencyBalance(selectedCurrencyBalance);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // The effect intentionally keys currency by currencyKey. Some SDK Currency
+    // objects are rebuilt during render, and depending on the object itself can
+    // create a tight balance-fetch loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [balanceUpdateSelector.flag]);
+  }, [
+    account,
+    balanceBlockNumber,
+    balanceUpdateSelector.blockNumber,
+    balanceUpdateSelector.flag,
+    chainId,
+    currencyKey,
+    multicallContract,
+  ]);
 
   const selectedCurrencyBalanceDependency = JSON.stringify(
     selectedCurrencyBalance,
@@ -101,6 +135,9 @@ const CurrencyInput: React.FC<CurrencyInputProps> = ({
     setUpdatedSelectedCurrencyBalance(selectedCurrencyBalance);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCurrencyBalanceDependency]);
+
+  const displayedCurrencyBalance =
+    updatedSelectedCurrencyBalance ?? selectedCurrencyBalance;
 
   const usdPriceV2 = Number(useUSDCPrice(currency)?.toSignificant() ?? 0);
   const currencyV3 =
@@ -137,7 +174,7 @@ const CurrencyInput: React.FC<CurrencyInputProps> = ({
           <Box className='flex justify-end' sx={{ fontSize: '13px' }}>
             <small className={`${color ? `text-${color}` : 'text-secondary'}}`}>
               <span className='subtext-color'>{t('balance')}:</span>{' '}
-              {formatTokenAmount(selectedCurrencyBalance)}
+              {formatTokenAmount(displayedCurrencyBalance)}
             </small>
           </Box>
           <Box display='flex' ml={1}>

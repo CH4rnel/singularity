@@ -62,6 +62,7 @@
     "analyze": "source-map-explorer 'build/static/js/*.js'",
     "postinstall": "patch-package",
     "start": "react-app-rewired start --max-old-space-size=7168",
+    "start-no-eslint": "DISABLE_ESLINT_PLUGIN=true react-app-rewired start --max-old-space-size=7168",
     "start-legacy": "react-app-rewired --openssl-legacy-provider start",
     "build": "GENERATE_SOURCEMAP=false CI=false react-app-rewired build --max-old-space-size=7168",
     "test": "react-app-rewired test --env=jsdom",

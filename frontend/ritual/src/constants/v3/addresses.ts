@@ -518,6 +518,7 @@ export const WMATIC_EXTENDED: { [chainId: number]: TokenV3 } = {
   [ChainId.MINATO]: toV3Token(WETH[ChainId.MINATO]),
   [ChainId.SONEIUM]: toV3Token(WETH[ChainId.SONEIUM]),
   [ChainId.SOMNIA]: toV3Token(WETH[ChainId.SOMNIA]),
+  [ChainId.CYBERIA]: toV3Token(WETH[ChainId.CYBERIA]),
 };
 
 export const USDC: { [chainId: number]: Token } = {
@@ -625,6 +626,13 @@ export const USDC: { [chainId: number]: Token } = {
     6,
     'USDC',
     'USDC',
+  ),
+  [ChainId.CYBERIA]: new Token(
+    ChainId.CYBERIA,
+    '0xdc25597B19799010047F17e9591EFE08EFd40077',
+    6,
+    'USDC',
+    'USD Coin',
   ),
 };
 
@@ -739,6 +747,13 @@ export const USDT: { [chainId: number]: Token } = {
     18,
     'USDT',
     'USDT',
+  ),
+  [ChainId.CYBERIA]: new Token(
+    ChainId.CYBERIA,
+    '0x94845aF24a3E431593A2b941b2b31836dE45185D',
+    6,
+    'USDT',
+    'Tether USD',
   ),
 };
 
@@ -1552,6 +1567,16 @@ export const DLDQUICK: { [chainId: number]: Token } = {
   [ChainId.DOGECHAIN]: dDD[ChainId.DOGECHAIN],
 };
 
+export const SILVER: { [chainId: number]: Token } = {
+  [ChainId.CYBERIA]: new Token(
+    ChainId.CYBERIA,
+    '0xAd9dfef9D671aFCF29Dbdd7Df360E7cA8D5ac40b',
+    18,
+    'SILVER',
+    'Silver',
+  ),
+};
+
 export const V2_BASES_TO_CHECK_TRADES_AGAINST: {
   [ChainId: number]: Token[];
 } = {
@@ -1576,7 +1601,15 @@ export const V2_BASES_TO_CHECK_TRADES_AGAINST: {
     DD[ChainId.DOGECHAIN],
   ],
   [ChainId.ZKEVM]: [],
-  [ChainId.CYBERIA]: [WETH[ChainId.CYBERIA], NEW_QUICK[ChainId.CYBERIA]],
+  [ChainId.CYBERIA]: [
+    WETH[ChainId.CYBERIA],
+    NEW_QUICK[ChainId.CYBERIA],
+    USDC[ChainId.CYBERIA],
+    USDT[ChainId.CYBERIA],
+    // SILVER is the only liquid pair for RUB (RUB↔SILVER, SILVER↔CYBER),
+    // so it must be a routing base for multi-hop swaps into/out of RUB.
+    SILVER[ChainId.CYBERIA],
+  ],
 };
 
 // Some tokens can only be swapped via certain pairs, so we override the list of bases that are considered for these tokens.
@@ -1775,6 +1808,13 @@ export const V2_BASES_TO_TRACK_LIQUIDITY_FOR: {
     USDO[ChainId.DOGECHAIN],
     DC[ChainId.DOGECHAIN],
     DD[ChainId.DOGECHAIN],
+  ],
+  [ChainId.CYBERIA]: [
+    WETH[ChainId.CYBERIA],
+    NEW_QUICK[ChainId.CYBERIA],
+    USDC[ChainId.CYBERIA],
+    USDT[ChainId.CYBERIA],
+    SILVER[ChainId.CYBERIA],
   ],
 };
 

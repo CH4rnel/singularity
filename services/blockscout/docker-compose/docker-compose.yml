@@ -117,6 +117,37 @@ services:
       - /root/certbot/conf:/etc/letsencrypt
       - /root/certbot/www:/var/www/certbot
 
+  cyberia_church:
+    build: /root/singularity/backend/laravel
+    container_name: cyberia_church
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - /root/singularity/backend/laravel:/var/www/html
+      - /root/singularity:/singularity
+      - /root/.config/solana:/solana
+    command: >
+      sh -lc "if [ ! -f vendor/autoload.php ]; then
+        composer install --no-interaction --prefer-dist --no-progress;
+      fi &&
+      if [ ! -f public/build/manifest.json ]; then
+        npm install && npm run build;
+      fi &&
+      if [ ! -d /singularity/crypto/hardhat/node_modules/dotenv ]; then
+        npm ci --prefix /singularity/crypto/hardhat;
+      fi &&
+      if [ ! -d /singularity/crypto/anchor/node_modules/@solana/web3.js ]; then
+        npm ci --prefix /singularity/crypto/anchor;
+      fi &&
+      php artisan serve --host=0.0.0.0 --port=9001"
+    ports:
+      - "9001:9001"
+    env_file:
+      - /root/singularity/backend/laravel/.env
+    environment:
+      APP_URL: https://cyberia.church
+      ASSET_URL: https://cyberia.church
+
   polygon-edge:
     image: 0xpolygon/polygon-edge:latest
     container_name: polygon-edge

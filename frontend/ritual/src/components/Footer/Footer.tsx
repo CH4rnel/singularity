@@ -1,8 +1,6 @@
 import React from 'react';
 import { Box, Grid, useMediaQuery } from '@material-ui/core';
 import { useTheme } from '@material-ui/core/styles';
-import QUICKLogo from 'assets/images/quickLogo.png';
-import QUICKLogoWebP from 'assets/images/quickLogo.webp';
 import Fire from 'assets/images/fire-new.svg';
 import 'components/styles/Footer.scss';
 import { Link, useHistory } from 'react-router-dom';
@@ -63,14 +61,6 @@ const Footer: React.FC = () => {
             ))}
           </Grid>
           <Grid item xs={12} sm={12} md={8}>
-            <picture>
-              <source
-                className='logo'
-                srcSet={QUICKLogoWebP}
-                type='image/webp'
-              />
-              <img className='logo' src={QUICKLogo} alt='Ritual' />
-            </picture>
             <Box mt={2} maxWidth='320px'>
               <small className='text-secondary'>{t('socialDescription')}</small>
             </Box>

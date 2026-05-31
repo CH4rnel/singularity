@@ -4,8 +4,6 @@ import { useActiveWeb3React, useIsProMode, useMasaAnalytics } from 'hooks';
 import { useHistory } from 'react-router-dom';
 import IntractAttribution, { trackCustomWallet } from '@intract/attribution';
 import { config, passport } from '@imtbl/sdk';
-import NewsletterSignupPanel from './NewsletterSignupPanel';
-import { useArcxAnalytics } from '@arcxmoney/analytics';
 const Header = lazy(() => import('components/Header'));
 const Footer = lazy(() => import('components/Footer'));
 const BetaWarningBanner = lazy(() => import('components/BetaWarningBanner'));
@@ -18,9 +16,8 @@ export interface PageLayoutProps {
 }
 
 const PageLayout: React.FC<PageLayoutProps> = ({ children, name }) => {
-  const [headerClass, setHeaderClass] = useState('');
-  const { chainId, account } = useActiveWeb3React();
-  const arcxSdk = useArcxAnalytics();
+  const [headerClass] = useState('');
+  const { account } = useActiveWeb3React();
   const isProMode = useIsProMode();
   const [openPassModal, setOpenPassModal] = useState(false);
   const { location } = useHistory();
@@ -56,13 +53,6 @@ const PageLayout: React.FC<PageLayoutProps> = ({ children, name }) => {
       trackCustomWallet(account);
     }
   }, [account]);
-
-  useEffect(() => {
-    if (arcxSdk && account) {
-      arcxSdk.wallet({ chainId, account });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chainId, account]);
 
   useEffect(() => {
     if (
@@ -124,18 +114,12 @@ const PageLayout: React.FC<PageLayoutProps> = ({ children, name }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const showBetaBanner = false;
-  const displayNewsletter = false;
 
   return (
     <Box className='page'>
       {/* {openPassModal && <PasswordModal />} */}
       {showBetaBanner && <BetaWarningBanner />}
-      {displayNewsletter && <NewsletterSignupPanel />}
-      <Header
-        onUpdateNewsletter={(val) => {
-          setHeaderClass(val ? '' : 'pageWrapper-no-max-no-news');
-        }}
-      />
+      <Header />
       {!isProMode && <Background fallback={false} />}
       <Box
         className={`${pageWrapperClassName} ${headerClass}`}

@@ -32,7 +32,7 @@
   "farm": {
     "quickswap": false,
     "merkl": false,
-    "available": false
+    "available": true
   },
   "lair": {
     "available": false,

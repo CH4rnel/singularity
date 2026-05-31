@@ -21,8 +21,6 @@ export type Proposal = {
     comments?: ProposalComment[];
     votes?: ProposalVote[];
     comments_count?: number;
-    votes_for_count?: number;
-    votes_against_count?: number;
     power_for?: string;
     power_against?: string;
     created_at: string;

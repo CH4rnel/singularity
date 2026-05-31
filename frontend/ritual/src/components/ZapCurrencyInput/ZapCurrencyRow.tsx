@@ -5,7 +5,7 @@ import { Box, Tooltip, CircularProgress, ListItem } from '@material-ui/core';
 import { useActiveWeb3React } from 'hooks';
 import { WrappedTokenInfo } from 'state/lists/hooks';
 import { CurrencyLogo } from 'components';
-import { getTokenLogoURL } from 'utils/getTokenLogoURL';
+import { getMetamaskTokenImage } from 'utils/getTokenLogoURL';
 import { PlusHelper } from 'components/QuestionHelper';
 import { ReactComponent as TokenSelectedIcon } from 'assets/images/TokenSelected.svg';
 import { formatNumber } from 'utils';
@@ -136,7 +136,7 @@ const CurrencyRow: React.FC<CurrenyRowProps> = ({
                       currency.address,
                       currency.symbol,
                       currency.decimals,
-                      getTokenLogoURL(currency.address),
+                      getMetamaskTokenImage(currency),
                     );
                     event.stopPropagation();
                   }}

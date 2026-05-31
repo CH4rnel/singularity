@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import sys
@@ -9,11 +10,19 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from telegram import BotCommand, Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    Application,
+    ChatMemberHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 from telegram.error import TelegramError
 from telegram.request import HTTPXRequest
 
 from sqlalchemy import create_engine, text
+from web3 import Web3
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -26,7 +35,9 @@ HTTP_PROXY = os.environ.get("HTTP_PROXY")
 
 DB_PATH = os.environ.get("DB_PATH", "/home/lain/random/singularity/backend/laravel/database/database.sqlite")
 
-TOKEN_ADDRESS = "0x4A3B5919e60fd290172955753DdA9216E396170A"
+TOKEN_ADDRESS = os.environ.get(
+    "TG_TOKEN_ADDRESS", "0x4A3B5919e60fd290172955753DdA9216E396170A"
+).strip() or None
 TOKEN_ABI = [
     {
         "inputs": [
@@ -49,6 +60,7 @@ TOKEN_ABI = [
 
 RPC_URL = os.environ.get("RPC_URL", "https://rpc.cyberia.church")
 CHAIN_ID = int(os.environ.get("CHAIN_ID", "49406"))
+EXPLORER_URL = os.environ.get("EXPLORER_URL", "https://explorer.cyberia.church").rstrip("/")
 
 TELEGRAM_TOKEN_FACTORY = os.environ.get("TELEGRAM_TOKEN_FACTORY")
 DEPLOYER_PK = os.environ.get("DEPLOYER_PK")
@@ -58,7 +70,6 @@ FACTORY_ABI = [
         "inputs": [
             {"name": "name_", "type": "string"},
             {"name": "symbol_", "type": "string"},
-            {"name": "chatId", "type": "int64"},
             {"name": "tokenOwner", "type": "address"},
         ],
         "name": "createToken",
@@ -67,16 +78,8 @@ FACTORY_ABI = [
         "type": "function",
     },
     {
-        "inputs": [{"name": "", "type": "int64"}],
-        "name": "tokenOfChat",
-        "outputs": [{"name": "", "type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "name": "chatId", "type": "int64"},
             {"indexed": True, "name": "token", "type": "address"},
             {"indexed": True, "name": "owner", "type": "address"},
             {"indexed": False, "name": "name", "type": "string"},
@@ -87,8 +90,73 @@ FACTORY_ABI = [
     },
 ]
 
+TOKEN_CREATED_TOPIC = Web3.keccak(text="TokenCreated(address,address,string,string)").hex()
+
 MIN_REWARDS_INTERVAL_SECONDS = int(os.environ.get("MIN_REWARDS_INTERVAL_SECONDS", "60"))
 MAX_REWARDS_INTERVAL_SECONDS = int(os.environ.get("MAX_REWARDS_INTERVAL_SECONDS", str(30 * 24 * 3600)))
+
+# Public chat where successful bridge txs are announced.
+BRIDGE_ANNOUNCE_CHAT = os.environ.get("BRIDGE_ANNOUNCE_CHAT", "@cyberia_network_chat")
+BRIDGE_POLL_SECONDS = int(os.environ.get("BRIDGE_POLL_SECONDS", "30"))
+SOLSCAN_URL = os.environ.get("SOLSCAN_URL", "https://solscan.io").rstrip("/")
+
+# Ritual DEX (Quickswap V2 fork on Cyberia) swap announcer.
+SWAP_ANNOUNCE_CHAT = os.environ.get("SWAP_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+SWAP_POLL_SECONDS = int(os.environ.get("SWAP_POLL_SECONDS", "30"))
+RITUAL_V2_ROUTER = os.environ.get(
+    "RITUAL_V2_ROUTER", "0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62"
+)
+RITUAL_V2_FACTORY = os.environ.get(
+    "RITUAL_V2_FACTORY", "0xB0aC30907c04b61F1482e62eA66eF4562a690917"
+)
+
+# Don't announce swap/liquidity events whose USD volume is below this. Set to 0
+# to disable the filter. Default: $1 — drops dust noise from cheap launchpad
+# memecoins paired against CYBER.sol.
+MIN_ANNOUNCE_USD = float(os.environ.get("MIN_ANNOUNCE_USD", "1.0"))
+
+# Tokens pegged to $1 — anchor points for the price walker. Comma-separated
+# addresses. Default: USDC + USDT on Cyberia.
+USD_ANCHORS = {
+    a.strip().lower()
+    for a in os.environ.get(
+        "USD_ANCHORS",
+        "0xdc25597B19799010047F17e9591EFE08EFd40077,"
+        "0x94845aF24a3E431593A2b941b2b31836dE45185D",
+    ).split(",")
+    if a.strip()
+}
+
+# Relay tokens used to price assets that have no direct stablecoin pair.
+# Default: WCYBER and CYBER.sol — together they reach the long tail of pairs.
+PRICE_RELAY_TOKENS = [
+    a.strip().lower()
+    for a in os.environ.get(
+        "PRICE_RELAY_TOKENS",
+        "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9,"
+        "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA",
+    ).split(",")
+    if a.strip()
+]
+# Bound the per-tick block range so eth_getLogs stays well under provider limits
+# even if the bot was stopped for a while.
+SWAP_MAX_BLOCK_RANGE = int(os.environ.get("SWAP_MAX_BLOCK_RANGE", "2000"))
+
+# Ritual DEX liquidity (V2 Mint/Burn) announcer. Same router filter as swaps:
+# addLiquidity/removeLiquidity go through the router, so the pair's Mint/Burn
+# `sender` topic equals the router address.
+LIQUIDITY_ANNOUNCE_CHAT = os.environ.get("LIQUIDITY_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+LIQUIDITY_POLL_SECONDS = int(os.environ.get("LIQUIDITY_POLL_SECONDS", str(SWAP_POLL_SECONDS)))
+LIQUIDITY_MAX_BLOCK_RANGE = int(os.environ.get("LIQUIDITY_MAX_BLOCK_RANGE", str(SWAP_MAX_BLOCK_RANGE)))
+
+# Lending (Compound-style markets) announcer. Markets are enumerated from the
+# comptroller's getAllMarkets(); supply/withdraw/borrow/repay are announced.
+LENDING_ANNOUNCE_CHAT = os.environ.get("LENDING_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+LENDING_POLL_SECONDS = int(os.environ.get("LENDING_POLL_SECONDS", str(SWAP_POLL_SECONDS)))
+LENDING_MAX_BLOCK_RANGE = int(os.environ.get("LENDING_MAX_BLOCK_RANGE", str(SWAP_MAX_BLOCK_RANGE)))
+# Same value the DEX frontend reads as VITE_LENDING_COMPTROLLER. Without it the
+# lending announcer stays dormant.
+LENDING_COMPTROLLER = (os.environ.get("LENDING_COMPTROLLER", "") or "").strip()
 
 LOG_FILE = Path(__file__).parent / "bot.log"
 
@@ -219,10 +287,10 @@ def transliterate_name(value: str) -> str:
 
 def slugify_symbol(name: str, chat_id: int) -> str:
     """Derive a short ERC20 symbol from a human-readable name."""
-    cleaned = re.sub(r"[^A-Za-z0-9]+", "", transliterate_name(name)).upper()
+    cleaned = re.sub(r"[^A-Za-z0-9_]+", "", transliterate_name(name)).upper()
     if not cleaned:
         return f"CHAT{abs(chat_id)}"
-    return cleaned[:8]
+    return cleaned[:16]
 
 
 def ensure_chat_token_schema():
@@ -256,9 +324,51 @@ def ensure_chat_token_schema():
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """))
+        # Owed rewards for users without a wallet yet. distribute_chat_tokens.py
+        # adds to `amount` (uint256 as text) on every payout tick where the
+        # user is a chat member but has no entry in tg_wallets. /set_wallet
+        # flushes these on-chain in one mint per chat token.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS pending_rewards (
+                chat_id    INTEGER NOT NULL,
+                user_id    INTEGER NOT NULL,
+                amount     TEXT NOT NULL DEFAULT '0',
+                updated_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (chat_id, user_id)
+            )
+        """))
+        # Small key/value store for the bot's own state, separate from the
+        # Laravel-owned tables. Used to track the last bridge_requests.id we
+        # already announced in BRIDGE_ANNOUNCE_CHAT.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bot_kv (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """))
 
 
 ensure_chat_token_schema()
+
+
+def _kv_get(key: str, default: str | None = None) -> str | None:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT value FROM bot_kv WHERE key = :k"),
+            {"k": key},
+        ).fetchone()
+    return row[0] if row else default
+
+
+def _kv_set(key: str, value: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO bot_kv (key, value) VALUES (:k, :v)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """),
+            {"k": key, "v": value},
+        )
 
 
 async def is_chat_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -272,6 +382,19 @@ async def is_chat_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
     try:
         member = await context.bot.get_chat_member(chat.id, user.id)
         return member.status in ("creator", "administrator")
+    except TelegramError as e:
+        logger.warning(f"get_chat_member failed for chat {chat.id} user {user.id}: {e}")
+        return False
+
+
+async def is_chat_owner(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat is None or user is None:
+        return False
+    try:
+        member = await context.bot.get_chat_member(chat.id, user.id)
+        return member.status == "creator"
     except TelegramError as e:
         logger.warning(f"get_chat_member failed for chat {chat.id} user {user.id}: {e}")
         return False
@@ -299,20 +422,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Commands:\n"
         "/start - start receiving TG\n"
-        "/set_wallet <address> - link your wallet once, receive from every chat you join\n"
-        "/stop - stop receiving\n"
-        "/balance - check balance\n"
-        "/create_token <name> <interval> - (admins) create a chat reward token\n"
+        "/set_wallet [address] - link your wallet (asks for address if omitted)\n"
+        "/unset_wallet - unlink your wallet (pending rewards are kept)\n"
+        "/wallet - show your linked wallet and explorer link\n"
+        "/balance - show TG, all chat tokens, and pending rewards\n"
+        "/token - show this chat's reward token (group only)\n"
+        "/cancel - cancel an interactive prompt\n"
+        "/create_token [name] [interval] - (admins) create a chat reward token\n"
+        "   (prompts for missing arguments; use /cancel to abort)\n"
         "   e.g. /create_token MyChatToken 1h\n"
         "/set_rewards_interval <interval> - (admins) change payout interval\n"
         "/reward_now - (admins) trigger an extra payout right now\n"
         "/github <username> <address> - link GitHub for GITHUB token airdrop\n"
-        "/website - project website"
+        "/website - project website\n\n"
+        "You can chat in groups without a wallet -- rewards will be saved as "
+        "pending and minted in one go when you /set_wallet."
     )
 
 
 async def website_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("https://cyberia-temple.github.io")
+    await update.message.reply_text("https://cyberia.church")
 
 
 async def github_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -354,40 +483,19 @@ async def github_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Error saving. Try again.")
 
 
-async def create_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /create_token <name> <rewards_interval>
-    Creates a per-chat ERC20Votes reward token via the on-chain factory and
-    wires it to this chat. Only chat admins can run it; must be used from the
-    target group/supergroup.
+async def _process_create_token(
+    update: Update, context: ContextTypes.DEFAULT_TYPE,
+    name: str, interval_raw: str,
+) -> None:
+    """Shared implementation for /create_token and the follow-up prompts.
+
+    Validates name & interval, persists, deploys on-chain, and stores the
+    resulting token address.
     """
     chat = update.effective_chat
     user = update.effective_user
     if chat is None or user is None:
         return
-
-    if chat.type not in ("group", "supergroup"):
-        await update.message.reply_text(
-            "This command must be used inside a group chat."
-        )
-        return
-
-    if not await is_chat_admin(update, context):
-        await update.message.reply_text("Only chat admins can create a token.")
-        return
-
-    args = context.args or []
-    if len(args) < 2:
-        await update.message.reply_text(
-            "Usage: /create_token <name> <rewards_interval>\n"
-            "Example: /create_token MyChatToken 1h\n"
-            "Intervals: 30s, 15m, 1h, 2d, 1w"
-        )
-        return
-
-    # name may contain spaces if the user passes them; last token is always the interval
-    name = " ".join(args[:-1]).strip()
-    interval_raw = args[-1]
 
     if not name or len(name) > 48:
         await update.message.reply_text("Token name must be 1..48 characters.")
@@ -401,15 +509,6 @@ async def create_token_command(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    existing = get_chat_token(chat.id)
-    if existing is not None:
-        await update.message.reply_text(
-            f"This chat already has a token: {existing[1]} ({existing[2]})\n"
-            f"Address: {existing[3] or 'pending'}\n"
-            f"Interval: {format_interval(existing[4])}"
-        )
-        return
-
     if not TELEGRAM_TOKEN_FACTORY or not DEPLOYER_PK:
         await update.message.reply_text(
             "Token creation is not configured on this bot "
@@ -419,34 +518,36 @@ async def create_token_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
     symbol = slugify_symbol(name, chat.id)
 
-    # Persist the request first so we never lose it if the on-chain call blows up.
-    try:
-        with engine.begin() as conn:
-            conn.execute(
-                text("""
-                    INSERT INTO chat_tokens
-                        (chat_id, name, symbol, rewards_interval, created_by)
-                    VALUES
-                        (:chat_id, :name, :symbol, :interval, :user_id)
-                """),
-                {
-                    "chat_id": chat.id,
-                    "name": name,
-                    "symbol": symbol,
-                    "interval": rewards_interval,
-                    "user_id": user.id,
-                },
-            )
-    except Exception as e:
-        logger.error(f"Error persisting chat_token row for chat {chat.id}: {e}")
-        await update.message.reply_text("Internal error saving token. Try again.")
-        return
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO chat_tokens
+                    (chat_id, name, symbol, rewards_interval, created_by)
+                VALUES
+                    (:chat_id, :name, :symbol, :interval, :user_id)
+                ON CONFLICT(chat_id) DO UPDATE SET
+                    name = excluded.name,
+                    symbol = excluded.symbol,
+                    token_address = NULL,
+                    rewards_interval = excluded.rewards_interval,
+                    created_by = excluded.created_by,
+                    created_at = datetime('now'),
+                    last_payout_at = NULL
+            """),
+            {
+                "chat_id": chat.id,
+                "name": name,
+                "symbol": symbol,
+                "interval": rewards_interval,
+                "user_id": user.id,
+            },
+        )
 
     status_msg = await update.message.reply_text(
         f"Deploying token {name} ({symbol})... this may take a few seconds."
     )
 
-    # On-chain deployment
+    token_address = None
     try:
         from web3 import Web3
 
@@ -460,14 +561,14 @@ async def create_token_command(update: Update, context: ContextTypes.DEFAULT_TYP
         nonce = w3.eth.get_transaction_count(acct.address, "pending")
         try:
             estimated = factory.functions.createToken(
-                name, symbol, int(chat.id), acct.address
+                name, symbol, acct.address
             ).estimate_gas({"from": acct.address})
         except Exception as est_err:
             logger.warning(f"estimate_gas failed, falling back to 5_000_000: {est_err}")
             estimated = 5_000_000
         gas_limit = int(estimated * 1.25) + 50_000
         tx = factory.functions.createToken(
-            name, symbol, int(chat.id), acct.address
+            name, symbol, acct.address
         ).build_transaction({
             "from": acct.address,
             "nonce": nonce,
@@ -482,22 +583,23 @@ async def create_token_command(update: Update, context: ContextTypes.DEFAULT_TYP
         if receipt.status != 1:
             raise RuntimeError(f"tx reverted: {tx_hash.hex()}")
 
-        # Try to pull token address from event; fall back to view call.
-        token_address = None
-        try:
-            events = factory.events.TokenCreated().process_receipt(receipt)
-            if events:
-                token_address = events[0]["args"]["token"]
-        except Exception:
-            token_address = None
+        for log in receipt.logs:
+            topics = log.get("topics") or []
+            if not topics:
+                continue
+            if log.get("address", "").lower() != factory.address.lower():
+                continue
+            if topics[0].hex().lower() != TOKEN_CREATED_TOPIC.lower():
+                continue
+            event = factory.events.TokenCreated().process_log(log)
+            token_address = event["args"]["token"]
+            break
 
         if not token_address:
-            token_address = factory.functions.tokenOfChat(int(chat.id)).call()
-
+            raise RuntimeError("TokenCreated event did not include token address")
         token_address = Web3.to_checksum_address(token_address)
     except Exception as e:
         logger.error(f"On-chain createToken failed for chat {chat.id}: {e}")
-        # Roll back the DB row so the user can retry.
         with engine.begin() as conn:
             conn.execute(
                 text("DELETE FROM chat_tokens WHERE chat_id = :c AND token_address IS NULL"),
@@ -513,13 +615,73 @@ async def create_token_command(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
     await status_msg.edit_text(
-        "Token created!\n"
+        "New token created.\n"
         f"Name: {name}\n"
         f"Symbol: {symbol}\n"
         f"Address: {token_address}\n"
-        f"Rewards interval: {format_interval(rewards_interval)}\n\n"
-        "Members: run /set_wallet <address> here to join the airdrop."
+        f"Rewards interval: {format_interval(rewards_interval)}"
     )
+
+
+async def create_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /create_token <name> <rewards_interval>
+    Creates a per-chat ERC20Votes reward token via the on-chain factory and
+    wires it to this chat. Only the chat owner can run it; must be used from the
+    target group/supergroup.
+
+    If arguments are omitted the bot prompts for them interactively.
+    """
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat is None or user is None:
+        return
+
+    if chat.type not in ("group", "supergroup"):
+        await update.message.reply_text(
+            "This command must be used inside a group chat."
+        )
+        return
+
+    if not await is_chat_owner(update, context):
+        await update.message.reply_text("Only the chat owner can create a token.")
+        logger.warning(
+            "Unauthorized create_token attempt by non-owner user_id=%s username=%s chat_id=%s",
+            user.id,
+            user.username,
+            chat.id,
+        )
+        return
+
+    args = context.args or []
+
+    if not args:
+        context.user_data["awaiting_token_name"] = True
+        context.user_data["awaiting_token_chat_id"] = chat.id
+        bot_msg = await update.message.reply_text(
+            "Reply to this message with the token name (1-48 characters), or /cancel to abort."
+        )
+        context.user_data["awaiting_token_bot_msg_id"] = bot_msg.message_id
+        return
+
+    if len(args) == 1:
+        name = args[0].strip()
+        if not name or len(name) > 48:
+            await update.message.reply_text("Token name must be 1..48 characters.")
+            return
+        context.user_data["token_name"] = name
+        context.user_data["awaiting_token_interval"] = True
+        context.user_data["awaiting_token_chat_id"] = chat.id
+        bot_msg = await update.message.reply_text(
+            "Reply to this message with the rewards interval (e.g. 30s, 15m, 1h, 2d, 1w), or /cancel to abort."
+        )
+        context.user_data["awaiting_token_bot_msg_id"] = bot_msg.message_id
+        return
+
+    # 2+ args: last token is always the interval
+    name = " ".join(args[:-1]).strip()
+    interval_raw = args[-1]
+    await _process_create_token(update, context, name, interval_raw)
 
 
 async def set_rewards_interval_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -567,13 +729,21 @@ async def set_rewards_interval_command(update: Update, context: ContextTypes.DEF
 
 
 def _get_chat_payout_recipients(chat_id: int):
-    """Return chat members with wallet addresses from the global tg_wallets table."""
+    """Return [(user_id, address), ...] for users that have BOTH been seen in
+    this chat (`chat_members`) AND linked a wallet globally (`tg_wallets`).
+
+    `chat_members` is maintained by the bot via message tracking and
+    left/kicked event handlers, so it reflects current membership for users
+    the bot has ever seen. `tg_wallets` is global, so a user only needs to
+    /set_wallet once anywhere to receive rewards from every chat they
+    participate in.
+    """
     with engine.connect() as conn:
         return conn.execute(
             text("""
-                SELECT cm.user_id, wallets.address
+                SELECT cm.user_id, w.address
                 FROM chat_members cm
-                JOIN tg_wallets wallets ON wallets.user_id = cm.user_id
+                JOIN tg_wallets w ON w.user_id = cm.user_id
                 WHERE cm.chat_id = :c
             """),
             {"c": chat_id},
@@ -588,6 +758,14 @@ def _record_chat_member(chat_id: int, user_id: int):
                 VALUES (:c, :u, datetime('now'), datetime('now'))
                 ON CONFLICT(chat_id, user_id) DO UPDATE SET last_seen = datetime('now')
             """),
+            {"c": chat_id, "u": user_id},
+        )
+
+
+def _forget_chat_member(chat_id: int, user_id: int):
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM chat_members WHERE chat_id = :c AND user_id = :u"),
             {"c": chat_id, "u": user_id},
         )
 
@@ -628,7 +806,8 @@ async def reward_now_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     recipients = _get_chat_payout_recipients(chat.id)
     if not recipients:
         await update.message.reply_text(
-            "No eligible recipients: no chat members have a wallet in tg_wallets."
+            "No eligible recipients: no current member of this chat has registered "
+            "a wallet via /set_wallet yet."
         )
         return
 
@@ -694,17 +873,117 @@ async def reward_now_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 
-async def set_wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Usage: /set_wallet <address>\nExample: /set_wallet 0x1234...")
-        return
+CHAT_TOKEN_MINT_ABI = [{
+    "inputs": [
+        {"name": "to", "type": "address"},
+        {"name": "amount", "type": "uint256"},
+    ],
+    "name": "mint",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+}]
 
-    address = args[0].strip()
+
+def _claim_pending_rewards(user_id: int, address: str):
+    """Mint everything in pending_rewards for this user, one tx per chat token.
+
+    Returns (claimed, failed, total_amount_by_symbol_dict).
+    Rows are deleted only on successful mint to keep retries safe.
+    """
+    if not DEPLOYER_PK:
+        logger.warning("claim_pending: DEPLOYER_PK not set, skipping")
+        return 0, 0, {}
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT p.chat_id, p.amount, t.symbol, t.token_address
+                FROM pending_rewards p
+                JOIN chat_tokens t ON t.chat_id = p.chat_id
+                WHERE p.user_id = :u
+                  AND CAST(p.amount AS INTEGER) > 0
+                  AND t.token_address IS NOT NULL
+            """),
+            {"u": user_id},
+        ).fetchall()
+
+    if not rows:
+        return 0, 0, {}
+
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    acct = w3.eth.account.from_key(DEPLOYER_PK)
+    to = Web3.to_checksum_address(address)
+    nonce = w3.eth.get_transaction_count(acct.address, "pending")
+
+    claimed = 0
+    failed = 0
+    totals: dict = {}
+
+    for chat_id, amount_str, symbol, token_address in rows:
+        try:
+            amount = int(amount_str)
+            if amount <= 0:
+                continue
+            contract = w3.eth.contract(
+                address=Web3.to_checksum_address(token_address),
+                abi=CHAT_TOKEN_MINT_ABI,
+            )
+            tx = contract.functions.mint(to, amount).build_transaction({
+                "from": acct.address,
+                "nonce": nonce,
+                "gas": 200_000,
+                "gasPrice": w3.eth.gas_price,
+                "chainId": CHAIN_ID,
+            })
+            signed = acct.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+            nonce += 1
+            if receipt.status != 1:
+                failed += 1
+                logger.error(
+                    "claim_pending: tx reverted user=%s chat=%s symbol=%s tx=%s",
+                    user_id, chat_id, symbol, tx_hash.hex(),
+                )
+                continue
+
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM pending_rewards WHERE chat_id = :c AND user_id = :u"),
+                    {"c": chat_id, "u": user_id},
+                )
+            claimed += 1
+            totals[symbol] = totals.get(symbol, 0) + amount
+            logger.info(
+                "claim_pending: minted %s %s to %s user=%s chat=%s tx=%s",
+                amount, symbol, address, user_id, chat_id, tx_hash.hex(),
+            )
+        except Exception as e:
+            failed += 1
+            logger.error(
+                "claim_pending: mint failed user=%s chat=%s symbol=%s: %s",
+                user_id, chat_id, symbol, e,
+            )
+            # Bump nonce defensively in case the tx was actually broadcast.
+            nonce += 1
+
+    return claimed, failed, totals
+
+
+async def _process_set_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE, address: str):
+    """Shared implementation for /set_wallet <addr> and the follow-up message
+    captured after a bare /set_wallet. Validates, persists, claims pending."""
     user_id = update.effective_user.id
 
     if not is_valid_eth_address(address):
-        await update.message.reply_text("Invalid address format. Expected 0x...")
+        # Re-arm the prompt so the user can simply retry without re-invoking
+        # /set_wallet. They can /cancel to bail out.
+        context.user_data["awaiting_wallet"] = True
+        await update.message.reply_text(
+            "Invalid address format. Expected 0x followed by 40 hex characters.\n"
+            "Send a valid address, or /cancel to abort."
+        )
         return
 
     try:
@@ -717,79 +996,1405 @@ async def set_wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 """),
                 {"user_id": user_id, "address": address},
             )
+    except Exception as e:
+        logger.error(f"Error in set_wallet: {e}")
+        await update.message.reply_text("Error saving address. Try again.")
+        return
 
+    # Check whether anything is owed before we promise a mint.
+    with engine.connect() as conn:
+        pending_count = conn.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM pending_rewards p
+                JOIN chat_tokens t ON t.chat_id = p.chat_id
+                WHERE p.user_id = :u
+                  AND CAST(p.amount AS INTEGER) > 0
+                  AND t.token_address IS NOT NULL
+            """),
+            {"u": user_id},
+        ).scalar() or 0
+
+    if pending_count == 0:
         await update.message.reply_text(
             f"Wallet saved: {address}\n"
             "You will receive rewards from every chat token in groups you participate in, "
             "and 1 TG every hour from the global airdrop."
         )
-    except Exception as e:
-        logger.error(f"Error in set_wallet: {e}")
-        await update.message.reply_text("Error saving address. Try again.")
+        return
 
-
-async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
+    status_msg = await update.message.reply_text(
+        f"Wallet saved: {address}\n"
+        f"Claiming pending rewards from {pending_count} chat(s)..."
+    )
     try:
-        with engine.connect() as conn:
-            conn.execute(
-                text("DELETE FROM tg_wallets WHERE user_id = :user_id"),
-                {"user_id": user_id},
-            )
-            conn.commit()
-
-        await update.message.reply_text("You have been removed from the airdrop list.")
+        claimed, failed, totals = _claim_pending_rewards(user_id, address)
     except Exception as e:
-        logger.error(f"Error in stop: {e}")
-        await update.message.reply_text("Error removing you from list.")
+        logger.error(f"set_wallet claim failed: {e}")
+        await status_msg.edit_text(
+            f"Wallet saved: {address}\n"
+            "Could not claim pending rewards automatically. They are safe in the database "
+            "and will be retried later."
+        )
+        return
+
+    if not totals:
+        await status_msg.edit_text(
+            f"Wallet saved: {address}\n"
+            f"Claim attempted but nothing succeeded ({failed} failed). Will retry later."
+        )
+        return
+
+    lines = [f"Wallet saved: {address}", "Claimed pending rewards:"]
+    for symbol, total in totals.items():
+        human = total / 10**18
+        lines.append(f"  {human:g} {symbol}")
+    if failed:
+        lines.append(f"({failed} chat(s) failed and will retry later)")
+    await status_msg.edit_text("\n".join(lines))
+
+
+async def set_wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """`/set_wallet <address>` -- bind a wallet and claim pending rewards.
+
+    If invoked without an argument, the bot asks the user to send the address
+    in the next message. The follow-up handler (`pending_input_handler`)
+    picks it up using `context.user_data["awaiting_wallet"]`.
+    """
+    args = context.args or []
+    chat = update.effective_chat
+    if not args:
+        # Interactive follow-up only makes sense in DMs -- in groups the bot
+        # would otherwise hijack the next casual message the user sends.
+        if chat is not None and chat.type == "private":
+            context.user_data["awaiting_wallet"] = True
+            await update.message.reply_text(
+                "Send your wallet address now (a single message starting with 0x), "
+                "or /cancel to abort."
+            )
+        else:
+            await update.message.reply_text(
+                "Usage: /set_wallet <address>\nExample: /set_wallet 0x1234..."
+            )
+        return
+    context.user_data.pop("awaiting_wallet", None)
+    await _process_set_wallet(update, context, args[0].strip())
+
+
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel any pending interactive flow (/set_wallet or /create_token)."""
+    cancelled = bool(context.user_data.pop("awaiting_wallet", None))
+    for key in ("awaiting_token_name", "awaiting_token_interval", "token_name", "awaiting_token_chat_id", "awaiting_token_bot_msg_id"):
+        if context.user_data.pop(key, None) is not None:
+            cancelled = True
+    await update.message.reply_text("Cancelled." if cancelled else "Nothing to cancel.")
+
+
+async def pending_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Catch the next text message from a user who issued bare /set_wallet.
+
+    Only fires when `awaiting_wallet` is set in the user's `user_data` and the
+    message text looks like a single address-shaped token. Anything else is
+    ignored so we don't accidentally hijack normal chat messages.
+    """
+    if not context.user_data.get("awaiting_wallet"):
+        return
+    msg = update.effective_message
+    if msg is None or not msg.text:
+        return
+    text_value = msg.text.strip()
+    # Bare addresses only -- skip if user typed a command in the meantime.
+    if text_value.startswith("/"):
+        return
+    # If the user sent multiple tokens, take the first.
+    candidate = text_value.split()[0]
+    context.user_data.pop("awaiting_wallet", None)
+    await _process_set_wallet(update, context, candidate)
+
+
+async def pending_create_token_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Catch the next text message from a user who issued bare /create_token.
+
+    Fires when `awaiting_token_name` or `awaiting_token_interval` is set in
+    the user's `user_data`.  Only processes messages that reply to the bot's
+    last prompt, so the handler works in both privacy mode and when the bot is
+    an admin, without hijacking casual group chat.
+    """
+    awaiting_name = context.user_data.get("awaiting_token_name")
+    awaiting_interval = context.user_data.get("awaiting_token_interval")
+    if not awaiting_name and not awaiting_interval:
+        return
+
+    chat = update.effective_chat
+    if chat is None or chat.id != context.user_data.get("awaiting_token_chat_id"):
+        return
+
+    msg = update.effective_message
+    if msg is None or not msg.text:
+        return
+
+    text_value = msg.text.strip()
+    if text_value.startswith("/"):
+        return
+
+    # Must be a reply to the bot's prompt message (handles privacy mode).
+    expected_bot_msg_id = context.user_data.get("awaiting_token_bot_msg_id")
+    if not msg.reply_to_message or msg.reply_to_message.message_id != expected_bot_msg_id:
+        return
+
+    # Use the first line as the value so multi-line pastes don't confuse us.
+    value = text_value.splitlines()[0].strip()
+
+    if awaiting_name:
+        context.user_data.pop("awaiting_token_name", None)
+        context.user_data.pop("awaiting_token_bot_msg_id", None)
+        name = value
+        if not name or len(name) > 48:
+            context.user_data["awaiting_token_name"] = True
+            retry = await update.message.reply_text(
+                "Token name must be 1..48 characters. Reply to this message with the name, or /cancel to abort."
+            )
+            context.user_data["awaiting_token_bot_msg_id"] = retry.message_id
+            return
+        context.user_data["token_name"] = name
+        context.user_data["awaiting_token_interval"] = True
+        bot_msg = await update.message.reply_text(
+            "Reply to this message with the rewards interval (e.g. 30s, 15m, 1h, 2d, 1w), or /cancel to abort."
+        )
+        context.user_data["awaiting_token_bot_msg_id"] = bot_msg.message_id
+        return
+
+    if awaiting_interval:
+        context.user_data.pop("awaiting_token_interval", None)
+        context.user_data.pop("awaiting_token_bot_msg_id", None)
+        name = context.user_data.pop("token_name", None)
+        if not name:
+            context.user_data.pop("awaiting_token_chat_id", None)
+            await update.message.reply_text(
+                "Something went wrong — the token name was lost. Try /create_token again."
+            )
+            return
+        context.user_data.pop("awaiting_token_chat_id", None)
+        interval_raw = value
+        await _process_create_token(update, context, name, interval_raw)
+
+
+async def unset_wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Remove the linked wallet without dropping accrued pending rewards.
+
+    The user can /set_wallet again later (possibly with a different address)
+    and the pending balance will be minted to the new wallet.
+    """
+    user_id = update.effective_user.id
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("DELETE FROM tg_wallets WHERE user_id = :u"),
+                {"u": user_id},
+            )
+    except Exception as e:
+        logger.error(f"Error in unset_wallet: {e}")
+        await update.message.reply_text("Error removing wallet. Try again.")
+        return
+
+    if result.rowcount == 0:
+        await update.message.reply_text("No wallet was linked.")
+        return
+
+    await update.message.reply_text(
+        "Wallet removed. Any pending rewards stay credited and will be minted "
+        "to the next wallet you link with /set_wallet."
+    )
+
+
+BALANCE_OF_ABI = [{
+    "inputs": [{"name": "account", "type": "address"}],
+    "name": "balanceOf",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function",
+}]
 
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from web3 import Web3
-
+    """Show: linked wallet, global TG balance, every chat-token balance the user
+    is eligible for, and any pending (claimable on /set_wallet) amounts."""
     user_id = update.effective_user.id
-    try:
+
+    # Without admin rights the bot doesn't receive chat_member updates, so
+    # silent observers never end up in chat_members. Treat /balance in a group
+    # as proof-of-presence: record the caller so they (and the chat owner who
+    # almost certainly also runs /balance) actually start accruing rewards.
+    chat = update.effective_chat
+    if chat is not None and chat.type in ("group", "supergroup"):
+        try:
+            _record_chat_member(chat.id, user_id)
+        except Exception as e:
+            logger.debug(f"balance member tracking failed: {e}")
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT address FROM tg_wallets WHERE user_id = :u"),
+            {"u": user_id},
+        ).fetchone()
+        # Chat tokens this user is a member of (regardless of wallet status).
+        chat_tokens = conn.execute(
+            text("""
+                SELECT t.chat_id, t.name, t.symbol, t.token_address
+                FROM chat_members cm
+                JOIN chat_tokens t ON t.chat_id = cm.chat_id
+                WHERE cm.user_id = :u
+                  AND t.token_address IS NOT NULL
+            """),
+            {"u": user_id},
+        ).fetchall()
+        pending = conn.execute(
+            text("""
+                SELECT t.symbol, p.amount
+                FROM pending_rewards p
+                JOIN chat_tokens t ON t.chat_id = p.chat_id
+                WHERE p.user_id = :u
+                  AND CAST(p.amount AS INTEGER) > 0
+            """),
+            {"u": user_id},
+        ).fetchall()
+
+    address = row[0] if row else None
+    lines = []
+
+    if address:
+        lines.append(f"Wallet: {address}")
+    else:
+        lines.append("Wallet: not set -- use /set_wallet <address> to claim pending rewards.")
+
+    if address:
+        try:
+            w3 = Web3(Web3.HTTPProvider(RPC_URL))
+            checksum = Web3.to_checksum_address(address)
+        except Exception as e:
+            logger.exception(f"balance: web3/checksum init failed: {e}")
+            w3 = None
+            checksum = None
+
+        # Global TG token is optional: if TG_TOKEN_ADDRESS isn't configured we
+        # just skip this line instead of poisoning the whole message.
+        if w3 is not None and checksum is not None and TOKEN_ADDRESS:
+            try:
+                # TOKEN_ABI only declares mint/symbol; balanceOf lives in
+                # BALANCE_OF_ABI, which is the only thing we need here.
+                tg_contract = w3.eth.contract(
+                    address=Web3.to_checksum_address(TOKEN_ADDRESS), abi=BALANCE_OF_ABI
+                )
+                tg_balance = tg_contract.functions.balanceOf(checksum).call() / 10**18
+                lines.append(f"TG (global): {tg_balance:g}")
+            except Exception as e:
+                logger.exception(
+                    f"balance: TG global read failed for {address} at {TOKEN_ADDRESS}: {e}"
+                )
+                lines.append("TG (global): (read error)")
+
+        if w3 is not None and checksum is not None and chat_tokens:
+            lines.append("")
+            lines.append("Chat token balances:")
+            for _cid, _name, symbol, token_address in chat_tokens:
+                try:
+                    c = w3.eth.contract(
+                        address=Web3.to_checksum_address(token_address),
+                        abi=BALANCE_OF_ABI,
+                    )
+                    bal = c.functions.balanceOf(checksum).call() / 10**18
+                    lines.append(f"  {symbol}: {bal:g}")
+                except Exception as e:
+                    logger.exception(
+                        f"balance: chat-token read failed for {symbol} ({token_address}): {e}"
+                    )
+                    lines.append(f"  {symbol}: (read error)")
+
+    if pending:
+        lines.append("")
+        lines.append("Pending (claim by setting a wallet):")
+        for symbol, amount_str in pending:
+            human = int(amount_str) / 10**18
+            lines.append(f"  {human:g} {symbol}")
+    elif not address:
+        # Help wallet-less users understand why pending may be zero. Show every
+        # chat-with-token they are a member of, so they know what to expect.
+        lines.append("")
+        if chat_tokens:
+            lines.append("You are eligible for these chat tokens (rewards will accrue here):")
+            for _cid, _name, symbol, _addr in chat_tokens:
+                lines.append(f"  {symbol}")
+            lines.append(
+                "Pending is empty right now. New rewards are credited on each "
+                "payout tick of the chat, so check back after the next interval."
+            )
+        else:
+            lines.append(
+                "No pending rewards yet. Write at least one message in a chat "
+                "that has a reward token, then wait for its next payout tick."
+            )
+
+    await update.message.reply_text("\n".join(lines))
+
+
+async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the user's linked wallet address and a link to it on the explorer."""
+    user_id = update.effective_user.id
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT address FROM tg_wallets WHERE user_id = :u"),
+            {"u": user_id},
+        ).fetchone()
+    if not row:
+        await update.message.reply_text(
+            "No wallet linked yet. Use /set_wallet <address> to link one."
+        )
+        return
+    address = row[0]
+    await update.message.reply_text(
+        f"Wallet: {address}\n{EXPLORER_URL}/address/{address}"
+    )
+
+
+ADMIN_USERNAME = "rtutin"
+
+
+async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/whois <address> — admin-only. Show the Telegram user(s) linked to a
+    wallet address, the chats they belong to, any GitHub link, and pending
+    rewards. Restricted to @rtutin."""
+    user = update.effective_user
+    if user is None or (user.username or "").lower() != ADMIN_USERNAME:
+        logger.warning(
+            "Unauthorized /whois attempt by user_id=%s username=%s",
+            user.id if user else None,
+            user.username if user else None,
+        )
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text("Usage: /whois <wallet_address>")
+        return
+
+    address = args[0].strip()
+    if not is_valid_eth_address(address):
+        await update.message.reply_text("Invalid address. Expected 0x followed by 40 hex characters.")
+        return
+
+    address_lower = address.lower()
+
+    with engine.connect() as conn:
+        wallets = conn.execute(
+            text("SELECT user_id, address, created_at FROM tg_wallets WHERE LOWER(address) = :a"),
+            {"a": address_lower},
+        ).fetchall()
+
+        github_links = []
+        try:
+            github_links = conn.execute(
+                text("SELECT github_username FROM github_wallets WHERE LOWER(wallet_address) = :a"),
+                {"a": address_lower},
+            ).fetchall()
+        except Exception as e:
+            logger.debug(f"whois: github_wallets lookup failed: {e}")
+
+    if not wallets and not github_links:
+        await update.message.reply_text(f"No user is linked to {address}.")
+        return
+
+    lines = [f"Wallet: {address}"]
+
+    if github_links:
+        gh = ", ".join(f"@{row[0]}" for row in github_links)
+        lines.append(f"GitHub: {gh}")
+
+    for user_id, addr, created_at in wallets:
+        lines.append("")
+        lines.append(f"Telegram user_id: {user_id}")
+        lines.append(f"Linked at: {created_at}")
+
+        try:
+            tg_user = await context.bot.get_chat(user_id)
+            uname = f"@{tg_user.username}" if tg_user.username else "(no username)"
+            full_name = " ".join(
+                p for p in (tg_user.first_name, tg_user.last_name) if p
+            ) or "(no name)"
+            lines.append(f"Name: {full_name} {uname}")
+        except TelegramError as e:
+            lines.append(f"Name: (lookup failed: {e})")
+
         with engine.connect() as conn:
-            result = conn.execute(
-                text("SELECT address FROM tg_wallets WHERE user_id = :user_id"),
-                {"user_id": user_id},
-            ).fetchone()
+            chats = conn.execute(
+                text("""
+                    SELECT cm.chat_id, t.name, t.symbol, cm.first_seen, cm.last_seen
+                    FROM chat_members cm
+                    LEFT JOIN chat_tokens t ON t.chat_id = cm.chat_id
+                    WHERE cm.user_id = :u
+                    ORDER BY cm.last_seen DESC
+                """),
+                {"u": user_id},
+            ).fetchall()
+            pending = conn.execute(
+                text("""
+                    SELECT t.symbol, p.amount
+                    FROM pending_rewards p
+                    JOIN chat_tokens t ON t.chat_id = p.chat_id
+                    WHERE p.user_id = :u
+                      AND CAST(p.amount AS INTEGER) > 0
+                """),
+                {"u": user_id},
+            ).fetchall()
 
-        if not result:
-            await update.message.reply_text("You are not registered. Use /set_wallet <address>.")
-            return
+        if chats:
+            lines.append(f"Chats ({len(chats)}):")
+            for chat_id, name, symbol, first_seen, last_seen in chats:
+                label = f"{name} ({symbol})" if name else "(no token)"
+                lines.append(
+                    f"  {chat_id} {label} — seen {first_seen}..{last_seen}"
+                )
+        else:
+            lines.append("Chats: none tracked")
 
-        address = result[0]
+        if pending:
+            lines.append("Pending rewards:")
+            for symbol, amount_str in pending:
+                human = int(amount_str) / 10**18
+                lines.append(f"  {human:g} {symbol}")
 
-        w3 = Web3(Web3.HTTPProvider(RPC_URL))
-        contract = w3.eth.contract(address=Web3.to_checksum_address(TOKEN_ADDRESS), abi=TOKEN_ABI)
+    await update.message.reply_text("\n".join(lines))
 
-        balance = contract.functions.balanceOf(Web3.to_checksum_address(address)).call()
-        decimals = 18
-        balance_tg = balance / (10**decimals)
 
-        await update.message.reply_text(f"Balance {address[:6]}...{address[-4:]}: {balance_tg} TG")
-    except Exception as e:
-        logger.error(f"Error in balance: {e}")
-        await update.message.reply_text("Error fetching balance. Try again later.")
+async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show this chat's reward token details and an explorer link."""
+    chat = update.effective_chat
+    if chat is None:
+        return
+    if chat.type not in ("group", "supergroup"):
+        await update.message.reply_text(
+            "Use this command inside the group chat whose token you want to inspect."
+        )
+        return
+    # Same reasoning as in /balance: running /token in the group is concrete
+    # proof the caller belongs here, so use it to backfill chat_members when
+    # the bot lacks admin rights to receive chat_member updates.
+    user = update.effective_user
+    if user is not None and not user.is_bot:
+        try:
+            _record_chat_member(chat.id, user.id)
+        except Exception as e:
+            logger.debug(f"token member tracking failed: {e}")
+
+    chat_token = get_chat_token(chat.id)
+    if chat_token is None:
+        await update.message.reply_text(
+            "This chat has no reward token. The chat owner can create one with "
+            "/create_token <name> <interval>."
+        )
+        return
+    _cid, name, symbol, token_address, interval, _reward = chat_token
+    if not token_address:
+        await update.message.reply_text(
+            f"Token {name} ({symbol}) is still being deployed. Try again shortly."
+        )
+        return
+    await update.message.reply_text(
+        f"Name: {name}\n"
+        f"Symbol: {symbol}\n"
+        f"Address: {token_address}\n"
+        f"Rewards interval: {format_interval(interval)}\n"
+        f"{EXPLORER_URL}/address/{token_address}"
+    )
 
 
 async def track_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Record (chat_id, user_id) for any message in a group. Used by the payout
-    script to know who is a member of a chat that has its own reward token."""
+    """Record (chat_id, user_id) for any message in a group, and remove the
+    row when a service message reports the user left or was kicked. Used by
+    the payout pipeline to know who currently belongs to a chat that has its
+    own reward token."""
     chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or chat.type not in ("group", "supergroup"):
+        return
+
+    # Membership departures arrive as service messages on the same update.
+    if message is not None:
+        left = getattr(message, "left_chat_member", None)
+        if left is not None and not left.is_bot:
+            try:
+                _forget_chat_member(chat.id, left.id)
+                logger.info(
+                    "chat_members: removed user_id=%s from chat_id=%s (left/kicked via service msg)",
+                    left.id, chat.id,
+                )
+            except Exception as e:
+                logger.debug(f"forget_chat_member (left) failed: {e}")
+
+        new_members = getattr(message, "new_chat_members", None) or []
+        for member in new_members:
+            if member.is_bot:
+                continue
+            try:
+                _record_chat_member(chat.id, member.id)
+            except Exception as e:
+                logger.debug(f"record_chat_member (new) failed: {e}")
+
+    # Anyone whose message reached us is, by definition, currently in the chat.
     user = update.effective_user
-    if chat is None or user is None:
-        return
-    if chat.type not in ("group", "supergroup"):
-        return
-    if user.is_bot:
+    if user is None or user.is_bot:
         return
     try:
         _record_chat_member(chat.id, user.id)
     except Exception as e:
         logger.debug(f"track_chat_member failed: {e}")
+
+
+async def on_chat_member_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle `chat_member` updates -- fires for *every* membership status
+    transition in groups where the bot is admin, including silent leaves and
+    bans that never produce a visible service message. Required for the
+    payout filter to stay accurate when users quietly leave."""
+    cmu = update.chat_member
+    if cmu is None:
+        return
+    chat = cmu.chat
+    if chat.type not in ("group", "supergroup"):
+        return
+    user = cmu.new_chat_member.user
+    if user.is_bot:
+        return
+
+    new_status = cmu.new_chat_member.status
+    # Statuses that mean "currently in the chat".
+    present = {"creator", "administrator", "member", "restricted"}
+    try:
+        if new_status in present:
+            _record_chat_member(chat.id, user.id)
+        else:
+            # left, kicked, etc.
+            _forget_chat_member(chat.id, user.id)
+            logger.info(
+                "chat_members: removed user_id=%s from chat_id=%s (status=%s via chat_member update)",
+                user.id, chat.id, new_status,
+            )
+    except Exception as e:
+        logger.debug(f"on_chat_member_update failed: {e}")
+
+
+def _short_addr(addr: str | None) -> str:
+    if not addr:
+        return "?"
+    if len(addr) <= 12:
+        return addr
+    return f"{addr[:6]}...{addr[-4:]}"
+
+
+def _format_decimal_amount(value) -> str:
+    """bridge_requests.amount is a DECIMAL(_,18). Strip trailing zeros for display."""
+    s = str(value or "0")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
+
+
+def _bridge_tx_links(direction: str, source_tx: str, dest_tx: str | None) -> tuple[str, str | None]:
+    """Return (source_link, dest_link). Direction tells us which chain each tx is on."""
+    if direction == "sol_to_evm":
+        src = f"{SOLSCAN_URL}/tx/{source_tx}" if source_tx else ""
+        dst = f"{EXPLORER_URL}/tx/{dest_tx}" if dest_tx else None
+    else:  # evm_to_sol (and anything else falls back to this layout)
+        src = f"{EXPLORER_URL}/tx/{source_tx}" if source_tx else ""
+        dst = f"{SOLSCAN_URL}/tx/{dest_tx}" if dest_tx else None
+    return src, dst
+
+
+def _direction_label(direction: str) -> str:
+    return {
+        "sol_to_evm": "Solana → Cyberia",
+        "evm_to_sol": "Cyberia → Solana",
+    }.get(direction, direction)
+
+
+async def _announce_bridge_tick(bot) -> None:
+    """Find newly-completed bridge_requests and announce them in BRIDGE_ANNOUNCE_CHAT.
+
+    Advances `last_announced_bridge_id` only when send_message succeeds, so a
+    transient Telegram failure is retried on the next tick.
+    """
+    last_id = int(_kv_get("last_announced_bridge_id", "0") or "0")
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT id, direction, token, source_tx_hash, sender_address,
+                       recipient_address, amount, destination_tx_hash
+                FROM bridge_requests
+                WHERE status = 'completed'
+                  AND id > :last
+                ORDER BY id ASC
+                LIMIT 50
+            """),
+            {"last": last_id},
+        ).fetchall()
+
+    for row in rows:
+        (req_id, direction, token, source_tx, sender, recipient,
+         amount, dest_tx) = row
+        src_link, dst_link = _bridge_tx_links(direction, source_tx or "", dest_tx)
+        lines = [
+            f"🌉 Bridge: {_direction_label(direction)}",
+            f"Amount: {_format_decimal_amount(amount)} {token}",
+            f"From: {_short_addr(sender)}",
+            f"To: {_short_addr(recipient)}",
+        ]
+        if src_link:
+            lines.append(f"Source: {src_link}")
+        if dst_link:
+            lines.append(f"Destination: {dst_link}")
+        try:
+            await bot.send_message(
+                chat_id=BRIDGE_ANNOUNCE_CHAT,
+                text="\n".join(lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"announce_bridge: send failed for id={req_id}: {e}")
+            return
+        _kv_set("last_announced_bridge_id", str(req_id))
+        logger.info(f"announce_bridge: posted bridge id={req_id} ({direction})")
+
+
+async def bridge_announcer_loop(application: Application) -> None:
+    """Background loop that polls bridge_requests every BRIDGE_POLL_SECONDS."""
+    # Bootstrap: on a fresh install we skip historical completed bridges so the
+    # chat doesn't get spammed with the entire history on first run.
+    if _kv_get("last_announced_bridge_id") is None:
+        try:
+            with engine.connect() as conn:
+                max_id = conn.execute(
+                    text("SELECT COALESCE(MAX(id), 0) FROM bridge_requests WHERE status = 'completed'"),
+                ).scalar() or 0
+        except Exception as e:
+            logger.warning(f"bridge_announcer: bootstrap query failed: {e}")
+            max_id = 0
+        _kv_set("last_announced_bridge_id", str(max_id))
+        logger.info(f"bridge_announcer: bootstrapped last_announced_bridge_id={max_id}")
+
+    while True:
+        try:
+            await _announce_bridge_tick(application.bot)
+        except Exception as e:
+            logger.error(f"bridge_announcer_loop: {e}")
+        await asyncio.sleep(BRIDGE_POLL_SECONDS)
+
+
+# --- Ritual DEX swap announcer ---------------------------------------------
+
+# keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").
+# Normalize to "0x..." since hexbytes' `.hex()` adds the prefix in 1.x but not
+# in older releases, and eth_getLogs expects 0x-prefixed topic hex.
+_swap_topic_hex = Web3.keccak(
+    text="Swap(address,uint256,uint256,uint256,uint256,address)"
+).hex()
+SWAP_EVENT_TOPIC = "0x" + _swap_topic_hex.removeprefix("0x").removeprefix("0X")
+
+PAIR_ABI = [
+    {"inputs": [], "name": "token0",
+     "outputs": [{"name": "", "type": "address"}],
+     "stateMutability": "view", "type": "function"},
+    {"inputs": [], "name": "token1",
+     "outputs": [{"name": "", "type": "address"}],
+     "stateMutability": "view", "type": "function"},
+]
+ERC20_META_ABI = [
+    {"inputs": [], "name": "symbol",
+     "outputs": [{"name": "", "type": "string"}],
+     "stateMutability": "view", "type": "function"},
+    {"inputs": [], "name": "decimals",
+     "outputs": [{"name": "", "type": "uint8"}],
+     "stateMutability": "view", "type": "function"},
+]
+
+# Long-lived process: caching pair→tokens and token→(symbol,decimals) cuts the
+# RPC chatter from "4 calls per swap" to ~zero once the active set is warm.
+_pair_token_cache: dict[str, tuple[str, str]] = {}
+_token_meta_cache: dict[str, tuple[str, int]] = {}
+
+
+def _get_pair_tokens(w3: Web3, pair_addr: str) -> tuple[str, str] | None:
+    addr = Web3.to_checksum_address(pair_addr)
+    cached = _pair_token_cache.get(addr)
+    if cached is not None:
+        return cached
+    try:
+        pair = w3.eth.contract(address=addr, abi=PAIR_ABI)
+        t0 = pair.functions.token0().call()
+        t1 = pair.functions.token1().call()
+    except Exception as e:
+        logger.warning(f"swap_announcer: pair {addr} token0/1 failed: {e}")
+        return None
+    _pair_token_cache[addr] = (t0, t1)
+    return t0, t1
+
+
+def _get_token_meta(w3: Web3, token_addr: str) -> tuple[str, int]:
+    addr = Web3.to_checksum_address(token_addr)
+    cached = _token_meta_cache.get(addr)
+    if cached is not None:
+        return cached
+    c = w3.eth.contract(address=addr, abi=ERC20_META_ABI)
+    try:
+        sym = c.functions.symbol().call()
+    except Exception:
+        sym = addr[:6] + "..." + addr[-4:]
+    try:
+        dec = int(c.functions.decimals().call())
+    except Exception:
+        dec = 18
+    meta = (sym, dec)
+    _token_meta_cache[addr] = meta
+    return meta
+
+
+def _hex_no_prefix(value) -> str:
+    if isinstance(value, (bytes, bytearray)):
+        return value.hex()
+    s = str(value)
+    if s.startswith("0x") or s.startswith("0X"):
+        return s[2:]
+    return s
+
+
+def _decode_topic_address(topic) -> str:
+    h = _hex_no_prefix(topic).lower()
+    return Web3.to_checksum_address("0x" + h[-40:])
+
+
+def _decode_swap_data(data) -> tuple[int, int, int, int]:
+    """V2 Swap data: four uint256 words — amount0In, amount1In, amount0Out, amount1Out."""
+    h = _hex_no_prefix(data)
+    return (
+        int(h[0:64], 16),
+        int(h[64:128], 16),
+        int(h[128:192], 16),
+        int(h[192:256], 16),
+    )
+
+
+FACTORY_GET_PAIR_ABI = [{
+    "inputs": [
+        {"name": "tokenA", "type": "address"},
+        {"name": "tokenB", "type": "address"},
+    ],
+    "name": "getPair",
+    "outputs": [{"name": "pair", "type": "address"}],
+    "stateMutability": "view", "type": "function",
+}]
+
+PAIR_RESERVES_ABI = [{
+    "inputs": [], "name": "getReserves",
+    "outputs": [
+        {"name": "reserve0", "type": "uint112"},
+        {"name": "reserve1", "type": "uint112"},
+        {"name": "blockTimestampLast", "type": "uint32"},
+    ],
+    "stateMutability": "view", "type": "function",
+}]
+
+# token_addr_lower → (usd_price | None, fetched_at_ts). `None` means "looked
+# up but no priceable route" — cached to avoid retrying every block.
+_token_usd_price_cache: dict[str, tuple[float | None, float]] = {}
+_TOKEN_USD_TTL_SECONDS = 300.0
+
+
+def _get_token_usd_price(w3: Web3, token_addr: str, _depth: int = 0) -> float | None:
+    """USD price of one whole token. Anchors return 1.0; otherwise walks at
+    most one hop via a relay token to reach an anchor. Cached for 5 min."""
+    addr = token_addr.lower()
+    if addr in USD_ANCHORS:
+        return 1.0
+    now = time.time()
+    cached = _token_usd_price_cache.get(addr)
+    if cached is not None and now - cached[1] < _TOKEN_USD_TTL_SECONDS:
+        return cached[0]
+    if _depth >= 2:
+        return None
+
+    factory = w3.eth.contract(
+        address=Web3.to_checksum_address(RITUAL_V2_FACTORY), abi=FACTORY_GET_PAIR_ABI
+    )
+
+    def price_via(target_addr: str, target_price_usd: float) -> float | None:
+        try:
+            pair_addr = factory.functions.getPair(
+                Web3.to_checksum_address(token_addr),
+                Web3.to_checksum_address(target_addr),
+            ).call()
+        except Exception:
+            return None
+        if not pair_addr or int(pair_addr, 16) == 0:
+            return None
+        try:
+            pair = w3.eth.contract(
+                address=Web3.to_checksum_address(pair_addr), abi=PAIR_RESERVES_ABI
+            )
+            reserves = pair.functions.getReserves().call()
+        except Exception:
+            return None
+        tokens = _get_pair_tokens(w3, pair_addr)
+        if tokens is None:
+            return None
+        t0, _t1 = tokens
+        _, dec_token = _get_token_meta(w3, token_addr)
+        _, dec_target = _get_token_meta(w3, target_addr)
+        if t0.lower() == addr:
+            r_token, r_target = reserves[0], reserves[1]
+        else:
+            r_token, r_target = reserves[1], reserves[0]
+        if r_token <= 0 or r_target <= 0:
+            return None
+        return (r_target / 10**dec_target) / (r_token / 10**dec_token) * target_price_usd
+
+    # Direct stable pair.
+    for anchor in USD_ANCHORS:
+        p = price_via(anchor, 1.0)
+        if p is not None and p > 0:
+            _token_usd_price_cache[addr] = (p, now)
+            return p
+
+    # One hop via a relay.
+    for relay in PRICE_RELAY_TOKENS:
+        if relay == addr:
+            continue
+        relay_price = _get_token_usd_price(w3, relay, _depth=_depth + 1)
+        if relay_price is None or relay_price <= 0:
+            continue
+        p = price_via(relay, relay_price)
+        if p is not None and p > 0:
+            _token_usd_price_cache[addr] = (p, now)
+            return p
+
+    _token_usd_price_cache[addr] = (None, now)
+    return None
+
+
+def _swap_usd_volume(
+    w3: Web3,
+    in_addr: str, in_amt: int, in_dec: int,
+    out_addr: str, out_amt: int, out_dec: int,
+) -> float | None:
+    """USD value of a swap. Prefers pricing the input side (closer to user
+    intent), falls back to the output side. Returns None if neither can be
+    priced — caller decides whether to allow through."""
+    in_price = _get_token_usd_price(w3, in_addr)
+    if in_price is not None:
+        return (in_amt / 10**in_dec) * in_price
+    out_price = _get_token_usd_price(w3, out_addr)
+    if out_price is not None:
+        return (out_amt / 10**out_dec) * out_price
+    return None
+
+
+def _liquidity_usd_volume(
+    w3: Web3,
+    t0_addr: str, t1_addr: str,
+    dec0: int, dec1: int,
+    amount0: int, amount1: int,
+) -> float | None:
+    """USD value of a Mint/Burn. Both sides equal in a constant-product pool,
+    so if only one side can be priced we double it."""
+    p0 = _get_token_usd_price(w3, t0_addr)
+    p1 = _get_token_usd_price(w3, t1_addr)
+    val0 = (amount0 / 10**dec0) * p0 if p0 is not None else None
+    val1 = (amount1 / 10**dec1) * p1 if p1 is not None else None
+    if val0 is None and val1 is None:
+        return None
+    if val0 is None:
+        return val1 * 2  # type: ignore[operator]
+    if val1 is None:
+        return val0 * 2
+    return val0 + val1
+
+
+def _format_token_amount(amount: int, decimals: int) -> str:
+    if amount == 0:
+        return "0"
+    if decimals <= 0:
+        return str(amount)
+    # 6 fractional digits is enough for human-readable; trim trailing zeros.
+    s = f"{amount / 10**decimals:.6f}"
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
+
+
+def _router_topic_hex() -> str:
+    return "0x" + RITUAL_V2_ROUTER.lower().replace("0x", "").rjust(64, "0")
+
+
+def _decode_data_words(data, n: int) -> list[int]:
+    """Decode the first `n` 32-byte words of an event's data blob to ints."""
+    h = _hex_no_prefix(data)
+    return [int(h[i * 64:(i + 1) * 64], 16) for i in range(n)]
+
+
+def _get_block_cursor(key: str) -> tuple[int, int] | None:
+    """Read a `block:log_index` cursor stored in bot_kv under `key`."""
+    raw = _kv_get(key)
+    if raw is None:
+        return None
+    try:
+        block_str, idx_str = raw.split(":", 1)
+        return int(block_str), int(idx_str)
+    except Exception:
+        return None
+
+
+def _set_block_cursor(key: str, block: int, log_index: int) -> None:
+    _kv_set(key, f"{block}:{log_index}")
+
+
+def _get_swap_cursor() -> tuple[int, int] | None:
+    return _get_block_cursor("last_announced_swap_cursor")
+
+
+def _set_swap_cursor(block: int, log_index: int) -> None:
+    _set_block_cursor("last_announced_swap_cursor", block, log_index)
+
+
+async def _announce_swap_tick(bot) -> None:
+    """Scan new Swap events from the Ritual V2 router and post one msg per swap.
+
+    Cursor is stored as `block:log_index` so a mid-tick Telegram failure
+    resumes exactly where it stopped without duplicating earlier sends.
+    """
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    try:
+        latest = w3.eth.block_number
+    except Exception as e:
+        logger.error(f"swap_announcer: block_number failed: {e}")
+        return
+
+    cursor = _get_swap_cursor()
+    if cursor is None:
+        # Don't backfill historical swaps on first run.
+        _set_swap_cursor(latest, 10**9)
+        logger.info(f"swap_announcer: bootstrapped cursor to head block={latest}")
+        return
+    cur_block, cur_idx = cursor
+
+    if cur_block > latest:
+        return
+
+    end = min(cur_block + SWAP_MAX_BLOCK_RANGE - 1, latest)
+
+    try:
+        logs = w3.eth.get_logs({
+            "fromBlock": cur_block,
+            "toBlock": end,
+            "topics": [SWAP_EVENT_TOPIC, _router_topic_hex()],
+        })
+    except Exception as e:
+        logger.error(f"swap_announcer: get_logs {cur_block}..{end}: {e}")
+        return
+
+    for log in logs:
+        blk = int(log["blockNumber"])
+        idx = int(log["logIndex"])
+        if (blk, idx) <= (cur_block, cur_idx):
+            continue
+
+        try:
+            pair_addr = log["address"]
+            tokens = _get_pair_tokens(w3, pair_addr)
+            if not tokens:
+                _set_swap_cursor(blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            t0, t1 = tokens
+            sym0, dec0 = _get_token_meta(w3, t0)
+            sym1, dec1 = _get_token_meta(w3, t1)
+            a0in, a1in, a0out, a1out = _decode_swap_data(log["data"])
+
+            if a0in > 0 and a1out > 0:
+                in_addr, in_sym, in_amt, in_dec = t0, sym0, a0in, dec0
+                out_addr, out_sym, out_amt, out_dec = t1, sym1, a1out, dec1
+            elif a1in > 0 and a0out > 0:
+                in_addr, in_sym, in_amt, in_dec = t1, sym1, a1in, dec1
+                out_addr, out_sym, out_amt, out_dec = t0, sym0, a0out, dec0
+            else:
+                _set_swap_cursor(blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+
+            # Skip dust swaps. Known-USD volume below the threshold is dropped;
+            # unprice-able swaps pass through (better than going silent on novel
+            # pairs that the price walker can't reach yet).
+            if MIN_ANNOUNCE_USD > 0:
+                usd = _swap_usd_volume(
+                    w3, in_addr, in_amt, in_dec, out_addr, out_amt, out_dec
+                )
+                if usd is not None and usd < MIN_ANNOUNCE_USD:
+                    logger.info(
+                        f"swap_announcer: skip block={blk} idx={idx} "
+                        f"usd={usd:.4f} < {MIN_ANNOUNCE_USD}"
+                    )
+                    _set_swap_cursor(blk, idx)
+                    cur_block, cur_idx = blk, idx
+                    continue
+
+            to_addr = _decode_topic_address(log["topics"][2])
+            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            text_lines = [
+                "🔄 Swap on Ritual",
+                f"{_format_token_amount(in_amt, in_dec)} {in_sym} → "
+                f"{_format_token_amount(out_amt, out_dec)} {out_sym}",
+                f"User: {_short_addr(to_addr)}",
+                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+            ]
+        except Exception as e:
+            logger.error(f"swap_announcer: decode failed block={blk} idx={idx}: {e}")
+            _set_swap_cursor(blk, idx)
+            cur_block, cur_idx = blk, idx
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=SWAP_ANNOUNCE_CHAT,
+                text="\n".join(text_lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"swap_announcer: send failed block={blk} idx={idx}: {e}")
+            return  # leave cursor at last successful; retry next tick
+
+        _set_swap_cursor(blk, idx)
+        cur_block, cur_idx = blk, idx
+        logger.info(f"swap_announcer: posted swap block={blk} idx={idx} tx={tx_hash}")
+
+    # Empty range, or fully drained — advance past the scanned window so we
+    # don't refetch the same blocks indefinitely.
+    if end > cur_block:
+        _set_swap_cursor(end, 10**9)
+
+
+async def swap_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_swap_tick(application.bot)
+        except Exception as e:
+            logger.error(f"swap_announcer_loop: {e}")
+        await asyncio.sleep(SWAP_POLL_SECONDS)
+
+
+# --- Ritual DEX liquidity announcer (V2 Mint/Burn) -------------------------
+
+def _event_topic(signature: str) -> str:
+    """0x-prefixed keccak topic for an event signature. Normalizes the prefix
+    since hexbytes' `.hex()` adds `0x` in 1.x but not in older releases."""
+    return "0x" + Web3.keccak(text=signature).hex().removeprefix("0x").removeprefix("0X")
+
+
+# keccak256("Mint(address,uint256,uint256)") / "Burn(address,uint256,uint256,address)".
+LP_MINT_TOPIC = _event_topic("Mint(address,uint256,uint256)")
+LP_BURN_TOPIC = _event_topic("Burn(address,uint256,uint256,address)")
+
+# Cache tx hash → initiating EOA so re-scanned/multi-event txs cost one lookup.
+_tx_sender_cache: dict[str, str] = {}
+
+
+def _get_tx_sender(w3: Web3, tx_hash: str) -> str | None:
+    cached = _tx_sender_cache.get(tx_hash)
+    if cached is not None:
+        return cached
+    try:
+        tx = w3.eth.get_transaction(tx_hash)
+        sender = Web3.to_checksum_address(tx["from"])
+    except Exception as e:
+        logger.warning(f"liquidity_announcer: get_transaction {tx_hash} failed: {e}")
+        return None
+    _tx_sender_cache[tx_hash] = sender
+    return sender
+
+
+async def _announce_liquidity_tick(bot) -> None:
+    """Scan V2 Mint/Burn events routed through the Ritual router and announce
+    each add/remove. Mirrors the swap announcer's cursor handling."""
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    try:
+        latest = w3.eth.block_number
+    except Exception as e:
+        logger.error(f"liquidity_announcer: block_number failed: {e}")
+        return
+
+    cursor = _get_block_cursor("last_announced_liq_cursor")
+    if cursor is None:
+        _set_block_cursor("last_announced_liq_cursor", latest, 10**9)
+        logger.info(f"liquidity_announcer: bootstrapped cursor to head block={latest}")
+        return
+    cur_block, cur_idx = cursor
+    if cur_block > latest:
+        return
+    end = min(cur_block + LIQUIDITY_MAX_BLOCK_RANGE - 1, latest)
+
+    try:
+        logs = w3.eth.get_logs({
+            "fromBlock": cur_block,
+            "toBlock": end,
+            "topics": [[LP_MINT_TOPIC, LP_BURN_TOPIC], _router_topic_hex()],
+        })
+    except Exception as e:
+        logger.error(f"liquidity_announcer: get_logs {cur_block}..{end}: {e}")
+        return
+
+    for log in sorted(logs, key=lambda l: (int(l["blockNumber"]), int(l["logIndex"]))):
+        blk = int(log["blockNumber"])
+        idx = int(log["logIndex"])
+        if (blk, idx) <= (cur_block, cur_idx):
+            continue
+
+        try:
+            topic0 = "0x" + _hex_no_prefix(log["topics"][0]).lower()
+            is_add = topic0 == LP_MINT_TOPIC.lower()
+            tokens = _get_pair_tokens(w3, log["address"])
+            if not tokens:
+                _set_block_cursor("last_announced_liq_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            t0, t1 = tokens
+            sym0, dec0 = _get_token_meta(w3, t0)
+            sym1, dec1 = _get_token_meta(w3, t1)
+            # Both Mint and Burn carry (amount0, amount1) as the first two words.
+            words = _decode_data_words(log["data"], 2)
+            amount0, amount1 = words[0], words[1]
+
+            if MIN_ANNOUNCE_USD > 0:
+                usd = _liquidity_usd_volume(
+                    w3, t0, t1, dec0, dec1, amount0, amount1
+                )
+                if usd is not None and usd < MIN_ANNOUNCE_USD:
+                    logger.info(
+                        f"liquidity_announcer: skip block={blk} idx={idx} "
+                        f"usd={usd:.4f} < {MIN_ANNOUNCE_USD}"
+                    )
+                    _set_block_cursor("last_announced_liq_cursor", blk, idx)
+                    cur_block, cur_idx = blk, idx
+                    continue
+
+            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            # Burn carries the LP recipient in topics[2]; for Mint we fall back
+            # to the tx initiator (the EOA that called the router).
+            if not is_add and len(log["topics"]) > 2:
+                user = _decode_topic_address(log["topics"][2])
+            else:
+                user = _get_tx_sender(w3, tx_hash) or "?"
+
+            verb = "added" if is_add else "removed"
+            sign = "+" if is_add else "-"
+            text_lines = [
+                f"💧 Liquidity {verb} on Ritual",
+                f"{sign}{_format_token_amount(amount0, dec0)} {sym0} + "
+                f"{sign}{_format_token_amount(amount1, dec1)} {sym1}",
+                f"User: {_short_addr(user)}",
+                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+            ]
+        except Exception as e:
+            logger.error(f"liquidity_announcer: decode failed block={blk} idx={idx}: {e}")
+            _set_block_cursor("last_announced_liq_cursor", blk, idx)
+            cur_block, cur_idx = blk, idx
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=LIQUIDITY_ANNOUNCE_CHAT,
+                text="\n".join(text_lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"liquidity_announcer: send failed block={blk} idx={idx}: {e}")
+            return
+
+        _set_block_cursor("last_announced_liq_cursor", blk, idx)
+        cur_block, cur_idx = blk, idx
+        logger.info(f"liquidity_announcer: posted {verb} block={blk} idx={idx} tx={tx_hash}")
+
+    if end > cur_block:
+        _set_block_cursor("last_announced_liq_cursor", end, 10**9)
+
+
+async def liquidity_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_liquidity_tick(application.bot)
+        except Exception as e:
+            logger.error(f"liquidity_announcer_loop: {e}")
+        await asyncio.sleep(LIQUIDITY_POLL_SECONDS)
+
+
+# --- Lending announcer (Compound-style markets) ----------------------------
+
+# Market event topics. Note Mint(address,uint256,uint256) collides with the V2
+# pair Mint signature, but the two announcers filter disjoint address sets
+# (lending markets vs. router-routed pairs), so they never cross-fire.
+LEND_MINT_TOPIC = _event_topic("Mint(address,uint256,uint256)")
+LEND_REDEEM_TOPIC = _event_topic("Redeem(address,uint256,uint256)")
+LEND_BORROW_TOPIC = _event_topic("Borrow(address,uint256,uint256,uint256)")
+LEND_REPAY_TOPIC = _event_topic("RepayBorrow(address,address,uint256,uint256,uint256)")
+
+_LEND_ACTION = {
+    LEND_MINT_TOPIC.lower():   ("supplied", "🏦"),
+    LEND_REDEEM_TOPIC.lower(): ("withdrew", "🏦"),
+    LEND_BORROW_TOPIC.lower(): ("borrowed", "💸"),
+    LEND_REPAY_TOPIC.lower():  ("repaid",   "💵"),
+}
+
+GET_ALL_MARKETS_ABI = [{
+    "inputs": [], "name": "getAllMarkets",
+    "outputs": [{"name": "", "type": "address[]"}],
+    "stateMutability": "view", "type": "function",
+}]
+UNDERLYING_ABI = [{
+    "inputs": [], "name": "underlying",
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view", "type": "function",
+}]
+
+# market address (checksummed) → underlying ERC20 address.
+_market_underlying_cache: dict[str, str] = {}
+
+
+def _get_lending_markets(w3: Web3) -> list[str]:
+    c = w3.eth.contract(
+        address=Web3.to_checksum_address(LENDING_COMPTROLLER), abi=GET_ALL_MARKETS_ABI
+    )
+    return [Web3.to_checksum_address(m) for m in c.functions.getAllMarkets().call()]
+
+
+def _get_market_underlying(w3: Web3, market_addr: str) -> str | None:
+    addr = Web3.to_checksum_address(market_addr)
+    cached = _market_underlying_cache.get(addr)
+    if cached is not None:
+        return cached
+    try:
+        c = w3.eth.contract(address=addr, abi=UNDERLYING_ABI)
+        underlying = Web3.to_checksum_address(c.functions.underlying().call())
+    except Exception as e:
+        logger.warning(f"lending_announcer: underlying() failed for {addr}: {e}")
+        return None
+    _market_underlying_cache[addr] = underlying
+    return underlying
+
+
+async def _announce_lending_tick(bot) -> None:
+    """Scan supply/withdraw/borrow/repay events from every lending market and
+    announce them. Amounts are in underlying-token units."""
+    if not LENDING_COMPTROLLER:
+        return
+
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    try:
+        latest = w3.eth.block_number
+    except Exception as e:
+        logger.error(f"lending_announcer: block_number failed: {e}")
+        return
+
+    cursor = _get_block_cursor("last_announced_lend_cursor")
+    if cursor is None:
+        _set_block_cursor("last_announced_lend_cursor", latest, 10**9)
+        logger.info(f"lending_announcer: bootstrapped cursor to head block={latest}")
+        return
+    cur_block, cur_idx = cursor
+    if cur_block > latest:
+        return
+    end = min(cur_block + LENDING_MAX_BLOCK_RANGE - 1, latest)
+
+    try:
+        markets = _get_lending_markets(w3)
+    except Exception as e:
+        logger.error(f"lending_announcer: getAllMarkets failed: {e}")
+        return
+    if not markets:
+        return
+
+    try:
+        logs = w3.eth.get_logs({
+            "fromBlock": cur_block,
+            "toBlock": end,
+            "address": markets,
+            "topics": [[LEND_MINT_TOPIC, LEND_REDEEM_TOPIC, LEND_BORROW_TOPIC, LEND_REPAY_TOPIC]],
+        })
+    except Exception as e:
+        logger.error(f"lending_announcer: get_logs {cur_block}..{end}: {e}")
+        return
+
+    for log in sorted(logs, key=lambda l: (int(l["blockNumber"]), int(l["logIndex"]))):
+        blk = int(log["blockNumber"])
+        idx = int(log["logIndex"])
+        if (blk, idx) <= (cur_block, cur_idx):
+            continue
+
+        try:
+            topic0 = "0x" + _hex_no_prefix(log["topics"][0]).lower()
+            action = _LEND_ACTION.get(topic0)
+            if action is None:
+                _set_block_cursor("last_announced_lend_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            verb, emoji = action
+
+            underlying = _get_market_underlying(w3, log["address"])
+            if underlying is None:
+                _set_block_cursor("last_announced_lend_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            sym, dec = _get_token_meta(w3, underlying)
+
+            # First data word is always the underlying amount (mint/redeem/borrow/
+            # repay all lead with it). The acting user is the first indexed arg,
+            # except RepayBorrow where topics[1]=payer and topics[2]=borrower.
+            amount = _decode_data_words(log["data"], 1)[0]
+            if topic0 == LEND_REPAY_TOPIC.lower() and len(log["topics"]) > 2:
+                user = _decode_topic_address(log["topics"][2])
+            else:
+                user = _decode_topic_address(log["topics"][1])
+
+            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            text_lines = [
+                f"{emoji} Lending: {verb} {_format_token_amount(amount, dec)} {sym}",
+                f"User: {_short_addr(user)}",
+                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+            ]
+        except Exception as e:
+            logger.error(f"lending_announcer: decode failed block={blk} idx={idx}: {e}")
+            _set_block_cursor("last_announced_lend_cursor", blk, idx)
+            cur_block, cur_idx = blk, idx
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=LENDING_ANNOUNCE_CHAT,
+                text="\n".join(text_lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"lending_announcer: send failed block={blk} idx={idx}: {e}")
+            return
+
+        _set_block_cursor("last_announced_lend_cursor", blk, idx)
+        cur_block, cur_idx = blk, idx
+        logger.info(f"lending_announcer: posted {verb} block={blk} idx={idx} tx={tx_hash}")
+
+    if end > cur_block:
+        _set_block_cursor("last_announced_lend_cursor", end, 10**9)
+
+
+async def lending_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_lending_tick(application.bot)
+        except Exception as e:
+            logger.error(f"lending_announcer_loop: {e}")
+        await asyncio.sleep(LENDING_POLL_SECONDS)
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -801,9 +2406,12 @@ async def post_init(application: Application):
         [
             BotCommand("start", "Start receiving TG"),
             BotCommand("help", "Show available commands"),
-            BotCommand("set_wallet", "Set your wallet address"),
-            BotCommand("stop", "Stop receiving TG"),
-            BotCommand("balance", "Check your TG balance"),
+            BotCommand("set_wallet", "Link wallet (asks for address if omitted)"),
+            BotCommand("unset_wallet", "Unlink your wallet (keep pending)"),
+            BotCommand("wallet", "Show your linked wallet"),
+            BotCommand("balance", "Show TG, chat tokens, and pending rewards"),
+            BotCommand("token", "Show this chat's reward token"),
+            BotCommand("cancel", "Cancel an interactive prompt"),
             BotCommand("github", "Link GitHub for GITHUB airdrop"),
             BotCommand("website", "Open the project website"),
             BotCommand("create_token", "(admins) Create a chat reward token"),
@@ -812,6 +2420,36 @@ async def post_init(application: Application):
         ]
     )
     logger.info("Bot commands published to Telegram")
+
+    # Background loop that announces successful bridge txs in the public chat.
+    application.create_task(bridge_announcer_loop(application))
+    logger.info(
+        f"Bridge announcer started: chat={BRIDGE_ANNOUNCE_CHAT} interval={BRIDGE_POLL_SECONDS}s"
+    )
+
+    # Background loop that announces Ritual DEX swaps in the public chat.
+    application.create_task(swap_announcer_loop(application))
+    logger.info(
+        f"Swap announcer started: chat={SWAP_ANNOUNCE_CHAT} "
+        f"router={RITUAL_V2_ROUTER} interval={SWAP_POLL_SECONDS}s"
+    )
+
+    # Background loop that announces Ritual DEX liquidity add/remove.
+    application.create_task(liquidity_announcer_loop(application))
+    logger.info(
+        f"Liquidity announcer started: chat={LIQUIDITY_ANNOUNCE_CHAT} "
+        f"router={RITUAL_V2_ROUTER} interval={LIQUIDITY_POLL_SECONDS}s"
+    )
+
+    # Background loop that announces lending supply/withdraw/borrow/repay.
+    if LENDING_COMPTROLLER:
+        application.create_task(lending_announcer_loop(application))
+        logger.info(
+            f"Lending announcer started: chat={LENDING_ANNOUNCE_CHAT} "
+            f"comptroller={LENDING_COMPTROLLER} interval={LENDING_POLL_SECONDS}s"
+        )
+    else:
+        logger.info("Lending announcer disabled: LENDING_COMPTROLLER not set")
 
 
 def run_dispatcher():
@@ -837,13 +2475,36 @@ def run_dispatcher():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("set_wallet", set_wallet_command))
-    application.add_handler(CommandHandler("stop", stop_command))
+    application.add_handler(CommandHandler("unset_wallet", unset_wallet_command))
+    application.add_handler(CommandHandler("wallet", wallet_command))
+    application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CommandHandler("balance", balance_command))
+    application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("github", github_command))
     application.add_handler(CommandHandler("website", website_command))
     application.add_handler(CommandHandler("create_token", create_token_command))
     application.add_handler(CommandHandler("set_rewards_interval", set_rewards_interval_command))
     application.add_handler(CommandHandler("reward_now", reward_now_command))
+    application.add_handler(CommandHandler("whois", whois_command))
+
+    # Capture the "next message is the address" reply after a bare /set_wallet
+    # in DMs. Restricted to private chats so the bot never hijacks ordinary
+    # group messages.
+    application.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND,
+            pending_input_handler,
+        )
+    )
+
+    # Capture name/interval replies after a bare /create_token in groups.
+    application.add_handler(
+        MessageHandler(
+            (filters.ChatType.GROUPS | filters.ChatType.SUPERGROUP)
+            & filters.TEXT & ~filters.COMMAND,
+            pending_create_token_handler,
+        )
+    )
 
     # Track chat membership on any group message, including commands.
     application.add_handler(
@@ -854,12 +2515,19 @@ def run_dispatcher():
         group=1,
     )
 
+    # Catch silent leaves/kicks and joins. Requires the bot to be admin in the
+    # chat to receive these updates from Telegram. Without admin rights only
+    # service messages (handled above) will fire.
+    application.add_handler(
+        ChatMemberHandler(on_chat_member_update, ChatMemberHandler.CHAT_MEMBER)
+    )
+
     application.add_error_handler(error_handler)
 
     logger.info("Bot started, polling...")
 
     try:
-        application.run_polling(allowed_updates=["message"])
+        application.run_polling(allowed_updates=["message", "chat_member"])
     except Exception as e:
         logger.error(f"Polling error: {e}")
         raise

@@ -3,16 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\BridgeRequest;
+use App\Services\BridgeRelayerService;
 use App\Services\CataasApiService;
 use App\Services\CyberPriceService;
 use App\Services\YesNoApiService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 class ApiController extends Controller
 {
-    public function index(YesNoApiService $yesNo, CataasApiService $cataas, CyberPriceService $cyber)
+    public function index(YesNoApiService $yesNo, CataasApiService $cataas, CyberPriceService $cyber, Request $request)
     {
         $price = $cyber->get();
 
@@ -28,9 +30,21 @@ class ApiController extends Controller
                 ]);
         }
 
-        return Inertia::render('Welcome', [
+        $useNewUx = config('bridge.new_ux', true) && ! $request->boolean('legacy');
+
+        return Inertia::render('Bridge', [
             'price' => $price,
             'bridgeHistory' => $bridgeHistory,
+            'useNewUx' => $useNewUx,
+            'bridgeRelayerEvm' => app(BridgeRelayerService::class)->evmAddress(),
+            'bridgeFeeConfig' => [
+                'flatUsd' => (float) config('bridge.fee.flat_usd', 0.1),
+                'rateBps' => (int) config('bridge.fee.rate_bps', 0),
+            ],
+            'bridgeGasDrop' => [
+                'enabled' => (bool) config('bridge.gas_drop.enabled', true),
+                'amount' => (string) config('bridge.gas_drop.amount_cyber', '0.01'),
+            ],
         ]);
     }
 

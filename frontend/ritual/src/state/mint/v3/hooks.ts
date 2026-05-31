@@ -42,7 +42,7 @@ import { FeeAmount } from 'v3lib/utils';
 import { useCurrencyBalances } from 'state/wallet/v3/hooks';
 import { useCurrencyBalance, useTokenBalance } from 'state/wallet/hooks';
 import { tryParseAmount } from 'state/swap/v3/hooks';
-import { IPresetArgs } from 'pages/PoolsPage/v3/SupplyLiquidityV3/components/PresetRanges';
+import { IPresetArgs, IFeeTier } from './types';
 import { GlobalConst, UnipilotVaults } from 'constants/index';
 import { Interface, formatUnits, parseUnits } from 'ethers/lib/utils';
 import {
@@ -64,7 +64,6 @@ import { useMultipleContractSingleData } from 'state/multicall/v3/hooks';
 import UNIPILOT_VAULT_ABI from 'constants/abis/unipilot-vault.json';
 import DEFIEDGE_STRATEGY_ABI from 'constants/abis/defiedge-strategy.json';
 import { getConfig } from 'config/index';
-import { IFeeTier } from 'pages/PoolsPage/v3/SupplyLiquidityV3/containers/SelectFeeTier';
 import { useSteerVaults } from 'hooks/v3/useSteerData';
 import { useQuery } from '@tanstack/react-query';
 import { useIsV4 } from 'state/application/hooks';

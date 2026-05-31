@@ -23,7 +23,9 @@ class DaoController extends Controller
             'dao' => $dao,
             'proposals' => $dao->proposals()
                 ->with(['user', 'votes'])
-                ->withCount(['comments', 'votesFor', 'votesAgainst'])
+                ->withCount(['comments'])
+                ->withSum('votesFor as power_for', 'voting_power')
+                ->withSum('votesAgainst as power_against', 'voting_power')
                 ->latest()
                 ->get(),
         ]);

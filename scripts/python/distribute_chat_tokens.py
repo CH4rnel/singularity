@@ -67,8 +67,6 @@ def _parse_ts(value):
 
 
 def distribute():
-    logger.info("Starting chat-token distribution")
-
     with engine.connect() as conn:
         tokens = conn.execute(
             text("""
@@ -80,10 +78,10 @@ def distribute():
         ).fetchall()
 
     if not tokens:
-        logger.info("No chat tokens configured")
         return
 
     now = datetime.now(timezone.utc)
+    started = False
 
     for chat_id, name, symbol, token_address, interval, reward_amount, last_payout_at in tokens:
         last = _parse_ts(last_payout_at)
@@ -94,6 +92,11 @@ def distribute():
             )
             continue
 
+        # Two cohorts:
+        #   wallets  -- chat members with a linked wallet (mint on-chain now)
+        #   pending  -- chat members without a wallet (credit pending_rewards
+        #               so they can claim everything as soon as they /set_wallet)
+        # `chat_members` is maintained by the bot, `tg_wallets` is global.
         with engine.connect() as conn:
             wallets = conn.execute(
                 text("""
@@ -104,16 +107,56 @@ def distribute():
                 """),
                 {"c": chat_id},
             ).fetchall()
+            pending_members = conn.execute(
+                text("""
+                    SELECT cm.user_id
+                    FROM chat_members cm
+                    LEFT JOIN tg_wallets w ON w.user_id = cm.user_id
+                    WHERE cm.chat_id = :c AND w.user_id IS NULL
+                """),
+                {"c": chat_id},
+            ).fetchall()
+
+        amount = int(reward_amount)
+
+        # Credit pending balances first; this is cheap and unconditional, so it
+        # happens even if the on-chain mint half later fails.
+        if pending_members:
+            with engine.begin() as conn:
+                for (uid,) in pending_members:
+                    conn.execute(
+                        text("""
+                            INSERT INTO pending_rewards (chat_id, user_id, amount, updated_at)
+                            VALUES (:c, :u, :amt, datetime('now'))
+                            ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                                amount = CAST(CAST(amount AS INTEGER) + :amt_int AS TEXT),
+                                updated_at = datetime('now')
+                        """),
+                        {
+                            "c": chat_id,
+                            "u": uid,
+                            "amt": str(amount),
+                            "amt_int": amount,
+                        },
+                    )
+            logger.info(
+                "chat %s (%s): credited pending %s to %d wallet-less members",
+                chat_id, symbol, reward_amount, len(pending_members),
+            )
 
         if not wallets:
-            logger.info("chat %s (%s): no wallets registered, skipping", chat_id, symbol)
-            # still bump timestamp so we do not re-evaluate every second for nothing
+            # Bump timestamp so we do not re-evaluate every second; pending was
+            # already credited above (if any).
             with engine.begin() as conn:
                 conn.execute(
                     text("UPDATE chat_tokens SET last_payout_at = :t WHERE chat_id = :c"),
                     {"t": now.strftime("%Y-%m-%d %H:%M:%S"), "c": chat_id},
                 )
             continue
+
+        if not started:
+            logger.info("Starting chat-token distribution")
+            started = True
 
         logger.info(
             "chat %s (%s): minting to %d wallets (%s each)",
@@ -123,7 +166,7 @@ def distribute():
         contract = w3.eth.contract(
             address=Web3.to_checksum_address(token_address), abi=CHAT_TOKEN_ABI
         )
-        amount = int(reward_amount)
+        # `amount` is already set above (same int(reward_amount) used for pending).
         nonce = w3.eth.get_transaction_count(account.address, "pending")
         success_count = 0
         failed_count = 0
@@ -188,7 +231,8 @@ def distribute():
             failed_count,
         )
 
-    logger.info("Distribution complete")
+    if started:
+        logger.info("Distribution complete")
 
 
 if __name__ == "__main__":

@@ -40,19 +40,24 @@ const useFindBestRoute = () => {
         (isExactIn ? inputCurrency : outputCurrency) ?? undefined,
       )
     : undefined;
-  const bestTradeExactIn = useTradeExactIn(
+  const bestTradeExactInResult = useTradeExactIn(
     isExactIn ? parsedAmount : undefined,
     outputCurrency ?? undefined,
     swapDelay,
     onSetSwapDelay,
   );
-  const bestTradeExactOut = useTradeExactOut(
+  const bestTradeExactOutResult = useTradeExactOut(
     inputCurrency ?? undefined,
     !isExactIn ? parsedAmount : undefined,
     swapDelay,
     onSetSwapDelay,
   );
+  const bestTradeExactIn = bestTradeExactInResult.trade;
+  const bestTradeExactOut = bestTradeExactOutResult.trade;
   const v2Trade = isExactIn ? bestTradeExactIn : bestTradeExactOut;
+  const v2TradeLoading = isExactIn
+    ? bestTradeExactInResult.loading
+    : bestTradeExactOutResult.loading;
 
   // Get the current router the trade will be going through
   const currentSmartRouter: SmartRouter = bestRoute.smartRouter;
@@ -71,7 +76,7 @@ const useFindBestRoute = () => {
 
   // To not cause a call on every user input the code will be executed when the delay is complete
   if (swapDelay !== SwapDelay.SWAP_COMPLETE) {
-    return { v2Trade, bestTradeExactIn, bestTradeExactOut };
+    return { v2Trade, bestTradeExactIn, bestTradeExactOut, v2TradeLoading };
   }
   if (bonusRouterDisabled) {
     onBestRoute({
@@ -79,10 +84,10 @@ const useFindBestRoute = () => {
       smartRouter: currentSmartRouter,
     });
     onSetSwapDelay(SwapDelay.SWAP_REFRESH);
-    return { v2Trade, bestTradeExactIn, bestTradeExactOut };
+    return { v2Trade, bestTradeExactIn, bestTradeExactOut, v2TradeLoading };
   }
 
-  return { v2Trade, bestTradeExactIn, bestTradeExactOut };
+  return { v2Trade, bestTradeExactIn, bestTradeExactOut, v2TradeLoading };
 };
 
 export default useFindBestRoute;
