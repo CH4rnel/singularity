@@ -61,9 +61,14 @@ export default async function getTokenList(
       // The content of the result is sometimes invalid even with a 200 status code.
       // A response can be invalid if it's not a valid JSON or if it doesn't match the TokenList schema.
       const json = await response.json();
-      const list = skipValidation ? json : tokenListValidator(json);
 
-      if (!list) {
+      // The bundled list (served from public/ at a relative URL) intentionally
+      // uses relative logoURIs like "/CYBER.png", which fail the strict
+      // @uniswap/token-lists schema ("uri" format). Trust the local list and
+      // skip schema validation for it; still validate remote lists.
+      const isLocalList = listUrl.startsWith('/');
+
+      if (!skipValidation && !isLocalList && !tokenListValidator(json)) {
         console.log(tokenListValidator.errors);
         const validationErrors: string =
           tokenListValidator.errors?.reduce<string>((memo, error) => {
@@ -72,7 +77,7 @@ export default async function getTokenList(
           }, '') ?? 'unknown error';
         throw new Error(`Token list failed validation: ${validationErrors}`);
       }
-      return list;
+      return json;
     } catch (error) {
       console.debug(
         `failed to parse and validate list response: ${listUrl} (${url})`,
