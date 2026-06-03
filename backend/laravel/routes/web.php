@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\BridgeController;
+use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\Auth\Web3LoginController;
@@ -32,6 +33,9 @@ Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('p
 Route::post('login/web3', Web3LoginController::class)->name('web3.login');
 
 Route::get('/wallet-login', fn () => inertia('auth/WalletLogin'))->name('wallet.login')->middleware('guest');
+
+// Telegram whales-chat verification page (opened from the bot's one-time link).
+Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-sol');
 
 Route::prefix('{current_team}')
     ->middleware(['auth', 'verified', EnsureTeamMembership::class])

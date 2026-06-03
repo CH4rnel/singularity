@@ -1,10 +1,13 @@
 import asyncio
+import json
 import os
 import re
+import secrets
 import sys
 import time
 import logging
-from datetime import datetime, timedelta
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -157,6 +160,29 @@ LENDING_MAX_BLOCK_RANGE = int(os.environ.get("LENDING_MAX_BLOCK_RANGE", str(SWAP
 # Same value the DEX frontend reads as VITE_LENDING_COMPTROLLER. Without it the
 # lending announcer stays dormant.
 LENDING_COMPTROLLER = (os.environ.get("LENDING_COMPTROLLER", "") or "").strip()
+
+# --- Whales chat gate (CYBER.sol holders) -------------------------------------
+# Users prove ownership of a Solana wallet with a Phantom signature on the
+# Laravel-served page (/tg/cyber-sol); the backend writes the verified balance
+# to tg_sol_wallets and this bot invites/kicks based on the threshold. Balance
+# re-checks here need no signature — ownership was already proven once.
+SOLANA_RPC_URL = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+CYBER_SOL_MINT = os.environ.get("CYBER_SOL_MINT", "E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump")
+CYBER_SOL_DECIMALS = int(os.environ.get("CYBER_SOL_DECIMALS", "6"))
+WHALE_MIN_CYBER_SOL = int(os.environ.get("WHALE_MIN_CYBER_SOL", "10000000"))
+WHALE_MIN_RAW = WHALE_MIN_CYBER_SOL * (10 ** CYBER_SOL_DECIMALS)
+WHALE_VERIFY_URL = os.environ.get("WHALE_VERIFY_URL", "https://cyberia.church/tg/cyber-sol").rstrip("/")
+WHALE_LINK_TTL_MINUTES = int(os.environ.get("WHALE_LINK_TTL_MINUTES", "15"))
+# How often the loop ticks (issuing pending invites) and how stale a row must be
+# before its on-chain balance is re-read to enforce the threshold.
+WHALE_POLL_SECONDS = int(os.environ.get("WHALE_POLL_SECONDS", "20"))
+WHALE_RECHECK_SECONDS = int(os.environ.get("WHALE_RECHECK_SECONDS", "3600"))
+
+_whale_chat_raw = (os.environ.get("WHALE_CHAT_ID", "") or "").strip()
+try:
+    WHALE_CHAT_ID = int(_whale_chat_raw) if _whale_chat_raw else None
+except ValueError:
+    WHALE_CHAT_ID = None
 
 LOG_FILE = Path(__file__).parent / "bot.log"
 
@@ -346,6 +372,30 @@ def ensure_chat_token_schema():
                 value TEXT
             )
         """))
+        # One-time links minted by /whale and consumed by the Laravel verify
+        # endpoint (shared SQLite file): maps an opaque token -> telegram user.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS tg_link_tokens (
+                token      TEXT PRIMARY KEY,
+                tg_user_id INTEGER NOT NULL,
+                expires_at TEXT NOT NULL,
+                used       INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """))
+        # Verified Solana wallets + CYBER.sol balance. Laravel writes on verify;
+        # this bot reads to invite/kick and re-reads balances on a schedule.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS tg_sol_wallets (
+                tg_user_id      INTEGER PRIMARY KEY,
+                solana_address  TEXT NOT NULL,
+                balance_raw     TEXT NOT NULL DEFAULT '0',
+                is_whale        INTEGER NOT NULL DEFAULT 0,
+                invited         INTEGER NOT NULL DEFAULT 0,
+                verified_at     TEXT,
+                last_checked_at TEXT
+            )
+        """))
 
 
 ensure_chat_token_schema()
@@ -434,6 +484,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/set_rewards_interval <interval> - (admins) change payout interval\n"
         "/reward_now - (admins) trigger an extra payout right now\n"
         "/github <username> <address> - link GitHub for GITHUB token airdrop\n"
+        "/whale - verify CYBER.sol holdings to join the whales chat\n"
         "/website - project website\n\n"
         "You can chat in groups without a wallet -- rewards will be saved as "
         "pending and minted in one go when you /set_wallet."
@@ -2397,6 +2448,186 @@ async def lending_announcer_loop(application: Application) -> None:
         await asyncio.sleep(LENDING_POLL_SECONDS)
 
 
+# --- Whales chat gate ---------------------------------------------------------
+
+def _read_cyber_sol_raw(address: str) -> int:
+    """Sum the owner's CYBER.sol balance (base units) via Solana RPC. Blocking —
+    call through asyncio.to_thread from the event loop."""
+    payload = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getTokenAccountsByOwner",
+        "params": [
+            address,
+            {"mint": CYBER_SOL_MINT},
+            {"encoding": "jsonParsed", "commitment": "confirmed"},
+        ],
+    }).encode()
+    req = urllib.request.Request(
+        SOLANA_RPC_URL, data=payload, headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read().decode())
+    if "error" in data:
+        raise RuntimeError(f"Solana RPC error: {data['error']}")
+    total = 0
+    for acc in (data.get("result", {}).get("value") or []):
+        amount = acc["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"]
+        total += int(amount)
+    return total
+
+
+async def whale_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/whale — DM only. Hand out a one-time link to prove CYBER.sol holdings via
+    Phantom and (if above the threshold) get invited to the whales chat."""
+    chat = update.effective_chat
+    user = update.effective_user
+    if user is None:
+        return
+    if chat is not None and chat.type != "private":
+        await update.message.reply_text("DM me /whale in private to verify your CYBER.sol balance.")
+        return
+    if not WHALE_CHAT_ID:
+        await update.message.reply_text("Whale verification isn't configured on this bot yet.")
+        return
+
+    token = secrets.token_urlsafe(24)
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=WHALE_LINK_TTL_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO tg_link_tokens (token, tg_user_id, expires_at, used)
+                    VALUES (:t, :u, :e, 0)
+                """),
+                {"t": token, "u": user.id, "e": expires_at},
+            )
+    except Exception as e:
+        logger.error(f"whale: token insert failed for {user.id}: {e}")
+        await update.message.reply_text("Internal error. Try again.")
+        return
+
+    url = f"{WHALE_VERIFY_URL}?t={token}"
+    await update.message.reply_text(
+        f"To join the whales chat you must hold at least {WHALE_MIN_CYBER_SOL:,} CYBER.sol.\n\n"
+        f"Open this link, connect Phantom and sign (valid {WHALE_LINK_TTL_MINUTES} min):\n{url}\n\n"
+        "Once verified I'll DM you a one-time invite."
+    )
+
+
+async def _issue_whale_invites(bot) -> None:
+    """DM a single-use invite link to every verified whale not yet invited."""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT tg_user_id, solana_address, balance_raw
+                FROM tg_sol_wallets
+                WHERE is_whale = 1 AND invited = 0
+            """)
+        ).fetchall()
+
+    for tg_user_id, address, balance_raw in rows:
+        try:
+            link = await bot.create_chat_invite_link(
+                WHALE_CHAT_ID,
+                member_limit=1,
+                expire_date=int(time.time()) + 3600,
+                name=f"whale {tg_user_id}",
+            )
+            human = int(balance_raw) / 10 ** CYBER_SOL_DECIMALS
+            await bot.send_message(
+                tg_user_id,
+                f"Verified: {human:,.0f} CYBER.sol on {address[:4]}…{address[-4:]}.\n"
+                f"One-time invite to the whales chat:\n{link.invite_link}",
+            )
+            with engine.begin() as conn:
+                conn.execute(
+                    text("UPDATE tg_sol_wallets SET invited = 1 WHERE tg_user_id = :u"),
+                    {"u": tg_user_id},
+                )
+            logger.info("whale: invited user=%s balance_raw=%s", tg_user_id, balance_raw)
+        except Exception as e:
+            logger.error("whale: invite failed user=%s: %s", tg_user_id, e)
+
+
+async def _kick_from_whales(bot, tg_user_id: int) -> None:
+    """Remove a user from the whales chat (kick, not perma-ban) and reset their
+    invite flag so they can rejoin if they top up. Admins are never kicked."""
+    try:
+        member = await bot.get_chat_member(WHALE_CHAT_ID, tg_user_id)
+        status = member.status
+    except Exception:
+        status = "left"
+
+    if status in ("creator", "administrator"):
+        return
+    if status not in ("left", "kicked"):
+        try:
+            await bot.ban_chat_member(WHALE_CHAT_ID, tg_user_id)
+            await bot.unban_chat_member(WHALE_CHAT_ID, tg_user_id)
+            logger.info("whale: kicked user=%s (below threshold)", tg_user_id)
+            try:
+                await bot.send_message(
+                    tg_user_id,
+                    "Your CYBER.sol balance dropped below the whale threshold, so you were "
+                    "removed from the whales chat. Top up and run /whale to rejoin.",
+                )
+            except Exception:
+                pass
+        except Exception as e:
+            logger.error("whale: kick failed user=%s: %s", tg_user_id, e)
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE tg_sol_wallets SET invited = 0 WHERE tg_user_id = :u"),
+            {"u": tg_user_id},
+        )
+
+
+async def _recheck_whales(bot) -> None:
+    """Re-read on-chain balances for rows staler than WHALE_RECHECK_SECONDS and
+    kick anyone who fell below the threshold."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=WHALE_RECHECK_SECONDS)).strftime("%Y-%m-%d %H:%M:%S")
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT tg_user_id, solana_address, is_whale
+                FROM tg_sol_wallets
+                WHERE last_checked_at IS NULL OR last_checked_at < :cutoff
+            """),
+            {"cutoff": cutoff},
+        ).fetchall()
+
+    for tg_user_id, address, was_whale in rows:
+        try:
+            raw = await asyncio.to_thread(_read_cyber_sol_raw, address)
+        except Exception as e:
+            logger.warning("whale recheck: balance read failed for %s: %s", address, e)
+            continue
+        is_whale = 1 if raw >= WHALE_MIN_RAW else 0
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    UPDATE tg_sol_wallets
+                    SET balance_raw = :b, is_whale = :w, last_checked_at = datetime('now')
+                    WHERE tg_user_id = :u
+                """),
+                {"b": str(raw), "w": is_whale, "u": tg_user_id},
+            )
+        if was_whale and not is_whale:
+            await _kick_from_whales(bot, tg_user_id)
+
+
+async def whale_loop(application: Application) -> None:
+    while True:
+        try:
+            await _issue_whale_invites(application.bot)
+            await _recheck_whales(application.bot)
+        except Exception as e:
+            logger.error(f"whale_loop: {e}")
+        await asyncio.sleep(WHALE_POLL_SECONDS)
+
+
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
@@ -2414,6 +2645,7 @@ async def post_init(application: Application):
             BotCommand("cancel", "Cancel an interactive prompt"),
             BotCommand("github", "Link GitHub for GITHUB airdrop"),
             BotCommand("website", "Open the project website"),
+            BotCommand("whale", "Verify CYBER.sol to join the whales chat"),
             BotCommand("create_token", "(admins) Create a chat reward token"),
             BotCommand("set_rewards_interval", "(admins) Change rewards interval"),
             BotCommand("reward_now", "(admins) Pay rewards immediately"),
@@ -2451,6 +2683,16 @@ async def post_init(application: Application):
     else:
         logger.info("Lending announcer disabled: LENDING_COMPTROLLER not set")
 
+    # Whales chat gate: invite verified whales and re-check balances/kick.
+    if WHALE_CHAT_ID:
+        application.create_task(whale_loop(application))
+        logger.info(
+            f"Whale loop started: chat={WHALE_CHAT_ID} min={WHALE_MIN_CYBER_SOL} "
+            f"poll={WHALE_POLL_SECONDS}s recheck={WHALE_RECHECK_SECONDS}s"
+        )
+    else:
+        logger.info("Whale gate disabled: WHALE_CHAT_ID not set")
+
 
 def run_dispatcher():
     logger.info("Building application...")
@@ -2486,6 +2728,7 @@ def run_dispatcher():
     application.add_handler(CommandHandler("set_rewards_interval", set_rewards_interval_command))
     application.add_handler(CommandHandler("reward_now", reward_now_command))
     application.add_handler(CommandHandler("whois", whois_command))
+    application.add_handler(CommandHandler("whale", whale_command))
 
     # Capture the "next message is the address" reply after a bare /set_wallet
     # in DMs. Restricted to private chats so the bot never hijacks ordinary

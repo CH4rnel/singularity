@@ -55,6 +55,17 @@ return [
         'solana_bridge_program' => env('BRIDGE_SOLANA_PROGRAM_ID'),
     ],
 
+    // CYBER.sol balance reads + Telegram "whales chat" gate. Mint mirrors
+    // config/bridge.php (tokens.CYBER.sol). RPC prefers Helius (SOLANA_RPC_URL),
+    // falling back to the bridge RPC, then the public mainnet endpoint.
+    'cyber_sol' => [
+        'rpc_url' => env('SOLANA_RPC_URL') ?: env('BRIDGE_SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
+        'mint' => env('CYBER_SOL_MINT', 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump'),
+        'decimals' => (int) env('CYBER_SOL_DECIMALS', 6),
+        // Minimum whole CYBER.sol to qualify for the whales chat.
+        'whale_threshold' => env('WHALE_MIN_CYBER_SOL', 10000000),
+    ],
+
     'slots' => [
         'hot_wallet_address' => env('SLOT_HOT_WALLET_ADDRESS'),
         'hot_wallet_keypair_path' => env('SLOT_HOT_WALLET_KEYPAIR_PATH'),

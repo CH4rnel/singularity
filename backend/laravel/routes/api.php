@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\NFTController;
 use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
+use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -21,6 +22,12 @@ Route::prefix('wallet')->group(function () {
 Route::prefix('solana-wallet')->group(function () {
     Route::post('nonce', [SolanaWalletAuthController::class, 'generateNonce']);
     Route::post('verify', [SolanaWalletAuthController::class, 'verify']);
+});
+
+// Telegram "whales chat" gate — prove Phantom ownership + read CYBER.sol balance.
+Route::prefix('tg/cyber-sol')->group(function () {
+    Route::post('nonce', [TgWhaleController::class, 'nonce'])->middleware('throttle:30,1');
+    Route::post('verify', [TgWhaleController::class, 'verify'])->middleware('throttle:30,1');
 });
 
 // Bridge (public)
