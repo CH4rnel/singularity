@@ -31,27 +31,26 @@ class RecoverEvmAddress
 
         $msgHash = $this->hashPersonalMessage($message);
 
-        // EIP-2098 / canonical sigs include v; we ignore the supplied v and
-        // brute-force the recovery id by trying all four valid candidates.
-        for ($recId = 0; $recId < 4; $recId++) {
-            try {
-                $pubKey = $this->ec->recoverPubKey(
-                    gmp_init($msgHash, 16),
-                    ['r' => gmp_init($sig['r'], 16), 's' => gmp_init($sig['s'], 16)],
-                    $recId
-                );
-                $p = $pubKey->encode('array');
-                if (count($p) === 65 && $p[0] === 0x04) {
-                    array_shift($p);
-                }
-
-                return '0x'.substr($this->keccak256($p), 24);
-            } catch (\Throwable) {
-                continue;
+        // The recovery id MUST come from the signature's `v` byte. Several
+        // recovery ids yield a mathematically valid (but different) public key
+        // for the same r/s — only the one selected by `v` is the real signer.
+        // Brute-forcing and taking the first that doesn't throw silently
+        // returns the wrong address for ~half of all signatures.
+        try {
+            $pubKey = $this->ec->recoverPubKey(
+                gmp_init($msgHash, 16),
+                ['r' => gmp_init($sig['r'], 16), 's' => gmp_init($sig['s'], 16)],
+                $sig['recId']
+            );
+            $p = $pubKey->encode('array');
+            if (count($p) === 65 && $p[0] === 0x04) {
+                array_shift($p);
             }
-        }
 
-        return null;
+            return '0x'.substr($this->keccak256($p), 24);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function parseSignature(string $signature): ?array
@@ -64,9 +63,18 @@ class RecoverEvmAddress
             return null;
         }
 
+        // `v` is the last byte. personal_sign yields 27/28; some wallets and
+        // EIP-2098 already encode 0/1. Normalize to a recovery id of 0 or 1.
+        $v = hexdec(substr($sig, 128, 2));
+        $recId = $v >= 27 ? $v - 27 : $v;
+        if ($recId !== 0 && $recId !== 1) {
+            return null;
+        }
+
         return [
             'r' => '0x'.substr($sig, 0, 64),
             's' => '0x'.substr($sig, 64, 64),
+            'recId' => $recId,
         ];
     }
 

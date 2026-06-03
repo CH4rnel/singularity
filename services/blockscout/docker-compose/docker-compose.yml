@@ -130,6 +130,7 @@ services:
       sh -lc "if [ ! -f vendor/autoload.php ]; then
         composer install --no-interaction --prefer-dist --no-progress;
       fi &&
+      php artisan storage:link --relative --force &&
       php artisan serve --host=0.0.0.0 --port=9001"
     ports:
       - "9001:9001"
@@ -184,7 +185,9 @@ services:
       - "127.0.0.1:5001:5001"
       # Read gateway, localhost only — handy for debugging pinned content.
       # Host port 8080 is taken by the Blockscout proxy (services/nginx.yml),
-      # so it is published on 8081 here; the container still serves on 8080.
+      # so it is published on 8881 here; the container still serves on 8080.
+      # NOTE: 8881 is host-only. Sibling containers reach the gateway at
+      # http://ipfs:8080 and the API (for pinning) at http://ipfs:5001.
       - "127.0.0.1:8881:8080"
 
 volumes:
