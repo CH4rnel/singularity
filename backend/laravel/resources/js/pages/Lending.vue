@@ -10,7 +10,7 @@ import {
     getAddress,
 } from 'ethers';
 import { Loader2 } from 'lucide-vue-next';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import Header from '@/components/Header.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1307,7 +1307,16 @@ await loadMarkets();
 }
 });
 
+// Close the action modal on Escape.
+function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && action.value) {
+        action.value = null;
+    }
+}
+
 onMounted(async () => {
+    window.addEventListener('keydown', onKeydown);
+
     // Trigger silent reconnect via MetaMask in case the user landed on /lending
     // directly (AppSidebar/Welcome would normally do this).
     await wallet.restore(authUser.value?.wallet_address ?? null);
@@ -1315,6 +1324,10 @@ onMounted(async () => {
     if (queryAddress.value) {
         await loadMarkets();
     }
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', onKeydown);
 });
 </script>
 
@@ -1755,15 +1768,11 @@ onMounted(async () => {
                                 <th class="px-4 py-3 text-right">My supply</th>
                                 <th class="px-4 py-3 text-right">My borrow</th>
                                 <th class="px-4 py-3 text-right">Collateral</th>
-                                <th class="px-4 py-3"></th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr
-                                v-for="market in visibleMarkets"
-                                :key="market.address"
-                                class="border-t"
-                            >
+                            <template v-for="market in visibleMarkets" :key="market.address">
+                            <tr class="border-t">
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2">
                                         <span class="font-medium">{{ market.symbol }}</span>
@@ -1825,8 +1834,10 @@ onMounted(async () => {
                                         }}
                                     </button>
                                 </td>
-                                <td class="px-4 py-3">
-                                    <div class="flex justify-end gap-1 whitespace-nowrap">
+                            </tr>
+                            <tr>
+                                <td colspan="8" class="px-4 pb-3">
+                                    <div class="flex flex-wrap gap-2">
                                         <Button variant="outline" size="sm" @click="openAction(market, 'supply')">
                                             Supply
                                         </Button>
@@ -1862,6 +1873,7 @@ onMounted(async () => {
                                     </div>
                                 </td>
                             </tr>
+                            </template>
                         </tbody>
                     </table>
                 </div>

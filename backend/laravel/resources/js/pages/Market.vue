@@ -103,6 +103,11 @@ const listForms = ref<
 >({});
 const buyBusy = ref<Record<string, boolean>>({});
 
+// Connected wallet's balance of each listing's payment token, keyed by lowercased
+// token address. A missing key means "not loaded yet" — we don't block the buy
+// button on an unknown balance, only on one we've confirmed is too low.
+const payBalances = ref<Record<string, bigint>>({});
+
 const isConfigured = computed(() => !!NFT_CONTRACT && !!NFT_MARKET);
 
 const readRpcUrl =
@@ -181,6 +186,32 @@ const getErc20 = async (addr: string): Promise<{ symbol: string; decimals: numbe
     }
 };
 
+// Read the connected wallet's balance for every distinct payment token in the
+// active listings, so the buy button can be disabled when funds are short.
+const loadBalances = async (listings: Listing[]): Promise<void> => {
+    const addr = wallet.address.value;
+    if (!addr) {
+        payBalances.value = {};
+        return;
+    }
+    const tokens = Array.from(new Set(listings.map((l) => l.paymentToken.toLowerCase())));
+    const entries = await Promise.all(
+        tokens.map(async (token) => {
+            try {
+                const c = new Contract(token, ERC20_ABI, readProvider);
+                return [token, (await c.balanceOf(addr)) as bigint] as const;
+            } catch {
+                return [token, undefined] as const;
+            }
+        }),
+    );
+    const next: Record<string, bigint> = {};
+    for (const [token, bal] of entries) {
+        if (bal !== undefined) next[token] = bal;
+    }
+    payBalances.value = next;
+};
+
 const loadGallery = async (): Promise<void> => {
     if (!isConfigured.value) return;
     loading.value = true;
@@ -250,6 +281,8 @@ const loadGallery = async (): Promise<void> => {
         items.value = withMetadata
             .map((t) => ({ ...t, listing: byTokenId.get(t.tokenId.toString()) }))
             .reverse();
+
+        await loadBalances(activeListings);
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
     } finally {
@@ -383,6 +416,49 @@ const handleList = async (item: NFTItem): Promise<void> => {
     }
 };
 
+const priceForms = ref<Record<string, { price: string; busy: boolean; error: string | null }>>({});
+
+const openPriceForm = (item: NFTItem): void => {
+    if (!item.listing) return;
+    priceForms.value[item.tokenId.toString()] = {
+        price: formatUnits(item.listing.price, item.listing.paymentDecimals ?? 18),
+        busy: false,
+        error: null,
+    };
+};
+
+const closePriceForm = (item: NFTItem): void => {
+    delete priceForms.value[item.tokenId.toString()];
+};
+
+const handleUpdatePrice = async (item: NFTItem): Promise<void> => {
+    if (!item.listing) return;
+    const key = item.tokenId.toString();
+    const form = priceForms.value[key];
+    if (!form) return;
+    form.error = null;
+    form.busy = true;
+    try {
+        const newPrice = parseUnits(form.price || '0', item.listing.paymentDecimals ?? 18);
+        if (newPrice <= 0n) throw new Error('Price must be > 0');
+
+        const provider = await ensureCyberiaNetwork();
+        const signer = await provider.getSigner();
+        const market = new Contract(NFT_MARKET, MARKET_ABI, signer);
+        status.value = 'Updating price…';
+        const tx = await market.updatePrice(item.listing.listingId, newPrice);
+        await tx.wait();
+
+        status.value = 'Price updated.';
+        closePriceForm(item);
+        await loadGallery();
+    } catch (e) {
+        form.error = (e as Error).message ?? String(e);
+    } finally {
+        form.busy = false;
+    }
+};
+
 const handleCancel = async (item: NFTItem): Promise<void> => {
     if (!item.listing) return;
     buyBusy.value[item.tokenId.toString()] = true;
@@ -411,6 +487,13 @@ const handleBuy = async (item: NFTItem): Promise<void> => {
         const signerAddr = await signer.getAddress();
         const pay = new Contract(item.listing.paymentToken, ERC20_ABI, signer);
 
+        const balance = (await pay.balanceOf(signerAddr)) as bigint;
+        if (balance < item.listing.price) {
+            throw new Error(
+                `Insufficient ${item.listing.paymentSymbol ?? 'token'} balance to buy this NFT.`,
+            );
+        }
+
         const allowance = (await pay.allowance(signerAddr, NFT_MARKET)) as bigint;
         if (allowance < item.listing.price) {
             status.value = `Approving ${item.listing.paymentSymbol ?? 'token'}…`;
@@ -434,6 +517,14 @@ const handleBuy = async (item: NFTItem): Promise<void> => {
 const isMine = (addr: string): boolean =>
     !!wallet.address.value &&
     wallet.address.value.toLowerCase() === addr.toLowerCase();
+
+// True only when we've loaded the balance and it's below the asking price.
+const insufficient = (item: NFTItem): boolean => {
+    if (!item.listing || !wallet.address.value) return false;
+    const bal = payBalances.value[item.listing.paymentToken.toLowerCase()];
+    if (bal === undefined) return false; // unknown — let the on-chain check decide
+    return bal < item.listing.price;
+};
 
 const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
@@ -558,20 +649,32 @@ const formatPrice = (p: bigint, decimals: number): string => {
 
                             <div class="actions">
                                 <template v-if="item.listing">
-                                    <Button
-                                        v-if="isMine(item.listing.seller)"
-                                        :disabled="!!buyBusy[item.tokenId.toString()]"
-                                        @click="handleCancel(item)"
-                                    >
-                                        Cancel listing
-                                    </Button>
+                                    <template v-if="isMine(item.listing.seller)">
+                                        <Button
+                                            v-if="!priceForms[item.tokenId.toString()]"
+                                            :disabled="!!buyBusy[item.tokenId.toString()]"
+                                            @click="openPriceForm(item)"
+                                        >
+                                            Change price
+                                        </Button>
+                                        <Button
+                                            :disabled="!!buyBusy[item.tokenId.toString()]"
+                                            @click="handleCancel(item)"
+                                        >
+                                            Cancel listing
+                                        </Button>
+                                    </template>
                                     <Button
                                         v-else-if="wallet.isConnected.value"
-                                        :disabled="!!buyBusy[item.tokenId.toString()]"
+                                        :disabled="!!buyBusy[item.tokenId.toString()] || insufficient(item)"
                                         @click="handleBuy(item)"
                                     >
                                         <Loader2 v-if="buyBusy[item.tokenId.toString()]" class="spin" />
-                                        Buy
+                                        {{
+                                            insufficient(item)
+                                                ? `Insufficient ${item.listing.paymentSymbol ?? 'balance'}`
+                                                : 'Buy'
+                                        }}
                                     </Button>
                                 </template>
                                 <template v-else-if="isMine(item.owner)">
@@ -582,6 +685,46 @@ const formatPrice = (p: bigint, decimals: number): string => {
                                         List for sale
                                     </Button>
                                 </template>
+                            </div>
+
+                            <div
+                                v-if="item.listing && priceForms[item.tokenId.toString()]"
+                                class="listForm"
+                            >
+                                <label>
+                                    <span>New price ({{ item.listing.paymentSymbol ?? 'token' }})</span>
+                                    <Input
+                                        v-model="priceForms[item.tokenId.toString()].price"
+                                        type="text"
+                                        inputmode="decimal"
+                                    />
+                                </label>
+                                <div
+                                    v-if="priceForms[item.tokenId.toString()].error"
+                                    class="hint hint--err"
+                                >
+                                    {{ priceForms[item.tokenId.toString()].error }}
+                                </div>
+                                <div class="actions">
+                                    <Button
+                                        :disabled="priceForms[item.tokenId.toString()].busy"
+                                        @click="handleUpdatePrice(item)"
+                                    >
+                                        <Loader2
+                                            v-if="priceForms[item.tokenId.toString()].busy"
+                                            class="spin"
+                                        />
+                                        Save price
+                                    </Button>
+                                    <button
+                                        type="button"
+                                        class="editBtn"
+                                        :disabled="priceForms[item.tokenId.toString()].busy"
+                                        @click="closePriceForm(item)"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             </div>
 
                             <div

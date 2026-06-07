@@ -184,6 +184,23 @@ try:
 except ValueError:
     WHALE_CHAT_ID = None
 
+# --- Quick replies ("x", "ca", …) ---------------------------------------------
+# Plain one-word messages people drop in chat ("ca?", "x") asking for the
+# project's social link or token contract address. Answered both as /x, /ca
+# commands and as bare-text triggers. All values are env-overridable.
+PROJECT_X_URL = os.environ.get("PROJECT_X_URL", "https://x.com/cyberia_temple")
+PROJECT_WEBSITE_URL = os.environ.get("PROJECT_WEBSITE_URL", "https://cyberia.church")
+TELEGRAM_CHANNEL_URL = os.environ.get("TELEGRAM_CHANNEL_URL", "https://t.me/cyberia_network")
+TELEGRAM_CHAT_URL = os.environ.get("TELEGRAM_CHAT_URL", "https://t.me/cyberia_network_chat")
+
+# Contract addresses surfaced by "ca". CYBER.sol is the community pump.fun token
+# (also gates the whales chat); its EVM counterpart is the bridged CYBER.sol on
+# Cyberia (matches PRICE_RELAY_TOKENS). Blank values are simply omitted.
+CYBER_CA_SOLANA = (os.environ.get("CYBER_CA_SOLANA", CYBER_SOL_MINT) or "").strip()
+CYBER_CA_EVM = (os.environ.get(
+    "CYBER_CA_EVM", "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA"
+) or "").strip()
+
 LOG_FILE = Path(__file__).parent / "bot.log"
 
 logging.basicConfig(
@@ -522,6 +539,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/reward_now - (admins) trigger an extra payout right now\n"
         "/github <username> <address> - link GitHub for GITHUB token airdrop\n"
         "/whale - verify CYBER.sol holdings to join the whales chat\n"
+        "/x - X (Twitter) and Telegram links (also replies to \"x\")\n"
+        "/ca - CYBER contract address (also replies to \"ca\")\n"
         "/website - project website\n\n"
         "You can chat in groups without a wallet -- rewards will be saved as "
         "pending and minted in one go when you /set_wallet."
@@ -529,7 +548,80 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def website_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("https://cyberia.church")
+    await update.message.reply_text(PROJECT_WEBSITE_URL)
+
+
+def _build_x_reply() -> str:
+    """X (Twitter) link, plus the Telegram channel/chat for good measure."""
+    lines = [f"𝕏 (Twitter): {PROJECT_X_URL}"]
+    if TELEGRAM_CHANNEL_URL:
+        lines.append(f"Channel: {TELEGRAM_CHANNEL_URL}")
+    if TELEGRAM_CHAT_URL:
+        lines.append(f"Chat: {TELEGRAM_CHAT_URL}")
+    return "\n".join(lines)
+
+
+def _build_ca_reply() -> str:
+    """CYBER contract address(es). Solana mint first (the pump.fun token people
+    trade), then the bridged EVM token with an explorer link."""
+    if not CYBER_CA_SOLANA and not CYBER_CA_EVM:
+        return "Contract address is not configured on this bot yet."
+    lines = ["📜 CYBER contract address:"]
+    if CYBER_CA_SOLANA:
+        lines.append(f"Solana (CYBER.sol): {CYBER_CA_SOLANA}")
+    if CYBER_CA_EVM:
+        lines.append(f"Cyberia EVM: {CYBER_CA_EVM}")
+        lines.append(f"{EXPLORER_URL}/address/{CYBER_CA_EVM}")
+    return "\n".join(lines)
+
+
+async def x_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/x — reply with the project's X (Twitter) and Telegram links."""
+    await update.message.reply_text(_build_x_reply())
+
+
+async def ca_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/ca — reply with the CYBER token contract address(es)."""
+    await update.message.reply_text(_build_ca_reply(), disable_web_page_preview=True)
+
+
+# Bare-text triggers -> reply builder. Synonyms map to the same answer so that
+# "ca", "contract" or "address" all surface the contract address.
+_QUICK_REPLIES = {
+    "x": _build_x_reply,
+    "twitter": _build_x_reply,
+    "ca": _build_ca_reply,
+    "contract": _build_ca_reply,
+    "address": _build_ca_reply,
+}
+
+# Matches a message that is *only* a trigger word, optionally wrapped in
+# whitespace/punctuation (e.g. "ca?", " X ", "Contract."). Keeps the handler
+# from firing on ordinary chat that merely contains the word.
+_QUICK_REPLY_RE = re.compile(
+    r"^[\s]*(" + "|".join(_QUICK_REPLIES) + r")[\s?!.,]*$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_trigger(text_value: str) -> str:
+    return text_value.strip().strip("?!.,").strip().lower()
+
+
+async def quick_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Answer bare 'x'/'ca'-style messages with links and contract addresses.
+
+    Registered in its own handler group so it runs independently of the
+    wallet/token follow-up handlers, and gated by `_QUICK_REPLY_RE` so casual
+    chat is never hijacked.
+    """
+    msg = update.effective_message
+    if msg is None or not msg.text:
+        return
+    builder = _QUICK_REPLIES.get(_normalize_trigger(msg.text))
+    if builder is None:
+        return
+    await update.message.reply_text(builder(), disable_web_page_preview=True)
 
 
 async def github_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2727,6 +2819,8 @@ async def post_init(application: Application):
             BotCommand("cancel", "Cancel an interactive prompt"),
             BotCommand("github", "Link GitHub for GITHUB airdrop"),
             BotCommand("website", "Open the project website"),
+            BotCommand("x", "Show X (Twitter) and Telegram links"),
+            BotCommand("ca", "Show the CYBER contract address"),
             BotCommand("whale", "Verify CYBER.sol to join the whales chat"),
             BotCommand("create_token", "(admins) Create a chat reward token"),
             BotCommand("set_rewards_interval", "(admins) Change rewards interval"),
@@ -2811,6 +2905,8 @@ def run_dispatcher():
     application.add_handler(CommandHandler("reward_now", reward_now_command))
     application.add_handler(CommandHandler("whois", whois_command))
     application.add_handler(CommandHandler("whale", whale_command))
+    application.add_handler(CommandHandler("x", x_command))
+    application.add_handler(CommandHandler("ca", ca_command))
 
     # Capture the "next message is the address" reply after a bare /set_wallet
     # in DMs. Restricted to private chats so the bot never hijacks ordinary
@@ -2838,6 +2934,17 @@ def run_dispatcher():
             track_chat_member,
         ),
         group=1,
+    )
+
+    # Bare-text quick replies ("x", "ca", …) in any chat type. Lives in its own
+    # handler group so it never collides with the wallet/token follow-up
+    # handlers above; the Regex filter keeps it from running on ordinary chat.
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.Regex(_QUICK_REPLY_RE),
+            quick_reply_handler,
+        ),
+        group=2,
     )
 
     # Catch silent leaves/kicks and joins. Requires the bot to be admin in the

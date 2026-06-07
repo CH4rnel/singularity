@@ -64,6 +64,7 @@ const ERC20_READ_ABI = [
 ];
 
 const SWAP_BASE_URL = 'https://swap.cyberia.church/#/swap';
+const EXPLORER_BASE_URL = 'https://explorer.cyberia.church';
 
 type LaunchedToken = {
     token: string;
@@ -410,6 +411,9 @@ const submitMetadata = async (tokenAddress: string): Promise<void> => {
 
 const swapUrlFor = (tokenAddress: string): string =>
     `${SWAP_BASE_URL}?inputCurrency=${CYBER_SOL_ADDRESS}&outputCurrency=${tokenAddress}`;
+
+const explorerAddressUrl = (address: string): string =>
+    `${EXPLORER_BASE_URL}/address/${address}`;
 
 // Only the creator can edit. If no creator is set yet (unclaimed metadata),
 // any connected wallet is allowed to take the first turn — the backend records
@@ -808,10 +812,17 @@ onMounted(async () => {
                             <div>
                                 <div class="tokenTitle">
                                     <strong>{{ t.symbol }}</strong>
-                                    <span class="muted">· {{ t.name }}</span>
+                                    <span class="muted"> · {{ t.name }}</span>
                                 </div>
                                 <div class="muted small">
-                                    <code>{{ short(t.token) }}</code>
+                                    <a
+                                        class="addrLink"
+                                        :href="explorerAddressUrl(t.token)"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        <code>{{ short(t.token) }}</code>
+                                    </a>
                                 </div>
                             </div>
                             <div class="rowActions">
@@ -877,7 +888,16 @@ onMounted(async () => {
                             <div>
                                 <span class="statLabel">Creator</span>
                                 <span class="statValue">
-                                    <code>{{ t.creator ? short(t.creator) : '—' }}</code>
+                                    <a
+                                        v-if="t.creator"
+                                        class="addrLink"
+                                        :href="explorerAddressUrl(t.creator)"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        <code>{{ short(t.creator) }}</code>
+                                    </a>
+                                    <code v-else>—</code>
                                 </span>
                             </div>
                         </div>
@@ -1189,6 +1209,13 @@ onMounted(async () => {
 .statValue {
     font-size: 13px;
     color: var(--foreground, #e5e7eb);
+}
+.addrLink {
+    color: #93c5fd;
+    text-decoration: none;
+}
+.addrLink:hover {
+    text-decoration: underline;
 }
 @keyframes spin {
     to {

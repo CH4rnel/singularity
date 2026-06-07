@@ -33,7 +33,7 @@ const cyberiaExternalLinks: HeaderMenuItem[] = [
     id: 'cyberia-lending-link',
     isExternal: true,
     target: '_blank',
-    externalLink: 'https://bridge.cyberia.church/lending',
+    externalLink: 'https://cyberia.church/lending',
   },
   {
     link: '/cyberia-bridge',
@@ -41,7 +41,7 @@ const cyberiaExternalLinks: HeaderMenuItem[] = [
     id: 'cyberia-bridge-link',
     isExternal: true,
     target: '_blank',
-    externalLink: 'https://bridge.cyberia.church',
+    externalLink: 'https://cyberia.church/bridge',
   },
   {
     link: '/cyberia-explorer',
