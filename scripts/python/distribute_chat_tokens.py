@@ -66,6 +66,22 @@ def _parse_ts(value):
         return None
 
 
+def _amount_to_int(value) -> int:
+    """Parse a uint256-as-text amount into a Python int. Tolerates values an
+    earlier int64-overflowing version may have left in REAL/scientific form
+    (e.g. '1.02e+19') so we can keep accruing instead of choking on them."""
+    if value in (None, ""):
+        return 0
+    s = str(value)
+    try:
+        return int(s)
+    except ValueError:
+        try:
+            return int(float(s))
+        except (ValueError, OverflowError):
+            return 0
+
+
 def distribute():
     with engine.connect() as conn:
         tokens = conn.execute(
@@ -121,23 +137,28 @@ def distribute():
 
         # Credit pending balances first; this is cheap and unconditional, so it
         # happens even if the on-chain mint half later fails.
+        #
+        # `amount` is a uint256 wei value (1e18 per 18-decimal token). It MUST be
+        # accumulated in Python: SQLite integers are signed 64-bit, so adding via
+        # CAST(amount AS INTEGER) overflows past ~9.2e18 (a handful of tokens),
+        # silently promotes the sum to a lossy REAL, and caps the running total.
         if pending_members:
             with engine.begin() as conn:
                 for (uid,) in pending_members:
+                    row = conn.execute(
+                        text("SELECT amount FROM pending_rewards WHERE chat_id = :c AND user_id = :u"),
+                        {"c": chat_id, "u": uid},
+                    ).fetchone()
+                    new_amount = str(_amount_to_int(row[0] if row else 0) + amount)
                     conn.execute(
                         text("""
                             INSERT INTO pending_rewards (chat_id, user_id, amount, updated_at)
                             VALUES (:c, :u, :amt, datetime('now'))
                             ON CONFLICT(chat_id, user_id) DO UPDATE SET
-                                amount = CAST(CAST(amount AS INTEGER) + :amt_int AS TEXT),
+                                amount = :amt,
                                 updated_at = datetime('now')
                         """),
-                        {
-                            "c": chat_id,
-                            "u": uid,
-                            "amt": str(amount),
-                            "amt_int": amount,
-                        },
+                        {"c": chat_id, "u": uid, "amt": new_amount},
                     )
             logger.info(
                 "chat %s (%s): credited pending %s to %d wallet-less members",

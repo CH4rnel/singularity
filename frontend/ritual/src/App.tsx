@@ -37,7 +37,6 @@ import { createWeb3Modal, defaultConfig } from '@web3modal/ethers5/react';
 import { ChainId } from '@uniswap/sdk';
 import { SUPPORTED_CHAINIDS } from 'constants/index';
 import { getConfig } from 'config/index';
-import 'connectors/passport';
 import { BridgePage } from 'pages';
 
 const projectId = process.env.REACT_APP_WALLETCONNECT_PROJECT_ID ?? '';

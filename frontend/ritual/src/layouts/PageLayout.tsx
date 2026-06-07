@@ -1,9 +1,7 @@
 import React, { lazy, useEffect, useMemo, useState } from 'react';
 import { Box, Button, useMediaQuery, useTheme } from '@material-ui/core';
-import { useActiveWeb3React, useIsProMode, useMasaAnalytics } from 'hooks';
+import { useIsProMode } from 'hooks';
 import { useHistory } from 'react-router-dom';
-import IntractAttribution, { trackCustomWallet } from '@intract/attribution';
-import { config, passport } from '@imtbl/sdk';
 const Header = lazy(() => import('components/Header'));
 const Footer = lazy(() => import('components/Footer'));
 const BetaWarningBanner = lazy(() => import('components/BetaWarningBanner'));
@@ -17,7 +15,6 @@ export interface PageLayoutProps {
 
 const PageLayout: React.FC<PageLayoutProps> = ({ children, name }) => {
   const [headerClass] = useState('');
-  const { account } = useActiveWeb3React();
   const isProMode = useIsProMode();
   const [openPassModal, setOpenPassModal] = useState(false);
   const { location } = useHistory();
@@ -30,30 +27,6 @@ const PageLayout: React.FC<PageLayoutProps> = ({ children, name }) => {
     return name == 'prdt' ? 'pageWrapper-no-max' : 'pageWrapper';
   }, [isProMode, location, name]);
 
-  const { firePageViewEvent } = useMasaAnalytics();
-
-  const { pathname } = location;
-  useEffect(() => {
-    const page = `https://quickswap.exchange/#${pathname}`;
-    firePageViewEvent({ page, user_address: account });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
-
-  const intractKey = process.env.REACT_APP_INTRACT_KEY;
-  useEffect(() => {
-    if (intractKey) {
-      IntractAttribution(intractKey, {
-        configAllowCookie: true,
-      });
-    }
-  }, [intractKey]);
-
-  useEffect(() => {
-    if (account) {
-      trackCustomWallet(account);
-    }
-  }, [account]);
-
   useEffect(() => {
     if (
       window.location.host !== 'quickswap.exchange' &&
@@ -64,23 +37,6 @@ const PageLayout: React.FC<PageLayoutProps> = ({ children, name }) => {
         'feature-immutable-mainnet-1.interface-v2-01.pages.dev'
     ) {
       setOpenPassModal(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (process.env.REACT_APP_PASSPORT_CLIENT_ID) {
-      const connector = new passport.Passport({
-        baseConfig: {
-          environment: config.Environment.PRODUCTION,
-          publishableKey: process.env.REACT_APP_PASSPORT_PUBLISHABLE_KEY,
-        },
-        clientId: process.env.REACT_APP_PASSPORT_CLIENT_ID,
-        redirectUri: 'https://quickswap.exchange',
-        logoutRedirectUri: 'https://quickswap.exchange',
-        audience: 'platform_api',
-        scope: 'openid offline_access email transact',
-      });
-      connector.loginCallback();
     }
   }, []);
 

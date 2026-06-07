@@ -461,11 +461,48 @@ def get_chat_token(chat_id: int):
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Hi! I'll send you 1 TG token every hour on Cyberia (49406). "
-        "Use /set_wallet <address> to register.\n\n"
-        "Example: /set_wallet 0x1234567890abcdef1234567890abcdef12345678"
-    )
+    user = update.effective_user
+
+    has_wallet = False
+    if user is not None:
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    text("SELECT 1 FROM tg_wallets WHERE user_id = :u"),
+                    {"u": user.id},
+                ).fetchone()
+            has_wallet = row is not None
+        except Exception as e:
+            logger.debug(f"start: wallet lookup failed: {e}")
+
+    lines = [
+        "Hi! I send you 1 TG token every hour on Cyberia (49406).",
+        "",
+        "Commands:",
+        "/help - show available commands",
+        "/wallet - show your linked wallet and explorer link",
+        "/balance - show TG, all chat tokens, and pending rewards",
+        "/token - show this chat's reward token (group only)",
+        "/unset_wallet - unlink your wallet (pending rewards are kept)",
+        "/cancel - cancel an interactive prompt",
+        "/github <username> <address> - link GitHub for GITHUB token airdrop",
+        "/whale - verify CYBER.sol holdings to join the whales chat",
+        "/create_token [name] [interval] - (admins) create a chat reward token",
+        "/set_rewards_interval <interval> - (admins) change payout interval",
+        "/reward_now - (admins) trigger an extra payout right now",
+        "/website - project website",
+    ]
+
+    # Only nudge wallet-less users to register, and keep it at the very end.
+    if not has_wallet:
+        lines += [
+            "",
+            "You haven't linked a wallet yet — link one to receive rewards:",
+            "/set_wallet [address] - link your wallet (asks for address if omitted)",
+            "Example: /set_wallet 0x1234567890abcdef1234567890abcdef12345678",
+        ]
+
+    await update.message.reply_text("\n".join(lines))
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2527,6 +2564,10 @@ async def _issue_whale_invites(bot) -> None:
         ).fetchall()
 
     for tg_user_id, address, balance_raw in rows:
+        # Mint a single-use link. A failure here is chat-level (wrong
+        # WHALE_CHAT_ID, or the bot is not an admin of the whales chat) and would
+        # hit every pending whale, so abort the tick rather than logging the same
+        # "Chat not found" once per row.
         try:
             link = await bot.create_chat_invite_link(
                 WHALE_CHAT_ID,
@@ -2534,20 +2575,37 @@ async def _issue_whale_invites(bot) -> None:
                 expire_date=int(time.time()) + 3600,
                 name=f"whale {tg_user_id}",
             )
+        except Exception as e:
+            logger.error(
+                "whale: cannot create invite link for WHALE_CHAT_ID=%s — verify the id "
+                "(supergroups are -100…) and that the bot is an admin there with "
+                "'Invite Users via Link': %s",
+                WHALE_CHAT_ID, e,
+            )
+            return
+
+        # DM the link. A failure here is per-user (they never started the bot, or
+        # blocked it); skip them and keep going.
+        try:
             human = int(balance_raw) / 10 ** CYBER_SOL_DECIMALS
             await bot.send_message(
                 tg_user_id,
                 f"Verified: {human:,.0f} CYBER.sol on {address[:4]}…{address[-4:]}.\n"
                 f"One-time invite to the whales chat:\n{link.invite_link}",
             )
-            with engine.begin() as conn:
-                conn.execute(
-                    text("UPDATE tg_sol_wallets SET invited = 1 WHERE tg_user_id = :u"),
-                    {"u": tg_user_id},
-                )
-            logger.info("whale: invited user=%s balance_raw=%s", tg_user_id, balance_raw)
         except Exception as e:
-            logger.error("whale: invite failed user=%s: %s", tg_user_id, e)
+            logger.error(
+                "whale: cannot DM invite to user=%s (have they started the bot?): %s",
+                tg_user_id, e,
+            )
+            continue
+
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE tg_sol_wallets SET invited = 1 WHERE tg_user_id = :u"),
+                {"u": tg_user_id},
+            )
+        logger.info("whale: invited user=%s balance_raw=%s", tg_user_id, balance_raw)
 
 
 async def _kick_from_whales(bot, tg_user_id: int) -> None:
@@ -2619,6 +2677,30 @@ async def _recheck_whales(bot) -> None:
 
 
 async def whale_loop(application: Application) -> None:
+    bot = application.bot
+    # One-time self-check so a misconfigured WHALE_CHAT_ID surfaces clearly on
+    # startup instead of as a recurring per-user "Chat not found".
+    try:
+        chat = await bot.get_chat(WHALE_CHAT_ID)
+        me = await bot.get_me()
+        member = await bot.get_chat_member(WHALE_CHAT_ID, me.id)
+        logger.info(
+            "Whale chat reachable: %r (id=%s); bot status=%s",
+            chat.title, WHALE_CHAT_ID, member.status,
+        )
+        if member.status not in ("administrator", "creator"):
+            logger.warning(
+                "whale: bot is not an admin in WHALE_CHAT_ID=%s — it cannot create "
+                "invite links; grant it 'Invite Users via Link'",
+                WHALE_CHAT_ID,
+            )
+    except Exception as e:
+        logger.error(
+            "whale: WHALE_CHAT_ID=%s is unreachable — add the bot to that chat as an "
+            "admin and verify the id (supergroups are -100…): %s",
+            WHALE_CHAT_ID, e,
+        )
+
     while True:
         try:
             await _issue_whale_invites(application.bot)

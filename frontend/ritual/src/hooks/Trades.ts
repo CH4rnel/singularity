@@ -10,6 +10,10 @@ import { PairState, usePairs } from '../data/Reserves';
 import { wrappedCurrency } from '../utils/wrappedCurrency';
 
 import { useActiveWeb3React } from './index';
+import {
+  isFullPairEnumerationChain,
+  useAllV2Pairs,
+} from './useAllV2Pairs';
 
 interface V2TradeResult {
   trade: Trade | null;
@@ -28,6 +32,11 @@ function useAllCommonPairsState(
   currencyB?: Currency,
 ): { pairs: Pair[]; loading: boolean } {
   const { chainId } = useActiveWeb3React();
+
+  // On small chains we enumerate every pair from the factory and route through
+  // all on-chain liquidity, instead of only the curated base tokens below.
+  const fullEnumeration = isFullPairEnumerationChain(chainId);
+  const allV2 = useAllV2Pairs();
 
   const bases: Token[] = useMemo(
     () => (chainId ? V2_BASES_TO_CHECK_TRADES_AGAINST[chainId] : []),
@@ -48,7 +57,7 @@ function useAllCommonPairsState(
 
   const allPairCombinations: [Token, Token][] = useMemo(
     () =>
-      tokenA && tokenB
+      !fullEnumeration && tokenA && tokenB
         ? [
             // the direct pair
             [tokenA, tokenB],
@@ -89,12 +98,12 @@ function useAllCommonPairsState(
               return true;
             })
         : [],
-    [tokenA, tokenB, bases, basePairs, chainId],
+    [fullEnumeration, tokenA, tokenB, bases, basePairs, chainId],
   );
 
   const allPairs = usePairs(allPairCombinations);
 
-  return useMemo(() => {
+  const curated = useMemo(() => {
     const loading = allPairs.some(([state]) => state === PairState.LOADING);
     const pairs = Object.values(
       allPairs
@@ -112,6 +121,8 @@ function useAllCommonPairsState(
 
     return { pairs, loading };
   }, [allPairs]);
+
+  return fullEnumeration ? allV2 : curated;
 }
 
 /**

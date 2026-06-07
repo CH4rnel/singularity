@@ -1,0 +1,44 @@
+diff --git a/node_modules/@web3modal/ethers5/dist/esm/src/client.js b/node_modules/@web3modal/ethers5/dist/esm/src/client.js
+index 14f4800..0cba1cc 100644
+--- a/node_modules/@web3modal/ethers5/dist/esm/src/client.js
++++ b/node_modules/@web3modal/ethers5/dist/esm/src/client.js
+@@ -475,7 +475,20 @@ export class Web3Modal extends Web3ModalScaffold {
+     }
+     watchInjected(config) {
+         const InjectedProvider = config.injected;
+-        function disconnectHandler() {
++        async function disconnectHandler() {
++            // Cyberia mints a block every ~1s, so MetaMask routinely emits a
++            // transient EIP-1193 'disconnect' on a brief RPC hiccup while the
++            // wallet is still connected. eth_accounts is answered locally by
++            // MetaMask (it does not hit the chain RPC), so a still-permitted
++            // account survives a network blip. Only tear the session down when
++            // there are genuinely no accounts left.
++            try {
++                const accounts = await InjectedProvider?.request({ method: 'eth_accounts' });
++                if (accounts && accounts.length > 0) {
++                    return;
++                }
++            }
++            catch { }
+             localStorage.removeItem(EthersConstantsUtil.WALLET_ID);
+             EthersStoreUtil.reset();
+             InjectedProvider?.removeListener('disconnect', disconnectHandler);
+@@ -507,7 +520,16 @@ export class Web3Modal extends Web3ModalScaffold {
+         }
+     }
+     watchEIP6963(provider) {
+-        function disconnectHandler() {
++        async function disconnectHandler() {
++            // See watchInjected: ignore transient 'disconnect' events (RPC
++            // blips on the ~1s Cyberia chain) while accounts are still present.
++            try {
++                const accounts = await provider?.request({ method: 'eth_accounts' });
++                if (accounts && accounts.length > 0) {
++                    return;
++                }
++            }
++            catch { }
+             localStorage.removeItem(EthersConstantsUtil.WALLET_ID);
+             EthersStoreUtil.reset();
+             provider.removeListener('disconnect', disconnectHandler);
