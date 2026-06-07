@@ -2614,7 +2614,10 @@ async def whale_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user is None:
         return
     if chat is not None and chat.type != "private":
-        await update.message.reply_text("DM me /whale in private to verify your CYBER.sol balance.")
+        await update.message.reply_text(
+            f"To access the chat you must hold {WHALE_MIN_CYBER_SOL:,} CYBER.sol.\n"
+            "DM me /whale in private to verify your CYBER.sol balance."
+        )
         return
     if not WHALE_CHAT_ID:
         await update.message.reply_text("Whale verification isn't configured on this bot yet.")

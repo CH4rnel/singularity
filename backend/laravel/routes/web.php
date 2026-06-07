@@ -21,6 +21,7 @@ Route::get('/', fn () => response()->file(resource_path('views/landing/index.htm
 Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/lending', 'Lending')->name('lending');
+Route::inertia('/lending/liquidate', 'Liquidate')->name('lending.liquidate');
 Route::inertia('/launchpad', 'Launchpad')->name('launchpad');
 Route::get('/launchpad/sites/{address}', [\App\Http\Controllers\Api\LaunchpadController::class, 'showSite'])
     ->where('address', '0x[a-fA-F0-9]{40}')
