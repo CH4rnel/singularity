@@ -463,7 +463,7 @@ const useSubmitOrderCallback = () => {
         updateStore({
           swapStatus: SwapStatus.SUCCESS,
         });
-        dispatch(updateUserBalance());
+        dispatch(updateUserBalance(txReceipt.blockNumber));
         return txReceipt;
       } catch (error) {
         if (isRejectedError(error) && !shouldUnwrap) {

@@ -1,11 +1,10 @@
 import { Box, Typography } from '@material-ui/core';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { DLQUICK } from 'constants/v3/addresses';
 import { useNewLairInfo } from 'state/stake/hooks';
 import { useUSDCPriceFromAddress } from 'utils/useUSDCPrice';
 import { formatCompact, useLairDQUICKAPY } from 'utils';
 import { Skeleton } from '@material-ui/lab';
-import { StakeQuickModal } from 'components';
 import { useTranslation } from 'react-i18next';
 import { useActiveWeb3React } from 'hooks';
 
@@ -22,8 +21,6 @@ const DragonLayerInfoCard: React.FC<DragonLayerInfoCardProps> = ({
   const { t } = useTranslation();
   const lairInfo = useNewLairInfo();
   const dQUICKAPY = useLairDQUICKAPY(true, lairInfo);
-
-  const [openStakeModal, setOpenStakeModal] = useState(false);
 
   const quickToken = DLQUICK[chainId];
 
@@ -52,13 +49,6 @@ const DragonLayerInfoCard: React.FC<DragonLayerInfoCardProps> = ({
 
   return (
     <>
-      {openStakeModal && (
-        <StakeQuickModal
-          isNew={true}
-          open={openStakeModal}
-          onClose={() => setOpenStakeModal(false)}
-        />
-      )}
       {(oldLair || newLair) && (
         <Box className='tradingSection' pt='20px'>
           <Box
@@ -74,14 +64,6 @@ const DragonLayerInfoCard: React.FC<DragonLayerInfoCardProps> = ({
             >
               {t('dragonslair')}{' '}
             </Typography>
-            {account && (
-              <h4
-                style={{ marginBottom: '12px', marginTop: '0' }}
-                onClick={() => setOpenStakeModal(true)}
-              >
-                {t('stake')} {'>'}
-              </h4>
-            )}
           </Box>
           {loading ? (
             <Skeleton variant='rect' width={100} height={45} />

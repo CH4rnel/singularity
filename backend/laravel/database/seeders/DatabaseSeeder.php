@@ -26,5 +26,9 @@ class DatabaseSeeder extends Seeder
             'email' => 'lain@cyberia.network',
             'password' => Hash::make('lain'),
         ]);
+
+        $this->call([
+            SlotPoolSeeder::class,
+        ]);
     }
 }

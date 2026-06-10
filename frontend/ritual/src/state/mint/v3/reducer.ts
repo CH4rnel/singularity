@@ -1,5 +1,6 @@
 import { createReducer } from '@reduxjs/toolkit';
-import { IPresetArgs } from 'pages/PoolsPage/v3/SupplyLiquidityV3/components/PresetRanges';
+import { IPresetArgs, IFeeTier, Presets } from './types';
+export { Presets };
 import {
   selectCurrency,
   Field,
@@ -20,25 +21,7 @@ import {
   updatePresetRange,
   updateFeeTier,
 } from './actions';
-import { IFeeTier } from 'pages/PoolsPage/v3/SupplyLiquidityV3/containers/SelectFeeTier';
-
 export type FullRange = true;
-
-export enum Presets {
-  SAFE,
-  RISK,
-  NORMAL,
-  FULL,
-  STABLE,
-  GAMMA_NARROW,
-  GAMMA_WIDE,
-  GAMMA_DYNAMIC,
-  GAMMA_STABLE,
-  STEER_WIDE,
-  STEER_NARROW,
-  STEER_STABLE,
-  OUT_OF_RANGE,
-}
 
 interface MintState {
   readonly independentField: Field;

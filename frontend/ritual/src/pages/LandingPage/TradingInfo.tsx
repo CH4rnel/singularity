@@ -12,6 +12,7 @@ import { ZkEvmTvlInfoCard } from './TradingInfoCards/ZkEvmTvlInfoCard';
 import { useNewLairInfo } from 'state/stake/hooks';
 import { useUSDCPriceFromAddress } from 'utils/useUSDCPrice';
 import { DLQUICK } from 'constants/v3/addresses';
+import { useCyberiaDexStats } from 'hooks/useCyberiaDexStats';
 
 const TradingInfo: React.FC = () => {
   const { chainId } = useActiveWeb3React();
@@ -64,6 +65,12 @@ const TradingInfo: React.FC = () => {
     }
     return '0';
   }, [lairInfo, quickPrice]);
+
+  // Cyberia has no analytics backend; derive what we can straight from chain.
+  // Placed after all hooks above so the rules of hooks are respected.
+  if (chainIdToUse === ChainId.CYBERIA) {
+    return <CyberiaTradingInfo chainId={chainIdToUse} />;
+  }
 
   return (
     <>
@@ -198,6 +205,61 @@ const TradingInfo: React.FC = () => {
       </Box>
       <DragonLayerInfoCard chainId={chainIdToUse} config={config} />
       {chainIdToUse === ChainId.ZKEVM && <ZkEvmTvlInfoCard />}
+    </>
+  );
+};
+
+const CyberiaTradingInfo: React.FC<{ chainId: ChainId }> = ({ chainId }) => {
+  const { t } = useTranslation();
+  const { isLoading, data } = useCyberiaDexStats(chainId);
+
+  return (
+    <>
+      <Box className='tradingSection'>
+        <Typography
+          className='text-uppercase'
+          style={{ fontSize: '11px', fontWeight: 600 }}
+        >
+          {t('Total VALUE Locked')}
+        </Typography>
+        {isLoading ? (
+          <Skeleton variant='rect' width={100} height={45} />
+        ) : (
+          <Box display='flex'>
+            <h3>${formatCompact(data?.tvlUSD ?? 0)}</h3>
+          </Box>
+        )}
+      </Box>
+      <Box className='tradingSection'>
+        <Typography
+          className='text-uppercase'
+          style={{ fontSize: '11px', fontWeight: 600 }}
+        >
+          {t('Liquidity Pairs')}
+        </Typography>
+        {isLoading ? (
+          <Skeleton variant='rect' width={100} height={45} />
+        ) : (
+          <Box display='flex'>
+            <h3>{(data?.pairCount ?? 0).toLocaleString()}</h3>
+          </Box>
+        )}
+      </Box>
+      <Box className='tradingSection'>
+        <Typography
+          className='text-uppercase'
+          style={{ fontSize: '11px', fontWeight: 600 }}
+        >
+          {t('Tokens')}
+        </Typography>
+        {isLoading ? (
+          <Skeleton variant='rect' width={100} height={45} />
+        ) : (
+          <Box display='flex'>
+            <h3>{(data?.tokenCount ?? 0).toLocaleString()}</h3>
+          </Box>
+        )}
+      </Box>
     </>
   );
 };

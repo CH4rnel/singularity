@@ -22,16 +22,13 @@ console.log("caller:", account.address);
 const owner = await pub.readContract({ address: FACTORY, abi: artifact.abi, functionName: "owner" });
 console.log("factory owner:", owner);
 
-const chatId = -100_000_000_000n + BigInt(Math.floor(Math.random() * 1000));
-console.log("chatId:", chatId.toString());
-
 try {
   // simulate first to get revert reason
   const { request } = await pub.simulateContract({
     address: FACTORY,
     abi: artifact.abi,
     functionName: "createToken",
-    args: ["TestToken", "TEST", chatId, account.address],
+    args: ["TestToken", "TEST", account.address],
     account,
   });
   console.log("simulate OK");

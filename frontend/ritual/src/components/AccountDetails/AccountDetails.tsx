@@ -255,14 +255,6 @@ const AccountDetails: React.FC<AccountDetailsProps> = ({
       },
     },
     {
-      icon: <img src={walletIcon} alt='wallet icon' />,
-      name: 'Buy crypto with fiat',
-      url: '#',
-      onClick: () => {
-        setShowMeldWidgetWidget(true);
-      },
-    },
-    {
       icon: <img src={logout} alt='logout icon' />,
       name: t('disconnect'),
       url: '#',

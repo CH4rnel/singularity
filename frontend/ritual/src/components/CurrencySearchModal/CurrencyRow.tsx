@@ -14,7 +14,7 @@ import { WrappedTokenInfo } from 'state/lists/hooks';
 import { useAddUserToken, useRemoveUserAddedToken } from 'state/user/hooks';
 import { useIsUserAddedToken, useCurrency } from 'hooks/Tokens';
 import { CurrencyLogo } from 'components';
-import { getTokenLogoURL } from 'utils/getTokenLogoURL';
+import { getMetamaskTokenImage } from 'utils/getTokenLogoURL';
 import { PlusHelper } from 'components/QuestionHelper';
 import { ReactComponent as TokenSelectedIcon } from 'assets/images/TokenSelected.svg';
 import { formatNumber, formatTokenAmount } from 'utils';
@@ -199,12 +199,11 @@ const CurrencyRow: React.FC<CurrenyRowProps> = ({
                       ml='2px'
                       onClick={(event: any) => {
                         event.stopPropagation();
-                        // console.log(getTokenLogoURL(currency.address));
                         addTokenToMetamask(
                           currency.address,
                           currency.symbol,
                           currency.decimals,
-                          '',
+                          getMetamaskTokenImage(currency),
                         );
                       }}
                     >

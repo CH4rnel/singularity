@@ -1,0 +1,114 @@
+@use "styles/variables" as *;
+@use "styles/breakpoints" as *;
+
+/* Re-skin the default-mode swap widget to match the Wrap page card. */
+
+#swap-page {
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  /* Override the inherited Grid that crams the card into a 1/3-width column. */
+  & .MuiGrid-container {
+    justify-content: center !important;
+  }
+  & .MuiGrid-item {
+    max-width: 100% !important;
+    flex-basis: auto !important;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  & .wrapper {
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    background: $bgPalette;
+    border: 1px solid $divider;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+    @include media("screen", "<phone") {
+      padding: 16px;
+      border-radius: 16px;
+    }
+
+    /* Page heading line ("Swap") */
+    & .pageHeading {
+      margin-bottom: 16px;
+    }
+
+    /* The two CurrencyInput cards inside the swap. */
+    & .swapBox {
+      background: $bgColor;
+      border: 1px solid $divider;
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin: 0;
+
+      /* The inner row that actually holds the numeric input + currency select. */
+      & .bg-input1 {
+        background: transparent;
+        padding: 4px 0 !important;
+
+        & .inputWrapper input {
+          font-size: 26px;
+          font-weight: 500;
+          color: $textPrimary;
+          background: transparent;
+        }
+      }
+
+      /* Tighten the small "Balance:" / 50%/MAX row at the top. */
+      & .maxWrapper {
+        border-radius: 6px;
+        padding: 2px 8px !important;
+        & small {
+          font-size: 11px;
+          font-weight: 600;
+        }
+      }
+    }
+
+    /* Switcher button between the two inputs. */
+    & .exchangeSwap {
+      margin: -10px auto;
+      & > div, & > button {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: $bgColor;
+        border: 3px solid $bgPalette;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+        & svg { color: $textPrimary; }
+        &:hover { transform: rotate(180deg); }
+      }
+    }
+
+    /* Final action button (Connect / Approve / Swap). */
+    & .swapButtonWrapper {
+      margin-top: 16px;
+      & button {
+        height: 56px;
+        font-size: 16px;
+        font-weight: 600;
+        border-radius: 12px;
+      }
+    }
+
+    /* Recipient row "+ Add a send (optional)" — keep it minimal. */
+    & .recipientInput {
+      margin-top: 8px;
+    }
+  }
+}
+
+/* Hide the “QuickSwap Liquidity Hub powered by Orbs” banner on Cyberia. */
+#swap-page .liquidityHubAd { display: none; }

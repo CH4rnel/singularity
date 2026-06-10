@@ -12,6 +12,19 @@ interface MobileNavItemProps {
 const MobileNavItem: React.FC<MobileNavItemProps> = ({ navItem }) => {
   const [isActive, setIsActive] = useState(false);
 
+  const handleExternalClick = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    item: HeaderMenuItem,
+  ) => {
+    if (!item.isExternal) return;
+
+    event.preventDefault();
+    if (item.onClick) {
+      item.onClick();
+    } else {
+      window.open(item.externalLink, item.target);
+    }
+  };
 
   return (
     <>
@@ -54,6 +67,7 @@ const MobileNavItem: React.FC<MobileNavItemProps> = ({ navItem }) => {
                 return (
                   <Link
                     key={index}
+                    onClick={(event) => handleExternalClick(event, item)}
                     to={item.link}
                     style={{
                       color: '#c7cad9',
@@ -85,7 +99,13 @@ const MobileNavItem: React.FC<MobileNavItemProps> = ({ navItem }) => {
           }}
         >
           <Link
-            onClick={navItem.onClick}
+            onClick={(event) => {
+              if (navItem.isExternal) {
+                handleExternalClick(event, navItem);
+              } else {
+                navItem.onClick?.();
+              }
+            }}
             to={navItem.link}
             style={{
               color: '#c7cad9',

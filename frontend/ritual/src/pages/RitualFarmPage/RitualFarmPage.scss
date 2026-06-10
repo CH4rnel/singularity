@@ -1,0 +1,311 @@
+@use "styles/variables" as *;
+@use "styles/breakpoints" as *;
+
+.ritualFarmPage {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 32px 16px;
+
+  & .ritualFarmContainer {
+    width: 100%;
+    max-width: 720px;
+  }
+
+  & .ritualFarmHeader {
+    margin-bottom: 16px;
+    text-align: center;
+    color: $textPrimary;
+
+    & h3 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      font-weight: 600;
+    }
+    & .subtitle {
+      color: $textSecondary;
+      font-size: 13px;
+    }
+
+    & .sortRow {
+      margin-top: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+
+      & .sortLabel {
+        color: $textSecondary;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+
+      & button.sortBtn {
+        height: 32px;
+        min-width: 64px;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 8px;
+        padding: 0 12px;
+        background: transparent;
+        border: 1px solid $divider;
+        color: $textSecondary;
+        text-transform: none;
+        &.active {
+          background-image: linear-gradient(to bottom, $primary, $blue1);
+          color: white;
+          border-color: transparent;
+        }
+      }
+    }
+
+    & .harvestAllRow {
+      margin-top: 12px;
+      display: flex;
+      justify-content: center;
+
+      & button.harvestAllBtn {
+        height: 38px;
+        min-width: 160px;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 10px;
+        background-image: linear-gradient(to bottom, $primary, $blue1);
+        color: white;
+        &.Mui-disabled {
+          background-image: linear-gradient(to bottom, $secondary1, $grey10);
+          color: $textSecondary;
+          opacity: 0.6;
+        }
+      }
+    }
+  }
+
+  & .ritualFarmError {
+    margin: 0 0 16px;
+    padding: 12px;
+    border-radius: 10px;
+    background: rgba(234, 95, 90, 0.1);
+    border: 1px solid rgba(234, 95, 90, 0.3);
+    color: #ea5f5a;
+    word-break: break-word;
+    font-size: 13px;
+  }
+
+  & .ritualFarmFooter {
+    margin-top: 12px;
+    color: $textSecondary;
+    font-size: 11px;
+    text-align: center;
+    word-break: break-all;
+  }
+
+  & .poolCard {
+    background: $bgPalette;
+    border: 1px solid $divider;
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+
+    & .poolCardHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+
+      & .poolTitleWrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      & .tokenIcons {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+
+        & .tokenIcon,
+        & .tokenIconFallback {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: 2px solid $bgPalette;
+          background: $bgColor;
+          object-fit: cover;
+          &:not(:first-child) {
+            margin-left: -10px;
+          }
+        }
+        & .tokenIconFallback {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: $textPrimary;
+          font-size: 14px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+      }
+
+      & .poolTitle {
+        font-size: 17px;
+        font-weight: 600;
+        color: $textPrimary;
+        & .pidTag {
+          color: $textSecondary;
+          font-size: 12px;
+          font-weight: 400;
+          margin-left: 6px;
+        }
+      }
+      & .poolDescription {
+        color: $textSecondary;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      & .poolEmission {
+        text-align: right;
+        & .apy {
+          color: #4caf50;
+          font-weight: 700;
+          font-size: 17px;
+          line-height: 1.1;
+        }
+        & .alloc {
+          color: $primary;
+          font-weight: 700;
+          font-size: 16px;
+        }
+        & .rate {
+          color: $textSecondary;
+          font-size: 11px;
+          margin-top: 2px;
+        }
+      }
+    }
+
+    & .poolStats {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      @include media("screen", "<phone") {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      & .statCell {
+        background: $bgColor;
+        border: 1px solid $divider;
+        border-radius: 10px;
+        padding: 10px 12px;
+        & .statLabel {
+          color: $textSecondary;
+          font-size: 11px;
+          letter-spacing: 0.4px;
+          text-transform: uppercase;
+        }
+        & .statValue {
+          color: $textPrimary;
+          font-size: 15px;
+          font-weight: 600;
+          margin-top: 4px;
+          word-break: break-all;
+        }
+        & .statBreakdown {
+          color: $textPrimary;
+          font-size: 11px;
+          margin-top: 3px;
+          opacity: 0.85;
+          word-break: break-word;
+        }
+        & .statSub {
+          color: $textSecondary;
+          font-size: 11px;
+          margin-top: 2px;
+        }
+      }
+    }
+
+    & .poolActionsConnect {
+      margin-top: 14px;
+      color: $textSecondary;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    & .poolActions {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    & .actionRow {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      flex-wrap: wrap;
+
+      & .amountField {
+        flex: 1;
+        min-width: 160px;
+        background: $bgColor;
+        border: 1px solid $divider;
+        border-radius: 10px;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        & input {
+          background: transparent;
+          border: none;
+          outline: none;
+          color: $textPrimary;
+          font-size: 16px;
+          width: 100%;
+        }
+      }
+      & .maxBtn {
+        background: transparent;
+        border: 1px solid $primary;
+        color: $primary;
+        border-radius: 8px;
+        padding: 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        &:hover { background: rgba(68, 138, 255, 0.1); }
+      }
+
+      & button.actionBtn {
+        height: 40px;
+        min-width: 110px;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 10px;
+        background-image: linear-gradient(to bottom, $primary, $blue1);
+        color: white;
+        &.Mui-disabled {
+          background-image: linear-gradient(to bottom, $secondary1, $grey10);
+          color: $textSecondary;
+          opacity: 0.6;
+        }
+      }
+      & button.secondaryBtn {
+        height: 40px;
+        min-width: 110px;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 10px;
+        background: transparent;
+        border: 1px solid $divider;
+        color: $textPrimary;
+        &.Mui-disabled {
+          opacity: 0.4;
+        }
+      }
+    }
+  }
+}

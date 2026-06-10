@@ -14,7 +14,7 @@ export default defineConfig({
     profiles: {
       default: {
         compilers: [
-          { version: "0.8.19" },
+          { version: "0.8.19", settings: { optimizer: { enabled: true, runs: 200 } } },
           {
             version: "0.6.6",
             settings: {
@@ -70,7 +70,7 @@ export default defineConfig({
     },
     cyberia: {
       type: "http",
-      url: "http://195.166.164.94:8545",
+      url: "https://rpc.cyberia.church",
       chainId: 49406,
       accounts: [DEPLOYER_PK],
     },

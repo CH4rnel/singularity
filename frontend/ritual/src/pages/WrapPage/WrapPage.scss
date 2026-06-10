@@ -1,0 +1,168 @@
+@use "styles/variables" as *;
+@use "styles/breakpoints" as *;
+
+.wrapPage {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 32px 16px;
+
+  & .wrapCard {
+    width: 100%;
+    max-width: 480px;
+    background: $bgPalette;
+    border: 1px solid $divider;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+    @include media("screen", "<phone") {
+      padding: 16px;
+      border-radius: 16px;
+    }
+  }
+
+  & .wrapHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    & h5 {
+      margin: 0;
+      color: $textPrimary;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    & small {
+      color: $textSecondary;
+      font-size: 12px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+  }
+
+  & .wrapInputBox {
+    background: $bgColor;
+    border: 1px solid $divider;
+    border-radius: 16px;
+    padding: 14px 16px;
+
+    & .wrapInputRow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      & small {
+        color: $textSecondary;
+        font-size: 12px;
+      }
+      & .balanceWrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        & .maxBtn {
+          border: 1px solid $primary;
+          background: transparent;
+          color: $primary;
+          border-radius: 6px;
+          padding: 2px 8px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          line-height: 1.2;
+          &:hover {
+            background: rgba(68, 138, 255, 0.1);
+          }
+        }
+      }
+    }
+
+    & .wrapAmountRow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      & input {
+        font-size: 28px;
+        font-weight: 500;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: $textPrimary;
+        flex: 1;
+        min-width: 0;
+        padding: 0;
+        &::placeholder { color: $textSecondary; opacity: 0.5; }
+      }
+      & .symbol {
+        color: $textPrimary;
+        font-weight: 600;
+        font-size: 16px;
+        margin-left: 12px;
+      }
+      & .amountStatic {
+        font-size: 28px;
+        font-weight: 500;
+        color: $textPrimary;
+      }
+    }
+  }
+
+  & .wrapSwitcher {
+    display: flex;
+    justify-content: center;
+    margin: -10px auto;
+    position: relative;
+    z-index: 2;
+    & .switcherInner {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: $bgColor;
+      border: 3px solid $bgPalette;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+      & svg { color: $textPrimary; }
+      &:hover { transform: rotate(180deg); }
+    }
+  }
+
+  & .wrapErrorBox {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 10px;
+    background: rgba(234, 95, 90, 0.1);
+    border: 1px solid rgba(234, 95, 90, 0.3);
+    & small {
+      color: #ea5f5a;
+      word-break: break-word;
+    }
+  }
+
+  & .wrapAction {
+    margin-top: 16px;
+    & button {
+      width: 100%;
+      height: 56px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 12px;
+      background-image: linear-gradient(to bottom, $primary, $blue1);
+      &.Mui-disabled {
+        background-image: linear-gradient(to bottom, $secondary1, $grey10);
+        color: $textSecondary;
+        opacity: 0.5;
+      }
+    }
+  }
+
+  & .wrapHint {
+    margin-top: 12px;
+    text-align: center;
+    color: $textSecondary;
+    font-size: 12px;
+  }
+}

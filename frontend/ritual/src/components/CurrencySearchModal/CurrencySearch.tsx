@@ -1,4 +1,4 @@
-import { ChainId, Currency, ETHER, Token } from '@uniswap/sdk';
+import { ChainId, Currency, ETHER, Token, WETH, currencyEquals } from '@uniswap/sdk';
 import React, {
   KeyboardEvent,
   RefObject,
@@ -32,10 +32,11 @@ import { filterTokens } from 'utils/filtering';
 import { useTokenComparator } from 'utils/sorting';
 import useDebouncedChangeHandler from 'utils/useDebouncedChangeHandler';
 import { useCurrencyBalances } from 'state/wallet/hooks';
-import { useUSDCPricesFromAddresses } from 'utils/useUSDCPrice';
+import { useUSDCPricesFromAddresses, useUSDCPricesToken } from 'utils/useUSDCPrice';
 import { wrappedCurrency } from 'utils/wrappedCurrency';
+import { getConfig } from 'config/index';
 import CustomTabSwitch from 'components/v3/CustomTabSwitch';
-import { useLocalStorage } from '@orderly.network/hooks';
+import { useLocalStorage } from 'hooks/useLocalStorage';
 import { useUserAddedTokens } from 'state/user/hooks';
 
 interface CurrencySearchProps {
@@ -162,7 +163,7 @@ const CurrencySearch: React.FC<CurrencySearchProps> = ({
     let updatedTokens = Object.values(allTokens);
 
     if (tab === 'favorites') {
-      updatedTokens = [...favoriteCurrencies];
+      updatedTokens = [...favoriteCurrencies] as Token[];
     } else if (tab === 'trending') {
       updatedTokens = updatedTokens.filter(
         (t) => (t as any).tokenInfo?.trending,
@@ -239,6 +240,48 @@ const CurrencySearch: React.FC<CurrencySearchProps> = ({
     .filter((address, ind, self) => self.indexOf(address) === ind);
 
   const { prices: usdPrices } = useUSDCPricesFromAddresses(tokenAddresses);
+
+  const wrappedTokensForPricing = useMemo(
+    () =>
+      allCurrencies
+        .map((c): Token | undefined => {
+          if (!chainId) return undefined;
+          // native → WCYBER
+          if (currencyEquals(c, ETHER[chainId as ChainId])) {
+            return WETH[chainId as ChainId];
+          }
+          // quickswap-sdk Token
+          const wrapped = wrappedCurrency(c, chainId);
+          if (wrapped) return wrapped;
+          // WrappedTokenInfo or any currency with address (sdk-core Token)
+          const ca = c as any;
+          if (ca.address && ca.decimals !== undefined) {
+            try {
+              return new Token(
+                ca.chainId ?? chainId,
+                ca.address,
+                ca.decimals,
+                ca.symbol,
+                ca.name,
+              );
+            } catch {
+              return undefined;
+            }
+          }
+          return undefined;
+        })
+        .filter((t): t is Token => !!t),
+    [allCurrencies, chainId],
+  );
+  const onChainTokenPrices = useUSDCPricesToken(wrappedTokensForPricing, chainId);
+  const leaderboardAvailable = !!getConfig(chainId)?.leaderboard?.available;
+  const effectiveUsdPrices = useMemo(() => {
+    if (leaderboardAvailable) return usdPrices;
+    return wrappedTokensForPricing.map((token, i) => ({
+      address: token.address.toLowerCase(),
+      price: onChainTokenPrices[i] ?? 0,
+    }));
+  }, [leaderboardAvailable, usdPrices, wrappedTokensForPricing, onChainTokenPrices]);
 
   const handleCurrencySelect = useCallback(
     (currency: Currency) => {
@@ -324,7 +367,7 @@ const CurrencySearch: React.FC<CurrencySearchProps> = ({
           otherCurrency={otherSelectedCurrency}
           selectedCurrency={selectedCurrency}
           balances={currencyBalances}
-          usdPrices={usdPrices}
+          usdPrices={effectiveUsdPrices}
           handleChangeFavorite={handleChangeFavorite}
           favoriteCurrencies={favoriteCurrencies}
         />

@@ -13,7 +13,7 @@ import { useSelectedTokenList } from 'state/lists/hooks';
 import { useActiveWeb3React, useAnalyticsVersion } from 'hooks';
 import 'components/styles/AnalyticsTable.scss';
 import FarmingAPRTooltip from 'components/FarmingAPRTooltip';
-import { useLocalStorage } from '@orderly.network/hooks';
+import { useLocalStorage } from 'hooks/useLocalStorage';
 
 interface PairsTableProps {
   data: any[];

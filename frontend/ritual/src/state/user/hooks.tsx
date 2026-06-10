@@ -3,6 +3,7 @@ import flatMap from 'lodash.flatmap';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { shallowEqual, useDispatch, useSelector } from 'react-redux';
 import { useActiveWeb3React } from 'hooks';
+import { getConfig } from 'config/index';
 import { useAllTokens } from 'hooks/Tokens';
 import { AppDispatch, AppState } from 'state';
 import {
@@ -494,7 +495,7 @@ export function useIsInfiniteApproval(): [
 
 export function useAmlScore() {
   const dispatch = useDispatch<AppDispatch>();
-  const { account } = useActiveWeb3React();
+  const { account, chainId } = useActiveWeb3React();
   const amlScore = useSelector<AppState, AppState['user']['amlScore']>(
     (state) => state.user.amlScore,
   );
@@ -503,6 +504,12 @@ export function useAmlScore() {
 
   useEffect(() => {
     const fetchAmlScore = async () => {
+      if (!chainId || !getConfig(chainId)?.leaderboard?.available) {
+        setIsLoading(false);
+        setScore(0);
+        dispatch(updateUserAmlScore({ score: 0 }));
+        return;
+      }
       setIsLoading(true);
       try {
         const res = await fetch(
@@ -527,7 +534,7 @@ export function useAmlScore() {
     } else {
       fetchAmlScore();
     }
-  }, [account, amlScore, dispatch]);
+  }, [account, amlScore, chainId, dispatch]);
 
   return { score, isLoading };
 }

@@ -90,9 +90,19 @@ export function useContract<T extends Contract = Contract>(
   ABI: any,
   withSignerIfPossible = true,
 ): T | null {
-  const { library: web3ModalLibrary, account, chainId } = useActiveWeb3React();
+  const {
+    library: web3ModalLibrary,
+    account,
+    chainId,
+    currentChainId,
+  } = useActiveWeb3React();
   const libraryFromChain = RPC_PROVIDERS[chainId];
-  const library = web3ModalLibrary ?? libraryFromChain;
+  const useWalletProvider =
+    withSignerIfPossible &&
+    account &&
+    web3ModalLibrary &&
+    currentChainId === chainId;
+  const library = useWalletProvider ? web3ModalLibrary : libraryFromChain;
 
   return useMemo(() => {
     if (!addressOrAddressMap || !ABI || !library || !chainId) return null;
@@ -126,7 +136,19 @@ export function useContracts<T extends Contract = Contract>(
   ABI: any,
   withSignerIfPossible = true,
 ): (T | null)[] {
-  const { library, account, chainId } = useActiveWeb3React();
+  const {
+    library: web3ModalLibrary,
+    account,
+    chainId,
+    currentChainId,
+  } = useActiveWeb3React();
+  const libraryFromChain = RPC_PROVIDERS[chainId];
+  const useWalletProvider =
+    withSignerIfPossible &&
+    account &&
+    web3ModalLibrary &&
+    currentChainId === chainId;
+  const library = useWalletProvider ? web3ModalLibrary : libraryFromChain;
 
   return useMemo(() => {
     if (!addressOrAddressMaps || !ABI || !library || !chainId) return [];

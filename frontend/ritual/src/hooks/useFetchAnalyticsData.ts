@@ -1,8 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChainId } from '@uniswap/sdk';
+import { getConfig } from 'config/index';
+
+const useLeaderboardAvailable = (chainId: ChainId) =>
+  Boolean(getConfig(chainId)?.leaderboard?.available);
 
 export const useAnalyticsGlobalData = (version: string, chainId: ChainId) => {
+  const leaderboardAvailable = useLeaderboardAvailable(chainId);
   const fetchGlobalData = async () => {
+    if (!leaderboardAvailable) return null;
     const res = await fetch(
       `${process.env.REACT_APP_LEADERBOARD_APP_URL}/analytics/global-data/${version}?chainId=${chainId}`,
     );
@@ -17,6 +23,7 @@ export const useAnalyticsGlobalData = (version: string, chainId: ChainId) => {
   const { isLoading, data } = useQuery({
     queryKey: ['fetchAnalyticsGlobalData', version, chainId],
     queryFn: fetchGlobalData,
+    enabled: leaderboardAvailable,
     refetchInterval: 300000,
   });
 
@@ -28,7 +35,9 @@ export const useAnalyticsTopTokens = (
   chainId: ChainId,
   limit?: number,
 ) => {
+  const leaderboardAvailable = useLeaderboardAvailable(chainId);
   const fetchTopTokens = async () => {
+    if (!leaderboardAvailable) return null;
     const res = await fetch(
       `${
         process.env.REACT_APP_LEADERBOARD_APP_URL
@@ -46,6 +55,7 @@ export const useAnalyticsTopTokens = (
   const { isLoading, data } = useQuery({
     queryKey: ['fetchAnalyticsTopTokens', version, chainId, limit],
     queryFn: fetchTopTokens,
+    enabled: leaderboardAvailable,
     refetchInterval: 300000,
   });
 
@@ -53,7 +63,9 @@ export const useAnalyticsTopTokens = (
 };
 
 export const useAnalyticsTopPairs = (version: string, chainId: ChainId) => {
+  const leaderboardAvailable = useLeaderboardAvailable(chainId);
   const fetchTopPairs = async () => {
+    if (!leaderboardAvailable) return null;
     const res = await fetch(
       `${process.env.REACT_APP_LEADERBOARD_APP_URL}/analytics/top-pairs/${version}?chainId=${chainId}`,
     );
@@ -67,6 +79,7 @@ export const useAnalyticsTopPairs = (version: string, chainId: ChainId) => {
   const { isLoading, data } = useQuery({
     queryKey: ['fetchAnalyticsTopPairs', version, chainId],
     queryFn: fetchTopPairs,
+    enabled: leaderboardAvailable,
     refetchInterval: 300000,
   });
 
@@ -78,8 +91,9 @@ export const useAnalyticsTokenDetails = (
   version: string,
   chainId: ChainId,
 ) => {
+  const leaderboardAvailable = useLeaderboardAvailable(chainId);
   const fetchTokenDetails = async () => {
-    if (chainId && version) {
+    if (chainId && version && leaderboardAvailable) {
       const res = await fetch(
         `${process.env.REACT_APP_LEADERBOARD_APP_URL}/analytics/top-token-details/${tokenAddress}/${version}?chainId=${chainId}`,
       );
@@ -95,6 +109,7 @@ export const useAnalyticsTokenDetails = (
   const { isLoading, data } = useQuery({
     queryKey: ['fetchAnalyticsTokenDetails', tokenAddress, version, chainId],
     queryFn: fetchTokenDetails,
+    enabled: leaderboardAvailable,
     refetchInterval: 300000,
   });
 

@@ -11,13 +11,11 @@ const artifact = JSON.parse(fs.readFileSync("./artifacts/contracts/TelegramToken
 
 const acct = privateKeyToAccount((process.env.DEPLOYER_PK!.startsWith("0x") ? process.env.DEPLOYER_PK! : "0x" + process.env.DEPLOYER_PK!) as `0x${string}`);
 
-// Simulate with DIFFERENT chatId (fresh one)
-const chatId = -1234567890n;
 const gas = await pub.estimateContractGas({
   address: FACTORY,
   abi: artifact.abi,
   functionName: "createToken",
-  args: ["Bots", "BOTS", chatId, acct.address],
+  args: ["Bots", "BOTS", acct.address],
   account: acct,
 });
 console.log("estimated gas for createToken:", gas.toString());

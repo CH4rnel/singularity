@@ -4,18 +4,39 @@ import {
   V2_CUSTOM_BASES,
 } from 'constants/v3/addresses';
 import flatMap from 'lodash.flatmap';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { SwapDelay } from 'state/swap/actions';
 import { PairState, usePairs } from '../data/Reserves';
 import { wrappedCurrency } from '../utils/wrappedCurrency';
 
 import { useActiveWeb3React } from './index';
+import {
+  isFullPairEnumerationChain,
+  useAllV2Pairs,
+} from './useAllV2Pairs';
+
+interface V2TradeResult {
+  trade: Trade | null;
+  loading: boolean;
+}
 
 export function useAllCommonPairs(
   currencyA?: Currency,
   currencyB?: Currency,
 ): Pair[] {
+  return useAllCommonPairsState(currencyA, currencyB).pairs;
+}
+
+function useAllCommonPairsState(
+  currencyA?: Currency,
+  currencyB?: Currency,
+): { pairs: Pair[]; loading: boolean } {
   const { chainId } = useActiveWeb3React();
+
+  // On small chains we enumerate every pair from the factory and route through
+  // all on-chain liquidity, instead of only the curated base tokens below.
+  const fullEnumeration = isFullPairEnumerationChain(chainId);
+  const allV2 = useAllV2Pairs();
 
   const bases: Token[] = useMemo(
     () => (chainId ? V2_BASES_TO_CHECK_TRADES_AGAINST[chainId] : []),
@@ -36,7 +57,7 @@ export function useAllCommonPairs(
 
   const allPairCombinations: [Token, Token][] = useMemo(
     () =>
-      tokenA && tokenB
+      !fullEnumeration && tokenA && tokenB
         ? [
             // the direct pair
             [tokenA, tokenB],
@@ -77,29 +98,31 @@ export function useAllCommonPairs(
               return true;
             })
         : [],
-    [tokenA, tokenB, bases, basePairs, chainId],
+    [fullEnumeration, tokenA, tokenB, bases, basePairs, chainId],
   );
 
   const allPairs = usePairs(allPairCombinations);
 
-  // only pass along valid pairs, non-duplicated pairs
-  return useMemo(
-    () =>
-      Object.values(
-        allPairs
-          // filter out invalid pairs
-          .filter((result): result is [PairState.EXISTS, Pair] =>
-            Boolean(result[0] === PairState.EXISTS && result[1]),
-          )
-          // filter out duplicated pairs
-          .reduce<{ [pairAddress: string]: Pair }>((memo, [, curr]) => {
-            memo[curr.liquidityToken.address] =
-              memo[curr.liquidityToken.address] ?? curr;
-            return memo;
-          }, {}),
-      ),
-    [allPairs],
-  );
+  const curated = useMemo(() => {
+    const loading = allPairs.some(([state]) => state === PairState.LOADING);
+    const pairs = Object.values(
+      allPairs
+        // filter out invalid pairs
+        .filter((result): result is [PairState.EXISTS, Pair] =>
+          Boolean(result[0] === PairState.EXISTS && result[1]),
+        )
+        // filter out duplicated pairs
+        .reduce<{ [pairAddress: string]: Pair }>((memo, [, curr]) => {
+          memo[curr.liquidityToken.address] =
+            memo[curr.liquidityToken.address] ?? curr;
+          return memo;
+        }, {}),
+    );
+
+    return { pairs, loading };
+  }, [allPairs]);
+
+  return fullEnumeration ? allV2 : curated;
 }
 
 /**
@@ -112,8 +135,8 @@ export function useTradeExactIn(
   currencyOut?: Currency,
   swapDelay?: SwapDelay,
   onSetSwapDelay?: (swapDelay: SwapDelay) => void,
-): Trade | null {
-  const allowedPairs = useAllCommonPairs(
+): V2TradeResult {
+  const { pairs: allowedPairs, loading } = useAllCommonPairsState(
     currencyAmountIn?.currency,
     currencyOut,
   );
@@ -127,21 +150,39 @@ export function useTradeExactIn(
     ) {
       return bestTradeExactIn;
     }
-    if (swapDelay !== SwapDelay.SWAP_REFRESH && onSetSwapDelay) {
-      onSetSwapDelay(SwapDelay.SWAP_COMPLETE);
-    }
     if (currencyAmountIn && currencyOut && allowedPairs.length > 0) {
-      return (
+      const trade =
         Trade.bestTradeExactIn(allowedPairs, currencyAmountIn, currencyOut, {
           maxHops: 3,
           maxNumResults: 1,
-        })[0] ?? null
-      );
+        })[0] ?? null;
+      return trade;
     }
     return null;
-  }, [allowedPairs, currencyAmountIn, currencyOut, onSetSwapDelay, swapDelay]);
+  }, [allowedPairs, currencyAmountIn, currencyOut, swapDelay]);
 
-  return bestTradeExactIn;
+  useEffect(() => {
+    if (
+      swapDelay === SwapDelay.USER_INPUT_COMPLETE &&
+      onSetSwapDelay &&
+      currencyAmountIn &&
+      currencyOut &&
+      allowedPairs.length > 0
+    ) {
+      onSetSwapDelay(SwapDelay.SWAP_COMPLETE);
+    }
+  }, [
+    allowedPairs.length,
+    currencyAmountIn,
+    currencyOut,
+    onSetSwapDelay,
+    swapDelay,
+  ]);
+
+  return {
+    trade: bestTradeExactIn,
+    loading: Boolean(currencyAmountIn && currencyOut && loading),
+  };
 }
 
 /**
@@ -153,8 +194,8 @@ export function useTradeExactOut(
   currencyAmountOut?: CurrencyAmount,
   swapDelay?: SwapDelay,
   onSetSwapDelay?: (swapDelay: SwapDelay) => void,
-): Trade | null {
-  const allowedPairs = useAllCommonPairs(
+): V2TradeResult {
+  const { pairs: allowedPairs, loading } = useAllCommonPairsState(
     currencyIn,
     currencyAmountOut?.currency,
   );
@@ -167,19 +208,37 @@ export function useTradeExactOut(
     ) {
       return bestTradeExactOut;
     }
-    if (swapDelay !== SwapDelay.SWAP_REFRESH && onSetSwapDelay) {
-      onSetSwapDelay(SwapDelay.SWAP_COMPLETE);
-    }
     if (currencyIn && currencyAmountOut && allowedPairs.length > 0) {
-      return (
+      const trade =
         Trade.bestTradeExactOut(allowedPairs, currencyIn, currencyAmountOut, {
           maxHops: 3,
           maxNumResults: 1,
-        })[0] ?? null
-      );
+        })[0] ?? null;
+      return trade;
     }
     return null;
-  }, [allowedPairs, currencyIn, currencyAmountOut, onSetSwapDelay, swapDelay]);
+  }, [allowedPairs, currencyIn, currencyAmountOut, swapDelay]);
 
-  return bestTradeExactOut;
+  useEffect(() => {
+    if (
+      swapDelay === SwapDelay.USER_INPUT_COMPLETE &&
+      onSetSwapDelay &&
+      currencyIn &&
+      currencyAmountOut &&
+      allowedPairs.length > 0
+    ) {
+      onSetSwapDelay(SwapDelay.SWAP_COMPLETE);
+    }
+  }, [
+    allowedPairs.length,
+    currencyIn,
+    currencyAmountOut,
+    onSetSwapDelay,
+    swapDelay,
+  ]);
+
+  return {
+    trade: bestTradeExactOut,
+    loading: Boolean(currencyIn && currencyAmountOut && loading),
+  };
 }

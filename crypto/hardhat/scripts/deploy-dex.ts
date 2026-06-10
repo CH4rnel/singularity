@@ -48,7 +48,7 @@ const chain = {
   nativeCurrency: { name: "Cyber", symbol: "CYBER", decimals: 18 },
 };
 
-const RPC_URL = "http://195.166.164.94:8545";
+const RPC_URL = "https://rpc.cyberia.church";
 
 const walletClient = createWalletClient({
   chain,

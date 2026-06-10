@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid, Link as LinkIcon, Folder, Vote, Wallet } from 'lucide-vue-next';
+import {
+    BookOpen,
+    FolderGit2,
+    LayoutGrid,
+    Link as LinkIcon,
+    Folder,
+    Vote,
+    Wallet,
+} from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
@@ -29,7 +37,12 @@ const walletAuth = useWalletAuth();
 
 // Restore wallet state from saved user addresses on mount
 onMounted(() => {
-    const user = page.props.auth?.user as { wallet_address?: string | null; solana_wallet_address?: string | null } | undefined;
+    const user = page.props.auth?.user as
+        | {
+              wallet_address?: string | null;
+              solana_wallet_address?: string | null;
+          }
+        | undefined;
     wallet.restore(user?.wallet_address);
     solanaWallet.restore(user?.solana_wallet_address);
 });
@@ -83,7 +96,10 @@ const handleWalletConnect = async () => {
             const signature = await wallet.signMessage(message);
 
             if (signature) {
-                const response = await walletAuth.verifySignature(address, signature);
+                const response = await walletAuth.verifySignature(
+                    address,
+                    signature,
+                );
                 router.post('/login/web3', { token: response.token });
             }
         } catch {
@@ -101,7 +117,10 @@ const handleSolanaConnect = async () => {
             const signature = await solanaWallet.signMessage(message);
 
             if (signature) {
-                const response = await walletAuth.verifySolanaSignature(address, signature);
+                const response = await walletAuth.verifySolanaSignature(
+                    address,
+                    signature,
+                );
                 router.post('/login/web3', { token: response.token });
             }
         } catch {
@@ -143,16 +162,40 @@ const formatCyberBalance = (balance: string): string => {
                         @click="handleWalletConnect"
                     >
                         <div class="flex w-full items-center gap-2">
-                            <Wallet v-if="!wallet.isConnecting.value" class="h-4 w-4" />
-                            <span v-if="wallet.isConnected.value" class="font-mono text-xs">
-                                EVM: {{ wallet.formatAddress(wallet.address.value!) }}
+                            <Wallet
+                                v-if="!wallet.isConnecting.value"
+                                class="h-4 w-4"
+                            />
+                            <span
+                                v-if="wallet.isConnected.value"
+                                class="font-mono text-xs"
+                            >
+                                EVM:
+                                {{
+                                    wallet.formatAddress(wallet.address.value!)
+                                }}
                             </span>
                             <span v-else>
-                                {{ wallet.isConnecting.value ? 'Connecting...' : 'Connect EVM' }}
+                                {{
+                                    wallet.isConnecting.value
+                                        ? 'Connecting...'
+                                        : 'Connect EVM'
+                                }}
                             </span>
                         </div>
-                        <span v-if="wallet.isConnected.value && wallet.cyberBalance.value" class="text-xs text-muted-foreground">
-                            {{ formatCyberBalance(wallet.cyberBalance.value.formatted) }} CYBER
+                        <span
+                            v-if="
+                                wallet.isConnected.value &&
+                                wallet.cyberBalance.value
+                            "
+                            class="text-xs text-muted-foreground"
+                        >
+                            {{
+                                formatCyberBalance(
+                                    wallet.cyberBalance.value.formatted,
+                                )
+                            }}
+                            CYBER
                         </span>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -163,12 +206,27 @@ const formatCyberBalance = (balance: string): string => {
                         @click="handleSolanaConnect"
                     >
                         <div class="flex w-full items-center gap-2">
-                            <Wallet v-if="!solanaWallet.isConnecting.value" class="h-4 w-4" />
-                            <span v-if="solanaWallet.isConnected.value" class="font-mono text-xs">
-                                SOL: {{ solanaWallet.formatAddress(solanaWallet.address.value!) }}
+                            <Wallet
+                                v-if="!solanaWallet.isConnecting.value"
+                                class="h-4 w-4"
+                            />
+                            <span
+                                v-if="solanaWallet.isConnected.value"
+                                class="font-mono text-xs"
+                            >
+                                SOL:
+                                {{
+                                    solanaWallet.formatAddress(
+                                        solanaWallet.address.value!,
+                                    )
+                                }}
                             </span>
                             <span v-else>
-                                {{ solanaWallet.isConnecting.value ? 'Connecting...' : 'Connect Solana' }}
+                                {{
+                                    solanaWallet.isConnecting.value
+                                        ? 'Connecting...'
+                                        : 'Connect Solana'
+                                }}
                             </span>
                         </div>
                     </SidebarMenuButton>

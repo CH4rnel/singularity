@@ -8,7 +8,7 @@ withDefaults(
         canRegister: boolean;
         yesOrNo: {
             answer: string;
-        },
+        };
         price: {
             priceSol: string | null;
             priceUsd: string | null;
@@ -22,8 +22,8 @@ withDefaults(
             catSays: string;
             cats: Array<any>;
             count: null;
-            tags: Array<string>
-        }
+            tags: Array<string>;
+        };
     }>(),
     {
         canRegister: true,
@@ -33,8 +33,8 @@ withDefaults(
 
 const page = usePage();
 const dashboardUrl = computed(() => {
-    console.log(page.props)
-    page.props.currentTeam ? dashboard(page.props.currentTeam.slug).url : '/'
+    console.log(page.props);
+    page.props.currentTeam ? dashboard(page.props.currentTeam.slug).url : '/';
 });
 </script>
 
@@ -75,9 +75,9 @@ const dashboardUrl = computed(() => {
             </nav>
         </header>
         <div
-            class="w-full items-center justify-center opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0 text-white"
+            class="w-full items-center justify-center text-white opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0"
         >
-            <div v-if="price" class="mb-4 p-4 bg-gray-800 rounded">
+            <div v-if="price" class="mb-4 rounded bg-gray-800 p-4">
                 <p class="text-lg font-bold">CYBER Token</p>
                 <p>Price SOL: {{ price.priceSol }}</p>
                 <p>Price USD: {{ price.priceUsd }}</p>

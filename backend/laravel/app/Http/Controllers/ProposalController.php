@@ -20,7 +20,9 @@ class ProposalController extends Controller
             'dao' => $dao,
             'proposals' => $dao->proposals()
                 ->with(['user', 'votes'])
-                ->withCount(['comments', 'votesFor', 'votesAgainst'])
+                ->withCount(['comments'])
+                ->withSum('votesFor as power_for', 'voting_power')
+                ->withSum('votesAgainst as power_against', 'voting_power')
                 ->latest()
                 ->get(),
         ]);
@@ -35,7 +37,6 @@ class ProposalController extends Controller
             'votes.user',
         ]);
 
-        $proposal->loadCount(['votesFor', 'votesAgainst']);
         $proposal->loadSum('votesFor as power_for', 'voting_power');
         $proposal->loadSum('votesAgainst as power_against', 'voting_power');
 

@@ -20,15 +20,87 @@
       "symbol": "WCYBER",
       "decimals": 18,
       "chainId": 49406,
-      "logoURI": "/cyberia.png"
+      "logoURI": "/CYBER.png"
     },
     {
       "name": "Ash",
-      "address": "0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86",
+      "address": "0x992Fca0a89DD95afb17751f6CC233Adb9B089df5",
       "symbol": "ASH",
       "decimals": 18,
       "chainId": 49406,
       "logoURI": "/logo_circle.png"
+    },
+    {
+      "name": "Telegram",
+      "address": "0x3d32FE83ad0C1157fdDCA0a3280764c495cdAD6D",
+      "symbol": "TG",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/telegram.svg"
+    },
+    {
+      "name": "CYBER.sol",
+      "address": "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA",
+      "symbol": "CYBER.sol",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/CYBER.png"
+    },
+    {
+      "name": "USD Coin",
+      "address": "0xdc25597B19799010047F17e9591EFE08EFd40077",
+      "symbol": "USDC",
+      "decimals": 6,
+      "chainId": 49406,
+      "logoURI": "/usdc.svg"
+    },
+    {
+      "name": "Tether USD",
+      "address": "0x94845aF24a3E431593A2b941b2b31836dE45185D",
+      "symbol": "USDT",
+      "decimals": 6,
+      "chainId": 49406,
+      "logoURI": "/usdt.svg"
+    },
+    {
+      "name": "Bitcoin",
+      "address": "0x9332081f308BC978fe259237850fA253131b46Fa",
+      "symbol": "BTC",
+      "decimals": 8,
+      "chainId": 49406,
+      "logoURI": "/btc.svg"
+    },
+    {
+      "name": "Litecoin",
+      "address": "0x001AFD19C9d890b0cf0fcd6D654f9BFe4f264F14",
+      "symbol": "LTC",
+      "decimals": 8,
+      "chainId": 49406,
+      "logoURI": "/ltc.svg"
+    },
+    {
+      "name": "Solana",
+      "address": "0x53450B1d205f1e41d10B653FBBDEa74160dafFf4",
+      "symbol": "SOL",
+      "decimals": 9,
+      "chainId": 49406,
+      "logoURI": "/sol.svg"
+    },
+    {
+      "name": "Silver",
+      "address": "0xAd9dfef9D671aFCF29Dbdd7Df360E7cA8D5ac40b",
+      "symbol": "SILVER",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/silver.png"
+    },
+    {
+      "name": "Russian Ruble",
+      "address": "0x3cE7d8E486E16baD2Fb1487Fe1da4dC33237d923",
+      "symbol": "RUB",
+      "decimals": 2,
+      "chainId": 49406,
+      "logoURI": "/rub.png"
     }
   ]
 }

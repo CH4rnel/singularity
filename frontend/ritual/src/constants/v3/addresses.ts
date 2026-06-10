@@ -383,7 +383,7 @@ export const QUICK_ADDRESS: AddressMap = {
 export const NEW_QUICK_ADDRESS: AddressMap = {
   [ChainId.MATIC]: '0xB5C064F955D8e7F38fE0460C556a72987494eE17',
   [ChainId.ZKEVM]: '0x68286607A1d43602d880D349187c3c48c0fD05E6',
-  [ChainId.CYBERIA]: '0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86',
+  [ChainId.CYBERIA]: '0x992Fca0a89DD95afb17751f6CC233Adb9B089df5',
 };
 
 export const DL_QUICK_ADDRESS: AddressMap = {
@@ -518,6 +518,7 @@ export const WMATIC_EXTENDED: { [chainId: number]: TokenV3 } = {
   [ChainId.MINATO]: toV3Token(WETH[ChainId.MINATO]),
   [ChainId.SONEIUM]: toV3Token(WETH[ChainId.SONEIUM]),
   [ChainId.SOMNIA]: toV3Token(WETH[ChainId.SOMNIA]),
+  [ChainId.CYBERIA]: toV3Token(WETH[ChainId.CYBERIA]),
 };
 
 export const USDC: { [chainId: number]: Token } = {
@@ -625,6 +626,13 @@ export const USDC: { [chainId: number]: Token } = {
     6,
     'USDC',
     'USDC',
+  ),
+  [ChainId.CYBERIA]: new Token(
+    ChainId.CYBERIA,
+    '0xdc25597B19799010047F17e9591EFE08EFd40077',
+    6,
+    'USDC',
+    'USD Coin',
   ),
 };
 
@@ -739,6 +747,13 @@ export const USDT: { [chainId: number]: Token } = {
     18,
     'USDT',
     'USDT',
+  ),
+  [ChainId.CYBERIA]: new Token(
+    ChainId.CYBERIA,
+    '0x94845aF24a3E431593A2b941b2b31836dE45185D',
+    6,
+    'USDT',
+    'Tether USD',
   ),
 };
 
@@ -1552,6 +1567,16 @@ export const DLDQUICK: { [chainId: number]: Token } = {
   [ChainId.DOGECHAIN]: dDD[ChainId.DOGECHAIN],
 };
 
+export const SILVER: { [chainId: number]: Token } = {
+  [ChainId.CYBERIA]: new Token(
+    ChainId.CYBERIA,
+    '0xAd9dfef9D671aFCF29Dbdd7Df360E7cA8D5ac40b',
+    18,
+    'SILVER',
+    'Silver',
+  ),
+};
+
 export const V2_BASES_TO_CHECK_TRADES_AGAINST: {
   [ChainId: number]: Token[];
 } = {
@@ -1579,6 +1604,11 @@ export const V2_BASES_TO_CHECK_TRADES_AGAINST: {
   [ChainId.CYBERIA]: [
     WETH[ChainId.CYBERIA],
     NEW_QUICK[ChainId.CYBERIA],
+    USDC[ChainId.CYBERIA],
+    USDT[ChainId.CYBERIA],
+    // SILVER is the only liquid pair for RUB (RUB↔SILVER, SILVER↔CYBER),
+    // so it must be a routing base for multi-hop swaps into/out of RUB.
+    SILVER[ChainId.CYBERIA],
   ],
 };
 
@@ -1778,6 +1808,13 @@ export const V2_BASES_TO_TRACK_LIQUIDITY_FOR: {
     USDO[ChainId.DOGECHAIN],
     DC[ChainId.DOGECHAIN],
     DD[ChainId.DOGECHAIN],
+  ],
+  [ChainId.CYBERIA]: [
+    WETH[ChainId.CYBERIA],
+    NEW_QUICK[ChainId.CYBERIA],
+    USDC[ChainId.CYBERIA],
+    USDT[ChainId.CYBERIA],
+    SILVER[ChainId.CYBERIA],
   ],
 };
 

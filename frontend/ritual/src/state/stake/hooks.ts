@@ -441,6 +441,8 @@ export function useOldSyrupInfo(
 }
 
 const getOneDayVolume = async (version: string, chainId: ChainId) => {
+  if (!getConfig(chainId)?.leaderboard?.available) return 0;
+
   const res = await fetch(
     `${process.env.REACT_APP_LEADERBOARD_APP_URL}/utils/oneDayVolume?chainId=${chainId}`,
   );
@@ -600,6 +602,7 @@ function useLairInfo(
   const { data: oneDayVolume } = useQuery({
     queryKey: ['getOneDayVolume', chainId],
     queryFn: getOneDayVol,
+    enabled: Boolean(getConfig(chainId)?.leaderboard?.available),
     refetchInterval: 300000,
   });
 

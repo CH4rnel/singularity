@@ -37,51 +37,11 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   const { chainId } = useActiveWeb3React();
 
   const config = getConfig(chainId);
-  const showPerps = config['perps']['available'];
   const showPools = config['pools']['available'];
-
-  const showHydra = config['hydra']['available'];
-  const showPerpsV2 = config['perpsV2']['available'];
 
   useEffect(() => {
     setIsActive(false);
   }, [location]);
-
-  const perpMenuItems: any[] = [];
-  if (showPerpsV2) {
-    perpMenuItems.push({
-      id: 'perps-new-page-link',
-      link: '/falkor',
-      text: 'Perps',
-      isNew: true,
-    });
-  }
-  if (showHydra) {
-    perpMenuItems.push({
-      link: '/hydra',
-      text: 'Hydra',
-      id: 'hydra-page-link',
-      isExternal: true,
-      externalLink: process?.env?.REACT_APP_HYDRA_URL || '',
-      onClick: async () => {
-        if (process.env.REACT_APP_HYDRA_URL) {
-          window.open(process.env.REACT_APP_HYDRA_URL, '_blank');
-        }
-      },
-    });
-  }
-  if (showPerps && process.env.NODE_ENV !== 'production') {
-    perpMenuItems.push({
-      id: 'perps-v1-page-link',
-      link: process.env.REACT_APP_PERPS_URL || '#',
-      text: 'Perps V1',
-      onClick: () => {
-        if (process.env.REACT_APP_PERPS_URL) {
-          window.open(process.env.REACT_APP_PERPS_URL, '_blank');
-        }
-      },
-    });
-  }
 
   // Ritual has no external social accounts wired up yet — keep the list empty
   // so we don't show broken QuickSwap links.
@@ -277,26 +237,6 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 <Link to={`/swap?currency0=ETH${swapCurrencyStr}`}>
                   {t('swap')}
                 </Link>
-              </Box>
-              <Box>
-                <HeaderDesktopItem
-                  anchorOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
-                  }}
-                  transformOrigin={{
-                    vertical: 'bottom',
-                    horizontal: 'center',
-                  }}
-                  item={{
-                    link: '/perps',
-                    text: 'Perps',
-                    id: 'perps-page-link',
-                    isExternal: true,
-                    externalLink: process?.env?.REACT_APP_PERPS_URL || '',
-                    items: perpMenuItems,
-                  }}
-                />
               </Box>
               {showPools && (
                 <Box>

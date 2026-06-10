@@ -9,6 +9,13 @@ if (!DEPLOYER_PK) throw new Error("DEPLOYER_PK not set");
 
 const pk = (DEPLOYER_PK.startsWith("0x") ? DEPLOYER_PK : `0x${DEPLOYER_PK}`) as `0x${string}`;
 const account = privateKeyToAccount(pk);
+const relayerPk = process.env.BRIDGE_RELAYER_PRIVATE_KEY
+  ? (process.env.BRIDGE_RELAYER_PRIVATE_KEY.startsWith("0x")
+      ? process.env.BRIDGE_RELAYER_PRIVATE_KEY
+      : `0x${process.env.BRIDGE_RELAYER_PRIVATE_KEY}`) as `0x${string}`
+  : pk;
+const relayer = privateKeyToAccount(relayerPk);
+const rpcUrl = process.env.CYBERIA_RPC_URL || "https://rpc.cyberia.church";
 
 const chain = {
   ...mainnet,
@@ -19,13 +26,13 @@ const chain = {
 
 const client = createWalletClient({
   chain,
-  transport: http("http://195.166.164.94:8545"),
+  transport: http(rpcUrl),
   account,
 });
 
 const publicClient = createPublicClient({
   chain,
-  transport: http("http://195.166.164.94:8545"),
+  transport: http(rpcUrl),
 });
 
 async function deploy(artifactPath: string, args: unknown[] = []) {
@@ -43,6 +50,8 @@ async function deploy(artifactPath: string, args: unknown[] = []) {
 
 async function main() {
   console.log("Deployer:", account.address);
+  console.log("Relayer owner:", relayer.address);
+  console.log("RPC:", rpcUrl);
 
   // 1. Deploy CYBER.sol token
   console.log("\n1. Deploying CyberToken (CYBER.sol)...");
@@ -54,7 +63,7 @@ async function main() {
   console.log("\n2. Deploying CyberBridge...");
   const bridge = await deploy(
     "./artifacts/contracts/CyberBridge.sol/CyberBridge.json",
-    [cyberToken.address, account.address]
+    [cyberToken.address, relayer.address]
   );
 
   // 3. Read WrappedCyberSol address from bridge
@@ -68,6 +77,28 @@ async function main() {
   console.log("CyberToken (CYBER.sol):", cyberToken.address);
   console.log("CyberBridge:", bridge.address);
   console.log("WrappedCyberSol (CYBER.sol bridged):", wrappedAddr);
+
+  const deployment = {
+    chainId: chain.id,
+    rpcUrl,
+    deployer: account.address,
+    relayerOwner: relayer.address,
+    cyberToken: cyberToken.address,
+    cyberBridge: bridge.address,
+    wrappedCyberSol: wrappedAddr,
+    deployedAt: new Date().toISOString(),
+  };
+
+  fs.mkdirSync("./deployments", { recursive: true });
+  fs.writeFileSync(
+    "./deployments/cyberia-bridge.json",
+    `${JSON.stringify(deployment, null, 2)}\n`,
+  );
+
+  console.log("\nSaved deployment: deployments/cyberia-bridge.json");
+  console.log("\nUpdate env/frontend:");
+  console.log(`BRIDGE_EVM_CONTRACT_ADDRESS=${bridge.address}`);
+  console.log(`CYBERSOL_ERC20_ADDRESS=${wrappedAddr}`);
 }
 
 main().catch(console.error);

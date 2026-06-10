@@ -55,10 +55,10 @@ class Web3LoginController extends Controller
             return $team;
         });
 
-        $redirectUrl = $team
-            ? route('dashboard', ['current_team' => $team->slug])
-            : route('home');
-
-        return redirect()->intended($redirectUrl);
+        // Stay on whatever page the user connected from instead of forcing a
+        // redirect to the (currently empty) dashboard. `intended()` still
+        // honours a stored target when the user was bounced here from a
+        // protected page; otherwise we fall back to the referring page.
+        return redirect()->intended(url()->previous() ?: route('home'));
     }
 }

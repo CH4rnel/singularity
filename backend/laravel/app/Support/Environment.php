@@ -11,6 +11,7 @@ class Environment
     public static function isProduction(): bool
     {
         $productionDomains = [
+            'bridge.cyberia.church',
             'cyberia.church',
         ];
 

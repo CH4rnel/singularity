@@ -123,6 +123,7 @@ const Swap: React.FC<{
     currencyBalances,
     parsedAmount,
     currencies,
+    v2TradeLoading,
     inputError: swapInputError,
     autoSlippage,
   } = useDerivedSwapInfo();
@@ -197,6 +198,8 @@ const Swap: React.FC<{
       parsedAmounts[independentField]?.greaterThan(JSBI.BigInt(0)),
   );
   const noRoute = !route;
+  const routeLoading =
+    !showWrap && userHasSpecifiedInputOutput && v2TradeLoading;
 
   const { priceImpactWithoutFee } = computeTradePriceBreakdown(trade);
   const [approvalSubmitted, setApprovalSubmitted] = useState<boolean>(false);
@@ -352,6 +355,8 @@ const Swap: React.FC<{
           : wrapType === WrapType.UNWRAPPING
           ? t('unwrappingMATIC', { symbol: WETH[chainId].symbol })
           : '';
+      } else if (routeLoading) {
+        return t('loading');
       } else if (noRoute && userHasSpecifiedInputOutput) {
         return t('insufficientLiquidityTrade');
       } else if (priceImpactSeverity > 3 && !isExpertMode) {
@@ -376,6 +381,7 @@ const Swap: React.FC<{
     formattedAmounts,
     showWrap,
     noRoute,
+    routeLoading,
     userHasSpecifiedInputOutput,
     priceImpactSeverity,
     isExpertMode,
@@ -396,7 +402,7 @@ const Swap: React.FC<{
           wrapType === WrapType.WRAPPING ||
           wrapType === WrapType.UNWRAPPING
         );
-      } else if (noRoute && userHasSpecifiedInputOutput) {
+      } else if ((noRoute && userHasSpecifiedInputOutput) || routeLoading) {
         return true;
       } else if (showApproveFlow) {
         return (
@@ -424,6 +430,7 @@ const Swap: React.FC<{
     isSupportedNetwork,
     showWrap,
     noRoute,
+    routeLoading,
     userHasSpecifiedInputOutput,
     showApproveFlow,
     wrapInputError,
@@ -568,7 +575,7 @@ const Swap: React.FC<{
           finalizedTransaction(receipt, {
             summary,
           });
-          dispatch(updateUserBalance());
+          dispatch(updateUserBalance(receipt.blockNumber));
           setSwapState({
             attemptingTxn: false,
             txPending: false,

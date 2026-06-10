@@ -8,13 +8,19 @@ services:
       - 'host.docker.internal:host-gateway'
     volumes:
       - "../proxy:/etc/nginx/templates"
+      - "/root/singularity/frontend/landing:/usr/share/nginx/landing:ro"
+      - "/root/dex-frontend:/usr/share/nginx/dex:ro"
+      - "/root/certbot/conf:/etc/letsencrypt:ro"
+      - "/root/certbot/www:/var/www/certbot:ro"
     environment:
       BACK_PROXY_PASS: ${BACK_PROXY_PASS:-http://backend:4000}
       FRONT_PROXY_PASS: ${FRONT_PROXY_PASS:-http://frontend:3000}
       AD_IFRAME_REPLACEMENT_URL: ${AD_IFRAME_REPLACEMENT_URL:-}
     ports:
       - target: 80
-        published: 6080
+        published: 80
+      - target: 443
+        published: 443
       - target: 8080
         published: 8080
       - target: 8081

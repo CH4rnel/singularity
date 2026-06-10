@@ -56,7 +56,7 @@ function submitCreate() {
 
 function submitEdit() {
     if (!editingCategory.value) return;
-    
+
     editForm.put(`/categories/${editingCategory.value.id}`, {
         onSuccess: () => {
             showForm.value = false;
@@ -86,12 +86,14 @@ defineOptions({
 <template>
     <Head class="m-3" title="Categories" />
 
-    <div class="flex flex-col space-y-6 m-2">
+    <div class="m-2 flex flex-col space-y-6">
         <div class="flex items-center justify-between">
-            <Heading variant="small" title="Categories" description="Organize your links" />
-            <Button @click="openCreate">
-                <Plus /> Add Category
-            </Button>
+            <Heading
+                variant="small"
+                title="Categories"
+                description="Organize your links"
+            />
+            <Button @click="openCreate"> <Plus /> Add Category </Button>
         </div>
 
         <div v-if="showForm" class="rounded-lg border p-4">
@@ -99,15 +101,26 @@ defineOptions({
                 {{ editingCategory ? 'Edit Category' : 'Add New Category' }}
             </h3>
 
-            <form v-if="!editingCategory" @submit.prevent="submitCreate" class="space-y-4">
+            <form
+                v-if="!editingCategory"
+                @submit.prevent="submitCreate"
+                class="space-y-4"
+            >
                 <div>
                     <label class="text-sm font-medium">Name</label>
                     <Input v-model="createForm.name" class="mt-1" required />
                 </div>
 
                 <div class="flex gap-2">
-                    <Button type="submit" :disabled="createForm.processing">Create</Button>
-                    <Button type="button" variant="outline" @click="showForm = false">Cancel</Button>
+                    <Button type="submit" :disabled="createForm.processing"
+                        >Create</Button
+                    >
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="showForm = false"
+                        >Cancel</Button
+                    >
                 </div>
             </form>
 
@@ -118,22 +131,37 @@ defineOptions({
                 </div>
 
                 <div class="flex gap-2">
-                    <Button type="submit" :disabled="editForm.processing">Update</Button>
-                    <Button type="button" variant="outline" @click="showForm = false">Cancel</Button>
+                    <Button type="submit" :disabled="editForm.processing"
+                        >Update</Button
+                    >
+                    <Button
+                        type="button"
+                        variant="outline"
+                        @click="showForm = false"
+                        >Cancel</Button
+                    >
                 </div>
             </form>
         </div>
 
         <div class="space-y-3">
-            <div v-for="category in props.categories" :key="category.id" class="flex items-center justify-between rounded-lg border p-4">
+            <div
+                v-for="category in props.categories"
+                :key="category.id"
+                class="flex items-center justify-between rounded-lg border p-4"
+            >
                 <div class="flex items-center gap-4">
-                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                    <div
+                        class="flex h-10 w-10 items-center justify-center rounded-full bg-muted"
+                    >
                         <Folder class="h-5 w-5" />
                     </div>
                     <div>
                         <div class="flex items-center gap-2">
                             <span class="font-medium">{{ category.name }}</span>
-                            <Badge variant="secondary">{{ category.links?.length || 0 }} links</Badge>
+                            <Badge variant="secondary"
+                                >{{ category.links?.length || 0 }} links</Badge
+                            >
                         </div>
                     </div>
                 </div>
@@ -142,7 +170,11 @@ defineOptions({
                     <div class="flex items-center gap-2">
                         <Tooltip>
                             <TooltipTrigger as-child>
-                                <Button variant="ghost" size="sm" @click="openEdit(category)">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="openEdit(category)"
+                                >
                                     <Edit class="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
@@ -151,7 +183,11 @@ defineOptions({
 
                         <Tooltip>
                             <TooltipTrigger as-child>
-                                <Button variant="ghost" size="sm" @click="deleteCategory(category)">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="deleteCategory(category)"
+                                >
                                     <Trash2 class="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
@@ -161,7 +197,10 @@ defineOptions({
                 </TooltipProvider>
             </div>
 
-            <p v-if="props.categories.length === 0" class="py-8 text-center text-muted-foreground">
+            <p
+                v-if="props.categories.length === 0"
+                class="py-8 text-center text-muted-foreground"
+            >
                 No categories yet. Add one to get started.
             </p>
         </div>

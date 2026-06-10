@@ -18,6 +18,9 @@ pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
 
+// Slot Unit tests need the Laravel kernel (config, facades) but not the DB.
+pest()->extend(TestCase::class)->in('Unit/Slots');
+
 /*
 |--------------------------------------------------------------------------
 | Expectations

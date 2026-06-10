@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\BridgeController;
+use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\Auth\Web3LoginController;
+use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\LinkController;
@@ -11,14 +13,30 @@ use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
 use App\Http\Controllers\Teams\TeamInvitationController;
+use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureTeamMembership;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', [ApiController::class, 'index'])->name('home');
+Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
+Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
+Route::inertia('/market', 'Market')->name('market');
+Route::inertia('/lending', 'Lending')->name('lending');
+Route::inertia('/lending/liquidate', 'Liquidate')->name('lending.liquidate');
+Route::inertia('/launchpad', 'Launchpad')->name('launchpad');
+Route::get('/launchpad/sites/{address}', [\App\Http\Controllers\Api\LaunchpadController::class, 'showSite'])
+    ->where('address', '0x[a-fA-F0-9]{40}')
+    ->name('launchpad.site');
+Route::inertia('/slots', 'Slots')->name('slots');
+Route::get('dao', [DaoController::class, 'index'])->name('dao.index');
+Route::get('dao/{dao}', [DaoController::class, 'show'])->name('dao.show');
+Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('proposals.show');
 
 Route::post('login/web3', Web3LoginController::class)->name('web3.login');
 
 Route::get('/wallet-login', fn () => inertia('auth/WalletLogin'))->name('wallet.login')->middleware('guest');
+
+// Telegram whales-chat verification page (opened from the bot's one-time link).
+Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-sol');
 
 Route::prefix('{current_team}')
     ->middleware(['auth', 'verified', EnsureTeamMembership::class])
@@ -35,13 +53,12 @@ Route::middleware(['auth'])->group(function () {
         'destroy' => 'links.destroy',
     ]);
     Route::resource('categories', CategoryController::class)->except(['show', 'create', 'edit']);
-    Route::resource('dao', DaoController::class)->except(['create', 'edit']);
+    Route::resource('dao', DaoController::class)->only(['store', 'update', 'destroy']);
 
     // Proposals (nested under dao)
     Route::post('dao/{dao}/proposals', [ProposalController::class, 'store'])->name('dao.proposals.store');
 
     // Proposal detail
-    Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('proposals.show');
     Route::put('proposals/{proposal}', [ProposalController::class, 'update'])->name('proposals.update');
     Route::delete('proposals/{proposal}', [ProposalController::class, 'destroy'])->name('proposals.destroy');
 
@@ -62,5 +79,10 @@ Route::middleware(['auth'])->group(function () {
 
 // Bridge (public — no auth required, controller handles optional user)
 Route::post('bridge/submit', [BridgeController::class, 'submit'])->name('bridge.submit');
+
+// Bridge analytics (admin only)
+Route::middleware(['auth', EnsureBridgeAdmin::class])
+    ->get('admin/bridge-analytics', [BridgeAnalyticsController::class, 'index'])
+    ->name('admin.bridge-analytics');
 
 require __DIR__.'/settings.php';

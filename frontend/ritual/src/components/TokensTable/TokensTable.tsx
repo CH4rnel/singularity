@@ -18,7 +18,7 @@ import 'components/styles/AnalyticsTable.scss';
 import { useTranslation } from 'react-i18next';
 import { useSelectedTokenList } from 'state/lists/hooks';
 import { useActiveWeb3React } from 'hooks';
-import { useLocalStorage } from '@orderly.network/hooks';
+import { useLocalStorage } from 'hooks/useLocalStorage';
 
 interface TokensTableProps {
   data: any[];
