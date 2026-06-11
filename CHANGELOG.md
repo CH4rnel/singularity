@@ -10,16 +10,22 @@ vYYYY.MM.DD
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## v2026.06.11 - 2026-06-11
+
 ### Added
 
 - Public Laravel analytics surface at `/analytics`.
 - Repository hygiene rules for local AI assistant state.
 - Initial GitHub Actions CI for Laravel and EVM contracts.
 - Issue templates for bugs, features, and first-time contributors.
+- Ritual DEX environment template without secret values.
 
 ### Changed
 
 - README now explains what Singularity is, how Cyberia/CYBER/CYBER.sol relate, where each component lives, and why the repository appears Elixir-heavy.
+- Local `.env` files are ignored, and the tracked Ritual DEX `.env` was removed from git.
 
 ## Release Process
 
