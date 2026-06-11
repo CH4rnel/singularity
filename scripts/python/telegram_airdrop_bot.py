@@ -144,6 +144,12 @@ USD_ANCHORS = {
     if a.strip()
 }
 
+# A pool is only trusted as a price source when its anchor/relay-side reserve
+# is worth at least this many USD. Dust pools (e.g. a pair seeded with 1e-6
+# USDC) have meaningless reserve ratios and would otherwise poison the price
+# walker. When several pools qualify, the deepest one wins.
+PRICE_MIN_POOL_USD = float(os.environ.get("PRICE_MIN_POOL_USD", "1.0"))
+
 # Relay tokens used to price assets that have no direct stablecoin pair.
 # Default: WCYBER and CYBER.sol — together they reach the long tail of pairs.
 PRICE_RELAY_TOKENS = [
@@ -2099,7 +2105,10 @@ _TOKEN_USD_TTL_SECONDS = 300.0
 
 def _get_token_usd_price(w3: Web3, token_addr: str, _depth: int = 0) -> float | None:
     """USD price of one whole token. Anchors return 1.0; otherwise walks at
-    most one hop via a relay token to reach an anchor. Cached for 5 min."""
+    most one hop via a relay token to reach an anchor. Pools whose anchor/relay
+    side holds less than PRICE_MIN_POOL_USD are ignored (dust pools have
+    meaningless reserve ratios); among the rest the deepest pool wins.
+    Cached for 5 min."""
     addr = token_addr.lower()
     if addr in USD_ANCHORS:
         return 1.0
@@ -2114,7 +2123,10 @@ def _get_token_usd_price(w3: Web3, token_addr: str, _depth: int = 0) -> float | 
         address=Web3.to_checksum_address(RITUAL_V2_FACTORY), abi=FACTORY_GET_PAIR_ABI
     )
 
-    def price_via(target_addr: str, target_price_usd: float) -> float | None:
+    def price_via(target_addr: str, target_price_usd: float) -> tuple[float, float] | None:
+        """(price, depth_usd) via the token's direct pool with `target`, where
+        depth_usd is the USD value of the pool's target-side reserve — the
+        walker's confidence in this route."""
         try:
             pair_addr = factory.functions.getPair(
                 Web3.to_checksum_address(token_addr),
@@ -2143,29 +2155,35 @@ def _get_token_usd_price(w3: Web3, token_addr: str, _depth: int = 0) -> float | 
             r_token, r_target = reserves[1], reserves[0]
         if r_token <= 0 or r_target <= 0:
             return None
-        return (r_target / 10**dec_target) / (r_token / 10**dec_token) * target_price_usd
+        depth_usd = (r_target / 10**dec_target) * target_price_usd
+        if depth_usd < PRICE_MIN_POOL_USD:
+            return None
+        price = (r_target / 10**dec_target) / (r_token / 10**dec_token) * target_price_usd
+        return price, depth_usd
 
-    # Direct stable pair.
+    routes: list[tuple[float, float]] = []
+
     for anchor in USD_ANCHORS:
-        p = price_via(anchor, 1.0)
-        if p is not None and p > 0:
-            _token_usd_price_cache[addr] = (p, now)
-            return p
+        r = price_via(anchor, 1.0)
+        if r is not None and r[0] > 0:
+            routes.append(r)
 
-    # One hop via a relay.
     for relay in PRICE_RELAY_TOKENS:
         if relay == addr:
             continue
         relay_price = _get_token_usd_price(w3, relay, _depth=_depth + 1)
         if relay_price is None or relay_price <= 0:
             continue
-        p = price_via(relay, relay_price)
-        if p is not None and p > 0:
-            _token_usd_price_cache[addr] = (p, now)
-            return p
+        r = price_via(relay, relay_price)
+        if r is not None and r[0] > 0:
+            routes.append(r)
 
-    _token_usd_price_cache[addr] = (None, now)
-    return None
+    price = max(routes, key=lambda r: r[1])[0] if routes else None
+    # A None computed mid-recursion may be an artifact of the depth guard, not
+    # a real "no route" — caching it would poison the token for the TTL.
+    if price is not None or _depth == 0:
+        _token_usd_price_cache[addr] = (price, now)
+    return price
 
 
 def _swap_usd_volume(
@@ -2252,8 +2270,39 @@ def _set_swap_cursor(block: int, log_index: int) -> None:
     _set_block_cursor("last_announced_swap_cursor", block, log_index)
 
 
+def _decode_swap_hop(w3: Web3, log) -> dict | None:
+    """Decode one Swap log into a hop dict, or None when the pair is unknown
+    or the event has no clear in/out direction."""
+    tokens = _get_pair_tokens(w3, log["address"])
+    if not tokens:
+        return None
+    t0, t1 = tokens
+    sym0, dec0 = _get_token_meta(w3, t0)
+    sym1, dec1 = _get_token_meta(w3, t1)
+    a0in, a1in, a0out, a1out = _decode_swap_data(log["data"])
+
+    if a0in > 0 and a1out > 0:
+        in_addr, in_sym, in_amt, in_dec = t0, sym0, a0in, dec0
+        out_addr, out_sym, out_amt, out_dec = t1, sym1, a1out, dec1
+    elif a1in > 0 and a0out > 0:
+        in_addr, in_sym, in_amt, in_dec = t1, sym1, a1in, dec1
+        out_addr, out_sym, out_amt, out_dec = t0, sym0, a0out, dec0
+    else:
+        return None
+
+    return {
+        "in_addr": in_addr, "in_sym": in_sym, "in_amt": in_amt, "in_dec": in_dec,
+        "out_addr": out_addr, "out_sym": out_sym, "out_amt": out_amt, "out_dec": out_dec,
+        "to": _decode_topic_address(log["topics"][2]),
+        "route": None,
+    }
+
+
 async def _announce_swap_tick(bot) -> None:
-    """Scan new Swap events from the Ritual V2 router and post one msg per swap.
+    """Scan new Swap events from the Ritual V2 router and post one msg per
+    trade. A routed swap (A → B → C) emits one Swap event per pair with the
+    *next pair* as the intermediate recipient, so consecutive events of the
+    same tx are merged into a single first-in → last-out announcement.
 
     Cursor is stored as `block:log_index` so a mid-tick Telegram failure
     resumes exactly where it stopped without duplicating earlier sends.
@@ -2288,95 +2337,120 @@ async def _announce_swap_tick(bot) -> None:
         logger.error(f"swap_announcer: get_logs {cur_block}..{end}: {e}")
         return
 
-    for log in logs:
-        blk = int(log["blockNumber"])
-        idx = int(log["logIndex"])
-        if (blk, idx) <= (cur_block, cur_idx):
-            continue
+    new_logs = [
+        log for log in sorted(logs, key=lambda l: (int(l["blockNumber"]), int(l["logIndex"])))
+        if (int(log["blockNumber"]), int(log["logIndex"])) > (cur_block, cur_idx)
+    ]
+    threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
+
+    i = 0
+    while i < len(new_logs):
+        # Within one block, a tx's logs occupy a contiguous logIndex range, so
+        # the Swap events of one routed trade are consecutive here.
+        tx_raw = new_logs[i]["transactionHash"]
+        group = [new_logs[i]]
+        j = i + 1
+        while j < len(new_logs) and new_logs[j]["transactionHash"] == tx_raw:
+            group.append(new_logs[j])
+            j += 1
+        i = j
+
+        last_blk = int(group[-1]["blockNumber"])
+        last_idx = int(group[-1]["logIndex"])
+        tx_hash = "0x" + _hex_no_prefix(tx_raw).lower()
 
         try:
-            pair_addr = log["address"]
-            tokens = _get_pair_tokens(w3, pair_addr)
-            if not tokens:
-                _set_swap_cursor(blk, idx)
-                cur_block, cur_idx = blk, idx
-                continue
-            t0, t1 = tokens
-            sym0, dec0 = _get_token_meta(w3, t0)
-            sym1, dec1 = _get_token_meta(w3, t1)
-            a0in, a1in, a0out, a1out = _decode_swap_data(log["data"])
-
-            if a0in > 0 and a1out > 0:
-                in_addr, in_sym, in_amt, in_dec = t0, sym0, a0in, dec0
-                out_addr, out_sym, out_amt, out_dec = t1, sym1, a1out, dec1
-            elif a1in > 0 and a0out > 0:
-                in_addr, in_sym, in_amt, in_dec = t1, sym1, a1in, dec1
-                out_addr, out_sym, out_amt, out_dec = t0, sym0, a0out, dec0
-            else:
-                _set_swap_cursor(blk, idx)
-                cur_block, cur_idx = blk, idx
-                continue
-
-            usd = _swap_usd_volume(
-                w3, in_addr, in_amt, in_dec, out_addr, out_amt, out_dec
-            )
-            to_addr = _decode_topic_address(log["topics"][2])
-            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
-            event_kwargs = dict(
-                kind="swap", usd=usd,
-                sym_in=in_sym, amt_in=in_amt / 10**in_dec,
-                sym_out=out_sym, amt_out=out_amt / 10**out_dec,
-                user_addr=to_addr, tx_hash=tx_hash, block=blk,
-            )
-
-            # Only big swaps get their own post; everything below the threshold
-            # is recorded and surfaces in the periodic digest. Unprice-able
-            # swaps still post so novel pairs the price walker can't reach yet
-            # stay visible.
-            threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
-            if usd is not None and usd < threshold:
-                _record_activity(**event_kwargs)
-                logger.info(
-                    f"swap_announcer: digest-only block={blk} idx={idx} "
-                    f"usd={usd:.4f} < {threshold}"
-                )
-                _set_swap_cursor(blk, idx)
-                cur_block, cur_idx = blk, idx
-                continue
-
-            text_lines = [
-                "🔄 Swap on Ritual",
-                f"{_format_token_amount(in_amt, in_dec)} {in_sym} → "
-                f"{_format_token_amount(out_amt, out_dec)} {out_sym}",
-            ]
-            if usd is not None:
-                text_lines.append(f"Value: {_fmt_usd(usd)}")
-            text_lines += [
-                f"User: {_short_addr(to_addr)}",
-                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
-            ]
+            hops = [h for h in (_decode_swap_hop(w3, log) for log in group) if h is not None]
         except Exception as e:
-            logger.error(f"swap_announcer: decode failed block={blk} idx={idx}: {e}")
-            _set_swap_cursor(blk, idx)
-            cur_block, cur_idx = blk, idx
+            logger.error(f"swap_announcer: decode failed tx={tx_hash}: {e}")
+            hops = []
+        if not hops:
+            _set_swap_cursor(last_blk, last_idx)
+            cur_block, cur_idx = last_blk, last_idx
             continue
 
-        try:
-            await bot.send_message(
-                chat_id=SWAP_ANNOUNCE_CHAT,
-                text="\n".join(text_lines),
-                disable_web_page_preview=True,
-            )
-        except TelegramError as e:
-            logger.error(f"swap_announcer: send failed block={blk} idx={idx}: {e}")
-            return  # leave cursor at last successful; retry next tick
+        # Merge a chained route into one announcement: trade in = first hop's
+        # input, trade out = last hop's output, trader = last hop's recipient.
+        is_route = len(hops) > 1 and all(
+            hops[k]["out_addr"].lower() == hops[k + 1]["in_addr"].lower()
+            for k in range(len(hops) - 1)
+        )
+        if is_route:
+            first, last = hops[0], hops[-1]
+            announcements = [{
+                **{k: first[k] for k in ("in_addr", "in_sym", "in_amt", "in_dec")},
+                **{k: last[k] for k in ("out_addr", "out_sym", "out_amt", "out_dec")},
+                "to": last["to"],
+                "route": [first["in_sym"]] + [h["in_sym"] for h in hops[1:]] + [last["out_sym"]],
+            }]
+        else:
+            announcements = hops
 
-        # Record only after a successful send so a mid-tick retry can't
-        # double-count the same swap in the digest.
-        _record_activity(**event_kwargs)
-        _set_swap_cursor(blk, idx)
-        cur_block, cur_idx = blk, idx
-        logger.info(f"swap_announcer: posted swap block={blk} idx={idx} tx={tx_hash}")
+        aborted = False
+        for ann in announcements:
+            try:
+                usd = _swap_usd_volume(
+                    w3,
+                    ann["in_addr"], ann["in_amt"], ann["in_dec"],
+                    ann["out_addr"], ann["out_amt"], ann["out_dec"],
+                )
+                event_kwargs = dict(
+                    kind="swap", usd=usd,
+                    sym_in=ann["in_sym"], amt_in=ann["in_amt"] / 10**ann["in_dec"],
+                    sym_out=ann["out_sym"], amt_out=ann["out_amt"] / 10**ann["out_dec"],
+                    user_addr=ann["to"], tx_hash=tx_hash, block=last_blk,
+                )
+
+                # Only big swaps get their own post; everything below the
+                # threshold is recorded and surfaces in the periodic digest.
+                # Unprice-able swaps still post so novel pairs the price walker
+                # can't reach yet stay visible.
+                if usd is not None and usd < threshold:
+                    _record_activity(**event_kwargs)
+                    logger.info(
+                        f"swap_announcer: digest-only tx={tx_hash} "
+                        f"usd={usd:.4f} < {threshold}"
+                    )
+                    continue
+
+                text_lines = [
+                    "🔄 Swap on Ritual",
+                    f"{_format_token_amount(ann['in_amt'], ann['in_dec'])} {ann['in_sym']} → "
+                    f"{_format_token_amount(ann['out_amt'], ann['out_dec'])} {ann['out_sym']}",
+                ]
+                if ann["route"]:
+                    text_lines.append("Route: " + " → ".join(ann["route"]))
+                if usd is not None:
+                    text_lines.append(f"Value: {_fmt_usd(usd)}")
+                text_lines += [
+                    f"User: {_short_addr(ann['to'])}",
+                    f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+                ]
+            except Exception as e:
+                logger.error(f"swap_announcer: build failed tx={tx_hash}: {e}")
+                continue
+
+            try:
+                await bot.send_message(
+                    chat_id=SWAP_ANNOUNCE_CHAT,
+                    text="\n".join(text_lines),
+                    disable_web_page_preview=True,
+                )
+            except TelegramError as e:
+                logger.error(f"swap_announcer: send failed tx={tx_hash}: {e}")
+                aborted = True
+                break
+
+            # Record only after a successful send so a mid-tick retry can't
+            # double-count the same swap in the digest.
+            _record_activity(**event_kwargs)
+            logger.info(f"swap_announcer: posted swap block={last_blk} tx={tx_hash}")
+
+        if aborted:
+            return  # cursor still before this tx; the whole group retries next tick
+
+        _set_swap_cursor(last_blk, last_idx)
+        cur_block, cur_idx = last_blk, last_idx
 
     # Empty range, or fully drained — advance past the scanned window so we
     # don't refetch the same blocks indefinitely.
