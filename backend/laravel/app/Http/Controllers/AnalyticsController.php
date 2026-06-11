@@ -119,6 +119,12 @@ class AnalyticsController extends Controller
             ? DB::table('token_prices')->whereNotNull('price_usd')->orderBy('symbol')->get()
             : collect();
 
+        $cyberPrice = $hasPrices
+            ? DB::table('token_prices')->where('symbol', 'CYBER.sol')->value('price_usd')
+            : null;
+
+        $cyberPrice ??= $this->configuredCyberPrice();
+
         return Inertia::render('Analytics', [
             'days' => $days,
             'swaps' => $swaps,
@@ -130,9 +136,7 @@ class AnalyticsController extends Controller
             'bridges' => $bridges,
             'pools' => $pools,
             'prices' => $prices,
-            'cyberPrice' => $hasPrices
-                ? DB::table('token_prices')->where('symbol', 'CYBER.sol')->value('price_usd')
-                : null,
+            'cyberPrice' => $cyberPrice,
             'tvlUsd' => $hasPools ? (float) DB::table('dex_pools')->sum('tvl_usd') : null,
             'snapshotAt' => $hasPrices ? DB::table('token_prices')->max('updated_at') : null,
             'chain' => $this->chainStats(),
@@ -167,6 +171,17 @@ class AnalyticsController extends Controller
                 'gas_price_gwei' => $gasPrice !== null ? hexdec(substr($gasPrice, 2)) / 1e9 : null,
             ];
         });
+    }
+
+    private function configuredCyberPrice(): ?float
+    {
+        $price = config('services.cyber_sol.price_usd');
+
+        if ($price === null || $price === '') {
+            return null;
+        }
+
+        return is_numeric($price) ? (float) $price : null;
     }
 
     private function rpcCall(string $rpc, string $method): ?string

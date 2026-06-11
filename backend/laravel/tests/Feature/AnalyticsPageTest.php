@@ -17,7 +17,7 @@ it('renders without the bot-owned tables', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('Analytics')
             ->where('indexerReady', false)
-            ->where('cyberPrice', null));
+            ->where('cyberPrice', 0.00009235));
 });
 
 it('aggregates indexer data when the tables exist', function () {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import Header from '@/components/Header.vue';
 
 type SwapTotals = {
     count: number;
@@ -193,6 +194,8 @@ return usd(value, 4);
 
 <template>
     <Head title="Analytics" />
+
+    <Header />
 
     <div class="mx-auto max-w-6xl space-y-8 p-6">
         <header
