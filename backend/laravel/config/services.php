@@ -39,6 +39,10 @@ return [
         'rpc_url' => env('CYBERIA_RPC_URL'),
     ],
 
+    'cyberia' => [
+        'explorer_url' => env('CYBERIA_EXPLORER_URL', 'https://explorer.cyberia.church'),
+    ],
+
     'bridge' => [
         'evm_rpc_url' => env('BRIDGE_EVM_RPC_URL', env('CYBERIA_RPC_URL')),
         'evm_bridge_address' => env('BRIDGE_EVM_CONTRACT_ADDRESS'),
@@ -62,6 +66,7 @@ return [
         'rpc_url' => env('SOLANA_RPC_URL') ?: env('BRIDGE_SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
         'mint' => env('CYBER_SOL_MINT', 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump'),
         'decimals' => (int) env('CYBER_SOL_DECIMALS', 6),
+        'price_usd' => env('CYBER_SOL_PRICE_USD', '0.00009235'),
         // Minimum whole CYBER.sol to qualify for the whales chat.
         'whale_threshold' => env('WHALE_MIN_CYBER_SOL', 10000000),
     ],

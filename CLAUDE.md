@@ -1,65 +1,92 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides Claude Code guidance for the Singularity repository. Keep it aligned with `AGENTS.md`, which is the cross-agent source of truth.
 
 ## Overview
 
-**Singularity** is the Cyberia ecosystem monorepo. Cyberia is an EVM-compatible chain (Chain ID: 49406, RPC: https://rpc.cyberia.church, native token: CYBER). The repo contains a bridge UI/backend, a DEX frontend, EVM + Solana smart contracts, a block explorer, and operational bots/scripts.
+**Singularity** is the Cyberia ecosystem monorepo. Cyberia is an EVM-compatible chain with chain ID `49406`, RPC `https://rpc.cyberia.church`, native token `CYBER`, explorer `https://explorer.cyberia.church`, bridge `https://bridge.cyberia.church`, site `https://cyberia.church`, DEX `https://swap.cyberia.church`, and CYBER.sol mint `E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump`.
 
 ## Components
 
 | Directory | Stack | Purpose |
 |-----------|-------|---------|
-| `backend/laravel/` | Laravel 13, Vue 3, Inertia v3, Vite, Tailwind v4 | Bridge UI + backend API |
-| `frontend/ritual/` | React 18, CRA, Material-UI v4, Ethers v5 | Cyberia DEX interface |
-| `frontend/jekyll/` | Jekyll (Ruby) | Static blog |
-| `crypto/hardhat/` | Hardhat 3, Solidity, viem, OpenZeppelin 4.9 | EVM smart contracts |
-| `crypto/anchor/` | Anchor, Rust, SPL Token | Solana smart contracts |
-| `services/blockscout/` | Blockscout fork, Docker Compose | Block explorer |
-| `services/lisp/` | Common Lisp (SBCL) | Daemon/HTTP services |
-| `scripts/python/` | Python 3, web3, telegram-bot | Airdrop bots, crawlers |
+| `backend/laravel/` | Laravel 13, Vue 3, Inertia v3, Vite, Tailwind v4 | Bridge/site backend and UI |
+| `frontend/ritual/` | React 18, CRA/react-app-rewired, Material UI v4, ethers v5 | Ritual Cyberia DEX |
+| `frontend/landing/` | Static HTML/CSS | Landing and brand pages |
+| `frontend/jekyll/` | Jekyll | Cyberia blog/static site |
+| `crypto/hardhat/` | Hardhat 3, Solidity, viem, ethers v6, OpenZeppelin 4.9 | EVM contracts and deployment scripts |
+| `crypto/anchor/` | Anchor, Rust, Solana Web3.js, SPL Token | Solana bridge contracts and relayer scripts |
+| `crypto/quickswap-core/` | Truffle-era Uniswap v2 core fork | Legacy DEX core contracts/tests |
+| `services/blockscout/` | Blockscout fork, Docker Compose | Cyberia explorer config |
+| `services/ipfs/` | Docker Compose | IPFS service config |
+| `services/lisp/` | Common Lisp/SBCL | Daemon and HTTP services |
+| `scripts/` | Python, JS, Lisp | Airdrop bots, crawlers, price scripts, operations |
+| `linux/` | Linux build notes/config | Cyberia OS artifacts |
 
-Each component manages its own dependencies — no Turbo/Nx monorepo tooling.
+Each component manages its own dependencies. There is no root Turbo/Nx workspace.
+
+## Safety Rules
+
+- Do not print or commit secrets from `.env`, wallet keypair JSON files, cookies, bot tokens, private keys, or production Blockscout env files. Mention variable names only.
+- Do not edit generated dependency/runtime folders unless explicitly requested: `node_modules/`, `vendor/`, `target/`, `build/`, `_site/`, `artifacts/`, `cache/`, `test-ledger/`, `logs/`, `linux/custom-root/`, and Blockscout data volumes under `services/blockscout/docker-compose/services/*-data/`.
+- Prefer `rg --files` and scoped searches over broad `find` walks through runtime trees.
+- Root `README.md` is user-facing and currently less complete than agent docs. Do not rely on stale root paths such as `hardhat/`; EVM contracts live in `crypto/hardhat/`.
 
 ## Commands
 
-### Backend (Laravel) — `backend/laravel/`
+### Laravel Backend — `backend/laravel/`
+
+Nested instructions in `backend/laravel/AGENTS.md` are authoritative.
 
 ```bash
-composer install && npm install
-cp .env.example .env && php artisan key:generate
-php artisan migrate:fresh --seed
-
-composer run dev          # Full stack dev: PHP server + queue + logs + Vite
-npm run build             # Production asset build
-php artisan test          # Run Pest tests
-./vendor/bin/pest         # Run Pest directly
-
-composer run lint         # PHP Pint autofix
-composer run lint:check   # PHP Pint check (no changes)
-npm run lint              # ESLint autofix
-npm run lint:check        # ESLint check
-npm run format            # Prettier autofix
-npm run format:check      # Prettier check
-npm run types:check       # Vue/TS type check
-
-composer run ci:check     # Full CI suite (lint + types + tests)
+composer install
+npm install
+composer run dev
+npm run build
+composer run ci:check
+php artisan test --compact
+vendor/bin/pint --dirty --format agent
 ```
 
-### EVM Contracts (Hardhat) — `crypto/hardhat/`
+Use Wayfinder imports from `@/routes` and `@/actions` instead of hardcoded Laravel URLs. Vue pages live in `resources/js/pages`.
+
+### Ritual DEX — `frontend/ritual/`
+
+```bash
+npm install
+npm start
+npm run build
+npm run test
+npm run ipfs-deploy
+```
+
+Plain `npm run build` can fail on existing ESLint/TypeScript drift. For an explicit deploy artifact request without fixing old drift:
+
+```bash
+DISABLE_ESLINT_PLUGIN=true TSC_COMPILE_ON_ERROR=true npm run build
+test -f build/index.html
+test -d build/static
+find build/static -maxdepth 2 -type f | wc -l
+```
+
+`npm run ipfs-deploy` may fail on modern Node with `RequestInit: duplex option is required when sending a body`; report that exactly if it happens.
+
+### Hardhat EVM — `crypto/hardhat/`
 
 ```bash
 npm install
 npx hardhat compile
-npx hardhat test                   # All tests
-npx hardhat test nodejs            # Node.js tests only
-npx hardhat test solidity          # Solidity tests only
-
-# Deploy to Cyberia network
+npx hardhat test
+npx hardhat test solidity
+npx hardhat test nodejs
 npx hardhat run scripts/<script>.ts --network cyberia
 ```
 
-### Solana Contracts (Anchor) — `crypto/anchor/`
+`hardhat.config.ts` requires `DEPLOYER_PK` at import time. For local compile/test without a real deploy key, set a throwaway 32-byte private key in the environment. Never read or print `.env` secrets.
+
+Mint/burn administration for deployed Cyberia ERC20s is in `scripts/token-admin.ts`, using `deployments/cyberia-tokens.json`. Bridge relayer one-shot scripts are `scripts/relay-mint.ts` and `scripts/relay-burn.ts`.
+
+### Anchor Solana — `crypto/anchor/`
 
 ```bash
 npm install
@@ -69,100 +96,46 @@ npm run lint
 npm run lint:fix
 ```
 
-### DEX Frontend — `frontend/ritual/`
+Bridge scripts include `scripts/init-bridge.ts`, `scripts/relay-release-native.ts`, `scripts/relay-spl-transfer.ts`, and `scripts/slot-burn-and-payout.ts`.
+
+### Static Frontends
 
 ```bash
-npm install
-npm start                                     # Dev server port 3000
-npm run build
-DISABLE_ESLINT_PLUGIN=true npm run build      # Skip lint gate
-npm run ipfs-deploy
-```
-
-### Jekyll Blog — `frontend/jekyll/`
-
-```bash
+cd frontend/jekyll
 bundle install
 bundle exec jekyll serve
 bundle exec jekyll build
 ```
 
-### Explorer — `services/blockscout/docker-compose/`
+`frontend/landing/` is plain static HTML/CSS and needs no build step.
+
+### Blockscout — `services/blockscout/docker-compose/`
 
 ```bash
 docker compose up -d
 docker compose down
+docker compose config
 ```
 
-## Architecture
+Be careful with production-host paths such as `/root/singularity/...`.
 
-### Bridge
+## Architecture Notes
 
-The bridge is the core feature of `backend/laravel/`. Users lock funds on one chain and receive them on another. Key files:
-- `app/Services/BridgeService.php` — cross-chain logic, 1% fee deduction
-- `app/Http/Controllers/BridgeController.php` — API endpoints
-- `routes/api.php` — REST API for wallet auth and bridge operations
-- Hot wallet on Solana: `E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w`
+- Laravel bridge logic is under `backend/laravel/app/Services/BridgeService.php`, `BridgeRelayerService.php`, `BridgeFeeService.php`, and `ProcessBridgeRequest.php`.
+- Web3 auth uses EVM and Solana nonce flows backed by `WalletNonce` and Sanctum.
+- Laravel frontend wallet/bridge composables live under `backend/laravel/resources/js/composables/`.
+- EVM contracts include bridge (`CyberBridge.sol`, `WrappedCyberSol.sol`), tokens (`USDC.sol`, `USDT.sol`, `BTC.sol`, `LTC.sol`, `SOL.sol`, `RUB.sol`, `GOLD.sol`, etc.), DAO (`contracts/dao/`), lending (`contracts/lending/`), launchpad/NFT, and QuickSwap forks.
+- Anchor bridge instructions live in `crypto/anchor/programs/anchor/src/instructions/`.
 
-### Authentication
+## Verification
 
-Two-path Web3 login (no passwords):
-1. **EVM**: MetaMask → ECDSA nonce signing → `Web3LoginController`
-2. **Solana**: Phantom → `SolanaWalletAuthController`
+Use the smallest relevant check:
 
-Both use a nonce-based challenge stored in `WalletNonce`, verified, then exchanged for a Laravel Sanctum token.
-
-### Laravel Frontend (Vue 3 + Inertia)
-
-Pages live in `resources/js/pages/`. Composables handle Web3 state:
-- `useSolanaWallet`, `useWallet` — wallet connection
-- `useBridge` — bridge transaction flow
-- `useWalletAuth` — authentication
-
-Routes are typed via Wayfinder (`@/routes`, `@/actions`). An RPC proxy at `/api/rpc/cyberia` prevents mixed-content issues when the app is served over HTTPS.
-
-### DAO Contracts (`crypto/hardhat/contracts/dao/`)
-
-New contracts (undeployed at repo start): `DAOFactory.sol`, `DAOGovernor.sol`, `StakingVault.sol`. The Laravel backend has corresponding `Dao`, `Proposal`, `ProposalVote`, `ProposalComment` models, indicating the full DAO flow spans both backend and contracts.
-
-### EVM Contract Layout (`crypto/hardhat/contracts/`)
-
-- **Tokens**: `USDC.sol`, `USDT.sol`, `VotingToken.sol`, `WCYBER.sol`, `CyberToken.sol`
-- **Bridge**: `CyberBridge.sol`
-- **DEX**: `quickswap/` (AMM fork), `Multicall3.sol`
-- **DAO**: `DAOFactory.sol`, `DAOGovernor.sol`, `StakingVault.sol`
-- **Utilities**: `TokenFactory.sol`, `TelegramChatToken.sol`, `GitHub.sol`
-
-Hardhat 3 uses EDR simulation. Networks: `hardhatMainnet`, `hardhatOp`, `sepolia`, `cyberia`.
-
-## Environment Variables
-
-### Backend (`backend/laravel/.env`)
-
-```
-APP_KEY, APP_URL, APP_DEBUG
-DB_CONNECTION (default: sqlite)
-CYBERIA_RPC_URL               # default: https://rpc.cyberia.church
-BRIDGE_EVM_RPC_URL
-BRIDGE_EVM_CONTRACT_ADDRESS
-BRIDGE_RELAYER_PRIVATE_KEY
-BRIDGE_RELAYER_ADDRESS
-BRIDGE_SOLANA_RPC_URL
-BRIDGE_SOLANA_PROGRAM_ID
-PROXY_URL                     # optional HTTP proxy
-```
-
-### Hardhat (`crypto/hardhat/.env`)
-
-```
-DEPLOYER_PK                   # required for all deployments
-CYBERIA_RPC_URL               # optional, default: https://rpc.cyberia.church
-USDC_OWNER, USDT_OWNER        # optional, default to deployer
-SEPOLIA_PRIVATE_KEY, SEPOLIA_RPC_URL
-```
-
-## CI
-
-GitHub Actions (`.github/workflows/`):
-- **lint.yml** — PHP Pint + ESLint + Prettier on push/PR to `develop`, `main`, `master`, `workos`
-- **tests.yml** — Pest 4 on PHP 8.3/8.4/8.5 + Node 22 matrix
+- Laravel PHP: `cd backend/laravel && vendor/bin/pint --dirty --format agent && php artisan test --compact`
+- Laravel frontend: `cd backend/laravel && npm run lint:check && npm run types:check && npm run build`
+- Ritual: `cd frontend/ritual && npx eslint <changed files>` or the deploy build flow above
+- Hardhat: `cd crypto/hardhat && npx hardhat test`
+- Anchor: `cd crypto/anchor && anchor test` or at least `anchor build`
+- Jekyll: `cd frontend/jekyll && bundle exec jekyll build`
+- Static landing: inspect HTML and validate if a validator is available
+- Blockscout compose/proxy: `cd services/blockscout/docker-compose && docker compose config`

@@ -1,2 +1,15 @@
 logs/
 scripts/python/.env
+
+# Local environment files
+.env
+.env.*
+!.env.example
+frontend/ritual/.env
+frontend/ritual/.env.*
+!frontend/ritual/.env.example
+
+# Local AI assistant state
+.claude/
+.codex
+.codex/

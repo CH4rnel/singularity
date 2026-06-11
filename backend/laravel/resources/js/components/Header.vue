@@ -200,6 +200,9 @@ function signOut() {
             <InertiaLink href="/launchpad" :class="linkClass('/launchpad')"
                 >Launchpad</InertiaLink
             >
+            <InertiaLink href="/analytics" :class="linkClass('/analytics')"
+                >Analytics</InertiaLink
+            >
             <a
                 href="https://swap.cyberia.church/"
                 target="_blank"
