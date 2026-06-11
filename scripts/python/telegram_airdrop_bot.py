@@ -458,6 +458,30 @@ def ensure_chat_token_schema():
             CREATE INDEX IF NOT EXISTS idx_activity_events_kind_time
             ON activity_events (kind, created_at)
         """))
+        # Market snapshot rewritten by market_snapshot_loop every few minutes:
+        # token USD prices and DEX pool reserves/TVL. Read by the Laravel
+        # /analytics page through the shared SQLite file.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS token_prices (
+                address    TEXT PRIMARY KEY,
+                symbol     TEXT,
+                price_usd  REAL,
+                updated_at TEXT
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS dex_pools (
+                pair_address TEXT PRIMARY KEY,
+                token0       TEXT,
+                token1       TEXT,
+                symbol0      TEXT,
+                symbol1      TEXT,
+                reserve0     REAL,
+                reserve1     REAL,
+                tvl_usd      REAL,
+                updated_at   TEXT
+            )
+        """))
 
 
 ensure_chat_token_schema()
@@ -3040,6 +3064,144 @@ async def digest_loop(application: Application) -> None:
         await asyncio.sleep(60)
 
 
+# --- Market snapshot (token prices + DEX pools → SQLite) --------------------
+# Mirrors the price walker's view of the chain into token_prices/dex_pools so
+# the Laravel /analytics page can render without doing any RPC of its own.
+
+MARKET_SNAPSHOT_SECONDS = int(os.environ.get("MARKET_SNAPSHOT_SECONDS", "300"))
+
+FACTORY_ENUM_ABI = [
+    {"inputs": [], "name": "allPairsLength",
+     "outputs": [{"name": "", "type": "uint256"}],
+     "stateMutability": "view", "type": "function"},
+    {"inputs": [{"name": "", "type": "uint256"}], "name": "allPairs",
+     "outputs": [{"name": "", "type": "address"}],
+     "stateMutability": "view", "type": "function"},
+]
+
+# (fetched_at, [(pair_addr, token0, token1), ...]). The factory's pair list
+# only grows, so a long TTL is fine; reserves are re-read on every snapshot.
+_all_pairs_cache: tuple[float, list[tuple[str, str, str]]] | None = None
+_ALL_PAIRS_TTL_SECONDS = 600.0
+
+
+def _get_all_pairs(w3: Web3) -> list[tuple[str, str, str]]:
+    """Every pair in the Ritual factory. Cyberia has a few dozen, so straight
+    enumeration is cheap, and pair→token reads hit _pair_token_cache."""
+    global _all_pairs_cache
+    now = time.time()
+    if _all_pairs_cache is not None and now - _all_pairs_cache[0] < _ALL_PAIRS_TTL_SECONDS:
+        return _all_pairs_cache[1]
+    factory = w3.eth.contract(
+        address=Web3.to_checksum_address(RITUAL_V2_FACTORY), abi=FACTORY_ENUM_ABI
+    )
+    count = factory.functions.allPairsLength().call()
+    pairs: list[tuple[str, str, str]] = []
+    for i in range(count):
+        pair_addr = factory.functions.allPairs(i).call()
+        tokens = _get_pair_tokens(w3, pair_addr)
+        if tokens is not None:
+            pairs.append((pair_addr, tokens[0], tokens[1]))
+    _all_pairs_cache = (now, pairs)
+    return pairs
+
+
+def _take_market_snapshot(w3: Web3) -> tuple[int, int]:
+    """Read every pool's reserves, price every token via the walker, and
+    rewrite token_prices + dex_pools in one transaction. Blocking (a long
+    chain of RPC reads) — call through asyncio.to_thread. Returns
+    (pools_written, tokens_priced)."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    pool_rows: list[dict] = []
+    token_addrs: set[str] = set()
+    for pair_addr, t0, t1 in _get_all_pairs(w3):
+        try:
+            pair = w3.eth.contract(
+                address=Web3.to_checksum_address(pair_addr), abi=PAIR_RESERVES_ABI
+            )
+            r0, r1, _ts = pair.functions.getReserves().call()
+        except Exception as e:
+            logger.debug(f"market_snapshot: getReserves {pair_addr} failed: {e}")
+            continue
+        sym0, dec0 = _get_token_meta(w3, t0)
+        sym1, dec1 = _get_token_meta(w3, t1)
+        token_addrs.add(t0)
+        token_addrs.add(t1)
+        pool_rows.append({
+            "pair": pair_addr.lower(),
+            "t0": t0.lower(), "t1": t1.lower(),
+            "s0": sym0, "s1": sym1,
+            "r0": r0 / 10**dec0, "r1": r1 / 10**dec1,
+            "tvl": None,  # filled below once prices are known
+            "ts": now,
+        })
+
+    prices: dict[str, float | None] = {}
+    price_rows: list[dict] = []
+    for addr in token_addrs:
+        sym, _dec = _get_token_meta(w3, addr)
+        try:
+            price = _get_token_usd_price(w3, addr)
+        except Exception as e:
+            logger.debug(f"market_snapshot: price {addr} failed: {e}")
+            price = None
+        prices[addr.lower()] = price
+        price_rows.append({"a": addr.lower(), "s": sym, "p": price, "ts": now})
+
+    # TVL mirrors _liquidity_usd_volume: both sides of a constant-product pool
+    # are equal in value, so a single priced side is simply doubled.
+    for row in pool_rows:
+        p0 = prices.get(row["t0"])
+        p1 = prices.get(row["t1"])
+        if p0 is not None and p1 is not None:
+            row["tvl"] = row["r0"] * p0 + row["r1"] * p1
+        elif p0 is not None:
+            row["tvl"] = row["r0"] * p0 * 2
+        elif p1 is not None:
+            row["tvl"] = row["r1"] * p1 * 2
+
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM token_prices"))
+        if price_rows:
+            conn.execute(
+                text("""
+                    INSERT INTO token_prices (address, symbol, price_usd, updated_at)
+                    VALUES (:a, :s, :p, :ts)
+                """),
+                price_rows,
+            )
+        conn.execute(text("DELETE FROM dex_pools"))
+        if pool_rows:
+            conn.execute(
+                text("""
+                    INSERT INTO dex_pools
+                        (pair_address, token0, token1, symbol0, symbol1,
+                         reserve0, reserve1, tvl_usd, updated_at)
+                    VALUES
+                        (:pair, :t0, :t1, :s0, :s1, :r0, :r1, :tvl, :ts)
+                """),
+                pool_rows,
+            )
+
+    priced = sum(1 for p in prices.values() if p is not None)
+    return len(pool_rows), priced
+
+
+async def market_snapshot_loop(application: Application) -> None:
+    while True:
+        try:
+            pools, priced = await asyncio.to_thread(
+                _take_market_snapshot, Web3(Web3.HTTPProvider(RPC_URL))
+            )
+            logger.info(
+                f"market_snapshot: {pools} pools, {priced} tokens priced"
+            )
+        except Exception as e:
+            logger.error(f"market_snapshot_loop: {e}")
+        await asyncio.sleep(MARKET_SNAPSHOT_SECONDS)
+
+
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/stats [window] — on-demand activity digest, default last 24h.
     Examples: /stats, /stats 6h, /stats 3d. Read-only: never moves the
@@ -3364,6 +3526,13 @@ async def post_init(application: Application):
         )
     else:
         logger.info("Digest disabled: DIGEST_INTERVAL_SECONDS=0")
+
+    # Token prices + DEX pools snapshot for the Laravel /analytics page.
+    if MARKET_SNAPSHOT_SECONDS > 0:
+        application.create_task(market_snapshot_loop(application))
+        logger.info(f"Market snapshot started: every {MARKET_SNAPSHOT_SECONDS}s")
+    else:
+        logger.info("Market snapshot disabled: MARKET_SNAPSHOT_SECONDS=0")
 
     # Whales chat gate: invite verified whales and re-check balances/kick.
     if WHALE_CHAT_ID:

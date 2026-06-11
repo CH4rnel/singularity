@@ -1,3 +1,0 @@
-- [Blockscout explorer logo](blockscout-logo-external-asset-download.md) — logo/icon are downloaded at frontend container start from NEXT_PUBLIC_NETWORK_LOGO; URL must be reachable from inside the container (not the own explorer domain); repo/old-UI edits do nothing
-- [Blockscout explorer nginx upstream](blockscout-explorer-nginx-static-upstream.md) — recreating only the frontend 502s the explorer because the proxy caches a stale container IP (static proxy_pass, no resolver)
-- [Ritual DEX build & /swap runtime](ritual-dex-build-and-swap-runtime.md) — frontend/ritual is yarn-only (npm drifts @types/react and breaks the build); pin @types/react 18.2.79; /swap needs legacy ReactDOM.render, not React 18 createRoot

@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Api\BridgeController;
+use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\ApiController;
@@ -19,11 +21,12 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
 Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
+Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/lending', 'Lending')->name('lending');
 Route::inertia('/lending/liquidate', 'Liquidate')->name('lending.liquidate');
 Route::inertia('/launchpad', 'Launchpad')->name('launchpad');
-Route::get('/launchpad/sites/{address}', [\App\Http\Controllers\Api\LaunchpadController::class, 'showSite'])
+Route::get('/launchpad/sites/{address}', [LaunchpadController::class, 'showSite'])
     ->where('address', '0x[a-fA-F0-9]{40}')
     ->name('launchpad.site');
 Route::inertia('/slots', 'Slots')->name('slots');

@@ -1,2 +1,7 @@
 logs/
 scripts/python/.env
+
+# Local AI assistant state
+.claude/
+.codex
+.codex/

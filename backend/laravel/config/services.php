@@ -39,6 +39,10 @@ return [
         'rpc_url' => env('CYBERIA_RPC_URL'),
     ],
 
+    'cyberia' => [
+        'explorer_url' => env('CYBERIA_EXPLORER_URL', 'https://explorer.cyberia.church'),
+    ],
+
     'bridge' => [
         'evm_rpc_url' => env('BRIDGE_EVM_RPC_URL', env('CYBERIA_RPC_URL')),
         'evm_bridge_address' => env('BRIDGE_EVM_CONTRACT_ADDRESS'),

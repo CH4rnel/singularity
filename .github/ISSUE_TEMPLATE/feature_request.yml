@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a product, protocol, docs, or operations improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should users or maintainers be able to do after this?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the smallest useful version.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Laravel app
+        - Ritual DEX
+        - EVM contracts
+        - Solana bridge
+        - Explorer/Blockscout
+        - Bots/scripts
+        - Docs
+        - Other
+    validations:
+      required: true

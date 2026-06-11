@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security or private key exposure
+    url: https://github.com/
+    about: Do not open public issues with secrets, private keys, cookies, or exploitable security details.
