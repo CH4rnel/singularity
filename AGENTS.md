@@ -31,7 +31,9 @@ singularity/
 ├── frontend/jekyll/      # Jekyll Cyberia blog/static site
 ├── crypto/hardhat/       # EVM contracts, Hardhat 3 + viem
 ├── crypto/anchor/        # Solana/Anchor bridge contracts and scripts
+├── crypto/quickswap-core/ # Legacy QuickSwap/Uniswap v2 core contracts
 ├── services/blockscout/  # Blockscout fork + Cyberia docker-compose config
+├── services/ipfs/        # IPFS docker-compose config
 ├── services/lisp/        # Common Lisp daemon/http services
 ├── scripts/              # Python, JS, and Lisp operational scripts/bots
 ├── linux/                # Cyberia OS build notes/config
@@ -50,6 +52,22 @@ Do not rely on older docs that refer to `hardhat/` at the repo root; contracts n
 - Do not edit generated dependency folders (`node_modules/`, `vendor/`, `target/`) or generated build outputs unless the user explicitly asks for deploy/build artifacts.
 - Always verify changes with the narrowest useful command. If verification cannot pass because of known repo state, report the exact blocker and the command used.
 - For production/deploy requests, confirm the expected artifact exists after building, especially `frontend/ritual/build/index.html` and `frontend/ritual/build/static/`.
+
+LLM orientation:
+
+- Treat `AGENTS.md` as the cross-repo source of truth, and nested `AGENTS.md` files as authoritative inside their subtree.
+- `CLAUDE.md` mirrors this guidance for Claude Code; keep it in sync when changing broad repo instructions.
+- Root `README.md` is user-facing and currently less complete than these agent notes. Do not copy stale README paths such as root `hardhat/`.
+- Avoid broad filesystem walks through generated/runtime trees. Prefer `rg --files` and exclude `node_modules/`, `vendor/`, `target/`, `build/`, `_site/`, `artifacts/`, `cache/`, `test-ledger/`, `logs/`, and `linux/custom-root/` unless the task is specifically about those paths.
+- Never print secrets from `.env`, wallet keypair JSON files, cookies, bot tokens, private keys, or Blockscout production env files. Report variable names, not values.
+
+Important generated/runtime paths:
+
+- Dependency folders: `backend/laravel/vendor/`, `**/node_modules/`
+- Build outputs: `frontend/ritual/build/`, `frontend/jekyll/_site/`
+- Contract outputs: `crypto/hardhat/artifacts/`, `crypto/hardhat/cache/`, `crypto/anchor/target/`, `crypto/anchor/test-ledger/`
+- Blockscout data volumes under `services/blockscout/docker-compose/services/*-data/`, `services/blockscout/docker-compose/services/dets/`, and Redis dumps
+- OS/rootfs artifacts under `linux/custom-root/`
 
 ---
 
@@ -190,6 +208,8 @@ npx hardhat test nodejs
 ```
 
 - Deployment scripts/modules live under Hardhat project folders such as `ignition/` and scripts.
+- `hardhat.config.ts` requires `DEPLOYER_PK` at import time. If running local compile/test commands without a real deploy key, use a throwaway 32-byte private key in the environment rather than reading or printing `.env`.
+- Mint/burn administration for deployed Cyberia ERC20s is centralized in `scripts/token-admin.ts`, backed by `deployments/cyberia-tokens.json`. Bridge-specific one-shot scripts are `scripts/relay-mint.ts` and `scripts/relay-burn.ts`.
 - Never commit private keys or `.env` secrets.
 
 ### Solana / Anchor

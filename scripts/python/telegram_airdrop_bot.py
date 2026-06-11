@@ -118,6 +118,20 @@ RITUAL_V2_FACTORY = os.environ.get(
 # memecoins paired against CYBER.sol.
 MIN_ANNOUNCE_USD = float(os.environ.get("MIN_ANNOUNCE_USD", "1.0"))
 
+# Per-event posts are reserved for events at/above this USD value. Everything
+# below it (but above MIN_ANNOUNCE_USD's dust floor) is recorded in
+# activity_events and only surfaces in the periodic digest. Set to 0 to post
+# every event individually (the old behaviour).
+BIG_ANNOUNCE_USD = float(os.environ.get("BIG_ANNOUNCE_USD", "10.0"))
+
+# Periodic on-chain activity digest: swap volume, top tokens, liquidity flows,
+# bridges, lending and the CYBER price — one summary message instead of a
+# stream of per-event posts. Set DIGEST_INTERVAL_SECONDS=0 to disable.
+DIGEST_ANNOUNCE_CHAT = os.environ.get("DIGEST_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+DIGEST_INTERVAL_SECONDS = int(os.environ.get("DIGEST_INTERVAL_SECONDS", str(6 * 3600)))
+# Recorded events older than this are pruned (the digest never looks that far back).
+DIGEST_RETENTION_DAYS = int(os.environ.get("DIGEST_RETENTION_DAYS", "30"))
+
 # Tokens pegged to $1 — anchor points for the price walker. Comma-separated
 # addresses. Default: USDC + USDT on Cyberia.
 USD_ANCHORS = {
@@ -413,6 +427,31 @@ def ensure_chat_token_schema():
                 last_checked_at TEXT
             )
         """))
+        # Every on-chain event the announcers observe (swaps, liquidity,
+        # bridges, lending), whether or not it was posted individually. The
+        # periodic digest and /stats aggregate from here. usd is NULL when the
+        # price walker found no route. meta holds kind-specific extras
+        # (bridge direction).
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS activity_events (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind       TEXT NOT NULL,
+                usd        REAL,
+                sym_in     TEXT,
+                amt_in     REAL,
+                sym_out    TEXT,
+                amt_out    REAL,
+                user_addr  TEXT,
+                tx_hash    TEXT,
+                block      INTEGER,
+                meta       TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_activity_events_kind_time
+            ON activity_events (kind, created_at)
+        """))
 
 
 ensure_chat_token_schema()
@@ -436,6 +475,51 @@ def _kv_set(key: str, value: str) -> None:
             """),
             {"k": key, "v": value},
         )
+
+
+def _record_activity(
+    kind: str,
+    usd: float | None = None,
+    sym_in: str | None = None,
+    amt_in: float | None = None,
+    sym_out: str | None = None,
+    amt_out: float | None = None,
+    user_addr: str | None = None,
+    tx_hash: str | None = None,
+    block: int | None = None,
+    meta: str | None = None,
+) -> None:
+    """Persist one observed on-chain event for the digest. Never raises —
+    losing a stats row must not break the announcer that called us."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO activity_events
+                        (kind, usd, sym_in, amt_in, sym_out, amt_out,
+                         user_addr, tx_hash, block, meta)
+                    VALUES
+                        (:kind, :usd, :sym_in, :amt_in, :sym_out, :amt_out,
+                         :user_addr, :tx_hash, :block, :meta)
+                """),
+                {
+                    "kind": kind, "usd": usd,
+                    "sym_in": sym_in, "amt_in": amt_in,
+                    "sym_out": sym_out, "amt_out": amt_out,
+                    "user_addr": user_addr, "tx_hash": tx_hash,
+                    "block": block, "meta": meta,
+                },
+            )
+    except Exception as e:
+        logger.error(f"record_activity: insert failed kind={kind} tx={tx_hash}: {e}")
+
+
+def _fmt_usd(value: float) -> str:
+    if value >= 1000:
+        return f"${value:,.0f}"
+    if value >= 1:
+        return f"${value:,.2f}"
+    return f"${value:.4f}"
 
 
 async def is_chat_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -541,6 +625,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/whale - verify CYBER.sol holdings to join the whales chat\n"
         "/x - X (Twitter) and Telegram links (also replies to \"x\")\n"
         "/ca - CYBER contract address (also replies to \"ca\")\n"
+        "/stats [window] - on-chain activity digest (default 24h, e.g. /stats 6h)\n"
         "/website - project website\n\n"
         "You can chat in groups without a wallet -- rewards will be saved as "
         "pending and minted in one go when you /set_wallet."
@@ -1795,6 +1880,20 @@ def _direction_label(direction: str) -> str:
     }.get(direction, direction)
 
 
+def _bridge_token_usd_price(symbol: str) -> float | None:
+    """Best-effort USD price for a bridged token symbol. Stables are $1;
+    CYBER variants are priced via the on-chain walker through CYBER_CA_EVM."""
+    sym = (symbol or "").upper()
+    if sym in ("USDC", "USDT"):
+        return 1.0
+    if sym.startswith("CYBER") and CYBER_CA_EVM:
+        try:
+            return _get_token_usd_price(Web3(Web3.HTTPProvider(RPC_URL)), CYBER_CA_EVM)
+        except Exception as e:
+            logger.debug(f"bridge price: CYBER lookup failed: {e}")
+    return None
+
+
 async def _announce_bridge_tick(bot) -> None:
     """Find newly-completed bridge_requests and announce them in BRIDGE_ANNOUNCE_CHAT.
 
@@ -1840,6 +1939,17 @@ async def _announce_bridge_tick(bot) -> None:
         except TelegramError as e:
             logger.error(f"announce_bridge: send failed for id={req_id}: {e}")
             return
+        try:
+            amt = float(_format_decimal_amount(amount))
+        except ValueError:
+            amt = None
+        price = _bridge_token_usd_price(token)
+        _record_activity(
+            "bridge",
+            usd=amt * price if (amt is not None and price is not None) else None,
+            sym_in=token, amt_in=amt,
+            user_addr=sender, tx_hash=source_tx, meta=direction,
+        )
         _kv_set("last_announced_bridge_id", str(req_id))
         logger.info(f"announce_bridge: posted bridge id={req_id} ({direction})")
 
@@ -2207,28 +2317,41 @@ async def _announce_swap_tick(bot) -> None:
                 cur_block, cur_idx = blk, idx
                 continue
 
-            # Skip dust swaps. Known-USD volume below the threshold is dropped;
-            # unprice-able swaps pass through (better than going silent on novel
-            # pairs that the price walker can't reach yet).
-            if MIN_ANNOUNCE_USD > 0:
-                usd = _swap_usd_volume(
-                    w3, in_addr, in_amt, in_dec, out_addr, out_amt, out_dec
-                )
-                if usd is not None and usd < MIN_ANNOUNCE_USD:
-                    logger.info(
-                        f"swap_announcer: skip block={blk} idx={idx} "
-                        f"usd={usd:.4f} < {MIN_ANNOUNCE_USD}"
-                    )
-                    _set_swap_cursor(blk, idx)
-                    cur_block, cur_idx = blk, idx
-                    continue
-
+            usd = _swap_usd_volume(
+                w3, in_addr, in_amt, in_dec, out_addr, out_amt, out_dec
+            )
             to_addr = _decode_topic_address(log["topics"][2])
             tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            event_kwargs = dict(
+                kind="swap", usd=usd,
+                sym_in=in_sym, amt_in=in_amt / 10**in_dec,
+                sym_out=out_sym, amt_out=out_amt / 10**out_dec,
+                user_addr=to_addr, tx_hash=tx_hash, block=blk,
+            )
+
+            # Only big swaps get their own post; everything below the threshold
+            # is recorded and surfaces in the periodic digest. Unprice-able
+            # swaps still post so novel pairs the price walker can't reach yet
+            # stay visible.
+            threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
+            if usd is not None and usd < threshold:
+                _record_activity(**event_kwargs)
+                logger.info(
+                    f"swap_announcer: digest-only block={blk} idx={idx} "
+                    f"usd={usd:.4f} < {threshold}"
+                )
+                _set_swap_cursor(blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+
             text_lines = [
                 "🔄 Swap on Ritual",
                 f"{_format_token_amount(in_amt, in_dec)} {in_sym} → "
                 f"{_format_token_amount(out_amt, out_dec)} {out_sym}",
+            ]
+            if usd is not None:
+                text_lines.append(f"Value: {_fmt_usd(usd)}")
+            text_lines += [
                 f"User: {_short_addr(to_addr)}",
                 f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
             ]
@@ -2248,6 +2371,9 @@ async def _announce_swap_tick(bot) -> None:
             logger.error(f"swap_announcer: send failed block={blk} idx={idx}: {e}")
             return  # leave cursor at last successful; retry next tick
 
+        # Record only after a successful send so a mid-tick retry can't
+        # double-count the same swap in the digest.
+        _record_activity(**event_kwargs)
         _set_swap_cursor(blk, idx)
         cur_block, cur_idx = blk, idx
         logger.info(f"swap_announcer: posted swap block={blk} idx={idx} tx={tx_hash}")
@@ -2348,18 +2474,9 @@ async def _announce_liquidity_tick(bot) -> None:
             words = _decode_data_words(log["data"], 2)
             amount0, amount1 = words[0], words[1]
 
-            if MIN_ANNOUNCE_USD > 0:
-                usd = _liquidity_usd_volume(
-                    w3, t0, t1, dec0, dec1, amount0, amount1
-                )
-                if usd is not None and usd < MIN_ANNOUNCE_USD:
-                    logger.info(
-                        f"liquidity_announcer: skip block={blk} idx={idx} "
-                        f"usd={usd:.4f} < {MIN_ANNOUNCE_USD}"
-                    )
-                    _set_block_cursor("last_announced_liq_cursor", blk, idx)
-                    cur_block, cur_idx = blk, idx
-                    continue
+            usd = _liquidity_usd_volume(
+                w3, t0, t1, dec0, dec1, amount0, amount1
+            )
 
             tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
             # Burn carries the LP recipient in topics[2]; for Mint we fall back
@@ -2369,12 +2486,34 @@ async def _announce_liquidity_tick(bot) -> None:
             else:
                 user = _get_tx_sender(w3, tx_hash) or "?"
 
+            event_kwargs = dict(
+                kind="liq_add" if is_add else "liq_remove", usd=usd,
+                sym_in=sym0, amt_in=amount0 / 10**dec0,
+                sym_out=sym1, amt_out=amount1 / 10**dec1,
+                user_addr=user, tx_hash=tx_hash, block=blk,
+            )
+
+            threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
+            if usd is not None and usd < threshold:
+                _record_activity(**event_kwargs)
+                logger.info(
+                    f"liquidity_announcer: digest-only block={blk} idx={idx} "
+                    f"usd={usd:.4f} < {threshold}"
+                )
+                _set_block_cursor("last_announced_liq_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+
             verb = "added" if is_add else "removed"
             sign = "+" if is_add else "-"
             text_lines = [
                 f"💧 Liquidity {verb} on Ritual",
                 f"{sign}{_format_token_amount(amount0, dec0)} {sym0} + "
                 f"{sign}{_format_token_amount(amount1, dec1)} {sym1}",
+            ]
+            if usd is not None:
+                text_lines.append(f"Value: {_fmt_usd(usd)}")
+            text_lines += [
                 f"User: {_short_addr(user)}",
                 f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
             ]
@@ -2394,6 +2533,7 @@ async def _announce_liquidity_tick(bot) -> None:
             logger.error(f"liquidity_announcer: send failed block={blk} idx={idx}: {e}")
             return
 
+        _record_activity(**event_kwargs)
         _set_block_cursor("last_announced_liq_cursor", blk, idx)
         cur_block, cur_idx = blk, idx
         logger.info(f"liquidity_announcer: posted {verb} block={blk} idx={idx} tx={tx_hash}")
@@ -2538,9 +2678,33 @@ async def _announce_lending_tick(bot) -> None:
             else:
                 user = _decode_topic_address(log["topics"][1])
 
+            price = _get_token_usd_price(w3, underlying)
+            usd = (amount / 10**dec) * price if price is not None else None
+
             tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            event_kwargs = dict(
+                kind=f"lend_{verb}", usd=usd,
+                sym_in=sym, amt_in=amount / 10**dec,
+                user_addr=user, tx_hash=tx_hash, block=blk,
+            )
+
+            threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
+            if usd is not None and usd < threshold:
+                _record_activity(**event_kwargs)
+                logger.info(
+                    f"lending_announcer: digest-only block={blk} idx={idx} "
+                    f"usd={usd:.4f} < {threshold}"
+                )
+                _set_block_cursor("last_announced_lend_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+
             text_lines = [
                 f"{emoji} Lending: {verb} {_format_token_amount(amount, dec)} {sym}",
+            ]
+            if usd is not None:
+                text_lines.append(f"Value: {_fmt_usd(usd)}")
+            text_lines += [
                 f"User: {_short_addr(user)}",
                 f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
             ]
@@ -2560,6 +2724,7 @@ async def _announce_lending_tick(bot) -> None:
             logger.error(f"lending_announcer: send failed block={blk} idx={idx}: {e}")
             return
 
+        _record_activity(**event_kwargs)
         _set_block_cursor("last_announced_lend_cursor", blk, idx)
         cur_block, cur_idx = blk, idx
         logger.info(f"lending_announcer: posted {verb} block={blk} idx={idx} tx={tx_hash}")
@@ -2575,6 +2740,259 @@ async def lending_announcer_loop(application: Application) -> None:
         except Exception as e:
             logger.error(f"lending_announcer_loop: {e}")
         await asyncio.sleep(LENDING_POLL_SECONDS)
+
+
+# --- Activity digest --------------------------------------------------------
+# Aggregates activity_events into one periodic summary message instead of a
+# stream of per-event posts. Also backs the on-demand /stats command.
+
+_KV_LAST_DIGEST_AT = "last_digest_at"
+_KV_PREV_CYBER_PRICE = "digest_prev_cyber_price"
+_SQLITE_TS = "%Y-%m-%d %H:%M:%S"
+
+
+def _format_window(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds >= 48 * 3600:
+        return f"{round(seconds / 86400)}d"
+    if seconds >= 3600:
+        return f"{round(seconds / 3600)}h"
+    return f"{max(1, seconds // 60)}m"
+
+
+def _cyber_price_line(update_prev: bool = False) -> str | None:
+    """'💰 CYBER: $… (+x% …)' line, or None when CYBER can't be priced.
+    `update_prev` stores the fresh price as the next digest's comparison base."""
+    if not CYBER_CA_EVM:
+        return None
+    try:
+        w3 = Web3(Web3.HTTPProvider(RPC_URL))
+        price = _get_token_usd_price(w3, CYBER_CA_EVM)
+    except Exception as e:
+        logger.warning(f"digest: CYBER price read failed: {e}")
+        return None
+    if price is None or price <= 0:
+        return None
+    line = f"💰 CYBER: ${price:.6f}"
+    try:
+        prev = float(_kv_get(_KV_PREV_CYBER_PRICE) or 0)
+    except ValueError:
+        prev = 0.0
+    if prev > 0:
+        line += f" ({(price - prev) / prev * 100:+.1f}% since last digest)"
+    if update_prev:
+        _kv_set(_KV_PREV_CYBER_PRICE, f"{price:.12g}")
+    return line
+
+
+def _build_digest_text(since: str, window_label: str) -> str | None:
+    """Summary of activity_events recorded after `since` (sqlite UTC text).
+    Returns None when the window is empty so quiet periods stay silent."""
+    with engine.connect() as conn:
+        swap_count, swap_vol, traders, unpriced = conn.execute(
+            text("""
+                SELECT COUNT(*), COALESCE(SUM(usd), 0), COUNT(DISTINCT user_addr),
+                       SUM(CASE WHEN usd IS NULL THEN 1 ELSE 0 END)
+                FROM activity_events
+                WHERE kind = 'swap' AND created_at >= :s
+            """),
+            {"s": since},
+        ).fetchone()
+        top_tokens = conn.execute(
+            text("""
+                SELECT sym, SUM(usd) AS vol FROM (
+                    SELECT sym_in AS sym, usd FROM activity_events
+                    WHERE kind = 'swap' AND created_at >= :s AND usd IS NOT NULL
+                    UNION ALL
+                    SELECT sym_out, usd FROM activity_events
+                    WHERE kind = 'swap' AND created_at >= :s AND usd IS NOT NULL
+                ) GROUP BY sym ORDER BY vol DESC LIMIT 3
+            """),
+            {"s": since},
+        ).fetchall()
+        largest = conn.execute(
+            text("""
+                SELECT sym_in, amt_in, sym_out, amt_out, usd, user_addr
+                FROM activity_events
+                WHERE kind = 'swap' AND created_at >= :s AND usd IS NOT NULL
+                ORDER BY usd DESC LIMIT 1
+            """),
+            {"s": since},
+        ).fetchone()
+        liq = {
+            kind: (cnt, vol)
+            for kind, cnt, vol in conn.execute(
+                text("""
+                    SELECT kind, COUNT(*), COALESCE(SUM(usd), 0)
+                    FROM activity_events
+                    WHERE kind IN ('liq_add', 'liq_remove') AND created_at >= :s
+                    GROUP BY kind
+                """),
+                {"s": since},
+            ).fetchall()
+        }
+        bridges = conn.execute(
+            text("""
+                SELECT meta, sym_in, COUNT(*), COALESCE(SUM(amt_in), 0)
+                FROM activity_events
+                WHERE kind = 'bridge' AND created_at >= :s
+                GROUP BY meta, sym_in
+            """),
+            {"s": since},
+        ).fetchall()
+        lending = conn.execute(
+            text("""
+                SELECT kind, COUNT(*), COALESCE(SUM(usd), 0)
+                FROM activity_events
+                WHERE kind LIKE 'lend_%' AND created_at >= :s
+                GROUP BY kind
+            """),
+            {"s": since},
+        ).fetchall()
+
+    total = (
+        swap_count
+        + sum(c for c, _v in liq.values())
+        + sum(row[2] for row in bridges)
+        + sum(row[1] for row in lending)
+    )
+    if total == 0:
+        return None
+
+    lines = [f"📊 Cyberia activity — last {window_label}", ""]
+
+    if swap_count:
+        swap_line = (
+            f"🔄 Swaps: {swap_count} · volume {_fmt_usd(swap_vol)} · {traders} traders"
+        )
+        if unpriced:
+            swap_line += f" ({unpriced} unpriced)"
+        lines.append(swap_line)
+        if top_tokens:
+            lines.append(
+                "  Top: " + " · ".join(f"{sym} {_fmt_usd(vol)}" for sym, vol in top_tokens)
+            )
+        if largest:
+            l_sin, l_ain, l_sout, l_aout, l_usd, l_user = largest
+            lines.append(
+                f"  Largest: {l_ain:g} {l_sin} → {l_aout:g} {l_sout} "
+                f"({_fmt_usd(l_usd)}) by {_short_addr(l_user)}"
+            )
+
+    if liq:
+        add_c, add_v = liq.get("liq_add", (0, 0))
+        rem_c, rem_v = liq.get("liq_remove", (0, 0))
+        lines.append(
+            f"💧 Liquidity: +{_fmt_usd(add_v)} added ({add_c}) / "
+            f"-{_fmt_usd(rem_v)} removed ({rem_c})"
+        )
+
+    if bridges:
+        parts = [
+            f"{vol:g} {sym} {_direction_label(direction or '?')} ({cnt})"
+            for direction, sym, cnt, vol in bridges
+        ]
+        lines.append("🌉 Bridges: " + " · ".join(parts))
+
+    if lending:
+        parts = [
+            f"{kind.removeprefix('lend_')} {_fmt_usd(vol)} ({cnt})"
+            for kind, cnt, vol in lending
+        ]
+        lines.append("🏦 Lending: " + ", ".join(parts))
+
+    return "\n".join(lines)
+
+
+async def _digest_tick(bot) -> None:
+    now = datetime.now(timezone.utc)
+    last_raw = _kv_get(_KV_LAST_DIGEST_AT)
+    if last_raw is None:
+        # Fresh install: start the window now instead of summarizing nothing.
+        _kv_set(_KV_LAST_DIGEST_AT, now.strftime(_SQLITE_TS))
+        return
+    try:
+        last = datetime.strptime(last_raw, _SQLITE_TS).replace(tzinfo=timezone.utc)
+    except ValueError:
+        _kv_set(_KV_LAST_DIGEST_AT, now.strftime(_SQLITE_TS))
+        return
+    elapsed = (now - last).total_seconds()
+    if elapsed < DIGEST_INTERVAL_SECONDS:
+        return
+
+    since = last.strftime(_SQLITE_TS)
+    digest = await asyncio.to_thread(_build_digest_text, since, _format_window(elapsed))
+    if digest is None:
+        # Quiet window: advance silently so the next digest doesn't double-count,
+        # but keep the price base fresh.
+        _kv_set(_KV_LAST_DIGEST_AT, now.strftime(_SQLITE_TS))
+        await asyncio.to_thread(_cyber_price_line, True)
+        logger.info(f"digest: no activity since {since}, skipping post")
+        return
+
+    price_line = await asyncio.to_thread(_cyber_price_line)
+    if price_line:
+        digest += "\n\n" + price_line
+
+    try:
+        await bot.send_message(
+            chat_id=DIGEST_ANNOUNCE_CHAT, text=digest, disable_web_page_preview=True
+        )
+    except TelegramError as e:
+        # Window stays open; the next tick retries with a slightly wider range.
+        logger.error(f"digest: send failed: {e}")
+        return
+
+    _kv_set(_KV_LAST_DIGEST_AT, now.strftime(_SQLITE_TS))
+    await asyncio.to_thread(_cyber_price_line, True)
+    logger.info(f"digest: posted window since {since}")
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM activity_events WHERE created_at < datetime('now', :cutoff)"),
+                {"cutoff": f"-{DIGEST_RETENTION_DAYS} days"},
+            )
+    except Exception as e:
+        logger.warning(f"digest: retention cleanup failed: {e}")
+
+
+async def digest_loop(application: Application) -> None:
+    while True:
+        try:
+            await _digest_tick(application.bot)
+        except Exception as e:
+            logger.error(f"digest_loop: {e}")
+        await asyncio.sleep(60)
+
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/stats [window] — on-demand activity digest, default last 24h.
+    Examples: /stats, /stats 6h, /stats 3d. Read-only: never moves the
+    periodic digest's window or its price comparison base."""
+    args = context.args or []
+    seconds = 24 * 3600
+    if args:
+        try:
+            seconds = parse_interval(args[0])
+        except ValueError as e:
+            await update.message.reply_text(
+                f"Bad window: {e}\nExamples: /stats 6h, /stats 3d"
+            )
+            return
+
+    since = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).strftime(_SQLITE_TS)
+    window_label = _format_window(seconds)
+    digest = await asyncio.to_thread(_build_digest_text, since, window_label)
+    if digest is None:
+        await update.message.reply_text(
+            f"No tracked on-chain activity in the last {window_label}."
+        )
+        return
+    price_line = await asyncio.to_thread(_cyber_price_line)
+    if price_line:
+        digest += "\n\n" + price_line
+    await update.message.reply_text(digest, disable_web_page_preview=True)
 
 
 # --- Whales chat gate ---------------------------------------------------------
@@ -2824,6 +3242,7 @@ async def post_init(application: Application):
             BotCommand("website", "Open the project website"),
             BotCommand("x", "Show X (Twitter) and Telegram links"),
             BotCommand("ca", "Show the CYBER contract address"),
+            BotCommand("stats", "On-chain activity digest (default 24h)"),
             BotCommand("whale", "Verify CYBER.sol to join the whales chat"),
             BotCommand("create_token", "(admins) Create a chat reward token"),
             BotCommand("set_rewards_interval", "(admins) Change rewards interval"),
@@ -2861,6 +3280,16 @@ async def post_init(application: Application):
         )
     else:
         logger.info("Lending announcer disabled: LENDING_COMPTROLLER not set")
+
+    # Periodic on-chain activity digest.
+    if DIGEST_INTERVAL_SECONDS > 0:
+        application.create_task(digest_loop(application))
+        logger.info(
+            f"Digest started: chat={DIGEST_ANNOUNCE_CHAT} "
+            f"interval={DIGEST_INTERVAL_SECONDS}s big-event=${BIG_ANNOUNCE_USD:g}"
+        )
+    else:
+        logger.info("Digest disabled: DIGEST_INTERVAL_SECONDS=0")
 
     # Whales chat gate: invite verified whales and re-check balances/kick.
     if WHALE_CHAT_ID:
@@ -2910,6 +3339,7 @@ def run_dispatcher():
     application.add_handler(CommandHandler("whale", whale_command))
     application.add_handler(CommandHandler("x", x_command))
     application.add_handler(CommandHandler("ca", ca_command))
+    application.add_handler(CommandHandler("stats", stats_command))
 
     # Capture the "next message is the address" reply after a bare /set_wallet
     # in DMs. Restricted to private chats so the bot never hijacks ordinary
