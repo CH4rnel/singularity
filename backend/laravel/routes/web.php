@@ -9,14 +9,17 @@ use App\Http\Controllers\ApiController;
 use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CrmContactController;
+use App\Http\Controllers\CrmController;
+use App\Http\Controllers\CrmNoteController;
 use App\Http\Controllers\DaoController;
+use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\LinkController;
 use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Middleware\EnsureBridgeAdmin;
-use App\Http\Middleware\EnsureTeamMembership;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
@@ -41,11 +44,9 @@ Route::get('/wallet-login', fn () => inertia('auth/WalletLogin'))->name('wallet.
 // Telegram whales-chat verification page (opened from the bot's one-time link).
 Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-sol');
 
-Route::prefix('{current_team}')
-    ->middleware(['auth', 'verified', EnsureTeamMembership::class])
-    ->group(function () {
-        Route::inertia('dashboard', 'Dashboard')->name('dashboard');
-    });
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::inertia('dashboard', 'Dashboard')->name('dashboard');
+});
 
 Route::middleware(['auth'])->group(function () {
     Route::get('invitations/{invitation}/accept', [TeamInvitationController::class, 'accept'])->name('invitations.accept');
@@ -56,6 +57,9 @@ Route::middleware(['auth'])->group(function () {
         'destroy' => 'links.destroy',
     ]);
     Route::resource('categories', CategoryController::class)->except(['show', 'create', 'edit']);
+
+    // Fediverse: resolve an ActivityPub handle/URL to its actor profile.
+    Route::get('fediverse', [FediverseController::class, 'index'])->name('fediverse');
     Route::resource('dao', DaoController::class)->only(['store', 'update', 'destroy']);
 
     // Proposals (nested under dao)
@@ -71,6 +75,20 @@ Route::middleware(['auth'])->group(function () {
 
     // Votes on proposals
     Route::post('proposals/{proposal}/votes', [ProposalVoteController::class, 'store'])->name('proposals.votes.store');
+
+    // CRM — contacts, notes and data-source sync. Static routes (sync/export)
+    // are declared before the {contact} wildcard so they take precedence.
+    Route::prefix('crm')->name('crm.')->group(function () {
+        Route::post('sync', [CrmController::class, 'sync'])->name('sync');
+        Route::get('export', [CrmController::class, 'export'])->name('export');
+        Route::get('/', [CrmContactController::class, 'index'])->name('index');
+        Route::post('/', [CrmContactController::class, 'store'])->name('store');
+        Route::get('{contact}', [CrmContactController::class, 'show'])->name('show');
+        Route::put('{contact}', [CrmContactController::class, 'update'])->name('update');
+        Route::delete('{contact}', [CrmContactController::class, 'destroy'])->name('destroy');
+        Route::post('{contact}/notes', [CrmNoteController::class, 'store'])->name('notes.store');
+        Route::delete('notes/{note}', [CrmNoteController::class, 'destroy'])->name('notes.destroy');
+    });
 
     // Wallet attach/detach
     Route::post('wallets/evm/attach', [WalletAttachController::class, 'attachEvm'])->name('wallets.evm.attach');

@@ -1496,6 +1496,7 @@ export const getDexScreenerChainName = (
 ): string | undefined => {
   const chainsName: { [chainId in ChainId]?: string } = {
     [ChainId.MATIC]: 'polygon',
+    [ChainId.CYBERIA]: 'cyberia',
   };
   return chainsName[chainId];
 };

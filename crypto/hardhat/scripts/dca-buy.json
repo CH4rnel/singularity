@@ -1,0 +1,112 @@
+{
+  "rpcUrl": "https://rpc.cyberia.church",
+  "factory": "0xB0aC30907c04b61F1482e62eA66eF4562a690917",
+  "router": "0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62",
+  "wrappedNative": "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9",
+  "recipient": "self",
+  "intervalSeconds": 3600,
+  "gasReserveCyber": "0.05",
+  "slippageBps": 100,
+  "deadlineSeconds": 300,
+  "maxHops": 4,
+  "tokens": [
+    {
+      "symbol": "CYBER.sol",
+      "address": "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA",
+      "spendCyber": "0.01",
+      "enabled": true
+    },
+    {
+      "symbol": "USDC",
+      "address": "0xdc25597B19799010047F17e9591EFE08EFd40077",
+      "spendCyber": "0.01",
+      "enabled": true
+    },
+    {
+      "symbol": "USDT",
+      "address": "0x94845aF24a3E431593A2b941b2b31836dE45185D",
+      "spendCyber": "0.01",
+      "enabled": true
+    },
+    {
+      "symbol": "BTC",
+      "address": "0x9332081f308BC978fe259237850fA253131b46Fa",
+      "spendCyber": "0.01",
+      "enabled": true
+    },
+    {
+      "symbol": "LTC",
+      "address": "0x001AFD19C9d890b0cf0fcd6D654f9BFe4f264F14",
+      "spendCyber": "0.01",
+      "enabled": true
+    },
+    {
+      "symbol": "SILVER",
+      "address": "0xAd9dfef9D671aFCF29Dbdd7Df360E7cA8D5ac40b",
+      "spendCyber": "0.01",
+      "enabled": true
+    },
+    {
+      "symbol": "XMR",
+      "address": "0xe2E8D51C18d6e0FDDbb9Ff4BF63235D688dd00Ae",
+      "spendCyber": "0.01",
+      "enabled": true
+    },
+    {
+      "symbol": "SOL",
+      "address": "0x53450B1d205f1e41d10B653FBBDEa74160dafFf4",
+      "spendCyber": "0.01",
+      "enabled": true,
+      "note": "No direct WCYBER pool; bought multi-hop via CYBER.sol. Thin route - expect high price impact."
+    },
+    {
+      "symbol": "RUB",
+      "address": "0x3cE7d8E486E16baD2Fb1487Fe1da4dC33237d923",
+      "spendCyber": "0.01",
+      "enabled": true,
+      "note": "No direct WCYBER pool; bought multi-hop via SILVER. Thin route - expect high price impact."
+    },
+    {
+      "symbol": "TRUR",
+      "address": "0x6D056e56f5D90ed5680f0335D80E112799a735C8",
+      "spendCyber": "0.01",
+      "enabled": true,
+      "note": "No direct WCYBER pool; bought multi-hop via SILVER->RUB. Thin route - expect high price impact."
+    },
+    {
+      "symbol": "TGLD",
+      "address": "0xE2A45069C3e7897CAB592bEd389764e6eCf3b8a5",
+      "spendCyber": "0.01",
+      "enabled": true,
+      "note": "No direct WCYBER pool; bought multi-hop via SILVER->RUB. Thin route - expect high price impact."
+    },
+    {
+      "symbol": "TMOS",
+      "address": "0x3352254390526624a140B06E7D2dDA8BA85a9E89",
+      "spendCyber": "0.01",
+      "enabled": true,
+      "note": "No direct WCYBER pool; bought multi-hop via SILVER->RUB. Thin route - expect high price impact."
+    },
+    {
+      "symbol": "TOFZ",
+      "address": "0x46A6f512885De25AaefBf5A5F842ba378700Fe22",
+      "spendCyber": "0.01",
+      "enabled": true,
+      "note": "No direct WCYBER pool; bought multi-hop via SILVER->RUB. Thin route - expect high price impact."
+    },
+    {
+      "symbol": "GOLD",
+      "address": "0x38297140d60B48f746aD83D851b852Fd23eF9871",
+      "spendCyber": "0.01",
+      "enabled": true,
+      "note": "No direct WCYBER pool; bought multi-hop via SILVER->RUB. Thin route - expect high price impact."
+    },
+    {
+      "symbol": "TRX",
+      "address": "0x60617237bC60f73c0393c7a6d7352e16DF20472a",
+      "spendCyber": "0.01",
+      "enabled": true,
+      "note": "Direct WCYBER/TRX pool 0xb6184A51C0fAa2810D4A8Eb8C25bB18CB0bD4E33."
+    }
+  ]
+}

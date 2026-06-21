@@ -1,0 +1,13 @@
+{
+  "_note": "Copy to scripts/dca-buy.json and add explicit tokens before running with --execute. ASH is intentionally not configured.",
+  "rpcUrl": "https://rpc.cyberia.church",
+  "factory": "0xB0aC30907c04b61F1482e62eA66eF4562a690917",
+  "router": "0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62",
+  "wrappedNative": "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9",
+  "recipient": "self",
+  "intervalSeconds": 3600,
+  "gasReserveCyber": "0.05",
+  "slippageBps": 100,
+  "deadlineSeconds": 300,
+  "tokens": []
+}

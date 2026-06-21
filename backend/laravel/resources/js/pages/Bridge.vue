@@ -87,9 +87,7 @@ const user = computed(
 );
 
 const dashboardUrl = computed(() => {
-    return page.props.currentTeam
-        ? dashboard(page.props.currentTeam.slug).url
-        : '/';
+    return page.props.currentTeam ? dashboard().url : '/';
 });
 
 const bothWalletsConnected = computed(

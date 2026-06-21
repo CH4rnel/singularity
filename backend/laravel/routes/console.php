@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('slots:expire-prepares')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('slots:import-pumpfun')->hourly()->withoutOverlapping();
+Schedule::command('crm:sync')->daily()->withoutOverlapping();

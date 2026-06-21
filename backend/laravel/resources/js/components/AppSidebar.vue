@@ -6,6 +6,7 @@ import {
     LayoutGrid,
     Link as LinkIcon,
     Folder,
+    Users,
     Vote,
     Wallet,
 } from 'lucide-vue-next';
@@ -48,7 +49,7 @@ onMounted(() => {
 });
 
 const dashboardUrl = computed(() =>
-    page.props.currentTeam ? dashboard(page.props.currentTeam.slug).url : '/',
+    page.props.currentTeam ? dashboard().url : '/',
 );
 
 const mainNavItems = computed<NavItem[]>(() => [
@@ -71,6 +72,11 @@ const mainNavItems = computed<NavItem[]>(() => [
         title: 'DAO',
         href: '/dao',
         icon: Vote,
+    },
+    {
+        title: 'CRM',
+        href: '/crm',
+        icon: Users,
     },
 ]);
 
