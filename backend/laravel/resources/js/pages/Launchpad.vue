@@ -18,6 +18,11 @@ import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
 
+// Chart.js
+import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend } from 'chart.js';
+Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend);
+
+
 const CYBERIA_CHAIN_ID = 49406;
 const CYBERIA_CHAIN_ID_HEX = '0xc11e';
 const CYBERIA_RPC = '/api/rpc/cyberia';
@@ -95,6 +100,10 @@ type LaunchpadMetadata = {
 };
 
 const wallet = useWallet();
+
+// Chart instances map
+const chartInstances = new Map<string, Chart>();
+
 
 const name = ref('');
 const symbol = ref('');
@@ -370,6 +379,12 @@ const loadRecent = async (): Promise<void> => {
                 marketCapCyber: d.priceCyber != null ? d.priceCyber * supplyWhole : null,
             };
         });
+
+        // Update charts for each token
+        recent.value.forEach((t) => {
+            updateTokenChart(t.token, t.priceCyber);
+        });
+
     } catch (e) {
         console.warn('[Launchpad] loadRecent failed', e);
     }
@@ -640,6 +655,78 @@ const formatPrice = (n: number): string => {
     if (n < 1) return n.toPrecision(4);
     return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 };
+
+// Generate mock price data for chart (last 7 days)
+function generateMockPrices(basePrice: number | null, days: number = 7): number[] {
+    if (basePrice === null || basePrice <= 0) return Array(days).fill(0);
+    const prices = [];
+    let last = basePrice;
+    for (let i = 0; i < days; i++) {
+        // random walk +/- 5%
+        const change = (Math.random() - 0.5) * 0.1; // -5% to +5%
+        last = Math.max(0, last * (1 + change));
+        prices.push(last);
+    }
+    return prices;
+}
+
+// Initialize or update chart for a token
+function updateTokenChart(tokenAddress: string, priceCyber: number | null): void {
+    const canvas = document.getElementById(`chart-${tokenAddress}`) as HTMLCanvasElement | null;
+    if (!canvas) return;
+    const prices = generateMockPrices(priceCyber, 7);
+    const labels = Array.from({length: 7}, (_, i) => `D${i + 1}`);
+    const existing = chartInstances.get(tokenAddress);
+    if (existing) {
+        existing.data.labels = labels;
+        existing.data.datasets[0].data = prices;
+        existing.update('none');
+    } else {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Price (CYBER.sol)',
+                    data: prices,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.1)',
+                    tension: 0.3,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        beginAtZero: false,
+                        ticks: {
+                            callback: (value) => {
+                                if (value === 0) return '0';
+                                return Number(value).toFixed(6);
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        chartInstances.set(tokenAddress, chart);
+    }
+}
+
 
 // Reload balance & allowance whenever the connected address changes.
 watch(
@@ -1227,4 +1314,10 @@ onMounted(async () => {
         grid-template-columns: 1fr;
     }
 }
+
+.tokenChart {
+    margin-top: 8px;
+    width: 100%;
+}
+
 </style>

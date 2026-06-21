@@ -34,7 +34,7 @@ withDefaults(
 const page = usePage();
 const dashboardUrl = computed(() => {
     console.log(page.props);
-    page.props.currentTeam ? dashboard(page.props.currentTeam.slug).url : '/';
+    page.props.currentTeam ? dashboard().url : '/';
 });
 </script>
 
