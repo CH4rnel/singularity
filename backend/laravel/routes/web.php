@@ -26,6 +26,7 @@ Route::get('/', fn () => response()->file(resource_path('views/landing/index.htm
 Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 Route::inertia('/market', 'Market')->name('market');
+Route::inertia('/cyber-sol-swap', 'CyberSolSwap')->name('cyber-sol-swap');
 Route::inertia('/lending', 'Lending')->name('lending');
 Route::inertia('/lending/liquidate', 'Liquidate')->name('lending.liquidate');
 Route::inertia('/launchpad', 'Launchpad')->name('launchpad');

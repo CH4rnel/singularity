@@ -188,7 +188,15 @@ return usd(value, 0);
 return usd(value, 4);
 }
 
-    return '$' + value.toExponential(3);
+    if (value <= 0) {
+return usd(value, 2);
+}
+
+    // Sub-cent: plain decimal with ~4 significant figures, never scientific
+    // notation (e.g. 0.00009235, not 9.235e-5).
+    const digits = Math.min(20, Math.ceil(-Math.log10(value)) + 3);
+
+    return usd(value, digits);
 };
 </script>
 

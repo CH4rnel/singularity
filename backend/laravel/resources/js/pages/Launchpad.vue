@@ -8,10 +8,11 @@ import {
     MaxUint256,
     ZeroAddress,
     formatUnits,
+    id,
     parseUnits,
 } from 'ethers';
 import { Loader2 } from 'lucide-vue-next';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Header from '@/components/Header.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +53,7 @@ const ERC20_ABI = [
 ];
 
 const PAIR_ABI = [
+    'event Sync(uint112 reserve0, uint112 reserve1)',
     'function token0() view returns (address)',
     'function token1() view returns (address)',
     'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
@@ -70,6 +72,11 @@ const ERC20_READ_ABI = [
 
 const SWAP_BASE_URL = 'https://swap.cyberia.church/#/swap';
 const EXPLORER_BASE_URL = 'https://explorer.cyberia.church';
+const SYNC_TOPIC = id('Sync(uint112,uint112)');
+const TOKEN_LAUNCHED_TOPIC = id(
+    'TokenLaunched(address,address,address,string,string,uint256,uint256,uint256)',
+);
+const MAX_CHART_POINTS = 40;
 
 type LaunchedToken = {
     token: string;
@@ -87,6 +94,7 @@ type LaunchedToken = {
     // Enriched from pair reserves (price quoted in CYBER.sol per 1 token).
     priceCyber?: number | null;
     marketCapCyber?: number | null;
+    launchBlock?: number | null;
 };
 
 type LaunchpadMetadata = {
@@ -99,10 +107,24 @@ type LaunchpadMetadata = {
     site_url: string | null;
 };
 
+type LaunchEventMeta = {
+    creator: string;
+    pair: string;
+    blockNumber: number;
+    txHash: string;
+};
+
+type TokenPricePoint = {
+    label: string;
+    priceCyber: number;
+    blockNumber: number | null;
+};
+
 const wallet = useWallet();
 
 // Chart instances map
 const chartInstances = new Map<string, Chart>();
+const priceHistories = ref<Record<string, TokenPricePoint[]>>({});
 
 
 const name = ref('');
@@ -295,22 +317,164 @@ const fetchMetadata = async (): Promise<Map<string, LaunchpadMetadata>> => {
     }
 };
 
+const fetchLaunchEvents = async (): Promise<Map<string, LaunchEventMeta>> => {
+    const map = new Map<string, LaunchEventMeta>();
+    if (!isConfigured.value) return map;
+
+    try {
+        const iface = new Interface(LAUNCHPAD_ABI);
+        const logs = await readProvider.getLogs({
+            address: LAUNCHPAD_ADDRESS,
+            fromBlock: 0,
+            toBlock: 'latest',
+            topics: [TOKEN_LAUNCHED_TOPIC],
+        });
+
+        for (const log of logs) {
+            try {
+                const parsed = iface.parseLog(log);
+                if (parsed?.name !== 'TokenLaunched') continue;
+
+                const token = String(parsed.args.token).toLowerCase();
+                map.set(token, {
+                    creator: String(parsed.args.creator).toLowerCase(),
+                    pair: String(parsed.args.pair),
+                    blockNumber: log.blockNumber,
+                    txHash: log.transactionHash,
+                });
+            } catch {
+                // Ignore logs that don't match the current ABI shape.
+            }
+        }
+    } catch (e) {
+        console.warn('[Launchpad] launch event history failed', e);
+    }
+
+    return map;
+};
+
+const priceFromReserves = (
+    reserve0: bigint,
+    reserve1: bigint,
+    tokenIsToken0: boolean,
+): { priceCyber: number; reserveCyber: bigint; reserveToken: bigint } | null => {
+    const reserveToken = tokenIsToken0 ? reserve0 : reserve1;
+    const reserveCyber = tokenIsToken0 ? reserve1 : reserve0;
+    if (reserveToken === 0n || reserveCyber === 0n) return null;
+
+    const tokenWhole = Number(formatUnits(reserveToken, 18));
+    const cyberWhole = Number(formatUnits(reserveCyber, 18));
+    if (!isFinite(tokenWhole) || tokenWhole <= 0 || !isFinite(cyberWhole)) return null;
+
+    return {
+        priceCyber: cyberWhole / tokenWhole,
+        reserveCyber,
+        reserveToken,
+    };
+};
+
 const readPairPrice = async (
     pairAddr: string,
     tokenAddr: string,
-): Promise<{ priceCyber: number; reserveCyber: bigint; reserveToken: bigint } | null> => {
+): Promise<
+    | {
+          priceCyber: number;
+          reserveCyber: bigint;
+          reserveToken: bigint;
+          tokenIsToken0: boolean;
+      }
+    | null
+> => {
     try {
         const pair = new Contract(pairAddr, PAIR_ABI, readProvider);
         const [token0, reserves] = await Promise.all([pair.token0(), pair.getReserves()]);
         const tokenIsToken0 = String(token0).toLowerCase() === tokenAddr.toLowerCase();
-        const reserveToken = (tokenIsToken0 ? reserves[0] : reserves[1]) as bigint;
-        const reserveCyber = (tokenIsToken0 ? reserves[1] : reserves[0]) as bigint;
-        if (reserveToken === 0n) return null;
-        // Both LaunchpadToken and CYBER.sol are 18 decimals — direct ratio works.
-        const priceCyber = Number(formatUnits(reserveCyber, 18)) / Number(formatUnits(reserveToken, 18));
-        return { priceCyber, reserveCyber, reserveToken };
+        const price = priceFromReserves(
+            reserves[0] as bigint,
+            reserves[1] as bigint,
+            tokenIsToken0,
+        );
+        return price ? { ...price, tokenIsToken0 } : null;
     } catch {
         return null;
+    }
+};
+
+const fallbackPricePoints = (priceCyber: number | null | undefined): TokenPricePoint[] => {
+    if (priceCyber == null || !isFinite(priceCyber) || priceCyber <= 0) return [];
+
+    return [{ label: 'now', priceCyber, blockNumber: null }];
+};
+
+const sampleChartLogs = <T,>(items: T[], max: number): T[] => {
+    if (items.length <= max) return items;
+
+    const step = (items.length - 1) / (max - 1);
+    return Array.from({ length: max }, (_, i) => items[Math.round(i * step)]);
+};
+
+const readPairPriceHistory = async (
+    pairAddr: string,
+    tokenIsToken0: boolean,
+    launchBlock: number | null | undefined,
+    fallbackPriceCyber: number | null | undefined,
+): Promise<TokenPricePoint[]> => {
+    if (!pairAddr || pairAddr === ZeroAddress) return fallbackPricePoints(fallbackPriceCyber);
+
+    try {
+        const currentBlock = await readProvider.getBlockNumber();
+        const fromBlock =
+            launchBlock != null ? Math.max(0, launchBlock) : Math.max(0, currentBlock - 500_000);
+        const logs = await readProvider.getLogs({
+            address: pairAddr,
+            fromBlock,
+            toBlock: 'latest',
+            topics: [SYNC_TOPIC],
+        });
+
+        const iface = new Interface(PAIR_ABI);
+        const points = sampleChartLogs(logs, MAX_CHART_POINTS)
+            .map((log): TokenPricePoint | null => {
+                try {
+                    const parsed = iface.parseLog(log);
+                    if (parsed?.name !== 'Sync') return null;
+
+                    const price = priceFromReserves(
+                        parsed.args.reserve0 as bigint,
+                        parsed.args.reserve1 as bigint,
+                        tokenIsToken0,
+                    );
+                    if (!price) return null;
+
+                    return {
+                        label: `#${log.blockNumber.toLocaleString()}`,
+                        priceCyber: price.priceCyber,
+                        blockNumber: log.blockNumber,
+                    };
+                } catch {
+                    return null;
+                }
+            })
+            .filter((point): point is TokenPricePoint => point !== null);
+
+        const lastPoint = points.at(-1);
+        if (
+            fallbackPriceCyber != null &&
+            isFinite(fallbackPriceCyber) &&
+            fallbackPriceCyber > 0 &&
+            lastPoint?.blockNumber !== currentBlock
+        ) {
+            points.push({
+                label: 'now',
+                priceCyber: fallbackPriceCyber,
+                blockNumber: currentBlock,
+            });
+        }
+
+        return points.length > 0 ? points : fallbackPricePoints(fallbackPriceCyber);
+    } catch (e) {
+        console.warn('[Launchpad] pair price history failed', e);
+        return fallbackPricePoints(fallbackPriceCyber);
     }
 };
 

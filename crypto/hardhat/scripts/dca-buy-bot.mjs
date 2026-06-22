@@ -288,23 +288,24 @@ async function buildPairGraph(publicClient, config) {
   const symbols = new Map(); // lowerAddr -> symbol
 
   for (let i = 0n; i < length; i++) {
-    const pair = await publicClient.readContract({
-      address: config.factory,
-      abi: factoryAbi,
-      functionName: "allPairs",
-      args: [i],
-    });
-
+    let pair;
     let token0;
     let token1;
     let reserves;
     try {
+      pair = await publicClient.readContract({
+        address: config.factory,
+        abi: factoryAbi,
+        functionName: "allPairs",
+        args: [i],
+      });
       [token0, token1, reserves] = await Promise.all([
         publicClient.readContract({ address: pair, abi: pairAbi, functionName: "token0" }),
         publicClient.readContract({ address: pair, abi: pairAbi, functionName: "token1" }),
         publicClient.readContract({ address: pair, abi: pairAbi, functionName: "getReserves" }),
       ]);
-    } catch {
+    } catch (error) {
+      log(`WARN skip pair index ${i}: ${error.shortMessage || error.message}`);
       continue;
     }
 
@@ -462,9 +463,12 @@ async function main() {
   }
 
   const runtimeChain = { ...chain, rpcUrls: { default: { http: [config.rpcUrl] } } };
-  const publicClient = createPublicClient({ chain: runtimeChain, transport: http(config.rpcUrl) });
+  // Public RPC can lag; raise the per-request timeout and retry count so a single
+  // slow response no longer aborts the whole cycle with a TimeoutError.
+  const transport = http(config.rpcUrl, { timeout: 30_000, retryCount: 5, retryDelay: 1_000 });
+  const publicClient = createPublicClient({ chain: runtimeChain, transport });
   const walletClient = account
-    ? createWalletClient({ chain: runtimeChain, account, transport: http(config.rpcUrl) })
+    ? createWalletClient({ chain: runtimeChain, account, transport })
     : null;
 
   do {

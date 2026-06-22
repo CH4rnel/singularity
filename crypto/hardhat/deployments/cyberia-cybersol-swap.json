@@ -1,0 +1,12 @@
+{
+  "chainId": 49406,
+  "rpcUrl": "https://rpc.cyberia.church",
+  "_doc": "CyberSolSwap: fixed-rate redeemer converting bridged CYBER.sol -> native CYBER at 1000:1. Must be funded with native CYBER to provide payout liquidity.",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "address": "0x69b1614B088F5670E49bcC6fE33F28F2544F7415",
+  "cyberSol": "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA",
+  "rate": 1000,
+  "txHash": "0xb43e64c3a49c3bdd10aab534e37d88db27f4f25f647067c92301e94bb26bcd9c",
+  "block": 11142700,
+  "deployedAt": "2026-06-22T15:00:00.000Z"
+}
