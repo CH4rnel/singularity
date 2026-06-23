@@ -166,6 +166,11 @@
     * {
         @apply border-border outline-ring/50;
     }
+    /* Always reserve the scrollbar gutter so centered (mx-auto) layouts like
+       the header don't jump horizontally between short and long pages. */
+    html {
+        scrollbar-gutter: stable;
+    }
     body {
         @apply bg-background text-foreground;
     }
