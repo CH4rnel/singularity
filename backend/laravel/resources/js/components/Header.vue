@@ -73,6 +73,7 @@ async function connectMetaMask() {
 
     if (!evmWallet.isMetaMaskInstalled()) {
         authError.value = 'MetaMask is not installed';
+
         return;
     }
 
@@ -84,6 +85,7 @@ async function connectMetaMask() {
         if (!address) {
             authError.value = evmWallet.error.value || 'Failed to connect';
             isAuthenticating.value = false;
+
             return;
         }
 
@@ -94,6 +96,7 @@ async function connectMetaMask() {
         if (!signature) {
             authError.value = 'Failed to sign message';
             isAuthenticating.value = false;
+
             return;
         }
 
@@ -123,6 +126,7 @@ async function connectPhantom() {
 
     if (!solanaWallet.isPhantomInstalled()) {
         authError.value = 'Phantom is not installed';
+
         return;
     }
 
@@ -134,6 +138,7 @@ async function connectPhantom() {
         if (!address) {
             authError.value = solanaWallet.error.value || 'Failed to connect';
             isAuthenticating.value = false;
+
             return;
         }
 
@@ -144,6 +149,7 @@ async function connectPhantom() {
         if (!signature) {
             authError.value = 'Failed to sign message';
             isAuthenticating.value = false;
+
             return;
         }
 
@@ -181,7 +187,7 @@ function signOut() {
 <template>
     <header class="border-b">
         <nav
-            class="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-4 py-4 text-sm"
+            class="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-4 py-4 text-sm"
             aria-label="Cyberia navigation"
         >
             <a href="/" :class="linkClass('/')">Cyberia</a>
@@ -199,6 +205,11 @@ function signOut() {
             >
             <InertiaLink href="/launchpad" :class="linkClass('/launchpad')"
                 >Launchpad</InertiaLink
+            >
+            <InertiaLink
+                href="/cyber-sol-swap"
+                :class="linkClass('/cyber-sol-swap')"
+                >CYBER.sol Swap</InertiaLink
             >
             <InertiaLink href="/analytics" :class="linkClass('/analytics')"
                 >Analytics</InertiaLink
@@ -284,7 +295,7 @@ function signOut() {
 
         <p
             v-if="authError"
-            class="mx-auto max-w-5xl px-4 pb-2 text-xs text-destructive"
+            class="mx-auto max-w-6xl px-4 pb-2 text-xs text-destructive"
         >
             {{ authError }}
         </p>

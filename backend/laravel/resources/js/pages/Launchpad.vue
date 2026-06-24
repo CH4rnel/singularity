@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import {
+    CategoryScale,
+    Chart,
+    Filler,
+    Legend,
+    LinearScale,
+    LineController,
+    LineElement,
+    PointElement,
+    Tooltip,
+} from 'chart.js';
+import {
     BrowserProvider,
     Contract,
     Interface,
@@ -8,10 +19,18 @@ import {
     MaxUint256,
     ZeroAddress,
     formatUnits,
+    id,
     parseUnits,
 } from 'ethers';
 import { Loader2 } from 'lucide-vue-next';
-import { computed, onMounted, ref, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+} from 'vue';
 import Header from '@/components/Header.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,9 +38,16 @@ import { useWallet } from '@/composables/useWallet';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 // Chart.js
-import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend } from 'chart.js';
-Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend);
-
+Chart.register(
+    LineController,
+    LineElement,
+    PointElement,
+    LinearScale,
+    CategoryScale,
+    Tooltip,
+    Legend,
+    Filler,
+);
 
 const CYBERIA_CHAIN_ID = 49406;
 const CYBERIA_CHAIN_ID_HEX = '0xc11e';
@@ -52,6 +78,7 @@ const ERC20_ABI = [
 ];
 
 const PAIR_ABI = [
+    'event Sync(uint112 reserve0, uint112 reserve1)',
     'function token0() view returns (address)',
     'function token1() view returns (address)',
     'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
@@ -70,6 +97,11 @@ const ERC20_READ_ABI = [
 
 const SWAP_BASE_URL = 'https://swap.cyberia.church/#/swap';
 const EXPLORER_BASE_URL = 'https://explorer.cyberia.church';
+const SYNC_TOPIC = id('Sync(uint112,uint112)');
+const TOKEN_LAUNCHED_TOPIC = id(
+    'TokenLaunched(address,address,address,string,string,uint256,uint256,uint256)',
+);
+const MAX_CHART_POINTS = 40;
 
 type LaunchedToken = {
     token: string;
@@ -87,6 +119,7 @@ type LaunchedToken = {
     // Enriched from pair reserves (price quoted in CYBER.sol per 1 token).
     priceCyber?: number | null;
     marketCapCyber?: number | null;
+    launchBlock?: number | null;
 };
 
 type LaunchpadMetadata = {
@@ -99,11 +132,24 @@ type LaunchpadMetadata = {
     site_url: string | null;
 };
 
+type LaunchEventMeta = {
+    creator: string;
+    pair: string;
+    blockNumber: number;
+    txHash: string;
+};
+
+type TokenPricePoint = {
+    label: string;
+    priceCyber: number;
+    blockNumber: number | null;
+};
+
 const wallet = useWallet();
 
 // Chart instances map
 const chartInstances = new Map<string, Chart>();
-
+const priceHistories = ref<Record<string, TokenPricePoint[]>>({});
 
 const name = ref('');
 const symbol = ref('');
@@ -122,13 +168,16 @@ const onHtmlChange = (event: Event): void => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0] ?? null;
     error.value = null;
+
     if (file && file.size > MAX_HTML_BYTES) {
         error.value = `HTML page must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
         target.value = '';
         htmlFile.value = null;
         htmlFileName.value = null;
+
         return;
     }
+
     htmlFile.value = file;
     htmlFileName.value = file?.name ?? null;
 };
@@ -137,17 +186,22 @@ const onImageChange = (event: Event): void => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0] ?? null;
     error.value = null;
+
     if (file && file.size > MAX_IMAGE_BYTES) {
         error.value = `Image must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
         target.value = '';
         imageFile.value = null;
+
         return;
     }
+
     imageFile.value = file;
+
     if (imagePreview.value) {
         URL.revokeObjectURL(imagePreview.value);
         imagePreview.value = null;
     }
+
     if (file) {
         imagePreview.value = URL.createObjectURL(file);
     }
@@ -167,7 +221,9 @@ const txHash = ref<string | null>(null);
 // blocks browser CORS and the app may be served over HTTPS (mixed-content guard).
 // ethers v6's FetchRequest needs an absolute URL, so prepend window.location.origin.
 const readRpcUrl =
-    typeof window !== 'undefined' ? window.location.origin + CYBERIA_RPC : CYBERIA_PUBLIC_RPC;
+    typeof window !== 'undefined'
+        ? window.location.origin + CYBERIA_RPC
+        : CYBERIA_PUBLIC_RPC;
 const readProvider = new JsonRpcProvider(readRpcUrl, {
     chainId: CYBERIA_CHAIN_ID,
     name: 'cyberia',
@@ -218,11 +274,14 @@ const canLaunch = computed(
 
 const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
     const eth = getMetaMaskProvider();
+
     if (!eth) {
         throw new Error('MetaMask not found');
     }
+
     const provider = new BrowserProvider(eth);
     const net = await provider.getNetwork();
+
     if (Number(net.chainId) !== CYBERIA_CHAIN_ID) {
         try {
             await eth.request({
@@ -231,6 +290,7 @@ const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
             });
         } catch (e) {
             const code = (e as { code?: number }).code;
+
             if (code === 4902) {
                 await eth.request({
                     method: 'wallet_addEthereumChain',
@@ -251,20 +311,31 @@ const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
                 throw e;
             }
         }
+
         return new BrowserProvider(eth);
     }
+
     return provider;
 };
 
 const loadOnchain = async (): Promise<void> => {
-    if (!isConfigured.value) return;
-    const launchpad = new Contract(LAUNCHPAD_ADDRESS, LAUNCHPAD_ABI, readProvider);
+    if (!isConfigured.value) {
+        return;
+    }
+
+    const launchpad = new Contract(
+        LAUNCHPAD_ADDRESS,
+        LAUNCHPAD_ABI,
+        readProvider,
+    );
     const cyber = new Contract(CYBER_SOL_ADDRESS, ERC20_ABI, readProvider);
+
     try {
         minLiquidity.value = await launchpad.minLiquidity();
     } catch {
         minLiquidity.value = 0n;
     }
+
     if (wallet.address.value) {
         try {
             cyberSolBalance.value = await cyber.balanceOf(wallet.address.value);
@@ -283,78 +354,312 @@ const fetchMetadata = async (): Promise<Map<string, LaunchpadMetadata>> => {
         const res = await fetch('/api/launchpad/tokens', {
             headers: { Accept: 'application/json' },
         });
-        if (!res.ok) return new Map();
+
+        if (!res.ok) {
+            return new Map();
+        }
+
         const data = (await res.json()) as { tokens: LaunchpadMetadata[] };
         const map = new Map<string, LaunchpadMetadata>();
+
         for (const t of data.tokens) {
             map.set(t.address.toLowerCase(), t);
         }
+
         return map;
     } catch {
         return new Map();
     }
 };
 
+const fetchLaunchEvents = async (): Promise<Map<string, LaunchEventMeta>> => {
+    const map = new Map<string, LaunchEventMeta>();
+
+    if (!isConfigured.value) {
+        return map;
+    }
+
+    try {
+        const iface = new Interface(LAUNCHPAD_ABI);
+        const logs = await readProvider.getLogs({
+            address: LAUNCHPAD_ADDRESS,
+            fromBlock: 0,
+            toBlock: 'latest',
+            topics: [TOKEN_LAUNCHED_TOPIC],
+        });
+
+        for (const log of logs) {
+            try {
+                const parsed = iface.parseLog(log);
+
+                if (parsed?.name !== 'TokenLaunched') {
+                    continue;
+                }
+
+                const token = String(parsed.args.token).toLowerCase();
+                map.set(token, {
+                    creator: String(parsed.args.creator).toLowerCase(),
+                    pair: String(parsed.args.pair),
+                    blockNumber: log.blockNumber,
+                    txHash: log.transactionHash,
+                });
+            } catch {
+                // Ignore logs that don't match the current ABI shape.
+            }
+        }
+    } catch (e) {
+        console.warn('[Launchpad] launch event history failed', e);
+    }
+
+    return map;
+};
+
+const priceFromReserves = (
+    reserve0: bigint,
+    reserve1: bigint,
+    tokenIsToken0: boolean,
+): {
+    priceCyber: number;
+    reserveCyber: bigint;
+    reserveToken: bigint;
+} | null => {
+    const reserveToken = tokenIsToken0 ? reserve0 : reserve1;
+    const reserveCyber = tokenIsToken0 ? reserve1 : reserve0;
+
+    if (reserveToken === 0n || reserveCyber === 0n) {
+        return null;
+    }
+
+    const tokenWhole = Number(formatUnits(reserveToken, 18));
+    const cyberWhole = Number(formatUnits(reserveCyber, 18));
+
+    if (!isFinite(tokenWhole) || tokenWhole <= 0 || !isFinite(cyberWhole)) {
+        return null;
+    }
+
+    return {
+        priceCyber: cyberWhole / tokenWhole,
+        reserveCyber,
+        reserveToken,
+    };
+};
+
 const readPairPrice = async (
     pairAddr: string,
     tokenAddr: string,
-): Promise<{ priceCyber: number; reserveCyber: bigint; reserveToken: bigint } | null> => {
+): Promise<{
+    priceCyber: number;
+    reserveCyber: bigint;
+    reserveToken: bigint;
+    tokenIsToken0: boolean;
+} | null> => {
     try {
         const pair = new Contract(pairAddr, PAIR_ABI, readProvider);
-        const [token0, reserves] = await Promise.all([pair.token0(), pair.getReserves()]);
-        const tokenIsToken0 = String(token0).toLowerCase() === tokenAddr.toLowerCase();
-        const reserveToken = (tokenIsToken0 ? reserves[0] : reserves[1]) as bigint;
-        const reserveCyber = (tokenIsToken0 ? reserves[1] : reserves[0]) as bigint;
-        if (reserveToken === 0n) return null;
-        // Both LaunchpadToken and CYBER.sol are 18 decimals — direct ratio works.
-        const priceCyber = Number(formatUnits(reserveCyber, 18)) / Number(formatUnits(reserveToken, 18));
-        return { priceCyber, reserveCyber, reserveToken };
+        const [token0, reserves] = await Promise.all([
+            pair.token0(),
+            pair.getReserves(),
+        ]);
+        const tokenIsToken0 =
+            String(token0).toLowerCase() === tokenAddr.toLowerCase();
+        const price = priceFromReserves(
+            reserves[0] as bigint,
+            reserves[1] as bigint,
+            tokenIsToken0,
+        );
+
+        return price ? { ...price, tokenIsToken0 } : null;
     } catch {
         return null;
     }
 };
 
-const loadRecent = async (): Promise<void> => {
-    if (!isConfigured.value) return;
+const fallbackPricePoints = (
+    priceCyber: number | null | undefined,
+): TokenPricePoint[] => {
+    if (priceCyber == null || !isFinite(priceCyber) || priceCyber <= 0) {
+        return [];
+    }
+
+    return [{ label: 'now', priceCyber, blockNumber: null }];
+};
+
+const sampleChartLogs = <T,>(items: T[], max: number): T[] => {
+    if (items.length <= max) {
+        return items;
+    }
+
+    const step = (items.length - 1) / (max - 1);
+
+    return Array.from({ length: max }, (_, i) => items[Math.round(i * step)]);
+};
+
+const readPairPriceHistory = async (
+    pairAddr: string,
+    tokenIsToken0: boolean,
+    launchBlock: number | null | undefined,
+    fallbackPriceCyber: number | null | undefined,
+): Promise<TokenPricePoint[]> => {
+    if (!pairAddr || pairAddr === ZeroAddress) {
+        return fallbackPricePoints(fallbackPriceCyber);
+    }
+
     try {
-        const launchpad = new Contract(LAUNCHPAD_ADDRESS, LAUNCHPAD_ABI, readProvider);
-        const factory = new Contract(FACTORY_ADDRESS, FACTORY_ABI, readProvider);
+        const currentBlock = await readProvider.getBlockNumber();
+        const fromBlock =
+            launchBlock != null
+                ? Math.max(0, launchBlock)
+                : Math.max(0, currentBlock - 500_000);
+        const logs = await readProvider.getLogs({
+            address: pairAddr,
+            fromBlock,
+            toBlock: 'latest',
+            topics: [SYNC_TOPIC],
+        });
+
+        const iface = new Interface(PAIR_ABI);
+        const points = sampleChartLogs(logs, MAX_CHART_POINTS)
+            .map((log): TokenPricePoint | null => {
+                try {
+                    const parsed = iface.parseLog(log);
+
+                    if (parsed?.name !== 'Sync') {
+                        return null;
+                    }
+
+                    const price = priceFromReserves(
+                        parsed.args.reserve0 as bigint,
+                        parsed.args.reserve1 as bigint,
+                        tokenIsToken0,
+                    );
+
+                    if (!price) {
+                        return null;
+                    }
+
+                    return {
+                        label: `#${log.blockNumber.toLocaleString()}`,
+                        priceCyber: price.priceCyber,
+                        blockNumber: log.blockNumber,
+                    };
+                } catch {
+                    return null;
+                }
+            })
+            .filter((point): point is TokenPricePoint => point !== null);
+
+        const lastPoint = points.at(-1);
+
+        if (
+            fallbackPriceCyber != null &&
+            isFinite(fallbackPriceCyber) &&
+            fallbackPriceCyber > 0 &&
+            lastPoint?.blockNumber !== currentBlock
+        ) {
+            points.push({
+                label: 'now',
+                priceCyber: fallbackPriceCyber,
+                blockNumber: currentBlock,
+            });
+        }
+
+        return points.length > 0
+            ? points
+            : fallbackPricePoints(fallbackPriceCyber);
+    } catch (e) {
+        console.warn('[Launchpad] pair price history failed', e);
+
+        return fallbackPricePoints(fallbackPriceCyber);
+    }
+};
+
+const loadRecent = async (): Promise<void> => {
+    if (!isConfigured.value) {
+        return;
+    }
+
+    try {
+        const launchpad = new Contract(
+            LAUNCHPAD_ADDRESS,
+            LAUNCHPAD_ABI,
+            readProvider,
+        );
+        const factory = new Contract(
+            FACTORY_ADDRESS,
+            FACTORY_ABI,
+            readProvider,
+        );
 
         const lengthBn = (await launchpad.allTokensLength()) as bigint;
         const length = Number(lengthBn);
+
         if (length === 0) {
             recent.value = [];
+            priceHistories.value = {};
+            await renderTokenCharts();
+
             return;
         }
 
         // Newest first, cap at 25.
         const start = Math.max(0, length - 25);
         const indices: number[] = [];
-        for (let i = length - 1; i >= start; i--) indices.push(i);
+
+        for (let i = length - 1; i >= start; i--) {
+            indices.push(i);
+        }
 
         const addresses = (await Promise.all(
             indices.map((i) => launchpad.allTokens(i)),
         )) as string[];
 
+        const launchEvents = await fetchLaunchEvents();
+
         const perTokenData = await Promise.all(
             addresses.map(async (tokenAddr) => {
-                const erc20 = new Contract(tokenAddr, ERC20_READ_ABI, readProvider);
-                const [name_, symbol_, totalSupply_, pairAddr] = await Promise.all([
-                    erc20.name().catch(() => '') as Promise<string>,
-                    erc20.symbol().catch(() => '') as Promise<string>,
-                    erc20.totalSupply().catch(() => 0n) as Promise<bigint>,
-                    factory.getPair(tokenAddr, CYBER_SOL_ADDRESS).catch(() => ZeroAddress) as Promise<string>,
-                ]);
+                const erc20 = new Contract(
+                    tokenAddr,
+                    ERC20_READ_ABI,
+                    readProvider,
+                );
+                const launchEvent = launchEvents.get(tokenAddr.toLowerCase());
+                const [name_, symbol_, totalSupply_, pairAddrFromFactory] =
+                    await Promise.all([
+                        erc20.name().catch(() => '') as Promise<string>,
+                        erc20.symbol().catch(() => '') as Promise<string>,
+                        erc20.totalSupply().catch(() => 0n) as Promise<bigint>,
+                        factory
+                            .getPair(tokenAddr, CYBER_SOL_ADDRESS)
+                            .catch(() => ZeroAddress) as Promise<string>,
+                    ]);
+                const pairAddr =
+                    launchEvent?.pair && launchEvent.pair !== ZeroAddress
+                        ? launchEvent.pair
+                        : pairAddrFromFactory;
                 let reserveCyber = 0n;
                 let priceCyber: number | null = null;
+                let tokenIsToken0: boolean | null = null;
+
                 if (pairAddr && pairAddr !== ZeroAddress) {
                     const p = await readPairPrice(pairAddr, tokenAddr);
+
                     if (p) {
                         priceCyber = p.priceCyber;
                         reserveCyber = p.reserveCyber;
+                        tokenIsToken0 = p.tokenIsToken0;
                     }
                 }
-                return { name_, symbol_, totalSupply_, pairAddr, reserveCyber, priceCyber };
+
+                return {
+                    name_,
+                    symbol_,
+                    totalSupply_,
+                    pairAddr,
+                    reserveCyber,
+                    priceCyber,
+                    tokenIsToken0,
+                    launchBlock: launchEvent?.blockNumber ?? null,
+                    eventCreator: launchEvent?.creator ?? '',
+                };
             }),
         );
 
@@ -364,10 +669,11 @@ const loadRecent = async (): Promise<void> => {
             const d = perTokenData[i];
             const md = metadata.get(tokenAddr.toLowerCase());
             const supplyWhole = Number(formatUnits(d.totalSupply_, 18));
+
             return {
                 token: tokenAddr,
                 pair: d.pairAddr,
-                creator: md?.creator ?? '',
+                creator: md?.creator ?? d.eventCreator,
                 name: d.name_ || md?.name || '',
                 symbol: d.symbol_ || md?.symbol || '',
                 tokenSupply: d.totalSupply_,
@@ -376,51 +682,111 @@ const loadRecent = async (): Promise<void> => {
                 imageUrl: md?.image_url ?? null,
                 siteUrl: md?.site_url ?? null,
                 priceCyber: d.priceCyber,
-                marketCapCyber: d.priceCyber != null ? d.priceCyber * supplyWhole : null,
+                marketCapCyber:
+                    d.priceCyber != null ? d.priceCyber * supplyWhole : null,
+                launchBlock: d.launchBlock,
             };
         });
 
-        // Update charts for each token
+        const nextHistories: Record<string, TokenPricePoint[]> = {};
         recent.value.forEach((t) => {
-            updateTokenChart(t.token, t.priceCyber);
+            nextHistories[t.token.toLowerCase()] = fallbackPricePoints(
+                t.priceCyber,
+            );
         });
+        priceHistories.value = nextHistories;
+        await renderTokenCharts();
 
+        void loadPriceHistories(
+            recent.value.map((t, i) => ({
+                token: t,
+                tokenIsToken0: perTokenData[i].tokenIsToken0,
+            })),
+        );
     } catch (e) {
         console.warn('[Launchpad] loadRecent failed', e);
+    }
+};
+
+const loadPriceHistories = async (
+    tokens: { token: LaunchedToken; tokenIsToken0: boolean | null }[],
+): Promise<void> => {
+    for (const { token, tokenIsToken0 } of tokens) {
+        if (tokenIsToken0 === null) {
+            continue;
+        }
+
+        const points = await readPairPriceHistory(
+            token.pair,
+            tokenIsToken0,
+            token.launchBlock,
+            token.priceCyber,
+        );
+        priceHistories.value = {
+            ...priceHistories.value,
+            [token.token.toLowerCase()]: points,
+        };
+        await renderTokenCharts();
     }
 };
 
 const buildMetadataMessage = (tokenAddress: string): string =>
     `Edit Cyberia Launchpad metadata for ${tokenAddress.toLowerCase()} at ${new Date().toISOString()}`;
 
-const signMetadataMessage = async (tokenAddress: string): Promise<{ message: string; signature: string }> => {
+const signMetadataMessage = async (
+    tokenAddress: string,
+): Promise<{ message: string; signature: string }> => {
     const provider = await ensureCyberiaNetwork();
     const signer = await provider.getSigner();
     const message = buildMetadataMessage(tokenAddress);
     const signature = await signer.signMessage(message);
+
     return { message, signature };
 };
 
 const submitMetadata = async (tokenAddress: string): Promise<void> => {
-    if (!description.value.trim() && !imageFile.value && !htmlFile.value) return;
+    if (!description.value.trim() && !imageFile.value && !htmlFile.value) {
+        return;
+    }
+
     const { message, signature } = await signMetadataMessage(tokenAddress);
     const form = new FormData();
     form.append('address', tokenAddress);
     form.append('message', message);
     form.append('signature', signature);
-    if (name.value.trim()) form.append('name', name.value.trim());
-    if (symbol.value.trim()) form.append('symbol', symbol.value.trim());
-    if (description.value.trim()) form.append('description', description.value.trim());
-    if (imageFile.value) form.append('image', imageFile.value);
-    if (htmlFile.value) form.append('html', htmlFile.value);
+
+    if (name.value.trim()) {
+        form.append('name', name.value.trim());
+    }
+
+    if (symbol.value.trim()) {
+        form.append('symbol', symbol.value.trim());
+    }
+
+    if (description.value.trim()) {
+        form.append('description', description.value.trim());
+    }
+
+    if (imageFile.value) {
+        form.append('image', imageFile.value);
+    }
+
+    if (htmlFile.value) {
+        form.append('html', htmlFile.value);
+    }
+
     const res = await fetch('/api/launchpad/tokens', {
         method: 'POST',
         headers: { Accept: 'application/json' },
         body: form,
     });
+
     if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw new Error(`Metadata upload failed: HTTP ${res.status} ${text.slice(0, 300)}`);
+
+        throw new Error(
+            `Metadata upload failed: HTTP ${res.status} ${text.slice(0, 300)}`,
+        );
     }
 };
 
@@ -434,8 +800,14 @@ const explorerAddressUrl = (address: string): string =>
 // any connected wallet is allowed to take the first turn — the backend records
 // the first signer as the canonical creator.
 const canEdit = (t: LaunchedToken): boolean => {
-    if (!wallet.isConnected.value || !wallet.address.value) return false;
-    if (!t.creator) return true;
+    if (!wallet.isConnected.value || !wallet.address.value) {
+        return false;
+    }
+
+    if (!t.creator) {
+        return true;
+    }
+
     return t.creator.toLowerCase() === wallet.address.value.toLowerCase();
 };
 
@@ -455,10 +827,12 @@ const openEditor = (t: LaunchedToken): void => {
     editImageFile.value = null;
     editHtmlFile.value = null;
     editHtmlFileName.value = null;
+
     if (editImagePreview.value) {
         URL.revokeObjectURL(editImagePreview.value);
         editImagePreview.value = null;
     }
+
     editError.value = null;
 };
 
@@ -468,10 +842,12 @@ const closeEditor = (): void => {
     editImageFile.value = null;
     editHtmlFile.value = null;
     editHtmlFileName.value = null;
+
     if (editImagePreview.value) {
         URL.revokeObjectURL(editImagePreview.value);
         editImagePreview.value = null;
     }
+
     editError.value = null;
 };
 
@@ -479,13 +855,16 @@ const onEditHtmlChange = (event: Event): void => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0] ?? null;
     editError.value = null;
+
     if (file && file.size > MAX_HTML_BYTES) {
         editError.value = `HTML page must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
         target.value = '';
         editHtmlFile.value = null;
         editHtmlFileName.value = null;
+
         return;
     }
+
     editHtmlFile.value = file;
     editHtmlFileName.value = file?.name ?? null;
 };
@@ -494,46 +873,74 @@ const onEditImageChange = (event: Event): void => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0] ?? null;
     editError.value = null;
+
     if (file && file.size > MAX_IMAGE_BYTES) {
         editError.value = `Image must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
         target.value = '';
         editImageFile.value = null;
+
         return;
     }
+
     editImageFile.value = file;
+
     if (editImagePreview.value) {
         URL.revokeObjectURL(editImagePreview.value);
         editImagePreview.value = null;
     }
-    if (file) editImagePreview.value = URL.createObjectURL(file);
+
+    if (file) {
+        editImagePreview.value = URL.createObjectURL(file);
+    }
 };
 
 const saveEditor = async (t: LaunchedToken): Promise<void> => {
     editBusy.value = true;
     editError.value = null;
+
     try {
         if (!wallet.isConnected.value) {
-            throw new Error('Connect your wallet first — editing requires a signature from the token creator.');
+            throw new Error(
+                'Connect your wallet first — editing requires a signature from the token creator.',
+            );
         }
+
         const { message, signature } = await signMetadataMessage(t.token);
         const form = new FormData();
         form.append('address', t.token);
         form.append('message', message);
         form.append('signature', signature);
-        if (t.name) form.append('name', t.name);
-        if (t.symbol) form.append('symbol', t.symbol);
+
+        if (t.name) {
+            form.append('name', t.name);
+        }
+
+        if (t.symbol) {
+            form.append('symbol', t.symbol);
+        }
+
         form.append('description', editDescription.value.trim());
-        if (editImageFile.value) form.append('image', editImageFile.value);
-        if (editHtmlFile.value) form.append('html', editHtmlFile.value);
+
+        if (editImageFile.value) {
+            form.append('image', editImageFile.value);
+        }
+
+        if (editHtmlFile.value) {
+            form.append('html', editHtmlFile.value);
+        }
+
         const res = await fetch('/api/launchpad/tokens', {
             method: 'POST',
             headers: { Accept: 'application/json' },
             body: form,
         });
+
         if (!res.ok) {
             const text = await res.text();
+
             throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
         }
+
         closeEditor();
         await loadRecent();
     } catch (e) {
@@ -547,6 +954,7 @@ const handleApprove = async (): Promise<void> => {
     error.value = null;
     status.value = null;
     busy.value = true;
+
     try {
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
@@ -569,10 +977,15 @@ const handleLaunch = async (): Promise<void> => {
     status.value = null;
     txHash.value = null;
     busy.value = true;
+
     try {
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
-        const launchpad = new Contract(LAUNCHPAD_ADDRESS, LAUNCHPAD_ABI, signer);
+        const launchpad = new Contract(
+            LAUNCHPAD_ADDRESS,
+            LAUNCHPAD_ABI,
+            signer,
+        );
         const iface = new Interface(LAUNCHPAD_ABI);
         status.value = 'Confirm launch() in your wallet…';
         const tx = await launchpad.launch(
@@ -587,9 +1000,11 @@ const handleLaunch = async (): Promise<void> => {
 
         // Pull the deployed token address out of TokenLaunched (first indexed arg).
         let newTokenAddress: string | null = null;
+
         for (const log of receipt?.logs ?? []) {
             try {
                 const parsed = iface.parseLog(log);
+
                 if (parsed?.name === 'TokenLaunched') {
                     newTokenAddress = parsed.args.token as string;
                     break;
@@ -605,6 +1020,7 @@ const handleLaunch = async (): Promise<void> => {
                     'Launch succeeded but the TokenLaunched event was not found in the receipt — metadata not uploaded.',
                 );
             }
+
             status.value = 'Uploading metadata…';
             await submitMetadata(newTokenAddress);
         }
@@ -616,10 +1032,12 @@ const handleLaunch = async (): Promise<void> => {
         imageFile.value = null;
         htmlFile.value = null;
         htmlFileName.value = null;
+
         if (imagePreview.value) {
             URL.revokeObjectURL(imagePreview.value);
             imagePreview.value = null;
         }
+
         await loadOnchain();
         await loadRecent();
     } catch (e) {
@@ -632,101 +1050,186 @@ const handleLaunch = async (): Promise<void> => {
 const fmt = (v: bigint, decimals = 18): string => {
     const s = formatUnits(v, decimals);
     const n = Number(s);
-    if (!isFinite(n)) return s;
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+
+    if (!isFinite(n)) {
+        return s;
+    }
+
+    if (n >= 1_000_000) {
+        return `${(n / 1_000_000).toFixed(2)}M`;
+    }
+
+    if (n >= 1_000) {
+        return `${(n / 1_000).toFixed(2)}K`;
+    }
+
     return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 };
 
 const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 const formatNum = (n: number): string => {
-    if (!isFinite(n)) return '—';
-    if (n === 0) return '0';
-    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+    if (!isFinite(n)) {
+        return '—';
+    }
+
+    if (n === 0) {
+        return '0';
+    }
+
+    if (n >= 1_000_000_000) {
+        return `${(n / 1_000_000_000).toFixed(2)}B`;
+    }
+
+    if (n >= 1_000_000) {
+        return `${(n / 1_000_000).toFixed(2)}M`;
+    }
+
+    if (n >= 1_000) {
+        return `${(n / 1_000).toFixed(2)}K`;
+    }
+
     return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 };
 
 const formatPrice = (n: number): string => {
-    if (!isFinite(n) || n <= 0) return '0';
-    if (n < 1e-6) return n.toExponential(2);
-    if (n < 1) return n.toPrecision(4);
+    if (!isFinite(n) || n <= 0) {
+        return '0';
+    }
+
+    if (n < 1e-6) {
+        return n.toExponential(2);
+    }
+
+    if (n < 1) {
+        return n.toPrecision(4);
+    }
+
     return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 };
 
-// Generate mock price data for chart (last 7 days)
-function generateMockPrices(basePrice: number | null, days: number = 7): number[] {
-    if (basePrice === null || basePrice <= 0) return Array(days).fill(0);
-    const prices = [];
-    let last = basePrice;
-    for (let i = 0; i < days; i++) {
-        // random walk +/- 5%
-        const change = (Math.random() - 0.5) * 0.1; // -5% to +5%
-        last = Math.max(0, last * (1 + change));
-        prices.push(last);
-    }
-    return prices;
-}
+const chartKey = (tokenAddress: string): string => tokenAddress.toLowerCase();
 
-// Initialize or update chart for a token
-function updateTokenChart(tokenAddress: string, priceCyber: number | null): void {
-    const canvas = document.getElementById(`chart-${tokenAddress}`) as HTMLCanvasElement | null;
-    if (!canvas) return;
-    const prices = generateMockPrices(priceCyber, 7);
-    const labels = Array.from({length: 7}, (_, i) => `D${i + 1}`);
-    const existing = chartInstances.get(tokenAddress);
+const chartId = (tokenAddress: string): string =>
+    `launchpad-price-chart-${chartKey(tokenAddress)}`;
+
+const chartPointsFor = (t: LaunchedToken): TokenPricePoint[] =>
+    priceHistories.value[chartKey(t.token)] ??
+    fallbackPricePoints(t.priceCyber);
+
+const destroyMissingCharts = (): void => {
+    const active = new Set(recent.value.map((t) => chartKey(t.token)));
+
+    for (const [key, chart] of chartInstances.entries()) {
+        if (!active.has(key)) {
+            chart.destroy();
+            chartInstances.delete(key);
+        }
+    }
+};
+
+function updateTokenChart(
+    tokenAddress: string,
+    points: TokenPricePoint[],
+): void {
+    const key = chartKey(tokenAddress);
+    const existing = chartInstances.get(key);
+
+    if (points.length === 0) {
+        if (existing) {
+            existing.destroy();
+            chartInstances.delete(key);
+        }
+
+        return;
+    }
+
+    const canvas = document.getElementById(
+        chartId(tokenAddress),
+    ) as HTMLCanvasElement | null;
+
+    if (!canvas) {
+        return;
+    }
+
+    const labels = points.map((point) => point.label);
+    const prices = points.map((point) => point.priceCyber);
+
     if (existing) {
         existing.data.labels = labels;
         existing.data.datasets[0].data = prices;
         existing.update('none');
-    } else {
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
+
+        return;
+    }
+
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+        return;
+    }
+
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
                     label: 'Price (CYBER.sol)',
                     data: prices,
-                    borderColor: '#3b82f6',
-                    backgroundColor: 'rgba(59,130,246,0.1)',
-                    tension: 0.3,
-                    pointRadius: 0,
+                    borderColor: '#60a5fa',
+                    backgroundColor: 'rgba(96, 165, 250, 0.14)',
+                    fill: true,
+                    tension: 0.28,
+                    pointRadius: points.length === 1 ? 3 : 0,
                     pointHoverRadius: 4,
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                    },
                 },
-                scales: {
-                    x: { display: false },
-                    y: {
-                        beginAtZero: false,
-                        ticks: {
-                            callback: (value) => {
-                                if (value === 0) return '0';
-                                return Number(value).toFixed(6);
-                            },
-                        },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (context) =>
+                            `${formatPrice(Number(context.parsed.y))} CYBER.sol`,
                     },
                 },
             },
-        });
-        chartInstances.set(tokenAddress, chart);
-    }
+            scales: {
+                x: {
+                    display: false,
+                    grid: { display: false },
+                },
+                y: {
+                    beginAtZero: false,
+                    grid: { color: 'rgba(148, 163, 184, 0.12)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        maxTicksLimit: 4,
+                        callback: (value) => formatPrice(Number(value)),
+                    },
+                },
+            },
+        },
+    });
+    chartInstances.set(key, chart);
 }
 
+const renderTokenCharts = async (): Promise<void> => {
+    await nextTick();
+    destroyMissingCharts();
+    recent.value.forEach((t) => {
+        updateTokenChart(t.token, chartPointsFor(t));
+    });
+};
 
 // Reload balance & allowance whenever the connected address changes.
 watch(
@@ -740,12 +1243,16 @@ watch(
 
 const handleConnect = async (): Promise<void> => {
     error.value = null;
+
     try {
         const addr = await wallet.connect();
+
         if (!addr) {
             error.value = wallet.error.value || 'Failed to connect wallet';
+
             return;
         }
+
         // wallet.address watcher will refresh balance/allowance.
         await loadOnchain();
     } catch (e) {
@@ -757,6 +1264,14 @@ onMounted(async () => {
     await loadOnchain();
     await loadRecent();
 });
+
+onBeforeUnmount(() => {
+    for (const chart of chartInstances.values()) {
+        chart.destroy();
+    }
+
+    chartInstances.clear();
+});
 </script>
 
 <template>
@@ -766,282 +1281,363 @@ onMounted(async () => {
         <Header />
 
         <div class="launchpad">
-        <header class="intro">
-            <h1>Launchpad</h1>
-            <p>
-                Launch your own ERC-20 on Cyberia, paired with your CYBER.sol.
-                100% of the supply goes to the LP, and LP tokens are burned —
-                liquidity can't be pulled.
-            </p>
-        </header>
+            <header class="intro">
+                <h1>Launchpad</h1>
+                <p>
+                    Launch your own ERC-20 on Cyberia, paired with your
+                    CYBER.sol. 100% of the supply goes to the LP, and LP tokens
+                    are burned — liquidity can't be pulled.
+                </p>
+            </header>
 
-        <div v-if="!isConfigured" class="banner banner--warn">
-            Launchpad contract address is not configured. Set
-            <code>VITE_LAUNCHPAD_ADDRESS</code> in <code>.env</code> and rebuild the frontend.
-        </div>
-
-        <section class="card">
-            <h2>Create token</h2>
-
-            <div class="grid">
-                <label>
-                    <span>Name</span>
-                    <Input v-model="name" placeholder="e.g. MyToken" />
-                </label>
-                <label>
-                    <span>Symbol</span>
-                    <Input v-model="symbol" placeholder="e.g. MYT" maxlength="11" />
-                </label>
-                <label>
-                    <span>Total supply</span>
-                    <Input v-model="totalSupply" type="text" inputmode="decimal" />
-                </label>
-                <label>
-                    <span>CYBER.sol liquidity</span>
-                    <Input v-model="cyberSolLiquidity" type="text" inputmode="decimal" />
-                </label>
-                <label class="full">
-                    <span>Description (optional)</span>
-                    <textarea
-                        v-model="description"
-                        rows="3"
-                        maxlength="2000"
-                        placeholder="Tell people what your token is about"
-                        class="textarea"
-                    ></textarea>
-                </label>
-                <label class="full">
-                    <span>Image (optional, ≤ 2 MB)</span>
-                    <input
-                        type="file"
-                        accept="image/*"
-                        class="file"
-                        @change="onImageChange"
-                    />
-                    <img v-if="imagePreview" :src="imagePreview" class="preview" />
-                </label>
-                <label class="full">
-                    <span>HTML page (optional, ≤ 2 MB) — sandboxed static site</span>
-                    <input
-                        type="file"
-                        accept=".html,.htm,text/html"
-                        class="file"
-                        @change="onHtmlChange"
-                    />
-                    <span v-if="htmlFileName" class="small muted">{{ htmlFileName }}</span>
-                </label>
+            <div v-if="!isConfigured" class="banner banner--warn">
+                Launchpad contract address is not configured. Set
+                <code>VITE_LAUNCHPAD_ADDRESS</code> in <code>.env</code> and
+                rebuild the frontend.
             </div>
 
-            <div class="meta">
-                <div>
-                    Your CYBER.sol balance:
-                    <strong>{{ fmt(cyberSolBalance) }}</strong>
-                </div>
-                <div v-if="minLiquidity > 0n">
-                    Minimum: <strong>{{ fmt(minLiquidity) }}</strong> CYBER.sol
-                </div>
-                <div>
-                    Allowance:
-                    <strong>{{ fmt(cyberSolAllowance) }}</strong>
-                </div>
-            </div>
+            <section class="card">
+                <h2>Create token</h2>
 
-            <div class="actions">
-                <Button
-                    v-if="!wallet.isConnected.value"
-                    :disabled="wallet.isConnecting.value"
-                    @click="handleConnect"
-                >
-                    <Loader2 v-if="wallet.isConnecting.value" class="spin" />
-                    Connect MetaMask
-                </Button>
-                <template v-else>
+                <div class="grid">
+                    <label>
+                        <span>Name</span>
+                        <Input v-model="name" placeholder="e.g. MyToken" />
+                    </label>
+                    <label>
+                        <span>Symbol</span>
+                        <Input
+                            v-model="symbol"
+                            placeholder="e.g. MYT"
+                            maxlength="11"
+                        />
+                    </label>
+                    <label>
+                        <span>Total supply</span>
+                        <Input
+                            v-model="totalSupply"
+                            type="text"
+                            inputmode="decimal"
+                        />
+                    </label>
+                    <label>
+                        <span>CYBER.sol liquidity</span>
+                        <Input
+                            v-model="cyberSolLiquidity"
+                            type="text"
+                            inputmode="decimal"
+                        />
+                    </label>
+                    <label class="full">
+                        <span>Description (optional)</span>
+                        <textarea
+                            v-model="description"
+                            rows="3"
+                            maxlength="2000"
+                            placeholder="Tell people what your token is about"
+                            class="textarea"
+                        ></textarea>
+                    </label>
+                    <label class="full">
+                        <span>Image (optional, ≤ 2 MB)</span>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            class="file"
+                            @change="onImageChange"
+                        />
+                        <img
+                            v-if="imagePreview"
+                            :src="imagePreview"
+                            class="preview"
+                        />
+                    </label>
+                    <label class="full">
+                        <span
+                            >HTML page (optional, ≤ 2 MB) — sandboxed static
+                            site</span
+                        >
+                        <input
+                            type="file"
+                            accept=".html,.htm,text/html"
+                            class="file"
+                            @change="onHtmlChange"
+                        />
+                        <span v-if="htmlFileName" class="small muted">{{
+                            htmlFileName
+                        }}</span>
+                    </label>
+                </div>
+
+                <div class="meta">
+                    <div>
+                        Your CYBER.sol balance:
+                        <strong>{{ fmt(cyberSolBalance) }}</strong>
+                    </div>
+                    <div v-if="minLiquidity > 0n">
+                        Minimum:
+                        <strong>{{ fmt(minLiquidity) }}</strong> CYBER.sol
+                    </div>
+                    <div>
+                        Allowance:
+                        <strong>{{ fmt(cyberSolAllowance) }}</strong>
+                    </div>
+                </div>
+
+                <div class="actions">
                     <Button
-                        v-if="needsApprove"
-                        :disabled="busy || insufficientBalance || belowMin"
-                        @click="handleApprove"
+                        v-if="!wallet.isConnected.value"
+                        :disabled="wallet.isConnecting.value"
+                        @click="handleConnect"
                     >
-                        <Loader2 v-if="busy" class="spin" />
-                        Approve CYBER.sol
+                        <Loader2
+                            v-if="wallet.isConnecting.value"
+                            class="spin"
+                        />
+                        Connect MetaMask
                     </Button>
-                    <Button v-else :disabled="!canLaunch" @click="handleLaunch">
-                        <Loader2 v-if="busy" class="spin" />
-                        Launch token
-                    </Button>
-                </template>
-            </div>
+                    <template v-else>
+                        <Button
+                            v-if="needsApprove"
+                            :disabled="busy || insufficientBalance || belowMin"
+                            @click="handleApprove"
+                        >
+                            <Loader2 v-if="busy" class="spin" />
+                            Approve CYBER.sol
+                        </Button>
+                        <Button
+                            v-else
+                            :disabled="!canLaunch"
+                            @click="handleLaunch"
+                        >
+                            <Loader2 v-if="busy" class="spin" />
+                            Launch token
+                        </Button>
+                    </template>
+                </div>
 
-            <div v-if="insufficientBalance" class="hint hint--err">
-                Not enough CYBER.sol for the chosen liquidity.
-            </div>
-            <div v-else-if="belowMin" class="hint hint--err">
-                Liquidity below the minimum ({{ fmt(minLiquidity) }} CYBER.sol).
-            </div>
-            <div v-if="status" class="hint">{{ status }}</div>
-            <div v-if="error" class="hint hint--err">{{ error }}</div>
-            <div v-if="txHash" class="hint">
-                tx: <code>{{ short(txHash) }}</code>
-            </div>
-        </section>
+                <div v-if="insufficientBalance" class="hint hint--err">
+                    Not enough CYBER.sol for the chosen liquidity.
+                </div>
+                <div v-else-if="belowMin" class="hint hint--err">
+                    Liquidity below the minimum ({{
+                        fmt(minLiquidity)
+                    }}
+                    CYBER.sol).
+                </div>
+                <div v-if="status" class="hint">{{ status }}</div>
+                <div v-if="error" class="hint hint--err">{{ error }}</div>
+                <div v-if="txHash" class="hint">
+                    tx: <code>{{ short(txHash) }}</code>
+                </div>
+            </section>
 
-        <section v-if="recent.length" class="card">
-            <h2>Launched tokens</h2>
-            <ul class="tokenList">
-                <li v-for="t in recent" :key="t.token" class="tokenItem">
-                    <div class="tokenImage">
-                        <img v-if="t.imageUrl" :src="t.imageUrl" :alt="t.symbol" />
-                        <span v-else class="tokenImageFallback">
-                            {{ (t.symbol || '?').slice(0, 2).toUpperCase() }}
-                        </span>
-                    </div>
-                    <div class="tokenBody">
-                        <div class="tokenHead">
-                            <div>
-                                <div class="tokenTitle">
-                                    <strong>{{ t.symbol }}</strong>
-                                    <span class="muted"> · {{ t.name }}</span>
+            <section v-if="recent.length" class="card">
+                <h2>Launched tokens</h2>
+                <ul class="tokenList">
+                    <li v-for="t in recent" :key="t.token" class="tokenItem">
+                        <div class="tokenImage">
+                            <img
+                                v-if="t.imageUrl"
+                                :src="t.imageUrl"
+                                :alt="t.symbol"
+                            />
+                            <span v-else class="tokenImageFallback">
+                                {{
+                                    (t.symbol || '?').slice(0, 2).toUpperCase()
+                                }}
+                            </span>
+                        </div>
+                        <div class="tokenBody">
+                            <div class="tokenHead">
+                                <div>
+                                    <div class="tokenTitle">
+                                        <strong>{{ t.symbol }}</strong>
+                                        <span class="muted">
+                                            · {{ t.name }}</span
+                                        >
+                                    </div>
+                                    <div class="muted small">
+                                        <a
+                                            class="addrLink"
+                                            :href="explorerAddressUrl(t.token)"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            <code>{{ short(t.token) }}</code>
+                                        </a>
+                                    </div>
                                 </div>
-                                <div class="muted small">
+                                <div class="rowActions">
+                                    <button
+                                        v-if="canEdit(t)"
+                                        class="editBtn"
+                                        type="button"
+                                        @click="openEditor(t)"
+                                    >
+                                        Edit
+                                    </button>
                                     <a
-                                        class="addrLink"
-                                        :href="explorerAddressUrl(t.token)"
+                                        v-if="t.siteUrl"
+                                        class="siteBtn"
+                                        :href="t.siteUrl"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >
-                                        <code>{{ short(t.token) }}</code>
+                                        Site →
                                     </a>
-                                </div>
-                            </div>
-                            <div class="rowActions">
-                                <button
-                                    v-if="canEdit(t)"
-                                    class="editBtn"
-                                    type="button"
-                                    @click="openEditor(t)"
-                                >
-                                    Edit
-                                </button>
-                                <a
-                                    v-if="t.siteUrl"
-                                    class="siteBtn"
-                                    :href="t.siteUrl"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    Site →
-                                </a>
-                                <a
-                                    class="swapBtn"
-                                    :href="swapUrlFor(t.token)"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    Swap →
-                                </a>
-                            </div>
-                        </div>
-                        <p v-if="t.description" class="tokenDesc">
-                            {{ t.description }}
-                        </p>
-                        <div class="tokenStats">
-                            <div>
-                                <span class="statLabel">Price</span>
-                                <span class="statValue">
-                                    {{
-                                        t.priceCyber != null
-                                            ? formatPrice(t.priceCyber) + ' CYBER.sol'
-                                            : '—'
-                                    }}
-                                </span>
-                            </div>
-                            <div>
-                                <span class="statLabel">Market cap</span>
-                                <span class="statValue">
-                                    {{
-                                        t.marketCapCyber != null
-                                            ? formatNum(t.marketCapCyber) + ' CYBER.sol'
-                                            : '—'
-                                    }}
-                                </span>
-                            </div>
-                            <div>
-                                <span class="statLabel">Supply</span>
-                                <span class="statValue">{{ fmt(t.tokenSupply) }}</span>
-                            </div>
-                            <div>
-                                <span class="statLabel">Liquidity locked</span>
-                                <span class="statValue">{{ fmt(t.cyberSolLiquidity) }} CYBER.sol</span>
-                            </div>
-                            <div>
-                                <span class="statLabel">Creator</span>
-                                <span class="statValue">
                                     <a
-                                        v-if="t.creator"
-                                        class="addrLink"
-                                        :href="explorerAddressUrl(t.creator)"
+                                        class="swapBtn"
+                                        :href="swapUrlFor(t.token)"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >
-                                        <code>{{ short(t.creator) }}</code>
+                                        Swap →
                                     </a>
-                                    <code v-else>—</code>
-                                </span>
+                                </div>
                             </div>
-                        </div>
+                            <p v-if="t.description" class="tokenDesc">
+                                {{ t.description }}
+                            </p>
+                            <div class="tokenStats">
+                                <div>
+                                    <span class="statLabel">Price</span>
+                                    <span class="statValue">
+                                        {{
+                                            t.priceCyber != null
+                                                ? formatPrice(t.priceCyber) +
+                                                  ' CYBER.sol'
+                                                : '—'
+                                        }}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span class="statLabel">Market cap</span>
+                                    <span class="statValue">
+                                        {{
+                                            t.marketCapCyber != null
+                                                ? formatNum(t.marketCapCyber) +
+                                                  ' CYBER.sol'
+                                                : '—'
+                                        }}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span class="statLabel">Supply</span>
+                                    <span class="statValue">{{
+                                        fmt(t.tokenSupply)
+                                    }}</span>
+                                </div>
+                                <div>
+                                    <span class="statLabel"
+                                        >Liquidity locked</span
+                                    >
+                                    <span class="statValue"
+                                        >{{
+                                            fmt(t.cyberSolLiquidity)
+                                        }}
+                                        CYBER.sol</span
+                                    >
+                                </div>
+                                <div>
+                                    <span class="statLabel">Creator</span>
+                                    <span class="statValue">
+                                        <a
+                                            v-if="t.creator"
+                                            class="addrLink"
+                                            :href="
+                                                explorerAddressUrl(t.creator)
+                                            "
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            <code>{{ short(t.creator) }}</code>
+                                        </a>
+                                        <code v-else>—</code>
+                                    </span>
+                                </div>
+                            </div>
 
-                        <div v-if="editingToken === t.token" class="editor">
-                            <label>
-                                <span>Description</span>
-                                <textarea
-                                    v-model="editDescription"
-                                    rows="3"
-                                    maxlength="2000"
-                                    class="textarea"
-                                ></textarea>
-                            </label>
-                            <label>
-                                <span>Image (≤ 2 MB)</span>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    class="file"
-                                    @change="onEditImageChange"
-                                />
-                                <img v-if="editImagePreview" :src="editImagePreview" class="preview" />
-                            </label>
-                            <label>
-                                <span>HTML page (≤ 2 MB) — sandboxed static site</span>
-                                <input
-                                    type="file"
-                                    accept=".html,.htm,text/html"
-                                    class="file"
-                                    @change="onEditHtmlChange"
-                                />
-                                <span v-if="editHtmlFileName" class="small muted">{{ editHtmlFileName }}</span>
-                            </label>
-                            <div v-if="editError" class="hint hint--err">{{ editError }}</div>
-                            <div class="editorActions">
-                                <Button
-                                    :disabled="editBusy"
-                                    @click="saveEditor(t)"
-                                >
-                                    <Loader2 v-if="editBusy" class="spin" />
-                                    Save
-                                </Button>
-                                <button
-                                    type="button"
-                                    class="editBtn"
-                                    :disabled="editBusy"
-                                    @click="closeEditor"
-                                >
-                                    Cancel
-                                </button>
+                            <div
+                                v-if="chartPointsFor(t).length > 0"
+                                class="tokenChart"
+                            >
+                                <canvas
+                                    :id="chartId(t.token)"
+                                    :aria-label="`${t.symbol || 'Token'} price chart`"
+                                ></canvas>
+                            </div>
+                            <div v-else class="chartEmpty">
+                                Price chart will appear after pair reserves are
+                                available.
+                            </div>
+
+                            <div v-if="editingToken === t.token" class="editor">
+                                <label>
+                                    <span>Description</span>
+                                    <textarea
+                                        v-model="editDescription"
+                                        rows="3"
+                                        maxlength="2000"
+                                        class="textarea"
+                                    ></textarea>
+                                </label>
+                                <label>
+                                    <span>Image (≤ 2 MB)</span>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        class="file"
+                                        @change="onEditImageChange"
+                                    />
+                                    <img
+                                        v-if="editImagePreview"
+                                        :src="editImagePreview"
+                                        class="preview"
+                                    />
+                                </label>
+                                <label>
+                                    <span
+                                        >HTML page (≤ 2 MB) — sandboxed static
+                                        site</span
+                                    >
+                                    <input
+                                        type="file"
+                                        accept=".html,.htm,text/html"
+                                        class="file"
+                                        @change="onEditHtmlChange"
+                                    />
+                                    <span
+                                        v-if="editHtmlFileName"
+                                        class="small muted"
+                                        >{{ editHtmlFileName }}</span
+                                    >
+                                </label>
+                                <div v-if="editError" class="hint hint--err">
+                                    {{ editError }}
+                                </div>
+                                <div class="editorActions">
+                                    <Button
+                                        :disabled="editBusy"
+                                        @click="saveEditor(t)"
+                                    >
+                                        <Loader2 v-if="editBusy" class="spin" />
+                                        Save
+                                    </Button>
+                                    <button
+                                        type="button"
+                                        class="editBtn"
+                                        :disabled="editBusy"
+                                        @click="closeEditor"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </li>
-            </ul>
-        </section>
+                    </li>
+                </ul>
+            </section>
         </div>
     </div>
 </template>
@@ -1316,8 +1912,25 @@ onMounted(async () => {
 }
 
 .tokenChart {
-    margin-top: 8px;
+    margin-top: 14px;
     width: 100%;
+    height: 132px;
+    padding: 10px 8px 4px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.28);
 }
-
+.tokenChart canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.chartEmpty {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px dashed rgba(148, 163, 184, 0.28);
+    border-radius: 10px;
+    color: var(--muted-foreground, #94a3b8);
+    font-size: 12px;
+}
 </style>
