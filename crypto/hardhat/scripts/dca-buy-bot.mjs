@@ -364,9 +364,45 @@ function findBestRoute(graph, fromToken, toToken, amountIn, maxHops) {
   };
 }
 
+// Does any pool path connect from -> to within maxHops, ignoring liquidity? Lets us
+// tell "no pool path at all" apart from "path exists but too thin/small to trade",
+// which is what happens for low-decimal tokens behind a dust pool.
+function isReachable(graph, fromToken, toToken, maxHops) {
+  const start = fromToken.toLowerCase();
+  const target = toToken.toLowerCase();
+  const seen = new Set([start]);
+  const queue = [[start, 0]];
+  while (queue.length) {
+    const [node, hops] = queue.shift();
+    if (node === target) return true;
+    if (hops >= maxHops) continue;
+    for (const edge of graph.adjacency.get(node) || []) {
+      if (seen.has(edge.to)) continue;
+      seen.add(edge.to);
+      queue.push([edge.to, hops + 1]);
+    }
+  }
+  return false;
+}
+
 async function buyToken({ publicClient, walletClient, account, config, token, graph, dryRun }) {
   const { symbol, decimals } = await readTokenMeta(publicClient, token);
   const amountIn = parseEther(String(token.spendCyber));
+
+  // Check funds first in execute mode, before logging anything, so we never print a
+  // BUY for a swap we then skip. Balance is re-read per token because it drops as
+  // earlier tokens in the cycle are bought.
+  if (!dryRun) {
+    const balance = await publicClient.getBalance({ address: account.address });
+    const gasReserve = parseEther(config.gasReserveCyber);
+    if (balance < amountIn + gasReserve) {
+      log(
+        `SKIP ${symbol}: wallet balance ${formatEther(balance)} CYBER is below spend ` +
+          `${formatEther(amountIn)} + gas reserve ${formatEther(gasReserve)}`
+      );
+      return;
+    }
+  }
 
   let route;
   if (token.path) {
@@ -375,7 +411,13 @@ async function buyToken({ publicClient, walletClient, account, config, token, gr
     route = findBestRoute(graph, config.wrappedNative, token.address, amountIn, config.maxHops);
   }
   if (!route) {
-    throw new Error(`${symbol}: no route from WCYBER through existing pools (within ${config.maxHops} hops)`);
+    // A path can exist topologically yet yield zero output (low-decimal token behind a
+    // thin pool, or spend too small). Skip with the real reason instead of erroring.
+    const reason = isReachable(graph, config.wrappedNative, token.address, config.maxHops)
+      ? `pools exist but ${formatEther(amountIn)} CYBER is too small to buy a non-zero amount (thin liquidity)`
+      : `no pool path from WCYBER within ${config.maxHops} hops`;
+    log(`SKIP ${symbol}: ${reason}`);
+    return;
   }
 
   const amounts = await publicClient.readContract({
@@ -386,7 +428,8 @@ async function buyToken({ publicClient, walletClient, account, config, token, gr
   });
   const expectedOut = amounts[amounts.length - 1];
   if (expectedOut === 0n) {
-    throw new Error(`${symbol}: router returned zero output for ${formatEther(amountIn)} CYBER`);
+    log(`SKIP ${symbol}: router quote is zero for ${formatEther(amountIn)} CYBER (thin liquidity)`);
+    return;
   }
   const amountOutMin = minOutWithSlippage(expectedOut, config.slippageBps);
 
@@ -397,16 +440,6 @@ async function buyToken({ publicClient, walletClient, account, config, token, gr
   );
 
   if (dryRun) return;
-
-  const balance = await publicClient.getBalance({ address: account.address });
-  const gasReserve = parseEther(config.gasReserveCyber);
-  if (balance < amountIn + gasReserve) {
-    log(
-      `SKIP ${symbol}: wallet balance ${formatEther(balance)} CYBER is below spend ` +
-        `${formatEther(amountIn)} + gas reserve ${formatEther(gasReserve)}`
-    );
-    return;
-  }
 
   const recipient = config.recipient === "self" ? account.address : config.recipient;
   const deadline = BigInt(Math.floor(Date.now() / 1000) + config.deadlineSeconds);
