@@ -194,6 +194,9 @@ function signOut() {
             <InertiaLink href="/bridge" :class="linkClass('/bridge')"
                 >Bridge</InertiaLink
             >
+            <InertiaLink href="/convert" :class="linkClass('/convert')"
+                >Convert</InertiaLink
+            >
             <InertiaLink href="/dao" :class="linkClass('/dao')"
                 >DAO</InertiaLink
             >
@@ -205,11 +208,6 @@ function signOut() {
             >
             <InertiaLink href="/launchpad" :class="linkClass('/launchpad')"
                 >Launchpad</InertiaLink
-            >
-            <InertiaLink
-                href="/cyber-sol-swap"
-                :class="linkClass('/cyber-sol-swap')"
-                >CYBER.sol Swap</InertiaLink
             >
             <InertiaLink href="/analytics" :class="linkClass('/analytics')"
                 >Analytics</InertiaLink

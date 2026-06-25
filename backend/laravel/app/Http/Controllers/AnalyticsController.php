@@ -22,6 +22,18 @@ use Inertia\Response;
  */
 class AnalyticsController extends Controller
 {
+    /**
+     * Fallbacks for the price walker, used verbatim when the matching
+     * config/services.cyberia.* keys are absent — e.g. a cached config that
+     * predates them — so a stale config cache can't quietly disable pricing.
+     */
+    private const DEFAULT_USD_ANCHORS = '0xdc25597B19799010047F17e9591EFE08EFd40077,0x94845aF24a3E431593A2b941b2b31836dE45185D';
+
+    private const DEFAULT_PRICE_MIN_POOL_USD = 0.01;
+
+    /** Symbols always treated as $1 anchors, regardless of address config. */
+    private const STABLE_SYMBOLS = ['USDC', 'USDT'];
+
     public function index(Request $request): Response
     {
         $days = (int) $request->query('days', 1);
@@ -201,6 +213,9 @@ class AnalyticsController extends Controller
     private function priceFromPools($pools): array
     {
         $floor = (float) config('services.cyberia.price_min_pool_usd');
+        if ($floor <= 0) {
+            $floor = self::DEFAULT_PRICE_MIN_POOL_USD;
+        }
 
         // Each pool becomes two directed edges (price flows either way).
         $edges = [];
@@ -210,8 +225,8 @@ class AnalyticsController extends Controller
             if ($r0 <= 0 || $r1 <= 0) {
                 continue;
             }
-            $t0 = strtolower($pool->token0);
-            $t1 = strtolower($pool->token1);
+            $t0 = strtolower((string) $pool->token0);
+            $t1 = strtolower((string) $pool->token1);
             $edges[] = [$t0, $r0, $t1, $r1];
             $edges[] = [$t1, $r1, $t0, $r0];
         }
@@ -221,6 +236,18 @@ class AnalyticsController extends Controller
         foreach ($this->usdAnchors() as $anchor) {
             $price[$anchor] = 1.0;
             $confidence[$anchor] = INF;
+        }
+        // Also anchor by symbol: if the bot labelled a pool token USDC/USDT we
+        // peg it at $1 even when its address isn't in the configured list, so an
+        // address mismatch between the bot and this app can't unprice the walk.
+        foreach ($pools as $pool) {
+            foreach ([[$pool->token0, $pool->symbol0], [$pool->token1, $pool->symbol1]] as [$addr, $sym]) {
+                if (in_array(strtoupper((string) $sym), self::STABLE_SYMBOLS, true)) {
+                    $addr = strtolower((string) $addr);
+                    $price[$addr] = 1.0;
+                    $confidence[$addr] = INF;
+                }
+            }
         }
 
         if ($edges === [] || $price === []) {
@@ -262,7 +289,9 @@ class AnalyticsController extends Controller
      */
     private function usdAnchors(): array
     {
-        return collect(explode(',', (string) config('services.cyberia.usd_anchors')))
+        $configured = (string) config('services.cyberia.usd_anchors');
+
+        return collect(explode(',', $configured !== '' ? $configured : self::DEFAULT_USD_ANCHORS))
             ->map(fn (string $a): string => strtolower(trim($a)))
             ->filter()
             ->values()
