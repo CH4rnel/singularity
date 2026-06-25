@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -112,14 +113,50 @@ class AnalyticsController extends Controller
             ->get();
 
         $pools = $hasPools
-            ? DB::table('dex_pools')->orderByDesc('tvl_usd')->get()
+            ? DB::table('dex_pools')->get()
             : collect();
 
-        $prices = $hasPrices
-            ? DB::table('token_prices')->whereNotNull('price_usd')->orderBy('symbol')->get()
-            : collect();
+        // Price every token by walking the pool graph from the USD anchors,
+        // rather than trusting the bot's token_prices.price_usd column — the
+        // bot only relays one hop through WCYBER/CYBER.sol, so tokens reachable
+        // only through a longer chain (e.g. RUB via SILVER) end up unpriced.
+        $priceMap = $this->priceFromPools($pools);
 
-        $cyberPrice = $hasPrices
+        if ($priceMap !== []) {
+            $symbols = $this->poolSymbols($pools);
+
+            $prices = collect($priceMap)
+                // Skip anchors that don't appear in any pool: they carry a
+                // nominal $1 but aren't tradeable tokens on this DEX, so listing
+                // them (with their raw address for a symbol) is just noise.
+                ->filter(fn (float $usd, string $addr): bool => isset($symbols[$addr]))
+                ->map(fn (float $usd, string $addr): object => (object) [
+                    'address' => $addr,
+                    'symbol' => $symbols[$addr],
+                    'price_usd' => $usd,
+                ])
+                ->values()
+                ->sortBy('symbol', SORT_NATURAL | SORT_FLAG_CASE)
+                ->values();
+
+            // Recompute TVL from the fuller price set so pools whose tokens the
+            // bot couldn't price (now reachable) stop showing a blank TVL.
+            foreach ($pools as $pool) {
+                $pool->tvl_usd = $this->poolTvl($pool, $priceMap);
+            }
+            $pools = $pools->sortByDesc('tvl_usd')->values();
+
+            $cyberAddr = array_search('CYBER.sol', $symbols, true);
+            $cyberPrice = $cyberAddr !== false ? ($priceMap[$cyberAddr] ?? null) : null;
+        } else {
+            // No pool graph yet — fall back to whatever the bot recorded.
+            $prices = $hasPrices
+                ? DB::table('token_prices')->whereNotNull('price_usd')->orderBy('symbol')->get()
+                : collect();
+            $cyberPrice = null;
+        }
+
+        $cyberPrice ??= $hasPrices
             ? DB::table('token_prices')->where('symbol', 'CYBER.sol')->value('price_usd')
             : null;
 
@@ -137,12 +174,141 @@ class AnalyticsController extends Controller
             'pools' => $pools,
             'prices' => $prices,
             'cyberPrice' => $cyberPrice,
-            'tvlUsd' => $hasPools ? (float) DB::table('dex_pools')->sum('tvl_usd') : null,
-            'snapshotAt' => $hasPrices ? DB::table('token_prices')->max('updated_at') : null,
+            'tvlUsd' => $hasPools ? (float) $pools->sum('tvl_usd') : null,
+            'snapshotAt' => $hasPools
+                ? DB::table('dex_pools')->max('updated_at')
+                : ($hasPrices ? DB::table('token_prices')->max('updated_at') : null),
             'chain' => $this->chainStats(),
             'explorerUrl' => rtrim(config('services.cyberia.explorer_url'), '/'),
             'indexerReady' => $hasEvents,
         ]);
+    }
+
+    /**
+     * USD price of every token reachable from a $1 anchor through the DEX pool
+     * graph. Each pool gives an exchange rate between its two tokens, so prices
+     * propagate outward from USDC/USDT one pool at a time.
+     *
+     * A price is only as trustworthy as the shallowest pool in its chain back
+     * to an anchor, so each token keeps the route that maximises that
+     * bottleneck (widest-path relaxation) and pools whose already-priced side
+     * holds less than the depth floor are skipped — that floor is what rejects
+     * the 1-wei dust pools that would otherwise produce absurd ratios.
+     *
+     * @param  Collection<int, object>  $pools
+     * @return array<string, float> lowercased token address => USD price (anchors included at 1.0)
+     */
+    private function priceFromPools($pools): array
+    {
+        $floor = (float) config('services.cyberia.price_min_pool_usd');
+
+        // Each pool becomes two directed edges (price flows either way).
+        $edges = [];
+        foreach ($pools as $pool) {
+            $r0 = (float) $pool->reserve0;
+            $r1 = (float) $pool->reserve1;
+            if ($r0 <= 0 || $r1 <= 0) {
+                continue;
+            }
+            $t0 = strtolower($pool->token0);
+            $t1 = strtolower($pool->token1);
+            $edges[] = [$t0, $r0, $t1, $r1];
+            $edges[] = [$t1, $r1, $t0, $r0];
+        }
+
+        $price = [];
+        $confidence = [];
+        foreach ($this->usdAnchors() as $anchor) {
+            $price[$anchor] = 1.0;
+            $confidence[$anchor] = INF;
+        }
+
+        if ($edges === [] || $price === []) {
+            return [];
+        }
+
+        // Bellman-Ford-style: prices settle within (node count) passes; the
+        // early break stops as soon as a pass improves nothing.
+        $maxPasses = count($edges) + 1;
+        for ($pass = 0; $pass < $maxPasses; $pass++) {
+            $changed = false;
+            foreach ($edges as [$from, $rFrom, $to, $rTo]) {
+                if (! isset($price[$from])) {
+                    continue;
+                }
+                $sideUsd = $rFrom * $price[$from];
+                if ($sideUsd < $floor) {
+                    continue;
+                }
+                $candidate = min($confidence[$from], $sideUsd);
+                if ($candidate > ($confidence[$to] ?? 0.0)) {
+                    $confidence[$to] = $candidate;
+                    $price[$to] = $price[$from] * $rFrom / $rTo;
+                    $changed = true;
+                }
+            }
+            if (! $changed) {
+                break;
+            }
+        }
+
+        return $price;
+    }
+
+    /**
+     * USD anchor token addresses (lowercased), the $1-pegged roots of the walk.
+     *
+     * @return list<string>
+     */
+    private function usdAnchors(): array
+    {
+        return collect(explode(',', (string) config('services.cyberia.usd_anchors')))
+            ->map(fn (string $a): string => strtolower(trim($a)))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Map of lowercased token address => symbol, from the pool rows.
+     *
+     * @param  Collection<int, object>  $pools
+     * @return array<string, string>
+     */
+    private function poolSymbols($pools): array
+    {
+        $symbols = [];
+        foreach ($pools as $pool) {
+            $symbols[strtolower($pool->token0)] = $pool->symbol0;
+            $symbols[strtolower($pool->token1)] = $pool->symbol1;
+        }
+
+        return $symbols;
+    }
+
+    /**
+     * TVL of one pool from the price map. Both sides of a constant-product pool
+     * are equal in value, so a single priced side is doubled (mirrors the bot's
+     * snapshot). Null when neither token can be priced.
+     *
+     * @param  array<string, float>  $priceMap
+     */
+    private function poolTvl(object $pool, array $priceMap): ?float
+    {
+        $p0 = $priceMap[strtolower($pool->token0)] ?? null;
+        $p1 = $priceMap[strtolower($pool->token1)] ?? null;
+
+        if ($p0 !== null && $p1 !== null) {
+            return (float) $pool->reserve0 * $p0 + (float) $pool->reserve1 * $p1;
+        }
+        if ($p0 !== null) {
+            return (float) $pool->reserve0 * $p0 * 2;
+        }
+        if ($p1 !== null) {
+            return (float) $pool->reserve1 * $p1 * 2;
+        }
+
+        return null;
     }
 
     /**

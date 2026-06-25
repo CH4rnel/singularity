@@ -41,6 +41,15 @@ return [
 
     'cyberia' => [
         'explorer_url' => env('CYBERIA_EXPLORER_URL', 'https://explorer.cyberia.church'),
+        // Analytics token-price walker (AnalyticsController). $1-pegged anchor
+        // tokens the walk starts from (comma-separated addresses; default USDC +
+        // USDT) and the minimum USD depth a pool's priced side must hold to be
+        // trusted as a route — keeps 1-wei dust pools from poisoning prices.
+        'usd_anchors' => env(
+            'ANALYTICS_USD_ANCHORS',
+            '0xdc25597B19799010047F17e9591EFE08EFd40077,0x94845aF24a3E431593A2b941b2b31836dE45185D',
+        ),
+        'price_min_pool_usd' => (float) env('ANALYTICS_PRICE_MIN_POOL_USD', 0.01),
     ],
 
     'bridge' => [

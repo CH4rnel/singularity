@@ -29,9 +29,10 @@ from web3 import Web3
 
 load_dotenv(Path(__file__).parent / ".env")
 
+# Required to run the Telegram bot itself, but NOT to refresh the analytics
+# market snapshot (see `--snapshot-once`), so the check is deferred to
+# run_dispatcher() instead of failing at import time.
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN not set")
 
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 HTTP_PROXY = os.environ.get("HTTP_PROXY")
@@ -148,7 +149,13 @@ USD_ANCHORS = {
 # is worth at least this many USD. Dust pools (e.g. a pair seeded with 1e-6
 # USDC) have meaningless reserve ratios and would otherwise poison the price
 # walker. When several pools qualify, the deepest one wins.
-PRICE_MIN_POOL_USD = float(os.environ.get("PRICE_MIN_POOL_USD", "1.0"))
+#
+# Kept well below $1: Cyberia's WCYBER/stablecoin relay pools currently hold
+# under a dollar of stables (~$0.8-0.95), and at a $1 floor they get rejected,
+# which unprices WCYBER/CYBER.sol and collapses the whole relay cascade down to
+# just the two anchors. $0.1 still rejects genuine dust (depth ~$0) while
+# admitting the real pools (depth $0.4-$3).
+PRICE_MIN_POOL_USD = float(os.environ.get("PRICE_MIN_POOL_USD", "0.1"))
 
 # Relay tokens used to price assets that have no direct stablecoin pair.
 # Default: WCYBER and CYBER.sol — together they reach the long tail of pairs.
@@ -3548,6 +3555,9 @@ async def post_init(application: Application):
 def run_dispatcher():
     logger.info("Building application...")
 
+    if not TELEGRAM_BOT_TOKEN:
+        raise ValueError("TELEGRAM_BOT_TOKEN not set")
+
     builder = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init)
 
     if HTTP_PROXY:
@@ -3641,6 +3651,20 @@ def run_dispatcher():
         raise
 
 
+def run_snapshot_once() -> None:
+    """Refresh the analytics market snapshot (token_prices + dex_pools) once and
+    exit. Needs only RPC + the shared SQLite DB — no Telegram token, no polling —
+    so it can be run by hand or from cron to populate the /analytics page
+    independently of the long-running bot."""
+    logging.basicConfig(level=logging.INFO)
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    pools, priced = _take_market_snapshot(w3)
+    logger.info(f"snapshot-once: {pools} pools, {priced} tokens priced -> {DB_PATH}")
+
+
 if __name__ == "__main__":
-    logger.info("Main entry point")
-    run_dispatcher()
+    if "--snapshot-once" in sys.argv:
+        run_snapshot_once()
+    else:
+        logger.info("Main entry point")
+        run_dispatcher()

@@ -44,8 +44,14 @@ it('aggregates indexer data when the tables exist', function () {
     DB::table('token_prices')->insert([
         ['address' => '0x7dcd', 'symbol' => 'CYBER.sol', 'price_usd' => 0.0001, 'updated_at' => '2026-06-11 12:00:00'],
     ]);
+    // USDC is a $1 anchor; the page derives prices by walking out from it. The
+    // WCYBER pool gives WCYBER = 0.6/1.5 = $0.4, and RUB — which only touches
+    // WCYBER, never a stablecoin — gets priced one hop further at
+    // 0.4 * 2/100 = $0.008, the multi-hop case the bot's snapshot misses.
+    $usdc = '0xdc25597b19799010047f17e9591efe08efd40077';
     DB::table('dex_pools')->insert([
-        ['pair_address' => '0xpair', 'token0' => '0x1', 'token1' => '0x2', 'symbol0' => 'WCYBER', 'symbol1' => 'USDC', 'reserve0' => 1.5, 'reserve1' => 0.6, 'tvl_usd' => 2.1, 'updated_at' => '2026-06-11 12:00:00'],
+        ['pair_address' => '0xpairA', 'token0' => '0xwcyber', 'token1' => $usdc, 'symbol0' => 'WCYBER', 'symbol1' => 'USDC', 'reserve0' => 1.5, 'reserve1' => 0.6, 'tvl_usd' => null, 'updated_at' => '2026-06-11 12:00:00'],
+        ['pair_address' => '0xpairB', 'token0' => '0xwcyber', 'token1' => '0xrub', 'symbol0' => 'WCYBER', 'symbol1' => 'RUB', 'reserve0' => 2.0, 'reserve1' => 100.0, 'tvl_usd' => null, 'updated_at' => '2026-06-11 12:00:00'],
     ]);
 
     $this->get('/analytics?days=7')
@@ -59,7 +65,14 @@ it('aggregates indexer data when the tables exist', function () {
             ->where('swaps.traders', 2)
             ->where('swaps.unpriced', 1)
             ->where('cyberPrice', 0.0001)
-            ->where('tvlUsd', 2.1)
-            ->has('pools', 1)
+            // TVL recomputed from the walk: pool A 1.5*0.4 + 0.6 = 1.2,
+            // pool B 2*0.4 + 100*0.008 = 1.6.
+            ->where('tvlUsd', 2.8)
+            ->has('pools', 2)
+            // RUB, USDC, WCYBER (sorted; the USDT anchor has no pool, so it is
+            // dropped rather than listed with a bare address for a symbol).
+            ->has('prices', 3)
+            ->where('prices.0.symbol', 'RUB')
+            ->where('prices.0.price_usd', 0.008)
             ->has('recent', 3));
 });
