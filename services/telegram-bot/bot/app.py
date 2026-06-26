@@ -24,7 +24,9 @@ from bot.config import (
     NFT_FROM_POSTS, NFT_FROM_POSTS_DRYRUN, CYBERIA_NFT_ADDRESS, IPFS_API_URL,
 )
 from bot.db import ensure_schema
-from bot.nft import channel_post_handler
+from bot.nft import (
+    channel_post_handler, set_channel_wallet_command, channel_wallet_command,
+)
 from bot.handlers import (
     start_command, help_command, set_wallet_command, unset_wallet_command,
     wallet_command, cancel_command, balance_command, token_command,
@@ -64,6 +66,7 @@ async def post_init(application: Application):
             BotCommand("create_token", "(admins) Create a chat reward token"),
             BotCommand("set_rewards_interval", "(admins) Change rewards interval"),
             BotCommand("reward_now", "(admins) Pay rewards immediately"),
+            BotCommand("set_channel_wallet", "(channel admins) Wallet to receive post NFTs"),
         ]
     )
     logger.info("Bot commands published to Telegram")
@@ -177,6 +180,8 @@ def run_dispatcher():
     application.add_handler(CommandHandler("x", x_command))
     application.add_handler(CommandHandler("ca", ca_command))
     application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("set_channel_wallet", set_channel_wallet_command))
+    application.add_handler(CommandHandler("channel_wallet", channel_wallet_command))
 
     # Capture the "next message is the address" reply after a bare /set_wallet
     # in DMs. Restricted to private chats so the bot never hijacks ordinary

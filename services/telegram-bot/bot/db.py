@@ -161,6 +161,18 @@ def ensure_chat_token_schema():
             CREATE INDEX IF NOT EXISTS idx_channel_post_nfts_group
             ON channel_post_nfts (chat_id, media_group_id)
         """))
+        # Recipient wallet a channel admin registered (DM /set_channel_wallet).
+        # Post NFTs are minted then transferred to this address; posts in
+        # channels without a wallet are not minted.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS channel_wallets (
+                chat_id    INTEGER PRIMARY KEY,
+                channel    TEXT,
+                address    TEXT NOT NULL,
+                set_by     INTEGER,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """))
 
 
 def _kv_get(key: str, default: str | None = None) -> str | None:
@@ -288,6 +300,31 @@ def _record_post_nft(
                 "tid": token_id, "uri": token_uri, "tx": tx_hash,
             },
         )
+
+
+def _set_channel_wallet(chat_id: int, channel: str | None, address: str, set_by: int | None) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO channel_wallets (chat_id, channel, address, set_by, updated_at)
+                VALUES (:c, :ch, :a, :by, datetime('now'))
+                ON CONFLICT(chat_id) DO UPDATE SET
+                    channel = excluded.channel,
+                    address = excluded.address,
+                    set_by = excluded.set_by,
+                    updated_at = datetime('now')
+            """),
+            {"c": chat_id, "ch": channel, "a": address, "by": set_by},
+        )
+
+
+def _get_channel_wallet(chat_id: int) -> str | None:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT address FROM channel_wallets WHERE chat_id = :c"),
+            {"c": chat_id},
+        ).fetchone()
+    return row[0] if row else None
 
 
 ensure_schema = ensure_chat_token_schema

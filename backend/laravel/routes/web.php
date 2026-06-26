@@ -26,6 +26,7 @@ Route::get('/', fn () => response()->file(resource_path('views/landing/index.htm
 Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 Route::inertia('/market', 'Market')->name('market');
+Route::inertia('/pixels', 'PixelBattle')->name('pixels');
 // Fixed-rate redeemer for bridged CYBER.sol -> native CYBER. It's a conversion,
 // not a swap, hence /convert; the old /cyber-sol-swap path 301s here.
 Route::inertia('/convert', 'CyberSolSwap')->name('convert');

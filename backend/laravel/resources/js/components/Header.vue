@@ -203,6 +203,9 @@ function signOut() {
             <InertiaLink href="/market" :class="linkClass('/market')"
                 >NFT Market</InertiaLink
             >
+            <InertiaLink href="/pixels" :class="linkClass('/pixels')"
+                >Pixels</InertiaLink
+            >
             <InertiaLink href="/lending" :class="linkClass('/lending')"
                 >Lending</InertiaLink
             >

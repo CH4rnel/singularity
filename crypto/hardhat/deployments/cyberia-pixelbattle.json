@@ -1,0 +1,11 @@
+{
+  "chainId": 49406,
+  "rpc": "https://rpc.cyberia.church",
+  "PixelBattle": "0x9BCB235E3Ab18c884e82db8679BfA5A5AC0dd45c",
+  "width": 64,
+  "height": 64,
+  "paletteSize": 16,
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployTx": "0x922fe8a048de1c4437234520f8bc6887e2fe21f0632ffbb1d0318c8758c1c55a",
+  "timestamp": "2026-06-26T05:27:22.543Z"
+}

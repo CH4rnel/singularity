@@ -134,6 +134,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/x - X (Twitter) and Telegram links (also replies to \"x\")\n"
         "/ca - CYBER contract address (also replies to \"ca\")\n"
         "/stats [window] - on-chain activity digest (default 24h, e.g. /stats 6h)\n"
+        "/set_channel_wallet <@channel> <0x..> - (channel admins) wallet that receives post NFTs\n"
         "/website - project website\n\n"
         "You can chat in groups without a wallet -- rewards will be saved as "
         "pending and minted in one go when you /set_wallet."

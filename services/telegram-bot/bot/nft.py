@@ -18,14 +18,19 @@ from web3 import Web3
 
 from telegram import Update
 from telegram.ext import ContextTypes
+from telegram.error import TelegramError
 
 from bot.config import (
     CYBERIA_NFT_ADDRESS, CYBERIA_NFT_ABI, MINTED_TOPIC,
     NFT_FROM_POSTS, NFT_FROM_POSTS_DRYRUN,
     IPFS_API_URL, NFT_MAX_DESC_CHARS, TELEGRAM_POST_BASE,
-    RPC_URL, CHAIN_ID, DEPLOYER_PK,
+    RPC_URL, CHAIN_ID, DEPLOYER_PK, EXPLORER_URL,
 )
-from bot.db import _post_nft_seen, _record_post_nft
+from bot.utils import is_valid_eth_address
+from bot.db import (
+    _post_nft_seen, _record_post_nft,
+    _set_channel_wallet, _get_channel_wallet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,24 +113,17 @@ def _build_post_metadata(chat, message, image_uri: str | None, text_body: str) -
     return metadata
 
 
-def _mint_nft(token_uri: str) -> tuple[int | None, str]:
-    """Mint one CyberiaNFT with `token_uri`. Returns (token_id, tx_hash).
-    Blocking — call through asyncio.to_thread."""
-    w3 = Web3(Web3.HTTPProvider(RPC_URL))
-    acct = w3.eth.account.from_key(DEPLOYER_PK)
-    nft = w3.eth.contract(
-        address=Web3.to_checksum_address(CYBERIA_NFT_ADDRESS), abi=CYBERIA_NFT_ABI
-    )
-
+def _send_tx(w3, acct, fn, fallback_gas: int) -> str:
+    """Build/sign/send `fn` from `acct`, wait for the receipt, return tx hash.
+    Raises on revert. Uses a fresh pending nonce so sequential calls don't clash."""
     nonce = w3.eth.get_transaction_count(acct.address, "pending")
     try:
-        estimated = nft.functions.mint(token_uri).estimate_gas({"from": acct.address})
+        estimated = fn.estimate_gas({"from": acct.address})
     except Exception as est_err:
-        logger.warning(f"nft: estimate_gas failed, using 500000: {est_err}")
-        estimated = 500_000
+        logger.warning(f"nft: estimate_gas failed, using {fallback_gas}: {est_err}")
+        estimated = fallback_gas
     gas_limit = int(estimated * 1.25) + 50_000
-
-    tx = nft.functions.mint(token_uri).build_transaction({
+    tx = fn.build_transaction({
         "from": acct.address,
         "nonce": nonce,
         "gas": gas_limit,
@@ -138,9 +136,24 @@ def _mint_nft(token_uri: str) -> tuple[int | None, str]:
     tx_hex = tx_hash.hex()
     if not tx_hex.startswith("0x"):
         tx_hex = "0x" + tx_hex
-
     if receipt.status != 1:
-        raise RuntimeError(f"mint tx reverted: {tx_hex}")
+        raise RuntimeError(f"tx reverted: {tx_hex}")
+    return tx_hex, receipt
+
+
+def _mint_nft(token_uri: str, recipient: str | None = None) -> tuple[int | None, str, str | None]:
+    """Mint one CyberiaNFT with `token_uri` (to the deployer) and, if `recipient`
+    is set and not the deployer, transfer it there. Returns
+    (token_id, mint_tx, transfer_tx). Blocking — call through asyncio.to_thread."""
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    acct = w3.eth.account.from_key(DEPLOYER_PK)
+    nft = w3.eth.contract(
+        address=Web3.to_checksum_address(CYBERIA_NFT_ADDRESS), abi=CYBERIA_NFT_ABI
+    )
+
+    mint_tx, receipt = _send_tx(
+        w3, acct, nft.functions.mint(token_uri), fallback_gas=500_000
+    )
 
     token_id = None
     for log in receipt.logs:
@@ -160,7 +173,17 @@ def _mint_nft(token_uri: str) -> tuple[int | None, str]:
             token_id = int(nft.functions.nextId().call())
         except Exception:
             token_id = None
-    return token_id, tx_hex
+
+    transfer_tx = None
+    if recipient and token_id is not None:
+        to = Web3.to_checksum_address(recipient)
+        if to.lower() != acct.address.lower():
+            transfer_tx, _ = _send_tx(
+                w3, acct,
+                nft.functions.safeTransferFrom(acct.address, to, token_id),
+                fallback_gas=150_000,
+            )
+    return token_id, mint_tx, transfer_tx
 
 
 # --------------------------------------------------------------------------- #
@@ -191,6 +214,17 @@ async def channel_post_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"nft: dedup check failed: {e}")
         return
     if key in _inflight or (gkey is not None and gkey in _inflight):
+        return
+
+    # The NFT is minted then transferred to the wallet a channel admin
+    # registered via /set_channel_wallet. No wallet -> nothing to send to, so we
+    # don't mint (and don't waste IPFS/gas). Dry-run still pins to test the path.
+    recipient = _get_channel_wallet(chat.id)
+    if not recipient and not NFT_FROM_POSTS_DRYRUN:
+        logger.info(
+            f"nft: no recipient wallet for @{username} "
+            f"(admin should DM /set_channel_wallet @{username} 0x...); skipping post {msg.message_id}"
+        )
         return
 
     _inflight.add(key)
@@ -232,19 +266,23 @@ async def channel_post_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
         if NFT_FROM_POSTS_DRYRUN:
             logger.info(
-                f"nft[dryrun]: @{username}/{msg.message_id} -> {token_uri}"
+                f"nft[dryrun]: @{username}/{msg.message_id} -> {token_uri} "
+                f"recipient={recipient or '(none set)'}"
             )
             _record_post_nft(
                 chat.id, msg.message_id, f"@{username}", mgid, None, token_uri, None
             )
             return
 
-        token_id, tx_hash = await asyncio.to_thread(_mint_nft, token_uri)
+        token_id, mint_tx, transfer_tx = await asyncio.to_thread(
+            _mint_nft, token_uri, recipient
+        )
         _record_post_nft(
-            chat.id, msg.message_id, f"@{username}", mgid, token_id, token_uri, tx_hash
+            chat.id, msg.message_id, f"@{username}", mgid, token_id, token_uri, mint_tx
         )
         logger.info(
-            f"nft: minted token_id={token_id} tx={tx_hash} "
+            f"nft: minted token_id={token_id} mint_tx={mint_tx} "
+            f"transfer_tx={transfer_tx} -> {recipient} "
             f"for @{username}/{msg.message_id} uri={token_uri}"
         )
     except Exception as e:
@@ -253,3 +291,123 @@ async def channel_post_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         _inflight.discard(key)
         if gkey is not None:
             _inflight.discard(gkey)
+
+
+# --------------------------------------------------------------------------- #
+# Channel-wallet registration commands (DM)                                   #
+# --------------------------------------------------------------------------- #
+async def _resolve_channel(context, ref: str):
+    """Resolve '@name' / 'name' / numeric id to a Chat, or None."""
+    ref = ref.strip()
+    if not ref.startswith("@") and not ref.lstrip("-").isdigit():
+        ref = "@" + ref
+    target = int(ref) if ref.lstrip("-").isdigit() else ref
+    try:
+        return await context.bot.get_chat(target)
+    except TelegramError as e:
+        logger.info(f"nft: get_chat({ref}) failed: {e}")
+        return None
+
+
+async def _is_channel_admin(context, chat_id: int, user_id: int) -> bool:
+    try:
+        member = await context.bot.get_chat_member(chat_id, user_id)
+        return member.status in ("creator", "administrator")
+    except TelegramError as e:
+        logger.info(f"nft: get_chat_member({chat_id},{user_id}) failed: {e}")
+        return False
+
+
+async def set_channel_wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/set_channel_wallet <@channel> <0xaddress> — a channel admin registers the
+    wallet that post NFTs from that channel are sent to. DM only; the caller must
+    be an admin/owner of the channel."""
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat is None or user is None:
+        return
+    if chat.type != "private":
+        await update.message.reply_text("DM me this command in private.")
+        return
+
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text(
+            "Usage: /set_channel_wallet <@channel> <0xaddress>\n"
+            "Example: /set_channel_wallet @anarcho_autism 0x1234...abcd\n"
+            "You must be an admin of that channel, and the bot must be an admin there too."
+        )
+        return
+
+    address = args[1].strip()
+    if not is_valid_eth_address(address):
+        await update.message.reply_text("Invalid address. Expected 0x followed by 40 hex characters.")
+        return
+    try:
+        address = Web3.to_checksum_address(address)
+    except Exception:
+        await update.message.reply_text("Invalid address.")
+        return
+
+    channel = await _resolve_channel(context, args[0])
+    if channel is None or channel.type != "channel":
+        await update.message.reply_text(
+            "Couldn't find that channel. Make sure the bot is an admin of it and "
+            "you passed its @username (or numeric id)."
+        )
+        return
+
+    if not await _is_channel_admin(context, channel.id, user.id):
+        await update.message.reply_text("Only an admin of that channel can set its wallet.")
+        logger.warning(
+            "nft: unauthorized set_channel_wallet by user_id=%s for channel=%s",
+            user.id, channel.id,
+        )
+        return
+
+    label = f"@{channel.username}" if channel.username else (channel.title or str(channel.id))
+    try:
+        _set_channel_wallet(channel.id, label, address, user.id)
+    except Exception as e:
+        logger.error(f"nft: set_channel_wallet db error: {e}")
+        await update.message.reply_text("Internal error. Try again.")
+        return
+
+    await update.message.reply_text(
+        f"Wallet set for {label}.\n"
+        f"New posts there will be minted as NFTs and sent to:\n{address}\n"
+        f"{EXPLORER_URL}/address/{address}"
+    )
+
+
+async def channel_wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/channel_wallet <@channel> — show the wallet registered for a channel
+    (admins only). DM only."""
+    chat = update.effective_chat
+    user = update.effective_user
+    if chat is None or user is None or chat.type != "private":
+        if chat is not None and chat.type != "private":
+            await update.message.reply_text("DM me this command in private.")
+        return
+
+    args = context.args or []
+    if not args:
+        await update.message.reply_text("Usage: /channel_wallet <@channel>")
+        return
+
+    channel = await _resolve_channel(context, args[0])
+    if channel is None or channel.type != "channel":
+        await update.message.reply_text("Couldn't find that channel.")
+        return
+    if not await _is_channel_admin(context, channel.id, user.id):
+        await update.message.reply_text("Only an admin of that channel can view its wallet.")
+        return
+
+    label = f"@{channel.username}" if channel.username else (channel.title or str(channel.id))
+    address = _get_channel_wallet(channel.id)
+    if not address:
+        await update.message.reply_text(
+            f"No wallet set for {label}. Set one with /set_channel_wallet {label} 0x..."
+        )
+        return
+    await update.message.reply_text(f"{label} -> {address}\n{EXPLORER_URL}/address/{address}")
