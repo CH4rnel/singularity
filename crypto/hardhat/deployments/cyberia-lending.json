@@ -32,9 +32,65 @@
     "RUB": {
       "address": "0x63c3267072f8165b6E2bb300a3ab0968D5B5bfEb",
       "underlying": "0x3cE7d8E486E16baD2Fb1487Fe1da4dC33237d923"
+    },
+    "USDC": {
+      "address": "0xB5C366D4c03126d3fED940a7576eFD568c49d61D",
+      "underlying": "0xdc25597B19799010047F17e9591EFE08EFd40077"
+    },
+    "USDT": {
+      "address": "0x48dBB0D6549DC1c287c3A7EA314312fff2236e62",
+      "underlying": "0x94845aF24a3E431593A2b941b2b31836dE45185D"
+    },
+    "BTC": {
+      "address": "0xFdF7098d22AE929353218354920aBF625dd4B69f",
+      "underlying": "0x9332081f308BC978fe259237850fA253131b46Fa"
+    },
+    "LTC": {
+      "address": "0x7214bd5F60fB1Ef69E0AB0DFe0c4BFf0C8D0d463",
+      "underlying": "0x001AFD19C9d890b0cf0fcd6D654f9BFe4f264F14"
+    },
+    "SILVER": {
+      "address": "0xD300658cd2eECbee8852F82456E9b6904d62D3F1",
+      "underlying": "0xAd9dfef9D671aFCF29Dbdd7Df360E7cA8D5ac40b"
+    },
+    "TRUR": {
+      "address": "0x333080C5b1EAf5185158a3bcAe31B0e455E549E4",
+      "underlying": "0x6D056e56f5D90ed5680f0335D80E112799a735C8"
+    },
+    "TGLD": {
+      "address": "0x4a3599D1523495561F4eA4B5ECA1B32bd63DDDE8",
+      "underlying": "0xE2A45069C3e7897CAB592bEd389764e6eCf3b8a5"
+    },
+    "TMOS": {
+      "address": "0x92caD4b7C2D2949D48801677082AB4eFEfb6301b",
+      "underlying": "0x3352254390526624a140B06E7D2dDA8BA85a9E89"
+    },
+    "TOFZ": {
+      "address": "0xaC4BF6A9E0aB4316834e49c118B979D8F0474672",
+      "underlying": "0x46A6f512885De25AaefBf5A5F842ba378700Fe22"
+    },
+    "GOLD": {
+      "address": "0x3f4B453411295Dc9ec64096cd1d273152Dc4B56b",
+      "underlying": "0x38297140d60B48f746aD83D851b852Fd23eF9871"
+    },
+    "XMR": {
+      "address": "0x9e95a55de6B5F7118F43d14eAcCA9907823Dbd9a",
+      "underlying": "0xe2E8D51C18d6e0FDDbb9Ff4BF63235D688dd00Ae"
+    },
+    "TRX": {
+      "address": "0x3a8BfeC7AA09D7fb5c11b2324c8104561bc4057D",
+      "underlying": "0x60617237bC60f73c0393c7a6d7352e16DF20472a"
+    },
+    "KRSQ": {
+      "address": "0xe2deDDcA1235108Ca82c94bA6656A8075D6A4781",
+      "underlying": "0x4945419ccEEF0Dc70B054700DE2750A056B03eE3"
+    },
+    "YTN": {
+      "address": "0x92cF6A1A438888ffd738b80cf29Ee14583a16375",
+      "underlying": "0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6"
     }
   },
-  "timestamp": "2026-05-24T00:52:04.891Z",
+  "timestamp": "2026-06-26T00:04:29.946Z",
   "QuickswapPriceOracle": "0x8fEA279fb70D3D1B20a0E50cbC649c83C41Dc4D1",
   "SimplePriceOracle_legacy": "0x8eA212E3D8Ea63738B3eCaD0dA5c1683f711F4af",
   "LendingComptroller_legacy": "0xF1d1c79C535dBCf7F68784B3bCb91d9030A970e1",

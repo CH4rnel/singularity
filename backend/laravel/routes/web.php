@@ -31,6 +31,7 @@ Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/convert', 'CyberSolSwap')->name('convert');
 Route::permanentRedirect('/cyber-sol-swap', '/convert');
 Route::inertia('/lending', 'Lending')->name('lending');
+Route::inertia('/farm', 'Farm')->name('farm');
 Route::inertia('/lending/liquidate', 'Liquidate')->name('lending.liquidate');
 Route::inertia('/launchpad', 'Launchpad')->name('launchpad');
 Route::get('/launchpad/sites/{address}', [LaunchpadController::class, 'showSite'])

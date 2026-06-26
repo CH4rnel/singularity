@@ -206,6 +206,9 @@ function signOut() {
             <InertiaLink href="/lending" :class="linkClass('/lending')"
                 >Lending</InertiaLink
             >
+            <InertiaLink href="/farm" :class="linkClass('/farm')"
+                >Farm</InertiaLink
+            >
             <InertiaLink href="/launchpad" :class="linkClass('/launchpad')"
                 >Launchpad</InertiaLink
             >

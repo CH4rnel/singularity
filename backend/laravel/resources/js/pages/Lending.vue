@@ -7,9 +7,17 @@ import {
     parseUnits,
     MaxUint256,
 } from 'ethers';
-import { Loader2 } from 'lucide-vue-next';
+import {
+    ArrowRight,
+    Loader2,
+    RefreshCw,
+    Search,
+    TriangleAlert,
+    Wallet,
+} from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import Header from '@/components/Header.vue';
+import TokenIcon from '@/components/TokenIcon.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +51,7 @@ const {
 const action = ref<{ market: MarketView; type: MarketAction } | null>(null);
 const amountInput = ref('');
 const submitting = ref(false);
+const marketFilter = ref('');
 
 /// Forward-looking interest projection from the current owed amount and APR.
 /// Converts a fractional rate (e.g. 6.5% APR = 0.065) into a per-period
@@ -331,6 +340,10 @@ const borrowPositions = computed(() =>
     markets.value.filter((m) => m.userBorrow > 0n),
 );
 
+const hasPositions = computed(
+    () => supplyPositions.value.length > 0 || borrowPositions.value.length > 0,
+);
+
 const totalSupplyUsd = computed(() =>
     supplyPositions.value.reduce((sum, m) => {
         return (
@@ -346,6 +359,89 @@ const totalBorrowUsd = computed(() =>
         );
     }, 0),
 );
+
+// Account liquidity is the remaining USD borrow power; shortfall is how far
+// underwater the account is (>0 means liquidatable).
+const remainingBorrowUsd = computed(() =>
+    liquidity.value ? Number(liquidity.value.liquidity) / 1e18 : 0,
+);
+const shortfallUsd = computed(() =>
+    liquidity.value ? Number(liquidity.value.shortfall) / 1e18 : 0,
+);
+const borrowLimitUsd = computed(
+    () => totalBorrowUsd.value + remainingBorrowUsd.value,
+);
+const borrowUsedPct = computed(() => {
+    if (shortfallUsd.value > 0) {
+        return 100;
+    }
+
+    return borrowLimitUsd.value > 0
+        ? Math.min(100, (totalBorrowUsd.value / borrowLimitUsd.value) * 100)
+        : 0;
+});
+const healthColor = computed(() => {
+    if (shortfallUsd.value > 0 || borrowUsedPct.value >= 85) {
+        return 'bg-red-500';
+    }
+
+    if (borrowUsedPct.value >= 60) {
+        return 'bg-amber-500';
+    }
+
+    return 'bg-emerald-500';
+});
+
+const usd2 = (n: number): string =>
+    '$' + n.toLocaleString('en', { maximumFractionDigits: 2 });
+
+// Markets the user already has a position in float to the top; the rest sort by
+// liquidity so the deepest pools lead.
+const filteredMarkets = computed(() => {
+    const q = marketFilter.value.trim().toLowerCase();
+    const list = q
+        ? visibleMarkets.value.filter((m) => m.symbol.toLowerCase().includes(q))
+        : visibleMarkets.value.slice();
+
+    return list.sort((a, b) => {
+        const aMine = a.userSupplyShares > 0n || a.userBorrow > 0n ? 1 : 0;
+        const bMine = b.userSupplyShares > 0n || b.userBorrow > 0n ? 1 : 0;
+
+        if (aMine !== bMine) {
+            return bMine - aMine;
+        }
+
+        return b.cash > a.cash ? 1 : b.cash < a.cash ? -1 : 0;
+    });
+});
+
+const collateralState = (
+    m: MarketView,
+): { label: string; classes: string; warn: boolean } => {
+    if (m.entered) {
+        return {
+            label: 'collateral on',
+            classes:
+                'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+            warn: false,
+        };
+    }
+
+    if (m.userSupplyShares > 0n || m.userBorrow > 0n) {
+        return {
+            label: 'enable collateral',
+            classes:
+                'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+            warn: true,
+        };
+    }
+
+    return {
+        label: 'collateral off',
+        classes: 'border-border text-muted-foreground',
+        warn: false,
+    };
+};
 
 watch(queryAddress, async (addr) => {
     if (addr) {
@@ -383,334 +479,618 @@ onUnmounted(() => {
     <div class="min-h-screen bg-background text-foreground">
         <Header />
 
-        <main class="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12">
-            <div>
-                <p
-                    class="mb-3 text-xs tracking-[0.24em] text-muted-foreground uppercase"
-                >
-                    Cyberia product
-                </p>
-                <h1 class="text-4xl font-semibold tracking-tight">Lending</h1>
-                <p class="mt-2 max-w-2xl text-sm text-muted-foreground">
-                    Supply assets to earn interest, or borrow against your
-                    collateral. Each market is isolated and shares interest
-                    accrual blocks with on-chain liquidity checks.
-                </p>
-                <p
-                    v-if="queryAddress"
-                    class="mt-2 text-xs text-muted-foreground"
-                >
-                    Connected as
-                    <span class="font-mono">{{ queryAddress }}</span>
-                    <button
-                        class="ml-3 underline-offset-2 hover:underline"
-                        :disabled="loading"
-                        @click="loadMarkets"
-                    >
-                        refresh
-                    </button>
-                    <a
-                        href="/lending/liquidate"
-                        class="ml-3 underline-offset-2 hover:underline"
-                    >
-                        liquidate borrowers →
-                    </a>
-                </p>
+        <main class="relative overflow-hidden">
+            <div
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-x-0 -top-40 -z-10 flex justify-center"
+            >
+                <div
+                    class="h-[26rem] w-[60rem] max-w-full rounded-full bg-gradient-to-tr from-sky-500/20 via-indigo-500/10 to-emerald-400/20 blur-3xl"
+                ></div>
             </div>
 
-            <div v-if="!queryAddress" class="rounded-lg border p-6">
-                <p class="mb-4 text-sm text-muted-foreground">
-                    Connect your wallet to view markets and manage positions.
-                </p>
-                <Button @click="wallet.connect()"
-                    >Подключить кошелёк</Button
-                >
-            </div>
-
-            <div v-else-if="!comptrollerAddress" class="rounded-lg border p-6">
-                <p class="mb-4 text-sm text-muted-foreground">
-                    Lending comptroller address not configured. Paste it below
-                    or set <code>VITE_LENDING_COMPTROLLER</code> at build time.
-                </p>
-                <div class="flex gap-2">
-                    <Input
-                        v-model="inputComptroller"
-                        placeholder="0x…"
-                        class="font-mono"
-                    />
-                    <Button @click="setComptroller">Load</Button>
-                </div>
-            </div>
-
-            <div v-else>
-                <div class="mb-6 grid gap-4 md:grid-cols-3">
-                    <div class="rounded-lg border p-4">
-                        <p class="text-xs uppercase text-muted-foreground">
-                            Total supplied
-                        </p>
-                        <p class="mt-2 text-2xl font-semibold">
-                            ${{ totalSupplyUsd.toFixed(2) }}
-                        </p>
-                    </div>
-                    <div class="rounded-lg border p-4">
-                        <p class="text-xs uppercase text-muted-foreground">
-                            Total borrowed
-                        </p>
-                        <p class="mt-2 text-2xl font-semibold">
-                            ${{ totalBorrowUsd.toFixed(2) }}
-                        </p>
-                    </div>
-                    <div
-                        class="rounded-lg border p-4"
-                        :class="{
-                            'border-destructive':
-                                liquidity && liquidity.shortfall > 0n,
-                        }"
+            <div class="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12">
+                <!-- HERO -->
+                <header class="space-y-3">
+                    <p
+                        class="text-xs tracking-[0.24em] text-muted-foreground uppercase"
                     >
-                        <p class="text-xs uppercase text-muted-foreground">
-                            Account liquidity
-                        </p>
-                        <p
-                            v-if="liquidity && liquidity.shortfall > 0n"
-                            class="mt-2 text-2xl font-semibold text-destructive"
-                        >
-                            -${{
-                                (
-                                    Number(liquidity.shortfall) / 1e18
-                                ).toFixed(2)
-                            }}
-                        </p>
-                        <p v-else-if="liquidity" class="mt-2 text-2xl font-semibold">
-                            ${{ (Number(liquidity.liquidity) / 1e18).toFixed(2) }}
-                        </p>
-                        <p v-else class="mt-2 text-2xl font-semibold">—</p>
-                    </div>
-                </div>
-
-                <div v-if="error" class="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                    {{ error }}
-                </div>
-
-                <div v-if="borrowPositions.length > 0" class="mb-6 rounded-lg border">
-                    <div class="border-b px-4 py-2 text-xs uppercase tracking-wide text-muted-foreground">
-                        My borrows
-                    </div>
-                    <table class="w-full text-sm">
-                        <thead class="text-xs uppercase tracking-wide text-muted-foreground">
-                            <tr>
-                                <th class="px-4 py-2 text-left">Asset</th>
-                                <th class="px-4 py-2 text-right">Owed (live)</th>
-                                <th class="px-4 py-2 text-right">APR</th>
-                                <th class="px-4 py-2 text-right">Per month</th>
-                                <th class="px-4 py-2 text-right">Per week</th>
-                                <th class="px-4 py-2 text-right">Per day</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="m in borrowPositions"
-                                :key="`borrow-${m.address}`"
-                                class="border-t"
-                            >
-                                <td class="px-4 py-2 font-medium">{{ m.symbol }}</td>
-                                <td class="px-4 py-2 text-right font-mono">
-                                    {{ formatToken(m.userBorrow, m.decimals, 8) }}
-                                </td>
-                                <td class="px-4 py-2 text-right">
-                                    {{ m.borrowApy.toFixed(2) }}%
-                                </td>
-                                <td class="px-4 py-2 text-right font-mono">
-                                    +{{ formatToken(perMonthInterest(m), m.decimals, 8) }}
-                                </td>
-                                <td class="px-4 py-2 text-right font-mono">
-                                    +{{ formatToken(perWeekInterest(m), m.decimals, 8) }}
-                                </td>
-                                <td class="px-4 py-2 text-right font-mono">
-                                    +{{ formatToken(perDayInterest(m), m.decimals, 8) }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <p class="px-4 py-2 text-[11px] text-muted-foreground">
-                        Owed values are live, recomputed on every refresh
-                        (Multicall3 forces <code>accrueInterest</code> in a
-                        simulated call). The «per month / per week / per day»
-                        columns are projections based on the current borrow APR.
+                        Cyberia product
                     </p>
+                    <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
+                        Money
+                        <span
+                            class="bg-gradient-to-r from-sky-500 via-indigo-500 to-emerald-400 bg-clip-text text-transparent"
+                            >markets</span
+                        >
+                    </h1>
+                    <p class="max-w-2xl text-sm text-muted-foreground">
+                        Supply assets to earn interest, or borrow against your
+                        collateral. Each market is isolated, accrues interest
+                        every block and checks liquidity on-chain.
+                    </p>
+                    <p
+                        v-if="queryAddress"
+                        class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+                    >
+                        <span class="font-mono">{{ queryAddress }}</span>
+                        <button
+                            class="inline-flex items-center gap-1 transition hover:text-foreground disabled:opacity-50"
+                            :disabled="loading"
+                            @click="loadMarkets"
+                        >
+                            <RefreshCw
+                                class="h-3 w-3"
+                                :class="loading && 'animate-spin'"
+                            />
+                            refresh
+                        </button>
+                        <a
+                            href="/lending/liquidate"
+                            class="inline-flex items-center gap-1 transition hover:text-foreground"
+                        >
+                            liquidate borrowers
+                            <ArrowRight class="h-3 w-3" />
+                        </a>
+                    </p>
+                </header>
+
+                <!-- NOT CONNECTED -->
+                <div
+                    v-if="!queryAddress"
+                    class="rounded-2xl border border-border bg-card p-8 text-center"
+                >
+                    <Wallet class="mx-auto mb-3 h-7 w-7 text-muted-foreground" />
+                    <p class="mb-4 text-sm text-muted-foreground">
+                        Connect your wallet to view markets and manage
+                        positions.
+                    </p>
+                    <Button class="rounded-xl" @click="wallet.connect()">
+                        <Wallet class="mr-2 h-4 w-4" />
+                        Connect wallet
+                    </Button>
                 </div>
 
-                <div v-if="loading" class="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 class="h-4 w-4 animate-spin" />
-                    Loading markets…
+                <!-- COMPTROLLER NOT CONFIGURED -->
+                <div
+                    v-else-if="!comptrollerAddress"
+                    class="rounded-2xl border border-border bg-card p-6"
+                >
+                    <p class="mb-4 text-sm text-muted-foreground">
+                        Lending comptroller address not configured. Paste it
+                        below or set
+                        <code>VITE_LENDING_COMPTROLLER</code> at build time.
+                    </p>
+                    <div class="flex gap-2">
+                        <Input
+                            v-model="inputComptroller"
+                            placeholder="0x…"
+                            class="font-mono"
+                        />
+                        <Button @click="setComptroller">Load</Button>
+                    </div>
                 </div>
 
-                <div v-else-if="markets.length === 0" class="rounded-lg border p-8 text-center text-muted-foreground">
-                    No markets listed at <code class="font-mono">{{ comptrollerAddress }}</code>.
-                </div>
+                <template v-else>
+                    <!-- SUMMARY -->
+                    <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <div
+                            class="rounded-2xl border border-border bg-card p-5"
+                        >
+                            <p class="text-xs text-muted-foreground">
+                                Total supplied
+                            </p>
+                            <p class="mt-2 font-mono text-2xl font-semibold">
+                                {{ usd2(totalSupplyUsd) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-2xl border border-border bg-card p-5"
+                        >
+                            <p class="text-xs text-muted-foreground">
+                                Total borrowed
+                            </p>
+                            <p class="mt-2 font-mono text-2xl font-semibold">
+                                {{ usd2(totalBorrowUsd) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-2xl border border-border bg-card p-5"
+                        >
+                            <p class="text-xs text-muted-foreground">
+                                Borrow power left
+                            </p>
+                            <p
+                                class="mt-2 font-mono text-2xl font-semibold"
+                                :class="
+                                    shortfallUsd > 0 ? 'text-red-500' : ''
+                                "
+                            >
+                                {{
+                                    shortfallUsd > 0
+                                        ? '-' + usd2(shortfallUsd)
+                                        : usd2(remainingBorrowUsd)
+                                }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-2xl border border-border bg-card p-5"
+                        >
+                            <div
+                                class="flex items-center justify-between text-xs text-muted-foreground"
+                            >
+                                <span>Borrow used</span>
+                                <span
+                                    class="font-mono"
+                                    :class="
+                                        shortfallUsd > 0 ? 'text-red-500' : ''
+                                    "
+                                    >{{ borrowUsedPct.toFixed(0) }}%</span
+                                >
+                            </div>
+                            <div
+                                class="mt-3 h-2 overflow-hidden rounded-full bg-muted"
+                            >
+                                <div
+                                    class="h-full rounded-full transition-all"
+                                    :class="healthColor"
+                                    :style="{ width: borrowUsedPct + '%' }"
+                                />
+                            </div>
+                            <p
+                                v-if="shortfallUsd > 0"
+                                class="mt-2 flex items-center gap-1 text-[11px] text-red-500"
+                            >
+                                <TriangleAlert class="h-3 w-3" />
+                                Account is liquidatable
+                            </p>
+                        </div>
+                    </section>
 
-                <div v-else class="overflow-x-auto rounded-lg border">
-                    <table class="w-full min-w-[760px] text-sm">
-                        <thead class="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                            <tr>
-                                <th class="px-4 py-3 text-left">Asset</th>
-                                <th class="px-4 py-3 text-right">Wallet</th>
-                                <th class="px-4 py-3 text-right">Supply APY</th>
-                                <th class="px-4 py-3 text-right">Borrow APY</th>
-                                <th class="px-4 py-3 text-right">Liquidity</th>
-                                <th class="px-4 py-3 text-right">My supply</th>
-                                <th class="px-4 py-3 text-right">My borrow</th>
-                                <th class="px-4 py-3 text-right">Collateral</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template v-for="market in visibleMarkets" :key="market.address">
-                            <tr class="border-t">
-                                <td class="px-4 py-3">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-medium">{{ market.symbol }}</span>
-                                        <Badge variant="outline" class="font-mono text-[10px]">
-                                            CF {{ (market.collateralFactor * 100).toFixed(0) }}%
-                                        </Badge>
+                    <!-- ERROR -->
+                    <div
+                        v-if="error"
+                        class="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+                    >
+                        {{ error }}
+                    </div>
+
+                    <!-- MY POSITIONS -->
+                    <section
+                        v-if="hasPositions"
+                        class="grid gap-4 lg:grid-cols-2"
+                    >
+                        <div
+                            v-if="supplyPositions.length > 0"
+                            class="rounded-2xl border border-border bg-card p-5"
+                        >
+                            <h2 class="mb-3 text-sm font-semibold">
+                                Your supplies
+                            </h2>
+                            <div class="space-y-2">
+                                <div
+                                    v-for="m in supplyPositions"
+                                    :key="`s-${m.address}`"
+                                    class="flex items-center justify-between gap-3 rounded-xl border border-border bg-background/50 px-3 py-2 text-sm"
+                                >
+                                    <span class="font-medium">{{
+                                        m.symbol
+                                    }}</span>
+                                    <div class="text-right">
+                                        <p class="font-mono">
+                                            {{
+                                                formatToken(
+                                                    m.userSupplyUnderlying,
+                                                    m.decimals,
+                                                )
+                                            }}
+                                        </p>
+                                        <p
+                                            class="text-[11px] text-emerald-600 dark:text-emerald-400"
+                                        >
+                                            {{ m.supplyApy.toFixed(2) }}% APY
+                                        </p>
                                     </div>
-                                </td>
-                                <td class="px-4 py-3 text-right font-mono">
-                                    {{ formatToken(market.userUnderlyingBalance, market.decimals) }}
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {{ market.supplyApy.toFixed(2) }}%
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {{ market.borrowApy.toFixed(2) }}%
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    <span
-                                        :class="
-                                            market.cash === 0n
-                                                ? 'text-muted-foreground/60 italic'
-                                                : ''
-                                        "
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="borrowPositions.length > 0"
+                            class="rounded-2xl border border-border bg-card p-5"
+                        >
+                            <h2 class="mb-3 text-sm font-semibold">
+                                Your borrows
+                            </h2>
+                            <div class="space-y-2">
+                                <div
+                                    v-for="m in borrowPositions"
+                                    :key="`b-${m.address}`"
+                                    class="rounded-xl border border-border bg-background/50 px-3 py-2 text-sm"
+                                >
+                                    <div
+                                        class="flex items-center justify-between gap-3"
                                     >
-                                        {{ formatToken(market.cash, market.decimals) }}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {{ formatToken(market.userSupplyUnderlying, market.decimals) }}
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {{ formatToken(market.userBorrow, market.decimals) }}
-                                </td>
-                                <td class="px-4 py-3 text-right">
+                                        <span class="font-medium">{{
+                                            m.symbol
+                                        }}</span>
+                                        <div class="text-right">
+                                            <p class="font-mono">
+                                                {{
+                                                    formatToken(
+                                                        m.userBorrow,
+                                                        m.decimals,
+                                                        8,
+                                                    )
+                                                }}
+                                            </p>
+                                            <p
+                                                class="text-[11px] text-amber-600 dark:text-amber-400"
+                                            >
+                                                {{ m.borrowApy.toFixed(2) }}% APR
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <p
+                                        class="mt-1 font-mono text-[11px] text-muted-foreground"
+                                    >
+                                        +{{
+                                            formatToken(
+                                                perDayInterest(m),
+                                                m.decimals,
+                                                8,
+                                            )
+                                        }}/d ·
+                                        +{{
+                                            formatToken(
+                                                perWeekInterest(m),
+                                                m.decimals,
+                                                8,
+                                            )
+                                        }}/wk ·
+                                        +{{
+                                            formatToken(
+                                                perMonthInterest(m),
+                                                m.decimals,
+                                                8,
+                                            )
+                                        }}/mo
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="mt-2 text-[11px] text-muted-foreground">
+                                Owed amounts are live (interest accrued to the
+                                current block); the per-day/week/month figures
+                                project the current APR forward.
+                            </p>
+                        </div>
+                    </section>
+
+                    <!-- MARKETS -->
+                    <section class="space-y-4">
+                        <div
+                            class="flex flex-wrap items-center justify-between gap-3"
+                        >
+                            <h2 class="text-lg font-semibold">All markets</h2>
+                            <div class="relative w-full max-w-xs">
+                                <Search
+                                    class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                                />
+                                <Input
+                                    v-model="marketFilter"
+                                    placeholder="Filter by symbol…"
+                                    class="pl-9"
+                                />
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="loading"
+                            class="flex items-center gap-2 py-10 text-muted-foreground"
+                        >
+                            <Loader2 class="h-4 w-4 animate-spin" />
+                            Loading markets…
+                        </div>
+
+                        <div
+                            v-else-if="markets.length === 0"
+                            class="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground"
+                        >
+                            No markets listed at
+                            <code class="font-mono">{{
+                                comptrollerAddress
+                            }}</code
+                            >.
+                        </div>
+
+                        <div
+                            v-else-if="filteredMarkets.length === 0"
+                            class="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground"
+                        >
+                            No markets match “{{ marketFilter }}”.
+                        </div>
+
+                        <div
+                            v-else
+                            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                        >
+                            <article
+                                v-for="market in filteredMarkets"
+                                :key="market.address"
+                                class="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5"
+                            >
+                                <!-- card header -->
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="flex items-center gap-3">
+                                        <TokenIcon
+                                            :symbol="market.symbol"
+                                            :size="40"
+                                        />
+                                        <div>
+                                            <p class="font-semibold leading-tight">
+                                                {{ market.symbol }}
+                                            </p>
+                                            <Badge
+                                                variant="outline"
+                                                class="mt-0.5 font-mono text-[10px]"
+                                            >
+                                                CF
+                                                {{
+                                                    (
+                                                        market.collateralFactor *
+                                                        100
+                                                    ).toFixed(0)
+                                                }}%
+                                            </Badge>
+                                        </div>
+                                    </div>
                                     <button
-                                        class="text-xs underline-offset-2 hover:underline"
-                                        :class="
-                                            market.entered
-                                                ? 'text-emerald-500'
-                                                : (market.userSupplyShares > 0n || market.userBorrow > 0n)
-                                                    ? 'text-amber-500 font-medium'
-                                                    : 'text-muted-foreground'
-                                        "
+                                        class="rounded-full border px-2 py-0.5 text-[10px] font-medium transition disabled:opacity-50"
+                                        :class="collateralState(market).classes"
                                         :disabled="submitting"
                                         :title="
-                                            !market.entered && (market.userSupplyShares > 0n || market.userBorrow > 0n)
-                                                ? 'You have a position here but the comptroller does not see it — click to enterMarkets so collateral / debt is counted.'
-                                                : undefined
+                                            collateralState(market).warn
+                                                ? 'You have a position here but the comptroller does not count it — click to enable collateral.'
+                                                : 'Toggle whether this market counts as collateral.'
                                         "
                                         @click="toggleMembership(market)"
                                     >
-                                        {{
-                                            market.entered
-                                                ? 'enabled'
-                                                : (market.userSupplyShares > 0n || market.userBorrow > 0n)
-                                                    ? '⚠ enter'
-                                                    : 'disabled'
-                                        }}
+                                        {{ collateralState(market).label }}
                                     </button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td colspan="8" class="px-4 pb-3">
-                                    <div class="flex flex-wrap gap-2">
-                                        <Button variant="outline" size="sm" @click="openAction(market, 'supply')">
-                                            Supply
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            :disabled="market.userSupplyShares === 0n"
-                                            @click="openAction(market, 'withdraw')"
+                                </div>
+
+                                <!-- APYs -->
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div
+                                        class="rounded-xl border border-border bg-background/50 p-3"
+                                    >
+                                        <p class="text-[11px] text-muted-foreground">
+                                            Supply APY
+                                        </p>
+                                        <p
+                                            class="font-mono text-lg text-emerald-600 dark:text-emerald-400"
                                         >
-                                            Withdraw
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            :disabled="market.cash === 0n"
-                                            :title="
-                                                market.cash === 0n
-                                                    ? 'No liquidity to borrow — someone must supply first'
-                                                    : undefined
-                                            "
-                                            @click="openAction(market, 'borrow')"
-                                        >
-                                            Borrow
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            :disabled="market.userBorrow === 0n"
-                                            @click="openAction(market, 'repay')"
-                                        >
-                                            Repay
-                                        </Button>
+                                            {{ market.supplyApy.toFixed(2) }}%
+                                        </p>
                                     </div>
-                                </td>
-                            </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
+                                    <div
+                                        class="rounded-xl border border-border bg-background/50 p-3"
+                                    >
+                                        <p class="text-[11px] text-muted-foreground">
+                                            Borrow APY
+                                        </p>
+                                        <p
+                                            class="font-mono text-lg text-amber-600 dark:text-amber-400"
+                                        >
+                                            {{ market.borrowApy.toFixed(2) }}%
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- stats -->
+                                <dl class="grid grid-cols-2 gap-y-2 text-sm">
+                                    <dt class="text-muted-foreground">
+                                        Liquidity
+                                    </dt>
+                                    <dd
+                                        class="text-right font-mono"
+                                        :class="
+                                            market.cash === 0n
+                                                ? 'text-muted-foreground/50 italic'
+                                                : ''
+                                        "
+                                    >
+                                        {{
+                                            formatToken(
+                                                market.cash,
+                                                market.decimals,
+                                            )
+                                        }}
+                                    </dd>
+                                    <dt class="text-muted-foreground">Wallet</dt>
+                                    <dd class="text-right font-mono">
+                                        {{
+                                            formatToken(
+                                                market.userUnderlyingBalance,
+                                                market.decimals,
+                                            )
+                                        }}
+                                    </dd>
+                                    <dt class="text-muted-foreground">
+                                        My supply
+                                    </dt>
+                                    <dd class="text-right font-mono">
+                                        {{
+                                            formatToken(
+                                                market.userSupplyUnderlying,
+                                                market.decimals,
+                                            )
+                                        }}
+                                    </dd>
+                                    <dt class="text-muted-foreground">
+                                        My borrow
+                                    </dt>
+                                    <dd class="text-right font-mono">
+                                        {{
+                                            formatToken(
+                                                market.userBorrow,
+                                                market.decimals,
+                                            )
+                                        }}
+                                    </dd>
+                                </dl>
+
+                                <!-- actions -->
+                                <div class="mt-auto grid grid-cols-2 gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        @click="openAction(market, 'supply')"
+                                    >
+                                        Supply
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        :disabled="
+                                            market.userSupplyShares === 0n
+                                        "
+                                        @click="openAction(market, 'withdraw')"
+                                    >
+                                        Withdraw
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        :disabled="market.cash === 0n"
+                                        :title="
+                                            market.cash === 0n
+                                                ? 'No liquidity to borrow — someone must supply first'
+                                                : undefined
+                                        "
+                                        @click="openAction(market, 'borrow')"
+                                    >
+                                        Borrow
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        :disabled="market.userBorrow === 0n"
+                                        @click="openAction(market, 'repay')"
+                                    >
+                                        Repay
+                                    </Button>
+                                </div>
+                            </article>
+                        </div>
+                    </section>
+                </template>
             </div>
         </main>
 
+        <!-- ACTION MODAL -->
         <div
             v-if="action"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
             @click.self="action = null"
         >
-            <div class="w-full max-w-md rounded-lg border bg-background p-6 shadow-xl">
-                <h2 class="text-lg font-semibold capitalize">
-                    {{ action.type }} {{ action.market.symbol }}
-                </h2>
-                <p class="mt-1 text-xs text-muted-foreground">
+            <div
+                class="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-2xl"
+            >
+                <div class="flex items-center gap-3">
+                    <TokenIcon :symbol="action.market.symbol" :size="36" />
+                    <h2 class="text-lg font-semibold capitalize">
+                        {{ action.type }} {{ action.market.symbol }}
+                    </h2>
+                </div>
+
+                <p class="mt-3 text-xs text-muted-foreground">
                     <template v-if="action.type === 'supply'">
-                        Wallet balance: {{ formatToken(action.market.userUnderlyingBalance, action.market.decimals) }} {{ action.market.symbol }}
+                        Wallet balance:
+                        {{
+                            formatToken(
+                                action.market.userUnderlyingBalance,
+                                action.market.decimals,
+                            )
+                        }}
+                        {{ action.market.symbol }}
                     </template>
                     <template v-else-if="action.type === 'withdraw'">
-                        Supplied: {{ formatToken(action.market.userSupplyUnderlying, action.market.decimals) }} {{ action.market.symbol }}
+                        Supplied:
+                        {{
+                            formatToken(
+                                action.market.userSupplyUnderlying,
+                                action.market.decimals,
+                            )
+                        }}
+                        {{ action.market.symbol }}
                     </template>
                     <template v-else-if="action.type === 'borrow'">
-                        Borrow power: {{ formatToken(maxBorrowUnderlying(action.market), action.market.decimals) }} {{ action.market.symbol }}
-                        · cash {{ formatToken(action.market.cash, action.market.decimals) }}
+                        Borrow power:
+                        {{
+                            formatToken(
+                                maxBorrowUnderlying(action.market),
+                                action.market.decimals,
+                            )
+                        }}
+                        {{ action.market.symbol }} · cash
+                        {{
+                            formatToken(
+                                action.market.cash,
+                                action.market.decimals,
+                            )
+                        }}
                     </template>
                     <template v-else>
-                        Owed: {{ formatToken(action.market.userBorrow, action.market.decimals) }} {{ action.market.symbol }}
+                        Owed:
+                        {{
+                            formatToken(
+                                action.market.userBorrow,
+                                action.market.decimals,
+                            )
+                        }}
+                        {{ action.market.symbol }}
                     </template>
                 </p>
 
-                <div class="mt-4 space-y-2">
-                    <div class="flex gap-2">
-                        <Input v-model="amountInput" type="number" min="0" step="any" placeholder="0.0" />
-                        <Button variant="outline" type="button" @click="setMax">Max</Button>
-                    </div>
+                <div
+                    class="mt-4 flex items-center gap-2 rounded-xl border border-border bg-card p-2"
+                >
+                    <Input
+                        v-model="amountInput"
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.0"
+                        class="border-0 bg-transparent text-lg shadow-none focus-visible:ring-0"
+                    />
+                    <button
+                        type="button"
+                        class="rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition hover:border-foreground/30 hover:text-foreground"
+                        @click="setMax"
+                    >
+                        MAX
+                    </button>
+                    <span
+                        class="pr-1 text-sm font-medium text-muted-foreground"
+                        >{{ action.market.symbol }}</span
+                    >
                 </div>
 
                 <div class="mt-6 flex justify-end gap-2">
-                    <Button variant="ghost" :disabled="submitting" @click="action = null">
+                    <Button
+                        variant="ghost"
+                        :disabled="submitting"
+                        @click="action = null"
+                    >
                         Cancel
                     </Button>
                     <Button :disabled="submitting" @click="submitAction">
-                        <Loader2 v-if="submitting" class="mr-2 h-4 w-4 animate-spin" />
-                        Confirm
+                        <Loader2
+                            v-if="submitting"
+                            class="mr-2 h-4 w-4 animate-spin"
+                        />
+                        <span class="capitalize">{{ action.type }}</span>
                     </Button>
                 </div>
             </div>
