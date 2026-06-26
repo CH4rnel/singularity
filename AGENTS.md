@@ -35,6 +35,7 @@ singularity/
 ├── services/blockscout/  # Blockscout fork + Cyberia docker-compose config
 ├── services/ipfs/        # IPFS docker-compose config
 ├── services/lisp/        # Common Lisp daemon/http services
+├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, whales gate
 ├── scripts/              # Python, JS, and Lisp operational scripts/bots
 ├── linux/                # Cyberia OS build notes/config
 └── logs/                 # Runtime logs

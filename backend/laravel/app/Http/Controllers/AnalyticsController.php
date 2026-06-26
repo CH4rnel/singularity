@@ -15,7 +15,7 @@ use Inertia\Response;
 /**
  * Public on-chain analytics: swaps, liquidity, bridges, token prices and DEX
  * pools. Everything except the live chain head comes from SQLite tables
- * written by the Telegram bot (scripts/python/telegram_airdrop_bot.py), which
+ * written by the Telegram bot (services/telegram-bot/), which
  * indexes the chain and shares this app's database file. The page therefore
  * renders even when those tables don't exist yet — sections just come back
  * empty.

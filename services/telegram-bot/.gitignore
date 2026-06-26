@@ -1,0 +1,12 @@
+.env
+bot.log
+__pycache__/
+*.pyc
+
+# local virtualenvs
+.venv/
+venv/
+bin/
+lib/
+lib64
+pyvenv.cfg

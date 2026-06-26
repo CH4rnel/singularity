@@ -20,6 +20,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `services/blockscout/` | Blockscout fork, Docker Compose | Cyberia explorer config |
 | `services/ipfs/` | Docker Compose | IPFS service config |
 | `services/lisp/` | Common Lisp/SBCL | Daemon and HTTP services |
+| `services/telegram-bot/` | Python, python-telegram-bot, web3, SQLAlchemy | Cyberia Telegram bot: wallet rewards, chat tokens, on-chain announcers, whales gate |
 | `scripts/` | Python, JS, Lisp | Airdrop bots, crawlers, price scripts, operations |
 | `linux/` | Linux build notes/config | Cyberia OS artifacts |
 

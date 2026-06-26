@@ -1,0 +1,1 @@
+"""Cyberia Telegram airdrop bot."""
