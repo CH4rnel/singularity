@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from web3 import Web3
 from sqlalchemy import text
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 
@@ -19,6 +19,7 @@ from bot.config import (
     PROJECT_X_URL, PROJECT_WEBSITE_URL, TELEGRAM_CHANNEL_URL, TELEGRAM_CHAT_URL,
     CYBER_CA_SOLANA, CYBER_CA_EVM,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_VERIFY_URL, WHALE_LINK_TTL_MINUTES,
+    SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL,
 )
 from bot.db import engine
 from bot.utils import (
@@ -28,6 +29,25 @@ from bot.utils import (
 from bot.announcers import _build_digest_text, _cyber_price_line, _SQLITE_TS
 
 logger = logging.getLogger(__name__)
+
+
+def _main_menu_kb() -> InlineKeyboardMarkup:
+    """Inline keyboard of ecosystem links shown under /start and /help.
+
+    URL buttons only — no callbacks — so it cannot interfere with any command
+    flow. Blank URLs are skipped (Telegram rejects empty url buttons).
+    """
+    pairs = [
+        ("🎨 Pixel Battle", PIXEL_BATTLE_URL),
+        ("🖼 NFT Market", NFT_MARKET_URL),
+        ("💱 Swap", SWAP_URL),
+        ("🌐 Website", PROJECT_WEBSITE_URL),
+        ("𝕏 Twitter", PROJECT_X_URL),
+        ("📣 Channel", TELEGRAM_CHANNEL_URL),
+    ]
+    buttons = [InlineKeyboardButton(label, url=url) for label, url in pairs if url]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(rows)
 
 
 async def is_chat_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -111,7 +131,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Example: /set_wallet 0x1234567890abcdef1234567890abcdef12345678",
         ]
 
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text("\n".join(lines), reply_markup=_main_menu_kb())
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -137,7 +157,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/set_channel_wallet <@channel> <0x..> - (channel admins) wallet that receives post NFTs\n"
         "/website - project website\n\n"
         "You can chat in groups without a wallet -- rewards will be saved as "
-        "pending and minted in one go when you /set_wallet."
+        "pending and minted in one go when you /set_wallet.",
+        reply_markup=_main_menu_kb(),
     )
 
 

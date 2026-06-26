@@ -220,6 +220,12 @@ PROJECT_WEBSITE_URL = os.environ.get("PROJECT_WEBSITE_URL", "https://cyberia.chu
 TELEGRAM_CHANNEL_URL = os.environ.get("TELEGRAM_CHANNEL_URL", "https://t.me/cyberia_network")
 TELEGRAM_CHAT_URL = os.environ.get("TELEGRAM_CHAT_URL", "https://t.me/cyberia_network_chat")
 
+# Ecosystem links surfaced as inline URL buttons under /start and /help.
+# Defaults derive the marketplace/pixel-battle pages from the project website.
+SWAP_URL = os.environ.get("SWAP_URL", "https://swap.cyberia.church")
+NFT_MARKET_URL = os.environ.get("NFT_MARKET_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/market")
+PIXEL_BATTLE_URL = os.environ.get("PIXEL_BATTLE_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/pixels")
+
 # Contract addresses surfaced by "ca". CYBER.sol is the community pump.fun token
 # (also gates the whales chat); its EVM counterpart is the bridged CYBER.sol on
 # Cyberia (matches PRICE_RELAY_TOKENS). Blank values are simply omitted.
