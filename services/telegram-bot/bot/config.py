@@ -228,6 +228,65 @@ CYBER_CA_EVM = (os.environ.get(
     "CYBER_CA_EVM", "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA"
 ) or "").strip()
 
+# --- NFT from channel posts ---------------------------------------------------
+# When the bot is an admin of a PUBLIC channel it receives that channel's posts;
+# each new post is minted into the shared CyberiaNFT collection with ERC-721 +
+# IPFS metadata so it shows up on the Cyberia NFT marketplace. The NFT is owned
+# by the deployer/treasury wallet (mint -> msg.sender) but the marketplace lists
+# the whole collection by nextId, so it is visible regardless.
+CYBERIA_NFT_ADDRESS = (os.environ.get(
+    "CYBERIA_NFT_ADDRESS", "0x546462FAbf30734E63b64f32B30EC8ADD9B6EBa7"
+) or "").strip()
+
+# Master switch. Defaults on once both the NFT address and a deployer key exist;
+# set NFT_FROM_POSTS=0 to disable.
+NFT_FROM_POSTS = (os.environ.get("NFT_FROM_POSTS", "1").strip().lower()
+                  not in ("0", "false", "no", "off")) and bool(CYBERIA_NFT_ADDRESS)
+
+# Pin metadata to IPFS but skip the on-chain mint (no gas) — for testing.
+NFT_FROM_POSTS_DRYRUN = os.environ.get(
+    "NFT_FROM_POSTS_DRYRUN", "0"
+).strip().lower() in ("1", "true", "yes", "on")
+
+# Local Kubo HTTP API used to pin images + metadata JSON. Same env name and
+# default as the Laravel NFTController so prod config carries over.
+IPFS_API_URL = (os.environ.get("IPFS_API_URL", "http://127.0.0.1:5001") or "").rstrip("/")
+
+# Cap the NFT description (post text) length kept in metadata.
+NFT_MAX_DESC_CHARS = int(os.environ.get("NFT_MAX_DESC_CHARS", "1500"))
+
+# Public base for the post link surfaced as the NFT's external_url.
+TELEGRAM_POST_BASE = os.environ.get("TELEGRAM_POST_BASE", "https://t.me").rstrip("/")
+
+CYBERIA_NFT_ABI = [
+    {
+        "inputs": [{"name": "uri", "type": "string"}],
+        "name": "mint",
+        "outputs": [{"name": "tokenId", "type": "uint256"}],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "nextId",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "anonymous": False,
+        "inputs": [
+            {"indexed": True, "name": "tokenId", "type": "uint256"},
+            {"indexed": True, "name": "creator", "type": "address"},
+            {"indexed": False, "name": "uri", "type": "string"},
+        ],
+        "name": "Minted",
+        "type": "event",
+    },
+]
+
+MINTED_TOPIC = Web3.keccak(text="Minted(uint256,address,string)").hex()
+
 
 MARKET_SNAPSHOT_SECONDS = int(os.environ.get("MARKET_SNAPSHOT_SECONDS", "300"))
 

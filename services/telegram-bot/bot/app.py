@@ -21,8 +21,10 @@ from bot.config import (
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, BIG_ANNOUNCE_USD,
     MARKET_SNAPSHOT_SECONDS,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS,
+    NFT_FROM_POSTS, NFT_FROM_POSTS_DRYRUN, CYBERIA_NFT_ADDRESS, IPFS_API_URL,
 )
 from bot.db import ensure_schema
+from bot.nft import channel_post_handler
 from bot.handlers import (
     start_command, help_command, set_wallet_command, unset_wallet_command,
     wallet_command, cancel_command, balance_command, token_command,
@@ -122,6 +124,18 @@ async def post_init(application: Application):
         )
     else:
         logger.info("Whale gate disabled: WHALE_CHAT_ID not set")
+
+    # NFT-from-posts: mint each new post in public channels the bot administers.
+    if NFT_FROM_POSTS:
+        mode = "DRY-RUN (no mint)" if NFT_FROM_POSTS_DRYRUN else "live"
+        logger.info(
+            f"NFT-from-posts enabled [{mode}]: collection={CYBERIA_NFT_ADDRESS} "
+            f"ipfs={IPFS_API_URL}"
+        )
+    else:
+        logger.info("NFT-from-posts disabled: NFT_FROM_POSTS off or no collection")
+
+
 def run_dispatcher():
     logger.info("Building application...")
 
@@ -197,11 +211,23 @@ def run_dispatcher():
     # handlers above; the Regex filter keeps it from running on ordinary chat.
     application.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND & filters.Regex(_QUICK_REPLY_RE),
+            filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL
+            & filters.Regex(_QUICK_REPLY_RE),
             quick_reply_handler,
         ),
         group=2,
     )
+
+    # Mint each new post in public channels the bot administers into CyberiaNFT.
+    # A bot only receives channel_post updates for channels it is an admin of.
+    if NFT_FROM_POSTS:
+        application.add_handler(
+            MessageHandler(
+                filters.ChatType.CHANNEL & filters.UpdateType.CHANNEL_POST,
+                channel_post_handler,
+            ),
+            group=3,
+        )
 
     # Catch silent leaves/kicks and joins. Requires the bot to be admin in the
     # chat to receive these updates from Telegram. Without admin rights only
@@ -215,7 +241,9 @@ def run_dispatcher():
     logger.info("Bot started, polling...")
 
     try:
-        application.run_polling(allowed_updates=["message", "chat_member"])
+        application.run_polling(
+            allowed_updates=["message", "chat_member", "channel_post"]
+        )
     except Exception as e:
         logger.error(f"Polling error: {e}")
         raise

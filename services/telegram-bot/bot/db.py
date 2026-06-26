@@ -142,6 +142,27 @@ def ensure_chat_token_schema():
                 updated_at   TEXT
             )
         """))
+        # One row per channel post turned into a CyberiaNFT. Dedup is by
+        # (chat_id, message_id); media_group_id lets albums mint a single NFT.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS channel_post_nfts (
+                chat_id        INTEGER NOT NULL,
+                message_id     INTEGER NOT NULL,
+                channel        TEXT,
+                media_group_id TEXT,
+                token_id       INTEGER,
+                token_uri      TEXT,
+                tx_hash        TEXT,
+                created_at     TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (chat_id, message_id)
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_channel_post_nfts_group
+            ON channel_post_nfts (chat_id, media_group_id)
+        """))
+
+
 def _kv_get(key: str, default: str | None = None) -> str | None:
     with engine.connect() as conn:
         row = conn.execute(
@@ -217,6 +238,56 @@ def _get_swap_cursor() -> tuple[int, int] | None:
 
 def _set_swap_cursor(block: int, log_index: int) -> None:
     _set_block_cursor("last_announced_swap_cursor", block, log_index)
+
+
+def _post_nft_seen(chat_id: int, message_id: int, media_group_id: str | None = None) -> bool:
+    """True if this post (or its album) already produced an NFT. Albums fire one
+    update per item; the media_group_id check collapses them to a single mint."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT 1 FROM channel_post_nfts WHERE chat_id = :c AND message_id = :m"),
+            {"c": chat_id, "m": message_id},
+        ).fetchone()
+        if row is not None:
+            return True
+        if media_group_id:
+            row = conn.execute(
+                text("""
+                    SELECT 1 FROM channel_post_nfts
+                    WHERE chat_id = :c AND media_group_id = :g LIMIT 1
+                """),
+                {"c": chat_id, "g": media_group_id},
+            ).fetchone()
+            return row is not None
+    return False
+
+
+def _record_post_nft(
+    chat_id: int,
+    message_id: int,
+    channel: str | None,
+    media_group_id: str | None,
+    token_id: int | None,
+    token_uri: str | None,
+    tx_hash: str | None,
+) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO channel_post_nfts
+                    (chat_id, message_id, channel, media_group_id,
+                     token_id, token_uri, tx_hash)
+                VALUES (:c, :m, :ch, :g, :tid, :uri, :tx)
+                ON CONFLICT(chat_id, message_id) DO UPDATE SET
+                    token_id = excluded.token_id,
+                    token_uri = excluded.token_uri,
+                    tx_hash = excluded.tx_hash
+            """),
+            {
+                "c": chat_id, "m": message_id, "ch": channel, "g": media_group_id,
+                "tid": token_id, "uri": token_uri, "tx": tx_hash,
+            },
+        )
 
 
 ensure_schema = ensure_chat_token_schema
