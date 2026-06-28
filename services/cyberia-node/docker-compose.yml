@@ -1,0 +1,49 @@
+# Cyberia chain — SECOND node (non-validating full / RPC node).
+#
+# Deploy target: 213.135.146.117
+# This node SYNCS the chain from the production validator (2.26.24.177) but
+# NEVER seals blocks, so it cannot affect consensus and cannot break the
+# live single-validator chain. See README.md before bringing it up.
+#
+# Bring-up (only when you are ready — the node is intentionally NOT started
+# by `setup.sh`):
+#   ./setup.sh            # one-time: checks + generates this node's own keys
+#   docker compose up -d  # start syncing from block 0
+#   docker compose logs -f cyberia-node
+#
+# Differences vs the production validator service on purpose:
+#   --seal=false          this node is a follower, not a sealer
+#   --nat=213.135.146.117 advertise its real public IP to peers
+#   ./data + ./genesis.json are local bind mounts so the dir is self-contained
+services:
+  cyberia-node:
+    image: 0xpolygon/polygon-edge:latest
+    container_name: cyberia-node
+    restart: unless-stopped
+    user: "0:0"
+    volumes:
+      - ./data:/data
+      - ./genesis.json:/genesis.json:ro
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "1337:1337"
+    environment:
+      - POLYGON_EDGE_DATA_DIR=/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    command: >
+      server
+      --data-dir=/data
+      --chain=/genesis.json
+      --jsonrpc=0.0.0.0:8545
+      --access-control-allow-origins=*
+      --json-rpc-block-range-limit=1000
+      --block-gas-target=0x1C9C380
+      --libp2p=0.0.0.0:1337
+      --nat=213.135.146.117
+      --seal=false
+      --price-limit=1000000000

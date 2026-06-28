@@ -19,9 +19,10 @@ class CrmSyncCommand extends Command
         $counts = $sync->syncAll();
 
         $this->info(sprintf(
-            'Imported: %d platform users, %d bridge addresses, %d whales.',
+            'Imported: %d platform users, %d bridge addresses, %d holders, %d whales.',
             $counts['platform'],
             $counts['bridge'],
+            $counts['holders'],
             $counts['whales'],
         ));
 

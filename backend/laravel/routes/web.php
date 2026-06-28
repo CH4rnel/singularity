@@ -15,6 +15,7 @@ use App\Http\Controllers\CrmNoteController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\LinkController;
+use App\Http\Controllers\LiquidityController;
 use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
@@ -27,6 +28,7 @@ Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/pixels', 'PixelBattle')->name('pixels');
+Route::get('/liquidity', [LiquidityController::class, 'index'])->name('liquidity');
 // Fixed-rate redeemer for bridged CYBER.sol -> native CYBER. It's a conversion,
 // not a swap, hence /convert; the old /cyber-sol-swap path 301s here.
 Route::inertia('/convert', 'CyberSolSwap')->name('convert');

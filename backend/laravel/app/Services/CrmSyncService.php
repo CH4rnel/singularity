@@ -7,6 +7,7 @@ use App\Models\BridgeRequest;
 use App\Models\CrmContact;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
@@ -27,13 +28,14 @@ class CrmSyncService
     /**
      * Run every importer and return per-source counts.
      *
-     * @return array{platform: int, bridge: int, whales: int}
+     * @return array{platform: int, bridge: int, holders: int, whales: int}
      */
     public function syncAll(): array
     {
         return [
             'platform' => $this->importPlatformUsers(),
             'bridge' => $this->importBridgeUsers(),
+            'holders' => $this->importHolders(),
             'whales' => $this->importWhales(),
         ];
     }
@@ -147,6 +149,138 @@ class CrmSyncService
             });
 
         return $count;
+    }
+
+    /**
+     * Import every on-chain holder of the CYBER.sol mint as a CRM contact.
+     *
+     * This is the source that pulls the actual token holders (the pump.fun /
+     * Solana crowd) — the other importers only see people who touched the
+     * platform. We enumerate all of the mint's SPL token accounts with
+     * `getProgramAccounts` (the only RPC that returns the full set;
+     * `getTokenLargestAccounts` caps at 20), sum balances per owning wallet,
+     * and upsert each. Existing contacts keep their name/source — we only
+     * refresh the balance and may promote them to whale.
+     *
+     * Needs an RPC that allows `getProgramAccounts` (most providers do when a
+     * mint `memcmp` filter is supplied; the public endpoint may rate-limit, in
+     * which case this logs and imports nothing rather than breaking the sync).
+     */
+    public function importHolders(): int
+    {
+        $rpc = config('services.cyber_sol.rpc_url');
+        $mint = (string) config('services.cyber_sol.mint');
+        $decimals = (int) config('services.cyber_sol.decimals', 6);
+        $threshold = (int) config('services.cyber_sol.whale_threshold');
+
+        if (! $rpc || $mint === '') {
+            return 0;
+        }
+
+        // Token accounts are owned by whichever token program minted them
+        // (classic SPL Token vs Token-2022); detect it, default to classic.
+        $program = $this->tokenProgramForMint($rpc, $mint)
+            ?? 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+
+        try {
+            $res = Http::timeout(60)->acceptJson()->post($rpc, [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'getProgramAccounts',
+                'params' => [
+                    $program,
+                    [
+                        'encoding' => 'jsonParsed',
+                        'commitment' => 'confirmed',
+                        'filters' => [
+                            ['memcmp' => ['offset' => 0, 'bytes' => $mint]],
+                        ],
+                    ],
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('CrmSync: holder RPC request failed', ['error' => $e->getMessage()]);
+
+            return 0;
+        }
+
+        $body = $res->json();
+        if (! $res->successful() || isset($body['error'])) {
+            Log::warning('CrmSync: getProgramAccounts failed — RPC may not allow it', [
+                'status' => $res->status(),
+                'error' => $body['error'] ?? null,
+            ]);
+
+            return 0;
+        }
+
+        // Sum raw balances per owning wallet (a wallet can hold several accounts).
+        $byOwner = [];
+        foreach (($body['result'] ?? []) as $acc) {
+            $info = $acc['account']['data']['parsed']['info'] ?? null;
+            $owner = $info['owner'] ?? null;
+            $amount = $info['tokenAmount']['amount'] ?? null;
+            if (! is_string($owner) || $amount === null) {
+                continue;
+            }
+            $byOwner[$owner] = bcadd($byOwner[$owner] ?? '0', (string) $amount, 0);
+        }
+
+        $count = 0;
+        foreach ($byOwner as $owner => $raw) {
+            if (bccomp($raw, '0', 0) <= 0) {
+                continue; // skip emptied / closed-balance accounts
+            }
+            $amount = bcdiv($raw, bcpow('10', (string) $decimals), $decimals);
+            $this->upsertHolder($owner, $amount, $this->shouldBeWhale((float) $amount, $threshold));
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Resolve the token program that owns a mint (classic SPL or Token-2022) by
+     * reading the mint account's owner. Returns null if it can't be determined.
+     */
+    private function tokenProgramForMint(string $rpc, string $mint): ?string
+    {
+        try {
+            $res = Http::timeout(15)->acceptJson()->post($rpc, [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'getAccountInfo',
+                'params' => [$mint, ['encoding' => 'base64', 'commitment' => 'confirmed']],
+            ]);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        $owner = $res->successful() ? $res->json('result.value.owner') : null;
+
+        return is_string($owner) ? $owner : null;
+    }
+
+    /**
+     * Upsert a holder by Solana address: create new holders, refresh the balance
+     * on existing contacts, and promote to whale when they qualify (never
+     * downgrade, and never clobber an existing contact's name/source).
+     */
+    private function upsertHolder(string $solanaAddress, string $amount, bool $isWhale): void
+    {
+        $contact = CrmContact::query()->where('solana_address', $solanaAddress)->first() ?? new CrmContact;
+
+        if (! $contact->exists) {
+            $contact->solana_address = $solanaAddress;
+            $contact->source = 'holder';
+            $contact->type = $isWhale ? 'whale' : 'holder';
+        } elseif ($isWhale && $contact->type !== 'whale') {
+            $contact->type = 'whale';
+        }
+
+        $contact->cyber_sol_balance = $amount;
+        $contact->last_synced_at = now();
+        $contact->save();
     }
 
     /**

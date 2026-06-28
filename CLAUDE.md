@@ -21,6 +21,8 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `services/ipfs/` | Docker Compose | IPFS service config |
 | `services/lisp/` | Common Lisp/SBCL | Daemon and HTTP services |
 | `services/telegram-bot/` | Python, python-telegram-bot, web3, SQLAlchemy | Cyberia Telegram bot: wallet rewards, chat tokens, on-chain announcers, whales gate |
+| `services/lainos/` | TypeScript, Node, Anthropic SDK, viem | LainOS: autonomous AI agent framework (ElizaOS-like) with a Cyberia chain plugin |
+| `game/wired/` | Godot 4, GDScript | Wired: 3D on-chain game; NPCs think via LainOS, world reacts to the Cyberia chain |
 | `scripts/` | Python, JS, Lisp | Airdrop bots, crawlers, price scripts, operations |
 | `linux/` | Linux build notes/config | Cyberia OS artifacts |
 

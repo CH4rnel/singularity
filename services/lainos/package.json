@@ -1,0 +1,39 @@
+{
+  "name": "lainos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LainOS — a framework for autonomous AI agents in the Cyberia ecosystem.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "lainos": "./dist/scripts/chat.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "chat": "tsx scripts/chat.ts",
+    "tui": "tsx scripts/tui.ts",
+    "serve": "tsx scripts/serve.ts",
+    "serve:wired": "tsx scripts/serve-wired.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "wired:smoke": "tsx scripts/wired-smoke.ts",
+    "dev": "tsx watch scripts/chat.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "dotenv": "^16.4.5",
+    "ink": "^5.2.1",
+    "ink-spinner": "^5.0.0",
+    "react": "^18.3.1",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "@types/react": "^18.3.31",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

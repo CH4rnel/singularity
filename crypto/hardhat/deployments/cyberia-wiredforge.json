@@ -1,0 +1,10 @@
+{
+  "chainId": 49406,
+  "rpc": "https://rpc.cyberia.church",
+  "WiredForge": "0x2daa4A79EC2224AD02D9D4eBf937924b76F669Fa",
+  "signer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "owner": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployTx": "0x452edaab6830a09555564907dd7b2bc90461169fc02d208c945252f7c59a2693",
+  "timestamp": "2026-06-26T13:55:18.329Z"
+}

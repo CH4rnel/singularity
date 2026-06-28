@@ -5,7 +5,33 @@ use App\Models\CrmContact;
 use App\Models\User;
 use App\Services\CrmSyncService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+
+/** Fake the Solana RPC: program detection + a getProgramAccounts holder set. */
+function fakeHolderRpc(array $accounts = []): void
+{
+    Http::fake(function ($request) use ($accounts) {
+        $method = $request->data()['method'] ?? '';
+        if ($method === 'getAccountInfo') {
+            return Http::response(['result' => ['value' => ['owner' => 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA']]]);
+        }
+        if ($method === 'getProgramAccounts') {
+            return Http::response(['result' => $accounts]);
+        }
+
+        return Http::response([]);
+    });
+}
+
+/** Shape one getProgramAccounts entry for an owner holding `amount` base units. */
+function holderAccount(string $owner, string $amount): array
+{
+    return ['account' => ['data' => ['parsed' => ['info' => [
+        'owner' => $owner,
+        'tokenAmount' => ['amount' => $amount],
+    ]]]]];
+}
 
 test('platform users are imported as contacts and linked back', function () {
     $user = User::factory()->create([
@@ -91,6 +117,7 @@ test('importing whales is a no-op when the bot table is absent', function () {
 });
 
 test('the sync endpoint runs every importer', function () {
+    fakeHolderRpc();
     $user = User::factory()->create(['wallet_address' => '0x'.str_repeat('c', 40)]);
 
     $this->actingAs($user)
@@ -99,4 +126,50 @@ test('the sync endpoint runs every importer', function () {
         ->assertSessionHas('success');
 
     $this->assertDatabaseHas('crm_contacts', ['user_id' => $user->id]);
+});
+
+test('on-chain holders are imported with balances and whale tier', function () {
+    fakeHolderRpc([
+        holderAccount('Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11', '5000000000'),      // 5,000 CYBER.sol
+        holderAccount('Wha1eBigggggggggggggggggggggggggggggggggg11', '15000000000000'), // 15,000,000 -> whale
+        holderAccount('Emptyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy11', '0'),              // skipped
+    ]);
+
+    $imported = app(CrmSyncService::class)->importHolders();
+
+    expect($imported)->toBe(2);
+    $this->assertDatabaseHas('crm_contacts', [
+        'solana_address' => 'Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11',
+        'type' => 'holder',
+        'source' => 'holder',
+    ]);
+    $this->assertDatabaseHas('crm_contacts', [
+        'solana_address' => 'Wha1eBigggggggggggggggggggggggggggggggggg11',
+        'type' => 'whale',
+    ]);
+    $this->assertDatabaseMissing('crm_contacts', [
+        'solana_address' => 'Emptyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy11',
+    ]);
+});
+
+test('importing holders refreshes an existing contact without clobbering it', function () {
+    $user = User::factory()->create([
+        'name' => 'Known Trader',
+        'solana_wallet_address' => 'Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11',
+    ]);
+    app(CrmSyncService::class)->importPlatformUsers();
+
+    fakeHolderRpc([
+        holderAccount('Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11', '15000000000000'),
+    ]);
+    app(CrmSyncService::class)->importHolders();
+
+    // one contact, kept its name/source, refreshed balance + promoted to whale
+    expect(CrmContact::where('solana_address', 'Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11')->count())->toBe(1);
+    $this->assertDatabaseHas('crm_contacts', [
+        'solana_address' => 'Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11',
+        'name' => 'Known Trader',
+        'source' => 'platform',
+        'type' => 'whale',
+    ]);
 });

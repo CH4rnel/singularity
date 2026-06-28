@@ -57,9 +57,7 @@ function isActive(href: string): boolean {
         return currentUrl.value === '/' || currentUrl.value === '';
     }
 
-    return (
-        currentUrl.value === href || currentUrl.value.startsWith(href + '/')
-    );
+    return currentUrl.value === href || currentUrl.value.startsWith(href + '/');
 }
 
 function linkClass(href: string): string {
@@ -187,63 +185,68 @@ function signOut() {
 <template>
     <header class="border-b">
         <nav
-            class="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-4 py-4 text-sm"
+            class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-4 text-sm"
             aria-label="Cyberia navigation"
         >
-            <a href="/" :class="linkClass('/')">Cyberia</a>
-            <InertiaLink href="/bridge" :class="linkClass('/bridge')"
-                >Bridge</InertiaLink
-            >
-            <InertiaLink href="/convert" :class="linkClass('/convert')"
-                >Convert</InertiaLink
-            >
-            <InertiaLink href="/dao" :class="linkClass('/dao')"
-                >DAO</InertiaLink
-            >
-            <InertiaLink href="/market" :class="linkClass('/market')"
-                >NFT Market</InertiaLink
-            >
-            <InertiaLink href="/pixels" :class="linkClass('/pixels')"
-                >Pixels</InertiaLink
-            >
-            <InertiaLink href="/lending" :class="linkClass('/lending')"
-                >Lending</InertiaLink
-            >
-            <InertiaLink href="/farm" :class="linkClass('/farm')"
-                >Farm</InertiaLink
-            >
-            <InertiaLink href="/launchpad" :class="linkClass('/launchpad')"
-                >Launchpad</InertiaLink
-            >
-            <InertiaLink href="/analytics" :class="linkClass('/analytics')"
-                >Analytics</InertiaLink
-            >
-            <a
-                href="https://swap.cyberia.church/"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-            >
-                Swap <ExternalLink class="h-3 w-3" />
-            </a>
-            <a
-                href="https://cyberia.church/"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-            >
-                cyberia.church <ExternalLink class="h-3 w-3" />
-            </a>
-            <a
-                href="https://explorer.cyberia.church/"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-            >
-                Explorer <ExternalLink class="h-3 w-3" />
-            </a>
+            <div class="flex min-w-0 flex-1 items-center gap-3 overflow-x-auto">
+                <a href="/" :class="linkClass('/')">Cyberia</a>
+                <InertiaLink href="/bridge" :class="linkClass('/bridge')"
+                    >Bridge</InertiaLink
+                >
+                <InertiaLink href="/convert" :class="linkClass('/convert')"
+                    >Convert</InertiaLink
+                >
+                <InertiaLink href="/dao" :class="linkClass('/dao')"
+                    >DAO</InertiaLink
+                >
+                <InertiaLink href="/market" :class="linkClass('/market')"
+                    >NFT Market</InertiaLink
+                >
+                <InertiaLink href="/pixels" :class="linkClass('/pixels')"
+                    >Pixels</InertiaLink
+                >
+                <InertiaLink href="/lending" :class="linkClass('/lending')"
+                    >Lending</InertiaLink
+                >
+                <InertiaLink href="/farm" :class="linkClass('/farm')"
+                    >Farm</InertiaLink
+                >
+                <InertiaLink href="/liquidity" :class="linkClass('/liquidity')"
+                    >Liquidity</InertiaLink
+                >
+                <InertiaLink href="/launchpad" :class="linkClass('/launchpad')"
+                    >Launchpad</InertiaLink
+                >
+                <InertiaLink href="/analytics" :class="linkClass('/analytics')"
+                    >Analytics</InertiaLink
+                >
+                <a
+                    href="https://swap.cyberia.church/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                >
+                    Swap <ExternalLink class="h-3 w-3" />
+                </a>
+                <a
+                    href="https://cyberia.church/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                >
+                    cyberia.church <ExternalLink class="h-3 w-3" />
+                </a>
+                <a
+                    href="https://explorer.cyberia.church/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                >
+                    Explorer <ExternalLink class="h-3 w-3" />
+                </a>
+            </div>
 
-            <div class="ml-auto flex items-center gap-2">
+            <div class="flex shrink-0 items-center gap-2">
                 <slot name="actions" />
 
                 <DropdownMenu>
@@ -254,10 +257,7 @@ function signOut() {
                             class="gap-2"
                             :disabled="isAuthenticating"
                         >
-                            <Spinner
-                                v-if="isAuthenticating"
-                                class="h-4 w-4"
-                            />
+                            <Spinner v-if="isAuthenticating" class="h-4 w-4" />
                             <Wallet v-else class="h-4 w-4" />
                             <span
                                 v-if="isAuthenticated && displayAddress"

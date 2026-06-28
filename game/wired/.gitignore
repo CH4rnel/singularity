@@ -1,0 +1,7 @@
+# Godot import cache / editor state
+.godot/
+# Web/desktop export output
+build/
+# Optional local model drop-in (large binaries)
+assets/*.glb
+assets/*.blend

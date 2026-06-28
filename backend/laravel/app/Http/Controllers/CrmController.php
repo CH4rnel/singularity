@@ -14,9 +14,10 @@ class CrmController extends Controller
         $counts = $sync->syncAll();
 
         return back()->with('success', sprintf(
-            'Synced: %d platform, %d bridge, %d whales',
+            'Synced: %d platform, %d bridge, %d holders, %d whales',
             $counts['platform'],
             $counts['bridge'],
+            $counts['holders'],
             $counts['whales'],
         ));
     }
