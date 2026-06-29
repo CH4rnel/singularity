@@ -53,6 +53,7 @@ type PickerState = {
 
 const COMMANDS = [
   { name: "/help", desc: "show commands" },
+  { name: "/skills", desc: "list chain skills" },
   { name: "/skin", desc: "pick a colour skin (arrows)" },
   { name: "/effort", desc: "set reply depth (arrows)" },
   { name: "/cursor", desc: "cursor style + blink (arrows)" },
@@ -60,6 +61,17 @@ const COMMANDS = [
   { name: "/model", desc: "show provider + model" },
   { name: "/exit", desc: "leave the wired" },
 ];
+
+/** Bucket a skill (action) name into a stylish category. */
+function skillCategory(name: string): "wallet" | "tx" | "memory" | "system" | "chain" {
+  if (/balance|overview|token/.test(name)) return "wallet";
+  if (/send|transfer/.test(name)) return "tx";
+  if (/remember|recall|memor/.test(name)) return "memory";
+  if (/shell|exec|file|dir|^ls$|read|write|list/.test(name)) return "system";
+  if (/tx/.test(name)) return "tx";
+  return "chain";
+}
+const SKILL_ORDER = ["chain", "wallet", "tx", "memory", "system"] as const;
 
 const EFFORTS = [
   { value: "low", label: "low", tokens: 512, desc: "terse · fast" },
@@ -181,14 +193,9 @@ function BootCard({
   // Bucket the registered skills into stylish categories.
   const groups: Record<string, string[]> = {};
   for (const a of runtime.actions) {
-    const cat = /balance|overview|token/.test(a.name)
-      ? "wallet"
-      : /tx|send|transfer/.test(a.name)
-        ? "tx"
-        : "chain";
-    (groups[cat] ??= []).push(a.name);
+    (groups[skillCategory(a.name)] ??= []).push(a.name);
   }
-  const order = ["chain", "wallet", "tx"].filter((o) => groups[o]);
+  const order = SKILL_ORDER.filter((o) => groups[o]);
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -415,6 +422,7 @@ function InputCapture({ onKey }: { onKey: (input: string, key: Key) => void }) {
 const HELP = [
   "commands:",
   "  /help          this list",
+  "  /skills        list the chain skills Lain can use",
   "  /skin          pick a colour skin with the arrow keys",
   "  /effort        set reply depth (low … max) with the arrow keys",
   "  /cursor        cursor style — block/line, blink/steady",
@@ -426,6 +434,23 @@ const HELP = [
   "         ctrl+w / alt+⌫ del word · alt+d del word fwd · ctrl+u/ctrl+k kill line",
   "         ↑ ↓ recall history · type / for command autocomplete",
 ].join("\n");
+
+/** Render the registered skills grouped by category, with descriptions. */
+function skillsList(actions: readonly { name: string; description: string }[]): string {
+  if (!actions.length) return "no chain skills are registered.";
+  const groups: Record<string, { name: string; description: string }[]> = {};
+  for (const a of actions) (groups[skillCategory(a.name)] ??= []).push(a);
+  const pad = Math.min(22, Math.max(...actions.map((a) => a.name.length)));
+  const lines: string[] = [`skills · ${actions.length} chain abilities`, ""];
+  for (const cat of SKILL_ORDER) {
+    const items = groups[cat];
+    if (!items) continue;
+    lines.push(cat);
+    for (const a of items) lines.push(`  ${a.name.padEnd(pad)}  ${a.description}`);
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
 
 export function App({ runtime }: { runtime: IAgentRuntime }) {
   const { exit } = useApp();
@@ -538,6 +563,9 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         case "help":
           pushHistory(sysTurn(HELP));
           break;
+        case "skills":
+          pushHistory(sysTurn(skillsList(runtime.actions)));
+          break;
         case "skin":
         case "theme":
           openSkinPicker();
@@ -565,7 +593,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           pushHistory(sysTurn(`unknown command: /${cmd}  (try /help)`));
       }
     },
-    [exit, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pushHistory],
+    [exit, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pushHistory, runtime],
   );
 
   const send = useCallback(

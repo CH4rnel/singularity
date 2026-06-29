@@ -62,7 +62,10 @@ npm run serve               # HTTP bridge on :7777 (consumed by the Wired game)
 
 ## Built-in plugins
 
-- **bootstrap** — a `time` provider and a heuristic fact extractor.
+- **bootstrap** — a `time` provider, a heuristic fact extractor, and long-term
+  memory skills:
+  - `remember` — persist a durable fact (survives restarts, across rooms)
+  - `recall` — search durable facts + this room's history
 - **cyberia** — reads/writes the Cyberia chain (id `49406`):
   - `check_balance` — native CYBER balance of an address
   - `token_balance` — ERC20 balance (symbol like `USDC`/`BTC` or a `0x` address)
@@ -70,6 +73,14 @@ npm run serve               # HTTP bridge on :7777 (consumed by the Wired game)
 
   Token registry (USDC, USDT, BTC, LTC, SOL, RUB, SILVER) uses the real
   on-chain deployments; extend `CYBERIA_TOKENS` to add more.
+- **system** — a terminal and filesystem, confined to a workspace
+  (`LAINOS_WORKSPACE`, default `./workspace`):
+  - `run_shell` — run a shell command (cwd = workspace, hard timeout, clipped output)
+  - `read_file` / `write_file` / `list_dir` — files within the workspace
+
+  Powerful and dual-use: paths that escape the workspace are refused. It loads
+  only for characters that list `"system"` in their `plugins` (Lain does); drop
+  it from a character's plugins to take the capability away.
 
 ## Build your own agent
 
@@ -104,10 +115,11 @@ endpoint — the same agent, one mind across the terminal and the 3D world.
 src/
   types.ts            core interfaces (the contract)
   runtime.ts          AgentRuntime — the think→act→evaluate loop
-  memory/store.ts     file-backed memory + retrieval
+  memory/store.ts     file-backed long-term memory + retrieval
   models/             anthropic.ts (Claude) | mock.ts | index.ts (factory)
-  plugins/bootstrap/  time provider + fact extractor
+  plugins/bootstrap/  time provider + fact extractor + remember/recall
   plugins/cyberia/    chain service + balance/transfer actions
+  plugins/system/     terminal + filesystem skills (sandboxed workspace)
   clients/            cli.ts (REPL) | http.ts (bridge)
   characters/lain.ts  the resident mind of Cyberia
 scripts/              chat.ts | serve.ts | smoke.ts

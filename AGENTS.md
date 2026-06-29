@@ -33,6 +33,7 @@ singularity/
 ├── crypto/anchor/        # Solana/Anchor bridge contracts and scripts
 ├── crypto/quickswap-core/ # Legacy QuickSwap/Uniswap v2 core contracts
 ├── services/blockscout/  # Blockscout fork + Cyberia docker-compose config
+├── services/cyberia-node/ # Cyberia L1 second node (polygon-edge follower/RPC); prepared, not deployed
 ├── services/ipfs/        # IPFS docker-compose config
 ├── services/lisp/        # Common Lisp daemon/http services
 ├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, whales gate

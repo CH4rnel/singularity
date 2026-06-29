@@ -13,6 +13,7 @@ import { FileMemoryStore } from "./memory/store.js";
 import { createModelProvider } from "./models/index.js";
 import { bootstrapPlugin } from "./plugins/bootstrap/index.js";
 import { cyberiaPlugin } from "./plugins/cyberia/index.js";
+import { systemPlugin } from "./plugins/system/index.js";
 import { AgentRuntime } from "./runtime.js";
 import type { Character, Plugin } from "./types.js";
 
@@ -27,6 +28,7 @@ export {
 } from "./models/index.js";
 export { bootstrapPlugin } from "./plugins/bootstrap/index.js";
 export { cyberiaPlugin, cyberiaChain, CYBERIA_TOKENS } from "./plugins/cyberia/index.js";
+export { systemPlugin } from "./plugins/system/index.js";
 export { lain } from "./characters/lain.js";
 
 const log = createLogger("boot");
@@ -35,6 +37,7 @@ const log = createLogger("boot");
 const BUILTIN_PLUGINS: Record<string, Plugin> = {
   bootstrap: bootstrapPlugin,
   cyberia: cyberiaPlugin,
+  system: systemPlugin,
 };
 
 export interface CreateAgentOptions {

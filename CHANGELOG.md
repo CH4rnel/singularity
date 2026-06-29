@@ -10,7 +10,30 @@ vYYYY.MM.DD
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+
+- LainOS: autonomous AI agent framework with a Cyberia chain plugin (`services/lainos`).
+- Wired: 3D on-chain Godot game whose NPCs think via LainOS (`game/wired`).
+- Cyberia L1 second-node config: non-validating full/RPC follower, prepared but not deployed (`services/cyberia-node`).
+- NFT generator and PixelBattle surfaces.
+- CyberSolSwap: on-chain `CYBER.sol` ↔ `CYBER` converter.
+- Lending/farming UI and a CRM surface.
+- Telegram bot inline buttons.
+- Token listings (Yenten, Karasique, Goal) and Cyberia chain ID for DEXScreener integration.
+
+### Changed
+
+- Documentation now matches the actual tree: README repository map, "What Works Now" table, and architecture diagram cover `game/wired`, `services/lainos`, `services/telegram-bot`, and `services/cyberia-node`; `AGENTS.md` and `CLAUDE.md` document the second node. The gitignored `logs/` entry was dropped from the repository map.
+- Refactored the Telegram bot and the analytics surface.
+
+### Fixed
+
+- Analytics and DCA bot fixes.
+
+### Removed
+
+- Untracked `frontend/ritual/.env.production` (now covered by `.gitignore`; its keys are templated in `.env.example`).
+- Removed the stray root `key` public-key file and a stale `.gitmodules` that referenced nonexistent `frontend/hugo` and `frontend/blog` submodules.
 
 ## v2026.06.11 - 2026-06-11
 

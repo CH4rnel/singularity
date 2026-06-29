@@ -33,6 +33,10 @@ Live or implemented surfaces in this repo:
 | Lending | `backend/laravel/resources/js/pages/Lending.vue` | EVM lending UI/contracts |
 | DAO | `backend/laravel/resources/js/pages/dao`, `crypto/hardhat/contracts/dao` | DAO UI/models/contracts |
 | Analytics | `/analytics` in Laravel app | Public product analytics page |
+| Telegram bot | `services/telegram-bot` | Live bot: wallet rewards, chat tokens, on-chain announcers, whales gate |
+| AI agents (LainOS) | `services/lainos` | Autonomous AI agent framework with a Cyberia chain plugin (experimental) |
+| Game (Wired) | `game/wired` | 3D on-chain Godot game; NPCs think via LainOS, world reacts to the chain (prototype) |
+| Second L1 node | `services/cyberia-node` | Non-validating full/RPC follower config; prepared, not deployed |
 | Bots/scripts | `scripts/python` | Telegram/GitHub/X airdrop and crawler scripts |
 | Blog/static pages | `frontend/jekyll`, `frontend/landing` | Static content and brand pages |
 
@@ -165,18 +169,22 @@ The repo also contains contribution/community token experiments such as Telegram
                  CYBER.sol liquidity
                          |
                          v
-┌──────────────────────────────────────────────────────────┐
-│                     Singularity                          │
-│                                                          │
-│  frontend/landing + frontend/jekyll  -> public narrative │
-│  backend/laravel                    -> bridge/site app   │
-│  frontend/ritual                    -> DEX UI            │
-│  crypto/hardhat                     -> EVM contracts     │
-│  crypto/anchor                      -> Solana bridge     │
-│  scripts/python                     -> bots/airdrops     │
-│  services/blockscout                -> explorer config   │
-│  services/lisp                      -> daemon services   │
-└──────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                          Singularity                          │
+│                                                               │
+│  frontend/landing + frontend/jekyll  -> public narrative      │
+│  backend/laravel                     -> bridge/site app       │
+│  frontend/ritual                     -> DEX UI                │
+│  crypto/hardhat                      -> EVM contracts         │
+│  crypto/anchor                       -> Solana bridge         │
+│  services/telegram-bot               -> Telegram rewards/bots │
+│  services/lainos                     -> autonomous AI agents  │
+│  game/wired                          -> on-chain Godot game   │
+│  scripts/python                      -> bots/airdrops         │
+│  services/blockscout                 -> explorer config       │
+│  services/cyberia-node               -> second RPC node       │
+│  services/lisp                       -> daemon services       │
+└───────────────────────────────────────────────────────────────┘
                          |
                          v
               Cyberia EVM L1, chain ID 49406
@@ -211,11 +219,14 @@ singularity/
 ├── crypto/anchor/         # Solana/Anchor bridge contracts and scripts
 ├── crypto/quickswap-core/ # Legacy QuickSwap/Uniswap v2 core fork
 ├── services/blockscout/   # Blockscout fork + Cyberia docker-compose config
+├── services/cyberia-node/ # Cyberia L1 second-node config (polygon-edge follower/RPC)
 ├── services/ipfs/         # IPFS docker-compose config
+├── services/lainos/       # LainOS: autonomous AI agent framework (TypeScript)
+├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, whales gate
 ├── services/lisp/         # Common Lisp daemon/http services
+├── game/wired/            # Wired: 3D on-chain game (Godot 4), NPCs powered by LainOS
 ├── scripts/               # Python, JS, and Lisp operational scripts/bots
-├── linux/                 # Cyberia OS notes/config
-└── logs/                  # Runtime logs
+└── linux/                 # Cyberia OS notes/config
 ```
 
 ## Quick Start

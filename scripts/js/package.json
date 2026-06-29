@@ -4,11 +4,14 @@
   "description": "",
   "main": "price.js",
   "scripts": {
+    "minecraft-bot": "node minecraft-bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@pump-fun/pump-sdk": "^1.32.0"
+    "@pump-fun/pump-sdk": "^1.32.0",
+    "mineflayer": "^4.37.1",
+    "mineflayer-pathfinder": "^2.4.5"
   }
 }
