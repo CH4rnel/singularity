@@ -1,9 +1,0 @@
-[submodule "frontend/hugo/themes/ananke-theme"]
-	path = frontend/hugo/themes/ananke-theme
-	url = https://github.com/theNewDynamic/gohugo-theme-ananke.git
-[submodule "frontend/blog/themes/ananke"]
-	path = frontend/blog/themes/ananke
-	url = https://github.com/theNewDynamic/gohugo-theme-ananke.git
-[submodule "frontend/blog/themes/book"]
-	path = frontend/blog/themes/book
-	url = https://github.com/alex-shpak/hugo-book.git
