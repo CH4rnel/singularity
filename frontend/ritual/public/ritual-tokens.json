@@ -1,9 +1,9 @@
 {
   "name": "Ritual Token List",
-  "timestamp": "2026-04-23T12:00:00.000Z",
+  "timestamp": "2026-06-30T18:53:57.000Z",
   "version": {
     "major": 1,
-    "minor": 0,
+    "minor": 2,
     "patch": 0
   },
   "tags": {},
@@ -101,6 +101,110 @@
       "decimals": 2,
       "chainId": 49406,
       "logoURI": "/rub.png"
+    },
+    {
+      "name": "Hatcher",
+      "address": "0x621021F18b6404123f98b1395c418868418ACF36",
+      "symbol": "HATCHER",
+      "decimals": 9,
+      "chainId": 49406,
+      "logoURI": "/hatcher.jpg"
+    },
+    {
+      "name": "T-Capital Rouble Liquidity",
+      "address": "0x6D056e56f5D90ed5680f0335D80E112799a735C8",
+      "symbol": "TRUR",
+      "decimals": 2,
+      "chainId": 49406,
+      "logoURI": "/TRURx160.png"
+    },
+    {
+      "name": "T-Capital Gold",
+      "address": "0xE2A45069C3e7897CAB592bEd389764e6eCf3b8a5",
+      "symbol": "TGLD",
+      "decimals": 2,
+      "chainId": 49406,
+      "logoURI": "/TGLDx160.png"
+    },
+    {
+      "name": "T-Capital Russian Stocks",
+      "address": "0x3352254390526624a140B06E7D2dDA8BA85a9E89",
+      "symbol": "TMOS",
+      "decimals": 2,
+      "chainId": 49406,
+      "logoURI": "/TMOSx160.png"
+    },
+    {
+      "name": "T-Capital OFZ",
+      "address": "0x46A6f512885De25AaefBf5A5F842ba378700Fe22",
+      "symbol": "TOFZ",
+      "decimals": 2,
+      "chainId": 49406,
+      "logoURI": "/TOFZx160.png"
+    },
+    {
+      "name": "Gold",
+      "address": "0x38297140d60B48f746aD83D851b852Fd23eF9871",
+      "symbol": "GOLD",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/gold.png"
+    },
+    {
+      "name": "Monero",
+      "address": "0xe2E8D51C18d6e0FDDbb9Ff4BF63235D688dd00Ae",
+      "symbol": "XMR",
+      "decimals": 12,
+      "chainId": 49406,
+      "logoURI": "/monero.svg"
+    },
+    {
+      "name": "Tron",
+      "address": "0x60617237bC60f73c0393c7a6d7352e16DF20472a",
+      "symbol": "TRX",
+      "decimals": 6,
+      "chainId": 49406,
+      "logoURI": "/tron.svg"
+    },
+    {
+      "name": "KARASIQUE",
+      "address": "0x4945419ccEEF0Dc70B054700DE2750A056B03eE3",
+      "symbol": "KRSQ",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/KARASIQUE.webp"
+    },
+    {
+      "name": "Yenten",
+      "address": "0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6",
+      "symbol": "YTN",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/Yenten-logo.png"
+    },
+    {
+      "name": "Goal Bear Coin",
+      "address": "0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe",
+      "symbol": "GOAL",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/goal.webp"
+    },
+    {
+      "name": "Lain",
+      "address": "0x05cd1AFd5b2DF3CCA6cEAb80CbC21168ec981E8B",
+      "symbol": "LAIN",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/lain.jpg"
+    },
+    {
+      "name": "Minecraft",
+      "address": "0xD8c1f812ADd03ccdE8D3c7F86FeAD181980CD7Ec",
+      "symbol": "MINE",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/mine.jpg"
     }
   ]
 }
