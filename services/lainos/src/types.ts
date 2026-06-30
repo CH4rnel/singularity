@@ -11,6 +11,7 @@
  *   Evaluator   — runs after a response to learn/extract facts.
  *   Plugin      — a bundle of actions + providers + evaluators + services.
  *   ModelProvider — the LLM backend (Anthropic Claude by default).
+ *   EmbeddingProvider — optional vector backend for semantic memory recall.
  *   AgentRuntime — wires it all together and drives the think→act loop.
  */
 
@@ -69,11 +70,28 @@ export interface MemoryStore {
   add(memory: Memory): Promise<void>;
   /** Most recent memories in a room, newest last. */
   recent(roomId: string, limit: number): Promise<Memory[]>;
-  /** Naive relevance retrieval (keyword + recency + importance). */
+  /**
+   * Relevance retrieval. Keyword + recency + importance by default; semantic
+   * (embedding cosine) + recency + importance when an {@link EmbeddingProvider}
+   * is wired into the store.
+   */
   search(roomId: string, query: string, limit: number): Promise<Memory[]>;
   /** Durable agent facts not tied to a single room (learned knowledge). */
   remember(fact: string, metadata?: Record<string, unknown>): Promise<void>;
   facts(limit: number): Promise<string[]>;
+}
+
+/**
+ * Turns text into vectors for semantic memory retrieval. Optional: without one,
+ * the memory store falls back to keyword matching. Vectors are expected to be
+ * L2-normalised so similarity is a dot product.
+ */
+export interface EmbeddingProvider {
+  name: string;
+  /** Nominal vector dimensionality (informational; the store is dim-agnostic). */
+  dimensions: number;
+  /** Embed a batch, returning one vector per input in the same order. */
+  embed(texts: string[]): Promise<number[][]>;
 }
 
 /** The assembled context handed to the model on each turn. */

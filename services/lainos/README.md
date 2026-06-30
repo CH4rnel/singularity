@@ -13,7 +13,8 @@ LainOS gives you a `think → act → evaluate` agent loop built from:
 | Primitive | Role |
 |-----------|------|
 | **Character** | identity, voice, lore, model tier, requested plugins |
-| **MemoryStore** | conversation + durable learned facts, naive keyword/recency retrieval |
+| **MemoryStore** | conversation + durable learned facts; keyword/recency retrieval, or semantic (embedding cosine) when an `EmbeddingProvider` is set |
+| **EmbeddingProvider** | optional vector backend for semantic memory recall (OpenAI-compatible endpoint, or an offline hashing fallback) |
 | **Provider** | injects live context into the prompt (time, chain state, …) |
 | **Action** | something the agent can *do*, exposed to the model as a tool |
 | **Evaluator** | runs after a reply to learn/extract facts |
@@ -82,6 +83,27 @@ npm run serve               # HTTP bridge on :7777 (consumed by the Wired game)
   only for characters that list `"system"` in their `plugins` (Lain does); drop
   it from a character's plugins to take the capability away.
 
+## Semantic memory
+
+Memory persists to `data/memory.json` (episodic, per-room) plus durable learned
+facts, and survives restarts. Retrieval is keyword + recency by default. Point
+LainOS at an embedding model and recall becomes *semantic* — past turns are
+ranked by meaning (embedding cosine), not just shared words:
+
+```bash
+# OpenAI
+LAINOS_EMBED_API_KEY=sk-...           LAINOS_EMBED_MODEL=text-embedding-3-small
+# or a local, fully-offline server (Ollama)
+LAINOS_EMBED_BASE_URL=http://localhost:11434/v1   LAINOS_EMBED_MODEL=nomic-embed-text
+# or a zero-config, dependency-free offline fallback (lexical vectors)
+LAINOS_EMBED_PROVIDER=hash
+```
+
+Vectors are cached in `data/embeddings.json` and backfilled for pre-existing
+memories on first search. No embedding config means the keyword path — no
+network, no behaviour change. Changing the embedding model invalidates cached
+vectors: delete `data/embeddings.json` to re-embed.
+
 ## Build your own agent
 
 ```ts
@@ -116,6 +138,7 @@ src/
   types.ts            core interfaces (the contract)
   runtime.ts          AgentRuntime — the think→act→evaluate loop
   memory/store.ts     file-backed long-term memory + retrieval
+  memory/embeddings.ts  embedding providers (OpenAI-compatible | offline hash)
   models/             anthropic.ts (Claude) | mock.ts | index.ts (factory)
   plugins/bootstrap/  time provider + fact extractor + remember/recall
   plugins/cyberia/    chain service + balance/transfer actions

@@ -9,6 +9,7 @@
  */
 import "dotenv/config";
 import { createLogger } from "./logger.js";
+import { createEmbeddingProvider } from "./memory/embeddings.js";
 import { FileMemoryStore } from "./memory/store.js";
 import { createModelProvider } from "./models/index.js";
 import { bootstrapPlugin } from "./plugins/bootstrap/index.js";
@@ -27,6 +28,11 @@ export {
   OpenRouterModelProvider,
 } from "./models/index.js";
 export { bootstrapPlugin } from "./plugins/bootstrap/index.js";
+export {
+  createEmbeddingProvider,
+  HashingEmbeddingProvider,
+  OpenAIEmbeddingProvider,
+} from "./memory/embeddings.js";
 export { cyberiaPlugin, cyberiaChain, CYBERIA_TOKENS } from "./plugins/cyberia/index.js";
 export { systemPlugin } from "./plugins/system/index.js";
 export { lain } from "./characters/lain.js";
@@ -50,8 +56,9 @@ export interface CreateAgentOptions {
 /** Assemble and start an agent runtime from a character. */
 export async function createAgent(opts: CreateAgentOptions): Promise<AgentRuntime> {
   const dataDir = opts.dataDir ?? process.env.LAINOS_DATA_DIR ?? "./data";
-  const memory = new FileMemoryStore(dataDir);
   const getSetting = (k: string) => process.env[k];
+  const embedder = createEmbeddingProvider(getSetting);
+  const memory = new FileMemoryStore(dataDir, embedder);
   const model = createModelProvider(getSetting);
 
   const runtime = new AgentRuntime({ character: opts.character, memory, model });
