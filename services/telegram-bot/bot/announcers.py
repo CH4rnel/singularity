@@ -19,6 +19,8 @@ from bot.config import (
     LIQUIDITY_ANNOUNCE_CHAT, LIQUIDITY_POLL_SECONDS, LIQUIDITY_MAX_BLOCK_RANGE,
     LENDING_ANNOUNCE_CHAT, LENDING_POLL_SECONDS, LENDING_MAX_BLOCK_RANGE,
     LENDING_COMPTROLLER,
+    CYBERSOL_SWAP_ADDRESS, CYBERSOL_SWAP_ANNOUNCE_CHAT,
+    CYBERSOL_SWAP_POLL_SECONDS, CYBERSOL_SWAP_MAX_BLOCK_RANGE,
     MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD, RITUAL_V2_FACTORY,
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, DIGEST_RETENTION_DAYS,
     MARKET_SNAPSHOT_SECONDS, CYBER_CA_EVM,
@@ -627,6 +629,127 @@ async def lending_announcer_loop(application: Application) -> None:
         except Exception as e:
             logger.error(f"lending_announcer_loop: {e}")
         await asyncio.sleep(LENDING_POLL_SECONDS)
+# keccak256("Swapped(address,uint256,uint256)") — CyberSolSwap fixed-rate redeem.
+CYBERSOL_SWAPPED_TOPIC = _event_topic("Swapped(address,uint256,uint256)")
+# The bridged CYBER.sol ERC20 and native CYBER both use 18 decimals (the
+# redeemer's 1000:1 wei math relies on it), so both amounts decode at 18.
+_CYBERSOL_DECIMALS = 18
+async def _announce_cybersol_swap_tick(bot) -> None:
+    """Scan CyberSolSwap `Swapped` events and announce each CYBER.sol -> native
+    CYBER conversion. Cursor handling mirrors the lending announcer; the input
+    side (CYBER.sol == CYBER_CA_EVM) carries the priceable value."""
+    if not CYBERSOL_SWAP_ADDRESS:
+        return
+
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    try:
+        latest = w3.eth.block_number
+    except Exception as e:
+        logger.error(f"cybersol_swap_announcer: block_number failed: {e}")
+        return
+
+    cursor = _get_block_cursor("last_announced_cybersol_cursor")
+    if cursor is None:
+        _set_block_cursor("last_announced_cybersol_cursor", latest, 10**9)
+        logger.info(f"cybersol_swap_announcer: bootstrapped cursor to head block={latest}")
+        return
+    cur_block, cur_idx = cursor
+    if cur_block > latest:
+        return
+    end = min(cur_block + CYBERSOL_SWAP_MAX_BLOCK_RANGE - 1, latest)
+
+    try:
+        logs = w3.eth.get_logs({
+            "fromBlock": cur_block,
+            "toBlock": end,
+            "address": Web3.to_checksum_address(CYBERSOL_SWAP_ADDRESS),
+            "topics": [CYBERSOL_SWAPPED_TOPIC],
+        })
+    except Exception as e:
+        logger.error(f"cybersol_swap_announcer: get_logs {cur_block}..{end}: {e}")
+        return
+
+    for log in sorted(logs, key=lambda l: (int(l["blockNumber"]), int(l["logIndex"]))):
+        blk = int(log["blockNumber"])
+        idx = int(log["logIndex"])
+        if (blk, idx) <= (cur_block, cur_idx):
+            continue
+
+        try:
+            # Swapped data words: amountIn (CYBER.sol), amountOut (native CYBER).
+            amount_in, amount_out = _decode_data_words(log["data"], 2)
+            user = _decode_topic_address(log["topics"][1])
+            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+
+            price = None
+            if CYBER_CA_EVM:
+                try:
+                    price = _get_token_usd_price(w3, CYBER_CA_EVM)
+                except Exception as e:
+                    logger.debug(f"cybersol_swap_announcer: price lookup failed: {e}")
+            usd = (amount_in / 10**_CYBERSOL_DECIMALS) * price if price is not None else None
+
+            event_kwargs = dict(
+                kind="convert", usd=usd,
+                sym_in="CYBER.sol", amt_in=amount_in / 10**_CYBERSOL_DECIMALS,
+                sym_out="CYBER", amt_out=amount_out / 10**_CYBERSOL_DECIMALS,
+                user_addr=user, tx_hash=tx_hash, block=blk,
+            )
+
+            threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
+            if usd is not None and usd < threshold:
+                _record_activity(**event_kwargs)
+                logger.info(
+                    f"cybersol_swap_announcer: digest-only block={blk} idx={idx} "
+                    f"usd={usd:.4f} < {threshold}"
+                )
+                _set_block_cursor("last_announced_cybersol_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+
+            text_lines = [
+                "🔁 CYBER.sol → CYBER conversion",
+                f"{_format_token_amount(amount_in, _CYBERSOL_DECIMALS)} CYBER.sol → "
+                f"{_format_token_amount(amount_out, _CYBERSOL_DECIMALS)} CYBER",
+            ]
+            if usd is not None:
+                text_lines.append(f"Value: {_fmt_usd(usd)}")
+            text_lines += [
+                f"User: {_short_addr(user)}",
+                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+            ]
+        except Exception as e:
+            logger.error(f"cybersol_swap_announcer: decode failed block={blk} idx={idx}: {e}")
+            _set_block_cursor("last_announced_cybersol_cursor", blk, idx)
+            cur_block, cur_idx = blk, idx
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=CYBERSOL_SWAP_ANNOUNCE_CHAT,
+                text="\n".join(text_lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"cybersol_swap_announcer: send failed block={blk} idx={idx}: {e}")
+            return
+
+        _record_activity(**event_kwargs)
+        _set_block_cursor("last_announced_cybersol_cursor", blk, idx)
+        cur_block, cur_idx = blk, idx
+        logger.info(f"cybersol_swap_announcer: posted block={blk} idx={idx} tx={tx_hash}")
+
+    if end > cur_block:
+        _set_block_cursor("last_announced_cybersol_cursor", end, 10**9)
+
+
+async def cybersol_swap_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_cybersol_swap_tick(application.bot)
+        except Exception as e:
+            logger.error(f"cybersol_swap_announcer_loop: {e}")
+        await asyncio.sleep(CYBERSOL_SWAP_POLL_SECONDS)
 _KV_LAST_DIGEST_AT = "last_digest_at"
 _KV_PREV_CYBER_PRICE = "digest_prev_cyber_price"
 _SQLITE_TS = "%Y-%m-%d %H:%M:%S"
@@ -717,12 +840,22 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
             """),
             {"s": since},
         ).fetchall()
+        conversions = conn.execute(
+            text("""
+                SELECT COUNT(*), COALESCE(SUM(usd), 0),
+                       COALESCE(SUM(amt_in), 0), COALESCE(SUM(amt_out), 0)
+                FROM activity_events
+                WHERE kind = 'convert' AND created_at >= :s
+            """),
+            {"s": since},
+        ).fetchone()
 
     total = (
         swap_count
         + sum(c for c, _v in liq.values())
         + sum(row[2] for row in bridges)
         + sum(row[1] for row in lending)
+        + (conversions[0] if conversions else 0)
     )
     if total == 0:
         return None
@@ -768,6 +901,13 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
             for kind, cnt, vol in lending
         ]
         lines.append("🏦 Lending: " + ", ".join(parts))
+
+    if conversions and conversions[0]:
+        c_cnt, c_usd, c_in, c_out = conversions
+        conv_line = f"🔁 CYBER.sol → CYBER: {c_in:g} → {c_out:g} CYBER ({c_cnt})"
+        if c_usd:
+            conv_line += f" · {_fmt_usd(c_usd)}"
+        lines.append(conv_line)
 
     return "\n".join(lines)
 async def _digest_tick(bot) -> None:

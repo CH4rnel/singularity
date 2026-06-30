@@ -18,6 +18,7 @@ from bot.config import (
     SWAP_ANNOUNCE_CHAT, SWAP_POLL_SECONDS, RITUAL_V2_ROUTER,
     LIQUIDITY_ANNOUNCE_CHAT, LIQUIDITY_POLL_SECONDS,
     LENDING_ANNOUNCE_CHAT, LENDING_POLL_SECONDS, LENDING_COMPTROLLER,
+    CYBERSOL_SWAP_ADDRESS, CYBERSOL_SWAP_ANNOUNCE_CHAT, CYBERSOL_SWAP_POLL_SECONDS,
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, BIG_ANNOUNCE_USD,
     MARKET_SNAPSHOT_SECONDS,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS,
@@ -39,8 +40,8 @@ from bot.handlers import (
 )
 from bot.announcers import (
     bridge_announcer_loop, swap_announcer_loop, liquidity_announcer_loop,
-    lending_announcer_loop, digest_loop, market_snapshot_loop, whale_loop,
-    run_snapshot_once,
+    lending_announcer_loop, cybersol_swap_announcer_loop, digest_loop,
+    market_snapshot_loop, whale_loop, run_snapshot_once,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,16 @@ async def post_init(application: Application):
         )
     else:
         logger.info("Lending announcer disabled: LENDING_COMPTROLLER not set")
+
+    # Background loop that announces CYBER.sol -> native CYBER conversions.
+    if CYBERSOL_SWAP_ADDRESS:
+        application.create_task(cybersol_swap_announcer_loop(application))
+        logger.info(
+            f"CYBER.sol conversion announcer started: chat={CYBERSOL_SWAP_ANNOUNCE_CHAT} "
+            f"swap={CYBERSOL_SWAP_ADDRESS} interval={CYBERSOL_SWAP_POLL_SECONDS}s"
+        )
+    else:
+        logger.info("CYBER.sol conversion announcer disabled: CYBERSOL_SWAP_ADDRESS not set")
 
     # Periodic on-chain activity digest.
     if DIGEST_INTERVAL_SECONDS > 0:

@@ -2,9 +2,9 @@
 
 The community Telegram bot for Cyberia: wallet linking and hourly TG/chat-token
 rewards, per-chat reward tokens, the CYBER.sol "whales" gate, and on-chain
-announcers (bridge, Ritual DEX swaps/liquidity, lending) plus a periodic
-activity digest and the market snapshot that backs the Laravel `/analytics`
-page.
+announcers (bridge, Ritual DEX swaps/liquidity, lending, CYBER.sol→CYBER
+conversions) plus a periodic activity digest and the market snapshot that backs
+the Laravel `/analytics` page.
 
 Previously a single 3.6k-line `scripts/python/telegram_airdrop_bot.py`; now a
 small package. That old path still exists as a thin shim so the existing prod
@@ -19,8 +19,8 @@ bot/
   db.py          SQLite engine, schema, key/value store, activity log, cursors
   chain.py       web3 client, log decoders, on-chain USD price walker
   handlers.py    Telegram command/message handlers
-  announcers.py  background loops (bridge/swap/liquidity/lending/digest/
-                 snapshot/whale) + run_snapshot_once
+  announcers.py  background loops (bridge/swap/liquidity/lending/convert/
+                 digest/snapshot/whale) + run_snapshot_once
   app.py         build app, register handlers, schedule loops, main()
   __main__.py    `python -m bot`
 ```

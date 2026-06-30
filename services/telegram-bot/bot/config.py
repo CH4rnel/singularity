@@ -188,6 +188,17 @@ LENDING_MAX_BLOCK_RANGE = int(os.environ.get("LENDING_MAX_BLOCK_RANGE", str(SWAP
 # lending announcer stays dormant.
 LENDING_COMPTROLLER = (os.environ.get("LENDING_COMPTROLLER", "") or "").strip()
 
+# CYBER.sol -> native CYBER converter (CyberSolSwap) announcer. The fixed-rate
+# redeemer emits Swapped(user, amountIn, amountOut) on every conversion at the
+# hard 1000 CYBER.sol : 1 CYBER ratio. Default is the deployed redeemer; blank
+# disables the loop. The CYBER.sol input token is CYBER_CA_EVM (both 18 decimals).
+CYBERSOL_SWAP_ADDRESS = (os.environ.get(
+    "CYBERSOL_SWAP_ADDRESS", "0x69b1614B088F5670E49bcC6fE33F28F2544F7415"
+) or "").strip()
+CYBERSOL_SWAP_ANNOUNCE_CHAT = os.environ.get("CYBERSOL_SWAP_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+CYBERSOL_SWAP_POLL_SECONDS = int(os.environ.get("CYBERSOL_SWAP_POLL_SECONDS", str(SWAP_POLL_SECONDS)))
+CYBERSOL_SWAP_MAX_BLOCK_RANGE = int(os.environ.get("CYBERSOL_SWAP_MAX_BLOCK_RANGE", str(SWAP_MAX_BLOCK_RANGE)))
+
 # --- Whales chat gate (CYBER.sol holders) -------------------------------------
 # Users prove ownership of a Solana wallet with a Phantom signature on the
 # Laravel-served page (/tg/cyber-sol); the backend writes the verified balance
