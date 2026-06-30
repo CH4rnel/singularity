@@ -168,9 +168,13 @@ PRICE_RELAY_TOKENS = [
     ).split(",")
     if a.strip()
 ]
-# Bound the per-tick block range so eth_getLogs stays well under provider limits
-# even if the bot was stopped for a while.
-SWAP_MAX_BLOCK_RANGE = int(os.environ.get("SWAP_MAX_BLOCK_RANGE", "2000"))
+# Bound the per-tick block range so eth_getLogs stays under provider limits even
+# if the bot was stopped for a while. The Cyberia RPC rejects ranges over ~1023
+# blocks with "block range too high", so keep the default at 1000: a larger value
+# makes every catch-up query fail once the cursor falls that far behind head,
+# wedging the announcer permanently. Inherited by the liquidity/lending/cybersol
+# announcers below.
+SWAP_MAX_BLOCK_RANGE = int(os.environ.get("SWAP_MAX_BLOCK_RANGE", "1000"))
 
 # Ritual DEX liquidity (V2 Mint/Burn) announcer. Same router filter as swaps:
 # addLiquidity/removeLiquidity go through the router, so the pair's Mint/Burn

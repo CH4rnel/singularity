@@ -696,17 +696,11 @@ async def _announce_cybersol_swap_tick(bot) -> None:
                 user_addr=user, tx_hash=tx_hash, block=blk,
             )
 
-            threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
-            if usd is not None and usd < threshold:
-                _record_activity(**event_kwargs)
-                logger.info(
-                    f"cybersol_swap_announcer: digest-only block={blk} idx={idx} "
-                    f"usd={usd:.4f} < {threshold}"
-                )
-                _set_block_cursor("last_announced_cybersol_cursor", blk, idx)
-                cur_block, cur_idx = blk, idx
-                continue
-
+            # No USD threshold here, unlike swaps/liquidity/lending: the 1000:1
+            # redeem of a sub-cent token means every conversion is worth well
+            # under a dollar, so a "big event" gate would mute the announcer
+            # entirely. Conversions are infrequent bridge-redemption events, not
+            # DEX dust, so each one gets its own post (and still feeds the digest).
             text_lines = [
                 "🔁 CYBER.sol → CYBER conversion",
                 f"{_format_token_amount(amount_in, _CYBERSOL_DECIMALS)} CYBER.sol → "
