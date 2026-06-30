@@ -17,7 +17,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `crypto/hardhat/` | Hardhat 3, Solidity, viem, ethers v6, OpenZeppelin 4.9 | EVM contracts and deployment scripts |
 | `crypto/anchor/` | Anchor, Rust, Solana Web3.js, SPL Token | Solana bridge contracts and relayer scripts |
 | `crypto/quickswap-core/` | Truffle-era Uniswap v2 core fork | Legacy DEX core contracts/tests |
-| `services/blockscout/` | Blockscout fork, Docker Compose | Cyberia explorer config |
+| `services/blockscout/` | Docker Compose (official Blockscout images) | Cyberia explorer deployment config; no Elixir source vendored |
 | `services/cyberia-node/` | polygon-edge/IBFT PoA, Docker Compose | Cyberia L1 second node: non-validating full/RPC follower (chainID 49406); prepared, not deployed |
 | `services/ipfs/` | Docker Compose | IPFS service config |
 | `services/lisp/` | Common Lisp/SBCL | Daemon and HTTP services |
