@@ -42,20 +42,20 @@ Live or implemented surfaces in this repo:
 
 This is an active experimental stack. Some components are production-facing, some are prototypes, and some are operational scripts used by the project.
 
-## Why So Much Elixir?
+## What's The Stack?
 
-GitHub language stats may show this repository as mostly **Elixir** because `services/blockscout/` contains a Blockscout fork. That does not mean the Cyberia application itself is an Elixir app.
-
-The main product surfaces are split like this:
+Singularity is a polyglot monorepo. The main product surfaces are:
 
 - **Laravel + Vue** (`backend/laravel/`): bridge/site app, launchpad, analytics, DAO pages, lending UI, slots UI.
 - **React** (`frontend/ritual/`): Ritual DEX frontend.
 - **Solidity / TypeScript** (`crypto/hardhat/`): Cyberia EVM contracts and deployment scripts.
 - **Rust / TypeScript** (`crypto/anchor/`): Solana bridge program and relayer scripts.
-- **Elixir** (`services/blockscout/`): explorer fork/configuration, not the core app.
-- **Python** (`scripts/python/`): operational bots, airdrop scripts, and crawlers.
+- **TypeScript** (`services/lainos/`): LainOS autonomous AI agent framework.
+- **Python** (`scripts/python/`, `services/telegram-bot/`): operational bots, airdrop scripts, and crawlers.
 
-If you want to inspect the user-facing product, start with `backend/laravel/` and `frontend/ritual/`. If you want to inspect the explorer, start with `services/blockscout/`.
+The block explorer (`services/blockscout/`) is **deployment configuration only** — Docker Compose files that run the official Blockscout images. The explorer's own (Elixir) source is not vendored in this repository.
+
+If you want to inspect the user-facing product, start with `backend/laravel/` and `frontend/ritual/`.
 
 ## Token Utility
 
@@ -218,7 +218,7 @@ singularity/
 ├── crypto/hardhat/        # EVM contracts, Hardhat 3 + viem
 ├── crypto/anchor/         # Solana/Anchor bridge contracts and scripts
 ├── crypto/quickswap-core/ # Legacy QuickSwap/Uniswap v2 core fork
-├── services/blockscout/   # Blockscout fork + Cyberia docker-compose config
+├── services/blockscout/   # Cyberia explorer: Blockscout docker-compose deploy config (official images)
 ├── services/cyberia-node/ # Cyberia L1 second-node config (polygon-edge follower/RPC)
 ├── services/ipfs/         # IPFS docker-compose config
 ├── services/lainos/       # LainOS: autonomous AI agent framework (TypeScript)
@@ -281,7 +281,7 @@ docker compose config
 docker compose up -d
 ```
 
-The Blockscout subtree is large and Elixir-heavy because it is an explorer fork. It is operational infrastructure for `https://explorer.cyberia.church`, not the Laravel bridge/site app.
+This subtree is **deployment configuration only**: it runs the official Blockscout images (`ghcr.io/blockscout/blockscout`, pinned to a tagged release) — no Elixir source is built here. It is operational infrastructure for `https://explorer.cyberia.church`, not the Laravel bridge/site app.
 
 ## Development Notes
 

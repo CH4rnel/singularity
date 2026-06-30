@@ -32,7 +32,7 @@ singularity/
 ├── crypto/hardhat/       # EVM contracts, Hardhat 3 + viem
 ├── crypto/anchor/        # Solana/Anchor bridge contracts and scripts
 ├── crypto/quickswap-core/ # Legacy QuickSwap/Uniswap v2 core contracts
-├── services/blockscout/  # Blockscout fork + Cyberia docker-compose config
+├── services/blockscout/  # Cyberia explorer: Blockscout docker-compose deploy config (official images)
 ├── services/cyberia-node/ # Cyberia L1 second node (polygon-edge follower/RPC); prepared, not deployed
 ├── services/ipfs/        # IPFS docker-compose config
 ├── services/lisp/        # Common Lisp daemon/http services
@@ -247,7 +247,7 @@ npm run lint:fix
 
 Path: `services/blockscout/`
 
-This is a Blockscout fork with Cyberia docker-compose configuration. The compose setup points backend JSON-RPC to `host.docker.internal:8545` and uses Cyberia `CHAIN_ID=49406`.
+This is **deployment configuration only** — Cyberia docker-compose files that run the official Blockscout images (`ghcr.io/blockscout/blockscout`, pinned to a tagged release; `backend`/`nft_media_handler` are pinned to `11.0.0`). The explorer's Elixir source is **not** vendored here. The compose setup points backend JSON-RPC to `host.docker.internal:8545` and uses Cyberia `CHAIN_ID=49406`.
 
 Common commands:
 

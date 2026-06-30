@@ -26,11 +26,7 @@ services:
     extends:
       file: ./services/backend.yml
       service: backend
-    build:
-      context: ..
-      dockerfile: ./docker/Dockerfile
-      args:
-        RELEASE_VERSION: 9.0.2
+    image: ghcr.io/blockscout/blockscout:11.0.0
     links:
       - db:database
     environment:
@@ -50,11 +46,7 @@ services:
     extends:
       file: ./services/nft_media_handler.yml
       service: nft_media_handler
-    build:
-      context: ..
-      dockerfile: ./docker/Dockerfile
-      args:
-        RELEASE_VERSION: 9.0.2
+    image: ghcr.io/blockscout/blockscout:11.0.0
 
   visualizer:
     extends:
