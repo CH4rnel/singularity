@@ -1,4 +1,4 @@
-export type BridgeTokenSymbol = 'CYBER.sol' | 'USDC' | 'USDT';
+export type BridgeTokenSymbol = 'CYBER.sol' | 'USDC' | 'USDT' | 'HATCHER';
 
 export type BridgeTokenInfo = {
     symbol: BridgeTokenSymbol;
@@ -55,16 +55,32 @@ export const BRIDGE_TOKENS: Record<BridgeTokenSymbol, BridgeTokenInfo> = {
         model: 'mint',
         solanaTokenProgram: 'token',
     },
+    // HATCHER — Solana-native token bridged to Cyberia (mint model: relayer EOA
+    // owns the EVM wrapper, mint()s on bridge-IN / burnFrom()s on bridge-OUT).
+    // The canonical SPL mint is Token-2022 / 6 decimals; the EVM wrapper uses 9
+    // decimals (the bridge scales each side independently, like CYBER.sol 18/6).
+    HATCHER: {
+        symbol: 'HATCHER',
+        evmAddress: '0x621021F18b6404123f98b1395c418868418ACF36',
+        solanaMint: 'Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump',
+        evmDecimals: 9,
+        solanaDecimals: 6,
+        model: 'mint',
+        solanaTokenProgram: 'token-2022',
+    },
 };
 
 export const SUPPORTED_TOKEN_SYMBOLS: BridgeTokenSymbol[] = [
     'CYBER.sol',
     'USDC',
     'USDT',
+    'HATCHER',
 ];
 
 export const tokenBySymbol = (symbol: string): BridgeTokenInfo | null => {
-    if (symbol === 'CYBER.sol') return BRIDGE_TOKENS['CYBER.sol'];
+    if (symbol === 'CYBER.sol') {
+        return BRIDGE_TOKENS['CYBER.sol'];
+    }
 
     const upper = symbol.toUpperCase() as BridgeTokenSymbol;
 

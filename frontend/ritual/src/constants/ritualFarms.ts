@@ -104,13 +104,8 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       isSolo: false,
       icons: ['/cyberia.png', '/usdc.svg'],
     },
-    {
-      pid: 7,
-      lpToken: '0xBc9cbe6B1876480D094221eb32C9887df4E62ea6', // SOL/CYBER.sol LP
-      label: 'SOL / CYBER.sol LP',
-      description: 'Stake LP from the SOL/CYBER.sol pair',
-      isSolo: false,
-      icons: ['/sol.svg', '/CYBER.png'],
-    },
+    // pid 7 (SOL/CYBER.sol LP) retired: allocPoint zeroed on-chain via
+    // scripts/set-farm-alloc.ts. The MasterChef pool still exists (pools cannot
+    // be removed) but earns nothing, so it is hidden from the DEX farm list.
   ],
 };

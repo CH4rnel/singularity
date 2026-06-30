@@ -90,6 +90,20 @@ return [
             'model' => 'mint',
             'solana_token_program' => 'token',
         ],
+        // HATCHER — Solana-native token bridged to Cyberia. Mint model: the
+        // relayer EOA owns the EVM wrapper and mint()s on bridge-IN / burnFrom()s
+        // on bridge-OUT (see contracts/Hatcher.sol on Cyberia). The canonical SPL
+        // mint is a Token-2022 / 6-decimals token; the EVM wrapper uses 9 decimals
+        // (the bridge scales each side independently, like CYBER.sol's 18/6).
+        'HATCHER' => [
+            'symbol' => 'HATCHER',
+            'evm_address' => '0x621021F18b6404123f98b1395c418868418ACF36',
+            'solana_mint' => 'Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump',
+            'evm_decimals' => 9,
+            'solana_decimals' => 6,
+            'model' => 'mint',
+            'solana_token_program' => 'token-2022',
+        ],
     ],
 
 ];

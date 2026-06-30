@@ -32,10 +32,27 @@ const CYBERIA_CHAIN_ID_HEX = '0xc11e';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
-// CyberSolSwap: fixed-rate redeemer converting bridged CYBER.sol -> native CYBER
-// at 1000 : 1. Payouts come from the contract's own native balance, so it must
-// be funded with CYBER (the "fund liquidity" panel below).
-const SWAP_CONTRACT = '0x69b1614B088F5670E49bcC6fE33F28F2544F7415';
+// Two fixed-rate redeemers convert bridged CYBER.sol -> native CYBER at 1000 : 1.
+// They share the same swap logic and payout mechanism (native balance held by
+// the contract) and differ only in what happens to the CYBER.sol you pay in:
+//  - standard: the contract keeps it (the owner can withdraw it later).
+//  - burn:     it is forwarded straight to 0x…dEaD and removed from supply.
+// The user picks which contract to redeem through via the toggle on the card.
+const SWAP_CONTRACTS = {
+    standard: {
+        address: '0x69b1614B088F5670E49bcC6fE33F28F2544F7415',
+        label: 'Standard',
+        burns: false,
+    },
+    burn: {
+        address: '0xa5Ae36E5b1eDb24BCa2F96783d079B28e0BCfd71',
+        label: 'Burn 🔥',
+        burns: true,
+    },
+} as const;
+type SwapMode = keyof typeof SWAP_CONTRACTS;
+const swapModes = Object.keys(SWAP_CONTRACTS) as SwapMode[];
+
 const CYBER_SOL_ADDRESS = '0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA';
 const RATE = 1000n;
 
@@ -52,7 +69,10 @@ const SWAP_ABI = [
     'function RATE() view returns (uint256)',
     'function owner() view returns (address)',
     'function withdrawNative(address to, uint256 amount)',
+    // standard converter only — the burn converter holds no tokens to rescue:
     'function withdrawTokens(address to, uint256 amount)',
+    // burn converter only — cumulative CYBER.sol forwarded to 0x…dEaD:
+    'function totalBurned() view returns (uint256)',
 ];
 
 const ERC20_ABI = [
@@ -64,6 +84,12 @@ const ERC20_ABI = [
 ];
 
 const wallet = useWallet();
+
+// Which redeemer the user is interacting with. Drives every contract call,
+// balance read and the owner panel below.
+const mode = ref<SwapMode>('standard');
+const activeSwap = computed(() => SWAP_CONTRACTS[mode.value]);
+const swapAddress = computed(() => activeSwap.value.address);
 
 const page = usePage();
 const authUser = computed(
@@ -120,12 +146,18 @@ async function loadState(): Promise<void> {
     loading.value = true;
 
     try {
-        const swap = new Contract(SWAP_CONTRACT, SWAP_ABI, readProvider);
+        const addr = swapAddress.value;
+        const swap = new Contract(addr, SWAP_ABI, readProvider);
         const token = new Contract(CYBER_SOL_ADDRESS, ERC20_ABI, readProvider);
 
+        // For the burn converter "collected" is the cumulative amount burned
+        // (its own token balance is always ~0); for the standard one it is the
+        // CYBER.sol currently held by the contract.
         const [bal, coll, own] = await Promise.all([
-            readProvider.getBalance(SWAP_CONTRACT),
-            token.balanceOf(SWAP_CONTRACT) as Promise<bigint>,
+            readProvider.getBalance(addr),
+            (activeSwap.value.burns
+                ? swap.totalBurned()
+                : token.balanceOf(addr)) as Promise<bigint>,
             swap.owner() as Promise<string>,
         ]);
         liquidity.value = bal;
@@ -138,7 +170,7 @@ async function loadState(): Promise<void> {
             const [n, c, a] = await Promise.all([
                 readProvider.getBalance(me),
                 token.balanceOf(me) as Promise<bigint>,
-                token.allowance(me, SWAP_CONTRACT) as Promise<bigint>,
+                token.allowance(me, addr) as Promise<bigint>,
             ]);
             myNative.value = n;
             myCyberSol.value = c;
@@ -224,7 +256,7 @@ async function fundLiquidity(): Promise<void> {
         const signer = await provider.getSigner();
         status.value = 'Confirm the funding transfer in your wallet…';
         const tx = await signer.sendTransaction({
-            to: SWAP_CONTRACT,
+            to: swapAddress.value,
             value,
             gasLimit: FUND_GAS_LIMIT,
         });
@@ -319,12 +351,12 @@ async function doSwap(): Promise<void> {
         if (myAllowance.value < amountIn) {
             status.value = 'Approving CYBER.sol…';
             const token = new Contract(CYBER_SOL_ADDRESS, ERC20_ABI, signer);
-            const atx = await token.approve(SWAP_CONTRACT, amountIn);
+            const atx = await token.approve(swapAddress.value, amountIn);
             await atx.wait();
         }
 
         status.value = 'Confirm the swap in your wallet…';
-        const swap = new Contract(SWAP_CONTRACT, SWAP_ABI, signer);
+        const swap = new Contract(swapAddress.value, SWAP_ABI, signer);
         const tx = await swap.swap(amountIn);
         status.value = 'Waiting for block…';
         await tx.wait();
@@ -370,7 +402,7 @@ async function withdrawNative(): Promise<void> {
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
         const to = wNativeTo.value.trim() || (await signer.getAddress());
-        const swap = new Contract(SWAP_CONTRACT, SWAP_ABI, signer);
+        const swap = new Contract(swapAddress.value, SWAP_ABI, signer);
         status.value = 'Withdrawing CYBER…';
         const tx = await swap.withdrawNative(to, amount);
         await tx.wait();
@@ -408,7 +440,7 @@ async function withdrawTokens(): Promise<void> {
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
         const to = wTokenTo.value.trim() || (await signer.getAddress());
-        const swap = new Contract(SWAP_CONTRACT, SWAP_ABI, signer);
+        const swap = new Contract(swapAddress.value, SWAP_ABI, signer);
         status.value = 'Withdrawing CYBER.sol…';
         const tx = await swap.withdrawTokens(to, amount);
         await tx.wait();
@@ -435,6 +467,13 @@ onMounted(async () => {
 });
 // Reload balances once a wallet connects / switches account.
 watch(() => wallet.address.value, loadState);
+// Switching converter: re-read its liquidity/allowance and clear stale messages.
+watch(mode, () => {
+    myAllowance.value = 0n;
+    status.value = null;
+    error.value = null;
+    loadState();
+});
 </script>
 
 <template>
@@ -518,6 +557,33 @@ watch(() => wallet.address.value, loadState);
                                 Refresh
                             </button>
                         </div>
+
+                        <!-- converter selector: standard vs burn -->
+                        <div
+                            class="grid grid-cols-2 gap-1 rounded-xl border border-border bg-background/50 p-1"
+                        >
+                            <button
+                                v-for="key in swapModes"
+                                :key="key"
+                                type="button"
+                                class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                                :class="
+                                    mode === key
+                                        ? 'bg-card text-foreground shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                "
+                                @click="mode = key"
+                            >
+                                {{ SWAP_CONTRACTS[key].label }}
+                            </button>
+                        </div>
+                        <p
+                            v-if="activeSwap.burns"
+                            class="rounded-lg bg-orange-500/10 px-3 py-2 text-center text-[11px] text-orange-600 dark:text-orange-400"
+                        >
+                            Burn mode: the CYBER.sol you pay in is sent to
+                            0x…dEaD and permanently removed from supply.
+                        </p>
 
                         <!-- You pay -->
                         <div
@@ -876,7 +942,11 @@ watch(() => wallet.address.value, loadState);
                 </div>
                 <div>
                     <p class="text-xs text-muted-foreground">
-                        CYBER.sol redeemed
+                        {{
+                            activeSwap.burns
+                                ? 'CYBER.sol burned'
+                                : 'CYBER.sol redeemed'
+                        }}
                     </p>
                     <p class="font-mono text-lg">{{ fmt(collected) }}</p>
                 </div>
@@ -894,12 +964,12 @@ watch(() => wallet.address.value, loadState);
                 </div>
                 <div class="sm:col-span-4">
                     <a
-                        :href="explorerUrl(SWAP_CONTRACT)"
+                        :href="explorerUrl(swapAddress)"
                         target="_blank"
                         rel="noopener noreferrer"
                         class="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
                     >
-                        Contract {{ shortAddr(SWAP_CONTRACT) }}
+                        Contract {{ shortAddr(swapAddress) }}
                         <ExternalLink class="h-3 w-3" />
                     </a>
                 </div>
@@ -976,7 +1046,8 @@ watch(() => wallet.address.value, loadState);
                     </div>
                 </div>
 
-                <div class="space-y-2">
+                <!-- burn converter holds no tokens, so withdrawTokens is hidden -->
+                <div v-if="!activeSwap.burns" class="space-y-2">
                     <p class="text-xs text-muted-foreground">
                         Withdraw collected CYBER.sol (blank recipient = your
                         wallet).

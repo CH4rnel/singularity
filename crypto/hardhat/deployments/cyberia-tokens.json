@@ -156,6 +156,13 @@
       "artifact": "contracts/GOAL.sol/GOAL.json",
       "address": "0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe",
       "burnable": true
+    },
+    {
+      "symbol": "HATCHER",
+      "contract": "Hatcher",
+      "artifact": "contracts/Hatcher.sol/Hatcher.json",
+      "address": "0x621021F18b6404123f98b1395c418868418ACF36",
+      "burnable": true
     }
   ]
 }

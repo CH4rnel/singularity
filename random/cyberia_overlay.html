@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cyberia Network Overlay</title>
+
+<style>
+    :root {
+        --green: #00ff9c;
+        --green-dim: rgba(0, 255, 156, 0.4);
+        --green-soft: rgba(0, 255, 156, 0.12);
+        --yellow: #ffd166;
+        --red: #ff4d6d;
+        --white: #ffffff;
+        --muted: rgba(255, 255, 255, 0.66);
+    }
+
+    body {
+        margin: 0;
+        background: rgba(0, 0, 0, 0);
+        font-family: monospace;
+        color: var(--green);
+        overflow: hidden;
+    }
+
+    .panel {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        width: 360px;
+        padding: 14px;
+        background: rgba(0, 0, 0, 0.68);
+        border: 1px solid var(--green-dim);
+        box-shadow: 0 0 18px rgba(0, 255, 156, 0.22);
+        box-sizing: border-box;
+    }
+
+    .title {
+        font-weight: bold;
+        margin-bottom: 12px;
+        font-size: 14px;
+        letter-spacing: 1px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .network {
+        color: var(--white);
+        font-size: 11px;
+        font-weight: normal;
+        letter-spacing: 0;
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .metric {
+        min-height: 46px;
+        padding: 8px;
+        background: var(--green-soft);
+        border: 1px solid rgba(0, 255, 156, 0.18);
+        box-sizing: border-box;
+    }
+
+    .label {
+        margin-bottom: 5px;
+        color: var(--muted);
+        font-size: 10px;
+        text-transform: uppercase;
+    }
+
+    .value {
+        color: var(--white);
+        font-size: 14px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
+
+    .line {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 8px 0 0;
+        font-size: 12px;
+    }
+
+    .status-ok { color: var(--green); }
+    .status-warn { color: var(--yellow); }
+    .status-bad { color: var(--red); }
+
+    .links {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin-top: 12px;
+    }
+
+    .links a {
+        display: block;
+        padding: 6px 0;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        color: var(--green);
+        font-size: 10px;
+        text-align: center;
+        text-decoration: none;
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .links a:hover {
+        border-color: var(--green-dim);
+        background: var(--green-soft);
+    }
+
+    .timer {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--white);
+    }
+
+    .log {
+        margin-top: 10px;
+        font-size: 11px;
+        height: 88px;
+        overflow: hidden;
+        opacity: 0.9;
+        color: var(--muted);
+    }
+</style>
+</head>
+
+<body>
+
+<div class="panel">
+    <div class="title">
+        <span>CYBERIA NETWORK</span>
+        <span class="network">CHAIN <span id="chainExpected">49406</span></span>
+    </div>
+
+    <div class="grid">
+        <div class="metric">
+            <div class="label">RPC</div>
+            <div class="value"><span id="rpcStatus" class="status-warn">CHECKING</span></div>
+        </div>
+        <div class="metric">
+            <div class="label">Latency</div>
+            <div class="value" id="latency">-- ms</div>
+        </div>
+        <div class="metric">
+            <div class="label">Latest block</div>
+            <div class="value" id="blockNumber">--</div>
+        </div>
+        <div class="metric">
+            <div class="label">Gas price</div>
+            <div class="value" id="gasPrice">-- gwei</div>
+        </div>
+    </div>
+
+    <div class="line">
+        <span>■ Block age</span>
+        <span id="blockAge" class="status-warn">--</span>
+    </div>
+    <div class="line">
+        <span>■ Native token</span>
+        <span class="status-ok">CYBER</span>
+    </div>
+    <div class="line">
+        <span>■ CYBER.sol</span>
+        <span>E67W...pump</span>
+    </div>
+
+    <div class="timer">
+        Overlay uptime: <span id="timer">00:00:00</span> | Updated: <span id="updatedAt">--:--:--</span>
+    </div>
+
+    <div class="links">
+        <a href="https://cyberia.church" target="_blank" rel="noopener noreferrer">SITE</a>
+        <a href="https://bridge.cyberia.church" target="_blank" rel="noopener noreferrer">BRIDGE</a>
+        <a href="https://swap.cyberia.church" target="_blank" rel="noopener noreferrer">SWAP</a>
+        <a href="https://explorer.cyberia.church" target="_blank" rel="noopener noreferrer">EXPLORER</a>
+    </div>
+
+    <div class="log" id="log"></div>
+</div>
+
+<script>
+const CONFIG = {
+    rpcUrl: "https://rpc.cyberia.church",
+    explorerUrl: "https://explorer.cyberia.church",
+    chainId: 49406,
+    pollMs: 12000,
+    timeoutMs: 8000
+};
+
+const start = Date.now();
+let latestBlockTimestamp = null;
+
+function byId(id) {
+    return document.getElementById(id);
+}
+
+function updateTimer() {
+    const diff = Date.now() - start;
+
+    const sec = Math.floor(diff / 1000) % 60;
+    const min = Math.floor(diff / 1000 / 60) % 60;
+    const hr  = Math.floor(diff / 1000 / 60 / 60);
+
+    byId("timer").innerText =
+        String(hr).padStart(2, '0') + ":" +
+        String(min).padStart(2, '0') + ":" +
+        String(sec).padStart(2, '0');
+
+    updateBlockAge();
+}
+
+setInterval(updateTimer, 1000);
+
+function addLog(message, status) {
+    const log = byId("log");
+    const line = document.createElement("div");
+    line.textContent = "> " + new Date().toLocaleTimeString() + " " + message;
+
+    if (status) {
+        line.className = status;
+    }
+
+    log.appendChild(line);
+
+    if (log.children.length > 7) {
+        log.removeChild(log.children[0]);
+    }
+}
+
+function setStatus(element, value, className) {
+    element.textContent = value;
+    element.className = className;
+}
+
+function hexToNumber(value) {
+    if (!value) {
+        return null;
+    }
+
+    return Number.parseInt(value, 16);
+}
+
+function formatBlock(blockNumber) {
+    return Number.isFinite(blockNumber) ? blockNumber.toLocaleString("en-US") : "--";
+}
+
+function formatGas(weiHex) {
+    const wei = BigInt(weiHex || "0x0");
+    const whole = wei / 1000000000n;
+    const fraction = (wei % 1000000000n).toString().padStart(9, "0").slice(0, 2);
+
+    return whole.toString() + "." + fraction + " gwei";
+}
+
+function updateBlockAge() {
+    const blockAge = byId("blockAge");
+
+    if (!latestBlockTimestamp) {
+        blockAge.textContent = "--";
+        blockAge.className = "status-warn";
+        return;
+    }
+
+    const ageSeconds = Math.max(0, Math.floor((Date.now() - latestBlockTimestamp * 1000) / 1000));
+    blockAge.textContent = ageSeconds + "s";
+
+    if (ageSeconds < 45) {
+        blockAge.className = "status-ok";
+    } else if (ageSeconds < 180) {
+        blockAge.className = "status-warn";
+    } else {
+        blockAge.className = "status-bad";
+    }
+}
+
+async function rpc(method, params, signal) {
+    const response = await fetch(CONFIG.rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: Date.now(),
+            method,
+            params
+        }),
+        signal
+    });
+
+    if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+    }
+
+    const payload = await response.json();
+
+    if (payload.error) {
+        throw new Error(payload.error.message || "RPC error");
+    }
+
+    return payload.result;
+}
+
+async function refreshNetwork() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CONFIG.timeoutMs);
+    const startedAt = performance.now();
+
+    try {
+        const [chainIdHex, blockHex, gasHex] = await Promise.all([
+            rpc("eth_chainId", [], controller.signal),
+            rpc("eth_blockNumber", [], controller.signal),
+            rpc("eth_gasPrice", [], controller.signal)
+        ]);
+
+        const block = hexToNumber(blockHex);
+        const chainId = hexToNumber(chainIdHex);
+        const latestBlock = await rpc("eth_getBlockByNumber", [blockHex, false], controller.signal);
+        const latencyMs = Math.round(performance.now() - startedAt);
+
+        clearTimeout(timeout);
+
+        latestBlockTimestamp = hexToNumber(latestBlock && latestBlock.timestamp);
+        byId("chainExpected").textContent = String(CONFIG.chainId);
+        byId("latency").textContent = latencyMs + " ms";
+        byId("blockNumber").textContent = formatBlock(block);
+        byId("gasPrice").textContent = formatGas(gasHex);
+        byId("updatedAt").textContent = new Date().toLocaleTimeString();
+
+        if (chainId === CONFIG.chainId) {
+            setStatus(byId("rpcStatus"), latencyMs > 1500 ? "SLOW" : "ONLINE", latencyMs > 1500 ? "status-warn" : "status-ok");
+        } else {
+            setStatus(byId("rpcStatus"), "WRONG CHAIN", "status-bad");
+        }
+
+        updateBlockAge();
+        addLog("block " + formatBlock(block) + " / gas " + formatGas(gasHex), chainId === CONFIG.chainId ? "status-ok" : "status-bad");
+    } catch (error) {
+        clearTimeout(timeout);
+        latestBlockTimestamp = null;
+        setStatus(byId("rpcStatus"), "OFFLINE", "status-bad");
+        byId("latency").textContent = "-- ms";
+        byId("updatedAt").textContent = new Date().toLocaleTimeString();
+        updateBlockAge();
+        addLog("RPC unavailable: " + error.message, "status-bad");
+    }
+}
+
+addLog("overlay loaded / polling " + CONFIG.rpcUrl, "status-ok");
+refreshNetwork();
+setInterval(refreshNetwork, CONFIG.pollMs);
+</script>
+
+</body>
+</html>
