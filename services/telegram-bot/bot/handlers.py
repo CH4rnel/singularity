@@ -20,6 +20,7 @@ from bot.config import (
     CYBER_CA_SOLANA, CYBER_CA_EVM,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_VERIFY_URL, WHALE_LINK_TTL_MINUTES,
     SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL,
+    CYBER_SOL_DECIMALS,
 )
 from bot.db import engine
 from bot.utils import (
@@ -1154,10 +1155,154 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ADMIN_USERNAME = "rtutin"
 
 
+# Base58 (Bitcoin/Solana alphabet — no 0, O, I, l). Solana pubkeys are 32-44
+# base58 chars; EVM addresses are checked first so the 0x prefix never reaches
+# this pattern.
+_SOL_ADDR_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
+
+
+def _classify_whois_arg(arg: str) -> str:
+    """Map a /whois argument to 'user_id', 'evm', 'solana', or 'unknown'."""
+    if arg.isdigit():
+        return "user_id"
+    if is_valid_eth_address(arg):
+        return "evm"
+    if _SOL_ADDR_RE.match(arg):
+        return "solana"
+    return "unknown"
+
+
+def _github_for_address(conn, address_lower: str) -> list[str]:
+    """GitHub usernames linked to an EVM address (empty if the table is absent)."""
+    try:
+        rows = conn.execute(
+            text("SELECT github_username FROM github_wallets WHERE LOWER(wallet_address) = :a"),
+            {"a": address_lower},
+        ).fetchall()
+        return [r[0] for r in rows]
+    except Exception as e:
+        logger.debug(f"whois: github_wallets lookup failed: {e}")
+        return []
+
+
+def _whois_collect(user_id: int) -> dict:
+    """Gather everything the DB knows about one Telegram user_id (blocking)."""
+    with engine.connect() as conn:
+        evm = conn.execute(
+            text("SELECT address, created_at FROM tg_wallets WHERE user_id = :u"),
+            {"u": user_id},
+        ).fetchall()
+
+        github: list[str] = []
+        for addr, _created in evm:
+            github.extend(_github_for_address(conn, addr.lower()))
+
+        sol = conn.execute(
+            text("""
+                SELECT solana_address, balance_raw, is_whale, invited,
+                       verified_at, last_checked_at
+                FROM tg_sol_wallets WHERE tg_user_id = :u
+            """),
+            {"u": user_id},
+        ).fetchone()
+
+        chats = conn.execute(
+            text("""
+                SELECT cm.chat_id, t.name, t.symbol, cm.first_seen, cm.last_seen
+                FROM chat_members cm
+                LEFT JOIN chat_tokens t ON t.chat_id = cm.chat_id
+                WHERE cm.user_id = :u
+                ORDER BY cm.last_seen DESC
+            """),
+            {"u": user_id},
+        ).fetchall()
+
+        pending = conn.execute(
+            text("""
+                SELECT t.symbol, p.amount
+                FROM pending_rewards p
+                JOIN chat_tokens t ON t.chat_id = p.chat_id
+                WHERE p.user_id = :u
+                  AND CAST(p.amount AS INTEGER) > 0
+            """),
+            {"u": user_id},
+        ).fetchall()
+
+    return {"evm": evm, "github": github, "sol": sol, "chats": chats, "pending": pending}
+
+
+async def _whois_user_section(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> list[str]:
+    """Render a full profile block for one Telegram user_id."""
+    data = await asyncio.to_thread(_whois_collect, user_id)
+    lines = [f"Telegram user_id: {user_id}"]
+
+    try:
+        tg_user = await context.bot.get_chat(user_id)
+        uname = f"@{tg_user.username}" if tg_user.username else "(no username)"
+        full_name = " ".join(
+            p for p in (tg_user.first_name, tg_user.last_name) if p
+        ) or "(no name)"
+        lines.append(f"Name: {full_name} {uname}")
+    except TelegramError as e:
+        lines.append(f"Name: (lookup failed: {e})")
+
+    if data["github"]:
+        # dict.fromkeys dedupes while keeping order across multiple wallets.
+        lines.append("GitHub: " + ", ".join(f"@{g}" for g in dict.fromkeys(data["github"])))
+
+    if data["evm"]:
+        for addr, created_at in data["evm"]:
+            lines.append(f"EVM wallet: {addr}")
+            lines.append(f"  linked {created_at} · {EXPLORER_URL}/address/{addr}")
+    else:
+        lines.append("EVM wallet: none linked")
+
+    sol = data["sol"]
+    if sol:
+        sol_addr, balance_raw, is_whale, invited, verified_at, last_checked_at = sol
+        try:
+            human = int(balance_raw) / 10**CYBER_SOL_DECIMALS
+        except (TypeError, ValueError):
+            human = 0.0
+        flags = []
+        if is_whale:
+            flags.append("🐳 whale")
+        if invited:
+            flags.append("invited")
+        flag_str = (" [" + ", ".join(flags) + "]") if flags else ""
+        lines.append(f"Solana wallet: {sol_addr}{flag_str}")
+        lines.append(
+            f"  CYBER.sol {human:,.2f} · verified {verified_at or '?'}"
+            f" · checked {last_checked_at or '?'}"
+        )
+    else:
+        lines.append("Solana wallet: none linked")
+
+    chats = data["chats"]
+    if chats:
+        lines.append(f"Chats ({len(chats)}):")
+        for chat_id, name, symbol, first_seen, last_seen in chats:
+            label = f"{name} ({symbol})" if name else "(no token)"
+            lines.append(f"  {chat_id} {label} — seen {first_seen}..{last_seen}")
+    else:
+        lines.append("Chats: none tracked")
+
+    if data["pending"]:
+        lines.append("Pending rewards:")
+        for symbol, amount_str in data["pending"]:
+            human = int(amount_str) / 10**18
+            lines.append(f"  {human:g} {symbol}")
+
+    return lines
+
+
 async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/whois <address> — admin-only. Show the Telegram user(s) linked to a
-    wallet address, the chats they belong to, any GitHub link, and pending
-    rewards. Restricted to @rtutin."""
+    """/whois <telegram_id | evm_address | solana_address> — admin-only.
+
+    Resolves any of the three identifiers to the Telegram user(s) behind it and
+    dumps everything linked: profile name, EVM/Solana wallets (+ CYBER.sol
+    balance & whale status), GitHub link, chat memberships, and pending rewards.
+    Restricted to @rtutin."""
     user = update.effective_user
     if user is None or (user.username or "").lower() != ADMIN_USERNAME:
         logger.warning(
@@ -1169,95 +1314,60 @@ async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     args = context.args or []
     if not args:
-        await update.message.reply_text("Usage: /whois <wallet_address>")
+        await update.message.reply_text(
+            "Usage: /whois <telegram_id | evm_address | solana_address>"
+        )
         return
 
-    address = args[0].strip()
-    if not is_valid_eth_address(address):
-        await update.message.reply_text("Invalid address. Expected 0x followed by 40 hex characters.")
+    query = args[0].strip()
+    kind = _classify_whois_arg(query)
+    if kind == "unknown":
+        await update.message.reply_text(
+            "Unrecognized input. Pass a Telegram user_id (digits), an EVM "
+            "address (0x + 40 hex), or a Solana address (base58)."
+        )
         return
 
-    address_lower = address.lower()
-
+    orphan_github: list[str] = []
     with engine.connect() as conn:
-        wallets = conn.execute(
-            text("SELECT user_id, address, created_at FROM tg_wallets WHERE LOWER(address) = :a"),
-            {"a": address_lower},
-        ).fetchall()
-
-        github_links = []
-        try:
-            github_links = conn.execute(
-                text("SELECT github_username FROM github_wallets WHERE LOWER(wallet_address) = :a"),
-                {"a": address_lower},
+        if kind == "user_id":
+            user_ids = [int(query)]
+        elif kind == "evm":
+            rows = conn.execute(
+                text("SELECT user_id FROM tg_wallets WHERE LOWER(address) = :a"),
+                {"a": query.lower()},
             ).fetchall()
-        except Exception as e:
-            logger.debug(f"whois: github_wallets lookup failed: {e}")
+            user_ids = [r[0] for r in rows]
+            if not user_ids:
+                # The address may carry a GitHub link with no Telegram wallet.
+                orphan_github = _github_for_address(conn, query.lower())
+        else:  # solana
+            rows = conn.execute(
+                text("SELECT tg_user_id FROM tg_sol_wallets WHERE solana_address = :a"),
+                {"a": query},
+            ).fetchall()
+            user_ids = [r[0] for r in rows]
 
-    if not wallets and not github_links:
-        await update.message.reply_text(f"No user is linked to {address}.")
+    if not user_ids and not orphan_github:
+        await update.message.reply_text(f"Nothing linked to {query}.")
         return
 
-    lines = [f"Wallet: {address}"]
+    lines = [f"Query: {query}  ({kind})"]
 
-    if github_links:
-        gh = ", ".join(f"@{row[0]}" for row in github_links)
-        lines.append(f"GitHub: {gh}")
-
-    for user_id, addr, created_at in wallets:
+    if orphan_github:
         lines.append("")
-        lines.append(f"Telegram user_id: {user_id}")
-        lines.append(f"Linked at: {created_at}")
+        lines.append(f"EVM {query} — no Telegram link.")
+        lines.append("GitHub: " + ", ".join(f"@{g}" for g in dict.fromkeys(orphan_github)))
 
-        try:
-            tg_user = await context.bot.get_chat(user_id)
-            uname = f"@{tg_user.username}" if tg_user.username else "(no username)"
-            full_name = " ".join(
-                p for p in (tg_user.first_name, tg_user.last_name) if p
-            ) or "(no name)"
-            lines.append(f"Name: {full_name} {uname}")
-        except TelegramError as e:
-            lines.append(f"Name: (lookup failed: {e})")
+    seen: set[int] = set()
+    for uid in user_ids:
+        if uid in seen:
+            continue
+        seen.add(uid)
+        lines.append("")
+        lines.extend(await _whois_user_section(context, uid))
 
-        with engine.connect() as conn:
-            chats = conn.execute(
-                text("""
-                    SELECT cm.chat_id, t.name, t.symbol, cm.first_seen, cm.last_seen
-                    FROM chat_members cm
-                    LEFT JOIN chat_tokens t ON t.chat_id = cm.chat_id
-                    WHERE cm.user_id = :u
-                    ORDER BY cm.last_seen DESC
-                """),
-                {"u": user_id},
-            ).fetchall()
-            pending = conn.execute(
-                text("""
-                    SELECT t.symbol, p.amount
-                    FROM pending_rewards p
-                    JOIN chat_tokens t ON t.chat_id = p.chat_id
-                    WHERE p.user_id = :u
-                      AND CAST(p.amount AS INTEGER) > 0
-                """),
-                {"u": user_id},
-            ).fetchall()
-
-        if chats:
-            lines.append(f"Chats ({len(chats)}):")
-            for chat_id, name, symbol, first_seen, last_seen in chats:
-                label = f"{name} ({symbol})" if name else "(no token)"
-                lines.append(
-                    f"  {chat_id} {label} — seen {first_seen}..{last_seen}"
-                )
-        else:
-            lines.append("Chats: none tracked")
-
-        if pending:
-            lines.append("Pending rewards:")
-            for symbol, amount_str in pending:
-                human = int(amount_str) / 10**18
-                lines.append(f"  {human:g} {symbol}")
-
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 
 async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
