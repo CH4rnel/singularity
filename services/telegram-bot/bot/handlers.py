@@ -182,11 +182,14 @@ def _build_ca_reply() -> str:
     trade), then the bridged EVM token with an explorer link."""
     if not CYBER_CA_SOLANA and not CYBER_CA_EVM:
         return "Contract address is not configured on this bot yet."
+    # Addresses are wrapped in backticks so Telegram renders them as inline
+    # code (tap-to-copy). Sent with parse_mode="Markdown"; neither the
+    # addresses nor the explorer URL contain legacy-Markdown-special chars.
     lines = ["📜 CYBER contract address:"]
     if CYBER_CA_SOLANA:
-        lines.append(f"Solana (CYBER.sol): {CYBER_CA_SOLANA}")
+        lines.append(f"Solana (CYBER.sol): `{CYBER_CA_SOLANA}`")
     if CYBER_CA_EVM:
-        lines.append(f"Cyberia EVM: {CYBER_CA_EVM}")
+        lines.append(f"Cyberia EVM: `{CYBER_CA_EVM}`")
         lines.append(f"{EXPLORER_URL}/address/{CYBER_CA_EVM}")
     return "\n".join(lines)
 
@@ -198,17 +201,22 @@ async def x_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def ca_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/ca — reply with the CYBER token contract address(es)."""
-    await update.message.reply_text(_build_ca_reply(), disable_web_page_preview=True)
+    await update.message.reply_text(
+        _build_ca_reply(), parse_mode="Markdown", disable_web_page_preview=True
+    )
 
 
 # Bare-text triggers -> reply builder. Synonyms map to the same answer so that
 # "ca", "contract" or "address" all surface the contract address.
+# trigger -> (reply builder, parse_mode). The CA replies use Markdown so the
+# backtick-wrapped addresses render as tap-to-copy inline code; the X/links
+# reply stays plain text (its URLs may contain Markdown-special chars).
 _QUICK_REPLIES = {
-    "x": _build_x_reply,
-    "twitter": _build_x_reply,
-    "ca": _build_ca_reply,
-    "contract": _build_ca_reply,
-    "address": _build_ca_reply,
+    "x": (_build_x_reply, None),
+    "twitter": (_build_x_reply, None),
+    "ca": (_build_ca_reply, "Markdown"),
+    "contract": (_build_ca_reply, "Markdown"),
+    "address": (_build_ca_reply, "Markdown"),
 }
 
 # Matches a message that is *only* a trigger word, optionally wrapped in
@@ -234,10 +242,13 @@ async def quick_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     msg = update.effective_message
     if msg is None or not msg.text:
         return
-    builder = _QUICK_REPLIES.get(_normalize_trigger(msg.text))
-    if builder is None:
+    entry = _QUICK_REPLIES.get(_normalize_trigger(msg.text))
+    if entry is None:
         return
-    await update.message.reply_text(builder(), disable_web_page_preview=True)
+    builder, parse_mode = entry
+    await update.message.reply_text(
+        builder(), parse_mode=parse_mode, disable_web_page_preview=True
+    )
 
 
 async def github_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

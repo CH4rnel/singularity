@@ -230,7 +230,10 @@ async def _announce_swap_tick(bot) -> None:
         log for log in sorted(logs, key=lambda l: (int(l["blockNumber"]), int(l["logIndex"])))
         if (int(log["blockNumber"]), int(log["logIndex"])) > (cur_block, cur_idx)
     ]
-    threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
+    # Per-event swap posts are gated at the $1 dust floor and require a known
+    # USD value: small trades and swaps the price walker can't value are the
+    # bulk of the noise, so they go to the digest instead of their own message.
+    threshold = MIN_ANNOUNCE_USD
 
     i = 0
     while i < len(new_logs):
@@ -290,15 +293,14 @@ async def _announce_swap_tick(bot) -> None:
                     user_addr=ann["to"], tx_hash=tx_hash, block=last_blk,
                 )
 
-                # Only big swaps get their own post; everything below the
-                # threshold is recorded and surfaces in the periodic digest.
-                # Unprice-able swaps still post so novel pairs the price walker
-                # can't reach yet stay visible.
-                if usd is not None and usd < threshold:
+                # Only swaps worth more than the $1 floor get their own post;
+                # smaller trades and swaps we can't price are recorded and
+                # surface in the periodic digest instead of firehosing the chat.
+                if usd is None or usd < threshold:
                     _record_activity(**event_kwargs)
                     logger.info(
                         f"swap_announcer: digest-only tx={tx_hash} "
-                        f"usd={usd:.4f} < {threshold}"
+                        f"usd={usd} < {threshold}"
                     )
                     continue
 
