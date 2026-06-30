@@ -1,0 +1,10 @@
+# Runtime data and volumes — live prod state, never commit.
+# (These rules previously lived in the now-removed Blockscout fork .gitignore.)
+/services/blockscout-db-data/
+/services/stats-db-data/
+/services/redis-data/
+/services/dets/
+/services/logs/
+/dets/
+/logs/
+/tmp/
