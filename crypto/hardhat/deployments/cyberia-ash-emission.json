@@ -29,5 +29,26 @@
     "reserve0": "50000000000000000",
     "reserve1": "500000000000000000"
   },
-  "timestamp_lp": "2026-04-28T10:22:40.787Z"
+  "timestamp_lp": "2026-04-28T10:22:40.787Z",
+  "tokenFarmPools": {
+    "_doc": "LP farms added via scripts/add-cyber-token-farms.ts, allocPoint 100 each (same weight as every active farm). QuickSwap V2 pairs on factory 0xB0aC30907c04b61F1482e62eA66eF4562a690917. Mirrored in frontend/ritual/src/constants/ritualFarms.ts.",
+    "startPid": 8,
+    "allocPoint": 100,
+    "pools": [
+      { "pid": 8,  "label": "MINE/LAIN LP",     "lpToken": "0x86199CD222E0d3412b77323772B4D1cFd0a35242" },
+      { "pid": 9,  "label": "CYBER/HATCHER LP", "lpToken": "0x2AC6779E02ED515360a984A52441ba77fa7e3cAB" },
+      { "pid": 10, "label": "CYBER/LAIN LP",    "lpToken": "0x9298d13f57D1e5bD14C443144b500aaa210a1175" },
+      { "pid": 11, "label": "CYBER/MINE LP",    "lpToken": "0xF18bA050eFF63B2be2D244A423691D44BDDeF60d" },
+      { "pid": 12, "label": "CYBER/GOAL LP",    "lpToken": "0x7598B5A2421E7A9cA443368DB939Ec860Dc9d536" },
+      { "pid": 13, "label": "YTN/CYBER LP",     "lpToken": "0xda176FEd5D6D1e1eB8C37556A01678f9e18B941F" },
+      { "pid": 14, "label": "KRSQ/CYBER LP",    "lpToken": "0x828b0c5D46CfDf4Adc78E2cB4139547aca56845c" },
+      { "pid": 15, "label": "TRX/CYBER LP",     "lpToken": "0xb6184A51C0fAa2810D4A8Eb8C25bB18CB0bD4E33" },
+      { "pid": 16, "label": "CYBER/XMR LP",     "lpToken": "0x86dC072E44556c4F5cE948b94368b6631bCB0332" },
+      { "pid": 17, "label": "LTC/CYBER LP",     "lpToken": "0x1DF2329f6b9E94f9fdB5D76ea006DffF70C378Ec" },
+      { "pid": 18, "label": "CYBER/BTC LP",     "lpToken": "0x144211C1476e1Da2eD55B19ff25d1ea18AA75aBC" },
+      { "pid": 19, "label": "CYBER/SILVER LP",  "lpToken": "0xF94a92ED03fB44578f5246920D7fc1463Df2cF6D" },
+      { "pid": 20, "label": "CYBER/ETH LP",     "lpToken": "0x64252D0d9D9d2f27146c01CA15dD8680ACFFdEa2" },
+      { "pid": 21, "label": "BTC/ETH LP",       "lpToken": "0x28521507A465Da62B73348C9FBB5561cCB1f311c", "pending": "pair not seeded on-chain yet; deterministic CREATE2 address" }
+    ]
+  }
 }

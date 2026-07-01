@@ -88,9 +88,37 @@
     "YTN": {
       "address": "0x92cF6A1A438888ffd738b80cf29Ee14583a16375",
       "underlying": "0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6"
+    },
+    "SOL": {
+      "address": "0xC2eb4281BAB74133D75d44944D073aFAa94fe053",
+      "underlying": "0x53450B1d205f1e41d10B653FBBDEa74160dafFf4"
+    },
+    "ETH": {
+      "address": "0xDB6e3DC4E7EF046193e5035962C16E688c4F363e",
+      "underlying": "0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986"
+    },
+    "HATCHER": {
+      "address": "0xbDDE95A8713baf1624dAf61a2c8D1C2827dE7DFD",
+      "underlying": "0x621021F18b6404123f98b1395c418868418ACF36"
+    },
+    "LAIN": {
+      "address": "0x33Dd5e9CCc1d586AdF8a8bBE797c23Ea03F7f672",
+      "underlying": "0x05cd1AFd5b2DF3CCA6cEAb80CbC21168ec981E8B"
+    },
+    "MINE": {
+      "address": "0xaBaa0C2fE99Bcc5FEdE21909a28DFFF46B5cCE60",
+      "underlying": "0xD8c1f812ADd03ccdE8D3c7F86FeAD181980CD7Ec"
+    },
+    "TG": {
+      "address": "0x48D91fB570A01D3c62a0B8EC1ee34c7bfDcfbFf7",
+      "underlying": "0x3d32FE83ad0C1157fdDCA0a3280764c495cdAD6D"
+    },
+    "GOAL": {
+      "address": "0x540251428B6223cd5865769540f497ED2A332788",
+      "underlying": "0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe"
     }
   },
-  "timestamp": "2026-06-26T00:04:29.946Z",
+  "timestamp": "2026-07-01T21:56:54.998Z",
   "QuickswapPriceOracle": "0x8fEA279fb70D3D1B20a0E50cbC649c83C41Dc4D1",
   "SimplePriceOracle_legacy": "0x8eA212E3D8Ea63738B3eCaD0dA5c1683f711F4af",
   "LendingComptroller_legacy": "0xF1d1c79C535dBCf7F68784B3bCb91d9030A970e1",

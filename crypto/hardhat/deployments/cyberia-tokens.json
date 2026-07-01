@@ -163,6 +163,13 @@
       "artifact": "contracts/Hatcher.sol/Hatcher.json",
       "address": "0x621021F18b6404123f98b1395c418868418ACF36",
       "burnable": true
+    },
+    {
+      "symbol": "ETH",
+      "contract": "ETH",
+      "artifact": "contracts/ETH.sol/ETH.json",
+      "address": "0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986",
+      "burnable": true
     }
   ]
 }

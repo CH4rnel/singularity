@@ -80,6 +80,20 @@
         }
       }
     }
+
+    & .retiredLinkRow {
+      margin-top: 10px;
+
+      & .retiredLink {
+        color: $primary;
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
   }
 
   & .ritualFarmError {
@@ -99,6 +113,16 @@
     font-size: 11px;
     text-align: center;
     word-break: break-all;
+  }
+
+  & .ritualFarmEmpty {
+    margin: 8px 0 12px;
+    padding: 24px;
+    text-align: center;
+    color: $textSecondary;
+    font-size: 14px;
+    border: 1px dashed $divider;
+    border-radius: 12px;
   }
 
   & .poolCard {
@@ -183,6 +207,18 @@
           color: $textSecondary;
           font-size: 11px;
           margin-top: 2px;
+        }
+        & .retiredBadge {
+          display: inline-block;
+          padding: 3px 10px;
+          border-radius: 999px;
+          background: rgba(234, 95, 90, 0.12);
+          border: 1px solid rgba(234, 95, 90, 0.35);
+          color: #ea5f5a;
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
         }
       }
     }

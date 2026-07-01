@@ -1,11 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Link } from 'react-router-dom';
 import { Box, Button, CircularProgress } from '@material-ui/core';
 import { BigNumber, Contract } from 'ethers';
-import { formatUnits, parseUnits } from 'ethers/lib/utils';
+import { formatUnits, parseUnits, Interface } from 'ethers/lib/utils';
 import ERC20_ABI from 'constants/abis/erc20.json';
 import RITUAL_MASTERCHEF_ABI from 'constants/abis/ritual-masterchef.json';
 import {
   RITUAL_MASTERCHEF_ADDRESS,
+  RITUAL_MULTICALL3_ADDRESS,
   RITUAL_FARM_POOLS,
   RITUAL_TOTAL_DAILY_ASH,
   RITUAL_BLOCK_TIME_SECONDS,
@@ -41,6 +49,67 @@ const PAIR_ABI = [
   'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
   'function totalSupply() view returns (uint256)',
 ];
+
+const MULTICALL3_ABI = [
+  'function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success,bytes returnData)[] returnData)',
+];
+
+/** One batched read: an encoded call plus a sink for its decoded result. */
+interface McTask {
+  target: string;
+  callData: string;
+  /** Receives the raw returnData, or null if the sub-call reverted. */
+  onResult: (data: string | null) => void;
+}
+
+/**
+ * Run encoded read-only calls through Multicall3.aggregate3 (chunked so no
+ * single request grows too large) and route each result back to its task.
+ * Failed sub-calls resolve to null — the same effect the old per-call
+ * `.catch(() => fallback)` had, but in a couple of round-trips instead of one
+ * HTTP request per read.
+ */
+async function runMulticall(
+  mcAddress: string,
+  provider: unknown,
+  tasks: McTask[],
+): Promise<void> {
+  if (tasks.length === 0) return;
+  const mc = new Contract(mcAddress, MULTICALL3_ABI, provider as never);
+  const CHUNK = 80;
+  for (let i = 0; i < tasks.length; i += CHUNK) {
+    const slice = tasks.slice(i, i + CHUNK);
+    const res: Array<{
+      success: boolean;
+      returnData: string;
+    }> = await mc.aggregate3(
+      slice.map((t) => ({
+        target: t.target,
+        allowFailure: true,
+        callData: t.callData,
+      })),
+    );
+    res.forEach((r, j) => {
+      const ok = (r.success ?? (r as never)[0]) === true;
+      const data = r.returnData ?? (r as never)[1];
+      slice[j].onResult(ok && data && data !== '0x' ? data : null);
+    });
+  }
+}
+
+/**
+ * Static, never-changing metadata for a staked token / LP pair, cached across
+ * refreshes so we only ever read decimals/symbols/token0/token1 once.
+ */
+interface PairMeta {
+  lpDecimals: number;
+  token0?: string;
+  token1?: string;
+  decimals0?: number;
+  decimals1?: number;
+  symbol0?: string;
+  symbol1?: string;
+}
 
 interface PairInfo {
   token0: string; // lowercased
@@ -79,15 +148,39 @@ interface Globals {
   blockTimeMs: number; // estimated block interval
 }
 
-const RitualFarmPage: React.FC = () => {
+interface RitualFarmPageProps {
+  /**
+   * 'active' (default) lists pools that still earn ASH. 'empty' lists retired
+   * pools (allocPoint zeroed on-chain) in a withdraw-only mode so stakers can
+   * pull their locked tokens out.
+   */
+  variant?: 'active' | 'empty';
+}
+
+const RitualFarmPage: React.FC<RitualFarmPageProps> = ({
+  variant = 'active',
+}) => {
   const { chainId, account } = useActiveWeb3React();
   const isSupportedNetwork = useIsSupportedNetwork();
   const { connectWallet } = useConnectWallet(isSupportedNetwork);
   const blockNumber = useBlockNumber();
 
+  const isEmptyView = variant === 'empty';
+
   const chefAddress = chainId ? RITUAL_MASTERCHEF_ADDRESS[chainId] : undefined;
-  const pools = useMemo<RitualFarmPool[]>(
-    () => (chainId ? RITUAL_FARM_POOLS[chainId] ?? [] : []),
+  const pools = useMemo<RitualFarmPool[]>(() => {
+    const all = chainId ? RITUAL_FARM_POOLS[chainId] ?? [] : [];
+    // Active view hides retired pools; empty view shows only them.
+    return all.filter((p) => (isEmptyView ? !!p.retired : !p.retired));
+  }, [chainId, isEmptyView]);
+
+  // Whether any retired pools exist at all — gates the "Retired farms" link on
+  // the active page so it only appears when there is somewhere to point.
+  const hasRetired = useMemo(
+    () =>
+      chainId
+        ? (RITUAL_FARM_POOLS[chainId] ?? []).some((p) => p.retired)
+        : false,
     [chainId],
   );
 
@@ -95,6 +188,10 @@ const RitualFarmPage: React.FC = () => {
 
   const [globals, setGlobals] = useState<Globals | null>(null);
   const [poolStates, setPoolStates] = useState<Record<number, PoolState>>({});
+  // Static token/LP metadata (decimals, symbols, token0/token1), keyed by
+  // lowercased lpToken. Populated once and reused on every refresh so the
+  // per-block reload only fetches the values that actually change.
+  const pairMetaRef = useRef<Record<string, PairMeta>>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [busyPid, setBusyPid] = useState<number | null>(null);
   const [harvestingAll, setHarvestingAll] = useState(false);
@@ -120,24 +217,231 @@ const RitualFarmPage: React.FC = () => {
     return () => clearInterval(id);
   }, []);
 
-  // Load globals + per-pool state from the chain's RPC (works irrespective of
-  // which network the wallet is currently on).
+  // Load globals + per-pool state from the chain's RPC, batched through
+  // Multicall3. All reads for all pools go out in a couple of round-trips
+  // rather than one HTTP request per read, so the page stays responsive as the
+  // pool count grows. Static metadata (decimals/symbols/token0/token1) is read
+  // once and cached in pairMetaRef; only the changing values are re-read.
   useEffect(() => {
     let cancelled = false;
     if (!chainId || !chefAddress) return;
 
     const rpc = RPC_PROVIDERS[chainId];
-    if (!rpc) return;
-    const chefRead = new Contract(chefAddress, RITUAL_MASTERCHEF_ABI, rpc);
+    const mcAddress = RITUAL_MULTICALL3_ADDRESS[chainId];
+    if (!rpc || !mcAddress) return;
+
+    const chefIface = new Interface(RITUAL_MASTERCHEF_ABI as never);
+    const erc20Iface = new Interface(ERC20_ABI as never);
+    const pairIface = new Interface(PAIR_ABI);
+    const metaCache = pairMetaRef.current;
+
+    // Per-pool scratch buffers the multicall result sinks write into.
+    interface Scratch {
+      poolInfo?: ReturnType<Interface['decodeFunctionResult']> | null;
+      userInfo?: ReturnType<Interface['decodeFunctionResult']> | null;
+      pending?: BigNumber;
+      totalStaked?: BigNumber;
+      userBalance?: BigNumber;
+      allowance?: BigNumber;
+      lpDecimals?: number;
+      token0?: string;
+      token1?: string;
+      reserve0?: BigNumber;
+      reserve1?: BigNumber;
+      totalSupply?: BigNumber;
+    }
 
     (async () => {
       try {
-        const [totalAlloc, rpb, latestBlock] = await Promise.all([
-          chefRead.totalAllocPoint(),
-          chefRead.rewardPerBlock(),
+        let gAlloc: BigNumber | null = null;
+        let gRpb: BigNumber | null = null;
+        const scratch: Record<number, Scratch> = {};
+        const tasks: McTask[] = [
+          {
+            target: chefAddress,
+            callData: chefIface.encodeFunctionData('totalAllocPoint'),
+            onResult: (d) =>
+              (gAlloc = d
+                ? chefIface.decodeFunctionResult('totalAllocPoint', d)[0]
+                : null),
+          },
+          {
+            target: chefAddress,
+            callData: chefIface.encodeFunctionData('rewardPerBlock'),
+            onResult: (d) =>
+              (gRpb = d
+                ? chefIface.decodeFunctionResult('rewardPerBlock', d)[0]
+                : null),
+          },
+        ];
+
+        for (const pool of pools) {
+          const s: Scratch = {};
+          scratch[pool.pid] = s;
+          const lp = pool.lpToken;
+          const cached = metaCache[lp.toLowerCase()];
+
+          tasks.push({
+            target: chefAddress,
+            callData: chefIface.encodeFunctionData('poolInfo', [pool.pid]),
+            onResult: (d) =>
+              (s.poolInfo = d
+                ? chefIface.decodeFunctionResult('poolInfo', d)
+                : null),
+          });
+          tasks.push({
+            target: lp,
+            callData: erc20Iface.encodeFunctionData('balanceOf', [chefAddress]),
+            onResult: (d) =>
+              (s.totalStaked = d
+                ? erc20Iface.decodeFunctionResult('balanceOf', d)[0]
+                : ZERO),
+          });
+
+          if (account) {
+            tasks.push({
+              target: chefAddress,
+              callData: chefIface.encodeFunctionData('userInfo', [
+                pool.pid,
+                account,
+              ]),
+              onResult: (d) =>
+                (s.userInfo = d
+                  ? chefIface.decodeFunctionResult('userInfo', d)
+                  : null),
+            });
+            tasks.push({
+              target: chefAddress,
+              callData: chefIface.encodeFunctionData('pendingReward', [
+                pool.pid,
+                account,
+              ]),
+              onResult: (d) =>
+                (s.pending = d
+                  ? chefIface.decodeFunctionResult('pendingReward', d)[0]
+                  : ZERO),
+            });
+            tasks.push({
+              target: lp,
+              callData: erc20Iface.encodeFunctionData('balanceOf', [account]),
+              onResult: (d) =>
+                (s.userBalance = d
+                  ? erc20Iface.decodeFunctionResult('balanceOf', d)[0]
+                  : ZERO),
+            });
+            tasks.push({
+              target: lp,
+              callData: erc20Iface.encodeFunctionData('allowance', [
+                account,
+                chefAddress,
+              ]),
+              onResult: (d) =>
+                (s.allowance = d
+                  ? erc20Iface.decodeFunctionResult('allowance', d)[0]
+                  : ZERO),
+            });
+          }
+
+          if (cached) {
+            s.lpDecimals = cached.lpDecimals;
+            s.token0 = cached.token0;
+            s.token1 = cached.token1;
+          } else {
+            tasks.push({
+              target: lp,
+              callData: erc20Iface.encodeFunctionData('decimals'),
+              onResult: (d) =>
+                (s.lpDecimals = d
+                  ? erc20Iface.decodeFunctionResult('decimals', d)[0]
+                  : 18),
+            });
+            if (!pool.isSolo) {
+              tasks.push({
+                target: lp,
+                callData: pairIface.encodeFunctionData('token0'),
+                onResult: (d) =>
+                  (s.token0 = d
+                    ? pairIface.decodeFunctionResult('token0', d)[0]
+                    : undefined),
+              });
+              tasks.push({
+                target: lp,
+                callData: pairIface.encodeFunctionData('token1'),
+                onResult: (d) =>
+                  (s.token1 = d
+                    ? pairIface.decodeFunctionResult('token1', d)[0]
+                    : undefined),
+              });
+            }
+          }
+
+          if (!pool.isSolo) {
+            tasks.push({
+              target: lp,
+              callData: pairIface.encodeFunctionData('getReserves'),
+              onResult: (d) => {
+                if (!d) return;
+                const r = pairIface.decodeFunctionResult('getReserves', d);
+                s.reserve0 = r[0];
+                s.reserve1 = r[1];
+              },
+            });
+            tasks.push({
+              target: lp,
+              callData: pairIface.encodeFunctionData('totalSupply'),
+              onResult: (d) =>
+                (s.totalSupply = d
+                  ? pairIface.decodeFunctionResult('totalSupply', d)[0]
+                  : undefined),
+            });
+          }
+        }
+
+        // Round 1: everything above + the latest block for the virtual clock.
+        const [latestBlock] = await Promise.all([
           rpc.getBlock('latest'),
+          runMulticall(mcAddress, rpc, tasks),
         ]);
         if (cancelled) return;
+
+        // Round 2: token decimals+symbols for pairs not cached yet. Their
+        // target addresses (token0/token1) are only known after round 1.
+        const tokenMeta: Record<
+          string,
+          { decimals?: number; symbol?: string }
+        > = {};
+        const metaTasks: McTask[] = [];
+        for (const pool of pools) {
+          if (pool.isSolo || metaCache[pool.lpToken.toLowerCase()]) continue;
+          const s = scratch[pool.pid];
+          for (const t of [s.token0, s.token1]) {
+            if (!t) continue;
+            const key = t.toLowerCase();
+            if (tokenMeta[key]) continue;
+            tokenMeta[key] = {};
+            metaTasks.push({
+              target: t,
+              callData: erc20Iface.encodeFunctionData('decimals'),
+              onResult: (d) =>
+                (tokenMeta[key].decimals = d
+                  ? erc20Iface.decodeFunctionResult('decimals', d)[0]
+                  : 18),
+            });
+            metaTasks.push({
+              target: t,
+              callData: erc20Iface.encodeFunctionData('symbol'),
+              onResult: (d) =>
+                (tokenMeta[key].symbol = d
+                  ? String(erc20Iface.decodeFunctionResult('symbol', d)[0])
+                  : '?'),
+            });
+          }
+        }
+        if (metaTasks.length) {
+          await runMulticall(mcAddress, rpc, metaTasks);
+          if (cancelled) return;
+        }
+
         setGlobals((prev) => {
           // Estimate block time from successive observations; default 1 s.
           let blockTimeMs = prev?.blockTimeMs ?? 1000;
@@ -154,93 +458,83 @@ const RitualFarmPage: React.FC = () => {
             }
           }
           return {
-            totalAllocPoint: totalAlloc,
-            rewardPerBlock: rpb,
+            totalAllocPoint: gAlloc ?? BigNumber.from(0),
+            rewardPerBlock: gRpb ?? BigNumber.from(0),
             lastBlockNumber: BigNumber.from(latestBlock.number),
             lastBlockTimestampMs: Date.now(),
             blockTimeMs,
           };
         });
-      } catch {
-        // chef may not be deployed yet on this network
-      }
 
-      const next: Record<number, PoolState> = {};
-      for (const pool of pools) {
-        try {
-          const lp = new Contract(pool.lpToken, ERC20_ABI, rpc);
-          const [info, user, totalStaked, decimals] = await Promise.all([
-            chefRead.poolInfo(pool.pid),
-            account
-              ? chefRead.userInfo(pool.pid, account)
-              : Promise.resolve([ZERO, ZERO]),
-            lp.balanceOf(chefAddress),
-            lp.decimals().catch(() => 18),
-          ]);
-          const pending = account
-            ? await chefRead.pendingReward(pool.pid, account).catch(() => ZERO)
-            : ZERO;
-          const userBalance = account
-            ? await lp.balanceOf(account).catch(() => ZERO)
-            : ZERO;
-          const allowance = account
-            ? await lp.allowance(account, chefAddress).catch(() => ZERO)
-            : ZERO;
+        const next: Record<number, PoolState> = {};
+        for (const pool of pools) {
+          const s = scratch[pool.pid];
+          if (!s || !s.poolInfo) continue; // pool not on-chain yet
+          const lpLower = pool.lpToken.toLowerCase();
 
-          // For LP pools, read pair reserves so we can value the LP token.
-          let pair: PairInfo | undefined;
-          if (!pool.isSolo) {
-            try {
-              const pairContract = new Contract(pool.lpToken, PAIR_ABI, rpc);
-              const [t0, t1, reserves, totalSupply] = await Promise.all([
-                pairContract.token0(),
-                pairContract.token1(),
-                pairContract.getReserves(),
-                pairContract.totalSupply(),
-              ]);
-              const e0 = new Contract(t0, ERC20_ABI, rpc);
-              const e1 = new Contract(t1, ERC20_ABI, rpc);
-              const [d0, d1, s0, s1] = await Promise.all([
-                e0.decimals().catch(() => 18),
-                e1.decimals().catch(() => 18),
-                e0.symbol().catch(() => '?'),
-                e1.symbol().catch(() => '?'),
-              ]);
-              pair = {
-                token0: String(t0).toLowerCase(),
-                token1: String(t1).toLowerCase(),
-                reserve0: reserves[0],
-                reserve1: reserves[1],
-                decimals0: d0,
-                decimals1: d1,
-                symbol0: String(s0),
-                symbol1: String(s1),
-                totalSupply,
-              };
-            } catch {
-              // not an AMM pair / not deployed — leave unpriced
+          // Resolve + persist the static metadata for this token/pair.
+          let meta = metaCache[lpLower];
+          if (!meta) {
+            meta = { lpDecimals: s.lpDecimals ?? 18 };
+            if (!pool.isSolo && s.token0 && s.token1) {
+              const k0 = s.token0.toLowerCase();
+              const k1 = s.token1.toLowerCase();
+              meta.token0 = s.token0;
+              meta.token1 = s.token1;
+              meta.decimals0 = tokenMeta[k0]?.decimals ?? 18;
+              meta.decimals1 = tokenMeta[k1]?.decimals ?? 18;
+              meta.symbol0 = tokenMeta[k0]?.symbol ?? '?';
+              meta.symbol1 = tokenMeta[k1]?.symbol ?? '?';
+              metaCache[lpLower] = meta;
+            } else if (pool.isSolo) {
+              metaCache[lpLower] = meta;
             }
+            // LP whose pair isn't deployed: leave uncached, retry next block.
           }
 
+          let pair: PairInfo | undefined;
+          if (
+            !pool.isSolo &&
+            meta.token0 &&
+            meta.token1 &&
+            s.reserve0 != null &&
+            s.reserve1 != null &&
+            s.totalSupply != null
+          ) {
+            pair = {
+              token0: meta.token0.toLowerCase(),
+              token1: meta.token1.toLowerCase(),
+              reserve0: s.reserve0,
+              reserve1: s.reserve1,
+              decimals0: meta.decimals0 ?? 18,
+              decimals1: meta.decimals1 ?? 18,
+              symbol0: meta.symbol0 ?? '?',
+              symbol1: meta.symbol1 ?? '?',
+              totalSupply: s.totalSupply,
+            };
+          }
+
+          const info = s.poolInfo;
+          const user = s.userInfo;
           next[pool.pid] = {
             allocPoint: info.allocPoint ?? info[1],
-            totalStaked,
-            userStaked: user.amount ?? user[0],
-            pending,
-            userBalance,
-            allowance,
-            decimals,
-            tokenAddress: pool.lpToken.toLowerCase(),
+            totalStaked: s.totalStaked ?? ZERO,
+            userStaked: user ? user.amount ?? user[0] : ZERO,
+            pending: s.pending ?? ZERO,
+            userBalance: s.userBalance ?? ZERO,
+            allowance: s.allowance ?? ZERO,
+            decimals: meta.lpDecimals,
+            tokenAddress: lpLower,
             pair,
             lastRewardBlock: info.lastRewardBlock ?? info[2],
             accRewardPerShare: info.accRewardPerShare ?? info[3],
-            rewardDebt: user.rewardDebt ?? user[1],
+            rewardDebt: user ? user.rewardDebt ?? user[1] : ZERO,
           };
-        } catch {
-          // pool not on-chain yet; skip
         }
+        if (!cancelled) setPoolStates(next);
+      } catch {
+        // Network hiccup — keep the previous state; the next block retriggers.
       }
-      if (!cancelled) setPoolStates(next);
     })();
 
     return () => {
@@ -433,27 +727,50 @@ const RitualFarmPage: React.FC = () => {
     <Box className='ritualFarmPage'>
       <Box className='ritualFarmContainer'>
         <Box className='ritualFarmHeader'>
-          <h3>Ritual Farms</h3>
+          <h3>{isEmptyView ? 'Retired farms' : 'Ritual Farms'}</h3>
           <div className='subtitle'>
-            {RITUAL_TOTAL_DAILY_ASH} ASH minted per day, split between pools by
-            allocPoint. Block ≈ {RITUAL_BLOCK_TIME_SECONDS}s.
-            {ashPriceUsd ? ` ASH ≈ $${formatUsdPrice(ashPriceUsd)}.` : ''}
+            {isEmptyView ? (
+              'These pools no longer earn ASH. Withdraw your staked tokens below.'
+            ) : (
+              <>
+                {RITUAL_TOTAL_DAILY_ASH} ASH minted per day, split between pools
+                by allocPoint. Block ≈ {RITUAL_BLOCK_TIME_SECONDS}s.
+                {ashPriceUsd ? ` ASH ≈ $${formatUsdPrice(ashPriceUsd)}.` : ''}
+              </>
+            )}
           </div>
-          <Box className='sortRow'>
-            <span className='sortLabel'>Sort by</span>
-            <Button
-              className={`sortBtn${sortBy === 'tvl' ? ' active' : ''}`}
-              onClick={() => setSortBy('tvl')}
-            >
-              TVL
-            </Button>
-            <Button
-              className={`sortBtn${sortBy === 'apy' ? ' active' : ''}`}
-              onClick={() => setSortBy('apy')}
-            >
-              APY%
-            </Button>
-          </Box>
+          {isEmptyView ? (
+            <div className='retiredLinkRow'>
+              <Link to='/farm' className='retiredLink'>
+                ← Back to active farms
+              </Link>
+            </div>
+          ) : (
+            hasRetired && (
+              <div className='retiredLinkRow'>
+                <Link to='/farm-empty' className='retiredLink'>
+                  Retired farms — withdraw your tokens →
+                </Link>
+              </div>
+            )
+          )}
+          {!isEmptyView && (
+            <Box className='sortRow'>
+              <span className='sortLabel'>Sort by</span>
+              <Button
+                className={`sortBtn${sortBy === 'tvl' ? ' active' : ''}`}
+                onClick={() => setSortBy('tvl')}
+              >
+                TVL
+              </Button>
+              <Button
+                className={`sortBtn${sortBy === 'apy' ? ' active' : ''}`}
+                onClick={() => setSortBy('apy')}
+              >
+                APY%
+              </Button>
+            </Box>
+          )}
           {account && (
             <Box className='harvestAllRow'>
               <Button
@@ -476,31 +793,46 @@ const RitualFarmPage: React.FC = () => {
         {error && <Box className='ritualFarmError'>{error}</Box>}
 
         {sortedPools.map(
-          ({ pool, state: st, allocShare, dailyAsh, stakedUsdPrice, tvlUsd, apy }) => {
-          const livePending = computeLivePending(st, globals);
+          ({
+            pool,
+            state: st,
+            allocShare,
+            dailyAsh,
+            stakedUsdPrice,
+            tvlUsd,
+            apy,
+          }) => {
+            const livePending = computeLivePending(st, globals);
 
-          return (
-            <PoolCard
-              key={pool.pid}
-              pool={pool}
-              state={st}
-              livePending={livePending}
-              allocSharePct={allocShare}
-              dailyAsh={dailyAsh}
-              apy={apy}
-              stakedUsdPrice={stakedUsdPrice}
-              tvlUsd={tvlUsd}
-              ashPriceUsd={ashPriceUsd}
-              account={account ?? null}
-              busy={busyPid === pool.pid || harvestingAll}
-              onConnect={() => connectWallet()}
-              onApprove={() => handleApprove(pool)}
-              onDeposit={(v) => handleDeposit(pool, v)}
-              onWithdraw={(v) => handleWithdraw(pool, v)}
-              onHarvest={() => handleHarvest(pool)}
-            />
-          );
-        },
+            return (
+              <PoolCard
+                key={pool.pid}
+                pool={pool}
+                state={st}
+                livePending={livePending}
+                allocSharePct={allocShare}
+                dailyAsh={dailyAsh}
+                apy={apy}
+                stakedUsdPrice={stakedUsdPrice}
+                tvlUsd={tvlUsd}
+                ashPriceUsd={ashPriceUsd}
+                account={account ?? null}
+                busy={busyPid === pool.pid || harvestingAll}
+                withdrawOnly={isEmptyView}
+                onConnect={() => connectWallet()}
+                onApprove={() => handleApprove(pool)}
+                onDeposit={(v) => handleDeposit(pool, v)}
+                onWithdraw={(v) => handleWithdraw(pool, v)}
+                onHarvest={() => handleHarvest(pool)}
+              />
+            );
+          },
+        )}
+
+        {sortedPools.length === 0 && (
+          <Box className='ritualFarmEmpty'>
+            {isEmptyView ? 'No retired farms.' : 'No active farms right now.'}
+          </Box>
         )}
 
         <div className='ritualFarmFooter'>MasterChef: {chefAddress}</div>
@@ -521,6 +853,8 @@ interface PoolCardProps {
   ashPriceUsd: number | undefined;
   account: string | null;
   busy: boolean;
+  /** Retired pool: hide deposit, show a Retired badge, keep withdraw/harvest. */
+  withdrawOnly: boolean;
   onConnect: () => void;
   onApprove: () => Promise<boolean>;
   onDeposit: (amount: string) => Promise<boolean>;
@@ -540,6 +874,7 @@ const PoolCard: React.FC<PoolCardProps> = ({
   ashPriceUsd,
   account,
   busy,
+  withdrawOnly,
   onConnect,
   onApprove,
   onDeposit,
@@ -588,13 +923,19 @@ const PoolCard: React.FC<PoolCardProps> = ({
           </Box>
         </Box>
         <Box className='poolEmission'>
-          {apy != null && (
-            <div className='apy' title='Estimated APY from ASH emissions'>
-              {formatApy(apy)} APY
-            </div>
+          {withdrawOnly ? (
+            <div className='retiredBadge'>Retired</div>
+          ) : (
+            <>
+              {apy != null && (
+                <div className='apy' title='Estimated APY from ASH emissions'>
+                  {formatApy(apy)} APY
+                </div>
+              )}
+              <div className='alloc'>{allocSharePct.toFixed(0)}% emission</div>
+              <div className='rate'>≈ {dailyAsh.toFixed(2)} ASH/day</div>
+            </>
           )}
-          <div className='alloc'>{allocSharePct.toFixed(0)}% emission</div>
-          <div className='rate'>≈ {dailyAsh.toFixed(2)} ASH/day</div>
         </Box>
       </Box>
 
@@ -636,46 +977,48 @@ const PoolCard: React.FC<PoolCardProps> = ({
         </Box>
       ) : (
         <Box className='poolActions'>
-          <Box className='actionRow'>
-            <Box className='amountField'>
-              <input
-                type='text'
-                value={depositValue}
-                onChange={(e) => setDepositValue(sanitize(e.target.value))}
-                placeholder={`Deposit ${pool.label}`}
-                inputMode='decimal'
-              />
+          {!withdrawOnly && (
+            <Box className='actionRow'>
+              <Box className='amountField'>
+                <input
+                  type='text'
+                  value={depositValue}
+                  onChange={(e) => setDepositValue(sanitize(e.target.value))}
+                  placeholder={`Deposit ${pool.label}`}
+                  inputMode='decimal'
+                />
+              </Box>
+              <Button
+                className='secondaryBtn'
+                onClick={() =>
+                  state &&
+                  setDepositValue(formatUnits(state.userBalance, decimals))
+                }
+              >
+                Max
+              </Button>
+              {needsApprove ? (
+                <Button
+                  className='actionBtn'
+                  disabled={busy}
+                  onClick={() => onApprove()}
+                >
+                  {busy ? <CircularProgress size={18} /> : 'Approve'}
+                </Button>
+              ) : (
+                <Button
+                  className='actionBtn'
+                  disabled={busy || depositBn.isZero()}
+                  onClick={async () => {
+                    const ok = await onDeposit(depositValue);
+                    if (ok) setDepositValue('');
+                  }}
+                >
+                  {busy ? <CircularProgress size={18} /> : 'Deposit'}
+                </Button>
+              )}
             </Box>
-            <Button
-              className='secondaryBtn'
-              onClick={() =>
-                state &&
-                setDepositValue(formatUnits(state.userBalance, decimals))
-              }
-            >
-              Max
-            </Button>
-            {needsApprove ? (
-              <Button
-                className='actionBtn'
-                disabled={busy}
-                onClick={() => onApprove()}
-              >
-                {busy ? <CircularProgress size={18} /> : 'Approve'}
-              </Button>
-            ) : (
-              <Button
-                className='actionBtn'
-                disabled={busy || depositBn.isZero()}
-                onClick={async () => {
-                  const ok = await onDeposit(depositValue);
-                  if (ok) setDepositValue('');
-                }}
-              >
-                {busy ? <CircularProgress size={18} /> : 'Deposit'}
-              </Button>
-            )}
-          </Box>
+          )}
 
           <Box className='actionRow'>
             <Box className='amountField'>

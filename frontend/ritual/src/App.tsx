@@ -152,12 +152,14 @@ const App: React.FC = () => {
                   <PoolsPage />
                 </PageLayout>
               </Route>
-              <Route
-                exact
-                path='/add/:currencyIdA?/:currencyIdB?/:version?'
-              >
+              <Route exact path='/add/:currencyIdA?/:currencyIdB?/:version?'>
                 <PageLayout>
                   <PoolsPage />
+                </PageLayout>
+              </Route>
+              <Route exact path='/farm-empty'>
+                <PageLayout>
+                  <RitualFarmPage variant='empty' />
                 </PageLayout>
               </Route>
               <Route exact path='/farm/:version?'>

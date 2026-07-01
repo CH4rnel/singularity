@@ -15,9 +15,14 @@ import * as path from "node:path";
 //     that only trade against RUB, the fallback is derived from the on-chain
 //     (token, RUB) pool times the live RUB fallback, so the cluster stays
 //     consistent with the existing RUB market.
-//   - SOL is intentionally skipped: its only (SOL, WCYBER) pool is 1-wei dust,
-//     so the spot oracle would misprice it ~190x and a fallback can't override a
-//     non-empty pool. List it only after a real SOL/WCYBER pool is seeded.
+//   - SOL used to be skipped (its only (SOL, WCYBER) pool was 1-wei dust); a
+//     real SOL/WCYBER pool has since been seeded (~244 WCYBER deep), so it is
+//     now listed straight from that pool like the majors.
+//   - The freshly-listed DEX tokens (TG, HATCHER, GOAL, LAIN, MINE, ETH) all
+//     have live (token, WCYBER) pools and are priced from them. Heads up: the
+//     TG (~0.1 WCYBER) and GOAL (~1 WCYBER) pools are shallow, so their spot
+//     price is easy to move in one block — seed deeper liquidity or drop their
+//     collateral factor (see COLLATERAL_FACTOR) before leaning on them.
 
 const DEPLOYER_PK = process.env.DEPLOYER_PK;
 if (!DEPLOYER_PK) throw new Error("DEPLOYER_PK not set in .env");
@@ -49,8 +54,12 @@ const COLLATERAL_FACTOR = 5n * 10n ** 17n; // 50%, uniform
 // broadcasts nothing — a free pre-flight before spending gas.
 const DRY_RUN = process.env.DRY_RUN === "1";
 
-// Tokens to list. SOL is deliberately excluded (see header); RUB is already
-// listed and will be skipped by the on-chain check.
+// Every listed (DEX) token that should have a lending market. Already-listed
+// underlyings are skipped by the on-chain getAllMarkets() check, so this can
+// hold the full set and stay safe to re-run. Addresses mirror the Ritual token
+// list (frontend/ritual/public/ritual-tokens.json). The native/DEX tokens
+// WCYBER, ASH and CYBER.sol are listed by their own dedicated scripts and are
+// intentionally omitted here.
 const TOKENS: { symbol: string; address: `0x${string}` }[] = [
   { symbol: "USDC", address: "0xdc25597B19799010047F17e9591EFE08EFd40077" },
   { symbol: "USDT", address: "0x94845aF24a3E431593A2b941b2b31836dE45185D" },
@@ -66,6 +75,16 @@ const TOKENS: { symbol: string; address: `0x${string}` }[] = [
   { symbol: "TRX", address: "0x60617237bC60f73c0393c7a6d7352e16DF20472a" },
   { symbol: "KRSQ", address: "0x4945419ccEEF0Dc70B054700DE2750A056B03eE3" },
   { symbol: "YTN", address: "0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6" },
+  // Newly listed DEX tokens — each has a live (token, WCYBER) pool, so the
+  // oracle prices them straight from it (no fallback). See header re: shallow
+  // TG/GOAL pools.
+  { symbol: "SOL", address: "0x53450B1d205f1e41d10B653FBBDEa74160dafFf4" },
+  { symbol: "ETH", address: "0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986" },
+  { symbol: "HATCHER", address: "0x621021F18b6404123f98b1395c418868418ACF36" },
+  { symbol: "LAIN", address: "0x05cd1AFd5b2DF3CCA6cEAb80CbC21168ec981E8B" },
+  { symbol: "MINE", address: "0xD8c1f812ADd03ccdE8D3c7F86FeAD181980CD7Ec" },
+  { symbol: "TG", address: "0x3d32FE83ad0C1157fdDCA0a3280764c495cdAD6D" },
+  { symbol: "GOAL", address: "0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe" },
 ];
 
 const ARTIFACTS = {

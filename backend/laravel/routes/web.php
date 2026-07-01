@@ -20,12 +20,17 @@ use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
 use App\Http\Controllers\Teams\TeamInvitationController;
+use App\Http\Controllers\TokenController;
 use App\Http\Middleware\EnsureBridgeAdmin;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
 Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+// Public token directory + per-token pages the analytics list links into.
+// {token} accepts a 0x address or a symbol (e.g. /token/CYBER.sol).
+Route::get('/tokens', [TokenController::class, 'index'])->name('tokens.index');
+Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.show');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/pixels', 'PixelBattle')->name('pixels');
 Route::get('/liquidity', [LiquidityController::class, 'index'])->name('liquidity');

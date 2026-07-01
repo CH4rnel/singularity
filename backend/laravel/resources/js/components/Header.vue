@@ -220,6 +220,9 @@ function signOut() {
                 <InertiaLink href="/analytics" :class="linkClass('/analytics')"
                     >Analytics</InertiaLink
                 >
+                <InertiaLink href="/tokens" :class="linkClass('/tokens')"
+                    >Tokens</InertiaLink
+                >
                 <a
                     href="https://swap.cyberia.church/"
                     target="_blank"

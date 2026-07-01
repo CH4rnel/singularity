@@ -13,6 +13,15 @@ export const RITUAL_MASTERCHEF_ADDRESS: { [chainId: number]: string } = {
   [ChainId.CYBERIA]: '0xd540DEa828567160FFDe5e792ca359aDD1f6B03D',
 };
 
+/**
+ * Multicall3 on Cyberia — used by the farm page to batch all per-pool reads
+ * into a couple of RPC round-trips. Without it, the ~20 pools × ~10 reads each
+ * are issued one HTTP request at a time and never finish within a ~1s block.
+ */
+export const RITUAL_MULTICALL3_ADDRESS: { [chainId: number]: string } = {
+  [ChainId.CYBERIA]: '0x176C70dD7CF17056596D8c4C7E2b1f2537df978F',
+};
+
 /** Approx daily emission. 437 ASH/day across all pools combined. */
 export const RITUAL_TOTAL_DAILY_ASH = 437;
 
@@ -44,6 +53,14 @@ export interface RitualFarmPool {
   isSolo: boolean;
   /** Token logos shown on the pool card (paths served from /public). */
   icons: string[];
+  /**
+   * Retired pool: its allocPoint has been zeroed on-chain (via
+   * scripts/set-farm-alloc.ts) so it no longer earns ASH. MasterChef pools
+   * cannot be removed, and stakers may still have LP locked in them, so we keep
+   * the entry but hide it from the main /farm list. Retired pools are shown on
+   * the withdraw-only /farm-empty page so stakers can pull their tokens out.
+   */
+  retired?: boolean;
 }
 
 export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
@@ -68,17 +85,19 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       pid: 2,
       lpToken: '0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA', // CYBER.sol
       label: 'CYBER.sol',
-      description: 'Stake CYBER.sol directly',
+      description: 'Retired — withdraw only',
       isSolo: true,
       icons: ['/CYBER.png'],
+      retired: true,
     },
     {
       pid: 3,
       lpToken: '0x7D8e23e33c6680D5C45CA2deb8A85CcA0fe283F4', // CYBER.sol/CYBER LP
       label: 'CYBER.sol / CYBER LP',
-      description: 'Stake LP from the CYBER.sol/CYBER pair',
+      description: 'Retired — withdraw only',
       isSolo: false,
       icons: ['/CYBER.png', '/cyberia.png'],
+      retired: true,
     },
     {
       pid: 4,
@@ -104,8 +123,126 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       isSolo: false,
       icons: ['/cyberia.png', '/usdc.svg'],
     },
-    // pid 7 (SOL/CYBER.sol LP) retired: allocPoint zeroed on-chain via
-    // scripts/set-farm-alloc.ts. The MasterChef pool still exists (pools cannot
-    // be removed) but earns nothing, so it is hidden from the DEX farm list.
+    {
+      pid: 7,
+      lpToken: '0xBc9cbe6B1876480D094221eb32C9887df4E62ea6', // SOL/CYBER.sol LP
+      label: 'SOL / CYBER.sol LP',
+      description: 'Retired — withdraw only',
+      isSolo: false,
+      icons: ['/sol.svg', '/CYBER.png'],
+      retired: true,
+    },
+    {
+      pid: 8,
+      lpToken: '0x86199CD222E0d3412b77323772B4D1cFd0a35242', // MINE/LAIN LP
+      label: 'MINE / LAIN LP',
+      description: 'Stake LP from the MINE/LAIN pair',
+      isSolo: false,
+      icons: ['/mine.jpg', '/lain.jpg'],
+    },
+    {
+      pid: 9,
+      lpToken: '0x2AC6779E02ED515360a984A52441ba77fa7e3cAB', // CYBER/HATCHER LP
+      label: 'CYBER / HATCHER LP',
+      description: 'Stake LP from the CYBER/HATCHER pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/hatcher.jpg'],
+    },
+    {
+      pid: 10,
+      lpToken: '0x9298d13f57D1e5bD14C443144b500aaa210a1175', // CYBER/LAIN LP
+      label: 'CYBER / LAIN LP',
+      description: 'Stake LP from the CYBER/LAIN pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/lain.jpg'],
+    },
+    {
+      pid: 11,
+      lpToken: '0xF18bA050eFF63B2be2D244A423691D44BDDeF60d', // CYBER/MINE LP
+      label: 'CYBER / MINE LP',
+      description: 'Stake LP from the CYBER/MINE pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/mine.jpg'],
+    },
+    {
+      pid: 12,
+      lpToken: '0x7598B5A2421E7A9cA443368DB939Ec860Dc9d536', // CYBER/GOAL LP
+      label: 'CYBER / GOAL LP',
+      description: 'Stake LP from the CYBER/GOAL pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/goal.webp'],
+    },
+    {
+      pid: 13,
+      lpToken: '0xda176FEd5D6D1e1eB8C37556A01678f9e18B941F', // YTN/CYBER LP
+      label: 'YTN / CYBER LP',
+      description: 'Stake LP from the YTN/CYBER pair',
+      isSolo: false,
+      icons: ['/Yenten-logo.png', '/cyberia.png'],
+    },
+    {
+      pid: 14,
+      lpToken: '0x828b0c5D46CfDf4Adc78E2cB4139547aca56845c', // KRSQ/CYBER LP
+      label: 'KRSQ / CYBER LP',
+      description: 'Stake LP from the KRSQ/CYBER pair',
+      isSolo: false,
+      icons: ['/KARASIQUE.webp', '/cyberia.png'],
+    },
+    {
+      pid: 15,
+      lpToken: '0xb6184A51C0fAa2810D4A8Eb8C25bB18CB0bD4E33', // TRX/CYBER LP
+      label: 'TRX / CYBER LP',
+      description: 'Stake LP from the TRX/CYBER pair',
+      isSolo: false,
+      icons: ['/tron.svg', '/cyberia.png'],
+    },
+    {
+      pid: 16,
+      lpToken: '0x86dC072E44556c4F5cE948b94368b6631bCB0332', // CYBER/XMR LP
+      label: 'CYBER / XMR LP',
+      description: 'Stake LP from the CYBER/XMR pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/monero.svg'],
+    },
+    {
+      pid: 17,
+      lpToken: '0x1DF2329f6b9E94f9fdB5D76ea006DffF70C378Ec', // LTC/CYBER LP
+      label: 'LTC / CYBER LP',
+      description: 'Stake LP from the LTC/CYBER pair',
+      isSolo: false,
+      icons: ['/ltc.svg', '/cyberia.png'],
+    },
+    {
+      pid: 18,
+      lpToken: '0x144211C1476e1Da2eD55B19ff25d1ea18AA75aBC', // CYBER/BTC LP
+      label: 'CYBER / BTC LP',
+      description: 'Stake LP from the CYBER/BTC pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/btc.svg'],
+    },
+    {
+      pid: 19,
+      lpToken: '0xF94a92ED03fB44578f5246920D7fc1463Df2cF6D', // CYBER/SILVER LP
+      label: 'CYBER / SILVER LP',
+      description: 'Stake LP from the CYBER/SILVER pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/silver.png'],
+    },
+    {
+      pid: 20,
+      lpToken: '0x64252D0d9D9d2f27146c01CA15dD8680ACFFdEa2', // CYBER/ETH LP
+      label: 'CYBER / ETH LP',
+      description: 'Stake LP from the CYBER/ETH pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/ethereum-eth-logo-colored.svg'],
+    },
+    {
+      pid: 21,
+      lpToken: '0x28521507A465Da62B73348C9FBB5561cCB1f311c', // BTC/ETH LP
+      label: 'BTC / ETH LP',
+      description: 'Stake LP from the BTC/ETH pair',
+      isSolo: false,
+      icons: ['/btc.svg', '/ethereum-eth-logo-colored.svg'],
+    },
   ],
 };

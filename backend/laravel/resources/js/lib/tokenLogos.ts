@@ -16,6 +16,21 @@ export const TOKEN_LOGOS: Record<string, string> = {
     LTC: '/tokens/ltc.svg',
     SILVER: '/tokens/silver.png',
     SOL: '/tokens/sol.svg',
+    ETH: '/tokens/eth.svg',
+    XMR: '/tokens/monero.svg',
+    TRX: '/tokens/tron.svg',
+    GOLD: '/tokens/gold.png',
+    TRUR: '/tokens/trur.png',
+    TGLD: '/tokens/tgld.png',
+    TMOS: '/tokens/tmos.png',
+    TOFZ: '/tokens/tofz.png',
+    HATCHER: '/tokens/hatcher.jpg',
+    KRSQ: '/tokens/karasique.webp',
+    YTN: '/tokens/yenten.png',
+    LAIN: '/tokens/lain.jpg',
+    MINE: '/tokens/mine.jpg',
+    GOAL: '/tokens/goal.webp',
+    TG: '/tokens/telegram.svg',
 };
 
 // Symbols whose <img> failed to load (404). Module-level so a single failure is
@@ -28,8 +43,12 @@ export const logoFor = (symbol: string): string | undefined =>
 export const showLogo = (symbol: string): boolean =>
     !!TOKEN_LOGOS[symbol] && !failed[symbol];
 
-export const markLogoFailed = (symbol: string): void => {
-    failed[symbol] = true;
+// Keyed by whatever string identifies the image (symbol or explicit URL), so
+// TokenIcon can track failures for both the built-in map and registry logos.
+export const logoFailed = (key: string): boolean => !!failed[key];
+
+export const markLogoFailed = (key: string): void => {
+    failed[key] = true;
 };
 
 // Deterministic hue per symbol for the gradient fallback avatar.

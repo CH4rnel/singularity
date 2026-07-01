@@ -1,9 +1,9 @@
 {
   "name": "Ritual Token List",
-  "timestamp": "2026-06-30T18:53:57.000Z",
+  "timestamp": "2026-07-01T00:00:00.000Z",
   "version": {
     "major": 1,
-    "minor": 2,
+    "minor": 3,
     "patch": 0
   },
   "tags": {},
@@ -205,6 +205,14 @@
       "decimals": 18,
       "chainId": 49406,
       "logoURI": "/mine.jpg"
+    },
+    {
+      "name": "Ethereum",
+      "address": "0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986",
+      "symbol": "ETH",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/ethereum-eth-logo-colored.svg"
     }
   ]
 }

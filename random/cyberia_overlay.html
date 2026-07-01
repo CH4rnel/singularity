@@ -11,7 +11,9 @@
         --green-dim: rgba(0, 255, 156, 0.4);
         --green-soft: rgba(0, 255, 156, 0.12);
         --yellow: #ffd166;
+        --yellow-soft: rgba(255, 209, 102, 0.12);
         --red: #ff4d6d;
+        --red-soft: rgba(255, 77, 109, 0.12);
         --white: #ffffff;
         --muted: rgba(255, 255, 255, 0.66);
     }
@@ -28,23 +30,23 @@
         position: absolute;
         top: 20px;
         left: 20px;
-        width: 360px;
+        width: 420px;
         padding: 14px;
-        background: rgba(0, 0, 0, 0.68);
+        background: rgba(0, 0, 0, 0.72);
         border: 1px solid var(--green-dim);
         box-shadow: 0 0 18px rgba(0, 255, 156, 0.22);
         box-sizing: border-box;
     }
 
     .title {
-        font-weight: bold;
-        margin-bottom: 12px;
-        font-size: 14px;
-        letter-spacing: 1px;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 10px;
+        margin-bottom: 12px;
+        font-size: 14px;
+        font-weight: bold;
+        letter-spacing: 1px;
     }
 
     .network {
@@ -54,14 +56,40 @@
         letter-spacing: 0;
     }
 
+    .summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .headline {
+        margin-top: 4px;
+        font-size: 16px;
+        line-height: 1.2;
+        color: var(--white);
+    }
+
+    .badge {
+        padding: 5px 8px;
+        border: 1px solid currentColor;
+        font-size: 10px;
+        letter-spacing: 1px;
+        white-space: nowrap;
+    }
+
     .grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
     }
 
     .metric {
-        min-height: 46px;
+        min-height: 54px;
         padding: 8px;
         background: var(--green-soft);
         border: 1px solid rgba(0, 255, 156, 0.18);
@@ -90,9 +118,25 @@
         font-size: 12px;
     }
 
-    .status-ok { color: var(--green); }
-    .status-warn { color: var(--yellow); }
-    .status-bad { color: var(--red); }
+    .mono {
+        font-size: 11px;
+    }
+
+    .note {
+        margin-top: 10px;
+        padding: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+        font-size: 11px;
+        line-height: 1.35;
+        color: var(--white);
+    }
+
+    .timer {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--white);
+    }
 
     .links {
         display: grid;
@@ -117,12 +161,6 @@
         background: var(--green-soft);
     }
 
-    .timer {
-        margin-top: 10px;
-        font-size: 13px;
-        color: var(--white);
-    }
-
     .log {
         margin-top: 10px;
         font-size: 11px;
@@ -130,6 +168,28 @@
         overflow: hidden;
         opacity: 0.9;
         color: var(--muted);
+    }
+
+    .status-ok {
+        color: var(--green);
+    }
+
+    .status-warn {
+        color: var(--yellow);
+    }
+
+    .status-bad {
+        color: var(--red);
+    }
+
+    .panel-warn {
+        background: var(--yellow-soft);
+        border-color: rgba(255, 209, 102, 0.25);
+    }
+
+    .panel-bad {
+        background: var(--red-soft);
+        border-color: rgba(255, 77, 109, 0.25);
     }
 </style>
 </head>
@@ -140,6 +200,14 @@
     <div class="title">
         <span>CYBERIA NETWORK</span>
         <span class="network">CHAIN <span id="chainExpected">49406</span></span>
+    </div>
+
+    <div class="summary">
+        <div>
+            <div class="label">Network health</div>
+            <div class="headline" id="healthHeadline">INITIALIZING</div>
+        </div>
+        <div class="badge status-warn" id="healthBadge">BOOT</div>
     </div>
 
     <div class="grid">
@@ -159,23 +227,43 @@
             <div class="label">Gas price</div>
             <div class="value" id="gasPrice">-- gwei</div>
         </div>
+        <div class="metric">
+            <div class="label">Tx in block</div>
+            <div class="value" id="txCount">--</div>
+        </div>
+        <div class="metric">
+            <div class="label">Block time</div>
+            <div class="value" id="blockTime">-- s</div>
+        </div>
     </div>
 
+    <div class="line">
+        <span>■ Sync state</span>
+        <span id="syncStatus" class="status-warn">CHECKING</span>
+    </div>
+    <div class="line">
+        <span>■ Peer count</span>
+        <span id="peerCount" class="status-warn">--</span>
+    </div>
     <div class="line">
         <span>■ Block age</span>
         <span id="blockAge" class="status-warn">--</span>
     </div>
     <div class="line">
         <span>■ Native token</span>
-        <span class="status-ok">CYBER</span>
+        <span class="status-ok" id="nativeToken">CYBER</span>
     </div>
     <div class="line">
         <span>■ CYBER.sol</span>
-        <span>E67W...pump</span>
+        <span class="mono" id="mintAddress">E67WWi...bpump</span>
     </div>
 
+    <div class="note status-warn" id="actionNote">Checking RPC reachability and node sync status...</div>
+
     <div class="timer">
-        Overlay uptime: <span id="timer">00:00:00</span> | Updated: <span id="updatedAt">--:--:--</span>
+        Overlay uptime: <span id="timer">00:00:00</span> |
+        Updated: <span id="updatedAt">--:--:--</span> |
+        Local: <span id="localTime">--:--:--</span>
     </div>
 
     <div class="links">
@@ -191,32 +279,50 @@
 <script>
 const CONFIG = {
     rpcUrl: "https://rpc.cyberia.church",
-    explorerUrl: "https://explorer.cyberia.church",
     chainId: 49406,
+    nativeToken: "CYBER",
+    solMint: "E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
     pollMs: 12000,
     timeoutMs: 8000
 };
 
 const start = Date.now();
 let latestBlockTimestamp = null;
+let runtimeState = {
+    online: false,
+    chainMatch: false,
+    reportedChainId: null,
+    latencyMs: null,
+    syncLag: null,
+    syncClass: "status-warn"
+};
 
 function byId(id) {
     return document.getElementById(id);
 }
 
+function truncateMiddle(value, startChars, endChars) {
+    if (!value || value.length <= startChars + endChars + 3) {
+        return value || "--";
+    }
+
+    return value.slice(0, startChars) + "..." + value.slice(-endChars);
+}
+
 function updateTimer() {
     const diff = Date.now() - start;
-
     const sec = Math.floor(diff / 1000) % 60;
     const min = Math.floor(diff / 1000 / 60) % 60;
-    const hr  = Math.floor(diff / 1000 / 60 / 60);
+    const hr = Math.floor(diff / 1000 / 60 / 60);
 
     byId("timer").innerText =
-        String(hr).padStart(2, '0') + ":" +
-        String(min).padStart(2, '0') + ":" +
-        String(sec).padStart(2, '0');
+        String(hr).padStart(2, "0") + ":" +
+        String(min).padStart(2, "0") + ":" +
+        String(sec).padStart(2, "0");
 
+    byId("localTime").textContent = new Date().toLocaleTimeString();
     updateBlockAge();
+    renderHealth();
 }
 
 setInterval(updateTimer, 1000);
@@ -237,9 +343,9 @@ function addLog(message, status) {
     }
 }
 
-function setStatus(element, value, className) {
+function setStatus(element, value, className, baseClassName) {
     element.textContent = value;
-    element.className = className;
+    element.className = [baseClassName, className].filter(Boolean).join(" ");
 }
 
 function hexToNumber(value) {
@@ -248,6 +354,10 @@ function hexToNumber(value) {
     }
 
     return Number.parseInt(value, 16);
+}
+
+function numberToHex(value) {
+    return "0x" + value.toString(16);
 }
 
 function formatBlock(blockNumber) {
@@ -262,25 +372,126 @@ function formatGas(weiHex) {
     return whole.toString() + "." + fraction + " gwei";
 }
 
+function formatSeconds(seconds) {
+    if (!Number.isFinite(seconds)) {
+        return "--";
+    }
+
+    if (seconds < 10) {
+        return seconds.toFixed(1) + " s";
+    }
+
+    return Math.round(seconds) + " s";
+}
+
+function formatPeerCount(count) {
+    return Number.isFinite(count) ? String(count) : "N/A";
+}
+
+function computeBlockAgeSeconds() {
+    if (!latestBlockTimestamp) {
+        return null;
+    }
+
+    return Math.max(0, Math.floor((Date.now() - latestBlockTimestamp * 1000) / 1000));
+}
+
 function updateBlockAge() {
+    const blockAgeSeconds = computeBlockAgeSeconds();
     const blockAge = byId("blockAge");
 
-    if (!latestBlockTimestamp) {
-        blockAge.textContent = "--";
-        blockAge.className = "status-warn";
+    if (!Number.isFinite(blockAgeSeconds)) {
+        setStatus(blockAge, "--", "status-warn");
         return;
     }
 
-    const ageSeconds = Math.max(0, Math.floor((Date.now() - latestBlockTimestamp * 1000) / 1000));
-    blockAge.textContent = ageSeconds + "s";
+    setStatus(
+        blockAge,
+        blockAgeSeconds + "s",
+        blockAgeSeconds < 45 ? "status-ok" : blockAgeSeconds < 180 ? "status-warn" : "status-bad"
+    );
+}
 
-    if (ageSeconds < 45) {
-        blockAge.className = "status-ok";
-    } else if (ageSeconds < 180) {
-        blockAge.className = "status-warn";
-    } else {
-        blockAge.className = "status-bad";
+function getHealthState() {
+    const blockAgeSeconds = computeBlockAgeSeconds();
+
+    if (!runtimeState.online) {
+        return {
+            headline: "RPC OFFLINE",
+            badge: "DOWN",
+            className: "status-bad",
+            panelClassName: "panel-bad",
+            note: "The RPC endpoint is unreachable or timing out. Live metrics are stale until connectivity returns."
+        };
     }
+
+    if (!runtimeState.chainMatch) {
+        return {
+            headline: "WRONG CHAIN",
+            badge: "ALERT",
+            className: "status-bad",
+            panelClassName: "panel-bad",
+            note: "RPC returned chain " + (runtimeState.reportedChainId || "--") + " while this overlay expects 49406."
+        };
+    }
+
+    if (Number.isFinite(runtimeState.syncLag) && runtimeState.syncLag > 0) {
+        return {
+            headline: "SYNCING",
+            badge: "CATCHUP",
+            className: "status-warn",
+            panelClassName: "panel-warn",
+            note: "Node is still syncing and trails the highest known block by " + runtimeState.syncLag + "."
+        };
+    }
+
+    if (Number.isFinite(blockAgeSeconds) && blockAgeSeconds >= 180) {
+        return {
+            headline: "STALE HEAD",
+            badge: "LAG",
+            className: "status-bad",
+            panelClassName: "panel-bad",
+            note: "Latest block is older than 180 seconds. The node may be stalled even if it still answers RPC calls."
+        };
+    }
+
+    if (Number.isFinite(blockAgeSeconds) && blockAgeSeconds >= 45) {
+        return {
+            headline: "HEAD AGING",
+            badge: "WATCH",
+            className: "status-warn",
+            panelClassName: "panel-warn",
+            note: "RPC is online, but the latest block is aging. Watch for a stalled sequencer or delayed node updates."
+        };
+    }
+
+    if (Number.isFinite(runtimeState.latencyMs) && runtimeState.latencyMs > 1500) {
+        return {
+            headline: "SLOW RPC",
+            badge: "SLOW",
+            className: "status-warn",
+            panelClassName: "panel-warn",
+            note: "The node is healthy but slow to answer. Frontends depending on this RPC may feel delayed."
+        };
+    }
+
+    return {
+        headline: "NETWORK LIVE",
+        badge: "OK",
+        className: "status-ok",
+        panelClassName: "",
+        note: "RPC, latest block, gas price and sync status all look healthy for chain 49406."
+    };
+}
+
+function renderHealth() {
+    const health = getHealthState();
+    const panel = document.querySelector(".panel");
+
+    setStatus(byId("healthHeadline"), health.headline, health.className, "headline");
+    setStatus(byId("healthBadge"), health.badge, health.className, "badge");
+    setStatus(byId("actionNote"), health.note, health.className, "note");
+    panel.className = ["panel", health.panelClassName].filter(Boolean).join(" ");
 }
 
 async function rpc(method, params, signal) {
@@ -315,25 +526,69 @@ async function refreshNetwork() {
     const startedAt = performance.now();
 
     try {
-        const [chainIdHex, blockHex, gasHex] = await Promise.all([
+        const [chainIdHex, gasHex, latestBlock, syncingState, peerCountHex] = await Promise.all([
             rpc("eth_chainId", [], controller.signal),
-            rpc("eth_blockNumber", [], controller.signal),
-            rpc("eth_gasPrice", [], controller.signal)
+            rpc("eth_gasPrice", [], controller.signal),
+            rpc("eth_getBlockByNumber", ["latest", false], controller.signal),
+            rpc("eth_syncing", [], controller.signal).catch(() => false),
+            rpc("net_peerCount", [], controller.signal).catch(() => null)
         ]);
 
-        const block = hexToNumber(blockHex);
+        if (!latestBlock || !latestBlock.number) {
+            throw new Error("latest block unavailable");
+        }
+
+        const blockNumber = hexToNumber(latestBlock.number);
         const chainId = hexToNumber(chainIdHex);
-        const latestBlock = await rpc("eth_getBlockByNumber", [blockHex, false], controller.signal);
+        const peerCount = hexToNumber(peerCountHex);
+        const txCount = Array.isArray(latestBlock.transactions) ? latestBlock.transactions.length : 0;
+        const previousBlock = blockNumber > 0
+            ? await rpc("eth_getBlockByNumber", [numberToHex(blockNumber - 1), false], controller.signal).catch(() => null)
+            : null;
+        const previousTimestamp = previousBlock ? hexToNumber(previousBlock.timestamp) : null;
+        const currentTimestamp = hexToNumber(latestBlock.timestamp);
+        const blockTimeSeconds =
+            Number.isFinite(currentTimestamp) && Number.isFinite(previousTimestamp)
+                ? Math.max(0, currentTimestamp - previousTimestamp)
+                : null;
         const latencyMs = Math.round(performance.now() - startedAt);
+        let syncLag = null;
+        let syncText = "SYNCED";
+        let syncClass = "status-ok";
 
         clearTimeout(timeout);
 
-        latestBlockTimestamp = hexToNumber(latestBlock && latestBlock.timestamp);
+        if (syncingState && typeof syncingState === "object") {
+            const currentBlock = hexToNumber(syncingState.currentBlock);
+            const highestBlock = hexToNumber(syncingState.highestBlock);
+            syncLag = Number.isFinite(currentBlock) && Number.isFinite(highestBlock)
+                ? Math.max(0, highestBlock - currentBlock)
+                : null;
+            syncText = syncLag > 0 ? "LAG " + syncLag : "SYNCING";
+            syncClass = syncLag > 0 ? "status-warn" : "status-ok";
+        }
+
+        latestBlockTimestamp = currentTimestamp;
+        runtimeState = {
+            online: true,
+            chainMatch: chainId === CONFIG.chainId,
+            reportedChainId: chainId,
+            latencyMs,
+            syncLag,
+            syncClass: chainId === CONFIG.chainId ? syncClass : "status-bad"
+        };
+
         byId("chainExpected").textContent = String(CONFIG.chainId);
+        byId("nativeToken").textContent = CONFIG.nativeToken;
+        byId("mintAddress").textContent = truncateMiddle(CONFIG.solMint, 6, 5);
         byId("latency").textContent = latencyMs + " ms";
-        byId("blockNumber").textContent = formatBlock(block);
+        byId("blockNumber").textContent = formatBlock(blockNumber);
         byId("gasPrice").textContent = formatGas(gasHex);
+        byId("txCount").textContent = String(txCount);
+        byId("blockTime").textContent = formatSeconds(blockTimeSeconds);
         byId("updatedAt").textContent = new Date().toLocaleTimeString();
+        byId("peerCount").textContent = formatPeerCount(peerCount);
+        setStatus(byId("syncStatus"), syncText, runtimeState.syncClass);
 
         if (chainId === CONFIG.chainId) {
             setStatus(byId("rpcStatus"), latencyMs > 1500 ? "SLOW" : "ONLINE", latencyMs > 1500 ? "status-warn" : "status-ok");
@@ -342,19 +597,46 @@ async function refreshNetwork() {
         }
 
         updateBlockAge();
-        addLog("block " + formatBlock(block) + " / gas " + formatGas(gasHex), chainId === CONFIG.chainId ? "status-ok" : "status-bad");
+        renderHealth();
+        addLog(
+            "head " + formatBlock(blockNumber) +
+            " / tx " + txCount +
+            " / block " + (Number.isFinite(blockTimeSeconds) ? Math.round(blockTimeSeconds) + "s" : "--") +
+            " / peers " + formatPeerCount(peerCount),
+            chainId === CONFIG.chainId ? "status-ok" : "status-bad"
+        );
     } catch (error) {
         clearTimeout(timeout);
         latestBlockTimestamp = null;
+        runtimeState = {
+            online: false,
+            chainMatch: false,
+            reportedChainId: null,
+            latencyMs: null,
+            syncLag: null,
+            syncClass: "status-bad"
+        };
+
         setStatus(byId("rpcStatus"), "OFFLINE", "status-bad");
+        setStatus(byId("syncStatus"), "UNAVAILABLE", "status-bad");
         byId("latency").textContent = "-- ms";
+        byId("blockNumber").textContent = "--";
+        byId("gasPrice").textContent = "-- gwei";
+        byId("txCount").textContent = "--";
+        byId("blockTime").textContent = "-- s";
+        byId("peerCount").textContent = "--";
         byId("updatedAt").textContent = new Date().toLocaleTimeString();
         updateBlockAge();
+        renderHealth();
         addLog("RPC unavailable: " + error.message, "status-bad");
     }
 }
 
+byId("mintAddress").textContent = truncateMiddle(CONFIG.solMint, 6, 5);
+byId("nativeToken").textContent = CONFIG.nativeToken;
+byId("localTime").textContent = new Date().toLocaleTimeString();
 addLog("overlay loaded / polling " + CONFIG.rpcUrl, "status-ok");
+renderHealth();
 refreshNetwork();
 setInterval(refreshNetwork, CONFIG.pollMs);
 </script>

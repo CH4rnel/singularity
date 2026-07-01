@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import Header from '@/components/Header.vue';
 
@@ -82,6 +82,7 @@ const props = defineProps<{
     chain: { latest_block: number | null; gas_price_gwei: number | null } | null;
     explorerUrl: string;
     indexerReady: boolean;
+    tokenLinks: Record<string, string>;
 }>();
 
 const windows = [
@@ -129,6 +130,18 @@ return '?';
 }
 
     return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
+};
+
+// The /token/{address} page for a documented symbol, or null when we have no
+// page to link to (so the symbol renders as plain text instead of a dead link).
+const tokenHrefBySymbol = (symbol: string | null): string | null => {
+    if (!symbol) {
+        return null;
+    }
+
+    const addr = props.tokenLinks[symbol.toUpperCase()];
+
+    return addr ? `/token/${addr}` : null;
 };
 
 const maxDailyUsd = computed(() =>
@@ -315,7 +328,14 @@ return usd(value, 2);
                         :key="t.symbol"
                         class="grid grid-cols-[7rem_1fr_6rem] items-center gap-3 text-sm"
                     >
-                        <span class="truncate font-mono text-xs">{{ t.symbol }}</span>
+                        <Link
+                            v-if="tokenHrefBySymbol(t.symbol)"
+                            :href="tokenHrefBySymbol(t.symbol)!"
+                            class="truncate font-mono text-xs text-blue-500 hover:underline"
+                        >
+                            {{ t.symbol }}
+                        </Link>
+                        <span v-else class="truncate font-mono text-xs">{{ t.symbol }}</span>
                         <div class="relative h-5 rounded bg-gray-100 dark:bg-gray-800">
                             <div
                                 class="absolute inset-y-0 left-0 rounded bg-indigo-500/70"
@@ -501,23 +521,24 @@ return usd(value, 2);
         </section>
 
         <section v-if="prices.length > 0">
-            <h2 class="mb-3 text-lg font-semibold">Token prices</h2>
+            <div class="mb-3 flex items-baseline justify-between">
+                <h2 class="text-lg font-semibold">Token prices</h2>
+                <Link href="/tokens" class="text-xs text-blue-500 hover:underline">
+                    Browse all tokens →
+                </Link>
+            </div>
             <div class="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
-                <div
+                <Link
                     v-for="p in prices"
                     :key="p.address"
-                    class="rounded border border-gray-200 px-3 py-2 dark:border-gray-800"
+                    :href="`/token/${p.address}`"
+                    class="block rounded border border-gray-200 px-3 py-2 transition hover:border-gray-400 dark:border-gray-800 dark:hover:border-gray-600"
                 >
-                    <a
-                        :href="`${explorerUrl}/address/${p.address}`"
-                        target="_blank"
-                        rel="noopener"
-                        class="block truncate font-mono text-xs text-gray-500 hover:underline"
-                    >
+                    <span class="block truncate font-mono text-xs text-gray-500">
                         {{ p.symbol }}
-                    </a>
-                    <p class="font-mono text-sm">{{ price(p.price_usd) }}</p>
-                </div>
+                    </span>
+                    <span class="font-mono text-sm">{{ price(p.price_usd) }}</span>
+                </Link>
             </div>
         </section>
 

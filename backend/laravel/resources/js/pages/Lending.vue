@@ -404,6 +404,14 @@ const filteredMarkets = computed(() => {
         : visibleMarkets.value.slice();
 
     return list.sort((a, b) => {
+        // Featured tokens are pinned to the top, in their curated order.
+        const ra = featuredRank(a.symbol);
+        const rb = featuredRank(b.symbol);
+
+        if (ra !== rb) {
+            return ra - rb;
+        }
+
         const aMine = a.userSupplyShares > 0n || a.userBorrow > 0n ? 1 : 0;
         const bMine = b.userSupplyShares > 0n || b.userBorrow > 0n ? 1 : 0;
 
@@ -414,6 +422,23 @@ const filteredMarkets = computed(() => {
         return b.cash > a.cash ? 1 : b.cash < a.cash ? -1 : 0;
     });
 });
+
+// The single markets grid leads with a curated set, pinned to the top: the
+// headline assets first, then the community "partner" projects — so they land
+// on the first two rows (at lg's 3 columns). WCYBER is surfaced under its
+// friendlier "CYBER" name.
+const FEATURED_ORDER = ['WCYBER', 'BTC', 'ETH', 'HATCHER', 'KRSQ', 'YTN'];
+const PARTNER_SYMBOLS = new Set(['HATCHER', 'KRSQ', 'YTN']);
+
+const featuredRank = (symbol: string): number => {
+    const i = FEATURED_ORDER.indexOf(symbol.toUpperCase());
+
+    return i === -1 ? Number.POSITIVE_INFINITY : i;
+};
+const isPartner = (symbol: string): boolean =>
+    PARTNER_SYMBOLS.has(symbol.toUpperCase());
+const featuredName = (m: MarketView): string =>
+    m.symbol.toUpperCase() === 'WCYBER' ? 'CYBER' : m.symbol;
 
 const collateralState = (
     m: MarketView,
@@ -828,20 +853,31 @@ onUnmounted(() => {
                                         />
                                         <div>
                                             <p class="font-semibold leading-tight">
-                                                {{ market.symbol }}
+                                                {{ featuredName(market) }}
                                             </p>
-                                            <Badge
-                                                variant="outline"
-                                                class="mt-0.5 font-mono text-[10px]"
+                                            <div
+                                                class="mt-0.5 flex items-center gap-1"
                                             >
-                                                CF
-                                                {{
-                                                    (
-                                                        market.collateralFactor *
-                                                        100
-                                                    ).toFixed(0)
-                                                }}%
-                                            </Badge>
+                                                <Badge
+                                                    variant="outline"
+                                                    class="font-mono text-[10px]"
+                                                >
+                                                    CF
+                                                    {{
+                                                        (
+                                                            market.collateralFactor *
+                                                            100
+                                                        ).toFixed(0)
+                                                    }}%
+                                                </Badge>
+                                                <Badge
+                                                    v-if="isPartner(market.symbol)"
+                                                    variant="outline"
+                                                    class="border-blue-500/40 bg-blue-500/10 text-[10px] text-blue-600 dark:text-blue-400"
+                                                >
+                                                    Partner
+                                                </Badge>
+                                            </div>
                                         </div>
                                     </div>
                                     <button
