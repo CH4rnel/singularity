@@ -52,6 +52,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Optional CYBER.sol -> native CYBER auto-conversion (sol_to_evm only).
+    |--------------------------------------------------------------------------
+    | When the user opts in, the relayer mints the bridged CYBER.sol to itself
+    | and redeems it through the CyberSolBurnSwap contract (fixed 1000:1 rate,
+    | input burned to 0x...dEaD), then forwards the native CYBER payout to the
+    | recipient. Off by default per request — plain CYBER.sol delivery stays
+    | the standard flow.
+    */
+
+    'convert' => [
+        'enabled' => filter_var(env('BRIDGE_CONVERT_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        'burn_swap_address' => env('BRIDGE_CYBERSOL_BURN_SWAP', '0xa5Ae36E5b1eDb24BCa2F96783d079B28e0BCfd71'),
+        // CYBER.sol required per 1 native CYBER (matches CyberSolBurnSwap.RATE).
+        'rate' => 1000,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Supported tokens and their per-chain identifiers.
     |--------------------------------------------------------------------------
     | model: 'native' goes through the CyberBridge contract (CYBER only);

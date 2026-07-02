@@ -45,6 +45,7 @@ const props = withDefaults(
         bridgeRelayerEvm?: string | null;
         bridgeFeeConfig?: { flatUsd: number; rateBps: number };
         bridgeGasDrop?: { enabled: boolean; amount: string };
+        bridgeConvert?: { enabled: boolean; rate: number };
     }>(),
     {
         canRegister: true,
@@ -54,6 +55,7 @@ const props = withDefaults(
         bridgeRelayerEvm: null,
         bridgeFeeConfig: () => ({ flatUsd: 0.1, rateBps: 0 }),
         bridgeGasDrop: () => ({ enabled: true, amount: '0.01' }),
+        bridgeConvert: () => ({ enabled: true, rate: 1000 }),
     },
 );
 
@@ -577,6 +579,7 @@ const statusColor = (status: string) => {
                     "
                     :fee-config="props.bridgeFeeConfig"
                     :gas-drop-config="props.bridgeGasDrop"
+                    :convert-config="props.bridgeConvert"
                 />
 
                 <template v-else>

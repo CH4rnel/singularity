@@ -1,0 +1,20 @@
+[
+  {
+    "id": "akvarium",
+    "host": "play.akvarium228.ru",
+    "port": 25565,
+    "username": "lain",
+    "auth": "offline",
+    "loginCommand": "/l <password>",
+    "owner": "your_nickname"
+  },
+  {
+    "id": "other",
+    "host": "mc.example.com",
+    "port": 25565,
+    "username": "lain",
+    "auth": "offline",
+    "loginCommand": "",
+    "owner": "your_nickname"
+  }
+]

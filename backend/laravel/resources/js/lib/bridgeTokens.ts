@@ -70,6 +70,13 @@ export const BRIDGE_TOKENS: Record<BridgeTokenSymbol, BridgeTokenInfo> = {
     },
 };
 
+/**
+ * CYBER.sol per 1 native CYBER for the optional sol_to_evm auto-conversion.
+ * Mirrors CyberSolBurnSwap.RATE on Cyberia; the server sends the live value
+ * via the `bridgeConvert` page prop, this is only the fallback default.
+ */
+export const CYBERSOL_TO_NATIVE_RATE = 1000;
+
 export const SUPPORTED_TOKEN_SYMBOLS: BridgeTokenSymbol[] = [
     'CYBER.sol',
     'USDC',

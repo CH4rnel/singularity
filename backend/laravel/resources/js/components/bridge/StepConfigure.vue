@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Wallet, Clock } from 'lucide-vue-next';
+import { Wallet, Clock, Flame } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 import type { RecentDestination } from '@/composables/useBridgeFlow';
@@ -13,6 +13,9 @@ const props = defineProps<{
     token: BridgeTokenSymbol;
     amount: string;
     destinationAddress: string;
+    convertToNative: boolean;
+    convertEnabled: boolean;
+    convertRate: number;
     sourceWalletConnected: boolean;
     sourceWalletAddress: string | null;
     sourceWalletConnecting: boolean;
@@ -24,6 +27,7 @@ const emit = defineEmits<{
     (e: 'update:amount', v: string): void;
     (e: 'update:destinationAddress', v: string): void;
     (e: 'update:token', v: BridgeTokenSymbol): void;
+    (e: 'update:convertToNative', v: boolean): void;
     (e: 'connect-source'): void;
     (e: 'next'): void;
     (e: 'back'): void;
@@ -44,6 +48,29 @@ const localAmount = computed({
 const localDestination = computed({
     get: () => props.destinationAddress,
     set: (v) => emit('update:destinationAddress', v),
+});
+
+const localConvert = computed({
+    get: () => props.convertToNative,
+    set: (v) => emit('update:convertToNative', v),
+});
+
+// Auto-conversion is only offered for CYBER.sol arriving on Cyberia.
+const convertAvailable = computed(
+    () =>
+        props.convertEnabled &&
+        props.direction === 'sol_to_evm' &&
+        props.token === 'CYBER.sol',
+);
+
+const convertedEstimate = computed(() => {
+    const amt = parseFloat(localAmount.value);
+
+    if (!(amt > 0) || props.convertRate <= 0) {
+        return null;
+    }
+
+    return (amt / props.convertRate).toFixed(6);
 });
 
 const validation = ref(validateDestination(props.direction, ''));
@@ -230,6 +257,39 @@ const formatRelative = (ts: number): string => {
             >
                 Amount exceeds your balance
             </p>
+        </div>
+
+        <!-- Optional CYBER.sol -> native CYBER auto-conversion -->
+        <div
+            v-if="convertAvailable"
+            class="rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"
+        >
+            <label class="flex cursor-pointer items-start gap-3">
+                <input
+                    v-model="localConvert"
+                    type="checkbox"
+                    class="mt-0.5 h-4 w-4 shrink-0 rounded border-[#19140035] dark:border-[#3E3E3A]"
+                />
+                <span class="flex flex-col gap-1">
+                    <span
+                        class="flex items-center gap-1.5 text-sm font-medium text-[#1b1b18] dark:text-[#EDEDEC]"
+                    >
+                        <Flame class="h-3.5 w-3.5 text-orange-500" />
+                        Convert to native CYBER
+                    </span>
+                    <span class="text-xs text-[#706f6c] dark:text-[#A1A09A]">
+                        Automatically burn the bridged CYBER.sol and receive
+                        native CYBER (gas token) at {{ convertRate }} : 1
+                        instead. Leave off to receive CYBER.sol as usual.
+                    </span>
+                    <span
+                        v-if="localConvert && convertedEstimate"
+                        class="font-mono text-xs text-green-700 dark:text-green-400"
+                    >
+                        ≈ {{ convertedEstimate }} CYBER
+                    </span>
+                </span>
+            </label>
         </div>
 
         <!-- Destination address -->

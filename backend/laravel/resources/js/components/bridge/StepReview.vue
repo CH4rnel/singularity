@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AlertTriangle, Gift } from 'lucide-vue-next';
+import { AlertTriangle, Flame, Gift } from 'lucide-vue-next';
 import { computed } from 'vue';
 
 import type { BridgeDirection } from '@/lib/addressValidation';
@@ -20,12 +20,16 @@ const props = withDefaults(
         feeConfig?: BridgeFeeConfig;
         gasDropPlanned?: boolean;
         gasDropAmount?: string;
+        convertToNative?: boolean;
+        convertRate?: number;
     }>(),
     {
         cyberSolUsd: null,
         feeConfig: () => DEFAULT_FEE,
         gasDropPlanned: false,
         gasDropAmount: '0.01',
+        convertToNative: false,
+        convertRate: 1000,
     },
 );
 
@@ -65,10 +69,18 @@ const feeUsd = computed(() => feeResult.value.feeUsd.toFixed(2));
 
 const youReceive = computed(() => {
     const amt = parseFloat(props.amount);
-    const after = amt - feeResult.value.feeToken;
+    let after = amt - feeResult.value.feeToken;
+
+    if (props.convertToNative && props.convertRate > 0) {
+        after = after / props.convertRate;
+    }
 
     return after > 0 ? after.toFixed(6) : '0';
 });
+
+const receiveToken = computed(() =>
+    props.convertToNative ? 'CYBER (native)' : props.token,
+);
 </script>
 
 <template>
@@ -146,7 +158,19 @@ const youReceive = computed(() => {
                 <span
                     class="font-mono text-sm font-medium text-green-700 dark:text-green-400"
                 >
-                    {{ youReceive }} {{ token }}
+                    {{ youReceive }} {{ receiveToken }}
+                </span>
+            </div>
+            <div
+                v-if="convertToNative"
+                class="flex items-start gap-2 rounded border border-orange-500/30 bg-orange-500/10 p-2 text-xs text-orange-700 dark:text-orange-300"
+            >
+                <Flame class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                    Auto-conversion: your CYBER.sol will be
+                    <strong>burned</strong> and you'll receive native CYBER at
+                    {{ convertRate }} : 1. If conversion liquidity is
+                    temporarily unavailable, you'll receive CYBER.sol instead.
                 </span>
             </div>
             <div

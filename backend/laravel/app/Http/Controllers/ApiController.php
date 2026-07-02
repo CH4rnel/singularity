@@ -45,6 +45,10 @@ class ApiController extends Controller
                 'enabled' => (bool) config('bridge.gas_drop.enabled', true),
                 'amount' => (string) config('bridge.gas_drop.amount_cyber', '0.01'),
             ],
+            'bridgeConvert' => [
+                'enabled' => (bool) config('bridge.convert.enabled', true),
+                'rate' => (int) config('bridge.convert.rate', 1000),
+            ],
         ]);
     }
 

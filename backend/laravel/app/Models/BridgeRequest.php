@@ -21,6 +21,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $fee_usd
  * @property bool $gas_drop_planned
  * @property string|null $gas_drop_amount
+ * @property bool $convert_to_native
+ * @property bool|null $converted
  * @property string $status
  * @property string|null $destination_tx_hash
  * @property string|null $error_message
@@ -44,6 +46,8 @@ class BridgeRequest extends Model
         'fee_usd',
         'gas_drop_planned',
         'gas_drop_amount',
+        'convert_to_native',
+        'converted',
         'status',
         'destination_tx_hash',
         'error_message',
@@ -58,6 +62,8 @@ class BridgeRequest extends Model
             'fee_usd' => 'decimal:8',
             'gas_drop_planned' => 'boolean',
             'gas_drop_amount' => 'decimal:18',
+            'convert_to_native' => 'boolean',
+            'converted' => 'boolean',
             'source_nonce' => 'integer',
             'completed_at' => 'datetime',
         ];

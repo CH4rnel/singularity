@@ -27,6 +27,7 @@ type FlowContext = {
     sourceAddress: string;
     destinationAddress: string;
     amount: string;
+    convertToNative: boolean;
     sourceTxHash: string;
     sourceNonce: number;
     bridgeRequestId: number | null;
@@ -83,6 +84,7 @@ export const useBridgeFlow = () => {
         sourceAddress: '',
         destinationAddress: '',
         amount: '',
+        convertToNative: false,
         sourceTxHash: '',
         sourceNonce: 0,
         bridgeRequestId: null,
@@ -100,6 +102,7 @@ export const useBridgeFlow = () => {
         context.sourceAddress = '';
         context.destinationAddress = '';
         context.amount = '';
+        context.convertToNative = false;
         context.sourceTxHash = '';
         context.sourceNonce = 0;
         context.bridgeRequestId = null;

@@ -21,12 +21,14 @@ const props = withDefaults(
         cyberSolUsd?: number | null;
         feeConfig?: BridgeFeeConfig;
         gasDropConfig?: { enabled: boolean; amount: string };
+        convertConfig?: { enabled: boolean; rate: number };
     }>(),
     {
         relayerEvmAddress: null,
         cyberSolUsd: null,
         feeConfig: () => ({ flatUsd: 0.1, rateBps: 0 }),
         gasDropConfig: () => ({ enabled: true, amount: '0.01' }),
+        convertConfig: () => ({ enabled: true, rate: 1000 }),
     },
 );
 
@@ -152,7 +154,14 @@ watch(sourceWalletConnected, (connected) => {
 
 watch(
     () => flow.context.token,
-    () => refreshSourceBalance(),
+    (token) => {
+        // Conversion only exists for CYBER.sol — drop the flag on token switch.
+        if (token !== 'CYBER.sol') {
+            flow.context.convertToNative = false;
+        }
+
+        refreshSourceBalance();
+    },
 );
 
 const handleDirection = (direction: BridgeDirection) => {
@@ -306,6 +315,7 @@ const handleConfirm = async () => {
                 sender_address: flow.context.sourceAddress,
                 recipient_address: flow.context.destinationAddress,
                 amount: flow.context.amount,
+                convert_to_native: flow.context.convertToNative,
                 session_id: analytics.sessionId,
             }),
         });
@@ -369,6 +379,9 @@ const handleReset = () => {
             v-model:token="flow.context.token"
             v-model:amount="flow.context.amount"
             v-model:destination-address="flow.context.destinationAddress"
+            v-model:convert-to-native="flow.context.convertToNative"
+            :convert-enabled="props.convertConfig.enabled"
+            :convert-rate="props.convertConfig.rate"
             :source-wallet-connected="sourceWalletConnected"
             :source-wallet-address="sourceWalletAddress"
             :source-wallet-connecting="sourceWalletConnecting"
@@ -392,6 +405,8 @@ const handleReset = () => {
             :fee-config="props.feeConfig"
             :gas-drop-planned="gasDropPlanned"
             :gas-drop-amount="props.gasDropConfig.amount"
+            :convert-to-native="flow.context.convertToNative"
+            :convert-rate="props.convertConfig.rate"
             v-model:confirmed="flow.context.confirmed"
             @confirm="handleConfirm"
             @back="flow.backToConfigure"

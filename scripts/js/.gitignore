@@ -1,1 +1,4 @@
 node_modules/
+minecraft-servers.json
+minecraft-ledger.json*
+minecraft-bot.sqlite*

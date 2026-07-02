@@ -29,6 +29,8 @@ const emit = defineEmits<{
 const status = ref<string>('pending');
 const destinationTxHash = ref<string | null>(null);
 const errorMessage = ref<string | null>(null);
+const convertRequested = ref(false);
+const converted = ref<boolean | null>(null);
 const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
 const sourceExplorer = computed(() =>
@@ -63,6 +65,9 @@ const poll = async () => {
         status.value = data.status;
         destinationTxHash.value = data.destination_tx_hash;
         errorMessage.value = data.error_message;
+        convertRequested.value = Boolean(data.convert_to_native);
+        converted.value =
+            typeof data.converted === 'boolean' ? data.converted : null;
 
         if (data.status === 'completed') {
             emit('succeeded', data.destination_tx_hash);
@@ -172,6 +177,25 @@ const steps = computed(() => [
             class="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400"
         >
             {{ errorMessage }}
+        </p>
+
+        <p
+            v-if="status === 'completed' && convertRequested && converted"
+            class="rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-300"
+        >
+            Your CYBER.sol was burned and converted — the destination received
+            native CYBER.
+        </p>
+        <p
+            v-else-if="
+                status === 'completed' && convertRequested && converted === false
+            "
+            class="rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-300"
+        >
+            Conversion liquidity was temporarily unavailable, so the
+            destination received CYBER.sol instead of native CYBER. You can
+            still convert it manually on the
+            <a href="/convert" class="underline">Convert</a> page.
         </p>
 
         <div class="flex flex-col gap-2 text-xs">

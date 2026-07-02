@@ -42,11 +42,19 @@ class BridgeController extends Controller
                 new ValidDestinationAddress(is_string($direction) ? $direction : ''),
             ],
             'amount' => ['required', 'numeric', 'gt:0'],
+            'convert_to_native' => ['nullable', 'boolean'],
             'session_id' => ['nullable', 'uuid'],
         ]);
 
         $sourceChain = $validated['direction'] === 'sol_to_evm' ? 'solana' : 'cyberia';
         $token = $validated['token'] ?? 'CYBER.sol';
+
+        // Auto-conversion into native CYBER only applies to CYBER.sol arriving
+        // on Cyberia, and only when the feature is enabled server-side.
+        $convertToNative = ($validated['convert_to_native'] ?? false)
+            && $validated['direction'] === 'sol_to_evm'
+            && $token === 'CYBER.sol'
+            && config('bridge.convert.enabled', true);
 
         $fee = $this->feeService->feeForBridge($token, (string) $validated['amount']);
 
@@ -69,6 +77,7 @@ class BridgeController extends Controller
             feeUsd: $fee['fee_usd'],
             gasDropPlanned: $gasDropPlanned,
             gasDropAmount: $gasDropAmount,
+            convertToNative: $convertToNative,
         );
 
         if (! empty($validated['session_id'])) {
@@ -100,6 +109,8 @@ class BridgeController extends Controller
                 'fee_usd' => $bridgeRequest->fee_usd,
                 'gas_drop_planned' => $bridgeRequest->gas_drop_planned,
                 'gas_drop_amount' => $bridgeRequest->gas_drop_amount,
+                'convert_to_native' => $bridgeRequest->convert_to_native,
+                'converted' => $bridgeRequest->converted,
                 'destination_tx_hash' => $bridgeRequest->destination_tx_hash,
                 'error_message' => $bridgeRequest->error_message,
                 'created_at' => $bridgeRequest->created_at,
@@ -153,6 +164,8 @@ class BridgeController extends Controller
             'recipient_address' => $bridgeRequest->recipient_address,
             'amount' => $bridgeRequest->amount,
             'status' => $bridgeRequest->status,
+            'convert_to_native' => $bridgeRequest->convert_to_native,
+            'converted' => $bridgeRequest->converted,
             'destination_tx_hash' => $bridgeRequest->destination_tx_hash,
             'error_message' => $bridgeRequest->error_message,
             'created_at' => $bridgeRequest->created_at,

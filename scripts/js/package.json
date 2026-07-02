@@ -4,7 +4,7 @@
   "description": "",
   "main": "price.js",
   "scripts": {
-    "minecraft-bot": "node minecraft-bot.js",
+    "minecraft-bot": "node --disable-warning=ExperimentalWarning minecraft-bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

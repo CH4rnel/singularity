@@ -60,6 +60,7 @@ class BridgeService
         ?string $feeUsd = null,
         bool $gasDropPlanned = false,
         ?string $gasDropAmount = null,
+        bool $convertToNative = false,
     ): BridgeRequest {
         return BridgeRequest::create([
             'user_id' => $userId,
@@ -75,6 +76,7 @@ class BridgeService
             'fee_usd' => $feeUsd,
             'gas_drop_planned' => $gasDropPlanned,
             'gas_drop_amount' => $gasDropAmount,
+            'convert_to_native' => $convertToNative,
             'status' => 'pending',
         ]);
     }
@@ -713,6 +715,7 @@ class BridgeService
                 'fee' => $feeAmount,
                 'after_fee' => $amountAfterFee,
                 'gas_drop_wei' => $gasDropWei,
+                'convert_to_native' => $request->convert_to_native,
             ]);
 
             $hardhatDir = Environment::isProduction()
@@ -726,6 +729,8 @@ class BridgeService
                         : 'https://rpc.cyberia.church',
                     'BRIDGE_EVM_CONTRACT_ADDRESS' => config('services.bridge.evm_bridge_address'),
                     'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
+                    'CYBERSOL_BURN_SWAP_ADDRESS' => (string) config('bridge.convert.burn_swap_address'),
+                    'CYBER_SOL_TOKEN_ADDRESS' => (string) (config('bridge.tokens', [])['CYBER.sol']['evm_address'] ?? ''),
                 ])
                 ->timeout(120)
                 ->run([
@@ -735,6 +740,7 @@ class BridgeService
                     $amountWei,
                     (string) $request->id,
                     $gasDropWei,
+                    $request->convert_to_native ? '1' : '0',
                 ]);
 
             Log::info('Bridge relay sol_to_evm', [
@@ -754,6 +760,12 @@ class BridgeService
             $json = json_decode(end($lines), true);
 
             if ($json && isset($json['txHash'])) {
+                // Record the conversion outcome: the relayer falls back to a
+                // plain CYBER.sol delivery when the burn-swap lacks liquidity.
+                if ($request->convert_to_native) {
+                    $request->update(['converted' => (bool) ($json['converted'] ?? false)]);
+                }
+
                 $request->markCompleted($json['txHash']);
 
                 return true;
