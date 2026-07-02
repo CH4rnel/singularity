@@ -17,8 +17,8 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import Header from '@/components/Header.vue';
+import LendingMarketCard from '@/components/LendingMarketCard.vue';
 import TokenIcon from '@/components/TokenIcon.vue';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -440,33 +440,22 @@ const isPartner = (symbol: string): boolean =>
 const featuredName = (m: MarketView): string =>
     m.symbol.toUpperCase() === 'WCYBER' ? 'CYBER' : m.symbol;
 
-const collateralState = (
-    m: MarketView,
-): { label: string; classes: string; warn: boolean } => {
-    if (m.entered) {
-        return {
-            label: 'collateral on',
-            classes:
-                'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-            warn: false,
-        };
-    }
-
-    if (m.userSupplyShares > 0n || m.userBorrow > 0n) {
-        return {
-            label: 'enable collateral',
-            classes:
-                'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-            warn: true,
-        };
-    }
-
-    return {
-        label: 'collateral off',
-        classes: 'border-border text-muted-foreground',
-        warn: false,
-    };
-};
+// The filtered list, split into the framed "Featured" group (headline assets +
+// partners) and everything else. Each token appears in exactly one place.
+const mainFeaturedMarkets = computed(() =>
+    filteredMarkets.value.filter(
+        (m) => Number.isFinite(featuredRank(m.symbol)) && !isPartner(m.symbol),
+    ),
+);
+const partnerMarkets = computed(() =>
+    filteredMarkets.value.filter((m) => isPartner(m.symbol)),
+);
+const otherMarkets = computed(() =>
+    filteredMarkets.value.filter((m) => !Number.isFinite(featuredRank(m.symbol))),
+);
+const hasFeatured = computed(
+    () => mainFeaturedMarkets.value.length > 0 || partnerMarkets.value.length > 0,
+);
 
 watch(queryAddress, async (addr) => {
     if (addr) {
@@ -835,190 +824,68 @@ onUnmounted(() => {
                             No markets match “{{ marketFilter }}”.
                         </div>
 
-                        <div
-                            v-else
-                            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-                        >
-                            <article
-                                v-for="market in filteredMarkets"
-                                :key="market.address"
-                                class="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5"
+                        <template v-else>
+                            <!-- Featured: headline assets + partners, framed -->
+                            <div
+                                v-if="hasFeatured"
+                                class="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4 sm:p-5"
                             >
-                                <!-- card header -->
-                                <div class="flex items-start justify-between gap-2">
-                                    <div class="flex items-center gap-3">
-                                        <TokenIcon
-                                            :symbol="market.symbol"
-                                            :size="40"
+                                <h3 class="text-sm font-semibold">Featured</h3>
+                                <div
+                                    v-if="mainFeaturedMarkets.length"
+                                    class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                                >
+                                    <LendingMarketCard
+                                        v-for="market in mainFeaturedMarkets"
+                                        :key="market.address"
+                                        :market="market"
+                                        :submitting="submitting"
+                                        :display-name="featuredName(market)"
+                                        @action="openAction"
+                                        @toggle="toggleMembership"
+                                    />
+                                </div>
+                                <div
+                                    v-if="partnerMarkets.length"
+                                    class="space-y-2"
+                                >
+                                    <p
+                                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                                    >
+                                        Partners
+                                    </p>
+                                    <div
+                                        class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                                    >
+                                        <LendingMarketCard
+                                            v-for="market in partnerMarkets"
+                                            :key="market.address"
+                                            :market="market"
+                                            :submitting="submitting"
+                                            :display-name="featuredName(market)"
+                                            @action="openAction"
+                                            @toggle="toggleMembership"
                                         />
-                                        <div>
-                                            <p class="font-semibold leading-tight">
-                                                {{ featuredName(market) }}
-                                            </p>
-                                            <div
-                                                class="mt-0.5 flex items-center gap-1"
-                                            >
-                                                <Badge
-                                                    variant="outline"
-                                                    class="font-mono text-[10px]"
-                                                >
-                                                    CF
-                                                    {{
-                                                        (
-                                                            market.collateralFactor *
-                                                            100
-                                                        ).toFixed(0)
-                                                    }}%
-                                                </Badge>
-                                                <Badge
-                                                    v-if="isPartner(market.symbol)"
-                                                    variant="outline"
-                                                    class="border-blue-500/40 bg-blue-500/10 text-[10px] text-blue-600 dark:text-blue-400"
-                                                >
-                                                    Partner
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button
-                                        class="rounded-full border px-2 py-0.5 text-[10px] font-medium transition disabled:opacity-50"
-                                        :class="collateralState(market).classes"
-                                        :disabled="submitting"
-                                        :title="
-                                            collateralState(market).warn
-                                                ? 'You have a position here but the comptroller does not count it — click to enable collateral.'
-                                                : 'Toggle whether this market counts as collateral.'
-                                        "
-                                        @click="toggleMembership(market)"
-                                    >
-                                        {{ collateralState(market).label }}
-                                    </button>
-                                </div>
-
-                                <!-- APYs -->
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div
-                                        class="rounded-xl border border-border bg-background/50 p-3"
-                                    >
-                                        <p class="text-[11px] text-muted-foreground">
-                                            Supply APY
-                                        </p>
-                                        <p
-                                            class="font-mono text-lg text-emerald-600 dark:text-emerald-400"
-                                        >
-                                            {{ market.supplyApy.toFixed(2) }}%
-                                        </p>
-                                    </div>
-                                    <div
-                                        class="rounded-xl border border-border bg-background/50 p-3"
-                                    >
-                                        <p class="text-[11px] text-muted-foreground">
-                                            Borrow APY
-                                        </p>
-                                        <p
-                                            class="font-mono text-lg text-amber-600 dark:text-amber-400"
-                                        >
-                                            {{ market.borrowApy.toFixed(2) }}%
-                                        </p>
                                     </div>
                                 </div>
+                            </div>
 
-                                <!-- stats -->
-                                <dl class="grid grid-cols-2 gap-y-2 text-sm">
-                                    <dt class="text-muted-foreground">
-                                        Liquidity
-                                    </dt>
-                                    <dd
-                                        class="text-right font-mono"
-                                        :class="
-                                            market.cash === 0n
-                                                ? 'text-muted-foreground/50 italic'
-                                                : ''
-                                        "
-                                    >
-                                        {{
-                                            formatToken(
-                                                market.cash,
-                                                market.decimals,
-                                            )
-                                        }}
-                                    </dd>
-                                    <dt class="text-muted-foreground">Wallet</dt>
-                                    <dd class="text-right font-mono">
-                                        {{
-                                            formatToken(
-                                                market.userUnderlyingBalance,
-                                                market.decimals,
-                                            )
-                                        }}
-                                    </dd>
-                                    <dt class="text-muted-foreground">
-                                        My supply
-                                    </dt>
-                                    <dd class="text-right font-mono">
-                                        {{
-                                            formatToken(
-                                                market.userSupplyUnderlying,
-                                                market.decimals,
-                                            )
-                                        }}
-                                    </dd>
-                                    <dt class="text-muted-foreground">
-                                        My borrow
-                                    </dt>
-                                    <dd class="text-right font-mono">
-                                        {{
-                                            formatToken(
-                                                market.userBorrow,
-                                                market.decimals,
-                                            )
-                                        }}
-                                    </dd>
-                                </dl>
-
-                                <!-- actions -->
-                                <div class="mt-auto grid grid-cols-2 gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        @click="openAction(market, 'supply')"
-                                    >
-                                        Supply
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        :disabled="
-                                            market.userSupplyShares === 0n
-                                        "
-                                        @click="openAction(market, 'withdraw')"
-                                    >
-                                        Withdraw
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        :disabled="market.cash === 0n"
-                                        :title="
-                                            market.cash === 0n
-                                                ? 'No liquidity to borrow — someone must supply first'
-                                                : undefined
-                                        "
-                                        @click="openAction(market, 'borrow')"
-                                    >
-                                        Borrow
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        :disabled="market.userBorrow === 0n"
-                                        @click="openAction(market, 'repay')"
-                                    >
-                                        Repay
-                                    </Button>
-                                </div>
-                            </article>
-                        </div>
+                            <!-- Everything else -->
+                            <div
+                                v-if="otherMarkets.length"
+                                class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                            >
+                                <LendingMarketCard
+                                    v-for="market in otherMarkets"
+                                    :key="market.address"
+                                    :market="market"
+                                    :submitting="submitting"
+                                    :display-name="featuredName(market)"
+                                    @action="openAction"
+                                    @toggle="toggleMembership"
+                                />
+                            </div>
+                        </template>
                     </section>
                 </template>
             </div>

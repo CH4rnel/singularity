@@ -1,36 +1,36 @@
 import { reactive } from 'vue';
 
-// Token logos served from public/tokens/ (copied from the Ritual DEX), keyed by
+// Token logos served from public/token-icons/ (copied from the Ritual DEX), keyed by
 // on-chain symbol. Used by both the Lending and Farm pages via <TokenIcon>.
 //
-// To add a missing one: drop the file in public/tokens/ and add a line here —
+// To add a missing one: drop the file in public/token-icons/ and add a line here —
 // both pages pick it up. Tokens with no entry render a lettered gradient avatar.
 export const TOKEN_LOGOS: Record<string, string> = {
-    WCYBER: '/tokens/cyberia.png',
-    'CYBER.sol': '/tokens/CYBER.png',
-    ASH: '/tokens/ash.png',
-    RUB: '/tokens/rub.png',
-    USDC: '/tokens/usdc.svg',
-    USDT: '/tokens/usdt.svg',
-    BTC: '/tokens/btc.svg',
-    LTC: '/tokens/ltc.svg',
-    SILVER: '/tokens/silver.png',
-    SOL: '/tokens/sol.svg',
-    ETH: '/tokens/eth.svg',
-    XMR: '/tokens/monero.svg',
-    TRX: '/tokens/tron.svg',
-    GOLD: '/tokens/gold.png',
-    TRUR: '/tokens/trur.png',
-    TGLD: '/tokens/tgld.png',
-    TMOS: '/tokens/tmos.png',
-    TOFZ: '/tokens/tofz.png',
-    HATCHER: '/tokens/hatcher.jpg',
-    KRSQ: '/tokens/karasique.webp',
-    YTN: '/tokens/yenten.png',
-    LAIN: '/tokens/lain.jpg',
-    MINE: '/tokens/mine.jpg',
-    GOAL: '/tokens/goal.webp',
-    TG: '/tokens/telegram.svg',
+    WCYBER: '/token-icons/cyberia.png',
+    'CYBER.sol': '/token-icons/CYBER.png',
+    ASH: '/token-icons/ash.png',
+    RUB: '/token-icons/rub.png',
+    USDC: '/token-icons/usdc.svg',
+    USDT: '/token-icons/usdt.svg',
+    BTC: '/token-icons/btc.svg',
+    LTC: '/token-icons/ltc.svg',
+    SILVER: '/token-icons/silver.png',
+    SOL: '/token-icons/sol.svg',
+    ETH: '/token-icons/eth.svg',
+    XMR: '/token-icons/monero.svg',
+    TRX: '/token-icons/tron.svg',
+    GOLD: '/token-icons/gold.png',
+    TRUR: '/token-icons/trur.png',
+    TGLD: '/token-icons/tgld.png',
+    TMOS: '/token-icons/tmos.png',
+    TOFZ: '/token-icons/tofz.png',
+    HATCHER: '/token-icons/hatcher.jpg',
+    KRSQ: '/token-icons/karasique.webp',
+    YTN: '/token-icons/yenten.png',
+    LAIN: '/token-icons/lain.jpg',
+    MINE: '/token-icons/mine.jpg',
+    GOAL: '/token-icons/goal.webp',
+    TG: '/token-icons/telegram.svg',
 };
 
 // Symbols whose <img> failed to load (404). Module-level so a single failure is

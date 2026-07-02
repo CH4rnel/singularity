@@ -38,10 +38,11 @@ return [
     // Ordered category labels. The token pages render groups in this order.
     'categories' => [
         'native' => 'Native & DEX',
+        'partner' => 'Partner tokens',
+        'launchpad' => 'Cyberia launchpad',
         'stablecoin' => 'Stablecoins',
         'crypto' => 'Bridged crypto',
         'commodity' => 'Commodities',
-        'russian' => 'Russian market (T‑Capital / MOEX)',
         'community' => 'Community',
     ],
 
@@ -194,28 +195,6 @@ return [
             'why' => 'It brings TRX liquidity and price exposure onto the chain.',
         ],
 
-        '0x621021f18b6404123f98b1395c418868418acf36' => [
-            'symbol' => 'HATCHER',
-            'name' => 'Hatcher',
-            'decimals' => 9,
-            'logo' => '/hatcher.jpg',
-            'category' => 'crypto',
-            'tagline' => 'A Solana token, bridged to Cyberia.',
-            'what' => 'HATCHER is the EVM representation of a Solana-native token, bridged to Cyberia with 9 decimals. All supply here is minted and burned by the bridge, backed 1:1 by the Solana reserve.',
-            'why' => 'It brings the HATCHER community and its Solana liquidity onto the Cyberia chain to trade and pool.',
-        ],
-
-        '0x3a5820be90c3fb9c5f3fb47a4859544193b0f8c6' => [
-            'symbol' => 'YTN',
-            'name' => 'Yenten',
-            'decimals' => 18,
-            'logo' => '/Yenten-logo.png',
-            'category' => 'crypto',
-            'tagline' => 'Yenten — a CPU-mined PoW coin, on Cyberia.',
-            'what' => 'YTN is a Cyberia ERC-20 representing Yenten, a CPU-mineable proof-of-work cryptocurrency. 18 decimals, owner-minted.',
-            'why' => 'It gives the Yenten community an on-chain market and liquidity on Cyberia.',
-        ],
-
         // ---- Commodities --------------------------------------------------
 
         '0x38297140d60b48f746ad83d851b852fd23ef9871' => [
@@ -240,50 +219,80 @@ return [
             'why' => 'A second precious-metal instrument for diversification and pricing on Cyberia. Some SILVER pools can be thin — check depth before large trades.',
         ],
 
-        // ---- Russian market (T‑Capital / MOEX) ----------------------------
+        // ---- Partner tokens -----------------------------------------------
 
-        '0x6d056e56f5d90ed5680f0335d80e112799a735c8' => [
-            'symbol' => 'TRUR',
-            'name' => 'T-Capital Rouble Liquidity',
-            'decimals' => 2,
-            'logo' => '/TRURx160.png',
-            'category' => 'russian',
-            'tagline' => 'On-chain share of the T‑Capital rouble fund (MOEX: TRUR).',
-            'what' => 'TRUR mirrors the MOEX-listed TRUR exchange-traded fund — a Russian-rouble money-market / liquidity fund from T‑Capital (formerly Tinkoff Capital). Quoted in roubles with 2-decimal (kopeck) precision; one on-chain unit tracks one exchange share.',
-            'why' => 'It brings a low-risk, rouble-yield instrument on-chain so the Russian-speaking Cyberia community can hold and trade fund shares without a brokerage. Pairs naturally with RUB.',
+        '0x621021f18b6404123f98b1395c418868418acf36' => [
+            'symbol' => 'HATCHER',
+            'name' => 'Hatcher',
+            'decimals' => 9,
+            'logo' => '/hatcher.jpg',
+            'category' => 'partner',
+            'tagline' => 'Partner project — bridged to Cyberia from Solana.',
+            'what' => 'HATCHER is the token of a Cyberia partner project, bridged in from Solana with 9 decimals. Supply on Cyberia is minted and burned by the bridge, backed 1:1 by the Solana-side reserve.',
+            'why' => 'As a partner token it trades on the Ritual DEX and is a listed lending market, bringing its community and Solana liquidity onto the Cyberia chain.',
+            'links' => [
+                ['label' => 'Website', 'url' => 'https://hatcher.host/'],
+                ['label' => 'pump.fun', 'url' => 'https://pump.fun/coin/Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump'],
+            ],
         ],
 
-        '0xe2a45069c3e7897cab592bed389764e6ecf3b8a5' => [
-            'symbol' => 'TGLD',
-            'name' => 'T-Capital Gold',
-            'decimals' => 2,
-            'logo' => '/TGLDx160.png',
-            'category' => 'russian',
-            'tagline' => 'On-chain share of the T‑Capital Gold fund (MOEX: TGLD).',
-            'what' => 'TGLD mirrors the MOEX-listed TGLD ETF, T‑Capital\'s gold fund, quoted in roubles with kopeck (2-decimal) precision. One token tracks one exchange share unit.',
-            'why' => 'Gold exposure through a regulated Russian fund wrapper, tradable on Cyberia and priced in roubles.',
+        '0x4945419cceef0dc70b054700de2750a056b03ee3' => [
+            'symbol' => 'KRSQ',
+            'name' => 'KARASIQUE',
+            'decimals' => 18,
+            'logo' => '/KARASIQUE.webp',
+            'category' => 'partner',
+            'tagline' => 'Partner project — the KARASIQUE token.',
+            'what' => 'KRSQ (KARASIQUE) is a partner project\'s token on Cyberia, an owner-minted ERC-20 with 18 decimals.',
+            'why' => 'A partner in the Cyberia ecosystem: trade KRSQ on Ritual, supply or borrow it in the lending market, and take part in its community.',
+            'links' => [
+                ['label' => 'Website', 'url' => 'https://akvarium228.ru/'],
+                ['label' => 'Telegram', 'url' => 'https://t.me/akvarium228'],
+            ],
         ],
 
-        '0x3352254390526624a140b06e7d2dda8ba85a9e89' => [
-            'symbol' => 'TMOS',
-            'name' => 'T-Capital Russian Stocks',
-            'decimals' => 2,
-            'logo' => '/TMOSx160.png',
-            'category' => 'russian',
-            'tagline' => 'On-chain share of the T‑Capital Russian-equities fund (MOEX: TMOS).',
-            'what' => 'TMOS mirrors the MOEX-listed TMOS ETF — T‑Capital\'s broad Russian stock-market fund tracking the MOEX index. Rouble-priced, 2 decimals, one token per share unit.',
-            'why' => 'Broad Russian equity exposure on-chain, tradable and poolable on Cyberia.',
+        '0x3a5820be90c3fb9c5f3fb47a4859544193b0f8c6' => [
+            'symbol' => 'YTN',
+            'name' => 'Yenten',
+            'decimals' => 18,
+            'logo' => '/Yenten-logo.png',
+            'category' => 'partner',
+            'tagline' => 'Partner project — Yenten, a CPU-mined PoW coin.',
+            'what' => 'YTN is the Cyberia token for Yenten, a CPU-mineable proof-of-work cryptocurrency listed as a partner project. 18 decimals, owner-minted.',
+            'why' => 'As a partner token, Yenten gets an on-chain market and liquidity on Cyberia — tradable on Ritual and available in the lending market.',
+            'links' => [
+                ['label' => 'Website', 'url' => 'https://yentencoin.info/'],
+            ],
         ],
 
-        '0x46a6f512885de25aaefbf5a5f842ba378700fe22' => [
-            'symbol' => 'TOFZ',
-            'name' => 'T-Capital OFZ',
-            'decimals' => 2,
-            'logo' => '/TOFZx160.png',
-            'category' => 'russian',
-            'tagline' => 'On-chain share of the T‑Capital OFZ bond fund (MOEX: TOFZ).',
-            'what' => 'TOFZ mirrors the MOEX-listed TOFZ ETF, T‑Capital\'s fund of OFZ Russian federal government bonds. Rouble-priced with 2-decimal precision.',
-            'why' => 'Fixed-income, government-bond exposure on-chain — the conservative end of the rouble-market token set on Cyberia.',
+        // ---- Cyberia launchpad --------------------------------------------
+
+        '0x05cd1afd5b2df3cca6ceab80cbc21168ec981e8b' => [
+            'symbol' => 'LAIN',
+            'name' => 'Lain',
+            'decimals' => 18,
+            'logo' => '/lain.jpg',
+            'category' => 'launchpad',
+            'tagline' => 'Launched on the Cyberia launchpad.',
+            'what' => 'LAIN is a community token minted through the Cyberia launchpad, themed on the Serial-Experiments-Lain motif that runs through the whole ecosystem. ERC-20, 18 decimals.',
+            'why' => 'One of the tokens created on Cyberia\'s own launchpad. It leans into the Lain aesthetic — present everywhere, connected to everything. Trade it on Ritual.',
+            'links' => [
+                ['label' => 'Cyberia launchpad', 'url' => '/launchpad'],
+            ],
+        ],
+
+        '0xd8c1f812add03ccde8d3c7f86fead181980cd7ec' => [
+            'symbol' => 'MINE',
+            'name' => 'Minecraft',
+            'decimals' => 18,
+            'logo' => '/mine.jpg',
+            'category' => 'launchpad',
+            'tagline' => 'Launched on the Cyberia launchpad — Minecraft-themed.',
+            'what' => 'MINE is a community token minted through the Cyberia launchpad, themed after Minecraft. ERC-20, 18 decimals.',
+            'why' => 'A launchpad-born token for the gaming corner of Cyberia; trade and pool it on Ritual.',
+            'links' => [
+                ['label' => 'Cyberia launchpad', 'url' => '/launchpad'],
+            ],
         ],
 
         // ---- Community ----------------------------------------------------
@@ -299,17 +308,6 @@ return [
             'why' => 'It rewards active members of the Cyberia Telegram, and its vote-tracking makes it usable for community governance signals. Earn it by taking part in chat.',
         ],
 
-        '0x4945419cceef0dc70b054700de2750a056b03ee3' => [
-            'symbol' => 'KRSQ',
-            'name' => 'KARASIQUE',
-            'decimals' => 18,
-            'logo' => '/KARASIQUE.webp',
-            'category' => 'community',
-            'tagline' => 'A Cyberia community meme token.',
-            'what' => 'KRSQ (KARASIQUE) is a community/meme ERC-20 on Cyberia, owner-minted, 18 decimals.',
-            'why' => 'A community-driven token for fun, tipping and speculation within the Cyberia ecosystem. Trade it on Ritual.',
-        ],
-
         '0xeb91ec10462a249b9922d6d62fb2be73bd084ade' => [
             'symbol' => 'GOAL',
             'name' => 'Goal Bear Coin',
@@ -319,28 +317,6 @@ return [
             'tagline' => 'Goal Bear Coin — a community meme token.',
             'what' => 'GOAL (Goal Bear Coin) is a community/meme ERC-20 on Cyberia, 18 decimals, owner-minted.',
             'why' => 'A lighthearted community token; trade and pool it on Ritual.',
-        ],
-
-        '0x05cd1afd5b2df3cca6ceab80cbc21168ec981e8b' => [
-            'symbol' => 'LAIN',
-            'name' => 'Lain',
-            'decimals' => 18,
-            'logo' => '/lain.jpg',
-            'category' => 'community',
-            'tagline' => 'The ecosystem\'s namesake community token.',
-            'what' => 'LAIN is a community token themed on the Serial-Experiments-Lain motif that runs through the whole Cyberia ecosystem. ERC-20, 18 decimals.',
-            'why' => 'A cultural token tying into Cyberia\'s Lain aesthetic — present everywhere, connected to everything. Trade it on Ritual.',
-        ],
-
-        '0xd8c1f812add03ccde8d3c7f86fead181980cd7ec' => [
-            'symbol' => 'MINE',
-            'name' => 'Minecraft',
-            'decimals' => 18,
-            'logo' => '/mine.jpg',
-            'category' => 'community',
-            'tagline' => 'A Minecraft-themed community token.',
-            'what' => 'MINE is a community/meme ERC-20 on Cyberia themed after Minecraft, 18 decimals.',
-            'why' => 'A community token for the gaming corner of Cyberia; tradable on Ritual.',
         ],
 
     ],
