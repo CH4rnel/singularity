@@ -24,7 +24,17 @@ class ProposalFactory extends Factory
             'user_id' => User::factory(),
             'title' => fake()->sentence(),
             'description' => fake()->paragraph(),
-            'status' => 'open',
+            'ends_at' => now()->addDays(7),
         ];
+    }
+
+    public function open(): static
+    {
+        return $this->state(fn () => ['ends_at' => now()->addDays(7)]);
+    }
+
+    public function closed(): static
+    {
+        return $this->state(fn () => ['ends_at' => now()->subDay()]);
     }
 }

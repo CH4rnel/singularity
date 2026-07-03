@@ -8,6 +8,7 @@ import { initializeTheme } from '@/composables/useAppearance';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
+import Web3Layout from '@/layouts/Web3Layout.vue';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -21,13 +22,18 @@ createInertiaApp({
             case name === 'Bridge':
             case name === 'Market':
             case name === 'Lending':
+            case name === 'Liquidate':
+            case name === 'Liquidity':
             case name === 'Farm':
             case name === 'Launchpad':
             case name === 'CyberSolSwap':
             case name === 'Slots':
+            case name === 'Predictions':
+            case name === 'PixelBattle':
             case name.startsWith('dao/'):
             case name.startsWith('proposals/'):
-                return null;
+            case name.startsWith('users/'):
+                return Web3Layout;
             case name.startsWith('auth/'):
                 return AuthLayout;
             case name.startsWith('settings/'):
@@ -38,7 +44,7 @@ createInertiaApp({
         }
     },
     progress: {
-        color: '#4B5563',
+        color: '#00e5d1',
     },
 });
 

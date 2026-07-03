@@ -16,7 +16,6 @@ import {
     Wallet,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import Header from '@/components/Header.vue';
 import LendingMarketCard from '@/components/LendingMarketCard.vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
@@ -235,7 +234,9 @@ async function submitAction() {
                     COMPTROLLER_ABI,
                     signer,
                 );
-                const enterTx = await comptroller.enterMarkets([market.address]);
+                const enterTx = await comptroller.enterMarkets([
+                    market.address,
+                ]);
                 await enterTx.wait();
             }
         } else if (type === 'withdraw') {
@@ -347,7 +348,13 @@ const hasPositions = computed(
 const totalSupplyUsd = computed(() =>
     supplyPositions.value.reduce((sum, m) => {
         return (
-            sum + Number(formatUsd(m.userSupplyUnderlying, m.priceMantissa).replace(/[^0-9.]/g, '')) || 0
+            sum +
+                Number(
+                    formatUsd(m.userSupplyUnderlying, m.priceMantissa).replace(
+                        /[^0-9.]/g,
+                        '',
+                    ),
+                ) || 0
         );
     }, 0),
 );
@@ -355,7 +362,13 @@ const totalSupplyUsd = computed(() =>
 const totalBorrowUsd = computed(() =>
     borrowPositions.value.reduce((sum, m) => {
         return (
-            sum + Number(formatUsd(m.userBorrow, m.priceMantissa).replace(/[^0-9.]/g, '')) || 0
+            sum +
+                Number(
+                    formatUsd(m.userBorrow, m.priceMantissa).replace(
+                        /[^0-9.]/g,
+                        '',
+                    ),
+                ) || 0
         );
     }, 0),
 );
@@ -451,10 +464,13 @@ const partnerMarkets = computed(() =>
     filteredMarkets.value.filter((m) => isPartner(m.symbol)),
 );
 const otherMarkets = computed(() =>
-    filteredMarkets.value.filter((m) => !Number.isFinite(featuredRank(m.symbol))),
+    filteredMarkets.value.filter(
+        (m) => !Number.isFinite(featuredRank(m.symbol)),
+    ),
 );
 const hasFeatured = computed(
-    () => mainFeaturedMarkets.value.length > 0 || partnerMarkets.value.length > 0,
+    () =>
+        mainFeaturedMarkets.value.length > 0 || partnerMarkets.value.length > 0,
 );
 
 watch(queryAddress, async (addr) => {
@@ -490,20 +506,20 @@ onUnmounted(() => {
 <template>
     <Head title="Cyberia Lending" />
 
-    <div class="min-h-screen bg-background text-foreground">
-        <Header />
-
+    <div>
         <main class="relative overflow-hidden">
             <div
                 aria-hidden="true"
                 class="pointer-events-none absolute inset-x-0 -top-40 -z-10 flex justify-center"
             >
                 <div
-                    class="h-[26rem] w-[60rem] max-w-full rounded-full bg-gradient-to-tr from-sky-500/20 via-indigo-500/10 to-emerald-400/20 blur-3xl"
+                    class="h-[26rem] w-[60rem] max-w-full rounded-full bg-gradient-to-tr from-cyan-400/20 via-teal-400/10 to-teal-300/20 blur-3xl"
                 ></div>
             </div>
 
-            <div class="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12">
+            <div
+                class="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12"
+            >
                 <!-- HERO -->
                 <header class="space-y-3">
                     <p
@@ -514,7 +530,7 @@ onUnmounted(() => {
                     <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
                         Money
                         <span
-                            class="bg-gradient-to-r from-sky-500 via-indigo-500 to-emerald-400 bg-clip-text text-transparent"
+                            class="bg-gradient-to-r from-cyan-400 via-teal-400 to-teal-300 bg-clip-text text-transparent"
                             >markets</span
                         >
                     </h1>
@@ -554,7 +570,9 @@ onUnmounted(() => {
                     v-if="!queryAddress"
                     class="rounded-2xl border border-border bg-card p-8 text-center"
                 >
-                    <Wallet class="mx-auto mb-3 h-7 w-7 text-muted-foreground" />
+                    <Wallet
+                        class="mx-auto mb-3 h-7 w-7 text-muted-foreground"
+                    />
                     <p class="mb-4 text-sm text-muted-foreground">
                         Connect your wallet to view markets and manage
                         positions.
@@ -616,9 +634,7 @@ onUnmounted(() => {
                             </p>
                             <p
                                 class="mt-2 font-mono text-2xl font-semibold"
-                                :class="
-                                    shortfallUsd > 0 ? 'text-red-500' : ''
-                                "
+                                :class="shortfallUsd > 0 ? 'text-red-500' : ''"
                             >
                                 {{
                                     shortfallUsd > 0
@@ -637,8 +653,8 @@ onUnmounted(() => {
                                 <span
                                     class="font-mono"
                                     :class="
-                                        shortfallUsd > 0 ? 'text-red-500' : ''
-                                    "
+ shortfallUsd > 0 ? 'text-red-500' : ''
+ "
                                     >{{ borrowUsedPct.toFixed(0) }}%</span
                                 >
                             </div>
@@ -741,7 +757,8 @@ onUnmounted(() => {
                                             <p
                                                 class="text-[11px] text-amber-600 dark:text-amber-400"
                                             >
-                                                {{ m.borrowApy.toFixed(2) }}% APR
+                                                {{ m.borrowApy.toFixed(2) }}%
+                                                APR
                                             </p>
                                         </div>
                                     </div>
@@ -754,15 +771,13 @@ onUnmounted(() => {
                                                 m.decimals,
                                                 8,
                                             )
-                                        }}/d ·
-                                        +{{
+                                        }}/d · +{{
                                             formatToken(
                                                 perWeekInterest(m),
                                                 m.decimals,
                                                 8,
                                             )
-                                        }}/wk ·
-                                        +{{
+                                        }}/wk · +{{
                                             formatToken(
                                                 perMonthInterest(m),
                                                 m.decimals,

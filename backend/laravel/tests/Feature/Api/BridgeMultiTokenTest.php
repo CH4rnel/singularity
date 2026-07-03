@@ -88,6 +88,6 @@ test('CYBER.sol token name with a dot resolves to the right config', function ()
 
     expect($tokenConfig)->toBeArray();
     expect($tokenConfig['model'])->toBe('native');
-    expect($tokenConfig['solana_mint'])
+    expect($tokenConfig['chains']['solana']['mint'])
         ->toBe('E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump');
 });

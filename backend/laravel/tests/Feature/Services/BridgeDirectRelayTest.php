@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Process;
 beforeEach(function () {
     config()->set('services.bridge.relayer_address', '0x0000000000000000000000000000000000abcdef');
     config()->set('services.bridge.relayer_private_key', '0x'.str_repeat('1', 64));
+    config()->set('bridge.chains.solana.rpc_url', 'https://mainnet.helius-rpc.com/?api-key=test');
+    config()->set('bridge.chains.solana.deposit_address', 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w');
 });
 
 function makeDirectRequest(array $overrides = []): BridgeRequest
@@ -229,4 +231,108 @@ test('unknown token marks the request failed', function () {
 
     expect($request->status)->toBe('failed');
     expect($request->error_message)->toContain('Unknown token');
+});
+
+test('yenten_to_evm verifies native YTN and mints the Cyberia wrapper', function () {
+    config()->set('bridge.chains.yenten.deposit_address', 'YHotWallet11111111111111111111111111');
+
+    Http::fake([
+        'api.yentencoin.info/transaction/*' => Http::response([
+            'result' => [
+                'txid' => str_repeat('a', 64),
+                'confirmations' => 3,
+                'vin' => [[
+                    'scriptPubKey' => ['addresses' => ['YSender1111111111111111111111111111']],
+                ]],
+                'vout' => [[
+                    'value' => 200000000,
+                    'scriptPubKey' => ['addresses' => ['YHotWallet11111111111111111111111111']],
+                ]],
+            ],
+            'error' => null,
+        ]),
+    ]);
+
+    Process::fake([
+        '*relay-mint*' => Process::result(
+            output: json_encode(['txHash' => '0xytnmint']),
+            exitCode: 0,
+        ),
+    ]);
+
+    $request = makeDirectRequest([
+        'direction' => 'yenten_to_evm',
+        'token' => 'YTN',
+        'source_chain' => 'yenten',
+        'source_tx_hash' => str_repeat('a', 64),
+        'sender_address' => 'YSender1111111111111111111111111111',
+        'amount' => '2',
+        'fee_amount' => '0',
+    ]);
+
+    app(BridgeService::class)->processDirectRelay($request);
+    $request->refresh();
+
+    expect($request->status)->toBe('completed');
+    expect($request->destination_tx_hash)->toBe('0xytnmint');
+
+    Process::assertRan(fn ($process) => str_contains(
+        is_array($process->command) ? implode(' ', $process->command) : $process->command,
+        'relay-mint.ts 0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6',
+    ));
+});
+
+test('evm_to_yenten burns the wrapper and runs the light-wallet payout', function () {
+    config()->set('bridge.chains.yenten.deposit_address', 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL');
+    config()->set('bridge.chains.yenten.relayer_wif', 'test-wif-not-used-by-process-fake');
+
+    Http::fake([
+        'https://rpc.cyberia.church' => Http::response([
+            'result' => [
+                'status' => '0x1',
+                'logs' => [[
+                    'address' => '0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6',
+                    'topics' => [
+                        '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+                        '0x0000000000000000000000005555555555555555555555555555555555555555',
+                        '0x0000000000000000000000000000000000000000000000000000000000abcdef',
+                    ],
+                    'data' => '0x0000000000000000000000000000000000000000000000001bc16d674ec80000',
+                ]],
+            ],
+        ]),
+    ]);
+
+    Process::fake([
+        '*relay-burn*' => Process::result(
+            output: json_encode(['txHash' => '0xytnburn']),
+            exitCode: 0,
+        ),
+        '*npm*relay*' => Process::result(
+            output: json_encode(['txHash' => str_repeat('b', 64)]),
+            exitCode: 0,
+        ),
+    ]);
+
+    $request = makeDirectRequest([
+        'direction' => 'evm_to_yenten',
+        'token' => 'YTN',
+        'source_chain' => 'cyberia',
+        'source_tx_hash' => '0xytnsource',
+        'sender_address' => '0x5555555555555555555555555555555555555555',
+        'recipient_address' => 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL',
+        'amount' => '2',
+        'fee_amount' => '0',
+    ]);
+
+    app(BridgeService::class)->processDirectRelay($request);
+    $request->refresh();
+
+    expect($request->status)->toBe('completed');
+    expect($request->destination_tx_hash)->toBe(str_repeat('b', 64));
+
+    Process::assertRan(fn ($process) => str_contains(
+        is_array($process->command) ? implode(' ', $process->command) : $process->command,
+        'relay -- YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL 200000000',
+    ));
 });

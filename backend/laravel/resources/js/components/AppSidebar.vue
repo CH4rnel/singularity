@@ -25,10 +25,10 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
-import { useWallet } from '@/composables/useWallet';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
+import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
+import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -95,6 +95,7 @@ const footerNavItems: NavItem[] = [
 
 const handleWalletConnect = async () => {
     const address = await wallet.connect();
+
     if (address) {
         try {
             const { nonce } = await walletAuth.generateNonce(address);
@@ -116,6 +117,7 @@ const handleWalletConnect = async () => {
 
 const handleSolanaConnect = async () => {
     const address = await solanaWallet.connect();
+
     if (address) {
         try {
             const { nonce } = await walletAuth.generateSolanaNonce(address);
@@ -137,10 +139,23 @@ const handleSolanaConnect = async () => {
 
 const formatCyberBalance = (balance: string): string => {
     const num = parseFloat(balance);
-    if (num === 0) return '0';
-    if (num < 0.0001) return '<0.0001';
-    if (num < 1) return num.toFixed(4);
-    if (num < 1000) return num.toFixed(2);
+
+    if (num === 0) {
+        return '0';
+    }
+
+    if (num < 0.0001) {
+        return '<0.0001';
+    }
+
+    if (num < 1) {
+        return num.toFixed(4);
+    }
+
+    if (num < 1000) {
+        return num.toFixed(2);
+    }
+
     return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
 };
 </script>

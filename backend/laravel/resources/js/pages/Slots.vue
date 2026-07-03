@@ -14,22 +14,26 @@ const selectedMint = ref<string | null>(null);
 const betAmount = ref<string>('1');
 const clientSeed = ref<string>(Math.random().toString(36).slice(2));
 
-const selectedToken = computed(() =>
-    machine.pool.value?.tokens.find((t) => t.mint === selectedMint.value) ?? null,
+const selectedToken = computed(
+    () =>
+        machine.pool.value?.tokens.find((t) => t.mint === selectedMint.value) ??
+        null,
 );
 
 const betRaw = computed<string>(() => {
     if (!selectedToken.value) {
-return '0';
-}
+        return '0';
+    }
 
     const ui = parseFloat(betAmount.value || '0');
 
     if (!isFinite(ui) || ui <= 0) {
-return '0';
-}
+        return '0';
+    }
 
-    return BigInt(Math.round(ui * 10 ** selectedToken.value.decimals)).toString();
+    return BigInt(
+        Math.round(ui * 10 ** selectedToken.value.decimals),
+    ).toString();
 });
 
 const canSpin = computed(
@@ -50,15 +54,16 @@ onMounted(async () => {
 
 const handleSpin = async () => {
     if (!canSpin.value || !selectedMint.value) {
-return;
-}
+        return;
+    }
 
-    const phantom = (window as unknown as { solana?: any }).solana
-        ?? (window as unknown as { phantom?: { solana?: any } }).phantom?.solana;
+    const phantom =
+        (window as unknown as { solana?: any }).solana ??
+        (window as unknown as { phantom?: { solana?: any } }).phantom?.solana;
 
     if (!phantom) {
-return;
-}
+        return;
+    }
 
     clientSeed.value = Math.random().toString(36).slice(2);
 
@@ -74,7 +79,10 @@ return;
     <div class="slots-page">
         <header>
             <h1>pump.fun roulette</h1>
-            <p>Любой токен на ставку, любой токен в приз. Часть ставки сжигается.</p>
+            <p>
+                Любой токен на ставку, любой токен в приз. Часть ставки
+                сжигается.
+            </p>
         </header>
 
         <div class="layout">
@@ -88,7 +96,9 @@ return;
                 />
 
                 <div v-if="!wallet.isConnected.value" class="connect">
-                    <button @click="wallet.connect()">Подключить Phantom</button>
+                    <button @click="wallet.connect()">
+                        Подключить Phantom
+                    </button>
                 </div>
 
                 <div v-else class="controls">
@@ -100,20 +110,29 @@ return;
                                 :key="t.mint"
                                 :value="t.mint"
                             >
-                                {{ t.symbol ?? t.mint.slice(0, 8) }} ({{ (t.weight * 100).toFixed(1) }}%)
+                                {{ t.symbol ?? t.mint.slice(0, 8) }} ({{
+                                    (t.weight * 100).toFixed(1)
+                                }}%)
                             </option>
                         </select>
                     </label>
                     <label>
                         Размер:
-                        <input v-model="betAmount" type="number" min="0" step="0.000001" />
+                        <input
+                            v-model="betAmount"
+                            type="number"
+                            min="0"
+                            step="0.000001"
+                        />
                     </label>
                     <button :disabled="!canSpin" @click="handleSpin">
                         {{ machine.isSpinning.value ? 'Крутится...' : 'SPIN' }}
                     </button>
                 </div>
 
-                <p v-if="machine.error.value" class="error">{{ machine.error.value }}</p>
+                <p v-if="machine.error.value" class="error">
+                    {{ machine.error.value }}
+                </p>
             </main>
         </div>
 
@@ -129,8 +148,8 @@ return;
 <style scoped>
 .slots-page {
     padding: 32px;
-    color: #ddd;
-    background: #0d0d0d;
+    color: var(--foreground);
+    background: var(--background);
     min-height: 100vh;
 }
 header h1 {
@@ -154,14 +173,16 @@ header h1 {
     gap: 4px;
     font-size: 0.9em;
 }
-.controls select, .controls input {
-    background: #222;
-    color: #eee;
-    border: 1px solid #444;
+.controls select,
+.controls input {
+    background: var(--card);
+    color: var(--foreground);
+    border: 1px solid var(--border);
     padding: 6px 8px;
     border-radius: 4px;
 }
-.controls button, .connect button {
+.controls button,
+.connect button {
     background: #4ade80;
     color: #000;
     border: none;

@@ -65,6 +65,9 @@ return [
         // from the private key automatically (EIP-55 checksum) and caches it.
         'relayer_address' => env('BRIDGE_RELAYER_ADDRESS'),
         'solana_rpc_url' => env('BRIDGE_SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
+        // TON payout relayer (crypto/ton/scripts/relay-jetton-transfer.ts).
+        'ton_relayer_mnemonic' => env('TON_RELAYER_MNEMONIC'),
+        'toncenter_api_key' => env('TONCENTER_API_KEY'),
         'solana_bridge_program' => env('BRIDGE_SOLANA_PROGRAM_ID'),
     ],
 

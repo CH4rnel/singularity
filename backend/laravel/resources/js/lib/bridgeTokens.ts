@@ -1,4 +1,15 @@
-export type BridgeTokenSymbol = 'CYBER.sol' | 'USDC' | 'USDT' | 'HATCHER';
+export type BridgeTokenSymbol =
+    | 'CYBER.sol'
+    | 'USDC'
+    | 'USDT'
+    | 'HATCHER'
+    | 'YTN'
+    | 'KRSQ'
+    | 'GOAL'
+    | 'BNB'
+    | 'USDT.BNB'
+    // Config-driven tokens added in config/bridge.php arrive via server props.
+    | (string & {});
 
 export type BridgeTokenInfo = {
     symbol: BridgeTokenSymbol;
@@ -21,7 +32,7 @@ export type BridgeTokenInfo = {
     solanaTokenProgram: 'token' | 'token-2022';
 };
 
-export const BRIDGE_TOKENS: Record<BridgeTokenSymbol, BridgeTokenInfo> = {
+export const BRIDGE_TOKENS: Record<string, BridgeTokenInfo> = {
     // CYBER.sol is a wrapped token — mint()/burn() on the EVM side live on the
     // WrappedCyberSol contract and are gated to the CyberBridge owner. The
     // relayer EOA cannot just ERC20.transfer because it holds no inventory.
@@ -68,6 +79,56 @@ export const BRIDGE_TOKENS: Record<BridgeTokenSymbol, BridgeTokenInfo> = {
         model: 'mint',
         solanaTokenProgram: 'token-2022',
     },
+    YTN: {
+        symbol: 'YTN',
+        evmAddress: '0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6',
+        solanaMint: '',
+        evmDecimals: 18,
+        solanaDecimals: 8,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
+    // TON jettons bridged into existing Cyberia wrappers (KRSQ/GOAL are 9-dec
+    // jettons; the Cyberia ERC20s are 18-dec — the backend scales each side).
+    KRSQ: {
+        symbol: 'KRSQ',
+        evmAddress: '0x4945419ccEEF0Dc70B054700DE2750A056B03eE3',
+        solanaMint: '',
+        evmDecimals: 18,
+        solanaDecimals: 9,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
+    GOAL: {
+        symbol: 'GOAL',
+        evmAddress: '0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe',
+        solanaMint: '',
+        evmDecimals: 18,
+        solanaDecimals: 9,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
+    // BNB Chain assets. The Cyberia wrapper addresses come from the server
+    // config (BRIDGE_BNB_WRAPPER_ADDRESS / BRIDGE_USDT_BNB_WRAPPER_ADDRESS);
+    // the empty placeholders are overridden at runtime via bridgeConfig.
+    BNB: {
+        symbol: 'BNB',
+        evmAddress: '0x0000000000000000000000000000000000000000',
+        solanaMint: '',
+        evmDecimals: 18,
+        solanaDecimals: 18,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
+    'USDT.BNB': {
+        symbol: 'USDT.BNB',
+        evmAddress: '0x0000000000000000000000000000000000000000',
+        solanaMint: '',
+        evmDecimals: 18,
+        solanaDecimals: 18,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
 };
 
 /**
@@ -82,14 +143,13 @@ export const SUPPORTED_TOKEN_SYMBOLS: BridgeTokenSymbol[] = [
     'USDC',
     'USDT',
     'HATCHER',
+    'YTN',
 ];
 
 export const tokenBySymbol = (symbol: string): BridgeTokenInfo | null => {
-    if (symbol === 'CYBER.sol') {
-        return BRIDGE_TOKENS['CYBER.sol'];
+    if (BRIDGE_TOKENS[symbol]) {
+        return BRIDGE_TOKENS[symbol];
     }
 
-    const upper = symbol.toUpperCase() as BridgeTokenSymbol;
-
-    return BRIDGE_TOKENS[upper] ?? null;
+    return BRIDGE_TOKENS[symbol.toUpperCase()] ?? null;
 };

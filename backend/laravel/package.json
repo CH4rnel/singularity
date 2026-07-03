@@ -41,6 +41,7 @@
         "@vueuse/core": "^12.8.2",
         "buffer": "^6.0.3",
         "chart.js": "^4.5.1",
+        "chartjs-chart-financial": "^0.2.1",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "ethers": "^6.16.0",

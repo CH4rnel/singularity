@@ -23,8 +23,8 @@ const buildStrip = (): Cell[] => {
         const t = pool[Math.floor(Math.random() * Math.max(1, pool.length))];
 
         if (!t) {
-continue;
-}
+            continue;
+        }
 
         strip.push({ mint: t.mint, logo: t.logo_url, symbol: t.symbol });
     }
@@ -40,8 +40,8 @@ watch(() => props.tokens, rebuildStrips, { immediate: true });
 
 const settledMatrix = computed<Cell[][] | null>(() => {
     if (!props.target) {
-return null;
-}
+        return null;
+    }
 
     return props.target.map((row) =>
         row.map((mint) => {
@@ -67,17 +67,15 @@ return null;
             :style="{ animationDelay: `${(col - 1) * 0.2}s` }"
         >
             <template v-if="settledMatrix && !spinning">
-                <div
-                    v-for="row in 3"
-                    :key="row"
-                    class="cell settled"
-                >
+                <div v-for="row in 3" :key="row" class="cell settled">
                     <img
                         v-if="settledMatrix[row - 1][col - 1].logo"
                         :src="settledMatrix[row - 1][col - 1].logo!"
                         :alt="settledMatrix[row - 1][col - 1].symbol ?? ''"
                     />
-                    <span v-else>{{ settledMatrix[row - 1][col - 1].symbol }}</span>
+                    <span v-else>{{
+                        settledMatrix[row - 1][col - 1].symbol
+                    }}</span>
                 </div>
             </template>
             <template v-else>
@@ -137,7 +135,11 @@ return null;
 }
 
 @keyframes spin {
-    from { transform: translateY(0); }
-    to { transform: translateY(-96px); }
+    from {
+        transform: translateY(0);
+    }
+    to {
+        transform: translateY(-96px);
+    }
 }
 </style>

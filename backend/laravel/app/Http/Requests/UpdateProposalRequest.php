@@ -16,7 +16,7 @@ class UpdateProposalRequest extends FormRequest
         return [
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
-            'status' => 'sometimes|required|string|in:open,closed',
+            'ends_at' => 'sometimes|nullable|date',
         ];
     }
 }

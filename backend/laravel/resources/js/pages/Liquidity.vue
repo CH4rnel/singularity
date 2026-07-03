@@ -10,7 +10,6 @@ import {
 } from 'ethers';
 import { Loader2 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
-import Header from '@/components/Header.vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -687,8 +686,6 @@ onMounted(async () => {
     <Head title="Cyberia Liquidity" />
 
     <div class="liq-page">
-        <Header />
-
         <div class="mx-auto max-w-xl px-4 py-6">
             <header class="mb-4">
                 <h1 class="text-2xl font-bold">Liquidity</h1>

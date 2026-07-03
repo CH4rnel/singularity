@@ -213,6 +213,22 @@
       "decimals": 18,
       "chainId": 49406,
       "logoURI": "/ethereum-eth-logo-colored.svg"
+    },
+    {
+      "name": "JupUSD",
+      "address": "0x03EB2fb8473C0370c8F6463efEE5f5Cf4EC011c7",
+      "symbol": "JupUSD",
+      "decimals": 6,
+      "chainId": 49406,
+      "logoURI": "/jupusd.png"
+    },
+    {
+      "name": "2CHcoin",
+      "address": "0x13925d9c0a14720Df49ae3D0bbc7699044a95e6C",
+      "symbol": "2CH",
+      "decimals": 6,
+      "chainId": 49406,
+      "logoURI": "/2CHcoin.png"
     }
   ]
 }

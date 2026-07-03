@@ -6,9 +6,17 @@ import { useBridgeAnalytics } from '@/composables/useBridgeAnalytics';
 import { useBridgeFlow } from '@/composables/useBridgeFlow';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
+import { bridgeRoute, isManualBridgeRoute } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
+import {
+    bridgeChainInfo,
+    bridgeDepositAddress,
+    tokenOnChain,
+    tokensForRoute,
+} from '@/lib/bridgeConfig';
 import type { BridgeFeeConfig } from '@/lib/bridgeFee';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
+import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import StepConfigure from './StepConfigure.vue';
 import StepDirection from './StepDirection.vue';
 import StepReview from './StepReview.vue';
@@ -18,6 +26,8 @@ import StepTracking from './StepTracking.vue';
 const props = withDefaults(
     defineProps<{
         relayerEvmAddress?: string | null;
+        availableDirections?: string[];
+        yentenDepositAddress?: string | null;
         cyberSolUsd?: number | null;
         feeConfig?: BridgeFeeConfig;
         gasDropConfig?: { enabled: boolean; amount: string };
@@ -25,6 +35,8 @@ const props = withDefaults(
     }>(),
     {
         relayerEvmAddress: null,
+        availableDirections: () => [],
+        yentenDepositAddress: null,
         cyberSolUsd: null,
         feeConfig: () => ({ flatUsd: 0.1, rateBps: 0 }),
         gasDropConfig: () => ({ enabled: true, amount: '0.01' }),
@@ -75,20 +87,35 @@ onMounted(() => {
     analytics.track('page_view');
 });
 
-const sourceWalletConnected = computed(() =>
-    flow.context.direction === 'sol_to_evm'
-        ? solanaWallet.isConnected.value
-        : evmWallet.isConnected.value,
-);
+const sourceWalletConnected = computed(() => {
+    if (!flow.context.direction) {
+        return false;
+    }
 
-const sourceWalletAddress = computed(() =>
-    flow.context.direction === 'sol_to_evm'
+    const sourceWallet = bridgeRoute(flow.context.direction).sourceWallet;
+
+    if (sourceWallet === 'manual') {
+        return true;
+    }
+
+    return sourceWallet === 'solana'
+        ? solanaWallet.isConnected.value
+        : evmWallet.isConnected.value;
+});
+
+const sourceWalletAddress = computed(() => {
+    if (!flow.context.direction) {
+        return null;
+    }
+
+    return bridgeRoute(flow.context.direction).sourceWallet === 'solana'
         ? solanaWallet.address.value
-        : evmWallet.address.value,
-);
+        : evmWallet.address.value;
+});
 
 const sourceWalletConnecting = computed(() =>
-    flow.context.direction === 'sol_to_evm'
+    flow.context.direction &&
+    bridgeRoute(flow.context.direction).sourceWallet === 'solana'
         ? solanaWallet.isConnecting.value
         : evmWallet.isConnecting.value,
 );
@@ -98,8 +125,15 @@ const sourceBalance = computed(() => {
         return null;
     }
 
-    const chain: 'evm' | 'solana' =
-        flow.context.direction === 'sol_to_evm' ? 'solana' : 'evm';
+    const source = bridgeRoute(flow.context.direction).source;
+
+    if (source !== 'solana' && source !== 'cyberia') {
+        // Balances on other chains (BSC, TON, Yenten) aren't fetched
+        // client-side — the backend verifies the deposit anyway.
+        return null;
+    }
+
+    const chain: 'evm' | 'solana' = source === 'solana' ? 'solana' : 'evm';
 
     if (flow.context.token === 'CYBER.sol') {
         return chain === 'solana'
@@ -117,16 +151,15 @@ const refreshSourceBalance = () => {
 
     const token = flow.context.token;
 
-    if (flow.context.direction === 'sol_to_evm' && solanaWallet.address.value) {
+    const source = bridgeRoute(flow.context.direction).source;
+
+    if (source === 'solana' && solanaWallet.address.value) {
         if (token === 'CYBER.sol') {
             bridge.fetchSolanaCyberBalance(solanaWallet.address.value);
         } else {
             bridge.fetchTokenBalanceSolana(token, solanaWallet.address.value);
         }
-    } else if (
-        flow.context.direction === 'evm_to_sol' &&
-        evmWallet.address.value
-    ) {
+    } else if (source === 'cyberia' && evmWallet.address.value) {
         if (token === 'CYBER.sol') {
             bridge.fetchCyberSolBalance(evmWallet.address.value);
         } else {
@@ -140,12 +173,11 @@ watch(sourceWalletConnected, (connected) => {
         return;
     }
 
-    if (flow.context.direction === 'sol_to_evm' && solanaWallet.address.value) {
+    const sourceWallet = bridgeRoute(flow.context.direction).sourceWallet;
+
+    if (sourceWallet === 'solana' && solanaWallet.address.value) {
         flow.context.sourceAddress = solanaWallet.address.value;
-    } else if (
-        flow.context.direction === 'evm_to_sol' &&
-        evmWallet.address.value
-    ) {
+    } else if (sourceWallet === 'evm' && evmWallet.address.value) {
         flow.context.sourceAddress = evmWallet.address.value;
     }
 
@@ -164,13 +196,37 @@ watch(
     },
 );
 
+const sourceDepositAddress = computed(() => {
+    if (
+        !flow.context.direction ||
+        !isManualBridgeRoute(flow.context.direction)
+    ) {
+        return null;
+    }
+
+    const source = bridgeRoute(flow.context.direction).source;
+
+    return (
+        bridgeDepositAddress(source) ??
+        (source === 'yenten' ? props.yentenDepositAddress : null)
+    );
+});
+
 const handleDirection = (direction: BridgeDirection) => {
     flow.chooseDirection(direction);
     analytics.track('direction_selected', { direction });
 
-    if (direction === 'sol_to_evm' && solanaWallet.address.value) {
+    const available = tokensForRoute(direction);
+
+    if (available.length > 0 && !available.includes(flow.context.token)) {
+        flow.context.token = available[0] as BridgeTokenSymbol;
+    }
+
+    const sourceWallet = bridgeRoute(direction).sourceWallet;
+
+    if (sourceWallet === 'solana' && solanaWallet.address.value) {
         flow.context.sourceAddress = solanaWallet.address.value;
-    } else if (direction === 'evm_to_sol' && evmWallet.address.value) {
+    } else if (sourceWallet === 'evm' && evmWallet.address.value) {
         flow.context.sourceAddress = evmWallet.address.value;
     }
 
@@ -182,7 +238,7 @@ const handleConnectSource = async () => {
         return;
     }
 
-    if (flow.context.direction === 'sol_to_evm') {
+    if (bridgeRoute(flow.context.direction).sourceWallet === 'solana') {
         const addr = await solanaWallet.connect();
 
         if (addr) {
@@ -207,7 +263,7 @@ const handleConfigureNext = async () => {
     });
 
     gasDropPlanned.value =
-        flow.context.direction === 'sol_to_evm'
+        bridgeRoute(flow.context.direction!).destination === 'cyberia'
             ? await checkEvmRecipientNeedsGas(flow.context.destinationAddress)
             : false;
 
@@ -219,74 +275,99 @@ const handleConfirm = async () => {
         return;
     }
 
-    flow.beginSigning();
-    analytics.track('lock_tx_submitted', {
-        direction: flow.context.direction,
-        amount: flow.context.amount,
-        metadata: { token: flow.context.token },
-    });
+    const manualSource = isManualBridgeRoute(flow.context.direction);
 
-    const tokenInfo = BRIDGE_TOKENS[flow.context.token];
+    if (!manualSource) {
+        flow.beginSigning();
+        analytics.track('lock_tx_submitted', {
+            direction: flow.context.direction,
+            amount: flow.context.amount,
+            metadata: { token: flow.context.token },
+        });
 
-    try {
-        let result: { txHash: string; nonce: number } | null;
+        const tokenInfo = BRIDGE_TOKENS[flow.context.token];
 
-        if (tokenInfo.model === 'native') {
-            // CYBER — through CyberBridge contract
-            result =
-                flow.context.direction === 'evm_to_sol'
-                    ? await bridge.redeemCyberSolOnEvm(
+        try {
+            let result: { txHash: string; nonce: number } | null;
+
+            if (tokenInfo.model === 'native') {
+                // CYBER — through CyberBridge contract
+                result =
+                    flow.context.direction === 'evm_to_sol'
+                        ? await bridge.redeemCyberSolOnEvm(
+                              flow.context.amount,
+                              flow.context.destinationAddress,
+                          )
+                        : await bridge.lockNativeOnSolana(
+                              flow.context.amount,
+                              flow.context.destinationAddress,
+                          );
+            } else if (
+                bridgeChainInfo(bridgeRoute(flow.context.direction).source)
+                    ?.type === 'evm'
+            ) {
+                const sourceChain = bridgeRoute(flow.context.direction).source;
+                const relayer =
+                    bridgeDepositAddress(sourceChain) ??
+                    props.relayerEvmAddress;
+
+                if (!relayer) {
+                    throw new Error(
+                        'Bridge relayer address not configured on the server. Run `php artisan bridge:show-relayer` and add the printed BRIDGE_RELAYER_ADDRESS to .env.',
+                    );
+                }
+
+                const sourceToken = tokenOnChain(
+                    flow.context.token,
+                    sourceChain,
+                );
+
+                result = sourceToken?.native
+                    ? await bridge.nativeTransferToRelayer(
+                          sourceChain,
                           flow.context.amount,
-                          flow.context.destinationAddress,
+                          relayer,
                       )
-                    : await bridge.lockNativeOnSolana(
+                    : await bridge.erc20TransferToRelayer(
+                          flow.context.token,
                           flow.context.amount,
-                          flow.context.destinationAddress,
+                          relayer,
+                          sourceChain,
                       );
-        } else if (flow.context.direction === 'evm_to_sol') {
-            if (!props.relayerEvmAddress) {
-                throw new Error(
-                    'Bridge relayer address not configured on the server. Run `php artisan bridge:show-relayer` and add the printed BRIDGE_RELAYER_ADDRESS to .env.',
+            } else {
+                result = await bridge.splTransferToHotWallet(
+                    flow.context.token,
+                    flow.context.amount,
                 );
             }
 
-            result = await bridge.erc20TransferToRelayer(
-                flow.context.token,
-                flow.context.amount,
-                props.relayerEvmAddress,
-            );
-        } else {
-            result = await bridge.splTransferToHotWallet(
-                flow.context.token,
-                flow.context.amount,
-            );
+            if (!result) {
+                throw new Error('Transaction cancelled');
+            }
+
+            flow.context.sourceTxHash = result.txHash;
+            flow.context.sourceNonce = result.nonce;
+
+            analytics.track('lock_tx_confirmed', {
+                direction: flow.context.direction,
+                amount: flow.context.amount,
+                source_address: flow.context.sourceAddress,
+                destination_address: flow.context.destinationAddress,
+                metadata: { tx_hash: result.txHash, nonce: result.nonce },
+            });
+        } catch (err) {
+            const message =
+                err instanceof Error ? err.message : 'Signing failed';
+
+            analytics.track('lock_tx_rejected', {
+                direction: flow.context.direction,
+                amount: flow.context.amount,
+                error_message: message,
+            });
+            flow.markFailed(message);
+
+            return;
         }
-
-        if (!result) {
-            throw new Error('Transaction cancelled');
-        }
-
-        flow.context.sourceTxHash = result.txHash;
-        flow.context.sourceNonce = result.nonce;
-
-        analytics.track('lock_tx_confirmed', {
-            direction: flow.context.direction,
-            amount: flow.context.amount,
-            source_address: flow.context.sourceAddress,
-            destination_address: flow.context.destinationAddress,
-            metadata: { tx_hash: result.txHash, nonce: result.nonce },
-        });
-    } catch (err) {
-        const message = err instanceof Error ? err.message : 'Signing failed';
-
-        analytics.track('lock_tx_rejected', {
-            direction: flow.context.direction,
-            amount: flow.context.amount,
-            error_message: message,
-        });
-        flow.markFailed(message);
-
-        return;
     }
 
     flow.beginSubmitting();
@@ -368,6 +449,7 @@ const handleReset = () => {
     <div class="w-full">
         <StepDirection
             v-if="flow.step.value === 'idle'"
+            :available-directions="props.availableDirections"
             @select="handleDirection"
         />
 
@@ -378,6 +460,8 @@ const handleReset = () => {
             :direction="flow.context.direction"
             v-model:token="flow.context.token"
             v-model:amount="flow.context.amount"
+            v-model:source-tx-hash="flow.context.sourceTxHash"
+            v-model:source-address="flow.context.sourceAddress"
             v-model:destination-address="flow.context.destinationAddress"
             v-model:convert-to-native="flow.context.convertToNative"
             :convert-enabled="props.convertConfig.enabled"
@@ -386,6 +470,7 @@ const handleReset = () => {
             :source-wallet-address="sourceWalletAddress"
             :source-wallet-connecting="sourceWalletConnecting"
             :source-balance="sourceBalance"
+            :source-deposit-address="sourceDepositAddress"
             :recent="flow.recentForDirection.value"
             @connect-source="handleConnectSource"
             @next="handleConfigureNext"

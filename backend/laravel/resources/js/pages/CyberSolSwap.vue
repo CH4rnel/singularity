@@ -21,7 +21,6 @@ import {
     Wallet,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
-import Header from '@/components/Header.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
@@ -479,8 +478,6 @@ watch(mode, () => {
 <template>
     <Head title="Bring your CYBER home · CYBER.sol redeemer" />
 
-    <Header />
-
     <main class="relative overflow-hidden">
         <!-- ambient gradient glow -->
         <div
@@ -488,7 +485,7 @@ watch(mode, () => {
             class="pointer-events-none absolute inset-x-0 -top-40 -z-10 flex justify-center"
         >
             <div
-                class="h-[28rem] w-[60rem] max-w-full rounded-full bg-gradient-to-tr from-violet-600/20 via-fuchsia-500/10 to-emerald-400/20 blur-3xl"
+                class="h-[28rem] w-[60rem] max-w-full rounded-full bg-gradient-to-tr from-cyan-500/20 via-fuchsia-500/10 to-teal-300/20 blur-3xl"
             ></div>
         </div>
 
@@ -506,7 +503,7 @@ watch(mode, () => {
                 <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
                     Bring your
                     <span
-                        class="bg-gradient-to-r from-violet-500 via-fuchsia-500 to-emerald-400 bg-clip-text text-transparent"
+                        class="bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-teal-300 bg-clip-text text-transparent"
                         >CYBER</span
                     >
                     home
@@ -537,7 +534,7 @@ watch(mode, () => {
             <!-- SWAP CARD -->
             <section class="mx-auto w-full max-w-md space-y-4">
                 <div
-                    class="rounded-3xl bg-gradient-to-br from-violet-500/40 via-border to-emerald-400/40 p-px shadow-xl"
+                    class="rounded-3xl bg-gradient-to-br from-cyan-400/40 via-border to-teal-300/40 p-px shadow-xl"
                 >
                     <div
                         class="space-y-3 rounded-[calc(1.5rem-1px)] bg-card p-5"
@@ -611,7 +608,7 @@ watch(mode, () => {
                                     class="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-3"
                                 >
                                     <span
-                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-emerald-400 text-xs font-bold text-white"
+                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-teal-300 text-xs font-bold text-white"
                                         >◎</span
                                     >
                                     <div class="text-left leading-tight">
@@ -691,7 +688,7 @@ watch(mode, () => {
                                     class="flex shrink-0 items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/5 py-1 pl-1 pr-3"
                                 >
                                     <span
-                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-xs font-bold text-white"
+                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-teal-300 to-teal-400 text-xs font-bold text-white"
                                         >C</span
                                     >
                                     <div class="text-left leading-tight">
@@ -779,7 +776,7 @@ watch(mode, () => {
                 >
                     <span class="flex items-center gap-2 text-muted-foreground">
                         <span
-                            class="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-emerald-400 text-[10px] font-bold text-white"
+                            class="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-teal-300 text-[10px] font-bold text-white"
                             >◎</span
                         >
                         CYBER still on Solana?
@@ -818,7 +815,7 @@ watch(mode, () => {
                 <ol class="grid gap-4 sm:grid-cols-3">
                     <li class="rounded-2xl border border-border bg-card p-5">
                         <div
-                            class="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-bold text-white"
+                            class="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-fuchsia-500 text-sm font-bold text-white"
                         >
                             1
                         </div>
@@ -830,7 +827,7 @@ watch(mode, () => {
                     </li>
                     <li class="rounded-2xl border border-border bg-card p-5">
                         <div
-                            class="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-emerald-400 text-sm font-bold text-white"
+                            class="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-teal-300 text-sm font-bold text-white"
                         >
                             2
                         </div>
@@ -843,7 +840,7 @@ watch(mode, () => {
                     </li>
                     <li class="rounded-2xl border border-border bg-card p-5">
                         <div
-                            class="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-sm font-bold text-white"
+                            class="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-300 to-teal-400 text-sm font-bold text-white"
                         >
                             3
                         </div>

@@ -140,7 +140,7 @@ const rawJson = computed(() =>
             <button
                 type="submit"
                 :disabled="loading"
-                class="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
+                class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
                 <Search class="h-4 w-4" />
                 {{ loading ? 'Resolving…' : 'Look up' }}
@@ -321,8 +321,8 @@ const rawJson = computed(() =>
                     v-if="post.images.length"
                     class="mt-3 grid gap-2"
                     :class="
-                        post.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'
-                    "
+ post.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'
+ "
                 >
                     <img
                         v-for="(img, i) in post.images"

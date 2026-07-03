@@ -7,15 +7,24 @@ import { hueFor, logoFailed, logoFor, markLogoFailed } from '@/lib/tokenLogos';
 // registry) wins over the built-in symbol map; either falls back to the
 // gradient on a 404. Shared by the Lending, Farm, Liquidity and token pages.
 const props = withDefaults(
-    defineProps<{ symbol: string; size?: number; ring?: boolean; logo?: string | null }>(),
+    defineProps<{
+        symbol: string;
+        size?: number;
+        ring?: boolean;
+        logo?: string | null;
+    }>(),
     { size: 40, ring: false, logo: null },
 );
 
-const src = computed<string | undefined>(() => props.logo ?? logoFor(props.symbol));
+const src = computed<string | undefined>(
+    () => props.logo ?? logoFor(props.symbol),
+);
 const useImage = computed(() => !!src.value && !logoFailed(src.value));
 
 const dimension = computed(() => `${props.size}px`);
-const fontSize = computed(() => `${Math.max(9, Math.round(props.size * 0.32))}px`);
+const fontSize = computed(
+    () => `${Math.max(9, Math.round(props.size * 0.32))}px`,
+);
 const letters = computed(() => props.symbol.slice(0, props.size >= 32 ? 3 : 2));
 const gradient = computed(
     () =>

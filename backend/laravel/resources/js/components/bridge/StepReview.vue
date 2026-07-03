@@ -2,6 +2,7 @@
 import { AlertTriangle, Flame, Gift } from 'lucide-vue-next';
 import { computed } from 'vue';
 
+import { bridgeRoute, isManualBridgeRoute } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
 import { DEFAULT_FEE, computeFee, isFeeBearing } from '@/lib/bridgeFee';
 import type { BridgeFeeConfig } from '@/lib/bridgeFee';
@@ -44,13 +45,13 @@ const localConfirmed = computed({
     set: (v) => emit('update:confirmed', v),
 });
 
-const sourceChain = computed(() =>
-    props.direction === 'sol_to_evm' ? 'Solana' : 'Cyberia EVM',
-);
+const route = computed(() => bridgeRoute(props.direction));
 
-const destChain = computed(() =>
-    props.direction === 'sol_to_evm' ? 'Cyberia EVM' : 'Solana',
-);
+const sourceChain = computed(() => route.value.sourceLabel);
+
+const destChain = computed(() => route.value.destinationLabel);
+
+const manualRoute = computed(() => isManualBridgeRoute(props.direction));
 
 const feeResult = computed(() =>
     computeFee(
@@ -220,7 +221,7 @@ const receiveToken = computed(() =>
             :disabled="!localConfirmed"
             @click="$emit('confirm')"
         >
-            Confirm and sign
+            {{ manualRoute ? 'Submit request' : 'Confirm and sign' }}
         </button>
     </div>
 </template>

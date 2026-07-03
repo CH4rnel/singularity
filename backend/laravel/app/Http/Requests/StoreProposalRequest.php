@@ -21,6 +21,7 @@ class StoreProposalRequest extends FormRequest
             'dao_id' => 'required|exists:daos,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'ends_at' => 'nullable|date|after:now',
         ];
     }
 }

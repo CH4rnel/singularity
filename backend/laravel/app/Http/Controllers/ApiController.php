@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BridgeRequest;
+use App\Services\BridgeConfigService;
 use App\Services\BridgeRelayerService;
 use App\Services\CataasApiService;
 use App\Services\CyberPriceService;
@@ -14,7 +15,7 @@ use Laravel\Fortify\Features;
 
 class ApiController extends Controller
 {
-    public function index(YesNoApiService $yesNo, CataasApiService $cataas, CyberPriceService $cyber, Request $request)
+    public function index(YesNoApiService $yesNo, CataasApiService $cataas, CyberPriceService $cyber, BridgeConfigService $bridgeConfig, Request $request)
     {
         $price = $cyber->get();
 
@@ -30,13 +31,18 @@ class ApiController extends Controller
                 ]);
         }
 
-        $useNewUx = config('bridge.new_ux', true) && ! $request->boolean('legacy');
-
         return Inertia::render('Bridge', [
             'price' => $price,
             'bridgeHistory' => $bridgeHistory,
-            'useNewUx' => $useNewUx,
             'bridgeRelayerEvm' => app(BridgeRelayerService::class)->evmAddress(),
+            // Full bridge config for the frontend: chains, routes and tokens
+            // all come from config/bridge.php — adding an EVM chain is a
+            // config-only change, no frontend edits.
+            'bridgeChains' => $bridgeConfig->publicChains(),
+            'bridgeRoutes' => $bridgeConfig->publicRoutes(),
+            'bridgeTokens' => $bridgeConfig->publicTokens(),
+            'bridgeDirections' => array_column($bridgeConfig->publicRoutes(), 'direction'),
+            'bridgeYentenDepositAddress' => $bridgeConfig->depositAddress('yenten'),
             'bridgeFeeConfig' => [
                 'flatUsd' => (float) config('bridge.fee.flat_usd', 0.1),
                 'rateBps' => (int) config('bridge.fee.rate_bps', 0),

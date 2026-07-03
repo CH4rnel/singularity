@@ -11,7 +11,6 @@ import {
 } from 'ethers';
 import { Loader2 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
-import Header from '@/components/Header.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -610,9 +609,7 @@ onMounted(async () => {
 <template>
     <Head title="Cyberia Lending — Liquidate" />
 
-    <div class="min-h-screen bg-background text-foreground">
-        <Header />
-
+    <div>
         <main class="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12">
             <div>
                 <p
@@ -805,10 +802,10 @@ onMounted(async () => {
                                     <p class="text-xs uppercase text-muted-foreground">Shortfall</p>
                                     <p
                                         :class="
-                                            borrowerData.shortfall > 0n
-                                                ? 'text-destructive font-semibold'
-                                                : 'text-muted-foreground'
-                                        "
+ borrowerData.shortfall > 0n
+ ? 'text-destructive font-semibold'
+ : 'text-muted-foreground'
+ "
                                     >
                                         ${{ (Number(borrowerData.shortfall) / 1e18).toFixed(4) }}
                                     </p>
@@ -901,10 +898,10 @@ onMounted(async () => {
                                             v-if="repayMarket && maxRepayReason"
                                             class="ml-1 normal-case font-normal"
                                             :class="
-                                                maxRepayReason === 'collateral'
-                                                    ? 'text-amber-500'
-                                                    : 'text-muted-foreground'
-                                            "
+ maxRepayReason === 'collateral'
+ ? 'text-amber-500'
+ : 'text-muted-foreground'
+ "
                                         >
                                             (max {{ formatToken(maxRepay, repayMarket.decimals, 8) }} —
                                             {{

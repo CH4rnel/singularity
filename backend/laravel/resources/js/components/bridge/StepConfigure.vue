@@ -3,15 +3,18 @@ import { Wallet, Clock, Flame } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 import type { RecentDestination } from '@/composables/useBridgeFlow';
+import { bridgeRoute, isManualBridgeRoute } from '@/lib/addressValidation';
 import { validateDestination } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
-import { SUPPORTED_TOKEN_SYMBOLS } from '@/lib/bridgeTokens';
+import { tokensForRoute } from '@/lib/bridgeConfig';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 
 const props = defineProps<{
     direction: BridgeDirection;
     token: BridgeTokenSymbol;
     amount: string;
+    sourceTxHash: string;
+    sourceAddress: string;
     destinationAddress: string;
     convertToNative: boolean;
     convertEnabled: boolean;
@@ -20,11 +23,14 @@ const props = defineProps<{
     sourceWalletAddress: string | null;
     sourceWalletConnecting: boolean;
     sourceBalance: string | null;
+    sourceDepositAddress: string | null;
     recent: RecentDestination[];
 }>();
 
 const emit = defineEmits<{
     (e: 'update:amount', v: string): void;
+    (e: 'update:sourceTxHash', v: string): void;
+    (e: 'update:sourceAddress', v: string): void;
     (e: 'update:destinationAddress', v: string): void;
     (e: 'update:token', v: BridgeTokenSymbol): void;
     (e: 'update:convertToNative', v: boolean): void;
@@ -33,7 +39,9 @@ const emit = defineEmits<{
     (e: 'back'): void;
 }>();
 
-const tokenSymbols = SUPPORTED_TOKEN_SYMBOLS;
+const tokenSymbols = computed(
+    () => tokensForRoute(props.direction) as BridgeTokenSymbol[],
+);
 
 const localToken = computed({
     get: () => props.token,
@@ -43,6 +51,16 @@ const localToken = computed({
 const localAmount = computed({
     get: () => props.amount,
     set: (v) => emit('update:amount', v),
+});
+
+const localSourceTxHash = computed({
+    get: () => props.sourceTxHash,
+    set: (v) => emit('update:sourceTxHash', v),
+});
+
+const localSourceAddress = computed({
+    get: () => props.sourceAddress,
+    set: (v) => emit('update:sourceAddress', v),
 });
 
 const localDestination = computed({
@@ -62,6 +80,10 @@ const convertAvailable = computed(
         props.direction === 'sol_to_evm' &&
         props.token === 'CYBER.sol',
 );
+
+const route = computed(() => bridgeRoute(props.direction));
+
+const manualRoute = computed(() => isManualBridgeRoute(props.direction));
 
 const convertedEstimate = computed(() => {
     const amt = parseFloat(localAmount.value);
@@ -83,23 +105,36 @@ watch(
     { immediate: true },
 );
 
-const sourceLabel = computed(() =>
-    props.direction === 'sol_to_evm' ? 'Solana' : 'Cyberia EVM',
-);
+const sourceLabel = computed(() => route.value.sourceLabel);
 
-const destChainLabel = computed(() =>
-    props.direction === 'sol_to_evm' ? 'Cyberia EVM' : 'Solana',
-);
+const destChainLabel = computed(() => route.value.destinationLabel);
 
-const destPlaceholder = computed(() =>
-    props.direction === 'sol_to_evm'
-        ? '0x… EVM address that will receive the funds'
-        : 'Solana address that will receive the funds',
-);
+const destPlaceholder = computed(() => {
+    if (route.value.destinationAddressType === 'evm') {
+        return '0x... address that will receive the funds';
+    }
+
+    if (route.value.destinationAddressType === 'ton') {
+        return 'TON address that will receive the funds';
+    }
+
+    if (route.value.destinationAddressType === 'yenten') {
+        return 'Y... address that will receive native YTN';
+    }
+
+    return 'Solana address that will receive the funds';
+});
 
 const amountNum = computed(() => parseFloat(localAmount.value));
 
 const amountValid = computed(() => amountNum.value > 0);
+
+const manualFieldsValid = computed(
+    () =>
+        !manualRoute.value ||
+        (localSourceAddress.value.trim().length > 0 &&
+            localSourceTxHash.value.trim().length > 0),
+);
 
 const amountExceedsBalance = computed(() => {
     const bal = parseFloat(props.sourceBalance ?? '0');
@@ -118,6 +153,7 @@ const canProceed = computed(
         props.sourceWalletConnected &&
         amountValid.value &&
         !amountExceedsBalance.value &&
+        manualFieldsValid.value &&
         validation.value.valid,
 );
 
@@ -158,7 +194,7 @@ const formatRelative = (ts: number): string => {
             </button>
         </header>
 
-        <!-- Source wallet -->
+        <!-- Source wallet / manual deposit -->
         <div
             class="flex items-center justify-between rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"
         >
@@ -169,7 +205,11 @@ const formatRelative = (ts: number): string => {
                         From {{ sourceLabel }}
                     </p>
                     <p
-                        v-if="sourceWalletConnected && sourceWalletAddress"
+                        v-if="
+                            !manualRoute &&
+                            sourceWalletConnected &&
+                            sourceWalletAddress
+                        "
                         class="font-mono text-xs text-[#1b1b18] dark:text-[#EDEDEC]"
                     >
                         {{ sourceWalletAddress.slice(0, 6) }}…{{
@@ -179,7 +219,7 @@ const formatRelative = (ts: number): string => {
                 </div>
             </div>
             <button
-                v-if="!sourceWalletConnected"
+                v-if="!manualRoute && !sourceWalletConnected"
                 type="button"
                 class="rounded border border-[#19140035] px-3 py-1.5 text-xs text-[#1b1b18] hover:border-[#1915014a] disabled:opacity-50 dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
                 :disabled="sourceWalletConnecting"
@@ -188,8 +228,70 @@ const formatRelative = (ts: number): string => {
                 {{ sourceWalletConnecting ? 'Connecting…' : 'Connect' }}
             </button>
             <span v-else class="text-xs text-green-600 dark:text-green-400">
-                Connected
+                {{ manualRoute ? 'Manual' : 'Connected' }}
             </span>
+        </div>
+
+        <div
+            v-if="manualRoute"
+            class="rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"
+        >
+            <p class="mb-3 text-xs text-[#706f6c] dark:text-[#A1A09A]">
+                Send the amount to the bridge Yenten deposit address first, then
+                paste the sender address and transaction hash. The relayer
+                verifies the confirmed transaction automatically.
+            </p>
+            <div
+                v-if="sourceDepositAddress"
+                class="mb-3 rounded border border-[#19140020] bg-[#19140008] p-3 dark:border-[#3E3E3A] dark:bg-[#ffffff08]"
+            >
+                <p class="mb-1 text-xs text-[#706f6c] dark:text-[#A1A09A]">
+                    Bridge deposit address
+                </p>
+                <code
+                    class="text-xs break-all text-[#1b1b18] dark:text-[#EDEDEC]"
+                >
+                    {{ sourceDepositAddress }}
+                </code>
+                <a
+                    href="https://wallet.yentencoin.info/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-2 block text-xs underline"
+                >
+                    Open Yenten web wallet
+                </a>
+            </div>
+            <label
+                for="bridge-source-address"
+                class="mb-1 block text-xs text-[#706f6c] dark:text-[#A1A09A]"
+            >
+                Sender address on {{ sourceLabel }}
+            </label>
+            <input
+                id="bridge-source-address"
+                v-model="localSourceAddress"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                class="mb-3 w-full rounded border border-[#19140020] bg-[#FDFDFC] px-3 py-2 font-mono text-xs text-[#1b1b18] outline-none placeholder:text-[#c4c4c0] focus:border-[#1915014a] dark:border-[#3E3E3A] dark:bg-[#0a0a0a] dark:text-[#EDEDEC] dark:placeholder:text-[#555]"
+                :placeholder="`${sourceLabel} sender address`"
+            />
+            <label
+                for="bridge-source-tx"
+                class="mb-1 block text-xs text-[#706f6c] dark:text-[#A1A09A]"
+            >
+                Source transaction hash
+            </label>
+            <input
+                id="bridge-source-tx"
+                v-model="localSourceTxHash"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                class="w-full rounded border border-[#19140020] bg-[#FDFDFC] px-3 py-2 font-mono text-xs text-[#1b1b18] outline-none placeholder:text-[#c4c4c0] focus:border-[#1915014a] dark:border-[#3E3E3A] dark:bg-[#0a0a0a] dark:text-[#EDEDEC] dark:placeholder:text-[#555]"
+                placeholder="Transaction hash on the source chain"
+            />
         </div>
 
         <!-- Token + Amount -->
@@ -371,6 +473,7 @@ const formatRelative = (ts: number): string => {
             <span v-if="!sourceWalletConnected">Connect source wallet</span>
             <span v-else-if="!amountValid">Enter amount</span>
             <span v-else-if="amountExceedsBalance">Insufficient balance</span>
+            <span v-else-if="!manualFieldsValid">Enter source transaction</span>
             <span v-else-if="!validation.valid">Enter destination address</span>
             <span v-else>Review</span>
         </button>

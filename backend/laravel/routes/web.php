@@ -16,11 +16,15 @@ use App\Http\Controllers\DaoController;
 use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\LinkController;
 use App\Http\Controllers\LiquidityController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
+use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\ReactionController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
+use App\Http\Controllers\UserProfileController;
 use App\Http\Middleware\EnsureBridgeAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -46,9 +50,11 @@ Route::get('/launchpad/sites/{address}', [LaunchpadController::class, 'showSite'
     ->where('address', '0x[a-fA-F0-9]{40}')
     ->name('launchpad.site');
 Route::inertia('/slots', 'Slots')->name('slots');
+Route::inertia('/predictions', 'Predictions')->name('predictions');
 Route::get('dao', [DaoController::class, 'index'])->name('dao.index');
 Route::get('dao/{dao}', [DaoController::class, 'show'])->name('dao.show');
 Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('proposals.show');
+Route::get('u/{user}', [UserProfileController::class, 'show'])->name('users.show');
 
 Route::post('login/web3', Web3LoginController::class)->name('web3.login');
 
@@ -88,6 +94,18 @@ Route::middleware(['auth'])->group(function () {
 
     // Votes on proposals
     Route::post('proposals/{proposal}/votes', [ProposalVoteController::class, 'store'])->name('proposals.votes.store');
+
+    // Emoji reactions on proposals/comments (toggle)
+    Route::post('reactions', [ReactionController::class, 'toggle'])->name('reactions.toggle');
+
+    // In-app notifications (bell dropdown + 30s poll)
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.readAll');
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+
+    // Web Push subscriptions (service worker)
+    Route::post('push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
+    Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
 
     // CRM — contacts, notes and data-source sync. Static routes (sync/export)
     // are declared before the {contact} wildcard so they take precedence.

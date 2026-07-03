@@ -16,6 +16,8 @@ import {
 } from 'ethers';
 import { ref } from 'vue';
 
+import type { BridgeChain } from '@/lib/addressValidation';
+import { bridgeChainInfo, tokenOnChain } from '@/lib/bridgeConfig';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenInfo, BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
@@ -168,19 +170,27 @@ export const useBridge = () => {
     //  EVM -> Solana: burn CYBER.sol ERC20, relayer unlocks SPL on Solana
     // ---------------------------------------------------------------
 
-    const ensureCyberiaNetwork = async (): Promise<boolean> => {
+    /**
+     * Switch (or add + switch) MetaMask to an arbitrary EVM chain described by
+     * the server bridge config. Chain params all come from config/bridge.php,
+     * so new EVM chains need no frontend changes.
+     */
+    const ensureNetwork = async (chainKey: BridgeChain): Promise<boolean> => {
         const injected = getMetaMaskProvider();
+        const chain = bridgeChainInfo(chainKey);
 
-        if (!injected) {
+        if (!injected || !chain?.evmChainId) {
             return false;
         }
+
+        const chainIdHexTarget = '0x' + chain.evmChainId.toString(16);
 
         try {
             const chainIdHex = (await injected.request({
                 method: 'eth_chainId',
             })) as string;
 
-            if (parseInt(chainIdHex, 16) === CYBERIA_CHAIN_ID) {
+            if (parseInt(chainIdHex, 16) === chain.evmChainId) {
                 wrongNetwork.value = false;
 
                 return true;
@@ -189,31 +199,33 @@ export const useBridge = () => {
             try {
                 await injected.request({
                     method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x' + CYBERIA_CHAIN_ID.toString(16) }],
+                    params: [{ chainId: chainIdHexTarget }],
                 });
                 wrongNetwork.value = false;
 
                 return true;
             } catch {
                 try {
+                    const explorerOrigin = chain.explorerTx
+                        ? new URL(chain.explorerTx.replace('{hash}', 'x'))
+                              .origin
+                        : null;
+
                     await injected.request({
                         method: 'wallet_addEthereumChain',
                         params: [
                             {
-                                chainId: '0x' + CYBERIA_CHAIN_ID.toString(16),
-                                chainName: 'Cyberia',
-                                nativeCurrency: {
-                                    name: 'Cyber',
-                                    symbol: 'CYBER',
+                                chainId: chainIdHexTarget,
+                                chainName: chain.label,
+                                nativeCurrency: chain.nativeCurrency ?? {
+                                    name: chain.label,
+                                    symbol: chain.label.slice(0, 5),
                                     decimals: 18,
                                 },
-                                rpcUrls: [CYBERIA_RPC],
-                                blockExplorerUrls: [
-                                    'https://explorer.cyberia.church',
-                                ],
-                                iconUrls: [
-                                    'https://swap.cyberia.church/CYBER.png',
-                                ],
+                                rpcUrls: chain.rpcUrl ? [chain.rpcUrl] : [],
+                                blockExplorerUrls: explorerOrigin
+                                    ? [explorerOrigin]
+                                    : [],
                             },
                         ],
                     });
@@ -232,6 +244,8 @@ export const useBridge = () => {
             return false;
         }
     };
+
+    const ensureCyberiaNetwork = (): Promise<boolean> => ensureNetwork('cyberia');
 
     const redeemCyberSolOnEvm = async (
         amount: string,
@@ -452,6 +466,7 @@ export const useBridge = () => {
         symbol: BridgeTokenSymbol,
         amount: string,
         relayerEvmAddress: string,
+        chainKey: BridgeChain = 'cyberia',
     ): Promise<{ txHash: string; nonce: number } | null> => {
         const injected = getMetaMaskProvider();
 
@@ -459,18 +474,64 @@ export const useBridge = () => {
             return null;
         }
 
-        if (!(await ensureCyberiaNetwork())) {
-            throw new Error('Please switch to Cyberia network');
+        if (!(await ensureNetwork(chainKey))) {
+            throw new Error(
+                `Please switch to the ${bridgeChainInfo(chainKey)?.label ?? chainKey} network`,
+            );
         }
 
-        const token = BRIDGE_TOKENS[symbol];
+        const token = tokenOnChain(symbol, chainKey);
+
+        if (!token?.address) {
+            throw new Error(`${symbol} is not configured on ${chainKey}`);
+        }
+
         const provider = new BrowserProvider(injected);
         const signer = await provider.getSigner();
-        const contract = new Contract(token.evmAddress, ERC20_ABI, signer);
-        const amountRaw = parseUnits(String(amount), token.evmDecimals);
+        const contract = new Contract(token.address, ERC20_ABI, signer);
+        const amountRaw = parseUnits(String(amount), token.decimals);
 
         const tx = await contract.transfer(relayerEvmAddress, amountRaw);
         const receipt = await tx.wait();
+
+        return { txHash: receipt.hash, nonce: 0 };
+    };
+
+    /**
+     * Native-coin deposit to the relayer EOA on an EVM chain (e.g. BNB on
+     * BSC): plain value transfer signed with MetaMask.
+     */
+    const nativeTransferToRelayer = async (
+        chainKey: BridgeChain,
+        amount: string,
+        relayerEvmAddress: string,
+    ): Promise<{ txHash: string; nonce: number } | null> => {
+        const injected = getMetaMaskProvider();
+
+        if (!injected) {
+            return null;
+        }
+
+        if (!(await ensureNetwork(chainKey))) {
+            throw new Error(
+                `Please switch to the ${bridgeChainInfo(chainKey)?.label ?? chainKey} network`,
+            );
+        }
+
+        const provider = new BrowserProvider(injected);
+        const signer = await provider.getSigner();
+        const decimals =
+            bridgeChainInfo(chainKey)?.nativeCurrency?.decimals ?? 18;
+
+        const tx = await signer.sendTransaction({
+            to: relayerEvmAddress,
+            value: parseUnits(String(amount), decimals),
+        });
+        const receipt = await tx.wait();
+
+        if (!receipt) {
+            return null;
+        }
 
         return { txHash: receipt.hash, nonce: 0 };
     };
@@ -595,6 +656,9 @@ export const useBridge = () => {
         lockNativeOnSolana,
         redeemCyberSolOnEvm,
         erc20TransferToRelayer,
+        nativeTransferToRelayer,
+        ensureNetwork,
+        ensureCyberiaNetwork,
         splTransferToHotWallet,
     };
 };

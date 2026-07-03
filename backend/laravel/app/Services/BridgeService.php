@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\BridgeRequest;
 use App\Support\Environment;
+use App\Support\TokenAmount;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
@@ -11,19 +12,7 @@ use Illuminate\Support\Facades\Process;
 class BridgeService
 {
     /**
-     * Hot wallet address on Solana (receives deposits from users).
-     */
-    private const SOLANA_HOT_WALLET = 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w';
-
-    /**
-     * CYBER token mint on Solana devnet (9 decimals).
-     */
-    private const SOLANA_CYBER_MINT = 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump';
-
-    private const SOLANA_RPC = 'https://mainnet.helius-rpc.com/?api-key=7e740762-a25d-4d37-b854-de4cec9815ed';
-
-    /**
-     * Bridge fee percentage (1% = 0.01).
+     * Bridge fee percentage (1% = 0.01) — legacy fallback for old rows only.
      */
     private const FEE_RATE = '0.01';
 
@@ -44,6 +33,16 @@ class BridgeService
     public static function calculateFee(string $amount): string
     {
         return bcmul($amount, self::FEE_RATE, 18);
+    }
+
+    private function solanaRpc(): string
+    {
+        return (string) config('bridge.chains.solana.rpc_url');
+    }
+
+    private function solanaHotWallet(): string
+    {
+        return (string) config('bridge.chains.solana.deposit_address');
     }
 
     public function createRequest(
@@ -88,7 +87,7 @@ class BridgeService
     public function verifySolanaDeposit(string $txHash, string $expectedSender): ?string
     {
         try {
-            $response = Http::timeout(30)->post(self::SOLANA_RPC, [
+            $response = Http::timeout(30)->post($this->solanaRpc(), [
                 'jsonrpc' => '2.0',
                 'id' => 1,
                 'method' => 'getTransaction',
@@ -189,10 +188,10 @@ class BridgeService
         string $expectedMint,
         ?string $expectedRecipient = null,
     ): ?string {
-        $expectedRecipient ??= self::SOLANA_HOT_WALLET;
+        $expectedRecipient ??= $this->solanaHotWallet();
 
         try {
-            $response = Http::timeout(30)->post(self::SOLANA_RPC, [
+            $response = Http::timeout(30)->post($this->solanaRpc(), [
                 'jsonrpc' => '2.0',
                 'id' => 1,
                 'method' => 'getTransaction',
@@ -285,8 +284,8 @@ class BridgeService
     }
 
     /**
-     * Verify an ERC20 deposit on Cyberia EVM. Returns the raw transfer amount
-     * (wei in token's decimals) or null if the tx does not contain a matching
+     * Verify an ERC20 deposit on an EVM chain. Returns the raw transfer amount
+     * (in the token's decimals) or null if the tx does not contain a matching
      * Transfer(sender → expectedRecipient) event for the given token.
      */
     public function verifyEvmDeposit(
@@ -294,8 +293,10 @@ class BridgeService
         string $expectedSender,
         string $tokenAddress,
         string $expectedRecipient,
+        ?string $rpcUrl = null,
     ): ?string {
-        $rpc = config('services.bridge.evm_rpc_url')
+        $rpc = $rpcUrl
+            ?: config('services.bridge.evm_rpc_url')
             ?: config('services.ethereum.rpc_url', 'https://rpc.cyberia.church');
 
         try {
@@ -337,15 +338,7 @@ class BridgeService
                     continue;
                 }
 
-                $data = $log['data'] ?? '0x0';
-                $hex = strtolower(ltrim(substr($data, 2), '0')) ?: '0';
-                $dec = '0';
-
-                foreach (str_split($hex) as $ch) {
-                    $dec = bcadd(bcmul($dec, '16'), (string) hexdec($ch));
-                }
-
-                return $dec;
+                return TokenAmount::hexToDec($log['data'] ?? '0x0');
             }
 
             Log::warning('Bridge: no matching Transfer log', [
@@ -366,11 +359,71 @@ class BridgeService
     }
 
     /**
-     * Direct-model relay: user has already transferred the source token directly
-     * to the hot wallet (Solana side) or relayer EOA (EVM side). We verify the
-     * deposit on the source chain, then send the (amount - fee) on the destination
-     * chain. For sol_to_evm we can also drop native CYBER if the request was
-     * flagged for gas drop.
+     * Verify a NATIVE-coin deposit on an EVM chain (e.g. BNB sent to the
+     * relayer EOA on BSC): the tx itself must move value from the sender to
+     * the deposit address and be successfully mined. Returns the value in wei.
+     */
+    public function verifyEvmNativeDeposit(
+        string $txHash,
+        string $expectedSender,
+        string $expectedRecipient,
+        string $rpcUrl,
+    ): ?string {
+        try {
+            $txResponse = Http::timeout(15)->post($rpcUrl, [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'eth_getTransactionByHash',
+                'params' => [$txHash],
+            ]);
+
+            $tx = $txResponse->json('result');
+
+            if (! is_array($tx)) {
+                Log::warning('Bridge: EVM native tx not found', ['tx' => $txHash]);
+
+                return null;
+            }
+
+            if (strtolower((string) ($tx['from'] ?? '')) !== strtolower($expectedSender)
+                || strtolower((string) ($tx['to'] ?? '')) !== strtolower($expectedRecipient)) {
+                Log::warning('Bridge: EVM native tx sender/recipient mismatch', ['tx' => $txHash]);
+
+                return null;
+            }
+
+            $receiptResponse = Http::timeout(15)->post($rpcUrl, [
+                'jsonrpc' => '2.0',
+                'id' => 2,
+                'method' => 'eth_getTransactionReceipt',
+                'params' => [$txHash],
+            ]);
+
+            $receipt = $receiptResponse->json('result');
+
+            if (! is_array($receipt) || ($receipt['status'] ?? null) !== '0x1') {
+                Log::warning('Bridge: EVM native receipt missing or failed', ['tx' => $txHash]);
+
+                return null;
+            }
+
+            $value = TokenAmount::hexToDec((string) ($tx['value'] ?? '0x0'));
+
+            return bccomp($value, '0', 0) > 0 ? $value : null;
+        } catch (\Throwable $e) {
+            Log::error('Bridge: verifyEvmNativeDeposit failed', [
+                'tx' => $txHash,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Direct/mint-model relay, config-driven: the route's source and
+     * destination chains (config/bridge.php) pick the verification and payout
+     * strategies, so adding an EVM chain is a config-only change.
      */
     public function processDirectRelay(BridgeRequest $request): bool
     {
@@ -386,6 +439,32 @@ class BridgeService
             return false;
         }
 
+        $route = config('bridge.routes', [])[$request->direction] ?? null;
+
+        if (! is_array($route)) {
+            $request->markFailed("Unknown direction: {$request->direction}");
+
+            return false;
+        }
+
+        $sourceChain = config('bridge.chains', [])[$route['source_chain']] ?? null;
+        $destinationChain = config('bridge.chains', [])[$route['destination_chain']] ?? null;
+
+        if (! is_array($sourceChain) || ! is_array($destinationChain)) {
+            $request->markFailed("Route {$request->direction} references an unknown chain");
+
+            return false;
+        }
+
+        $sourceToken = $tokenConfig['chains'][$sourceChain['key']] ?? null;
+        $destinationToken = $tokenConfig['chains'][$destinationChain['key']] ?? null;
+
+        if (! is_array($sourceToken) || ! is_array($destinationToken)) {
+            $request->markFailed("Token {$request->token} is not configured for route {$request->direction}");
+
+            return false;
+        }
+
         $request->markProcessing();
 
         try {
@@ -397,11 +476,45 @@ class BridgeService
                 return false;
             }
 
-            return match ($request->direction) {
-                'sol_to_evm' => $this->directSolToEvm($request, $tokenConfig, $netAmount),
-                'evm_to_sol' => $this->directEvmToSol($request, $tokenConfig, $netAmount),
-                default => tap(false, fn () => $request->markFailed("Unknown direction: {$request->direction}")),
-            };
+            $verified = $this->verifySourceDeposit($request, $sourceChain, $sourceToken);
+
+            if ($verified === null) {
+                $request->markFailed("Could not verify {$sourceChain['label']} deposit transaction");
+
+                return false;
+            }
+
+            $claimedRaw = TokenAmount::toRaw((string) $request->amount, (int) $sourceToken['decimals']);
+
+            if (bccomp($verified, $claimedRaw, 0) < 0) {
+                $request->markFailed("Deposit underfunded: verified={$verified} claimed={$claimedRaw}");
+
+                return false;
+            }
+
+            // Leaving the wrapper's home chain with a mint-model token:
+            // destroy the wrapper the user deposited so supply stays backed
+            // by the destination-side reserve. Deposits on external EVM
+            // chains (e.g. canonical USDT on BSC) are reserves — never burn.
+            if (($sourceChain['type'] ?? '') === 'evm'
+                && $sourceChain['key'] === config('bridge.home_chain', 'cyberia')
+                && ($tokenConfig['model'] ?? 'direct') === 'mint'
+                && ! ($sourceToken['native'] ?? false)) {
+                $burned = $this->burnEvmWrapper(
+                    (string) $sourceToken['address'],
+                    $claimedRaw,
+                    $request->id,
+                    $sourceChain,
+                );
+
+                if (! $burned) {
+                    $request->markFailed('Failed to burn wrapped EVM tokens after user deposit');
+
+                    return false;
+                }
+            }
+
+            return $this->payoutDestination($request, $destinationChain, $destinationToken, $tokenConfig, $netAmount);
         } catch (\Throwable $e) {
             $request->markFailed($e->getMessage());
             Log::error('Bridge: direct relay failed', [
@@ -414,151 +527,162 @@ class BridgeService
     }
 
     /**
+     * Verify the source-chain deposit and return the raw deposited amount.
+     *
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $tokenEntry
+     */
+    private function verifySourceDeposit(BridgeRequest $request, array $chain, array $tokenEntry): ?string
+    {
+        return match ($chain['type'] ?? '') {
+            'solana' => $this->verifySolanaTokenDeposit(
+                $request->source_tx_hash,
+                $request->sender_address,
+                (string) $tokenEntry['mint'],
+                $chain['deposit_address'] ?? null,
+            ),
+            'evm' => ($tokenEntry['native'] ?? false)
+                ? $this->verifyEvmNativeDeposit(
+                    $request->source_tx_hash,
+                    $request->sender_address,
+                    $this->evmDepositAddress($chain),
+                    (string) $chain['rpc_url'],
+                )
+                : $this->verifyEvmDeposit(
+                    $request->source_tx_hash,
+                    $request->sender_address,
+                    (string) $tokenEntry['address'],
+                    $this->evmDepositAddress($chain),
+                    (string) $chain['rpc_url'],
+                ),
+            'ton' => $this->verifyTonDeposit($request, $chain, $tokenEntry),
+            'yenten' => app(YentenApiService::class)->verifyDeposit(
+                $request->source_tx_hash,
+                $request->sender_address,
+                (string) ($chain['deposit_address'] ?? ''),
+                (int) ($chain['minimum_confirmations'] ?? 1),
+            ),
+            default => null,
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $tokenEntry
+     */
+    private function verifyTonDeposit(BridgeRequest $request, array $chain, array $tokenEntry): ?string
+    {
+        $txHash = TonApiService::normalizeTxHash($request->source_tx_hash);
+        $sender = TonApiService::normalizeAddress($request->sender_address);
+        $master = TonApiService::normalizeAddress((string) $tokenEntry['master']);
+        $recipient = TonApiService::normalizeAddress((string) ($chain['deposit_address'] ?? ''));
+
+        if (! $txHash || ! $sender || ! $master || ! $recipient) {
+            Log::warning('Bridge: TON deposit fields failed normalization', [
+                'id' => $request->id,
+                'tx_ok' => (bool) $txHash,
+                'sender_ok' => (bool) $sender,
+            ]);
+
+            return null;
+        }
+
+        return app(TonApiService::class)->verifyJettonDeposit($txHash, $sender, $master, $recipient);
+    }
+
+    /**
+     * Deposit address on an EVM chain: explicit config value or relayer EOA.
+     *
+     * @param  array<string, mixed>  $chain
+     */
+    private function evmDepositAddress(array $chain): string
+    {
+        $explicit = $chain['deposit_address'] ?? null;
+
+        if (is_string($explicit) && $explicit !== '') {
+            return $explicit;
+        }
+
+        return (string) app(BridgeRelayerService::class)->evmAddress();
+    }
+
+    /**
+     * Pay out the net amount on the destination chain.
+     *
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $tokenEntry
      * @param  array<string, mixed>  $tokenConfig
      */
-    private function directSolToEvm(BridgeRequest $request, array $tokenConfig, string $netAmount): bool
-    {
-        $verified = $this->verifySolanaTokenDeposit(
-            $request->source_tx_hash,
-            $request->sender_address,
-            (string) $tokenConfig['solana_mint'],
-        );
+    private function payoutDestination(
+        BridgeRequest $request,
+        array $chain,
+        array $tokenEntry,
+        array $tokenConfig,
+        string $netAmount,
+    ): bool {
+        return match ($chain['type'] ?? '') {
+            'evm' => $this->payoutEvm($request, $chain, $tokenEntry, $tokenConfig, $netAmount),
+            'solana' => $this->payoutSolana($request, $chain, $tokenEntry, $netAmount),
+            'ton' => $this->payoutTon($request, $chain, $tokenEntry, $netAmount),
+            'yenten' => $this->payoutYenten($request, $chain, $tokenEntry, $netAmount),
+            default => tap(false, fn () => $request->markFailed("No payout strategy for chain type '{$chain['type']}'")),
+        };
+    }
 
-        if ($verified === null) {
-            $request->markFailed('Could not verify Solana deposit transaction');
-
-            return false;
-        }
-
-        // Compare claimed vs verified raw amounts (with token's solana decimals).
-        $claimedRaw = bcmul($request->amount, bcpow('10', (string) $tokenConfig['solana_decimals']));
-        $claimedRaw = explode('.', $claimedRaw)[0];
-
-        if (bccomp($verified, $claimedRaw, 0) < 0) {
-            $request->markFailed("Deposit underfunded: verified={$verified} claimed={$claimedRaw}");
-
-            return false;
-        }
-
-        $evmDecimals = (int) $tokenConfig['evm_decimals'];
-        $amountWei = bcmul($netAmount, bcpow('10', (string) $evmDecimals));
-        $amountWei = explode('.', $amountWei)[0];
+    /**
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $tokenEntry
+     * @param  array<string, mixed>  $tokenConfig
+     */
+    private function payoutEvm(
+        BridgeRequest $request,
+        array $chain,
+        array $tokenEntry,
+        array $tokenConfig,
+        string $netAmount,
+    ): bool {
+        $amountRaw = TokenAmount::toRaw($netAmount, (int) $tokenEntry['decimals']);
 
         $gasDropWei = '0';
 
         if ($request->gas_drop_planned && $request->gas_drop_amount) {
-            $gasDropWei = bcmul((string) $request->gas_drop_amount, bcpow('10', '18'));
-            $gasDropWei = explode('.', $gasDropWei)[0];
+            $gasDropWei = TokenAmount::toRaw((string) $request->gas_drop_amount, 18);
         }
 
-        $hardhatDir = Environment::isProduction()
-            ? '/singularity/crypto/hardhat'
-            : base_path('/../../crypto/hardhat');
+        $isHomeChain = ($chain['key'] ?? '') === config('bridge.home_chain', 'cyberia');
 
-        // mint model: relayer is the wrapper-token owner → mint to recipient.
-        // direct model: relayer holds inventory → plain ERC20.transfer.
-        $script = ($tokenConfig['model'] ?? 'direct') === 'mint'
-            ? 'scripts/relay-mint.ts'
-            : 'scripts/relay-erc20-transfer.ts';
+        if ($tokenEntry['native'] ?? false) {
+            // Native-coin payout from the relayer balance (e.g. BNB on BSC).
+            $args = ['scripts/relay-native-transfer.ts', $request->recipient_address, $amountRaw];
+        } elseif (($tokenConfig['model'] ?? 'direct') === 'mint' && $isHomeChain) {
+            // Relayer owns the wrapper on its home chain: mint to recipient.
+            $args = ['scripts/relay-mint.ts', (string) $tokenEntry['address'], $request->recipient_address, $amountRaw, $gasDropWei];
+        } else {
+            // External chain or direct model: pay out of relayer inventory
+            // (e.g. canonical USDT on BSC) with a plain ERC20 transfer.
+            $args = ['scripts/relay-erc20-transfer.ts', (string) $tokenEntry['address'], $request->recipient_address, $amountRaw, $gasDropWei];
+        }
 
-        $result = Process::path($hardhatDir)
-            ->env([
-                'CYBERIA_RPC_URL' => config('services.bridge.evm_rpc_url')
-                    ?: config('services.ethereum.rpc_url', 'https://rpc.cyberia.church'),
-                'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
-            ])
-            ->timeout(120)
-            ->run([
-                'npx', 'tsx', $script,
-                (string) $tokenConfig['evm_address'],
-                $request->recipient_address,
-                $amountWei,
-                $gasDropWei,
-            ]);
+        $txHash = $this->runEvmRelayScript($args, $chain, $request->id);
 
-        Log::info('Bridge relay direct sol_to_evm', [
-            'id' => $request->id,
-            'stdout' => $result->output(),
-            'stderr' => $result->errorOutput(),
-            'exit' => $result->exitCode(),
-        ]);
-
-        if ($result->exitCode() !== 0) {
-            $request->markFailed('Relay failed: '.$result->errorOutput());
+        if ($txHash === null) {
+            $request->markFailed('Relay failed on '.$chain['label']);
 
             return false;
         }
 
-        $json = $this->lastJsonLine($result->output());
-
-        if (! $json || empty($json['txHash'])) {
-            $request->markFailed('Could not parse relay output');
-
-            return false;
-        }
-
-        $request->markCompleted((string) $json['txHash']);
+        $request->markCompleted($txHash);
 
         return true;
     }
 
     /**
-     * @param  array<string, mixed>  $tokenConfig
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $tokenEntry
      */
-    private function directEvmToSol(BridgeRequest $request, array $tokenConfig, string $netAmount): bool
+    private function payoutSolana(BridgeRequest $request, array $chain, array $tokenEntry, string $netAmount): bool
     {
-        $relayerEvm = app(BridgeRelayerService::class)->evmAddress();
-
-        if (! is_string($relayerEvm) || $relayerEvm === '') {
-            $request->markFailed('Bridge relayer private key not configured (set DEPLOYER_PK)');
-
-            return false;
-        }
-
-        $verified = $this->verifyEvmDeposit(
-            $request->source_tx_hash,
-            $request->sender_address,
-            (string) $tokenConfig['evm_address'],
-            $relayerEvm,
-        );
-
-        if ($verified === null) {
-            $request->markFailed('Could not verify EVM deposit transaction');
-
-            return false;
-        }
-
-        $evmDecimals = (int) $tokenConfig['evm_decimals'];
-        $claimedRaw = bcmul($request->amount, bcpow('10', (string) $evmDecimals));
-        $claimedRaw = explode('.', $claimedRaw)[0];
-
-        if (bccomp($verified, $claimedRaw, 0) < 0) {
-            $request->markFailed("Deposit underfunded: verified={$verified} claimed={$claimedRaw}");
-
-            return false;
-        }
-
-        // For 'mint' tokens (USDC/USDT) we destroy the wrapped EVM tokens the
-        // user transferred to the relayer, so EVM supply stays backed by the
-        // Solana hot-wallet reserve. Burn the full claimed amount (no fee
-        // deduction here — fee is reflected in the destination amount).
-        if (($tokenConfig['model'] ?? 'direct') === 'mint') {
-            $burned = $this->burnEvmWrapper(
-                (string) $tokenConfig['evm_address'],
-                $claimedRaw,
-                $request->id,
-            );
-
-            if (! $burned) {
-                $request->markFailed('Failed to burn wrapped EVM tokens after user deposit');
-
-                return false;
-            }
-        }
-
-        $solanaDecimals = (int) $tokenConfig['solana_decimals'];
-        $amountRaw = bcmul($netAmount, bcpow('10', (string) $solanaDecimals));
-        $amountRaw = explode('.', $amountRaw)[0];
+        $amountRaw = TokenAmount::toRaw($netAmount, (int) $tokenEntry['decimals']);
 
         $scriptDir = Environment::isProduction()
             ? '/singularity/crypto/anchor'
@@ -572,19 +696,19 @@ class BridgeService
 
         $result = Process::path($scriptDir)
             ->env([
-                'ANCHOR_PROVIDER_URL' => self::SOLANA_RPC,
+                'ANCHOR_PROVIDER_URL' => (string) $chain['rpc_url'],
                 'ANCHOR_WALLET' => $walletPath,
             ])
             ->timeout(120)
             ->run([
                 'npx', 'ts-node', '--transpile-only', 'scripts/relay-spl-transfer.ts',
-                (string) $tokenConfig['solana_mint'],
+                (string) $tokenEntry['mint'],
                 $request->recipient_address,
                 $amountRaw,
-                (string) $tokenConfig['solana_token_program'],
+                (string) ($tokenEntry['token_program'] ?? 'token'),
             ]);
 
-        Log::info('Bridge relay direct evm_to_sol', [
+        Log::info('Bridge relay payout solana', [
             'id' => $request->id,
             'stdout' => $result->output(),
             'stderr' => $result->errorOutput(),
@@ -611,11 +735,142 @@ class BridgeService
     }
 
     /**
-     * Burn the relayer's freshly-received wrapper-token balance so EVM supply
-     * stays in sync with the destination-side reserve. Used by the mint model
-     * for evm_to_sol bridges.
+     * Jetton payout on TON via crypto/ton/scripts/relay-jetton-transfer.ts.
+     * query_id = request id makes the transfer idempotent: the script checks
+     * for an existing outgoing transfer with the same query_id before sending.
+     *
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $tokenEntry
      */
-    private function burnEvmWrapper(string $tokenAddress, string $amountWei, int $requestId): bool
+    private function payoutTon(BridgeRequest $request, array $chain, array $tokenEntry, string $netAmount): bool
+    {
+        $mnemonic = (string) config('services.bridge.ton_relayer_mnemonic');
+
+        if ($mnemonic === '') {
+            $request->markFailed('TON relayer mnemonic not configured (TON_RELAYER_MNEMONIC)');
+
+            return false;
+        }
+
+        $amountRaw = TokenAmount::toRaw($netAmount, (int) $tokenEntry['decimals']);
+
+        $scriptDir = Environment::isProduction()
+            ? '/singularity/crypto/ton'
+            : base_path('/../../crypto/ton');
+
+        $result = Process::path($scriptDir)
+            ->env([
+                'TON_RELAYER_MNEMONIC' => $mnemonic,
+                'TONCENTER_RPC_URL' => (string) ($chain['toncenter_rpc_url'] ?? 'https://toncenter.com/api/v2/jsonRPC'),
+                'TONCENTER_API_KEY' => (string) config('services.bridge.toncenter_api_key', ''),
+                'TONAPI_URL' => (string) ($chain['api_url'] ?? 'https://tonapi.io'),
+                'TONAPI_KEY' => (string) ($chain['api_key'] ?? ''),
+            ])
+            ->timeout(240)
+            ->run([
+                'npx', 'tsx', 'scripts/relay-jetton-transfer.ts',
+                (string) $tokenEntry['master'],
+                $request->recipient_address,
+                $amountRaw,
+                (string) $request->id,
+            ]);
+
+        Log::info('Bridge relay payout ton', [
+            'id' => $request->id,
+            'stdout' => $result->output(),
+            'stderr' => $result->errorOutput(),
+            'exit' => $result->exitCode(),
+        ]);
+
+        if ($result->exitCode() !== 0) {
+            $request->markFailed('TON relay failed: '.$result->errorOutput());
+
+            return false;
+        }
+
+        $json = $this->lastJsonLine($result->output());
+
+        if (! $json || empty($json['txHash'])) {
+            $request->markFailed('Could not parse TON relay output');
+
+            return false;
+        }
+
+        $request->markCompleted((string) $json['txHash']);
+
+        return true;
+    }
+
+    /**
+     * Native YTN payout through the official light-wallet API. The WIF stays
+     * local to the relay process; only the signed raw transaction is broadcast.
+     *
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $tokenEntry
+     */
+    private function payoutYenten(BridgeRequest $request, array $chain, array $tokenEntry, string $netAmount): bool
+    {
+        $wif = (string) ($chain['relayer_wif'] ?? '');
+
+        if ($wif === '') {
+            $request->markFailed('Yenten relayer WIF not configured (BRIDGE_YENTEN_RELAYER_WIF)');
+
+            return false;
+        }
+
+        $amountRaw = TokenAmount::toRaw($netAmount, (int) $tokenEntry['decimals']);
+        $scriptDir = Environment::isProduction()
+            ? '/singularity/crypto/yenten'
+            : base_path('/../../crypto/yenten');
+
+        $result = Process::path($scriptDir)
+            ->env([
+                'YENTEN_RELAYER_WIF' => $wif,
+                'YENTEN_RELAYER_ADDRESS' => (string) ($chain['deposit_address'] ?? ''),
+                'YENTEN_API_URL' => (string) ($chain['api_url'] ?? 'https://api.yentencoin.info'),
+            ])
+            ->timeout(180)
+            ->run([
+                'npm', 'run', '--silent', 'relay', '--',
+                $request->recipient_address,
+                $amountRaw,
+                (string) $request->id,
+            ]);
+
+        Log::info('Bridge relay payout yenten', [
+            'id' => $request->id,
+            'stdout' => $result->output(),
+            'stderr' => $result->errorOutput(),
+            'exit' => $result->exitCode(),
+        ]);
+
+        if ($result->exitCode() !== 0) {
+            $request->markFailed('Yenten relay failed: '.$result->errorOutput());
+
+            return false;
+        }
+
+        $json = $this->lastJsonLine($result->output());
+
+        if (! $json || empty($json['txHash'])) {
+            $request->markFailed('Could not parse Yenten relay output');
+
+            return false;
+        }
+
+        $request->markCompleted((string) $json['txHash']);
+
+        return true;
+    }
+
+    /**
+     * Run a hardhat relay script against an arbitrary EVM chain and return
+     * the resulting tx hash (last-line JSON contract), or null on failure.
+     *
+     * @param  array<int, string>  $args  script path + its arguments
+     * @param  array<string, mixed>  $chain
+     */
+    private function runEvmRelayScript(array $args, array $chain, int $requestId): ?string
     {
         $hardhatDir = Environment::isProduction()
             ? '/singularity/crypto/hardhat'
@@ -623,8 +878,55 @@ class BridgeService
 
         $result = Process::path($hardhatDir)
             ->env([
-                'CYBERIA_RPC_URL' => config('services.bridge.evm_rpc_url')
-                    ?: config('services.ethereum.rpc_url', 'https://rpc.cyberia.church'),
+                'EVM_RPC_URL' => (string) $chain['rpc_url'],
+                'EVM_CHAIN_ID' => (string) ($chain['evm_chain_id'] ?? ''),
+                // Back-compat for scripts still reading the legacy var.
+                'CYBERIA_RPC_URL' => (string) $chain['rpc_url'],
+                'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
+            ])
+            ->timeout(120)
+            ->run(['npx', 'tsx', ...$args]);
+
+        Log::info('Bridge relay evm script', [
+            'id' => $requestId,
+            'chain' => $chain['key'] ?? null,
+            'script' => $args[0] ?? null,
+            'stdout' => $result->output(),
+            'stderr' => $result->errorOutput(),
+            'exit' => $result->exitCode(),
+        ]);
+
+        if ($result->exitCode() !== 0) {
+            return null;
+        }
+
+        $json = $this->lastJsonLine($result->output());
+
+        if (! $json || empty($json['txHash'])) {
+            return null;
+        }
+
+        return (string) $json['txHash'];
+    }
+
+    /**
+     * Burn the relayer's freshly-received wrapper-token balance so EVM supply
+     * stays in sync with the destination-side reserve. Used by the mint model
+     * when bridging OUT of an EVM chain.
+     *
+     * @param  array<string, mixed>  $chain
+     */
+    private function burnEvmWrapper(string $tokenAddress, string $amountWei, int $requestId, array $chain): bool
+    {
+        $hardhatDir = Environment::isProduction()
+            ? '/singularity/crypto/hardhat'
+            : base_path('/../../crypto/hardhat');
+
+        $result = Process::path($hardhatDir)
+            ->env([
+                'EVM_RPC_URL' => (string) $chain['rpc_url'],
+                'EVM_CHAIN_ID' => (string) ($chain['evm_chain_id'] ?? ''),
+                'CYBERIA_RPC_URL' => (string) $chain['rpc_url'],
                 'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
             ])
             ->timeout(120)
@@ -692,21 +994,19 @@ class BridgeService
             ]);
 
             // Use the per-request fee_amount (computed by BridgeFeeService at
-            // submit time). For CYBER.sol this is 0 — only USDC/USDT carry a
+            // submit time). For CYBER.sol this is 0 — only stables carry a
             // fee. Falls back to legacy 1% if no fee was stored (very old rows).
             $feeAmount = $request->fee_amount !== null
                 ? (string) $request->fee_amount
                 : self::calculateFee((string) $request->amount);
 
             $amountAfterFee = bcsub((string) $request->amount, $feeAmount, 18);
-            $amountWei = bcmul($amountAfterFee, bcpow('10', '18'));
-            $amountWei = explode('.', $amountWei)[0];
+            $amountWei = TokenAmount::toRaw($amountAfterFee, 18);
 
             // Optional native-CYBER gas drop for empty recipients.
             $gasDropWei = '0';
             if ($request->gas_drop_planned && $request->gas_drop_amount) {
-                $gasDropWei = bcmul((string) $request->gas_drop_amount, bcpow('10', '18'));
-                $gasDropWei = explode('.', $gasDropWei)[0];
+                $gasDropWei = TokenAmount::toRaw((string) $request->gas_drop_amount, 18);
             }
 
             Log::info('Bridge: sol_to_evm fee applied', [
@@ -730,7 +1030,7 @@ class BridgeService
                     'BRIDGE_EVM_CONTRACT_ADDRESS' => config('services.bridge.evm_bridge_address'),
                     'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
                     'CYBERSOL_BURN_SWAP_ADDRESS' => (string) config('bridge.convert.burn_swap_address'),
-                    'CYBER_SOL_TOKEN_ADDRESS' => (string) (config('bridge.tokens', [])['CYBER.sol']['evm_address'] ?? ''),
+                    'CYBER_SOL_TOKEN_ADDRESS' => (string) (config('bridge.tokens', [])['CYBER.sol']['chains']['cyberia']['address'] ?? ''),
                 ])
                 ->timeout(120)
                 ->run([
@@ -807,9 +1107,9 @@ class BridgeService
                 'after_fee' => $amountAfterFee,
             ]);
 
-            // Convert amount to Solana smallest units (6 decimals on mainnet).
-            $amountRaw = bcmul($amountAfterFee, bcpow('10', '6'));
-            $amountRaw = explode('.', $amountRaw)[0];
+            // Convert amount to Solana smallest units (CYBER.sol mint decimals).
+            $solanaDecimals = (int) (config('bridge.tokens', [])['CYBER.sol']['chains']['solana']['decimals'] ?? 6);
+            $amountRaw = TokenAmount::toRaw($amountAfterFee, $solanaDecimals);
 
             $scriptDir = Environment::isProduction()
                 ? '/singularity/crypto/anchor'
@@ -823,7 +1123,7 @@ class BridgeService
 
             $result = Process::path($scriptDir)
                 ->env([
-                    'ANCHOR_PROVIDER_URL' => self::SOLANA_RPC,
+                    'ANCHOR_PROVIDER_URL' => $this->solanaRpc(),
                     'ANCHOR_WALLET' => $walletPath,
                 ])
                 ->timeout(120)

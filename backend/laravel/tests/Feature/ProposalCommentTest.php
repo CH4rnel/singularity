@@ -29,14 +29,24 @@ test('comment requires body', function () {
     $response->assertSessionHasErrors('body');
 });
 
-test('authenticated users can delete a comment', function () {
+test('authors can delete their comment', function () {
     $user = User::factory()->create();
-    $comment = ProposalComment::factory()->create();
+    $comment = ProposalComment::factory()->create(['user_id' => $user->id]);
 
     $response = $this->actingAs($user)->delete("/comments/{$comment->id}");
 
     $response->assertRedirect();
     $this->assertDatabaseMissing('proposal_comments', ['id' => $comment->id]);
+});
+
+test('non-authors cannot delete a comment', function () {
+    $user = User::factory()->create();
+    $comment = ProposalComment::factory()->create();
+
+    $response = $this->actingAs($user)->delete("/comments/{$comment->id}");
+
+    $response->assertForbidden();
+    $this->assertDatabaseHas('proposal_comments', ['id' => $comment->id]);
 });
 
 test('guests cannot add comments', function () {

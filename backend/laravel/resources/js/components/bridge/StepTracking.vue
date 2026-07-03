@@ -8,7 +8,9 @@ import {
 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
+import { bridgeRoute } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
+import { explorerTxUrl } from '@/lib/bridgeConfig';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import AddressDisplay from './AddressDisplay.vue';
 
@@ -33,10 +35,11 @@ const convertRequested = ref(false);
 const converted = ref<boolean | null>(null);
 const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
+const explorerUrl = (chain: string, txHash: string): string =>
+    explorerTxUrl(chain, txHash);
+
 const sourceExplorer = computed(() =>
-    props.direction === 'sol_to_evm'
-        ? `https://solscan.io/tx/${props.sourceTxHash}`
-        : `https://explorer.cyberia.church/tx/${props.sourceTxHash}`,
+    explorerUrl(bridgeRoute(props.direction).source, props.sourceTxHash),
 );
 
 const destExplorer = computed(() => {
@@ -44,9 +47,10 @@ const destExplorer = computed(() => {
         return null;
     }
 
-    return props.direction === 'sol_to_evm'
-        ? `https://explorer.cyberia.church/tx/${destinationTxHash.value}`
-        : `https://solscan.io/tx/${destinationTxHash.value}`;
+    return explorerUrl(
+        bridgeRoute(props.direction).destination,
+        destinationTxHash.value,
+    );
 });
 
 const poll = async () => {
@@ -188,13 +192,15 @@ const steps = computed(() => [
         </p>
         <p
             v-else-if="
-                status === 'completed' && convertRequested && converted === false
+                status === 'completed' &&
+                convertRequested &&
+                converted === false
             "
             class="rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-300"
         >
-            Conversion liquidity was temporarily unavailable, so the
-            destination received CYBER.sol instead of native CYBER. You can
-            still convert it manually on the
+            Conversion liquidity was temporarily unavailable, so the destination
+            received CYBER.sol instead of native CYBER. You can still convert it
+            manually on the
             <a href="/convert" class="underline">Convert</a> page.
         </p>
 

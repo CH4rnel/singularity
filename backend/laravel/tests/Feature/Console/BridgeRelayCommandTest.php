@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\Process;
 beforeEach(function () {
     config()->set('services.bridge.relayer_address', '0x0000000000000000000000000000000000abcdef');
     config()->set('services.bridge.relayer_private_key', '0x'.str_repeat('1', 64));
+    // Pin the Solana RPC so Http::fake('*helius-rpc.com*') matches regardless
+    // of the local BRIDGE_SOLANA_RPC_URL value.
+    config()->set('bridge.chains.solana.rpc_url', 'https://mainnet.helius-rpc.com/?api-key=test');
 });
 
 function makeStuckRequest(array $overrides = []): BridgeRequest

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
+import { Wallet, Shield, Zap } from 'lucide-vue-next';
 import { onMounted, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,10 +11,9 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
-import { Wallet, Shield, Zap } from 'lucide-vue-next';
-import { register } from '@/routes';
 import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
+import { register } from '@/routes';
 
 defineOptions({
     layout: {
@@ -41,6 +41,7 @@ const authenticate = async (address: string) => {
         if (!signature) {
             error.value = 'Failed to sign message. Please try again.';
             isLoading.value = false;
+
             return;
         }
 
@@ -71,6 +72,7 @@ const authenticate = async (address: string) => {
 
 const handleConnect = async () => {
     const address = await wallet.connect();
+
     if (address) {
         await authenticate(address);
     } else if (wallet.error.value) {
@@ -192,7 +194,7 @@ onMounted(() => {
                 <div class="text-center text-sm text-muted-foreground">
                     Don't have an account?
                     <a
-                        :href="register().url()"
+                        :href="register().url"
                         class="underline hover:text-foreground"
                     >
                         Sign up with email

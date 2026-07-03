@@ -1,3 +1,5 @@
+import type { BridgeDirection } from '@/lib/addressValidation';
+
 const SESSION_KEY = 'bridgeSessionId';
 
 export type BridgeEventType =
@@ -15,7 +17,7 @@ export type BridgeEventType =
     | 'tracking_started';
 
 export type BridgeEventPayload = {
-    direction?: 'sol_to_evm' | 'evm_to_sol';
+    direction?: BridgeDirection;
     amount?: string | number;
     source_address?: string;
     destination_address?: string;

@@ -17,7 +17,6 @@ import {
     Wallet,
 } from 'lucide-vue-next';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import Header from '@/components/Header.vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -154,7 +153,11 @@ const poolWeight = (pool: Pool): number => {
 
 const symbolOf = async (addr: string): Promise<string> => {
     try {
-        return (await new Contract(addr, ERC20_ABI, readProvider).symbol()) as string;
+        return (await new Contract(
+            addr,
+            ERC20_ABI,
+            readProvider,
+        ).symbol()) as string;
     } catch {
         return shortAddr(addr);
     }
@@ -330,7 +333,9 @@ async function connectWallet(): Promise<void> {
 async function run(
     pid: number,
     action: string,
-    fn: (signer: Awaited<ReturnType<BrowserProvider['getSigner']>>) => Promise<void>,
+    fn: (
+        signer: Awaited<ReturnType<BrowserProvider['getSigner']>>,
+    ) => Promise<void>,
 ): Promise<void> {
     const key = `${pid}:${action}`;
     error.value = null;
@@ -458,7 +463,9 @@ async function emergencyUnstake(pool: Pool): Promise<void> {
 
 const setStakeMax = (pool: Pool): void => {
     stakeInput[pool.pid] =
-        pool.walletBalance > 0n ? formatUnits(pool.walletBalance, pool.decimals) : '';
+        pool.walletBalance > 0n
+            ? formatUnits(pool.walletBalance, pool.decimals)
+            : '';
 };
 
 const setUnstakeMax = (pool: Pool): void => {
@@ -480,15 +487,13 @@ watch(() => wallet.address.value, loadState);
 <template>
     <Head title="Farm · stake LP, earn ASH" />
 
-    <Header />
-
     <main class="relative overflow-hidden">
         <div
             aria-hidden="true"
             class="pointer-events-none absolute inset-x-0 -top-40 -z-10 flex justify-center"
         >
             <div
-                class="h-[28rem] w-[60rem] max-w-full rounded-full bg-gradient-to-tr from-emerald-500/20 via-lime-400/10 to-amber-400/20 blur-3xl"
+                class="h-[28rem] w-[60rem] max-w-full rounded-full bg-gradient-to-tr from-cyan-400/20 via-teal-300/10 to-fuchsia-400/20 blur-3xl"
             ></div>
         </div>
 
@@ -504,7 +509,7 @@ watch(() => wallet.address.value, loadState);
                 <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
                     Stake &amp; earn
                     <span
-                        class="bg-gradient-to-r from-emerald-500 via-lime-500 to-amber-400 bg-clip-text text-transparent"
+                        class="bg-gradient-to-r from-cyan-400 via-teal-400 to-fuchsia-400 bg-clip-text text-transparent"
                         >{{ rewardSymbol }}</span
                     >
                 </h1>
@@ -522,7 +527,13 @@ watch(() => wallet.address.value, loadState);
                 <div>
                     <p class="text-xs text-muted-foreground">Emission</p>
                     <p class="font-mono text-lg">
-                        {{ fmt(rewardPerBlock * BLOCKS_PER_DAY, rewardDecimals, 0) }}
+                        {{
+                            fmt(
+                                rewardPerBlock * BLOCKS_PER_DAY,
+                                rewardDecimals,
+                                0,
+                            )
+                        }}
                         {{ rewardSymbol }}/day
                     </p>
                 </div>
@@ -536,7 +547,9 @@ watch(() => wallet.address.value, loadState);
                     <p class="text-xs text-muted-foreground">Active pools</p>
                     <p class="font-mono text-lg">{{ pools.length || '—' }}</p>
                 </div>
-                <div class="flex items-center justify-between gap-2 sm:justify-end">
+                <div
+                    class="flex items-center justify-between gap-2 sm:justify-end"
+                >
                     <a
                         :href="explorerUrl(MASTERCHEF)"
                         target="_blank"
@@ -592,10 +605,7 @@ watch(() => wallet.address.value, loadState);
             </p>
 
             <!-- POOLS -->
-            <section
-                v-if="pools.length > 0"
-                class="grid gap-5 md:grid-cols-2"
-            >
+            <section v-if="pools.length > 0" class="grid gap-5 md:grid-cols-2">
                 <div
                     v-for="pool in pools"
                     :key="pool.pid"
@@ -631,8 +641,13 @@ watch(() => wallet.address.value, loadState);
                             >
                                 {{ poolWeight(pool) }}% weight
                             </span>
-                            <p class="mt-1 font-mono text-[11px] text-muted-foreground">
-                                ≈ {{ fmt(dailyEmission(pool), rewardDecimals, 0) }}
+                            <p
+                                class="mt-1 font-mono text-[11px] text-muted-foreground"
+                            >
+                                ≈
+                                {{
+                                    fmt(dailyEmission(pool), rewardDecimals, 0)
+                                }}
                                 {{ rewardSymbol }}/day
                             </p>
                         </div>
@@ -640,16 +655,28 @@ watch(() => wallet.address.value, loadState);
 
                     <!-- stats -->
                     <div class="grid grid-cols-2 gap-3 text-sm">
-                        <div class="rounded-xl border border-border bg-background/50 p-3">
-                            <p class="text-xs text-muted-foreground">Total staked</p>
+                        <div
+                            class="rounded-xl border border-border bg-background/50 p-3"
+                        >
+                            <p class="text-xs text-muted-foreground">
+                                Total staked
+                            </p>
                             <p class="font-mono">
                                 {{ fmt(pool.totalStaked, pool.decimals) }}
                             </p>
                         </div>
-                        <div class="rounded-xl border border-border bg-background/50 p-3">
-                            <p class="text-xs text-muted-foreground">Your stake</p>
+                        <div
+                            class="rounded-xl border border-border bg-background/50 p-3"
+                        >
+                            <p class="text-xs text-muted-foreground">
+                                Your stake
+                            </p>
                             <p class="font-mono">
-                                {{ hasWallet ? fmt(pool.staked, pool.decimals) : '—' }}
+                                {{
+                                    hasWallet
+                                        ? fmt(pool.staked, pool.decimals)
+                                        : '—'
+                                }}
                             </p>
                         </div>
                     </div>
@@ -663,7 +690,11 @@ watch(() => wallet.address.value, loadState);
                                 Pending {{ rewardSymbol }}
                             </p>
                             <p class="font-mono text-lg">
-                                {{ hasWallet ? fmt(pool.pending, rewardDecimals, 6) : '—' }}
+                                {{
+                                    hasWallet
+                                        ? fmt(pool.pending, rewardDecimals, 6)
+                                        : '—'
+                                }}
                             </p>
                         </div>
                         <Button
@@ -692,7 +723,8 @@ watch(() => wallet.address.value, loadState);
                             >
                                 <span>Stake</span>
                                 <span class="font-mono">
-                                    Balance: {{ fmt(pool.walletBalance, pool.decimals) }}
+                                    Balance:
+                                    {{ fmt(pool.walletBalance, pool.decimals) }}
                                 </span>
                             </div>
                             <div class="flex items-center gap-2">
@@ -731,7 +763,8 @@ watch(() => wallet.address.value, loadState);
                             >
                                 <span>Unstake</span>
                                 <span class="font-mono">
-                                    Staked: {{ fmt(pool.staked, pool.decimals) }}
+                                    Staked:
+                                    {{ fmt(pool.staked, pool.decimals) }}
                                 </span>
                             </div>
                             <div class="flex items-center gap-2">
@@ -753,7 +786,8 @@ watch(() => wallet.address.value, loadState);
                                 <Button
                                     variant="outline"
                                     :disabled="
-                                        pool.staked <= 0n || isBusy(pool.pid, 'unstake')
+                                        pool.staked <= 0n ||
+                                        isBusy(pool.pid, 'unstake')
                                     "
                                     @click="unstake(pool)"
                                 >
@@ -784,7 +818,8 @@ watch(() => wallet.address.value, loadState);
                                 type="button"
                                 class="text-muted-foreground transition hover:text-destructive disabled:opacity-50"
                                 :disabled="
-                                    pool.staked <= 0n || isBusy(pool.pid, 'emergency')
+                                    pool.staked <= 0n ||
+                                    isBusy(pool.pid, 'emergency')
                                 "
                                 @click="emergencyUnstake(pool)"
                             >

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft, ExternalLink } from 'lucide-vue-next';
-import Header from '@/components/Header.vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { formatUsd, formatUsdPrice, shortAddress } from '@/lib/tokenFormat';
 
@@ -49,25 +48,29 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
 <template>
     <Head :title="title" />
 
-    <Header />
-
     <div class="mx-auto max-w-4xl space-y-8 p-6">
         <Link
             href="/analytics"
-            class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground dark:hover:text-foreground"
         >
             <ArrowLeft class="h-4 w-4" /> Back to analytics
         </Link>
 
         <!-- Hero -->
         <header class="flex flex-wrap items-start gap-4">
-            <TokenIcon :symbol="token.symbol ?? '?'" :logo="token.logo" :size="64" />
+            <TokenIcon
+                :symbol="token.symbol ?? '?'"
+                :logo="token.logo"
+                :size="64"
+            />
             <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
-                    <h1 class="text-2xl font-semibold">{{ token.name ?? title }}</h1>
+                    <h1 class="text-2xl font-semibold">
+                        {{ token.name ?? title }}
+                    </h1>
                     <span
                         v-if="token.symbol"
-                        class="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                        class="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
                     >
                         {{ token.symbol }}
                     </span>
@@ -78,22 +81,24 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
                         {{ token.category }}
                     </span>
                 </div>
-                <p v-if="token.tagline" class="mt-1 text-sm text-gray-500">
+                <p v-if="token.tagline" class="mt-1 text-sm text-muted-foreground">
                     {{ token.tagline }}
                 </p>
                 <a
                     :href="`${explorerUrl}/token/${token.address}`"
                     target="_blank"
                     rel="noopener"
-                    class="mt-2 inline-flex items-center gap-1 font-mono text-xs text-gray-400 hover:underline"
+                    class="mt-2 inline-flex items-center gap-1 font-mono text-xs text-muted-foreground hover:underline"
                 >
                     {{ token.address }} <ExternalLink class="h-3 w-3" />
                 </a>
             </div>
             <div class="text-right">
-                <p class="text-xs text-gray-500">Price</p>
+                <p class="text-xs text-muted-foreground">Price</p>
                 <p class="font-mono text-2xl">
-                    {{ token.price !== null ? formatUsdPrice(token.price) : '—' }}
+                    {{
+                        token.price !== null ? formatUsdPrice(token.price) : '—'
+                    }}
                 </p>
             </div>
         </header>
@@ -101,7 +106,7 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
         <!-- Undocumented fallback -->
         <section
             v-if="!token.isKnown"
-            class="rounded border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700"
+            class="rounded border border-dashed border-input p-4 text-sm text-muted-foreground"
         >
             This token trades on the Cyberia DEX but hasn't been documented yet.
             You can still view its live price, pools and contract below.
@@ -114,13 +119,17 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
         >
             <div v-if="token.what" class="space-y-2">
                 <h2 class="text-lg font-semibold">What is it?</h2>
-                <p class="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                <p
+                    class="text-sm leading-relaxed text-muted-foreground"
+                >
                     {{ token.what }}
                 </p>
             </div>
             <div v-if="token.why" class="space-y-2">
                 <h2 class="text-lg font-semibold">Why is it on Cyberia?</h2>
-                <p class="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                <p
+                    class="text-sm leading-relaxed text-muted-foreground"
+                >
                     {{ token.why }}
                 </p>
             </div>
@@ -134,14 +143,14 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
                     :href="link.url"
                     target="_blank"
                     rel="noopener"
-                    class="inline-flex items-center gap-1 rounded border border-gray-200 px-4 py-2 text-sm transition hover:border-gray-400 dark:border-gray-800 dark:hover:border-gray-600"
+                    class="inline-flex items-center gap-1 rounded border border-border px-4 py-2 text-sm transition hover:border-input dark:hover:border-input"
                 >
                     {{ link.label }} <ExternalLink class="h-3 w-3" />
                 </a>
                 <Link
                     v-else
                     :href="link.url"
-                    class="inline-flex items-center gap-1 rounded border border-gray-200 px-4 py-2 text-sm transition hover:border-gray-400 dark:border-gray-800 dark:hover:border-gray-600"
+                    class="inline-flex items-center gap-1 rounded border border-border px-4 py-2 text-sm transition hover:border-input dark:hover:border-input"
                 >
                     {{ link.label }}
                 </Link>
@@ -150,20 +159,28 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
 
         <!-- Quick facts -->
         <section class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">Symbol</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">Symbol</p>
                 <p class="font-mono">{{ token.symbol ?? '—' }}</p>
             </div>
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">Decimals</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">Decimals</p>
                 <p class="font-mono">{{ token.decimals ?? '—' }}</p>
             </div>
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">Standard</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">Standard</p>
                 <p class="font-mono">ERC-20</p>
             </div>
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">Chain</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">Chain</p>
                 <p class="font-mono">Cyberia</p>
             </div>
         </section>
@@ -172,10 +189,10 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
         <section v-if="pools.length > 0" class="space-y-3">
             <h2 class="text-lg font-semibold">Pools</h2>
             <div
-                class="overflow-x-auto rounded border border-gray-200 dark:border-gray-800"
+                class="overflow-x-auto rounded border border-border"
             >
                 <table class="min-w-full text-sm">
-                    <thead class="bg-gray-50 dark:bg-gray-900">
+                    <thead class="bg-muted/50">
                         <tr>
                             <th class="px-3 py-2 text-left">Pair</th>
                             <th class="px-3 py-2 text-left">Paired with</th>
@@ -187,7 +204,7 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
                         <tr
                             v-for="pool in pools"
                             :key="pool.pair_address"
-                            class="border-t border-gray-100 dark:border-gray-800"
+                            class="border-t border-border/60"
                         >
                             <td class="px-3 py-2 font-mono">
                                 {{ pool.symbol0 }}/{{ pool.symbol1 }}
@@ -221,7 +238,7 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
             </div>
         </section>
 
-        <p class="text-center text-xs text-gray-400">
+        <p class="text-center text-xs text-muted-foreground">
             Prices and pools are derived live from the Cyberia DEX pool graph ·
             descriptions are maintained by the Cyberia community
         </p>

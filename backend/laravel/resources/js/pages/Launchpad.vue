@@ -3,14 +3,15 @@ import { Head } from '@inertiajs/vue3';
 import {
     CategoryScale,
     Chart,
-    Filler,
     Legend,
     LinearScale,
-    LineController,
-    LineElement,
-    PointElement,
+    LogarithmicScale,
     Tooltip,
 } from 'chart.js';
+import {
+    CandlestickController,
+    CandlestickElement,
+} from 'chartjs-chart-financial';
 import {
     BrowserProvider,
     Contract,
@@ -31,7 +32,6 @@ import {
     ref,
     watch,
 } from 'vue';
-import Header from '@/components/Header.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
@@ -39,14 +39,13 @@ import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 // Chart.js
 Chart.register(
-    LineController,
-    LineElement,
-    PointElement,
+    CandlestickController,
+    CandlestickElement,
     LinearScale,
+    LogarithmicScale,
     CategoryScale,
     Tooltip,
     Legend,
-    Filler,
 );
 
 const CYBERIA_CHAIN_ID = 49406;
@@ -79,6 +78,7 @@ const ERC20_ABI = [
 
 const PAIR_ABI = [
     'event Sync(uint112 reserve0, uint112 reserve1)',
+    'event Swap(address indexed sender,uint256 amount0In,uint256 amount1In,uint256 amount0Out,uint256 amount1Out,address indexed to)',
     'function token0() view returns (address)',
     'function token1() view returns (address)',
     'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
@@ -88,6 +88,19 @@ const FACTORY_ABI = [
     'function getPair(address tokenA, address tokenB) view returns (address)',
 ];
 const FACTORY_ADDRESS = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
+const LIQUIDITY_PAIR_OVERRIDES: Record<
+    string,
+    { pair: string; quoteSymbol: string }
+> = {
+    '0x05cd1afd5b2df3cca6ceab80cbc21168ec981e8b': {
+        pair: '0x9298d13f57D1e5bD14C443144b500aaa210a1175',
+        quoteSymbol: 'WCYBER',
+    },
+    '0xd8c1f812add03ccde8d3c7f86fead181980cd7ec': {
+        pair: '0xF18bA050eFF63B2be2D244A423691D44BDDeF60d',
+        quoteSymbol: 'WCYBER',
+    },
+};
 
 const ERC20_READ_ABI = [
     'function name() view returns (string)',
@@ -97,11 +110,11 @@ const ERC20_READ_ABI = [
 
 const SWAP_BASE_URL = 'https://swap.cyberia.church/#/swap';
 const EXPLORER_BASE_URL = 'https://explorer.cyberia.church';
+const SWAP_TOPIC = id('Swap(address,uint256,uint256,uint256,uint256,address)');
 const SYNC_TOPIC = id('Sync(uint112,uint112)');
 const TOKEN_LAUNCHED_TOPIC = id(
     'TokenLaunched(address,address,address,string,string,uint256,uint256,uint256)',
 );
-const MAX_CHART_POINTS = 40;
 
 type LaunchedToken = {
     token: string;
@@ -111,12 +124,13 @@ type LaunchedToken = {
     symbol: string;
     tokenSupply: bigint;
     cyberSolLiquidity: bigint;
+    quoteSymbol: string;
     txHash?: string;
     // Enriched off-chain.
     description?: string | null;
     imageUrl?: string | null;
     siteUrl?: string | null;
-    // Enriched from pair reserves (price quoted in CYBER.sol per 1 token).
+    // Enriched from pair reserves (price quoted in the pair's quote asset).
     priceCyber?: number | null;
     marketCapCyber?: number | null;
     launchBlock?: number | null;
@@ -139,17 +153,36 @@ type LaunchEventMeta = {
     txHash: string;
 };
 
-type TokenPricePoint = {
+type TokenTradeCandle = {
+    x: number;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
     label: string;
-    priceCyber: number;
-    blockNumber: number | null;
+    blockNumber: number;
+    transactionHash: string;
+    logIndex: number;
+};
+
+type ExplorerLog = {
+    transaction_hash: string;
+    block_number: number;
+    index: number;
+    topics: (string | null)[];
+    data: string;
+};
+
+type ExplorerLogsResponse = {
+    items: ExplorerLog[];
+    next_page_params: Record<string, string | number> | null;
 };
 
 const wallet = useWallet();
 
 // Chart instances map
-const chartInstances = new Map<string, Chart>();
-const priceHistories = ref<Record<string, TokenPricePoint[]>>({});
+const chartInstances = new Map<string, Chart<'candlestick'>>();
+const priceHistories = ref<Record<string, TokenTradeCandle[]>>({});
 
 const name = ref('');
 const symbol = ref('');
@@ -372,6 +405,41 @@ const fetchMetadata = async (): Promise<Map<string, LaunchpadMetadata>> => {
     }
 };
 
+const fetchAddressLogs = async (
+    address: string,
+    topic: string,
+): Promise<ExplorerLog[]> => {
+    const logs: ExplorerLog[] = [];
+    let nextPage: Record<string, string | number> | null = null;
+
+    do {
+        const query = new URLSearchParams({ topic });
+
+        if (nextPage) {
+            Object.entries(nextPage).forEach(([key, value]) => {
+                query.set(key, String(value));
+            });
+        }
+
+        const response = await fetch(
+            `${EXPLORER_BASE_URL}/api/v2/addresses/${address}/logs?${query.toString()}`,
+            { headers: { Accept: 'application/json' } },
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `Explorer logs request failed (${response.status})`,
+            );
+        }
+
+        const page = (await response.json()) as ExplorerLogsResponse;
+        logs.push(...(Array.isArray(page.items) ? page.items : []));
+        nextPage = page.next_page_params;
+    } while (nextPage);
+
+    return logs;
+};
+
 const fetchLaunchEvents = async (): Promise<Map<string, LaunchEventMeta>> => {
     const map = new Map<string, LaunchEventMeta>();
 
@@ -381,16 +449,23 @@ const fetchLaunchEvents = async (): Promise<Map<string, LaunchEventMeta>> => {
 
     try {
         const iface = new Interface(LAUNCHPAD_ABI);
-        const logs = await readProvider.getLogs({
-            address: LAUNCHPAD_ADDRESS,
-            fromBlock: 0,
-            toBlock: 'latest',
-            topics: [TOKEN_LAUNCHED_TOPIC],
-        });
+        const logs = await fetchAddressLogs(
+            LAUNCHPAD_ADDRESS,
+            TOKEN_LAUNCHED_TOPIC,
+        );
 
         for (const log of logs) {
+            if (log.topics[0]?.toLowerCase() !== TOKEN_LAUNCHED_TOPIC) {
+                continue;
+            }
+
             try {
-                const parsed = iface.parseLog(log);
+                const parsed = iface.parseLog({
+                    topics: log.topics.filter(
+                        (topic): topic is string => topic !== null,
+                    ),
+                    data: log.data,
+                });
 
                 if (parsed?.name !== 'TokenLaunched') {
                     continue;
@@ -400,8 +475,8 @@ const fetchLaunchEvents = async (): Promise<Map<string, LaunchEventMeta>> => {
                 map.set(token, {
                     creator: String(parsed.args.creator).toLowerCase(),
                     pair: String(parsed.args.pair),
-                    blockNumber: log.blockNumber,
-                    txHash: log.transactionHash,
+                    blockNumber: log.block_number,
+                    txHash: log.transaction_hash,
                 });
             } catch {
                 // Ignore logs that don't match the current ABI shape.
@@ -473,102 +548,168 @@ const readPairPrice = async (
     }
 };
 
-const fallbackPricePoints = (
-    priceCyber: number | null | undefined,
-): TokenPricePoint[] => {
-    if (priceCyber == null || !isFinite(priceCyber) || priceCyber <= 0) {
+const tradePriceFromSwap = (
+    amount0In: bigint,
+    amount1In: bigint,
+    amount0Out: bigint,
+    amount1Out: bigint,
+    tokenIsToken0: boolean,
+): number | null => {
+    const tokenAmount = tokenIsToken0
+        ? amount0In + amount0Out
+        : amount1In + amount1Out;
+    const cyberAmount = tokenIsToken0
+        ? amount1In + amount1Out
+        : amount0In + amount0Out;
+
+    if (tokenAmount <= 0n || cyberAmount <= 0n) {
+        return null;
+    }
+
+    const tokenWhole = Number(formatUnits(tokenAmount, 18));
+    const cyberWhole = Number(formatUnits(cyberAmount, 18));
+
+    if (
+        !isFinite(tokenWhole) ||
+        tokenWhole <= 0 ||
+        !isFinite(cyberWhole) ||
+        cyberWhole <= 0
+    ) {
+        return null;
+    }
+
+    return cyberWhole / tokenWhole;
+};
+
+const readPairTradeHistory = async (
+    pairAddr: string,
+    tokenIsToken0: boolean,
+): Promise<TokenTradeCandle[]> => {
+    if (!pairAddr || pairAddr === ZeroAddress) {
         return [];
     }
 
-    return [{ label: 'now', priceCyber, blockNumber: null }];
-};
-
-const sampleChartLogs = <T,>(items: T[], max: number): T[] => {
-    if (items.length <= max) {
-        return items;
-    }
-
-    const step = (items.length - 1) / (max - 1);
-
-    return Array.from({ length: max }, (_, i) => items[Math.round(i * step)]);
-};
-
-const readPairPriceHistory = async (
-    pairAddr: string,
-    tokenIsToken0: boolean,
-    launchBlock: number | null | undefined,
-    fallbackPriceCyber: number | null | undefined,
-): Promise<TokenPricePoint[]> => {
-    if (!pairAddr || pairAddr === ZeroAddress) {
-        return fallbackPricePoints(fallbackPriceCyber);
-    }
-
     try {
-        const currentBlock = await readProvider.getBlockNumber();
-        const fromBlock =
-            launchBlock != null
-                ? Math.max(0, launchBlock)
-                : Math.max(0, currentBlock - 500_000);
-        const logs = await readProvider.getLogs({
-            address: pairAddr,
-            fromBlock,
-            toBlock: 'latest',
-            topics: [SYNC_TOPIC],
+        const iface = new Interface(PAIR_ABI);
+        const [swapLogs, syncLogs] = await Promise.all([
+            fetchAddressLogs(pairAddr, SWAP_TOPIC),
+            fetchAddressLogs(pairAddr, SYNC_TOPIC),
+        ]);
+        const logs = swapLogs
+            .filter((log) => log.topics[0]?.toLowerCase() === SWAP_TOPIC)
+            .sort(
+                (left, right) =>
+                    left.block_number - right.block_number ||
+                    left.index - right.index,
+            );
+        const syncsByTransaction = new Map<string, ExplorerLog[]>();
+
+        syncLogs.forEach((log) => {
+            const key = log.transaction_hash.toLowerCase();
+            const transactionSyncs = syncsByTransaction.get(key) ?? [];
+            transactionSyncs.push(log);
+            syncsByTransaction.set(key, transactionSyncs);
         });
 
-        const iface = new Interface(PAIR_ABI);
-        const points = sampleChartLogs(logs, MAX_CHART_POINTS)
-            .map((log): TokenPricePoint | null => {
-                try {
-                    const parsed = iface.parseLog(log);
+        const candles: TokenTradeCandle[] = [];
+        let previousClose: number | null = null;
 
-                    if (parsed?.name !== 'Sync') {
+        logs.forEach((log) => {
+            const candle = (() => {
+                try {
+                    const parsed = iface.parseLog({
+                        topics: log.topics.filter(
+                            (topic): topic is string => topic !== null,
+                        ),
+                        data: log.data,
+                    });
+
+                    if (parsed?.name !== 'Swap') {
                         return null;
                     }
 
-                    const price = priceFromReserves(
-                        parsed.args.reserve0 as bigint,
-                        parsed.args.reserve1 as bigint,
+                    const amount0In = parsed.args.amount0In as bigint;
+                    const amount1In = parsed.args.amount1In as bigint;
+                    const amount0Out = parsed.args.amount0Out as bigint;
+                    const amount1Out = parsed.args.amount1Out as bigint;
+                    const executionPrice = tradePriceFromSwap(
+                        amount0In,
+                        amount1In,
+                        amount0Out,
+                        amount1Out,
                         tokenIsToken0,
                     );
+                    const matchingSync = syncsByTransaction
+                        .get(log.transaction_hash.toLowerCase())
+                        ?.filter((sync) => sync.index < log.index)
+                        .sort((left, right) => right.index - left.index)[0];
+                    let open = previousClose ?? executionPrice;
+                    let close = executionPrice;
 
-                    if (!price) {
+                    if (matchingSync) {
+                        const parsedSync = iface.parseLog({
+                            topics: matchingSync.topics.filter(
+                                (topic): topic is string => topic !== null,
+                            ),
+                            data: matchingSync.data,
+                        });
+
+                        if (parsedSync?.name === 'Sync') {
+                            const reserve0After = parsedSync.args
+                                .reserve0 as bigint;
+                            const reserve1After = parsedSync.args
+                                .reserve1 as bigint;
+                            const reserve0Before =
+                                reserve0After - amount0In + amount0Out;
+                            const reserve1Before =
+                                reserve1After - amount1In + amount1Out;
+                            const before = priceFromReserves(
+                                reserve0Before,
+                                reserve1Before,
+                                tokenIsToken0,
+                            );
+                            const after = priceFromReserves(
+                                reserve0After,
+                                reserve1After,
+                                tokenIsToken0,
+                            );
+
+                            open = before?.priceCyber ?? open;
+                            close = after?.priceCyber ?? close;
+                        }
+                    }
+
+                    if (open === null || close === null) {
                         return null;
                     }
 
                     return {
-                        label: `#${log.blockNumber.toLocaleString()}`,
-                        priceCyber: price.priceCyber,
-                        blockNumber: log.blockNumber,
+                        x: candles.length + 1,
+                        o: open,
+                        h: Math.max(open, close),
+                        l: Math.min(open, close),
+                        c: close,
+                        label: `Trade ${candles.length + 1} · #${log.block_number.toLocaleString()}`,
+                        blockNumber: log.block_number,
+                        transactionHash: log.transaction_hash,
+                        logIndex: log.index,
                     };
                 } catch {
                     return null;
                 }
-            })
-            .filter((point): point is TokenPricePoint => point !== null);
+            })();
 
-        const lastPoint = points.at(-1);
+            if (candle) {
+                candles.push(candle);
+                previousClose = candle.c;
+            }
+        });
 
-        if (
-            fallbackPriceCyber != null &&
-            isFinite(fallbackPriceCyber) &&
-            fallbackPriceCyber > 0 &&
-            lastPoint?.blockNumber !== currentBlock
-        ) {
-            points.push({
-                label: 'now',
-                priceCyber: fallbackPriceCyber,
-                blockNumber: currentBlock,
-            });
-        }
-
-        return points.length > 0
-            ? points
-            : fallbackPricePoints(fallbackPriceCyber);
+        return candles;
     } catch (e) {
-        console.warn('[Launchpad] pair price history failed', e);
+        console.warn('[Launchpad] pair trade history failed', e);
 
-        return fallbackPricePoints(fallbackPriceCyber);
+        return [];
     }
 };
 
@@ -631,10 +772,14 @@ const loadRecent = async (): Promise<void> => {
                             .getPair(tokenAddr, CYBER_SOL_ADDRESS)
                             .catch(() => ZeroAddress) as Promise<string>,
                     ]);
+                const pairOverride =
+                    LIQUIDITY_PAIR_OVERRIDES[tokenAddr.toLowerCase()];
                 const pairAddr =
-                    launchEvent?.pair && launchEvent.pair !== ZeroAddress
+                    pairOverride?.pair ??
+                    (launchEvent?.pair && launchEvent.pair !== ZeroAddress
                         ? launchEvent.pair
-                        : pairAddrFromFactory;
+                        : pairAddrFromFactory);
+                const quoteSymbol = pairOverride?.quoteSymbol ?? 'CYBER.sol';
                 let reserveCyber = 0n;
                 let priceCyber: number | null = null;
                 let tokenIsToken0: boolean | null = null;
@@ -654,6 +799,7 @@ const loadRecent = async (): Promise<void> => {
                     symbol_,
                     totalSupply_,
                     pairAddr,
+                    quoteSymbol,
                     reserveCyber,
                     priceCyber,
                     tokenIsToken0,
@@ -678,6 +824,7 @@ const loadRecent = async (): Promise<void> => {
                 symbol: d.symbol_ || md?.symbol || '',
                 tokenSupply: d.totalSupply_,
                 cyberSolLiquidity: d.reserveCyber,
+                quoteSymbol: d.quoteSymbol,
                 description: md?.description ?? null,
                 imageUrl: md?.image_url ?? null,
                 siteUrl: md?.site_url ?? null,
@@ -688,11 +835,9 @@ const loadRecent = async (): Promise<void> => {
             };
         });
 
-        const nextHistories: Record<string, TokenPricePoint[]> = {};
+        const nextHistories: Record<string, TokenTradeCandle[]> = {};
         recent.value.forEach((t) => {
-            nextHistories[t.token.toLowerCase()] = fallbackPricePoints(
-                t.priceCyber,
-            );
+            nextHistories[t.token.toLowerCase()] = [];
         });
         priceHistories.value = nextHistories;
         await renderTokenCharts();
@@ -716,12 +861,7 @@ const loadPriceHistories = async (
             continue;
         }
 
-        const points = await readPairPriceHistory(
-            token.pair,
-            tokenIsToken0,
-            token.launchBlock,
-            token.priceCyber,
-        );
+        const points = await readPairTradeHistory(token.pair, tokenIsToken0);
         priceHistories.value = {
             ...priceHistories.value,
             [token.token.toLowerCase()]: points,
@@ -1113,9 +1253,8 @@ const chartKey = (tokenAddress: string): string => tokenAddress.toLowerCase();
 const chartId = (tokenAddress: string): string =>
     `launchpad-price-chart-${chartKey(tokenAddress)}`;
 
-const chartPointsFor = (t: LaunchedToken): TokenPricePoint[] =>
-    priceHistories.value[chartKey(t.token)] ??
-    fallbackPricePoints(t.priceCyber);
+const chartPointsFor = (t: LaunchedToken): TokenTradeCandle[] =>
+    priceHistories.value[chartKey(t.token)] ?? [];
 
 const destroyMissingCharts = (): void => {
     const active = new Set(recent.value.map((t) => chartKey(t.token)));
@@ -1130,7 +1269,8 @@ const destroyMissingCharts = (): void => {
 
 function updateTokenChart(
     tokenAddress: string,
-    points: TokenPricePoint[],
+    points: TokenTradeCandle[],
+    quoteSymbol: string,
 ): void {
     const key = chartKey(tokenAddress);
     const existing = chartInstances.get(key);
@@ -1152,12 +1292,16 @@ function updateTokenChart(
         return;
     }
 
-    const labels = points.map((point) => point.label);
-    const prices = points.map((point) => point.priceCyber);
+    const candles = points.map(({ x, o, h, l, c }) => ({ x, o, h, l, c }));
+    const lowest = Math.min(...points.map((point) => point.l));
+    const highest = Math.max(...points.map((point) => point.h));
+    const logPriceSpan = Math.log(highest / lowest) || Math.log(1.05);
+    const scalePadding = Math.exp(logPriceSpan * 0.06);
+    const yMin = lowest / scalePadding;
+    const yMax = highest * scalePadding;
 
     if (existing) {
-        existing.data.labels = labels;
-        existing.data.datasets[0].data = prices;
+        existing.data.datasets[0].data = candles;
         existing.update('none');
 
         return;
@@ -1169,20 +1313,23 @@ function updateTokenChart(
         return;
     }
 
-    const chart = new Chart(ctx, {
-        type: 'line',
+    const chart = new Chart<'candlestick'>(ctx, {
+        type: 'candlestick',
         data: {
-            labels,
             datasets: [
                 {
-                    label: 'Price (CYBER.sol)',
-                    data: prices,
-                    borderColor: '#60a5fa',
-                    backgroundColor: 'rgba(96, 165, 250, 0.14)',
-                    fill: true,
-                    tension: 0.28,
-                    pointRadius: points.length === 1 ? 3 : 0,
-                    pointHoverRadius: 4,
+                    label: `Trade price (${quoteSymbol})`,
+                    data: candles,
+                    borderColors: {
+                        up: '#22c55e',
+                        down: '#ef4444',
+                        unchanged: '#94a3b8',
+                    },
+                    backgroundColors: {
+                        up: 'rgba(34, 197, 94, 0.55)',
+                        down: 'rgba(239, 68, 68, 0.55)',
+                        unchanged: 'rgba(148, 163, 184, 0.55)',
+                    },
                 },
             ],
         },
@@ -1198,18 +1345,39 @@ function updateTokenChart(
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (context) =>
-                            `${formatPrice(Number(context.parsed.y))} CYBER.sol`,
+                        title: (contexts) => {
+                            const point = points[contexts[0]?.dataIndex ?? -1];
+
+                            return point?.label ?? '';
+                        },
+                        label: (context) => {
+                            const point = points[context.dataIndex];
+
+                            if (!point) {
+                                return '';
+                            }
+
+                            return [
+                                `Open: ${formatPrice(point.o)} ${quoteSymbol}`,
+                                `High: ${formatPrice(point.h)} ${quoteSymbol}`,
+                                `Low: ${formatPrice(point.l)} ${quoteSymbol}`,
+                                `Close: ${formatPrice(point.c)} ${quoteSymbol}`,
+                                `Tx: ${short(point.transactionHash)}`,
+                            ];
+                        },
                     },
                 },
             },
             scales: {
                 x: {
+                    type: 'linear',
                     display: false,
                     grid: { display: false },
                 },
                 y: {
-                    beginAtZero: false,
+                    type: 'logarithmic',
+                    min: yMin,
+                    max: yMax,
                     grid: { color: 'rgba(148, 163, 184, 0.12)' },
                     ticks: {
                         color: '#94a3b8',
@@ -1227,7 +1395,7 @@ const renderTokenCharts = async (): Promise<void> => {
     await nextTick();
     destroyMissingCharts();
     recent.value.forEach((t) => {
-        updateTokenChart(t.token, chartPointsFor(t));
+        updateTokenChart(t.token, chartPointsFor(t), t.quoteSymbol);
     });
 };
 
@@ -1278,8 +1446,6 @@ onBeforeUnmount(() => {
     <Head title="Launchpad" />
 
     <div class="launchpad-page">
-        <Header />
-
         <div class="launchpad">
             <header class="intro">
                 <h1>Launchpad</h1>
@@ -1420,9 +1586,7 @@ onBeforeUnmount(() => {
                     Not enough CYBER.sol for the chosen liquidity.
                 </div>
                 <div v-else-if="belowMin" class="hint hint--err">
-                    Liquidity below the minimum ({{
-                        fmt(minLiquidity)
-                    }}
+                    Liquidity below the minimum ({{ fmt(minLiquidity) }}
                     CYBER.sol).
                 </div>
                 <div v-if="status" class="hint">{{ status }}</div>
@@ -1506,7 +1670,7 @@ onBeforeUnmount(() => {
                                         {{
                                             t.priceCyber != null
                                                 ? formatPrice(t.priceCyber) +
-                                                  ' CYBER.sol'
+                                                  ` ${t.quoteSymbol}`
                                                 : '—'
                                         }}
                                     </span>
@@ -1517,7 +1681,7 @@ onBeforeUnmount(() => {
                                         {{
                                             t.marketCapCyber != null
                                                 ? formatNum(t.marketCapCyber) +
-                                                  ' CYBER.sol'
+                                                  ` ${t.quoteSymbol}`
                                                 : '—'
                                         }}
                                     </span>
@@ -1533,10 +1697,8 @@ onBeforeUnmount(() => {
                                         >Liquidity locked</span
                                     >
                                     <span class="statValue"
-                                        >{{
-                                            fmt(t.cyberSolLiquidity)
-                                        }}
-                                        CYBER.sol</span
+                                        >{{ fmt(t.cyberSolLiquidity) }}
+                                        {{ t.quoteSymbol }}</span
                                     >
                                 </div>
                                 <div>
@@ -1568,8 +1730,8 @@ onBeforeUnmount(() => {
                                 ></canvas>
                             </div>
                             <div v-else class="chartEmpty">
-                                Price chart will appear after pair reserves are
-                                available.
+                                Candlestick chart will appear after the first
+                                trade. One candle represents one trade.
                             </div>
 
                             <div v-if="editingToken === t.token" class="editor">
@@ -1677,8 +1839,8 @@ onBeforeUnmount(() => {
     color: #facc15;
 }
 .card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 14px;
     padding: 20px;
     margin-bottom: 20px;
@@ -1704,8 +1866,8 @@ onBeforeUnmount(() => {
     grid-column: 1 / -1;
 }
 .textarea {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 8px 10px;
     color: var(--foreground, #e5e7eb);
@@ -1722,7 +1884,7 @@ onBeforeUnmount(() => {
     max-height: 120px;
     border-radius: 12px;
     object-fit: cover;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--border);
 }
 .meta {
     display: flex;
@@ -1773,8 +1935,8 @@ onBeforeUnmount(() => {
     display: flex;
     gap: 14px;
     padding: 14px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
 }
 .tokenImage {
@@ -1783,7 +1945,7 @@ onBeforeUnmount(() => {
     height: 72px;
     border-radius: 12px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--muted);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1819,8 +1981,8 @@ onBeforeUnmount(() => {
 .swapBtn,
 .editBtn,
 .siteBtn {
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--input);
+    background: var(--card);
     color: var(--foreground, #e5e7eb);
     padding: 6px 12px;
     border-radius: 8px;
@@ -1845,7 +2007,7 @@ onBeforeUnmount(() => {
 }
 .swapBtn:hover,
 .editBtn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--muted);
 }
 .swapBtn:hover {
     background: rgba(59, 130, 246, 0.25);
@@ -1853,7 +2015,7 @@ onBeforeUnmount(() => {
 .editor {
     margin-top: 14px;
     padding-top: 14px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1914,9 +2076,9 @@ onBeforeUnmount(() => {
 .tokenChart {
     margin-top: 14px;
     width: 100%;
-    height: 132px;
+    height: 220px;
     padding: 10px 8px 4px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border);
     border-radius: 10px;
     background: rgba(15, 23, 42, 0.28);
 }

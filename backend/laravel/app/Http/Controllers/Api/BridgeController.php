@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessBridgeRequest;
 use App\Models\BridgeRequest;
 use App\Rules\ValidDestinationAddress;
+use App\Services\BridgeConfigService;
 use App\Services\BridgeEventLogger;
 use App\Services\BridgeFeeService;
 use App\Services\BridgeService;
 use App\Services\CyberiaRpcService;
+use App\Services\TonApiService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class BridgeController extends Controller
 {
@@ -19,6 +23,7 @@ class BridgeController extends Controller
         private BridgeService $bridgeService,
         private BridgeEventLogger $eventLogger,
         private BridgeFeeService $feeService,
+        private BridgeConfigService $bridgeConfig,
         private CyberiaRpcService $rpc,
     ) {}
 
@@ -29,9 +34,11 @@ class BridgeController extends Controller
     {
         $direction = $request->input('direction');
         $supportedTokens = array_keys(config('bridge.tokens', []));
+        $routes = config('bridge.routes', []);
+        $supportedDirections = array_keys($routes);
 
         $validated = $request->validate([
-            'direction' => ['required', 'in:sol_to_evm,evm_to_sol'],
+            'direction' => ['required', Rule::in($supportedDirections)],
             'token' => ['nullable', 'string', 'in:'.implode(',', $supportedTokens)],
             'source_tx_hash' => ['required', 'string'],
             'source_nonce' => ['required', 'integer', 'min:0'],
@@ -46,8 +53,38 @@ class BridgeController extends Controller
             'session_id' => ['nullable', 'uuid'],
         ]);
 
-        $sourceChain = $validated['direction'] === 'sol_to_evm' ? 'solana' : 'cyberia';
+        $route = $routes[$validated['direction']] ?? null;
+
+        if (! is_array($route)) {
+            return response()->json(['message' => 'Unsupported bridge direction.'], 422);
+        }
+
+        $sourceChain = (string) $route['source_chain'];
         $token = $validated['token'] ?? 'CYBER.sol';
+
+        if (! isset($this->bridgeConfig->tokensForRoute($validated['direction'])[$token])) {
+            return response()->json(['message' => 'Token is not supported on this bridge route.'], 422);
+        }
+
+        $destinationChain = $this->bridgeConfig->chain((string) $route['destination_chain']);
+
+        if (($sourceChain === 'yenten' || ($destinationChain['key'] ?? null) === 'yenten')
+            && $this->bridgeConfig->depositAddress('yenten') === null) {
+            return response()->json(['message' => 'Yenten bridge address is not configured.'], 422);
+        }
+
+        $yentenChain = $this->bridgeConfig->chain('yenten');
+
+        if (($sourceChain === 'yenten' || ($destinationChain['type'] ?? null) === 'yenten')
+            && empty($yentenChain['relayer_wif'])) {
+            return response()->json(['message' => 'Yenten bridge relayer is not configured.'], 422);
+        }
+
+        // Chain-specific guards above give precise messages; anything else
+        // filtered out of availableRoutes() gets the generic refusal.
+        if (! isset($this->bridgeConfig->availableRoutes()[$validated['direction']])) {
+            return response()->json(['message' => 'This bridge route is not currently available.'], 422);
+        }
 
         // Auto-conversion into native CYBER only applies to CYBER.sol arriving
         // on Cyberia, and only when the feature is enabled server-side.
@@ -63,22 +100,42 @@ class BridgeController extends Controller
             $validated['recipient_address'],
         );
 
-        $bridgeRequest = $this->bridgeService->createRequest(
-            userId: $request->user()?->id,
-            direction: $validated['direction'],
-            sourceChain: $sourceChain,
-            sourceTxHash: $validated['source_tx_hash'],
-            sourceNonce: $validated['source_nonce'],
-            senderAddress: $validated['sender_address'],
-            recipientAddress: $validated['recipient_address'],
-            amount: $validated['amount'],
-            token: $token,
-            feeAmount: $fee['fee_amount'],
-            feeUsd: $fee['fee_usd'],
-            gasDropPlanned: $gasDropPlanned,
-            gasDropAmount: $gasDropAmount,
-            convertToNative: $convertToNative,
-        );
+        // Normalize TON hashes (hex vs base64 encodings of the same tx) so the
+        // source_tx_hash unique constraint can't be replayed via re-encoding.
+        $sourceTxHash = $validated['source_tx_hash'];
+
+        if ($sourceChain === 'ton') {
+            $normalized = TonApiService::normalizeTxHash($sourceTxHash);
+
+            if ($normalized === null) {
+                return response()->json(['message' => 'Invalid TON transaction hash.'], 422);
+            }
+
+            $sourceTxHash = $normalized;
+        }
+
+        try {
+            $bridgeRequest = $this->bridgeService->createRequest(
+                userId: $request->user()?->id,
+                direction: $validated['direction'],
+                sourceChain: $sourceChain,
+                sourceTxHash: $sourceTxHash,
+                sourceNonce: $validated['source_nonce'],
+                senderAddress: $validated['sender_address'],
+                recipientAddress: $validated['recipient_address'],
+                amount: $validated['amount'],
+                token: $token,
+                feeAmount: $fee['fee_amount'],
+                feeUsd: $fee['fee_usd'],
+                gasDropPlanned: $gasDropPlanned,
+                gasDropAmount: $gasDropAmount,
+                convertToNative: $convertToNative,
+            );
+        } catch (UniqueConstraintViolationException) {
+            return response()->json([
+                'message' => 'This transaction has already been submitted to the bridge.',
+            ], 422);
+        }
 
         if (! empty($validated['session_id'])) {
             $this->eventLogger->log('bridge_request_created', [
@@ -93,7 +150,9 @@ class BridgeController extends Controller
             ], $request);
         }
 
-        ProcessBridgeRequest::dispatchSync($bridgeRequest->id, $validated['session_id'] ?? null);
+        if ($this->shouldAutoProcess($validated['direction'])) {
+            ProcessBridgeRequest::dispatchSync($bridgeRequest->id, $validated['session_id'] ?? null);
+        }
 
         $bridgeRequest->refresh();
 
@@ -118,6 +177,13 @@ class BridgeController extends Controller
         ], 201);
     }
 
+    private function shouldAutoProcess(string $direction): bool
+    {
+        $route = config('bridge.routes', [])[$direction] ?? null;
+
+        return is_array($route) && ($route['auto_process'] ?? false) === true;
+    }
+
     /**
      * Decide whether a sol_to_evm bridge should also drop native CYBER on the
      * recipient so they can pay for their first transaction. Returns
@@ -127,7 +193,9 @@ class BridgeController extends Controller
      */
     private function planGasDrop(string $direction, string $recipient): array
     {
-        if ($direction !== 'sol_to_evm') {
+        $route = config('bridge.routes', [])[$direction] ?? null;
+
+        if (! is_array($route) || ($route['destination_chain'] ?? null) !== 'cyberia') {
             return [false, null];
         }
 

@@ -28,9 +28,23 @@ class ValidDestinationAddress implements ValidationRule
             return;
         }
 
-        match ($this->direction) {
-            'evm_to_sol' => $this->validateSolana($trimmed, $fail),
-            'sol_to_evm' => $this->validateEvm($trimmed, $fail),
+        $route = config('bridge.routes', [])[$this->direction] ?? null;
+
+        if (! is_array($route)) {
+            $fail('Unknown direction.');
+
+            return;
+        }
+
+        $destinationChain = (string) ($route['destination_chain'] ?? '');
+        $chain = config('bridge.chains', [])[$destinationChain] ?? null;
+        $addressType = is_array($chain) ? ($chain['address_type'] ?? null) : null;
+
+        match ($addressType) {
+            'evm' => $this->validateEvm($trimmed, $fail),
+            'solana' => $this->validateSolana($trimmed, $fail),
+            'ton' => $this->validateTon($trimmed, $fail),
+            'yenten' => $this->validateYenten($trimmed, $fail),
             default => $fail('Unknown direction.'),
         };
     }
@@ -74,6 +88,47 @@ class ValidDestinationAddress implements ValidationRule
 
         if ($decoded === null || strlen($decoded) !== 32) {
             $fail('Not a valid Solana address.');
+        }
+    }
+
+    private function validateTon(string $address, Closure $fail): void
+    {
+        if (preg_match('/^0x[0-9a-fA-F]{40}$/', $address)) {
+            $fail('This looks like an EVM address. Use a TON address.');
+
+            return;
+        }
+
+        $raw = preg_match('/^-?\d+:[0-9a-fA-F]{64}$/', $address) === 1;
+        $friendly = preg_match('/^[A-Za-z0-9_-]{48}$/', $address) === 1;
+
+        if (! $raw && ! $friendly) {
+            $fail('Not a valid TON address.');
+        }
+    }
+
+    private function validateYenten(string $address, Closure $fail): void
+    {
+        if (! preg_match('/^[1-9A-HJ-NP-Za-km-z]{26,35}$/', $address)) {
+            $fail('Not a valid Yenten address. Use a legacy Y... address.');
+
+            return;
+        }
+
+        $decoded = self::base58Decode($address);
+
+        if ($decoded === null || strlen($decoded) !== 25 || ord($decoded[0]) !== 0x4E) {
+            $fail('Not a valid Yenten address. Use a legacy Y... address.');
+
+            return;
+        }
+
+        $payload = substr($decoded, 0, 21);
+        $checksum = substr($decoded, 21, 4);
+        $expected = substr(hash('sha256', hash('sha256', $payload, true), true), 0, 4);
+
+        if (! hash_equals($expected, $checksum)) {
+            $fail('Yenten address checksum is invalid.');
         }
     }
 

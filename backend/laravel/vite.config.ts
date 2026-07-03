@@ -25,9 +25,16 @@ export default defineConfig({
             formVariants: true,
         }),
     ],
-    resolve: {
-        alias: {
-            buffer: 'buffer/',
+    // The Solana web3 stack needs the browser `buffer` polyfill, but only in
+    // the client bundle: the polyfill's CJS entry breaks Vite's ESM SSR
+    // runner, while SSR runs in Node where the built-in Buffer already works.
+    environments: {
+        client: {
+            resolve: {
+                alias: {
+                    buffer: 'buffer/',
+                },
+            },
         },
     },
 });

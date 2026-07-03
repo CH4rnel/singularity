@@ -75,8 +75,8 @@ export const useSlotMachine = (rpcUrlOverride?: string) => {
             const r = await fetch('/api/slots/pool');
 
             if (!r.ok) {
-throw new Error(`pool: ${r.status}`);
-}
+                throw new Error(`pool: ${r.status}`);
+            }
 
             pool.value = await r.json();
         } catch (e) {
@@ -96,18 +96,18 @@ throw new Error(`pool: ${r.status}`);
         clientSeed: string,
     ): Promise<SpinResult> => {
         if (!pool.value) {
-throw new Error('Pool not loaded');
-}
+            throw new Error('Pool not loaded');
+        }
 
         if (!phantom.publicKey) {
-throw new Error('Wallet not connected');
-}
+            throw new Error('Wallet not connected');
+        }
 
         const token = pool.value.tokens.find((t) => t.mint === betMint);
 
         if (!token) {
-throw new Error('Bet mint not in pool');
-}
+            throw new Error('Bet mint not in pool');
+        }
 
         isSpinning.value = true;
         error.value = null;

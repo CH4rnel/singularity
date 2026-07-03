@@ -244,5 +244,21 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       isSolo: false,
       icons: ['/btc.svg', '/ethereum-eth-logo-colored.svg'],
     },
+    {
+      pid: 22,
+      lpToken: '0x17022BC20166C0bEc0C1140c94B75443DbF46ec6', // JupUSD/USDC LP
+      label: 'JupUSD / USDC LP',
+      description: 'Stake LP from the JupUSD/USDC pair',
+      isSolo: false,
+      icons: ['/jupusd.png', '/usdc.svg'],
+    },
+    {
+      pid: 23,
+      lpToken: '0x15cB7289af5293ca4BeFB368Bde50D441B95b1E6', // CYBER/SOL LP
+      label: 'CYBER / SOL LP',
+      description: 'Stake LP from the CYBER/SOL pair',
+      isSolo: false,
+      icons: ['/cyberia.png', '/sol.svg'],
+    },
   ],
 };

@@ -12,10 +12,12 @@ use Illuminate\Support\Carbon;
  * @property string $direction
  * @property string $token
  * @property string $source_chain
- * @property string $source_tx_hash
+ * @property string|null $source_tx_hash
  * @property int $source_nonce
- * @property string $sender_address
+ * @property string|null $sender_address
  * @property string $recipient_address
+ * @property string|null $deposit_address
+ * @property bool $swept
  * @property string $amount
  * @property string|null $fee_amount
  * @property string|null $fee_usd
@@ -41,6 +43,8 @@ class BridgeRequest extends Model
         'source_nonce',
         'sender_address',
         'recipient_address',
+        'deposit_address',
+        'swept',
         'amount',
         'fee_amount',
         'fee_usd',

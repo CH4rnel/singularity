@@ -1,0 +1,12 @@
+{
+  "chainId": 49406,
+  "rpc": "https://rpc.cyberia.church",
+  "PredictionMarket": "0xb88063Cb2db16473Fb6deB71BaE364aFd09fdE54",
+  "oracle": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "feeBps": 200,
+  "createFeeCyber": 1,
+  "resolveWindowDays": 30,
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployTx": "0x3d8a63504f2f9798c242e80f206403635101b5fc4cba6f6e6d9e9d61c762fad6",
+  "timestamp": "2026-07-02T18:32:08.993Z"
+}

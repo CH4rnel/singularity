@@ -16,10 +16,12 @@ class BridgeEventController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $supportedDirections = array_keys(config('bridge.routes', []));
+
         $validated = $request->validate([
             'session_id' => ['required', 'uuid'],
             'event_type' => ['required', 'string', Rule::in(BridgeEventLogger::EVENT_TYPES)],
-            'direction' => ['nullable', 'in:sol_to_evm,evm_to_sol'],
+            'direction' => ['nullable', Rule::in($supportedDirections)],
             'amount' => ['nullable', 'numeric', 'min:0'],
             'source_address' => ['nullable', 'string', 'max:255'],
             'destination_address' => ['nullable', 'string', 'max:255'],

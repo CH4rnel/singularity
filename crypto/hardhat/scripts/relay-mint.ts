@@ -10,7 +10,8 @@
  *
  * env:
  *   BRIDGE_RELAYER_PRIVATE_KEY — relayer EOA (must be owner of the token contract)
- *   CYBERIA_RPC_URL           — Cyberia EVM RPC
+ *   EVM_RPC_URL / EVM_CHAIN_ID — target EVM chain (default Cyberia via
+ *   CYBERIA_RPC_URL / 49406)
  *
  * stdout (last line):
  *   {"txHash":"0x...","gasDropTxHash":"0x..."|null}
@@ -25,7 +26,13 @@ if (!RELAYER_PK) {
   process.exit(1);
 }
 
-const RPC_URL = process.env.CYBERIA_RPC_URL || "https://rpc.cyberia.church";
+// Generic EVM chain params (BSC etc.); legacy Cyberia vars as fallback.
+const RPC_URL =
+  process.env.EVM_RPC_URL ||
+  process.env.CYBERIA_RPC_URL ||
+  "https://rpc.cyberia.church";
+const CHAIN_ID = Number(process.env.EVM_CHAIN_ID || 49406);
+const CHAIN_NAME = process.env.EVM_NETWORK_NAME || "evm";
 
 const MINTABLE_ABI = [
   "function mint(address to, uint256 amount)",
@@ -42,7 +49,7 @@ async function main() {
   }
 
   const pk = (RELAYER_PK!.startsWith("0x") ? RELAYER_PK! : `0x${RELAYER_PK}`) as `0x${string}`;
-  const network = new ethers.Network("cyberia", 49406);
+  const network = new ethers.Network(CHAIN_NAME, CHAIN_ID);
   const provider = new ethers.JsonRpcProvider(RPC_URL, network, {
     staticNetwork: network,
     polling: false,

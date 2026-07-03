@@ -10,7 +10,6 @@ import {
 } from 'ethers';
 import { Loader2 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
-import Header from '@/components/Header.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
@@ -21,7 +20,8 @@ const CYBERIA_CHAIN_ID_HEX = '0xc11e';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
-const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+const env =
+    (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
 const NFT_CONTRACT = env.VITE_NFT_CONTRACT ?? '';
 const NFT_MARKET = env.VITE_NFT_MARKET ?? '';
 const IPFS_GATEWAY = env.VITE_IPFS_GATEWAY ?? 'https://ipfs.io/ipfs/';
@@ -99,7 +99,10 @@ const mintBusy = ref(false);
 const mintError = ref<string | null>(null);
 
 const listForms = ref<
-    Record<string, { token: string; price: string; busy: boolean; error: string | null }>
+    Record<
+        string,
+        { token: string; price: string; busy: boolean; error: string | null }
+    >
 >({});
 const buyBusy = ref<Record<string, boolean>>({});
 
@@ -111,22 +114,32 @@ const payBalances = ref<Record<string, bigint>>({});
 const isConfigured = computed(() => !!NFT_CONTRACT && !!NFT_MARKET);
 
 const readRpcUrl =
-    typeof window !== 'undefined' ? window.location.origin + CYBERIA_RPC : CYBERIA_PUBLIC_RPC;
+    typeof window !== 'undefined'
+        ? window.location.origin + CYBERIA_RPC
+        : CYBERIA_PUBLIC_RPC;
 const readProvider = new JsonRpcProvider(readRpcUrl, {
     chainId: CYBERIA_CHAIN_ID,
     name: 'cyberia',
 });
 
 const ipfsToHttp = (uri: string): string => {
-    if (uri.startsWith('ipfs://')) return IPFS_GATEWAY + uri.replace(/^ipfs:\/\//, '');
+    if (uri.startsWith('ipfs://')) {
+        return IPFS_GATEWAY + uri.replace(/^ipfs:\/\//, '');
+    }
+
     return uri;
 };
 
 const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
     const eth = getMetaMaskProvider();
-    if (!eth) throw new Error('MetaMask not found');
+
+    if (!eth) {
+        throw new Error('MetaMask not found');
+    }
+
     const provider = new BrowserProvider(eth);
     const net = await provider.getNetwork();
+
     if (Number(net.chainId) !== CYBERIA_CHAIN_ID) {
         try {
             await eth.request({
@@ -141,7 +154,11 @@ const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
                         {
                             chainId: CYBERIA_CHAIN_ID_HEX,
                             chainName: 'Cyberia',
-                            nativeCurrency: { name: 'Cyber', symbol: 'CYBER', decimals: 18 },
+                            nativeCurrency: {
+                                name: 'Cyber',
+                                symbol: 'CYBER',
+                                decimals: 18,
+                            },
                             rpcUrls: [CYBERIA_PUBLIC_RPC, CYBERIA_RPC],
                         },
                     ],
@@ -150,15 +167,23 @@ const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
                 throw e;
             }
         }
+
         return new BrowserProvider(eth);
     }
+
     return provider;
 };
 
 const fetchJson = async (url: string): Promise<NFTMetadata | undefined> => {
     try {
-        const res = await fetch(url, { headers: { Accept: 'application/json' } });
-        if (!res.ok) return undefined;
+        const res = await fetch(url, {
+            headers: { Accept: 'application/json' },
+        });
+
+        if (!res.ok) {
+            return undefined;
+        }
+
         return (await res.json()) as NFTMetadata;
     } catch {
         return undefined;
@@ -166,10 +191,16 @@ const fetchJson = async (url: string): Promise<NFTMetadata | undefined> => {
 };
 
 const erc20Cache = new Map<string, { symbol: string; decimals: number }>();
-const getErc20 = async (addr: string): Promise<{ symbol: string; decimals: number }> => {
+const getErc20 = async (
+    addr: string,
+): Promise<{ symbol: string; decimals: number }> => {
     const key = addr.toLowerCase();
     const cached = erc20Cache.get(key);
-    if (cached) return cached;
+
+    if (cached) {
+        return cached;
+    }
+
     try {
         const c = new Contract(addr, ERC20_ABI, readProvider);
         const [symbol, decimals] = await Promise.all([
@@ -178,10 +209,12 @@ const getErc20 = async (addr: string): Promise<{ symbol: string; decimals: numbe
         ]);
         const meta = { symbol: String(symbol), decimals: Number(decimals) };
         erc20Cache.set(key, meta);
+
         return meta;
     } catch {
         const meta = { symbol: '?', decimals: 18 };
         erc20Cache.set(key, meta);
+
         return meta;
     }
 };
@@ -190,15 +223,21 @@ const getErc20 = async (addr: string): Promise<{ symbol: string; decimals: numbe
 // active listings, so the buy button can be disabled when funds are short.
 const loadBalances = async (listings: Listing[]): Promise<void> => {
     const addr = wallet.address.value;
+
     if (!addr) {
         payBalances.value = {};
+
         return;
     }
-    const tokens = Array.from(new Set(listings.map((l) => l.paymentToken.toLowerCase())));
+
+    const tokens = Array.from(
+        new Set(listings.map((l) => l.paymentToken.toLowerCase())),
+    );
     const entries = await Promise.all(
         tokens.map(async (token) => {
             try {
                 const c = new Contract(token, ERC20_ABI, readProvider);
+
                 return [token, (await c.balanceOf(addr)) as bigint] as const;
             } catch {
                 return [token, undefined] as const;
@@ -206,16 +245,24 @@ const loadBalances = async (listings: Listing[]): Promise<void> => {
         }),
     );
     const next: Record<string, bigint> = {};
+
     for (const [token, bal] of entries) {
-        if (bal !== undefined) next[token] = bal;
+        if (bal !== undefined) {
+            next[token] = bal;
+        }
     }
+
     payBalances.value = next;
 };
 
 const loadGallery = async (): Promise<void> => {
-    if (!isConfigured.value) return;
+    if (!isConfigured.value) {
+        return;
+    }
+
     loading.value = true;
     error.value = null;
+
     try {
         const nft = new Contract(NFT_CONTRACT, NFT_ABI, readProvider);
         const market = new Contract(NFT_MARKET, MARKET_ABI, readProvider);
@@ -227,7 +274,9 @@ const loadGallery = async (): Promise<void> => {
         const nextId = Number(nextIdBn);
         const listingsLen = Number(listingsLenBn);
 
-        const tokenIds = Array.from({ length: nextId }, (_, i) => BigInt(i + 1));
+        const tokenIds = Array.from({ length: nextId }, (_, i) =>
+            BigInt(i + 1),
+        );
         const tokens = await Promise.all(
             tokenIds.map(async (id) => {
                 try {
@@ -235,6 +284,7 @@ const loadGallery = async (): Promise<void> => {
                         nft.ownerOf(id),
                         nft.tokenURI(id),
                     ]);
+
                     return { tokenId: id, owner, tokenURI: uri } as NFTItem;
                 } catch {
                     return null;
@@ -243,25 +293,36 @@ const loadGallery = async (): Promise<void> => {
         );
 
         const withMetadata = await Promise.all(
-            tokens.filter((t): t is NFTItem => !!t).map(async (t) => {
-                const httpUri = ipfsToHttp(t.tokenURI);
-                const md = await fetchJson(httpUri);
-                return {
-                    ...t,
-                    metadata: md,
-                    imageUrl: md?.image ? ipfsToHttp(md.image) : undefined,
-                };
-            }),
+            tokens
+                .filter((t): t is NFTItem => !!t)
+                .map(async (t) => {
+                    const httpUri = ipfsToHttp(t.tokenURI);
+                    const md = await fetchJson(httpUri);
+
+                    return {
+                        ...t,
+                        metadata: md,
+                        imageUrl: md?.image ? ipfsToHttp(md.image) : undefined,
+                    };
+                }),
         );
 
         const rawListings = await Promise.all(
             Array.from({ length: listingsLen }, (_, i) => market.listings(i)),
         );
         const activeListings: Listing[] = [];
+
         for (let i = 0; i < rawListings.length; i++) {
             const r = rawListings[i];
-            if (!r.active) continue;
-            if (String(r.nft).toLowerCase() !== NFT_CONTRACT.toLowerCase()) continue;
+
+            if (!r.active) {
+                continue;
+            }
+
+            if (String(r.nft).toLowerCase() !== NFT_CONTRACT.toLowerCase()) {
+                continue;
+            }
+
             const meta = await getErc20(r.paymentToken);
             activeListings.push({
                 listingId: i,
@@ -275,11 +336,18 @@ const loadGallery = async (): Promise<void> => {
                 paymentDecimals: meta.decimals,
             });
         }
+
         const byTokenId = new Map<string, Listing>();
-        for (const l of activeListings) byTokenId.set(l.tokenId.toString(), l);
+
+        for (const l of activeListings) {
+            byTokenId.set(l.tokenId.toString(), l);
+        }
 
         items.value = withMetadata
-            .map((t) => ({ ...t, listing: byTokenId.get(t.tokenId.toString()) }))
+            .map((t) => ({
+                ...t,
+                listing: byTokenId.get(t.tokenId.toString()),
+            }))
             .reverse();
 
         await loadBalances(activeListings);
@@ -301,45 +369,66 @@ const onMintImageChange = (event: Event): void => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0] ?? null;
     mintError.value = null;
+
     if (file && file.size > MAX_IMAGE_BYTES) {
         mintError.value = `Image must be ≤ 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`;
         target.value = '';
         mintImage.value = null;
+
         return;
     }
+
     mintImage.value = file;
-    if (mintImagePreview.value) URL.revokeObjectURL(mintImagePreview.value);
+
+    if (mintImagePreview.value) {
+        URL.revokeObjectURL(mintImagePreview.value);
+    }
+
     mintImagePreview.value = file ? URL.createObjectURL(file) : null;
 };
 
 const handleMint = async (): Promise<void> => {
     mintError.value = null;
+
     if (!mintName.value.trim()) {
         mintError.value = 'Name is required';
+
         return;
     }
+
     mintBusy.value = true;
+
     try {
         status.value = 'Uploading metadata…';
         const form = new FormData();
         form.append('name', mintName.value.trim());
         form.append('description', mintDescription.value.trim());
+
         if (mintExternalUrl.value.trim()) {
             form.append('external_url', mintExternalUrl.value.trim());
         }
+
         if (mintImage.value) {
             form.append('image', mintImage.value);
         }
+
         const res = await fetch('/api/nft/upload', {
             method: 'POST',
             headers: { Accept: 'application/json' },
             body: form,
         });
+
         if (!res.ok) {
             const t = await res.text().catch(() => '');
-            throw new Error(`Upload failed: HTTP ${res.status} ${t.slice(0, 200)}`);
+
+            throw new Error(
+                `Upload failed: HTTP ${res.status} ${t.slice(0, 200)}`,
+            );
         }
-        const { token_uri: tokenUri } = (await res.json()) as { token_uri: string };
+
+        const { token_uri: tokenUri } = (await res.json()) as {
+            token_uri: string;
+        };
 
         status.value = 'Confirm mint() in your wallet…';
         const provider = await ensureCyberiaNetwork();
@@ -354,10 +443,12 @@ const handleMint = async (): Promise<void> => {
         mintDescription.value = '';
         mintExternalUrl.value = '';
         mintImage.value = null;
+
         if (mintImagePreview.value) {
             URL.revokeObjectURL(mintImagePreview.value);
             mintImagePreview.value = null;
         }
+
         await loadGallery();
     } catch (e) {
         mintError.value = (e as Error).message ?? String(e);
@@ -382,15 +473,21 @@ const closeListForm = (item: NFTItem): void => {
 const handleList = async (item: NFTItem): Promise<void> => {
     const key = item.tokenId.toString();
     const form = listForms.value[key];
-    if (!form) return;
+
+    if (!form) {
+        return;
+    }
+
     form.error = null;
     form.busy = true;
+
     try {
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
         const nft = new Contract(NFT_CONTRACT, NFT_ABI, signer);
 
         const approved = await nft.getApproved(item.tokenId);
+
         if (String(approved).toLowerCase() !== NFT_MARKET.toLowerCase()) {
             status.value = 'Approving NFT for market…';
             const tx = await nft.approve(NFT_MARKET, item.tokenId);
@@ -399,11 +496,19 @@ const handleList = async (item: NFTItem): Promise<void> => {
 
         const erc20 = await getErc20(form.token);
         const price = parseUnits(form.price || '0', erc20.decimals);
-        if (price <= 0n) throw new Error('Price must be > 0');
+
+        if (price <= 0n) {
+            throw new Error('Price must be > 0');
+        }
 
         const market = new Contract(NFT_MARKET, MARKET_ABI, signer);
         status.value = 'Listing NFT…';
-        const tx = await market.list(NFT_CONTRACT, item.tokenId, form.token, price);
+        const tx = await market.list(
+            NFT_CONTRACT,
+            item.tokenId,
+            form.token,
+            price,
+        );
         await tx.wait();
 
         status.value = 'Listed.';
@@ -416,12 +521,20 @@ const handleList = async (item: NFTItem): Promise<void> => {
     }
 };
 
-const priceForms = ref<Record<string, { price: string; busy: boolean; error: string | null }>>({});
+const priceForms = ref<
+    Record<string, { price: string; busy: boolean; error: string | null }>
+>({});
 
 const openPriceForm = (item: NFTItem): void => {
-    if (!item.listing) return;
+    if (!item.listing) {
+        return;
+    }
+
     priceForms.value[item.tokenId.toString()] = {
-        price: formatUnits(item.listing.price, item.listing.paymentDecimals ?? 18),
+        price: formatUnits(
+            item.listing.price,
+            item.listing.paymentDecimals ?? 18,
+        ),
         busy: false,
         error: null,
     };
@@ -432,15 +545,29 @@ const closePriceForm = (item: NFTItem): void => {
 };
 
 const handleUpdatePrice = async (item: NFTItem): Promise<void> => {
-    if (!item.listing) return;
+    if (!item.listing) {
+        return;
+    }
+
     const key = item.tokenId.toString();
     const form = priceForms.value[key];
-    if (!form) return;
+
+    if (!form) {
+        return;
+    }
+
     form.error = null;
     form.busy = true;
+
     try {
-        const newPrice = parseUnits(form.price || '0', item.listing.paymentDecimals ?? 18);
-        if (newPrice <= 0n) throw new Error('Price must be > 0');
+        const newPrice = parseUnits(
+            form.price || '0',
+            item.listing.paymentDecimals ?? 18,
+        );
+
+        if (newPrice <= 0n) {
+            throw new Error('Price must be > 0');
+        }
 
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
@@ -460,8 +587,12 @@ const handleUpdatePrice = async (item: NFTItem): Promise<void> => {
 };
 
 const handleCancel = async (item: NFTItem): Promise<void> => {
-    if (!item.listing) return;
+    if (!item.listing) {
+        return;
+    }
+
     buyBusy.value[item.tokenId.toString()] = true;
+
     try {
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
@@ -479,8 +610,12 @@ const handleCancel = async (item: NFTItem): Promise<void> => {
 };
 
 const handleBuy = async (item: NFTItem): Promise<void> => {
-    if (!item.listing) return;
+    if (!item.listing) {
+        return;
+    }
+
     buyBusy.value[item.tokenId.toString()] = true;
+
     try {
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
@@ -488,13 +623,18 @@ const handleBuy = async (item: NFTItem): Promise<void> => {
         const pay = new Contract(item.listing.paymentToken, ERC20_ABI, signer);
 
         const balance = (await pay.balanceOf(signerAddr)) as bigint;
+
         if (balance < item.listing.price) {
             throw new Error(
                 `Insufficient ${item.listing.paymentSymbol ?? 'token'} balance to buy this NFT.`,
             );
         }
 
-        const allowance = (await pay.allowance(signerAddr, NFT_MARKET)) as bigint;
+        const allowance = (await pay.allowance(
+            signerAddr,
+            NFT_MARKET,
+        )) as bigint;
+
         if (allowance < item.listing.price) {
             status.value = `Approving ${item.listing.paymentSymbol ?? 'token'}…`;
             const tx = await pay.approve(NFT_MARKET, MaxUint256);
@@ -520,9 +660,16 @@ const isMine = (addr: string): boolean =>
 
 // True only when we've loaded the balance and it's below the asking price.
 const insufficient = (item: NFTItem): boolean => {
-    if (!item.listing || !wallet.address.value) return false;
+    if (!item.listing || !wallet.address.value) {
+        return false;
+    }
+
     const bal = payBalances.value[item.listing.paymentToken.toLowerCase()];
-    if (bal === undefined) return false; // unknown — let the on-chain check decide
+
+    if (bal === undefined) {
+        return false;
+    } // unknown — let the on-chain check decide
+
     return bal < item.listing.price;
 };
 
@@ -530,9 +677,19 @@ const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 const formatPrice = (p: bigint, decimals: number): string => {
     const v = Number(formatUnits(p, decimals));
-    if (!isFinite(v)) return '—';
-    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
-    if (v >= 1_000) return `${(v / 1_000).toFixed(2)}K`;
+
+    if (!isFinite(v)) {
+        return '—';
+    }
+
+    if (v >= 1_000_000) {
+        return `${(v / 1_000_000).toFixed(2)}M`;
+    }
+
+    if (v >= 1_000) {
+        return `${(v / 1_000).toFixed(2)}K`;
+    }
+
     return v.toLocaleString(undefined, { maximumFractionDigits: 4 });
 };
 </script>
@@ -541,21 +698,20 @@ const formatPrice = (p: bigint, decimals: number): string => {
     <Head title="Cyberia NFT Market" />
 
     <div class="market-page">
-        <Header />
-
         <div class="market">
             <header class="intro">
                 <h1>NFT Market</h1>
                 <p>
-                    Shared NFT collection (ERC-721). Anyone can mint — with an image,
-                    or just a link or a piece of text. Listings are fixed-price in any
-                    ERC-20. The market takes a 1% fee.
+                    Shared NFT collection (ERC-721). Anyone can mint — with an
+                    image, or just a link or a piece of text. Listings are
+                    fixed-price in any ERC-20. The market takes a 1% fee.
                 </p>
             </header>
 
             <div v-if="!isConfigured" class="banner banner--warn">
-                Set <code>VITE_NFT_CONTRACT</code> and <code>VITE_NFT_MARKET</code> in
-                <code>.env</code> and rebuild the frontend.
+                Set <code>VITE_NFT_CONTRACT</code> and
+                <code>VITE_NFT_MARKET</code> in <code>.env</code> and rebuild
+                the frontend.
             </div>
 
             <section class="card">
@@ -563,7 +719,10 @@ const formatPrice = (p: bigint, decimals: number): string => {
                 <div class="grid">
                     <label>
                         <span>Name</span>
-                        <Input v-model="mintName" placeholder="e.g. Cyberial Sunset" />
+                        <Input
+                            v-model="mintName"
+                            placeholder="e.g. Cyberial Sunset"
+                        />
                     </label>
                     <label>
                         <span>Image (optional, ≤ 2 MB)</span>
@@ -573,7 +732,11 @@ const formatPrice = (p: bigint, decimals: number): string => {
                             class="file"
                             @change="onMintImageChange"
                         />
-                        <img v-if="mintImagePreview" :src="mintImagePreview" class="preview" />
+                        <img
+                            v-if="mintImagePreview"
+                            :src="mintImagePreview"
+                            class="preview"
+                        />
                     </label>
                     <label class="full">
                         <span>Link (optional)</span>
@@ -594,7 +757,10 @@ const formatPrice = (p: bigint, decimals: number): string => {
                     </label>
                 </div>
                 <div class="actions">
-                    <Button v-if="!wallet.isConnected.value" @click="wallet.connect()">
+                    <Button
+                        v-if="!wallet.isConnected.value"
+                        @click="wallet.connect()"
+                    >
                         Connect MetaMask
                     </Button>
                     <Button
@@ -606,13 +772,19 @@ const formatPrice = (p: bigint, decimals: number): string => {
                         Mint
                     </Button>
                 </div>
-                <div v-if="mintError" class="hint hint--err">{{ mintError }}</div>
+                <div v-if="mintError" class="hint hint--err">
+                    {{ mintError }}
+                </div>
             </section>
 
             <section class="card">
                 <div class="cardHead">
                     <h2>Gallery</h2>
-                    <button class="reloadBtn" :disabled="loading" @click="loadGallery">
+                    <button
+                        class="reloadBtn"
+                        :disabled="loading"
+                        @click="loadGallery"
+                    >
                         {{ loading ? 'Loading…' : 'Reload' }}
                     </button>
                 </div>
@@ -624,41 +796,76 @@ const formatPrice = (p: bigint, decimals: number): string => {
                 </div>
 
                 <div class="grid-cards">
-                    <div v-for="item in items" :key="item.tokenId.toString()" class="nftCard">
+                    <div
+                        v-for="item in items"
+                        :key="item.tokenId.toString()"
+                        class="nftCard"
+                    >
                         <div class="nftImg">
-                            <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.metadata?.name" />
-                            <span v-else class="nftImgFallback">#{{ item.tokenId.toString() }}</span>
+                            <img
+                                v-if="item.imageUrl"
+                                :src="item.imageUrl"
+                                :alt="item.metadata?.name"
+                            />
+                            <span v-else class="nftImgFallback"
+                                >#{{ item.tokenId.toString() }}</span
+                            >
                         </div>
                         <div class="nftBody">
                             <div class="nftTitle">
-                                {{ item.metadata?.name || `Token #${item.tokenId.toString()}` }}
+                                {{
+                                    item.metadata?.name ||
+                                    `Token #${item.tokenId.toString()}`
+                                }}
                             </div>
                             <div class="muted small">
                                 Owner: <code>{{ short(item.owner) }}</code>
                             </div>
-                            <div v-if="item.metadata?.description" class="nftDesc">
+                            <div
+                                v-if="item.metadata?.description"
+                                class="nftDesc"
+                            >
                                 {{ item.metadata.description }}
                             </div>
 
                             <div v-if="item.listing" class="priceRow">
                                 <strong>
-                                    {{ formatPrice(item.listing.price, item.listing.paymentDecimals ?? 18) }}
+                                    {{
+                                        formatPrice(
+                                            item.listing.price,
+                                            item.listing.paymentDecimals ?? 18,
+                                        )
+                                    }}
                                     {{ item.listing.paymentSymbol ?? '?' }}
                                 </strong>
                             </div>
 
                             <div class="actions">
                                 <template v-if="item.listing">
-                                    <template v-if="isMine(item.listing.seller)">
+                                    <template
+                                        v-if="isMine(item.listing.seller)"
+                                    >
                                         <Button
-                                            v-if="!priceForms[item.tokenId.toString()]"
-                                            :disabled="!!buyBusy[item.tokenId.toString()]"
+                                            v-if="
+                                                !priceForms[
+                                                    item.tokenId.toString()
+                                                ]
+                                            "
+                                            :disabled="
+                                                !!buyBusy[
+                                                    item.tokenId.toString()
+                                                ]
+                                            "
                                             @click="openPriceForm(item)"
                                         >
                                             Change price
                                         </Button>
                                         <Button
-                                            :disabled="!!buyBusy[item.tokenId.toString()]"
+                                            :disabled="
+                                                !!buyBusy[
+                                                    item.tokenId.toString()
+                                                ]
+                                            "
                                             @click="handleCancel(item)"
                                         >
                                             Cancel listing
@@ -666,10 +873,19 @@ const formatPrice = (p: bigint, decimals: number): string => {
                                     </template>
                                     <Button
                                         v-else-if="wallet.isConnected.value"
-                                        :disabled="!!buyBusy[item.tokenId.toString()] || insufficient(item)"
+                                        :disabled="
+                                            !!buyBusy[
+                                                item.tokenId.toString()
+                                            ] || insufficient(item)
+                                        "
                                         @click="handleBuy(item)"
                                     >
-                                        <Loader2 v-if="buyBusy[item.tokenId.toString()]" class="spin" />
+                                        <Loader2
+                                            v-if="
+                                                buyBusy[item.tokenId.toString()]
+                                            "
+                                            class="spin"
+                                        />
                                         {{
                                             insufficient(item)
                                                 ? `Insufficient ${item.listing.paymentSymbol ?? 'balance'}`
@@ -679,7 +895,9 @@ const formatPrice = (p: bigint, decimals: number): string => {
                                 </template>
                                 <template v-else-if="isMine(item.owner)">
                                     <Button
-                                        v-if="!listForms[item.tokenId.toString()]"
+                                        v-if="
+                                            !listForms[item.tokenId.toString()]
+                                        "
                                         @click="openListForm(item)"
                                     >
                                         List for sale
@@ -688,30 +906,54 @@ const formatPrice = (p: bigint, decimals: number): string => {
                             </div>
 
                             <div
-                                v-if="item.listing && priceForms[item.tokenId.toString()]"
+                                v-if="
+                                    item.listing &&
+                                    priceForms[item.tokenId.toString()]
+                                "
                                 class="listForm"
                             >
                                 <label>
-                                    <span>New price ({{ item.listing.paymentSymbol ?? 'token' }})</span>
+                                    <span
+                                        >New price ({{
+                                            item.listing.paymentSymbol ??
+                                            'token'
+                                        }})</span
+                                    >
                                     <Input
-                                        v-model="priceForms[item.tokenId.toString()].price"
+                                        v-model="
+                                            priceForms[item.tokenId.toString()]
+                                                .price
+                                        "
                                         type="text"
                                         inputmode="decimal"
                                     />
                                 </label>
                                 <div
-                                    v-if="priceForms[item.tokenId.toString()].error"
+                                    v-if="
+                                        priceForms[item.tokenId.toString()]
+                                            .error
+                                    "
                                     class="hint hint--err"
                                 >
-                                    {{ priceForms[item.tokenId.toString()].error }}
+                                    {{
+                                        priceForms[item.tokenId.toString()]
+                                            .error
+                                    }}
                                 </div>
                                 <div class="actions">
                                     <Button
-                                        :disabled="priceForms[item.tokenId.toString()].busy"
+                                        :disabled="
+                                            priceForms[item.tokenId.toString()]
+                                                .busy
+                                        "
                                         @click="handleUpdatePrice(item)"
                                     >
                                         <Loader2
-                                            v-if="priceForms[item.tokenId.toString()].busy"
+                                            v-if="
+                                                priceForms[
+                                                    item.tokenId.toString()
+                                                ].busy
+                                            "
                                             class="spin"
                                         />
                                         Save price
@@ -719,7 +961,10 @@ const formatPrice = (p: bigint, decimals: number): string => {
                                     <button
                                         type="button"
                                         class="editBtn"
-                                        :disabled="priceForms[item.tokenId.toString()].busy"
+                                        :disabled="
+                                            priceForms[item.tokenId.toString()]
+                                                .busy
+                                        "
                                         @click="closePriceForm(item)"
                                     >
                                         Cancel
@@ -728,37 +973,57 @@ const formatPrice = (p: bigint, decimals: number): string => {
                             </div>
 
                             <div
-                                v-if="!item.listing && listForms[item.tokenId.toString()]"
+                                v-if="
+                                    !item.listing &&
+                                    listForms[item.tokenId.toString()]
+                                "
                                 class="listForm"
                             >
                                 <label>
                                     <span>Payment token (ERC-20 address)</span>
                                     <Input
-                                        v-model="listForms[item.tokenId.toString()].token"
+                                        v-model="
+                                            listForms[item.tokenId.toString()]
+                                                .token
+                                        "
                                         placeholder="0x…"
                                     />
                                 </label>
                                 <label>
                                     <span>Price</span>
                                     <Input
-                                        v-model="listForms[item.tokenId.toString()].price"
+                                        v-model="
+                                            listForms[item.tokenId.toString()]
+                                                .price
+                                        "
                                         type="text"
                                         inputmode="decimal"
                                     />
                                 </label>
                                 <div
-                                    v-if="listForms[item.tokenId.toString()].error"
+                                    v-if="
+                                        listForms[item.tokenId.toString()].error
+                                    "
                                     class="hint hint--err"
                                 >
-                                    {{ listForms[item.tokenId.toString()].error }}
+                                    {{
+                                        listForms[item.tokenId.toString()].error
+                                    }}
                                 </div>
                                 <div class="actions">
                                     <Button
-                                        :disabled="listForms[item.tokenId.toString()].busy"
+                                        :disabled="
+                                            listForms[item.tokenId.toString()]
+                                                .busy
+                                        "
                                         @click="handleList(item)"
                                     >
                                         <Loader2
-                                            v-if="listForms[item.tokenId.toString()].busy"
+                                            v-if="
+                                                listForms[
+                                                    item.tokenId.toString()
+                                                ].busy
+                                            "
                                             class="spin"
                                         />
                                         Confirm listing
@@ -766,7 +1031,10 @@ const formatPrice = (p: bigint, decimals: number): string => {
                                     <button
                                         type="button"
                                         class="editBtn"
-                                        :disabled="listForms[item.tokenId.toString()].busy"
+                                        :disabled="
+                                            listForms[item.tokenId.toString()]
+                                                .busy
+                                        "
                                         @click="closeListForm(item)"
                                     >
                                         Cancel
@@ -815,8 +1083,8 @@ const formatPrice = (p: bigint, decimals: number): string => {
     color: #facc15;
 }
 .card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 14px;
     padding: 20px;
     margin-bottom: 20px;
@@ -835,7 +1103,7 @@ const formatPrice = (p: bigint, decimals: number): string => {
 .reloadBtn {
     background: transparent;
     color: var(--muted-foreground, #94a3b8);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--border);
     padding: 6px 10px;
     border-radius: 8px;
     font-size: 12px;
@@ -857,8 +1125,8 @@ const formatPrice = (p: bigint, decimals: number): string => {
     grid-column: 1 / -1;
 }
 .textarea {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 8px 10px;
     color: var(--foreground, #e5e7eb);
@@ -875,7 +1143,7 @@ const formatPrice = (p: bigint, decimals: number): string => {
     max-height: 160px;
     border-radius: 12px;
     object-fit: cover;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--border);
 }
 .actions {
     display: flex;
@@ -915,8 +1183,8 @@ const formatPrice = (p: bigint, decimals: number): string => {
     gap: 14px;
 }
 .nftCard {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     overflow: hidden;
     display: flex;
@@ -924,7 +1192,7 @@ const formatPrice = (p: bigint, decimals: number): string => {
 }
 .nftImg {
     aspect-ratio: 1 / 1;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--muted);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -963,7 +1231,7 @@ const formatPrice = (p: bigint, decimals: number): string => {
 .listForm {
     margin-top: 10px;
     padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -971,7 +1239,7 @@ const formatPrice = (p: bigint, decimals: number): string => {
     color: var(--muted-foreground, #94a3b8);
 }
 .editBtn {
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    border: 1px solid var(--input);
     background: transparent;
     color: var(--foreground, #e5e7eb);
     padding: 6px 12px;

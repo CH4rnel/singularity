@@ -2,7 +2,6 @@
 import { Head } from '@inertiajs/vue3';
 import { BrowserProvider, Contract, JsonRpcProvider } from 'ethers';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import Header from '@/components/Header.vue';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/composables/useWallet';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
@@ -267,8 +266,6 @@ onUnmounted(() => {
     <Head title="Cyberia Pixel Battle" />
 
     <div class="pixel-page">
-        <Header />
-
         <div class="pixel">
             <header class="intro">
                 <h1>Pixel Battle</h1>

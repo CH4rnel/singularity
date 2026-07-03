@@ -48,6 +48,18 @@ class ProcessBridgeRequest implements ShouldQueue
             return;
         }
 
+        $route = config('bridge.routes', [])[$request->direction] ?? null;
+
+        if (! \is_array($route) || ($route['auto_process'] ?? false) !== true) {
+            Log::info('Bridge: route is pending manual relay', [
+                'id' => $request->id,
+                'direction' => $request->direction,
+                'token' => $request->token,
+            ]);
+
+            return;
+        }
+
         $this->logEvent($eventLogger, 'relayer_started', $request);
 
         $model = $tokenConfig['model'] ?? 'native';

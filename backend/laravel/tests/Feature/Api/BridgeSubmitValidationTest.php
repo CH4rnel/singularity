@@ -63,3 +63,47 @@ test('accepts valid EVM destination for sol_to_evm', function () {
         'amount' => '1.0',
     ])->assertStatus(201);
 });
+
+test('accepts a valid Yenten destination for evm_to_yenten', function () {
+    config()->set('bridge.chains.yenten.deposit_address', 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL');
+    config()->set('bridge.chains.yenten.relayer_wif', 'configured-in-production');
+
+    $this->postJson('/bridge/submit', [
+        'direction' => 'evm_to_yenten',
+        'token' => 'YTN',
+        'source_tx_hash' => '0xabc',
+        'source_nonce' => 1,
+        'sender_address' => '0x5555555555555555555555555555555555555555',
+        'recipient_address' => 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL',
+        'amount' => '1.0',
+    ])->assertStatus(201);
+});
+
+test('rejects a Yenten destination with an invalid checksum', function () {
+    $this->postJson('/bridge/submit', [
+        'direction' => 'evm_to_yenten',
+        'token' => 'YTN',
+        'source_tx_hash' => '0xabc',
+        'source_nonce' => 1,
+        'sender_address' => '0x5555555555555555555555555555555555555555',
+        'recipient_address' => 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDM',
+        'amount' => '1.0',
+    ])->assertStatus(422)
+        ->assertJsonValidationErrors(['recipient_address']);
+});
+
+test('rejects evm_to_yenten while the Yenten relayer key is not configured', function () {
+    config()->set('bridge.chains.yenten.deposit_address', 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL');
+    config()->set('bridge.chains.yenten.relayer_wif', null);
+
+    $this->postJson('/bridge/submit', [
+        'direction' => 'evm_to_yenten',
+        'token' => 'YTN',
+        'source_tx_hash' => '0xabc',
+        'source_nonce' => 1,
+        'sender_address' => '0x5555555555555555555555555555555555555555',
+        'recipient_address' => 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL',
+        'amount' => '1.0',
+    ])->assertStatus(422)
+        ->assertJsonPath('message', 'Yenten bridge relayer is not configured.');
+});

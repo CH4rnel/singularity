@@ -2,6 +2,7 @@
 import { Loader2 } from 'lucide-vue-next';
 import { computed } from 'vue';
 
+import { bridgeRoute } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
 
 const props = defineProps<{
@@ -10,7 +11,9 @@ const props = defineProps<{
 }>();
 
 const chainName = computed(() =>
-    props.direction === 'sol_to_evm' ? 'your Solana wallet' : 'your EVM wallet',
+    bridgeRoute(props.direction).sourceWallet === 'solana'
+        ? 'your Solana wallet'
+        : 'your EVM wallet',
 );
 </script>
 

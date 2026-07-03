@@ -4,12 +4,12 @@ use App\Models\Dao;
 use App\Models\Proposal;
 use App\Models\User;
 
-test('guests cannot access dao page', function () {
+test('guests can view dao page', function () {
     $dao = Dao::factory()->create();
 
     $response = $this->get("/dao/{$dao->id}");
 
-    $response->assertRedirect(route('login'));
+    $response->assertOk();
 });
 
 test('authenticated users can view dao with proposals', function () {
@@ -62,9 +62,9 @@ test('proposal creation requires valid dao_id', function () {
     $response->assertSessionHasErrors('dao_id');
 });
 
-test('authenticated users can update a proposal', function () {
+test('authors can update their proposal', function () {
     $user = User::factory()->create();
-    $proposal = Proposal::factory()->create(['title' => 'Old Title']);
+    $proposal = Proposal::factory()->create(['title' => 'Old Title', 'user_id' => $user->id]);
 
     $response = $this->actingAs($user)->put("/proposals/{$proposal->id}", [
         'title' => 'New Title',
@@ -77,24 +77,32 @@ test('authenticated users can update a proposal', function () {
     ]);
 });
 
-test('authenticated users can close a proposal', function () {
+test('authors can close a proposal by moving its deadline', function () {
     $user = User::factory()->create();
-    $proposal = Proposal::factory()->create(['status' => 'open']);
+    $proposal = Proposal::factory()->open()->create(['user_id' => $user->id]);
 
     $response = $this->actingAs($user)->put("/proposals/{$proposal->id}", [
-        'status' => 'closed',
+        'ends_at' => now()->subMinute()->toDateTimeString(),
     ]);
 
     $response->assertRedirect();
-    $this->assertDatabaseHas('proposals', [
-        'id' => $proposal->id,
-        'status' => 'closed',
-    ]);
+    expect($proposal->fresh()->status)->toBe('closed');
 });
 
-test('authenticated users can delete a proposal', function () {
+test('non-authors cannot update a proposal', function () {
     $user = User::factory()->create();
     $proposal = Proposal::factory()->create();
+
+    $response = $this->actingAs($user)->put("/proposals/{$proposal->id}", [
+        'title' => 'Hijacked',
+    ]);
+
+    $response->assertForbidden();
+});
+
+test('authors can delete their proposal', function () {
+    $user = User::factory()->create();
+    $proposal = Proposal::factory()->create(['user_id' => $user->id]);
 
     $response = $this->actingAs($user)->delete("/proposals/{$proposal->id}");
 

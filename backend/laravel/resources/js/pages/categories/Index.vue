@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { Link as InertiaLink } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +11,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { Category, Team } from '@/types';
+import type { Category } from '@/types';
 
 type Props = {
     categories: Category[];
@@ -55,7 +54,9 @@ function submitCreate() {
 }
 
 function submitEdit() {
-    if (!editingCategory.value) return;
+    if (!editingCategory.value) {
+        return;
+    }
 
     editForm.put(`/categories/${editingCategory.value.id}`, {
         onSuccess: () => {
@@ -72,7 +73,7 @@ function deleteCategory(category: Category) {
 }
 
 defineOptions({
-    layout: (props: { currentTeam?: Team | null }) => ({
+    layout: () => ({
         breadcrumbs: [
             {
                 title: 'Categories',

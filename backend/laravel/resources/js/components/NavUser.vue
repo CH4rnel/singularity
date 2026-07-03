@@ -18,14 +18,16 @@ import UserMenuContent from '@/components/UserMenuContent.vue';
 import type { Team } from '@/types';
 
 const page = usePage();
-const user = page.props.auth.user;
+// auth.user is null for guests (and mid-logout re-renders) — the menu simply
+// doesn't render then, see the v-if below.
+const user = computed(() => page.props.auth.user);
 const { isMobile, state } = useSidebar();
 
 const currentTeam = computed(() => page.props.currentTeam as Team | null);
 </script>
 
 <template>
-    <SidebarMenu>
+    <SidebarMenu v-if="user">
         <SidebarMenuItem>
             <DropdownMenu>
                 <DropdownMenuTrigger as-child>

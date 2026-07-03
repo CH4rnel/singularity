@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import Header from '@/components/Header.vue';
 
 type SwapTotals = {
     count: number;
@@ -79,7 +78,10 @@ const props = defineProps<{
     cyberPrice: number | null;
     tvlUsd: number | null;
     snapshotAt: string | null;
-    chain: { latest_block: number | null; gas_price_gwei: number | null } | null;
+    chain: {
+        latest_block: number | null;
+        gas_price_gwei: number | null;
+    } | null;
     explorerUrl: string;
     indexerReady: boolean;
     tokenLinks: Record<string, string>;
@@ -101,8 +103,8 @@ const windowLabel = computed(
 
 const usd = (value: number | null | undefined, digits?: number): string => {
     if (value === null || value === undefined) {
-return '—';
-}
+        return '—';
+    }
 
     const abs = Math.abs(value);
     const maximumFractionDigits =
@@ -118,16 +120,16 @@ return '—';
 
 const amount = (value: number | null | undefined): string => {
     if (value === null || value === undefined) {
-return '—';
-}
+        return '—';
+    }
 
     return value.toLocaleString('en-US', { maximumFractionDigits: 6 });
 };
 
 const shortAddr = (addr: string | null): string => {
     if (!addr) {
-return '?';
-}
+        return '?';
+    }
 
     return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
 };
@@ -165,7 +167,7 @@ const kindBadge: Record<string, { label: string; classes: string }> = {
 const badgeFor = (kind: string) =>
     kindBadge[kind] ?? {
         label: kind.replace('lend_', ''),
-        classes: 'bg-gray-500/10 text-gray-500',
+        classes: 'bg-muted/500/10 text-muted-foreground',
     };
 
 const directionLabel = (direction: string): string =>
@@ -194,16 +196,16 @@ const eventSummary = (e: RecentEvent): string => {
 
 const price = (value: number): string => {
     if (value >= 1000) {
-return usd(value, 0);
-}
+        return usd(value, 0);
+    }
 
     if (value >= 0.01) {
-return usd(value, 4);
-}
+        return usd(value, 4);
+    }
 
     if (value <= 0) {
-return usd(value, 2);
-}
+        return usd(value, 2);
+    }
 
     // Sub-cent: plain decimal with ~4 significant figures, never scientific
     // notation (e.g. 0.00009235, not 9.235e-5).
@@ -216,15 +218,11 @@ return usd(value, 2);
 <template>
     <Head title="Analytics" />
 
-    <Header />
-
     <div class="mx-auto max-w-6xl space-y-8 p-6">
-        <header
-            class="flex flex-wrap items-center justify-between gap-3"
-        >
+        <header class="flex flex-wrap items-center justify-between gap-3">
             <div>
-                <h1 class="text-2xl font-semibold">Cyberia analytics</h1>
-                <p class="text-xs text-gray-500">
+                <h1 class="text-3xl font-extrabold tracking-tight">Analytics<span class="text-brand-cyan">_</span></h1>
+                <p class="text-xs text-muted-foreground">
                     <span v-if="chain?.latest_block">
                         block #{{ chain.latest_block.toLocaleString() }}
                         <span v-if="chain.gas_price_gwei !== null">
@@ -242,10 +240,10 @@ return usd(value, 2);
                     :key="w.days"
                     class="rounded px-3 py-1 text-sm"
                     :class="
-                        w.days === days
-                            ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
-                            : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
-                    "
+ w.days === days
+ ? 'bg-primary text-primary-foreground'
+ : 'bg-muted text-muted-foreground'
+ "
                     @click="setWindow(w.days)"
                 >
                     {{ w.label }}
@@ -255,38 +253,50 @@ return usd(value, 2);
 
         <section
             v-if="!indexerReady"
-            class="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-gray-700"
+            class="rounded border border-dashed border-input p-6 text-center text-sm text-muted-foreground"
         >
             The on-chain indexer has not written any data yet. Start the
-            Telegram bot (it shares this app's database) and this page will
-            fill in.
+            Telegram bot (it shares this app's database) and this page will fill
+            in.
         </section>
 
         <section class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">CYBER price</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">CYBER price</p>
                 <p class="font-mono text-xl">
                     {{ cyberPrice !== null ? price(cyberPrice) : '—' }}
                 </p>
             </div>
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">DEX TVL</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">DEX TVL</p>
                 <p class="font-mono text-xl">{{ usd(tvlUsd) }}</p>
             </div>
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">Volume ({{ windowLabel }})</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">Volume ({{ windowLabel }})</p>
                 <p class="font-mono text-xl">{{ usd(swaps?.volume_usd) }}</p>
             </div>
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">Swaps ({{ windowLabel }})</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">Swaps ({{ windowLabel }})</p>
                 <p class="font-mono text-xl">{{ swaps?.count ?? '—' }}</p>
             </div>
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">Traders ({{ windowLabel }})</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">Traders ({{ windowLabel }})</p>
                 <p class="font-mono text-xl">{{ swaps?.traders ?? '—' }}</p>
             </div>
-            <div class="rounded border border-gray-200 p-4 dark:border-gray-800">
-                <p class="text-xs text-gray-500">Pools</p>
+            <div
+                class="rounded border border-border p-4"
+            >
+                <p class="text-xs text-muted-foreground">Pools</p>
                 <p class="font-mono text-xl">{{ pools.length || '—' }}</p>
             </div>
         </section>
@@ -300,7 +310,9 @@ return usd(value, 2);
                     class="grid grid-cols-[6.5rem_1fr_8rem_10rem] items-center gap-3 text-sm"
                 >
                     <span class="font-mono text-xs">{{ d.day }}</span>
-                    <div class="relative h-5 rounded bg-gray-100 dark:bg-gray-800">
+                    <div
+                        class="relative h-5 rounded bg-muted"
+                    >
                         <div
                             class="absolute inset-y-0 left-0 rounded bg-blue-500/70"
                             :style="{
@@ -308,8 +320,10 @@ return usd(value, 2);
                             }"
                         />
                     </div>
-                    <span class="text-right font-mono">{{ usd(d.swap_usd) }}</span>
-                    <span class="font-mono text-xs text-gray-500">
+                    <span class="text-right font-mono">{{
+                        usd(d.swap_usd)
+                    }}</span>
+                    <span class="font-mono text-xs text-muted-foreground">
                         {{ d.swaps }} swaps · {{ d.liquidity_events }} liq ·
                         {{ d.bridges }} bridges
                     </span>
@@ -335,13 +349,18 @@ return usd(value, 2);
                         >
                             {{ t.symbol }}
                         </Link>
-                        <span v-else class="truncate font-mono text-xs">{{ t.symbol }}</span>
-                        <div class="relative h-5 rounded bg-gray-100 dark:bg-gray-800">
+                        <span v-else class="truncate font-mono text-xs">{{
+                            t.symbol
+                        }}</span>
+                        <div
+                            class="relative h-5 rounded bg-muted"
+                        >
                             <div
                                 class="absolute inset-y-0 left-0 rounded bg-indigo-500/70"
                                 :style="{
                                     width:
-                                        (t.volume_usd / maxTopToken) * 100 + '%',
+                                        (t.volume_usd / maxTopToken) * 100 +
+                                        '%',
                                 }"
                             />
                         </div>
@@ -358,23 +377,23 @@ return usd(value, 2);
                 </h2>
                 <div class="space-y-2 text-sm">
                     <div
-                        class="flex items-center justify-between rounded border border-gray-200 px-4 py-2 dark:border-gray-800"
+                        class="flex items-center justify-between rounded border border-border px-4 py-2"
                     >
-                        <span class="text-gray-500">Liquidity added</span>
+                        <span class="text-muted-foreground">Liquidity added</span>
                         <span class="font-mono text-green-600">
                             +{{ usd(liquidityAdded?.volume_usd ?? 0) }}
-                            <span class="text-xs text-gray-500">
+                            <span class="text-xs text-muted-foreground">
                                 ({{ liquidityAdded?.count ?? 0 }})
                             </span>
                         </span>
                     </div>
                     <div
-                        class="flex items-center justify-between rounded border border-gray-200 px-4 py-2 dark:border-gray-800"
+                        class="flex items-center justify-between rounded border border-border px-4 py-2"
                     >
-                        <span class="text-gray-500">Liquidity removed</span>
+                        <span class="text-muted-foreground">Liquidity removed</span>
                         <span class="font-mono text-orange-500">
                             -{{ usd(liquidityRemoved?.volume_usd ?? 0) }}
-                            <span class="text-xs text-gray-500">
+                            <span class="text-xs text-muted-foreground">
                                 ({{ liquidityRemoved?.count ?? 0 }})
                             </span>
                         </span>
@@ -382,32 +401,36 @@ return usd(value, 2);
                     <div
                         v-for="b in bridges"
                         :key="b.direction + b.token"
-                        class="flex items-center justify-between rounded border border-gray-200 px-4 py-2 dark:border-gray-800"
+                        class="flex items-center justify-between rounded border border-border px-4 py-2"
                     >
-                        <span class="text-gray-500">
+                        <span class="text-muted-foreground">
                             Bridge {{ directionLabel(b.direction) }}
                         </span>
                         <span class="font-mono">
                             {{ amount(b.amount) }} {{ b.token }}
-                            <span class="text-xs text-gray-500">({{ b.count }})</span>
+                            <span class="text-xs text-muted-foreground"
+                                >({{ b.count }})</span
+                            >
                         </span>
                     </div>
                     <div
                         v-for="l in lending"
                         :key="l.kind"
-                        class="flex items-center justify-between rounded border border-gray-200 px-4 py-2 dark:border-gray-800"
+                        class="flex items-center justify-between rounded border border-border px-4 py-2"
                     >
-                        <span class="text-gray-500">
+                        <span class="text-muted-foreground">
                             Lending {{ l.kind.replace('lend_', '') }}
                         </span>
                         <span class="font-mono">
                             {{ usd(l.volume_usd) }}
-                            <span class="text-xs text-gray-500">({{ l.count }})</span>
+                            <span class="text-xs text-muted-foreground"
+                                >({{ l.count }})</span
+                            >
                         </span>
                     </div>
                     <p
                         v-if="swaps && swaps.unpriced > 0"
-                        class="text-xs text-gray-400"
+                        class="text-xs text-muted-foreground"
                     >
                         {{ swaps.unpriced }} swap(s) involved tokens with no USD
                         route and are excluded from volume numbers.
@@ -419,10 +442,10 @@ return usd(value, 2);
         <section v-if="pools.length > 0">
             <h2 class="mb-3 text-lg font-semibold">Liquidity pools</h2>
             <div
-                class="overflow-x-auto rounded border border-gray-200 dark:border-gray-800"
+                class="overflow-x-auto rounded border border-border"
             >
                 <table class="min-w-full text-sm">
-                    <thead class="bg-gray-50 dark:bg-gray-900">
+                    <thead class="bg-muted/50">
                         <tr>
                             <th class="px-3 py-2 text-left">Pair</th>
                             <th class="px-3 py-2 text-right">Reserves</th>
@@ -434,7 +457,7 @@ return usd(value, 2);
                         <tr
                             v-for="p in pools"
                             :key="p.pair_address"
-                            class="border-t border-gray-100 dark:border-gray-800"
+                            class="border-t border-border/60"
                         >
                             <td class="px-3 py-2 font-mono">
                                 {{ p.symbol0 }}/{{ p.symbol1 }}
@@ -465,10 +488,10 @@ return usd(value, 2);
         <section v-if="recent.length > 0">
             <h2 class="mb-3 text-lg font-semibold">Recent activity</h2>
             <div
-                class="overflow-x-auto rounded border border-gray-200 dark:border-gray-800"
+                class="overflow-x-auto rounded border border-border"
             >
                 <table class="min-w-full text-sm">
-                    <thead class="bg-gray-50 dark:bg-gray-900">
+                    <thead class="bg-muted/50">
                         <tr>
                             <th class="px-3 py-2 text-left">Type</th>
                             <th class="px-3 py-2 text-left">Event</th>
@@ -481,7 +504,7 @@ return usd(value, 2);
                         <tr
                             v-for="(e, i) in recent"
                             :key="i"
-                            class="border-t border-gray-100 dark:border-gray-800"
+                            class="border-t border-border/60"
                         >
                             <td class="px-3 py-2">
                                 <span
@@ -510,7 +533,7 @@ return usd(value, 2);
                                 {{ shortAddr(e.user_addr) }}
                             </td>
                             <td
-                                class="px-3 py-2 text-right font-mono text-xs text-gray-500"
+                                class="px-3 py-2 text-right font-mono text-xs text-muted-foreground"
                             >
                                 {{ e.created_at }}
                             </td>
@@ -523,7 +546,10 @@ return usd(value, 2);
         <section v-if="prices.length > 0">
             <div class="mb-3 flex items-baseline justify-between">
                 <h2 class="text-lg font-semibold">Token prices</h2>
-                <Link href="/tokens" class="text-xs text-blue-500 hover:underline">
+                <Link
+                    href="/tokens"
+                    class="text-xs text-blue-500 hover:underline"
+                >
                     Browse all tokens →
                 </Link>
             </div>
@@ -532,17 +558,21 @@ return usd(value, 2);
                     v-for="p in prices"
                     :key="p.address"
                     :href="`/token/${p.address}`"
-                    class="block rounded border border-gray-200 px-3 py-2 transition hover:border-gray-400 dark:border-gray-800 dark:hover:border-gray-600"
+                    class="block rounded border border-border px-3 py-2 transition hover:border-input dark:hover:border-input"
                 >
-                    <span class="block truncate font-mono text-xs text-gray-500">
+                    <span
+                        class="block truncate font-mono text-xs text-muted-foreground"
+                    >
                         {{ p.symbol }}
                     </span>
-                    <span class="font-mono text-sm">{{ price(p.price_usd) }}</span>
+                    <span class="font-mono text-sm">{{
+                        price(p.price_usd)
+                    }}</span>
                 </Link>
             </div>
         </section>
 
-        <p class="text-center text-xs text-gray-400">
+        <p class="text-center text-xs text-muted-foreground">
             Indexed from the Cyberia chain by the community bot · prices walk
             the DEX pool graph from USDC/USDT · refreshed every few minutes
         </p>

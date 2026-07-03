@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { Edit, Link as LinkIcon, Plus, Trash2 } from 'lucide-vue-next';
+import { ref, computed, onMounted } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import type { Category, Link, Team } from '@/types';
+import type { Category, Link } from '@/types';
 
 function isIPv6(str: string): boolean {
     return /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::/.test(str);
@@ -22,6 +22,7 @@ function formatUrl(url: string): string {
     if (isIPv6(url)) {
         return `[${url}]`;
     }
+
     return 'http://' + url;
 }
 
@@ -39,6 +40,7 @@ const selectedCategoryId = ref<number | null>(null);
 
 onMounted(() => {
     const categoryId = page.props.category_id;
+
     if (categoryId) {
         selectedCategoryId.value = categoryId as number;
     }
@@ -48,6 +50,7 @@ const filteredLinks = computed(() => {
     if (selectedCategoryId.value === null) {
         return props.links;
     }
+
     return props.links.filter(
         (link) => link.category_id === selectedCategoryId.value,
     );
@@ -95,7 +98,9 @@ function submitCreate() {
 }
 
 function submitEdit() {
-    if (!editingLink.value) return;
+    if (!editingLink.value) {
+        return;
+    }
 
     editForm.put(`/links/${editingLink.value.id}`, {
         onSuccess: () => {
@@ -121,14 +126,18 @@ function addUrl() {
 
 function removeUrl(i: number) {
     if (editingLink.value) {
-        if (editForm.urls.length > 1) editForm.urls.splice(i, 1);
+        if (editForm.urls.length > 1) {
+            editForm.urls.splice(i, 1);
+        }
     } else {
-        if (createForm.urls.length > 1) createForm.urls.splice(i, 1);
+        if (createForm.urls.length > 1) {
+            createForm.urls.splice(i, 1);
+        }
     }
 }
 
 defineOptions({
-    layout: (props: { currentTeam?: Team | null }) => ({
+    layout: () => ({
         breadcrumbs: [
             {
                 title: 'Links',

@@ -3,10 +3,10 @@
 use App\Models\Dao;
 use App\Models\User;
 
-test('guests cannot access dao index', function () {
+test('guests can view dao index', function () {
     $response = $this->get('/dao');
 
-    $response->assertRedirect(route('login'));
+    $response->assertOk();
 });
 
 test('authenticated users can view dao index', function () {
@@ -65,9 +65,9 @@ test('dao name must be unique', function () {
     $response->assertSessionHasErrors('name');
 });
 
-test('authenticated users can update a dao', function () {
+test('owners can update their dao', function () {
     $user = User::factory()->create();
-    $dao = Dao::factory()->create(['name' => 'Old Name', 'address' => '0xold']);
+    $dao = Dao::factory()->create(['name' => 'Old Name', 'address' => '0xold', 'user_id' => $user->id]);
 
     $response = $this->actingAs($user)->put("/dao/{$dao->id}", [
         'name' => 'New Name',
@@ -82,12 +82,33 @@ test('authenticated users can update a dao', function () {
     ]);
 });
 
-test('authenticated users can delete a dao', function () {
+test('owners can delete their dao', function () {
     $user = User::factory()->create();
-    $dao = Dao::factory()->create();
+    $dao = Dao::factory()->create(['user_id' => $user->id]);
 
     $response = $this->actingAs($user)->delete("/dao/{$dao->id}");
 
     $response->assertRedirect();
     $this->assertDatabaseMissing('daos', ['id' => $dao->id]);
+});
+
+test('non-owners cannot update a dao', function () {
+    $user = User::factory()->create();
+    $dao = Dao::factory()->create(['user_id' => User::factory()->create()->id]);
+
+    $response = $this->actingAs($user)->put("/dao/{$dao->id}", [
+        'name' => 'Hijacked',
+    ]);
+
+    $response->assertForbidden();
+});
+
+test('non-owners cannot delete a dao', function () {
+    $user = User::factory()->create();
+    $dao = Dao::factory()->create(['user_id' => User::factory()->create()->id]);
+
+    $response = $this->actingAs($user)->delete("/dao/{$dao->id}");
+
+    $response->assertForbidden();
+    $this->assertDatabaseHas('daos', ['id' => $dao->id]);
 });

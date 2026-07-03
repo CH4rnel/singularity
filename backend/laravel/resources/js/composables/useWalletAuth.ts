@@ -31,6 +31,7 @@ export const useWalletAuth = () => {
 
         if (!response.ok) {
             const error = await response.json();
+
             throw new Error(error.message || 'Authentication failed');
         }
 
@@ -81,6 +82,7 @@ export const useWalletAuth = () => {
 
         if (!response.ok) {
             const error = await response.json();
+
             throw new Error(error.message || 'Authentication failed');
         }
 
@@ -116,6 +118,7 @@ export const useWalletAuth = () => {
 
         if (!response.ok) {
             const error = await response.json();
+
             throw new Error(error.message || 'Failed to attach EVM wallet');
         }
 
@@ -145,6 +148,7 @@ export const useWalletAuth = () => {
 
         if (!response.ok) {
             const error = await response.json();
+
             throw new Error(error.message || 'Failed to attach Solana wallet');
         }
 
@@ -202,5 +206,6 @@ export const useWalletAuth = () => {
 
 function getCsrfToken(): string {
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+
     return match ? decodeURIComponent(match[1]) : '';
 }

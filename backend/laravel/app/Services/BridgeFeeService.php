@@ -48,11 +48,14 @@ class BridgeFeeService
     }
 
     /**
-     * Only USD-pegged stablecoins pay the bridge fee.
+     * Only tokens flagged fee_bearing in config/bridge.php pay the bridge fee
+     * (USD-pegged stablecoins).
      */
     public function isFeeBearing(string $token): bool
     {
-        return in_array($token, ['USDC', 'USDT'], true);
+        $config = config('bridge.tokens', [])[$token] ?? null;
+
+        return (bool) ($config['fee_bearing'] ?? false);
     }
 
     /**
@@ -61,7 +64,7 @@ class BridgeFeeService
      */
     public function priceUsd(string $token): string
     {
-        if ($token === 'USDC' || $token === 'USDT') {
+        if (in_array($token, ['USDC', 'USDT', 'USDT.BNB'], true)) {
             return '1';
         }
 

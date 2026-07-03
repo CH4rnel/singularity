@@ -170,6 +170,27 @@
       "artifact": "contracts/ETH.sol/ETH.json",
       "address": "0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986",
       "burnable": true
+    },
+    {
+      "symbol": "JupUSD",
+      "contract": "JUPUSD",
+      "artifact": "contracts/JUPUSD.sol/JUPUSD.json",
+      "address": "0x03EB2fb8473C0370c8F6463efEE5f5Cf4EC011c7",
+      "burnable": true
+    },
+    {
+      "symbol": "BNB",
+      "contract": "BNB",
+      "artifact": "contracts/BNB.sol/BNB.json",
+      "address": "0xF7655664D5D4b0681fdD4529438A1b667bCDc7E5",
+      "burnable": true
+    },
+    {
+      "symbol": "USDT.BNB",
+      "contract": "USDTBNB",
+      "artifact": "contracts/USDTBNB.sol/USDTBNB.json",
+      "address": "0x5664bcDDE27f0a1BB5b733530e261904b8dfE687",
+      "burnable": true
     }
   ]
 }
