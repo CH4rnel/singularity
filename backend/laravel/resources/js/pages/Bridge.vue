@@ -1,25 +1,32 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-vue-next';
+import {
+    CheckCircle2,
+    Clock,
+    ExternalLink,
+    Loader2,
+    XCircle,
+} from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import BridgeWizard from '@/components/bridge/BridgeWizard.vue';
 import { useBridgeAnalytics } from '@/composables/useBridgeAnalytics';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { bridgeRoute } from '@/lib/addressValidation';
-import { initBridgeConfig } from '@/lib/bridgeConfig';
+import { explorerTxUrl, initBridgeConfig } from '@/lib/bridgeConfig';
 import type {
     PublicChain,
     PublicRouteData,
     PublicToken,
 } from '@/lib/bridgeConfig';
+import type { BridgeFeeConfig } from '@/lib/bridgeFee';
 
 type BridgeHistoryItem = {
     id: number;
     direction: string;
     source_chain: string;
     source_tx_hash: string;
-    sender_address: string;
+    sender_address: string | null;
     recipient_address: string;
     amount: string;
     status: string;
@@ -41,7 +48,7 @@ const props = withDefaults(
         bridgeTokens?: PublicToken[];
         bridgeDirections?: string[];
         bridgeYentenDepositAddress?: string | null;
-        bridgeFeeConfig?: { flatUsd: number; rateBps: number };
+        bridgeFeeConfig?: BridgeFeeConfig;
         bridgeGasDrop?: { enabled: boolean; amount: string };
         bridgeConvert?: { enabled: boolean; rate: number };
     }>(),
@@ -95,8 +102,51 @@ const directionLabel = (direction: string): string => {
     return `${route.sourceLabel} -> ${route.destinationLabel}`;
 };
 
-const formatAddr = (addr: string) =>
-    addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+const formatAddr = (addr: string | null) => {
+    if (!addr) {
+        // Yenten deposits have no submitted sender — show the deposit direction.
+        return '—';
+    }
+
+    return addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+};
+
+const formatHash = (hash: string) =>
+    hash.length > 12 ? `${hash.slice(0, 6)}...${hash.slice(-4)}` : hash;
+
+// Deposit tx on the source chain. source_chain is the authoritative chain key
+// stored with the request; Yenten deposits carry no source hash.
+const sourceTxUrl = (item: BridgeHistoryItem): string | null =>
+    item.source_tx_hash
+        ? explorerTxUrl(item.source_chain, item.source_tx_hash)
+        : null;
+
+// Payout tx on the destination chain, once the relayer settles it. The
+// destination chain comes from the route; guard the unknown-direction fallback
+// (bridgeRoute defaults to sol_to_evm) so we never link to the wrong explorer.
+const destinationTxUrl = (item: BridgeHistoryItem): string | null => {
+    if (!item.destination_tx_hash) {
+        return null;
+    }
+
+    const route = bridgeRoute(item.direction);
+
+    if (route.direction !== item.direction) {
+        return null;
+    }
+
+    return explorerTxUrl(route.destination, item.destination_tx_hash);
+};
+
+// Precompute explorer links once per row instead of calling the helpers
+// repeatedly from the template.
+const historyRows = computed(() =>
+    props.bridgeHistory.map((item) => ({
+        ...item,
+        sourceUrl: sourceTxUrl(item),
+        destinationUrl: destinationTxUrl(item),
+    })),
+);
 
 const statusIcon = (status: string) => {
     switch (status) {
@@ -168,7 +218,7 @@ const statusColor = (status: string) => {
 
                 <!-- Bridge History -->
                 <div
-                    v-if="bridgeHistory.length > 0"
+                    v-if="historyRows.length > 0"
                     class="w-full rounded-xl border border-border p-5"
                 >
                     <h3 class="mb-3 text-sm font-semibold text-foreground">
@@ -176,7 +226,7 @@ const statusColor = (status: string) => {
                     </h3>
                     <div class="flex flex-col gap-2">
                         <div
-                            v-for="item in bridgeHistory"
+                            v-for="item in historyRows"
                             :key="item.id"
                             class="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3"
                         >
@@ -200,6 +250,43 @@ const statusColor = (status: string) => {
                                     ->
                                     {{ formatAddr(item.recipient_address) }}
                                 </p>
+                                <!-- Explorer links: source deposit tx and, once
+                                     settled, the destination payout tx. -->
+                                <div
+                                    v-if="item.sourceUrl || item.destinationUrl"
+                                    class="mt-1 flex items-center gap-2 text-[10px]"
+                                >
+                                    <a
+                                        v-if="item.sourceUrl"
+                                        :href="item.sourceUrl"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="inline-flex items-center gap-1 font-mono text-muted-foreground hover:text-foreground"
+                                    >
+                                        {{ formatHash(item.source_tx_hash) }}
+                                        <ExternalLink class="h-3 w-3" />
+                                    </a>
+                                    <span
+                                        v-if="
+                                            item.sourceUrl && item.destinationUrl
+                                        "
+                                        class="text-muted-foreground"
+                                    >
+                                        ->
+                                    </span>
+                                    <a
+                                        v-if="item.destinationUrl"
+                                        :href="item.destinationUrl"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="inline-flex items-center gap-1 font-mono text-primary hover:underline"
+                                    >
+                                        {{
+                                            formatHash(item.destination_tx_hash!)
+                                        }}
+                                        <ExternalLink class="h-3 w-3" />
+                                    </a>
+                                </div>
                             </div>
                             <component
                                 :is="statusIcon(item.status)"

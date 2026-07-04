@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\TokenAmount;
+use Illuminate\Support\Facades\Http;
+
 class BridgeFeeService
 {
     public function __construct(
@@ -15,36 +18,132 @@ class BridgeFeeService
      * CYBER.sol bridges are fee-free by policy — only USD-pegged stablecoins
      * (USDC/USDT) carry the bridge fee.
      */
-    public function feeForBridge(string $token, string $amount): array
+    public function feeForBridge(string $token, string $amount, ?string $direction = null): array
     {
         $price = $this->priceUsd($token);
+        $feeUsd = '0';
+        $feeAmount = '0';
 
-        if (! $this->isFeeBearing($token)) {
-            return [
-                'fee_amount' => '0',
-                'fee_usd' => '0',
-                'token_price_usd' => $price,
-            ];
+        if ($this->isFeeBearing($token)) {
+            $amountUsd = bcmul($amount, $price, 8);
+            $flatUsd = (string) config('bridge.fee.flat_usd', '0.10');
+            $rateBps = (int) config('bridge.fee.rate_bps', 0);
+            $rateUsd = bcdiv(bcmul($amountUsd, (string) $rateBps, 8), '10000', 8);
+
+            // max(flat, rate*amount)
+            $feeUsd = bccomp($flatUsd, $rateUsd, 8) >= 0 ? $flatUsd : $rateUsd;
+            $feeAmount = bccomp($price, '0', 8) > 0
+                ? bcdiv($feeUsd, $price, 18)
+                : '0';
         }
 
-        $amountUsd = bcmul($amount, $price, 8);
-
-        $flatUsd = (string) config('bridge.fee.flat_usd', '0.10');
-        $rateBps = (int) config('bridge.fee.rate_bps', 0);
-        $rateUsd = bcdiv(bcmul($amountUsd, (string) $rateBps, 8), '10000', 8);
-
-        // max(flat, rate*amount)
-        $feeUsd = bccomp($flatUsd, $rateUsd, 8) >= 0 ? $flatUsd : $rateUsd;
-
-        $feeAmount = bccomp($price, '0', 8) > 0
-            ? bcdiv($feeUsd, $price, 18)
+        $nativeGasFee = $direction
+            ? $this->nativePayoutFee($direction, $token)
             : '0';
+
+        if (bccomp($nativeGasFee, $feeAmount, 18) > 0) {
+            $feeAmount = $nativeGasFee;
+        }
 
         return [
             'fee_amount' => $feeAmount,
             'fee_usd' => $feeUsd,
             'token_price_usd' => $price,
         ];
+    }
+
+    /**
+     * Fee retained from a native-coin payout to cover the destination network
+     * fee (EVM gas, Yenten transaction fee). EVM quotes use the larger of the
+     * configured gas-price floor and the live RPC price, then apply a safety
+     * multiplier for price movement; Yenten uses a flat configured amount.
+     */
+    public function nativePayoutFee(string $direction, string $token, bool $live = true): string
+    {
+        $route = config('bridge.routes', [])[$direction] ?? null;
+
+        if (! is_array($route)) {
+            return '0';
+        }
+
+        $chainKey = (string) ($route['destination_chain'] ?? '');
+        $chain = config('bridge.chains', [])[$chainKey] ?? null;
+        $tokenConfig = config('bridge.tokens', [])[$token] ?? null;
+        $tokenEntry = is_array($tokenConfig)
+            ? ($tokenConfig['chains'][$chainKey] ?? null)
+            : null;
+
+        if (! is_array($chain)
+            || ! is_array($tokenEntry)
+            || ! ($tokenEntry['native'] ?? false)) {
+            return '0';
+        }
+
+        if (($chain['type'] ?? null) === 'yenten') {
+            return (string) config('bridge.fee.yenten_payout_fee_ytn', '0.01');
+        }
+
+        if (($chain['type'] ?? null) !== 'evm'
+            || ($chain['native_currency']['symbol'] ?? null) !== $token) {
+            return '0';
+        }
+
+        $floorWei = bcmul(
+            (string) config('bridge.fee.native_gas_price_floor_gwei', '3'),
+            '1000000000',
+            0,
+        );
+        $gasPriceWei = $floorWei;
+
+        if ($live && ! empty($chain['rpc_url'])) {
+            try {
+                $response = Http::timeout(5)->post((string) $chain['rpc_url'], [
+                    'jsonrpc' => '2.0',
+                    'id' => 1,
+                    'method' => 'eth_gasPrice',
+                    'params' => [],
+                ]);
+                $hex = $response->json('result');
+
+                if ($response->successful() && is_string($hex)) {
+                    $quotedWei = TokenAmount::hexToDec($hex);
+
+                    if (bccomp($quotedWei, $gasPriceWei, 0) > 0) {
+                        $gasPriceWei = $quotedWei;
+                    }
+                }
+            } catch (\Throwable) {
+                // The configured floor remains the safe fallback.
+            }
+        }
+
+        $gasLimit = (string) config('bridge.fee.native_transfer_gas_limit', 21000);
+        $multiplierBps = (string) config('bridge.fee.native_gas_multiplier_bps', 20000);
+        $feeRaw = bcdiv(
+            bcmul(bcmul($gasPriceWei, $gasLimit, 0), $multiplierBps, 0),
+            '10000',
+            0,
+        );
+
+        return TokenAmount::fromRaw($feeRaw, (int) ($tokenEntry['decimals'] ?? 18));
+    }
+
+    /** @return array<string, array<string, float>> */
+    public function frontendNativeFees(): array
+    {
+        $fees = [];
+
+        foreach (array_keys(config('bridge.routes', [])) as $direction) {
+            foreach (array_keys(config('bridge.tokens', [])) as $token) {
+                $fee = $this->nativePayoutFee((string) $direction, (string) $token, false);
+
+                if (bccomp($fee, '0', 18) > 0) {
+                    $fees[(string) $direction][(string) $token] = (float) $fee;
+                }
+            }
+        }
+
+        return $fees;
     }
 
     /**

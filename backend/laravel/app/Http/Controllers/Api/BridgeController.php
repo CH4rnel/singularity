@@ -12,6 +12,9 @@ use App\Services\BridgeFeeService;
 use App\Services\BridgeService;
 use App\Services\CyberiaRpcService;
 use App\Services\TonApiService;
+use App\Services\Yenten\YentenAddressDeriver;
+use App\Services\YentenApiService;
+use App\Support\TokenAmount;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -93,7 +96,11 @@ class BridgeController extends Controller
             && $token === 'CYBER.sol'
             && config('bridge.convert.enabled', true);
 
-        $fee = $this->feeService->feeForBridge($token, (string) $validated['amount']);
+        $fee = $this->feeService->feeForBridge(
+            $token,
+            (string) $validated['amount'],
+            $validated['direction'],
+        );
 
         [$gasDropPlanned, $gasDropAmount] = $this->planGasDrop(
             $validated['direction'],
@@ -175,6 +182,201 @@ class BridgeController extends Controller
                 'created_at' => $bridgeRequest->created_at,
             ],
         ], 201);
+    }
+
+    /**
+     * Phase 1 of a one-time-address deposit route (Yenten): commit the
+     * recipient and hand back a unique deposit address derived for this
+     * request. Binding a deposit to a single request with a pre-committed
+     * recipient is what prevents hijacking a public deposit transaction.
+     */
+    public function prepare(Request $request): JsonResponse
+    {
+        $direction = $request->input('direction');
+        $routes = $this->bridgeConfig->availableRoutes();
+
+        $validated = $request->validate([
+            'direction' => ['required', Rule::in(array_keys($routes))],
+            'token' => ['nullable', 'string', 'in:'.implode(',', array_keys(config('bridge.tokens', [])))],
+            'recipient_address' => [
+                'required',
+                'string',
+                new ValidDestinationAddress(is_string($direction) ? $direction : ''),
+            ],
+            'session_id' => ['nullable', 'uuid'],
+        ]);
+
+        $route = $routes[$validated['direction']];
+        $sourceChain = $this->bridgeConfig->chain((string) $route['source_chain']);
+
+        // One-time deposit addresses are only wired for Yenten today.
+        if (($sourceChain['type'] ?? null) !== 'yenten') {
+            return response()->json([
+                'message' => 'This route does not use a prepared deposit address.',
+            ], 422);
+        }
+
+        $token = $validated['token'] ?? 'YTN';
+
+        if (! isset($this->bridgeConfig->tokensForRoute($validated['direction'])[$token])) {
+            return response()->json(['message' => 'Token is not supported on this bridge route.'], 422);
+        }
+
+        // Amount is unknown until the user deposits — 0 for now, set at claim
+        // time from the detected balance.
+        $bridgeRequest = $this->bridgeService->createRequest(
+            userId: $request->user()?->id,
+            direction: $validated['direction'],
+            sourceChain: (string) $route['source_chain'],
+            sourceTxHash: null,
+            sourceNonce: 0,
+            senderAddress: null,
+            recipientAddress: $validated['recipient_address'],
+            amount: '0',
+            token: $token,
+            status: 'awaiting_deposit',
+        );
+
+        // Derive the one-time address + its spending key from the request id,
+        // and store both (WIF encrypted) so the operator can move the deposit.
+        $deriver = YentenAddressDeriver::fromConfig();
+        $bridgeRequest->update([
+            'deposit_address' => $deriver->depositAddress($bridgeRequest->id),
+            'deposit_wif' => $deriver->childWif($bridgeRequest->id),
+        ]);
+
+        return response()->json([
+            'bridge_request' => [
+                'id' => $bridgeRequest->id,
+                'direction' => $bridgeRequest->direction,
+                'token' => $bridgeRequest->token,
+                'deposit_address' => $bridgeRequest->deposit_address,
+                'recipient_address' => $bridgeRequest->recipient_address,
+                'status' => $bridgeRequest->status,
+                'expires_at' => $bridgeRequest->created_at
+                    ->addMinutes($this->yentenDepositTtlMinutes())
+                    ->toIso8601String(),
+            ],
+        ], 201);
+    }
+
+    private function yentenDepositTtlMinutes(): int
+    {
+        return max(1, (int) config('bridge.chains.yenten.deposit_ttl_minutes', 60));
+    }
+
+    /**
+     * Phase 2: the user has sent (any amount of) coins to the request's
+     * one-time address. Detect the balance on that address and mint exactly
+     * that much to the committed recipient — no amount or tx hash from the user.
+     */
+    public function claim(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'id' => ['required', 'integer'],
+            'session_id' => ['nullable', 'uuid'],
+        ]);
+
+        $bridgeRequest = BridgeRequest::find($validated['id']);
+
+        // Expired requests answer without touching the Yenten API: the whole
+        // point of the deposit window is to stop polling dead addresses.
+        if ($bridgeRequest && $bridgeRequest->isExpired()) {
+            return response()->json([
+                'message' => 'The deposit window has expired and this address is no longer monitored — start a new transfer.',
+                'expired' => true,
+            ], 422);
+        }
+
+        if (! $bridgeRequest || ! $bridgeRequest->isAwaitingDeposit()) {
+            return response()->json(['message' => 'Bridge request is not awaiting a deposit.'], 422);
+        }
+
+        $depositAddress = (string) $bridgeRequest->deposit_address;
+        $chain = $this->bridgeConfig->chain((string) $bridgeRequest->source_chain);
+        $tokenChain = config('bridge.tokens', [])[$bridgeRequest->token]['chains'][$bridgeRequest->source_chain] ?? null;
+
+        // Read what actually landed on the address.
+        $balances = app(YentenApiService::class)->addressBalances($depositAddress);
+
+        if ($balances === null) {
+            return response()->json([
+                'message' => 'Could not reach the Yenten network — try again shortly.',
+                'retryable' => true,
+            ], 422);
+        }
+
+        $balanceRaw = $balances['confirmed'];
+
+        if (bccomp($balanceRaw, '0', 0) <= 0) {
+            // The deposit is visible but unconfirmed — say so instead of
+            // pretending nothing arrived. Applies inside or past the window:
+            // coins already in flight are always honored.
+            if (bccomp($balances['pending'], '0', 0) > 0) {
+                return response()->json([
+                    'message' => 'Deposit detected — waiting for a Yenten network confirmation (about a minute). Try again shortly.',
+                    'retryable' => true,
+                ], 422);
+            }
+
+            // Nothing at all: inside the window keep waiting, past it close
+            // the request for good so the address drops out of polling.
+            $expiresAt = $bridgeRequest->created_at->addMinutes($this->yentenDepositTtlMinutes());
+
+            if ($expiresAt->isPast()) {
+                $bridgeRequest->markExpired();
+
+                return response()->json([
+                    'message' => 'The deposit window has expired and this address is no longer monitored — start a new transfer.',
+                    'expired' => true,
+                ], 422);
+            }
+
+            return response()->json([
+                'message' => 'No deposit detected yet — send YTN to the address and try again.',
+                'retryable' => true,
+            ], 422);
+        }
+
+        // Set the amount to the detected balance (scaled from Yenten satoshis)
+        // and process — the relayer mints exactly this much.
+        $decimals = (int) ($tokenChain['decimals'] ?? 8);
+        $bridgeRequest->update([
+            'amount' => TokenAmount::fromRaw($balanceRaw, $decimals),
+            'status' => 'pending',
+        ]);
+
+        if ($this->shouldAutoProcess($bridgeRequest->direction)) {
+            ProcessBridgeRequest::dispatchSync($bridgeRequest->id, $validated['session_id'] ?? null);
+        }
+
+        $bridgeRequest->refresh();
+
+        // Mint failed (e.g. transient RPC) — revert to awaiting so the user can
+        // retry once the deposit confirms. Funds stay safe on the address.
+        if ($bridgeRequest->status === 'failed') {
+            $bridgeRequest->update([
+                'status' => 'awaiting_deposit',
+                'amount' => '0',
+                'error_message' => null,
+            ]);
+
+            return response()->json([
+                'message' => 'Deposit not confirmed yet — wait a moment and try again.',
+                'retryable' => true,
+            ], 422);
+        }
+
+        return response()->json([
+            'bridge_request' => [
+                'id' => $bridgeRequest->id,
+                'direction' => $bridgeRequest->direction,
+                'token' => $bridgeRequest->token,
+                'status' => $bridgeRequest->status,
+                'destination_tx_hash' => $bridgeRequest->destination_tx_hash,
+                'error_message' => $bridgeRequest->error_message,
+            ],
+        ]);
     }
 
     private function shouldAutoProcess(string $direction): bool

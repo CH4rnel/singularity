@@ -73,6 +73,8 @@ const cyberSolBalance = ref<string | null>(null);
 const solanaCyberBalance = ref<string | null>(null);
 const cyberSolDecimals = ref(18);
 const wrongNetwork = ref(false);
+const evmNativeBalances = ref<Record<string, string | null>>({});
+const evmNativeMaxAmounts = ref<Record<string, string | null>>({});
 
 // Token-keyed balances, populated by fetchTokenBalance.
 const tokenBalances = ref<Record<string, string | null>>({});
@@ -88,6 +90,66 @@ const tokenProgramId = (token: BridgeTokenInfo): PublicKey =>
         : TOKEN_PROGRAM_ID;
 
 export const useBridge = () => {
+    const fetchEvmNativeBalance = async (
+        chainKey: BridgeChain,
+        address: string,
+    ): Promise<void> => {
+        const chain = bridgeChainInfo(chainKey);
+
+        if (!chain?.rpcUrl || chain.evmChainId === null) {
+            evmNativeBalances.value = {
+                ...evmNativeBalances.value,
+                [chainKey]: null,
+            };
+            evmNativeMaxAmounts.value = {
+                ...evmNativeMaxAmounts.value,
+                [chainKey]: null,
+            };
+
+            return;
+        }
+
+        try {
+            const network = new Network(chain.key, chain.evmChainId);
+            const provider = new JsonRpcProvider(chain.rpcUrl, network, {
+                staticNetwork: network,
+            });
+            const [balance, feeData] = await Promise.all([
+                provider.getBalance(address),
+                provider.getFeeData(),
+            ]);
+            const decimals = chain.nativeCurrency?.decimals ?? 18;
+            const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+            const gasReserve = (21_000n * gasPrice * 110n) / 100n;
+            const maxAmount = balance > gasReserve ? balance - gasReserve : 0n;
+
+            evmNativeBalances.value = {
+                ...evmNativeBalances.value,
+                [chainKey]: formatUnits(balance, decimals),
+            };
+            evmNativeMaxAmounts.value = {
+                ...evmNativeMaxAmounts.value,
+                [chainKey]: formatUnits(maxAmount, decimals),
+            };
+        } catch (e) {
+            console.error('[bridge] fetchEvmNativeBalance failed', e);
+            evmNativeBalances.value = {
+                ...evmNativeBalances.value,
+                [chainKey]: null,
+            };
+            evmNativeMaxAmounts.value = {
+                ...evmNativeMaxAmounts.value,
+                [chainKey]: null,
+            };
+        }
+    };
+
+    const getEvmNativeBalance = (chainKey: BridgeChain): string | null =>
+        evmNativeBalances.value[chainKey] ?? null;
+
+    const getEvmNativeMaxAmount = (chainKey: BridgeChain): string | null =>
+        evmNativeMaxAmounts.value[chainKey] ?? null;
+
     // ---------------------------------------------------------------
     //  EVM balance — read directly from Cyberia RPC, no MetaMask needed
     // ---------------------------------------------------------------
@@ -245,7 +307,8 @@ export const useBridge = () => {
         }
     };
 
-    const ensureCyberiaNetwork = (): Promise<boolean> => ensureNetwork('cyberia');
+    const ensureCyberiaNetwork = (): Promise<boolean> =>
+        ensureNetwork('cyberia');
 
     const redeemCyberSolOnEvm = async (
         amount: string,
@@ -392,22 +455,31 @@ export const useBridge = () => {
     const fetchTokenBalanceEvm = async (
         symbol: BridgeTokenSymbol,
         address: string,
+        chainKey: BridgeChain = 'cyberia',
     ): Promise<void> => {
-        const token = BRIDGE_TOKENS[symbol];
+        const token = tokenOnChain(symbol, chainKey);
+        const chain = bridgeChainInfo(chainKey);
         const key = balanceKey(symbol, 'evm');
 
         try {
-            const provider = getCyberiaProvider();
-            const contract = new Contract(
-                token.evmAddress,
-                ERC20_ABI,
-                provider,
-            );
+            if (
+                !token?.address ||
+                !chain?.rpcUrl ||
+                chain.evmChainId === null
+            ) {
+                throw new Error(`${symbol} is not configured on ${chainKey}`);
+            }
+
+            const network = new Network(chain.key, chain.evmChainId);
+            const provider = new JsonRpcProvider(chain.rpcUrl, network, {
+                staticNetwork: network,
+            });
+            const contract = new Contract(token.address, ERC20_ABI, provider);
             const bal = (await contract.balanceOf(address)) as bigint;
 
             tokenBalances.value = {
                 ...tokenBalances.value,
-                [key]: formatUnits(bal, token.evmDecimals),
+                [key]: formatUnits(bal, token.decimals),
             };
         } catch (e) {
             console.error('[bridge] fetchTokenBalanceEvm failed', e);
@@ -522,10 +594,26 @@ export const useBridge = () => {
         const signer = await provider.getSigner();
         const decimals =
             bridgeChainInfo(chainKey)?.nativeCurrency?.decimals ?? 18;
+        const symbol =
+            bridgeChainInfo(chainKey)?.nativeCurrency?.symbol ?? 'native coin';
+        const amountRaw = parseUnits(String(amount), decimals);
+        const signerAddress = await signer.getAddress();
+        const [balance, feeData] = await Promise.all([
+            provider.getBalance(signerAddress),
+            provider.getFeeData(),
+        ]);
+        const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+        const estimatedFee = 21_000n * gasPrice;
+
+        if (amountRaw + estimatedFee > balance) {
+            throw new Error(
+                `Insufficient ${symbol} balance. Available: ${formatUnits(balance, decimals)} ${symbol} (gas fee is paid separately).`,
+            );
+        }
 
         const tx = await signer.sendTransaction({
             to: relayerEvmAddress,
-            value: parseUnits(String(amount), decimals),
+            value: amountRaw,
         });
         const receipt = await tx.wait();
 
@@ -647,7 +735,12 @@ export const useBridge = () => {
         cyberSolBalance,
         solanaCyberBalance,
         wrongNetwork,
+        evmNativeBalances,
+        evmNativeMaxAmounts,
         tokenBalances,
+        fetchEvmNativeBalance,
+        getEvmNativeBalance,
+        getEvmNativeMaxAmount,
         fetchCyberSolBalance,
         fetchSolanaCyberBalance,
         fetchTokenBalanceEvm,

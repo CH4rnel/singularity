@@ -59,10 +59,13 @@ const feeResult = computed(() =>
         props.amount,
         { cyberSolUsd: props.cyberSolUsd ?? null },
         props.feeConfig,
+        props.direction,
     ),
 );
 
-const hasFee = computed(() => isFeeBearing(props.token));
+const hasFee = computed(() =>
+    isFeeBearing(props.token, props.direction, props.feeConfig),
+);
 
 const fee = computed(() => feeResult.value.feeToken.toFixed(6));
 
@@ -78,6 +81,9 @@ const youReceive = computed(() => {
 
     return after > 0 ? after.toFixed(6) : '0';
 });
+
+// The fee would consume the whole amount — nothing left to pay out.
+const receiveIsZero = computed(() => parseFloat(youReceive.value) <= 0);
 
 const receiveToken = computed(() =>
     props.convertToNative ? 'CYBER (native)' : props.token,
@@ -136,10 +142,13 @@ const receiveToken = computed(() =>
                     Bridge fee
                 </span>
                 <span class="font-mono text-sm">
-                    ${{ feeUsd }}
-                    <span class="text-[#706f6c] dark:text-[#A1A09A]">
-                        (≈ {{ fee }} {{ token }})
-                    </span>
+                    <template v-if="feeResult.feeUsd > 0">
+                        ${{ feeUsd }}
+                        <span class="text-[#706f6c] dark:text-[#A1A09A]">
+                            (≈ {{ fee }} {{ token }})
+                        </span>
+                    </template>
+                    <template v-else>{{ fee }} {{ token }}</template>
                 </span>
             </div>
             <div v-else class="flex items-center justify-between">
@@ -218,10 +227,13 @@ const receiveToken = computed(() =>
         <button
             type="button"
             class="w-full rounded-lg bg-[#1b1b18] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2a] disabled:opacity-50 dark:bg-[#EDEDEC] dark:text-[#0a0a0a] dark:hover:bg-[#d4d4d0]"
-            :disabled="!localConfirmed"
+            :disabled="!localConfirmed || receiveIsZero"
             @click="$emit('confirm')"
         >
-            {{ manualRoute ? 'Submit request' : 'Confirm and sign' }}
+            <template v-if="receiveIsZero">Amount does not cover the fee</template>
+            <template v-else>{{
+                manualRoute ? 'Submit request' : 'Confirm and sign'
+            }}</template>
         </button>
     </div>
 </template>

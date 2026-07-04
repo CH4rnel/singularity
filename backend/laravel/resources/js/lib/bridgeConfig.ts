@@ -75,7 +75,8 @@ const FALLBACK_EXPLORERS: Record<string, string> = {
     solana: 'https://solscan.io/tx/{hash}',
     ton: 'https://tonviewer.com/transaction/{hash}',
     bnb: 'https://bscscan.com/tx/{hash}',
-    yenten: 'https://ytn.ccore.online/transaction/{hash}/',
+    base: 'https://basescan.org/tx/{hash}',
+    yenten: 'https://explorer.yentencoin.info/tx/{hash}',
 };
 
 const FALLBACK_CHAINS: Record<string, Partial<PublicChain>> = {
@@ -94,6 +95,14 @@ const FALLBACK_CHAINS: Record<string, Partial<PublicChain>> = {
         evmChainId: 56,
         rpcUrl: 'https://bsc-dataseed.binance.org',
         nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+    },
+    base: {
+        label: 'Base',
+        type: 'evm',
+        wallet: 'evm',
+        evmChainId: 8453,
+        rpcUrl: 'https://mainnet.base.org',
+        nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
     },
 };
 

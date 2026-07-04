@@ -8,6 +8,7 @@ export type BridgeTokenSymbol =
     | 'GOAL'
     | 'BNB'
     | 'USDT.BNB'
+    | 'ETH'
     // Config-driven tokens added in config/bridge.php arrive via server props.
     | (string & {});
 
@@ -123,6 +124,18 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenInfo> = {
     'USDT.BNB': {
         symbol: 'USDT.BNB',
         evmAddress: '0x0000000000000000000000000000000000000000',
+        solanaMint: '',
+        evmDecimals: 18,
+        solanaDecimals: 18,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
+    // Native ETH on Base bridged into the existing Cyberia ETH wrapper. The
+    // Base side is the native coin (no address); server config carries the
+    // per-chain identity — this is only the pre-init/SSR fallback.
+    ETH: {
+        symbol: 'ETH',
+        evmAddress: '0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986',
         solanaMint: '',
         evmDecimals: 18,
         solanaDecimals: 18,

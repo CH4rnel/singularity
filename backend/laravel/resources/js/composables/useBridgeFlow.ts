@@ -31,6 +31,10 @@ type FlowContext = {
     sourceTxHash: string;
     sourceNonce: number;
     bridgeRequestId: number | null;
+    /** One-time deposit address (Yenten prepare/claim flow). */
+    depositAddress: string | null;
+    /** When the one-time deposit address stops being monitored (ISO). */
+    depositExpiresAt: string | null;
     destinationTxHash: string | null;
     error: string | null;
     confirmed: boolean;
@@ -88,6 +92,8 @@ export const useBridgeFlow = () => {
         sourceTxHash: '',
         sourceNonce: 0,
         bridgeRequestId: null,
+        depositAddress: null,
+        depositExpiresAt: null,
         destinationTxHash: null,
         error: null,
         confirmed: false,
@@ -106,6 +112,8 @@ export const useBridgeFlow = () => {
         context.sourceTxHash = '';
         context.sourceNonce = 0;
         context.bridgeRequestId = null;
+        context.depositAddress = null;
+        context.depositExpiresAt = null;
         context.destinationTxHash = null;
         context.error = null;
         context.confirmed = false;

@@ -260,6 +260,27 @@ test('USDT stays off BNB routes and USDT.BNB off Solana routes', function () {
         ->toContain('USDT.BNB');
 });
 
+test('Base routes are available and offer native ETH plus shared USDC', function () {
+    $service = app(BridgeConfigService::class);
+    $routes = array_keys($service->availableRoutes());
+
+    expect($routes)->toContain('base_to_evm')->toContain('evm_to_base');
+
+    // ETH bridges native on Base into the relayer-owned Cyberia wrapper;
+    // USDC is offered on Base without dropping off the Solana routes.
+    expect(array_keys($service->tokensForRoute('base_to_evm')))
+        ->toContain('ETH')
+        ->toContain('USDC')
+        ->and(array_keys($service->tokensForRoute('evm_to_base')))
+        ->toContain('ETH')
+        ->toContain('USDC')
+        ->and(array_keys($service->tokensForRoute('sol_to_evm')))
+        ->toContain('USDC');
+
+    expect($service->tokenOnChain('ETH', 'base')['native'] ?? false)->toBeTrue();
+    expect($service->depositAddress('base'))->toBe(RELAYER);
+});
+
 test('a deposit of the wrong jetton fails ton_to_evm verification', function () {
     Http::fake([
         'tonapi.test/*' => Http::response([

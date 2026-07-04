@@ -23,7 +23,13 @@ const props = defineProps<{
     sourceWalletAddress: string | null;
     sourceWalletConnecting: boolean;
     sourceBalance: string | null;
+    sourceMaxAmount: string | null;
     sourceDepositAddress: string | null;
+    /** One-time deposit address returned by /bridge/prepare (Yenten). */
+    preparedDepositAddress: string | null;
+    /** When the deposit address stops being monitored (ISO timestamp). */
+    depositExpiresAt: string | null;
+    preparing: boolean;
     recent: RecentDestination[];
 }>();
 
@@ -35,6 +41,8 @@ const emit = defineEmits<{
     (e: 'update:token', v: BridgeTokenSymbol): void;
     (e: 'update:convertToNative', v: boolean): void;
     (e: 'connect-source'): void;
+    (e: 'prepare'): void;
+    (e: 'claim'): void;
     (e: 'next'): void;
     (e: 'back'): void;
 }>();
@@ -84,6 +92,40 @@ const convertAvailable = computed(
 const route = computed(() => bridgeRoute(props.direction));
 
 const manualRoute = computed(() => isManualBridgeRoute(props.direction));
+
+// Yenten uses a two-phase one-time-address flow (prepare → claim): the deposit
+// address is unique per request and the recipient is committed at prepare time.
+// Other manual routes (TON) keep the shared-address flow for now.
+const oneTimeDepositRoute = computed(() => route.value.source === 'yenten');
+
+const prepared = computed(() => props.preparedDepositAddress !== null);
+
+// Inputs are locked once the deposit address is committed.
+const inputsLocked = computed(() => oneTimeDepositRoute.value && prepared.value);
+
+const copied = ref(false);
+
+const depositDeadline = computed(() => {
+    if (!props.depositExpiresAt) {
+        return null;
+    }
+
+    const parsed = new Date(props.depositExpiresAt);
+
+    return Number.isNaN(parsed.getTime())
+        ? null
+        : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+});
+
+const copyDepositAddress = async () => {
+    if (!props.preparedDepositAddress) {
+        return;
+    }
+
+    await navigator.clipboard.writeText(props.preparedDepositAddress);
+    copied.value = true;
+    setTimeout(() => (copied.value = false), 1500);
+};
 
 const convertedEstimate = computed(() => {
     const amt = parseFloat(localAmount.value);
@@ -137,14 +179,27 @@ const manualFieldsValid = computed(
 );
 
 const amountExceedsBalance = computed(() => {
-    const bal = parseFloat(props.sourceBalance ?? '0');
+    const available = parseFloat(
+        props.sourceMaxAmount ?? props.sourceBalance ?? '0',
+    );
 
-    return amountNum.value > 0 && bal > 0 && amountNum.value > bal;
+    return (
+        props.sourceBalance !== null &&
+        amountNum.value > 0 &&
+        amountNum.value > available
+    );
 });
 
+const maxReservesGas = computed(
+    () =>
+        props.sourceBalance !== null &&
+        props.sourceMaxAmount !== null &&
+        props.sourceBalance !== props.sourceMaxAmount,
+);
+
 const setMax = () => {
-    if (props.sourceBalance) {
-        localAmount.value = props.sourceBalance;
+    if (props.sourceMaxAmount !== null) {
+        localAmount.value = props.sourceMaxAmount;
     }
 };
 
@@ -155,6 +210,12 @@ const canProceed = computed(
         !amountExceedsBalance.value &&
         manualFieldsValid.value &&
         validation.value.valid,
+);
+
+// Phase A: only the destination is needed to reserve a deposit address —
+// the amount is whatever the user later deposits.
+const canPrepare = computed(
+    () => validation.value.valid && !props.preparing,
 );
 
 const useRecent = (entry: RecentDestination) => {
@@ -196,6 +257,7 @@ const formatRelative = (ts: number): string => {
 
         <!-- Source wallet / manual deposit -->
         <div
+            v-if="!oneTimeDepositRoute"
             class="flex items-center justify-between rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"
         >
             <div class="flex items-center gap-2">
@@ -232,14 +294,67 @@ const formatRelative = (ts: number): string => {
             </span>
         </div>
 
+        <!-- Yenten one-time deposit address (phase B: after prepare) -->
         <div
-            v-if="manualRoute"
+            v-if="oneTimeDepositRoute && prepared"
             class="rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"
         >
             <p class="mb-3 text-xs text-[#706f6c] dark:text-[#A1A09A]">
-                Send the amount to the bridge Yenten deposit address first, then
-                paste the sender address and transaction hash. The relayer
-                verifies the confirmed transaction automatically.
+                Send any amount of YTN to your unique deposit address below —
+                whatever you deposit is bridged to your destination. This
+                address belongs only to this transfer. Once you've sent it, hit
+                the button and the relayer credits your Cyberia address.
+            </p>
+            <p
+                class="mb-3 rounded border border-yellow-500/30 bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-300"
+            >
+                Your deposit is expected within the next hour<template
+                    v-if="depositDeadline"
+                >
+                    (until {{ depositDeadline }})</template
+                >. After that the address is no longer monitored — don't send
+                to it later.
+            </p>
+            <div
+                class="rounded border border-[#19140020] bg-[#19140008] p-3 dark:border-[#3E3E3A] dark:bg-[#ffffff08]"
+            >
+                <p class="mb-1 text-xs text-[#706f6c] dark:text-[#A1A09A]">
+                    Your Yenten deposit address
+                </p>
+                <div class="flex items-start justify-between gap-2">
+                    <code
+                        class="text-xs break-all text-[#1b1b18] dark:text-[#EDEDEC]"
+                    >
+                        {{ preparedDepositAddress }}
+                    </code>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded border border-[#19140035] px-2 py-1 text-[10px] text-[#1b1b18] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC]"
+                        @click="copyDepositAddress"
+                    >
+                        {{ copied ? 'Copied' : 'Copy' }}
+                    </button>
+                </div>
+                <a
+                    href="https://wallet.yentencoin.info/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-2 block text-xs underline"
+                >
+                    Open Yenten web wallet
+                </a>
+            </div>
+        </div>
+
+        <!-- Shared-address manual deposit (TON) -->
+        <div
+            v-if="manualRoute && !oneTimeDepositRoute"
+            class="rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"
+        >
+            <p class="mb-3 text-xs text-[#706f6c] dark:text-[#A1A09A]">
+                Send the amount to the bridge deposit address first, then paste
+                the sender address and transaction hash. The relayer verifies
+                the confirmed transaction automatically.
             </p>
             <div
                 v-if="sourceDepositAddress"
@@ -294,8 +409,9 @@ const formatRelative = (ts: number): string => {
             />
         </div>
 
-        <!-- Token + Amount -->
+        <!-- Token + Amount (Yenten deposits any amount, so no amount input) -->
         <div
+            v-if="!oneTimeDepositRoute"
             class="rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"
         >
             <div class="mb-3 flex flex-wrap items-center gap-2">
@@ -306,7 +422,8 @@ const formatRelative = (ts: number): string => {
                     v-for="symbol in tokenSymbols"
                     :key="symbol"
                     type="button"
-                    class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+                    :disabled="inputsLocked"
+                    class="rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-60"
                     :class="
                         localToken === symbol
                             ? 'border-[#1b1b18] bg-[#1b1b18] text-white dark:border-[#EDEDEC] dark:bg-[#EDEDEC] dark:text-[#0a0a0a]'
@@ -333,6 +450,7 @@ const formatRelative = (ts: number): string => {
                     <span class="font-mono">{{
                         parseFloat(sourceBalance).toFixed(4)
                     }}</span>
+                    {{ token }}
                     <button
                         type="button"
                         class="ml-2 rounded bg-[#19140010] px-1.5 py-0.5 text-[10px] font-medium text-[#1b1b18] hover:bg-[#19140020] dark:bg-[#3E3E3A] dark:text-[#EDEDEC]"
@@ -348,7 +466,8 @@ const formatRelative = (ts: number): string => {
                 type="text"
                 inputmode="decimal"
                 placeholder="0.0"
-                class="w-full bg-transparent text-2xl font-light text-[#1b1b18] outline-none placeholder:text-[#c4c4c0] dark:text-[#EDEDEC] dark:placeholder:text-[#555]"
+                :disabled="inputsLocked"
+                class="w-full bg-transparent text-2xl font-light text-[#1b1b18] outline-none placeholder:text-[#c4c4c0] disabled:opacity-70 dark:text-[#EDEDEC] dark:placeholder:text-[#555]"
                 :class="{
                     'text-red-500 dark:text-red-400': amountExceedsBalance,
                 }"
@@ -357,7 +476,11 @@ const formatRelative = (ts: number): string => {
                 v-if="amountExceedsBalance"
                 class="mt-1 text-xs text-red-500 dark:text-red-400"
             >
-                Amount exceeds your balance
+                {{
+                    maxReservesGas
+                        ? 'Amount plus network fee exceeds your balance'
+                        : 'Amount exceeds your balance'
+                }}
             </p>
         </div>
 
@@ -411,7 +534,8 @@ const formatRelative = (ts: number): string => {
                 autocomplete="off"
                 spellcheck="false"
                 :placeholder="destPlaceholder"
-                class="w-full rounded border border-[#19140020] bg-[#FDFDFC] px-3 py-2 font-mono text-xs text-[#1b1b18] outline-none placeholder:text-[#c4c4c0] focus:border-[#1915014a] dark:border-[#3E3E3A] dark:bg-[#0a0a0a] dark:text-[#EDEDEC] dark:placeholder:text-[#555]"
+                :disabled="inputsLocked"
+                class="w-full rounded border border-[#19140020] bg-[#FDFDFC] px-3 py-2 font-mono text-xs text-[#1b1b18] outline-none placeholder:text-[#c4c4c0] focus:border-[#1915014a] disabled:opacity-70 dark:border-[#3E3E3A] dark:bg-[#0a0a0a] dark:text-[#EDEDEC] dark:placeholder:text-[#555]"
                 :class="{
                     'border-red-500 dark:border-red-500':
                         !validation.valid && localDestination.length > 0,
@@ -464,7 +588,28 @@ const formatRelative = (ts: number): string => {
             </div>
         </div>
 
+        <!-- Yenten one-time flow: prepare (phase A) then claim (phase B). -->
         <button
+            v-if="oneTimeDepositRoute && !prepared"
+            type="button"
+            class="w-full rounded-lg bg-[#1b1b18] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2a] disabled:opacity-50 dark:bg-[#EDEDEC] dark:text-[#0a0a0a] dark:hover:bg-[#d4d4d0]"
+            :disabled="!canPrepare"
+            @click="$emit('prepare')"
+        >
+            <span v-if="preparing">Reserving address…</span>
+            <span v-else-if="!validation.valid">Enter destination address</span>
+            <span v-else>Get deposit address</span>
+        </button>
+        <button
+            v-else-if="oneTimeDepositRoute && prepared"
+            type="button"
+            class="w-full rounded-lg bg-[#1b1b18] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2a] disabled:opacity-50 dark:bg-[#EDEDEC] dark:text-[#0a0a0a] dark:hover:bg-[#d4d4d0]"
+            @click="$emit('claim')"
+        >
+            I've deposited — check
+        </button>
+        <button
+            v-else
             type="button"
             class="w-full rounded-lg bg-[#1b1b18] py-3 text-sm font-medium text-white transition-colors hover:bg-[#2d2d2a] disabled:opacity-50 dark:bg-[#EDEDEC] dark:text-[#0a0a0a] dark:hover:bg-[#d4d4d0]"
             :disabled="!canProceed"

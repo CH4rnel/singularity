@@ -7,106 +7,78 @@ use Illuminate\Support\Facades\Log;
 
 class YentenApiService
 {
-    public function verifyDeposit(
-        string $txHash,
-        string $expectedSender,
-        string $expectedRecipient,
-        int $minimumConfirmations = 1,
-    ): ?string {
-        if (! preg_match('/^[0-9a-fA-F]{64}$/', $txHash)) {
-            return null;
-        }
+    /**
+     * Confirmed (spendable) balance on an address, in satoshis. Used to mint
+     * whatever the user deposited to their one-time address — no amount or
+     * tx hash needed. Returns null on API failure, '0' when nothing is there.
+     */
+    public function addressBalance(string $address): ?string
+    {
+        $balances = $this->addressBalances($address);
 
+        return $balances === null ? null : $balances['confirmed'];
+    }
+
+    /**
+     * Confirmed and still-unconfirmed balances on an address, in satoshis:
+     * ['confirmed' => ..., 'pending' => ...]. Only confirmed coins (height > 0)
+     * are mintable — mirrors what the relay is willing to spend; pending lets
+     * the UI say "deposit seen, waiting for a confirmation" instead of
+     * pretending nothing arrived. Returns null on API failure.
+     *
+     * @return array{confirmed: string, pending: string}|null
+     */
+    public function addressBalances(string $address): ?array
+    {
         try {
             $response = Http::acceptJson()
                 ->timeout(20)
                 ->retry(2, 250)
-                ->get($this->apiUrl().'/transaction/'.strtolower($txHash));
+                ->get($this->apiUrl().'/unspent/'.rawurlencode($address).'?amount=0');
 
             if (! $response->successful() || $response->json('error') !== null) {
-                Log::warning('Bridge: Yenten API transaction lookup failed', [
-                    'tx' => $txHash,
+                Log::warning('Bridge: Yenten unspent lookup failed', [
+                    'address' => $address,
                     'status' => $response->status(),
                 ]);
 
                 return null;
             }
 
-            $transaction = $response->json('result');
+            $utxos = $response->json('result');
 
-            if (! is_array($transaction)
-                || strtolower((string) ($transaction['txid'] ?? '')) !== strtolower($txHash)
-                || (int) ($transaction['confirmations'] ?? 0) < $minimumConfirmations) {
-                return null;
+            if (! is_array($utxos)) {
+                return ['confirmed' => '0', 'pending' => '0'];
             }
 
-            if (! $this->hasInputFrom($transaction['vin'] ?? [], $expectedSender)) {
-                Log::warning('Bridge: Yenten deposit sender mismatch', ['tx' => $txHash]);
+            $confirmed = '0';
+            $pending = '0';
 
-                return null;
+            foreach ($utxos as $utxo) {
+                $value = is_array($utxo) ? ($utxo['value'] ?? null) : null;
+
+                if (! is_int($value) && ! (is_string($value) && ctype_digit($value))) {
+                    continue;
+                }
+
+                $height = is_array($utxo) ? ($utxo['height'] ?? 0) : 0;
+
+                if (is_int($height) && $height > 0) {
+                    $confirmed = bcadd($confirmed, (string) $value, 0);
+                } else {
+                    $pending = bcadd($pending, (string) $value, 0);
+                }
             }
 
-            $received = $this->sumOutputsTo($transaction['vout'] ?? [], $expectedRecipient);
-
-            return bccomp($received, '0', 0) > 0 ? $received : null;
+            return ['confirmed' => $confirmed, 'pending' => $pending];
         } catch (\Throwable $exception) {
-            Log::error('Bridge: Yenten deposit verification failed', [
-                'tx' => $txHash,
+            Log::error('Bridge: Yenten address balance lookup failed', [
+                'address' => $address,
                 'error' => $exception->getMessage(),
             ]);
 
             return null;
         }
-    }
-
-    private function hasInputFrom(mixed $inputs, string $expectedSender): bool
-    {
-        if (! is_array($inputs)) {
-            return false;
-        }
-
-        foreach ($inputs as $input) {
-            if (! is_array($input)) {
-                continue;
-            }
-
-            $addresses = $input['scriptPubKey']['addresses'] ?? [];
-
-            if (is_array($addresses) && in_array($expectedSender, $addresses, true)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function sumOutputsTo(mixed $outputs, string $expectedRecipient): string
-    {
-        if (! is_array($outputs)) {
-            return '0';
-        }
-
-        $total = '0';
-
-        foreach ($outputs as $output) {
-            if (! is_array($output)) {
-                continue;
-            }
-
-            $addresses = $output['scriptPubKey']['addresses'] ?? [];
-
-            if (! is_array($addresses) || ! in_array($expectedRecipient, $addresses, true)) {
-                continue;
-            }
-
-            $value = $output['value'] ?? null;
-
-            if (is_int($value) || (is_string($value) && ctype_digit($value))) {
-                $total = bcadd($total, (string) $value, 0);
-            }
-        }
-
-        return $total;
     }
 
     private function apiUrl(): string

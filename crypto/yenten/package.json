@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "relay": "tsx scripts/relay-yenten-transfer.ts",
+    "sweep": "tsx scripts/sweep-deposit.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\BridgeRequest;
 use App\Services\BridgeConfigService;
+use App\Services\BridgeFeeService;
 use App\Services\BridgeRelayerService;
 use App\Services\CataasApiService;
 use App\Services\CyberPriceService;
@@ -15,7 +16,7 @@ use Laravel\Fortify\Features;
 
 class ApiController extends Controller
 {
-    public function index(YesNoApiService $yesNo, CataasApiService $cataas, CyberPriceService $cyber, BridgeConfigService $bridgeConfig, Request $request)
+    public function index(YesNoApiService $yesNo, CataasApiService $cataas, CyberPriceService $cyber, BridgeConfigService $bridgeConfig, BridgeFeeService $bridgeFee, Request $request)
     {
         $price = $cyber->get();
 
@@ -46,6 +47,7 @@ class ApiController extends Controller
             'bridgeFeeConfig' => [
                 'flatUsd' => (float) config('bridge.fee.flat_usd', 0.1),
                 'rateBps' => (int) config('bridge.fee.rate_bps', 0),
+                'nativeRouteFees' => $bridgeFee->frontendNativeFees(),
             ],
             'bridgeGasDrop' => [
                 'enabled' => (bool) config('bridge.gas_drop.enabled', true),

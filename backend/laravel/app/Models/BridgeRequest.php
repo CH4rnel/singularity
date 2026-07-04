@@ -17,7 +17,9 @@ use Illuminate\Support\Carbon;
  * @property string|null $sender_address
  * @property string $recipient_address
  * @property string|null $deposit_address
+ * @property string|null $deposit_wif
  * @property bool $swept
+ * @property bool $wrapper_burned
  * @property string $amount
  * @property string|null $fee_amount
  * @property string|null $fee_usd
@@ -44,7 +46,9 @@ class BridgeRequest extends Model
         'sender_address',
         'recipient_address',
         'deposit_address',
+        'deposit_wif',
         'swept',
+        'wrapper_burned',
         'amount',
         'fee_amount',
         'fee_usd',
@@ -68,6 +72,9 @@ class BridgeRequest extends Model
             'gas_drop_amount' => 'decimal:18',
             'convert_to_native' => 'boolean',
             'converted' => 'boolean',
+            'deposit_wif' => 'encrypted',
+            'swept' => 'boolean',
+            'wrapper_burned' => 'boolean',
             'source_nonce' => 'integer',
             'completed_at' => 'datetime',
         ];
@@ -83,9 +90,29 @@ class BridgeRequest extends Model
         return $this->status === 'pending';
     }
 
+    public function isAwaitingDeposit(): bool
+    {
+        return $this->status === 'awaiting_deposit';
+    }
+
+    public function markAwaitingDeposit(): void
+    {
+        $this->update(['status' => 'awaiting_deposit']);
+    }
+
     public function isCompleted(): bool
     {
         return $this->status === 'completed';
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->status === 'expired';
+    }
+
+    public function markExpired(): void
+    {
+        $this->update(['status' => 'expired']);
     }
 
     public function markProcessing(): void

@@ -233,22 +233,13 @@ test('unknown token marks the request failed', function () {
     expect($request->error_message)->toContain('Unknown token');
 });
 
-test('yenten_to_evm verifies native YTN and mints the Cyberia wrapper', function () {
-    config()->set('bridge.chains.yenten.deposit_address', 'YHotWallet11111111111111111111111111');
+test('yenten_to_evm verifies the deposit on the request one-time address and mints the wrapper', function () {
+    $depositAddress = 'YRequestDepositAddr1111111111111111';
 
     Http::fake([
-        'api.yentencoin.info/transaction/*' => Http::response([
-            'result' => [
-                'txid' => str_repeat('a', 64),
-                'confirmations' => 3,
-                'vin' => [[
-                    'scriptPubKey' => ['addresses' => ['YSender1111111111111111111111111111']],
-                ]],
-                'vout' => [[
-                    'value' => 200000000,
-                    'scriptPubKey' => ['addresses' => ['YHotWallet11111111111111111111111111']],
-                ]],
-            ],
+        // The relayer mints whatever the deposit address holds (2 YTN).
+        'api.yentencoin.info/unspent/*' => Http::response([
+            'result' => [['txid' => str_repeat('a', 64), 'index' => 0, 'value' => 200000000, 'height' => 5]],
             'error' => null,
         ]),
     ]);
@@ -264,8 +255,7 @@ test('yenten_to_evm verifies native YTN and mints the Cyberia wrapper', function
         'direction' => 'yenten_to_evm',
         'token' => 'YTN',
         'source_chain' => 'yenten',
-        'source_tx_hash' => str_repeat('a', 64),
-        'sender_address' => 'YSender1111111111111111111111111111',
+        'deposit_address' => $depositAddress,
         'amount' => '2',
         'fee_amount' => '0',
     ]);
@@ -282,9 +272,65 @@ test('yenten_to_evm verifies native YTN and mints the Cyberia wrapper', function
     ));
 });
 
+test('evm relay records the confirmed hash even when the script also prints a broadcast hash', function () {
+    Http::fake([
+        'api.yentencoin.info/unspent/*' => Http::response([
+            'result' => [['txid' => str_repeat('a', 64), 'index' => 0, 'value' => 200000000, 'height' => 5]],
+            'error' => null,
+        ]),
+    ]);
+
+    // The relay scripts now print a pre-receipt {"broadcastTxHash":...} line
+    // before the confirmed {"txHash":...} line. The confirmed one must win.
+    Process::fake([
+        '*relay-mint*' => Process::result(
+            output: "Relayer: 0xrelayer\n"
+                .json_encode(['broadcastTxHash' => '0xbroadcasted'])."\n"
+                .json_encode(['txHash' => '0xconfirmed', 'gasDropTxHash' => null]),
+            exitCode: 0,
+        ),
+    ]);
+
+    $request = makeDirectRequest([
+        'direction' => 'yenten_to_evm',
+        'token' => 'YTN',
+        'source_chain' => 'yenten',
+        'deposit_address' => 'YRequestDepositAddr1111111111111111',
+        'amount' => '2',
+        'fee_amount' => '0',
+    ]);
+
+    app(BridgeService::class)->processDirectRelay($request);
+    $request->refresh();
+
+    expect($request->status)->toBe('completed');
+    expect($request->destination_tx_hash)->toBe('0xconfirmed');
+});
+
+test('extractRelayTxHash recovers the broadcast hash so a timed-out payout is not retried', function () {
+    $extract = new ReflectionMethod(BridgeService::class, 'extractRelayTxHash');
+    $extract->setAccessible(true);
+    $service = app(BridgeService::class);
+
+    // Timeout case: the receipt wait was killed, so only the pre-receipt
+    // broadcast line reached us. Recovering it lets the caller mark the
+    // request completed instead of failing (and double-paying on retry).
+    $broadcastOnly = "Relayer: 0xrelayer\nTo:      0xrecipient\n"
+        .json_encode(['broadcastTxHash' => '0xdeadbeef']);
+    expect($extract->invoke($service, $broadcastOnly))->toBe('0xdeadbeef');
+
+    // When both lines are present the confirmed hash wins.
+    $both = json_encode(['broadcastTxHash' => '0xbroad'])."\n".json_encode(['txHash' => '0xfinal']);
+    expect($extract->invoke($service, $both))->toBe('0xfinal');
+
+    // Nothing usable (timed out before broadcasting) → null, safe to retry.
+    expect($extract->invoke($service, "starting up\nnot json here"))->toBeNull();
+});
+
 test('evm_to_yenten burns the wrapper and runs the light-wallet payout', function () {
     config()->set('bridge.chains.yenten.deposit_address', 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL');
     config()->set('bridge.chains.yenten.relayer_wif', 'test-wif-not-used-by-process-fake');
+    config()->set('bridge.fee.yenten_payout_fee_ytn', '0.01');
 
     Http::fake([
         'https://rpc.cyberia.church' => Http::response([
@@ -330,9 +376,89 @@ test('evm_to_yenten burns the wrapper and runs the light-wallet payout', functio
 
     expect($request->status)->toBe('completed');
     expect($request->destination_tx_hash)->toBe(str_repeat('b', 64));
+    expect((float) $request->fee_amount)->toBe(0.01);
 
+    // The payout is net of the retained YTN fee: 2 - 0.01 = 1.99 YTN.
     Process::assertRan(fn ($process) => str_contains(
         is_array($process->command) ? implode(' ', $process->command) : $process->command,
-        'relay -- YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL 200000000',
+        'relay -- YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL 199000000',
     ));
+});
+
+test('evm_to_yenten payout keys never include unclaimed deposit addresses', function () {
+    config()->set('bridge.chains.yenten.deposit_address', 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL');
+    config()->set('bridge.chains.yenten.relayer_wif', 'central-wif');
+
+    // Awaiting deposit: the user may still claim these coins — off limits.
+    makeDirectRequest([
+        'direction' => 'yenten_to_evm',
+        'token' => 'YTN',
+        'source_chain' => 'yenten',
+        'source_tx_hash' => null,
+        'deposit_address' => 'YAwaitingDepositAddr111111111111111',
+        'deposit_wif' => 'awaiting-wif',
+        'status' => 'awaiting_deposit',
+        'amount' => '0',
+    ]);
+
+    // Claimed and minted: these coins belong to the pool.
+    makeDirectRequest([
+        'direction' => 'yenten_to_evm',
+        'token' => 'YTN',
+        'source_chain' => 'yenten',
+        'source_tx_hash' => null,
+        'deposit_address' => 'YClaimedDepositAddr1111111111111111',
+        'deposit_wif' => 'claimed-wif',
+        'status' => 'completed',
+        'amount' => '2',
+    ]);
+
+    Http::fake([
+        'https://rpc.cyberia.church' => Http::response([
+            'result' => [
+                'status' => '0x1',
+                'logs' => [[
+                    'address' => '0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6',
+                    'topics' => [
+                        '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+                        '0x0000000000000000000000005555555555555555555555555555555555555555',
+                        '0x0000000000000000000000000000000000000000000000000000000000abcdef',
+                    ],
+                    'data' => '0x0000000000000000000000000000000000000000000000001bc16d674ec80000',
+                ]],
+            ],
+        ]),
+    ]);
+
+    Process::fake([
+        '*relay-burn*' => Process::result(output: json_encode(['txHash' => '0xytnburn'])),
+        '*npm*relay*' => Process::result(output: json_encode(['txHash' => str_repeat('c', 64)])),
+    ]);
+
+    $request = makeDirectRequest([
+        'direction' => 'evm_to_yenten',
+        'token' => 'YTN',
+        'source_chain' => 'cyberia',
+        'source_tx_hash' => '0xytnsource2',
+        'sender_address' => '0x5555555555555555555555555555555555555555',
+        'recipient_address' => 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL',
+        'amount' => '2',
+        'fee_amount' => '0',
+    ]);
+
+    app(BridgeService::class)->processDirectRelay($request);
+
+    Process::assertRan(function ($process) {
+        $command = is_array($process->command) ? implode(' ', $process->command) : $process->command;
+
+        if (! str_contains($command, 'relay --')) {
+            return false;
+        }
+
+        $wifs = json_decode((string) ($process->environment['YENTEN_RELAYER_WIFS'] ?? '[]'), true);
+
+        return in_array('central-wif', $wifs, true)
+            && in_array('claimed-wif', $wifs, true)
+            && ! in_array('awaiting-wif', $wifs, true);
+    });
 });

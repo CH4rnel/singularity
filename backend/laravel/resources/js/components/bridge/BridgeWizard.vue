@@ -126,10 +126,15 @@ const sourceBalance = computed(() => {
     }
 
     const source = bridgeRoute(flow.context.direction).source;
+    const sourceToken = tokenOnChain(flow.context.token, source);
+
+    if (bridgeChainInfo(source)?.type === 'evm' && sourceToken?.native) {
+        return bridge.getEvmNativeBalance(source);
+    }
 
     if (source !== 'solana' && source !== 'cyberia') {
-        // Balances on other chains (BSC, TON, Yenten) aren't fetched
-        // client-side — the backend verifies the deposit anyway.
+        // Manual-chain balances (TON, Yenten) aren't available through the
+        // connected EVM/Solana wallets.
         return null;
     }
 
@@ -144,6 +149,19 @@ const sourceBalance = computed(() => {
     return bridge.getTokenBalance(flow.context.token, chain);
 });
 
+const sourceMaxAmount = computed(() => {
+    if (!flow.context.direction) {
+        return null;
+    }
+
+    const source = bridgeRoute(flow.context.direction).source;
+    const sourceToken = tokenOnChain(flow.context.token, source);
+
+    return bridgeChainInfo(source)?.type === 'evm' && sourceToken?.native
+        ? bridge.getEvmNativeMaxAmount(source)
+        : sourceBalance.value;
+});
+
 const refreshSourceBalance = () => {
     if (!flow.context.direction) {
         return;
@@ -152,8 +170,15 @@ const refreshSourceBalance = () => {
     const token = flow.context.token;
 
     const source = bridgeRoute(flow.context.direction).source;
+    const sourceToken = tokenOnChain(token, source);
 
-    if (source === 'solana' && solanaWallet.address.value) {
+    if (
+        bridgeChainInfo(source)?.type === 'evm' &&
+        sourceToken?.native &&
+        evmWallet.address.value
+    ) {
+        bridge.fetchEvmNativeBalance(source, evmWallet.address.value);
+    } else if (source === 'solana' && solanaWallet.address.value) {
         if (token === 'CYBER.sol') {
             bridge.fetchSolanaCyberBalance(solanaWallet.address.value);
         } else {
@@ -163,7 +188,7 @@ const refreshSourceBalance = () => {
         if (token === 'CYBER.sol') {
             bridge.fetchCyberSolBalance(evmWallet.address.value);
         } else {
-            bridge.fetchTokenBalanceEvm(token, evmWallet.address.value);
+            bridge.fetchTokenBalanceEvm(token, evmWallet.address.value, source);
         }
     }
 };
@@ -440,8 +465,110 @@ const handleConfirm = async () => {
     }
 };
 
+// --- Yenten one-time-address flow (prepare → claim) ---------------------
+const preparing = ref(false);
+
+const postJson = async (url: string, body: Record<string, unknown>) => {
+    const csrfToken = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1];
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-XSRF-TOKEN': csrfToken ? decodeURIComponent(csrfToken) : '',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+    });
+
+    return { response, data: await response.json() };
+};
+
+const handlePrepare = async () => {
+    if (!flow.context.direction || preparing.value) {
+        return;
+    }
+
+    preparing.value = true;
+
+    try {
+        const { response, data } = await postJson('/bridge/prepare', {
+            direction: flow.context.direction,
+            token: flow.context.token,
+            recipient_address: flow.context.destinationAddress,
+            session_id: analytics.sessionId,
+        });
+
+        if (!response.ok) {
+            flow.markFailed(
+                data.message ?? `Could not reserve a deposit address (HTTP ${response.status})`,
+            );
+
+            return;
+        }
+
+        const br = data.bridge_request;
+        flow.context.bridgeRequestId = br.id;
+        flow.context.depositAddress = br.deposit_address;
+        flow.context.depositExpiresAt = br.expires_at ?? null;
+    } catch (err) {
+        flow.markFailed(err instanceof Error ? err.message : 'Prepare failed');
+    } finally {
+        preparing.value = false;
+    }
+};
+
+const handleClaim = async () => {
+    if (!flow.context.bridgeRequestId) {
+        return;
+    }
+
+    claimError.value = null;
+
+    try {
+        const { response, data } = await postJson('/bridge/claim', {
+            id: flow.context.bridgeRequestId,
+            session_id: analytics.sessionId,
+        });
+
+        if (!response.ok) {
+            // Retryable (no deposit yet / unconfirmed): keep the deposit panel.
+            claimError.value =
+                data.message ?? `Check failed (HTTP ${response.status})`;
+
+            // The deposit window closed on an empty address — release the
+            // dead address so the user can start a fresh transfer.
+            if (data.expired) {
+                flow.context.bridgeRequestId = null;
+                flow.context.depositAddress = null;
+                flow.context.depositExpiresAt = null;
+            }
+
+            return;
+        }
+
+        const br = data.bridge_request;
+        flow.beginTracking(br.id);
+        analytics.track('tracking_started', {
+            direction: flow.context.direction!,
+            bridge_request_id: br.id,
+        });
+
+        if (br.status === 'completed') {
+            flow.markSucceeded(br.destination_tx_hash ?? null);
+        } else if (br.status === 'failed') {
+            flow.markFailed(br.error_message ?? 'Bridge failed');
+        }
+    } catch (err) {
+        claimError.value = err instanceof Error ? err.message : 'Claim failed';
+    }
+};
+
+const claimError = ref<string | null>(null);
+
 const handleReset = () => {
     flow.reset();
+    claimError.value = null;
 };
 </script>
 
@@ -470,12 +597,25 @@ const handleReset = () => {
             :source-wallet-address="sourceWalletAddress"
             :source-wallet-connecting="sourceWalletConnecting"
             :source-balance="sourceBalance"
+            :source-max-amount="sourceMaxAmount"
             :source-deposit-address="sourceDepositAddress"
+            :prepared-deposit-address="flow.context.depositAddress"
+            :deposit-expires-at="flow.context.depositExpiresAt"
+            :preparing="preparing"
             :recent="flow.recentForDirection.value"
             @connect-source="handleConnectSource"
+            @prepare="handlePrepare"
+            @claim="handleClaim"
             @next="handleConfigureNext"
             @back="handleReset"
         />
+
+        <p
+            v-if="claimError && flow.step.value === 'configuring'"
+            class="mt-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-xs text-yellow-700 dark:text-yellow-400"
+        >
+            {{ claimError }}
+        </p>
 
         <StepReview
             v-else-if="

@@ -36,6 +36,17 @@ return [
     'fee' => [
         'flat_usd' => env('BRIDGE_FEE_FLAT_USD', '0.10'),
         'rate_bps' => (int) env('BRIDGE_FEE_RATE_BPS', 0),
+        // Native EVM payouts retain enough of the bridged native asset to pay
+        // destination gas. The live gas price is multiplied for volatility;
+        // the floor also keeps a reserve when an RPC quote is unavailable.
+        'native_transfer_gas_limit' => (int) env('BRIDGE_NATIVE_TRANSFER_GAS_LIMIT', 21000),
+        'native_gas_price_floor_gwei' => env('BRIDGE_NATIVE_GAS_PRICE_FLOOR_GWEI', '3'),
+        'native_gas_multiplier_bps' => (int) env('BRIDGE_NATIVE_GAS_MULTIPLIER_BPS', 20000),
+        // Flat YTN retained from evm_to_yenten payouts so the recipient gets
+        // the promised net amount exactly; the Yenten network fee (typically
+        // well under 0.001 YTN even for many-input transactions) is paid out
+        // of this reserve and the remainder accrues to the relayer pool.
+        'yenten_payout_fee_ytn' => env('BRIDGE_YENTEN_PAYOUT_FEE_YTN', '0.01'),
     ],
 
     /*
@@ -116,6 +127,18 @@ return [
             'native_currency' => ['name' => 'BNB', 'symbol' => 'BNB', 'decimals' => 18],
             'deposit_address' => null,
         ],
+        'base' => [
+            'key' => 'base',
+            'label' => 'Base',
+            'type' => 'evm',
+            'address_type' => 'evm',
+            'wallet' => 'evm',
+            'evm_chain_id' => 8453,
+            'rpc_url' => env('BRIDGE_BASE_RPC_URL', 'https://mainnet.base.org'),
+            'explorer_tx' => 'https://basescan.org/tx/{hash}',
+            'native_currency' => ['name' => 'Ethereum', 'symbol' => 'ETH', 'decimals' => 18],
+            'deposit_address' => null,
+        ],
         'yenten' => [
             'key' => 'yenten',
             'label' => 'Yenten',
@@ -125,7 +148,7 @@ return [
             // Official light-wallet API: transaction/UTXO reads and raw-tx
             // broadcast. No local yentend or blockchain download is required.
             'api_url' => env('BRIDGE_YENTEN_API_URL', 'https://api.yentencoin.info'),
-            'explorer_tx' => 'https://ytn.ccore.online/transaction/{hash}/',
+            'explorer_tx' => 'https://explorer.yentencoin.info/tx/{hash}',
             // Central wallet: receives swept deposits and pays out evm_to_yenten.
             'deposit_address' => env('BRIDGE_YENTEN_DEPOSIT_ADDRESS'),
             'relayer_wif' => env('BRIDGE_YENTEN_RELAYER_WIF'),
@@ -135,6 +158,12 @@ return [
             // deposit tx can't be hijacked. Only the seed is secret.
             'hd_seed' => env('BRIDGE_YENTEN_HD_SEED'),
             'minimum_confirmations' => (int) env('BRIDGE_YENTEN_MIN_CONFIRMATIONS', 1),
+            // How long a one-time deposit address is monitored. After the
+            // window an empty request is marked expired and its address is
+            // never polled again (a deposit that DID land in time is still
+            // honored on claim). Keeps dead addresses from accumulating in
+            // the API polling set.
+            'deposit_ttl_minutes' => (int) env('BRIDGE_YENTEN_DEPOSIT_TTL_MINUTES', 60),
         ],
     ],
 
@@ -179,6 +208,18 @@ return [
             'direction' => 'evm_to_bnb',
             'source_chain' => 'cyberia',
             'destination_chain' => 'bnb',
+            'auto_process' => true,
+        ],
+        'base_to_evm' => [
+            'direction' => 'base_to_evm',
+            'source_chain' => 'base',
+            'destination_chain' => 'cyberia',
+            'auto_process' => true,
+        ],
+        'evm_to_base' => [
+            'direction' => 'evm_to_base',
+            'source_chain' => 'cyberia',
+            'destination_chain' => 'base',
             'auto_process' => true,
         ],
         'yenten_to_evm' => [
@@ -238,6 +279,10 @@ return [
                 'solana' => ['mint' => 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump', 'decimals' => 6, 'token_program' => 'token-2022'],
             ],
         ],
+        // USDC bridges native Circle USDC across Solana AND Base into the one
+        // Cyberia wrapper. Unlike USDT.BNB (a distinct BSC token), Base and
+        // Solana USDC are the same Circle-issued asset, so a shared reserve is
+        // sound — the relayer rebalances between chains via Circle.
         'USDC' => [
             'symbol' => 'USDC',
             'model' => 'mint',
@@ -245,6 +290,7 @@ return [
             'chains' => [
                 'cyberia' => ['address' => '0xdc25597B19799010047F17e9591EFE08EFd40077', 'decimals' => 6],
                 'solana' => ['mint' => 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 'decimals' => 6, 'token_program' => 'token'],
+                'base' => ['address' => '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'decimals' => 6],
             ],
         ],
         // USDT (Solana reserve). Deliberately NOT bridged to BNB Chain — the
@@ -297,6 +343,18 @@ return [
             'chains' => [
                 'cyberia' => ['address' => '0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6', 'decimals' => 18],
                 'yenten' => ['native' => true, 'decimals' => 8],
+            ],
+        ],
+        // Native ETH on Base bridged into the existing Cyberia ETH wrapper
+        // (0xFDa2…1986, relayer-owned Ownable mint/burn ERC20, 18 decimals).
+        // Same native-coin pattern as BNB: mint on bridge-IN, native transfer
+        // on bridge-OUT.
+        'ETH' => [
+            'symbol' => 'ETH',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => '0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986', 'decimals' => 18],
+                'base' => ['native' => true, 'decimals' => 18],
             ],
         ],
         // Native BNB bridged into a Cyberia wrapper (deployed via

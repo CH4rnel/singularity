@@ -8,6 +8,7 @@ use App\Support\TokenAmount;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 
 class BridgeService
 {
@@ -49,9 +50,9 @@ class BridgeService
         ?int $userId,
         string $direction,
         string $sourceChain,
-        string $sourceTxHash,
+        ?string $sourceTxHash,
         int $sourceNonce,
-        string $senderAddress,
+        ?string $senderAddress,
         string $recipientAddress,
         string $amount,
         string $token = 'CYBER.sol',
@@ -60,6 +61,9 @@ class BridgeService
         bool $gasDropPlanned = false,
         ?string $gasDropAmount = null,
         bool $convertToNative = false,
+        ?string $depositAddress = null,
+        ?string $depositWif = null,
+        string $status = 'pending',
     ): BridgeRequest {
         return BridgeRequest::create([
             'user_id' => $userId,
@@ -70,13 +74,15 @@ class BridgeService
             'source_nonce' => $sourceNonce,
             'sender_address' => $senderAddress,
             'recipient_address' => $recipientAddress,
+            'deposit_address' => $depositAddress,
+            'deposit_wif' => $depositWif,
             'amount' => $amount,
             'fee_amount' => $feeAmount,
             'fee_usd' => $feeUsd,
             'gas_drop_planned' => $gasDropPlanned,
             'gas_drop_amount' => $gasDropAmount,
             'convert_to_native' => $convertToNative,
-            'status' => 'pending',
+            'status' => $status,
         ]);
     }
 
@@ -468,7 +474,18 @@ class BridgeService
         $request->markProcessing();
 
         try {
-            $netAmount = bcsub((string) $request->amount, (string) ($request->fee_amount ?: '0'), 18);
+            $feeAmount = (string) ($request->fee_amount ?: '0');
+            $nativeGasFee = app(BridgeFeeService::class)->nativePayoutFee(
+                $request->direction,
+                $request->token,
+            );
+
+            if (bccomp($nativeGasFee, $feeAmount, 18) > 0) {
+                $feeAmount = $nativeGasFee;
+                $request->update(['fee_amount' => $feeAmount]);
+            }
+
+            $netAmount = bcsub((string) $request->amount, $feeAmount, 18);
 
             if (bccomp($netAmount, '0', 18) <= 0) {
                 $request->markFailed('Net amount after fee is zero or negative');
@@ -496,10 +513,13 @@ class BridgeService
             // destroy the wrapper the user deposited so supply stays backed
             // by the destination-side reserve. Deposits on external EVM
             // chains (e.g. canonical USDT on BSC) are reserves — never burn.
+            // Idempotent: a retry after a failed payout must not burn again —
+            // the wrapper is already gone.
             if (($sourceChain['type'] ?? '') === 'evm'
                 && $sourceChain['key'] === config('bridge.home_chain', 'cyberia')
                 && ($tokenConfig['model'] ?? 'direct') === 'mint'
-                && ! ($sourceToken['native'] ?? false)) {
+                && ! ($sourceToken['native'] ?? false)
+                && ! $request->wrapper_burned) {
                 $burned = $this->burnEvmWrapper(
                     (string) $sourceToken['address'],
                     $claimedRaw,
@@ -512,6 +532,8 @@ class BridgeService
 
                     return false;
                 }
+
+                $request->update(['wrapper_burned' => true]);
             }
 
             return $this->payoutDestination($request, $destinationChain, $destinationToken, $tokenConfig, $netAmount);
@@ -556,12 +578,12 @@ class BridgeService
                     (string) $chain['rpc_url'],
                 ),
             'ton' => $this->verifyTonDeposit($request, $chain, $tokenEntry),
-            'yenten' => app(YentenApiService::class)->verifyDeposit(
-                $request->source_tx_hash,
-                $request->sender_address,
-                (string) ($chain['deposit_address'] ?? ''),
-                (int) ($chain['minimum_confirmations'] ?? 1),
-            ),
+            // Whatever the user deposited to THIS request's one-time address is
+            // what gets minted — the address binds the deposit to this request
+            // and its committed recipient. No amount or tx hash needed.
+            'yenten' => $request->deposit_address
+                ? app(YentenApiService::class)->addressBalance((string) $request->deposit_address)
+                : null,
             default => null,
         };
     }
@@ -810,10 +832,15 @@ class BridgeService
      */
     private function payoutYenten(BridgeRequest $request, array $chain, array $tokenEntry, string $netAmount): bool
     {
-        $wif = (string) ($chain['relayer_wif'] ?? '');
+        // Liquidity is pooled across every relayer-controlled address: the
+        // central wallet plus the one-time deposit addresses (funds from
+        // prior yenten_to_evm bridge-ins). The recipient receives the net
+        // amount exactly; the network fee is paid by the pool out of the
+        // flat YTN bridge fee retained above (yenten_payout_fee_ytn).
+        $wifs = $this->yentenPayoutKeys($chain);
 
-        if ($wif === '') {
-            $request->markFailed('Yenten relayer WIF not configured (BRIDGE_YENTEN_RELAYER_WIF)');
+        if ($wifs === []) {
+            $request->markFailed('Yenten relayer key not configured (BRIDGE_YENTEN_RELAYER_WIF / deposits)');
 
             return false;
         }
@@ -825,11 +852,13 @@ class BridgeService
 
         $result = Process::path($scriptDir)
             ->env([
-                'YENTEN_RELAYER_WIF' => $wif,
-                'YENTEN_RELAYER_ADDRESS' => (string) ($chain['deposit_address'] ?? ''),
+                'YENTEN_RELAYER_WIFS' => json_encode(array_values($wifs)),
+                'YENTEN_CHANGE_ADDRESS' => (string) ($chain['deposit_address'] ?? ''),
                 'YENTEN_API_URL' => (string) ($chain['api_url'] ?? 'https://api.yentencoin.info'),
             ])
-            ->timeout(180)
+            // Generous: the relay script retries slow light-wallet API reads
+            // and reconciles a lost /broadcast response by polling the txid.
+            ->timeout(300)
             ->run([
                 'npm', 'run', '--silent', 'relay', '--',
                 $request->recipient_address,
@@ -858,14 +887,68 @@ class BridgeService
             return false;
         }
 
+        // Mark the deposit addresses whose coins funded this payout as swept.
+        foreach ((array) ($json['spentAddresses'] ?? []) as $address) {
+            BridgeRequest::where('deposit_address', $address)->update(['swept' => true]);
+        }
+
         $request->markCompleted((string) $json['txHash']);
 
         return true;
     }
 
     /**
+     * Relayer signing keys for a Yenten payout: the central wallet plus the
+     * one-time deposit-address keys still holding funds (unswept). Deposit keys
+     * are stored encrypted per request.
+     *
+     * @param  array<string, mixed>  $chain
+     * @return array<int, string> WIFs
+     */
+    private function yentenPayoutKeys(array $chain): array
+    {
+        $wifs = [];
+
+        $central = (string) ($chain['relayer_wif'] ?? '');
+
+        if ($central !== '') {
+            $wifs[] = $central;
+        }
+
+        // Bounded set of unswept deposit keys. Only COMPLETED requests: their
+        // deposit is claimed and minted, so the coins belong to the pool. An
+        // awaiting_deposit address may hold a deposit the user has not claimed
+        // yet — spending it would make the later claim come up empty. Never-
+        // funded/expired rows are excluded the same way, so the relay does not
+        // hammer the API over addresses that cannot hold pool funds.
+        $deposits = BridgeRequest::query()
+            ->where('source_chain', 'yenten')
+            ->where('status', 'completed')
+            ->whereNotNull('deposit_wif')
+            ->where('swept', false)
+            ->latest('id')
+            ->limit(50)
+            ->pluck('deposit_wif');
+
+        foreach ($deposits as $wif) {
+            if (is_string($wif) && $wif !== '') {
+                $wifs[] = $wif;
+            }
+        }
+
+        return array_values(array_unique($wifs));
+    }
+
+    /**
      * Run a hardhat relay script against an arbitrary EVM chain and return
-     * the resulting tx hash (last-line JSON contract), or null on failure.
+     * the resulting tx hash, or null on failure.
+     *
+     * The relay scripts broadcast the payout, print its hash, then block on
+     * the receipt. A slow destination RPC can push that wait past the timeout
+     * even though the payout is already in the mempool — so we stream stdout
+     * into a buffer and, on timeout, recover the broadcast hash. Returning it
+     * lets the caller record the request completed instead of failing it; a
+     * blind retry would send the payout a second time.
      *
      * @param  array<int, string>  $args  script path + its arguments
      * @param  array<string, mixed>  $chain
@@ -876,16 +959,35 @@ class BridgeService
             ? '/singularity/crypto/hardhat'
             : base_path('/../../crypto/hardhat');
 
-        $result = Process::path($hardhatDir)
-            ->env([
-                'EVM_RPC_URL' => (string) $chain['rpc_url'],
-                'EVM_CHAIN_ID' => (string) ($chain['evm_chain_id'] ?? ''),
-                // Back-compat for scripts still reading the legacy var.
-                'CYBERIA_RPC_URL' => (string) $chain['rpc_url'],
-                'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
-            ])
-            ->timeout(120)
-            ->run(['npx', 'tsx', ...$args]);
+        $captured = '';
+
+        try {
+            $result = Process::path($hardhatDir)
+                ->env([
+                    'EVM_RPC_URL' => (string) $chain['rpc_url'],
+                    'EVM_CHAIN_ID' => (string) ($chain['evm_chain_id'] ?? ''),
+                    // Back-compat for scripts still reading the legacy var.
+                    'CYBERIA_RPC_URL' => (string) $chain['rpc_url'],
+                    'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
+                ])
+                ->timeout(120)
+                ->run(['npx', 'tsx', ...$args], function (string $type, string $buffer) use (&$captured) {
+                    $captured .= $buffer;
+                });
+        } catch (ProcessTimedOutException $e) {
+            $broadcastHash = $this->extractRelayTxHash($captured);
+
+            Log::warning('Bridge relay evm script timed out waiting for receipt', [
+                'id' => $requestId,
+                'chain' => $chain['key'] ?? null,
+                'script' => $args[0] ?? null,
+                'broadcast_tx_hash' => $broadcastHash,
+                'output' => $captured,
+            ]);
+
+            // null when it timed out before broadcasting — safe to retry then.
+            return $broadcastHash;
+        }
 
         Log::info('Bridge relay evm script', [
             'id' => $requestId,
@@ -900,13 +1002,34 @@ class BridgeService
             return null;
         }
 
-        $json = $this->lastJsonLine($result->output());
+        return $this->extractRelayTxHash($result->output());
+    }
 
-        if (! $json || empty($json['txHash'])) {
-            return null;
+    /**
+     * Pull the relayer tx hash from EVM relay-script stdout, newest line first.
+     * Accepts the confirmed {"txHash":...} line and the pre-receipt
+     * {"broadcastTxHash":...} line the scripts print the moment the tx is
+     * broadcast, so a receipt-wait timeout can still recover the hash.
+     */
+    private function extractRelayTxHash(string $output): ?string
+    {
+        $lines = array_reverse(array_filter(array_map('trim', explode("\n", $output))));
+
+        foreach ($lines as $line) {
+            $json = json_decode($line, true);
+
+            if (! is_array($json)) {
+                continue;
+            }
+
+            $hash = $json['txHash'] ?? $json['broadcastTxHash'] ?? null;
+
+            if (is_string($hash) && $hash !== '') {
+                return $hash;
+            }
         }
 
-        return (string) $json['txHash'];
+        return null;
     }
 
     /**

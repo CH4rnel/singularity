@@ -6,6 +6,7 @@ export type BridgeChain =
     | 'cyberia'
     | 'ton'
     | 'bnb'
+    | 'base'
     | 'yenten'
     // Config-driven chains added in config/bridge.php arrive via server props.
     | (string & {});
@@ -19,6 +20,8 @@ export type BridgeDirection =
     | 'evm_to_ton'
     | 'bnb_to_evm'
     | 'evm_to_bnb'
+    | 'base_to_evm'
+    | 'evm_to_base'
     | 'yenten_to_evm'
     | 'evm_to_yenten'
     // Config-driven routes added in config/bridge.php arrive via server props.
@@ -104,6 +107,26 @@ export const BRIDGE_ROUTES: Record<string, BridgeRoute> = {
         destination: 'bnb',
         sourceLabel: 'Cyberia EVM',
         destinationLabel: 'BNB Chain',
+        sourceWallet: 'evm',
+        destinationAddressType: 'evm',
+        autoProcess: true,
+    },
+    base_to_evm: {
+        direction: 'base_to_evm',
+        source: 'base',
+        destination: 'cyberia',
+        sourceLabel: 'Base',
+        destinationLabel: 'Cyberia EVM',
+        sourceWallet: 'evm',
+        destinationAddressType: 'evm',
+        autoProcess: true,
+    },
+    evm_to_base: {
+        direction: 'evm_to_base',
+        source: 'cyberia',
+        destination: 'base',
+        sourceLabel: 'Cyberia EVM',
+        destinationLabel: 'Base',
         sourceWallet: 'evm',
         destinationAddressType: 'evm',
         autoProcess: true,

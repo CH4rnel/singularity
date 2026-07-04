@@ -3,91 +3,53 @@
 use App\Services\YentenApiService;
 use Illuminate\Support\Facades\Http;
 
-const YENTEN_TX_HASH = '62cfd7ed37b4471a5949aae2c7b09e4db34d2d9dac7b43c925d81cf583c8536f';
+const YENTEN_DEPOSIT_ADDR = 'YDepositAddr1111111111111111111111';
 
-function fakeYentenTransaction(array $overrides = []): array
-{
-    return array_replace_recursive([
-        'txid' => YENTEN_TX_HASH,
-        'confirmations' => 7,
-        'vin' => [[
-            'scriptPubKey' => ['addresses' => ['YSender1111111111111111111111111111']],
-        ]],
-        'vout' => [
-            [
-                'value' => 125000000,
-                'scriptPubKey' => ['addresses' => ['YHotWallet11111111111111111111111111']],
-            ],
-            [
-                'value' => 50000000,
-                'scriptPubKey' => ['addresses' => ['YChange111111111111111111111111111']],
-            ],
-        ],
-    ], $overrides);
-}
-
-test('verifies a confirmed Yenten deposit and returns satoshis', function () {
+test('sums the unspent balance of a deposit address', function () {
     Http::fake([
-        'api.yentencoin.info/transaction/*' => Http::response([
-            'result' => fakeYentenTransaction(),
+        'api.yentencoin.info/unspent/*' => Http::response([
+            'result' => [
+                ['txid' => str_repeat('a', 64), 'index' => 0, 'value' => 125000000, 'height' => 10],
+                ['txid' => str_repeat('b', 64), 'index' => 1, 'value' => 25000000, 'height' => 11],
+            ],
             'error' => null,
         ]),
     ]);
 
-    $amount = app(YentenApiService::class)->verifyDeposit(
-        YENTEN_TX_HASH,
-        'YSender1111111111111111111111111111',
-        'YHotWallet11111111111111111111111111',
-    );
-
-    expect($amount)->toBe('125000000');
+    expect(app(YentenApiService::class)->addressBalance(YENTEN_DEPOSIT_ADDR))
+        ->toBe('150000000');
 });
 
-test('sums multiple outputs sent to the Yenten hot wallet', function () {
-    $transaction = fakeYentenTransaction();
-    $transaction['vout'][] = [
-        'value' => '25000000',
-        'scriptPubKey' => ['addresses' => ['YHotWallet11111111111111111111111111']],
-    ];
-
+test('unconfirmed UTXOs count as pending, never as mintable balance', function () {
     Http::fake([
-        'api.yentencoin.info/transaction/*' => Http::response([
-            'result' => $transaction,
+        'api.yentencoin.info/unspent/*' => Http::response([
+            'result' => [
+                ['txid' => str_repeat('a', 64), 'index' => 0, 'value' => 125000000, 'height' => 10],
+                ['txid' => str_repeat('b', 64), 'index' => 1, 'value' => 25000000, 'height' => 0],
+            ],
             'error' => null,
         ]),
     ]);
 
-    $amount = app(YentenApiService::class)->verifyDeposit(
-        YENTEN_TX_HASH,
-        'YSender1111111111111111111111111111',
-        'YHotWallet11111111111111111111111111',
-    );
+    $service = app(YentenApiService::class);
 
-    expect($amount)->toBe('150000000');
+    expect($service->addressBalances(YENTEN_DEPOSIT_ADDR))
+        ->toBe(['confirmed' => '125000000', 'pending' => '25000000']);
+    expect($service->addressBalance(YENTEN_DEPOSIT_ADDR))->toBe('125000000');
 });
 
-test('rejects an unconfirmed or mismatched Yenten deposit', function (array $overrides) {
+test('returns zero when the address has no unspent outputs', function () {
     Http::fake([
-        'api.yentencoin.info/transaction/*' => Http::response([
-            'result' => fakeYentenTransaction($overrides),
-            'error' => null,
-        ]),
+        'api.yentencoin.info/unspent/*' => Http::response(['result' => [], 'error' => null]),
     ]);
 
-    $amount = app(YentenApiService::class)->verifyDeposit(
-        YENTEN_TX_HASH,
-        'YSender1111111111111111111111111111',
-        'YHotWallet11111111111111111111111111',
-    );
+    expect(app(YentenApiService::class)->addressBalance(YENTEN_DEPOSIT_ADDR))->toBe('0');
+});
 
-    expect($amount)->toBeNull();
-})->with([
-    'unconfirmed' => [['confirmations' => 0]],
-    'wrong sender' => [['vin' => [[
-        'scriptPubKey' => ['addresses' => ['YSomeoneElse111111111111111111111111']],
-    ]]]],
-    'wrong recipient' => [['vout' => [[
-        'value' => 125000000,
-        'scriptPubKey' => ['addresses' => ['YSomeoneElse111111111111111111111111']],
-    ]]]],
-]);
+test('returns null when the Yenten API errors', function () {
+    Http::fake([
+        'api.yentencoin.info/unspent/*' => Http::response(['error' => 'boom'], 500),
+    ]);
+
+    expect(app(YentenApiService::class)->addressBalance(YENTEN_DEPOSIT_ADDR))->toBeNull();
+});

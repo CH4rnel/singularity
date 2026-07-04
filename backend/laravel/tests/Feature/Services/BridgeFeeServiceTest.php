@@ -2,6 +2,7 @@
 
 use App\Services\BridgeFeeService;
 use App\Services\CyberPriceService;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     config()->set('bridge.fee.flat_usd', '0.10');
@@ -58,4 +59,64 @@ test('isFeeBearing reports correctly per token', function () {
     expect($service->isFeeBearing('USDC'))->toBeTrue();
     expect($service->isFeeBearing('USDT'))->toBeTrue();
     expect($service->isFeeBearing('CYBER.sol'))->toBeFalse();
+});
+
+test('native BNB payout fee reserves destination gas with a safety margin', function () {
+    config()->set('bridge.fee.native_transfer_gas_limit', 21000);
+    config()->set('bridge.fee.native_gas_price_floor_gwei', '3');
+    config()->set('bridge.fee.native_gas_multiplier_bps', 20000);
+
+    Http::fake([
+        '*' => Http::response(['result' => '0x29b92700']), // 0.7 gwei; floor wins
+    ]);
+
+    $service = new BridgeFeeService(new CyberPriceService);
+    $result = $service->feeForBridge('BNB', '1', 'evm_to_bnb');
+
+    expect($result['fee_amount'])->toBe('0.000126000000000000');
+    expect($result['fee_usd'])->toBe('0');
+});
+
+test('evm_to_yenten payouts retain the flat YTN fee', function () {
+    config()->set('bridge.fee.yenten_payout_fee_ytn', '0.01');
+
+    $service = new BridgeFeeService(new CyberPriceService);
+    $result = $service->feeForBridge('YTN', '2', 'evm_to_yenten');
+
+    expect($result['fee_amount'])->toBe('0.01');
+    expect($result['fee_usd'])->toBe('0');
+});
+
+test('yenten_to_evm mints stay fee-free', function () {
+    config()->set('bridge.fee.yenten_payout_fee_ytn', '0.01');
+
+    $service = new BridgeFeeService(new CyberPriceService);
+
+    expect($service->nativePayoutFee('yenten_to_evm', 'YTN'))->toBe('0');
+    expect($service->feeForBridge('YTN', '2', 'yenten_to_evm')['fee_amount'])->toBe('0');
+});
+
+test('frontend native fees include the Yenten payout route', function () {
+    config()->set('bridge.fee.yenten_payout_fee_ytn', '0.01');
+
+    $service = new BridgeFeeService(new CyberPriceService);
+    $fees = $service->frontendNativeFees();
+
+    expect($fees['evm_to_yenten']['YTN'])->toBe(0.01);
+    expect($fees)->not->toHaveKey('yenten_to_evm');
+});
+
+test('native BNB payout fee follows a live gas-price spike', function () {
+    config()->set('bridge.fee.native_transfer_gas_limit', 21000);
+    config()->set('bridge.fee.native_gas_price_floor_gwei', '3');
+    config()->set('bridge.fee.native_gas_multiplier_bps', 20000);
+
+    Http::fake([
+        '*' => Http::response(['result' => '0x12a05f200']), // 5 gwei
+    ]);
+
+    $service = new BridgeFeeService(new CyberPriceService);
+
+    expect($service->nativePayoutFee('evm_to_bnb', 'BNB'))
+        ->toBe('0.000210000000000000');
 });

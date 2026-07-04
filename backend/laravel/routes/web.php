@@ -131,6 +131,10 @@ Route::middleware(['auth'])->group(function () {
 
 // Bridge (public — no auth required, controller handles optional user)
 Route::post('bridge/submit', [BridgeController::class, 'submit'])->name('bridge.submit');
+// Two-phase one-time-address routes (Yenten): prepare commits the recipient
+// and returns a unique deposit address; claim verifies the deposit landed on it.
+Route::post('bridge/prepare', [BridgeController::class, 'prepare'])->name('bridge.prepare');
+Route::post('bridge/claim', [BridgeController::class, 'claim'])->name('bridge.claim');
 
 // Bridge analytics (admin only)
 Route::middleware(['auth', EnsureBridgeAdmin::class])

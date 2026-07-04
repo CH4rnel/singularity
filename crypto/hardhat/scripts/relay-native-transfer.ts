@@ -55,6 +55,10 @@ async function main() {
     to: recipient,
     value: BigInt(amountWei),
   });
+  // Emit the hash the instant the tx is in the mempool, before blocking on the
+  // receipt. If a slow RPC pushes tx.wait() past the caller's timeout, the
+  // caller recovers this hash instead of retrying and double-paying.
+  console.log(JSON.stringify({ broadcastTxHash: tx.hash }));
   const receipt = await tx.wait();
 
   if (!receipt || receipt.status !== 1) {
