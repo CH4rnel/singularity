@@ -1,0 +1,19 @@
+# Cyberia EVM JSON-RPC and the deployed MinecraftLand contract.
+rpc-url: "https://rpc.cyberia.church"
+chain-id: 49406
+contract-address: ""
+explorer-url: "https://explorer.cyberia.church"
+
+# Changing this key creates a separate on-chain parcel namespace. Keep it
+# stable after players start claiming land.
+world-key: "cyberia-survival-v1"
+protected-worlds:
+  - world
+
+# Ownership reads are cached to keep RPC traffic off the Minecraft tick loop.
+cache-seconds: 15
+rpc-timeout-seconds: 4
+
+# Deny edits while ownership is loading or RPC is unavailable. This prevents
+# an RPC outage from making every claimed parcel griefable.
+fail-closed: true

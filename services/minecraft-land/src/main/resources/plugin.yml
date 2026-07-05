@@ -1,0 +1,23 @@
+name: CyberiaLand
+version: '${version}'
+main: church.cyberia.land.CyberiaLandPlugin
+description: On-chain ERC-721 chunk ownership for Cyberia Minecraft
+author: Cyberia
+website: https://cyberia.church
+api-version: '1.21.4'
+libraries:
+  - org.web3j:core:4.12.3
+commands:
+  land:
+    description: Inspect land and securely link an EVM wallet
+    usage: /land <info|link|verify|unlink|reload>
+permissions:
+  cyberialand.use:
+    description: Use CyberiaLand player commands
+    default: true
+  cyberialand.bypass:
+    description: Modify any claimed parcel
+    default: op
+  cyberialand.reload:
+    description: Reload CyberiaLand configuration
+    default: op
