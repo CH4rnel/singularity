@@ -237,8 +237,12 @@ const sourceDepositAddress = computed(() => {
     );
 });
 
-const handleDirection = (direction: BridgeDirection) => {
+const handleDirection = (
+    direction: BridgeDirection,
+    token: BridgeTokenSymbol,
+) => {
     flow.chooseDirection(direction);
+    flow.context.token = token;
     analytics.track('direction_selected', { direction });
 
     const available = tokensForRoute(direction);

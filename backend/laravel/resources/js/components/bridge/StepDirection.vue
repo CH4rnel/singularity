@@ -3,11 +3,20 @@ import { ArrowRight, ArrowUpDown, PenLine, Wallet } from 'lucide-vue-next';
 
 import { computed, ref, watch } from 'vue';
 
+import TokenIcon from '@/components/TokenIcon.vue';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+} from '@/components/ui/select';
 import { bridgeRoutesList } from '@/lib/addressValidation';
 import type { BridgeDirection, BridgeRoute } from '@/lib/addressValidation';
+import { tokensForRoute } from '@/lib/bridgeConfig';
+import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 
 const emit = defineEmits<{
-    (e: 'select', direction: BridgeDirection): void;
+    (e: 'select', direction: BridgeDirection, token: BridgeTokenSymbol): void;
 }>();
 
 const props = withDefaults(
@@ -18,6 +27,17 @@ const props = withDefaults(
         availableDirections: () => [],
     },
 );
+
+// Chain logos live in public/token-icons/. Chains without a file fall back to a
+// lettered gradient avatar (TokenIcon), so this only needs the ones we ship.
+const CHAIN_LOGOS: Record<string, string> = {
+    solana: '/token-icons/sol.svg',
+    cyberia: '/token-icons/cyberia.png',
+    yenten: '/token-icons/yenten.png',
+    base: '/token-icons/eth.svg',
+};
+
+const chainLogo = (chain: string): string | null => CHAIN_LOGOS[chain] ?? null;
 
 // Server config (initBridgeConfig) is authoritative; the static table is the
 // pre-init fallback. availableDirections filters to operational routes.
@@ -41,6 +61,8 @@ const chainLabel = computed<Record<string, string>>(() => {
 
     return labels;
 });
+
+const labelFor = (chain: string): string => chainLabel.value[chain] ?? chain;
 
 const uniq = (values: string[]): string[] => [...new Set(values)];
 
@@ -91,6 +113,24 @@ const selectedRoute = computed(
         ) ?? null,
 );
 
+// Tokens available on the chosen route — the picker keeps a valid selection as
+// the route changes, so the choice made here carries straight into the flow.
+const availableTokens = computed<string[]>(() =>
+    selectedRoute.value ? tokensForRoute(selectedRoute.value.direction) : [],
+);
+
+const token = ref<string>('');
+
+watch(
+    availableTokens,
+    (list) => {
+        if (list.length > 0 && !list.includes(token.value)) {
+            token.value = list[0];
+        }
+    },
+    { immediate: true },
+);
+
 const canFlip = computed(() =>
     routes.value.some(
         (route) =>
@@ -107,8 +147,12 @@ const flip = () => {
 };
 
 const proceed = () => {
-    if (selectedRoute.value) {
-        emit('select', selectedRoute.value.direction);
+    if (selectedRoute.value && token.value) {
+        emit(
+            'select',
+            selectedRoute.value.direction,
+            token.value as BridgeTokenSymbol,
+        );
     }
 };
 </script>
@@ -120,7 +164,7 @@ const proceed = () => {
                 Where do you want to bridge?
             </h2>
             <p class="mt-1 text-sm text-muted-foreground">
-                Pick the source and destination chains — tokens come next.
+                Pick the source and destination chains and the token to bridge.
             </p>
         </div>
 
@@ -131,22 +175,38 @@ const proceed = () => {
             >
                 From
             </p>
-            <div class="flex flex-wrap gap-2">
-                <button
-                    v-for="chain in sourceChains"
-                    :key="chain"
-                    type="button"
-                    class="rounded-full border px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        from === chain
-                            ? 'border-brand-cyan bg-accent text-accent-foreground'
-                            : 'border-border text-muted-foreground hover:border-brand-cyan/40 hover:text-foreground'
-                    "
-                    @click="from = chain"
+            <Select v-model="from">
+                <SelectTrigger
+                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0"
                 >
-                    {{ chainLabel[chain] ?? chain }}
-                </button>
-            </div>
+                    <span class="flex items-center gap-2.5">
+                        <TokenIcon
+                            :symbol="labelFor(from)"
+                            :logo="chainLogo(from)"
+                            :size="24"
+                        />
+                        <span class="text-base font-semibold text-foreground">
+                            {{ labelFor(from) }}
+                        </span>
+                    </span>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem
+                        v-for="chain in sourceChains"
+                        :key="chain"
+                        :value="chain"
+                    >
+                        <span class="flex items-center gap-2.5">
+                            <TokenIcon
+                                :symbol="labelFor(chain)"
+                                :logo="chainLogo(chain)"
+                                :size="22"
+                            />
+                            {{ labelFor(chain) }}
+                        </span>
+                    </SelectItem>
+                </SelectContent>
+            </Select>
         </div>
 
         <!-- Swap -->
@@ -169,22 +229,74 @@ const proceed = () => {
             >
                 To
             </p>
-            <div class="flex flex-wrap gap-2">
-                <button
-                    v-for="chain in destinationChains"
-                    :key="chain"
-                    type="button"
-                    class="rounded-full border px-4 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        to === chain
-                            ? 'border-brand-cyan bg-accent text-accent-foreground'
-                            : 'border-border text-muted-foreground hover:border-brand-cyan/40 hover:text-foreground'
-                    "
-                    @click="to = chain"
+            <Select v-model="to">
+                <SelectTrigger
+                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0"
                 >
-                    {{ chainLabel[chain] ?? chain }}
-                </button>
-            </div>
+                    <span class="flex items-center gap-2.5">
+                        <TokenIcon
+                            :symbol="labelFor(to)"
+                            :logo="chainLogo(to)"
+                            :size="24"
+                        />
+                        <span class="text-base font-semibold text-foreground">
+                            {{ labelFor(to) }}
+                        </span>
+                    </span>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem
+                        v-for="chain in destinationChains"
+                        :key="chain"
+                        :value="chain"
+                    >
+                        <span class="flex items-center gap-2.5">
+                            <TokenIcon
+                                :symbol="labelFor(chain)"
+                                :logo="chainLogo(chain)"
+                                :size="22"
+                            />
+                            {{ labelFor(chain) }}
+                        </span>
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+        </div>
+
+        <!-- Token -->
+        <div
+            v-if="availableTokens.length > 0"
+            class="rounded-xl border border-border bg-card p-4"
+        >
+            <p
+                class="mb-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase"
+            >
+                Token
+            </p>
+            <Select v-model="token">
+                <SelectTrigger
+                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0"
+                >
+                    <span class="flex items-center gap-2.5">
+                        <TokenIcon :symbol="token" :size="24" />
+                        <span class="text-base font-semibold text-foreground">
+                            {{ token }}
+                        </span>
+                    </span>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem
+                        v-for="symbol in availableTokens"
+                        :key="symbol"
+                        :value="symbol"
+                    >
+                        <span class="flex items-center gap-2.5">
+                            <TokenIcon :symbol="symbol" :size="22" />
+                            {{ symbol }}
+                        </span>
+                    </SelectItem>
+                </SelectContent>
+            </Select>
         </div>
 
         <!-- Route hint -->
