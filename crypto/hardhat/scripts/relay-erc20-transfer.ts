@@ -17,6 +17,8 @@
  */
 import "dotenv/config";
 import { ethers } from "ethers";
+import { waitForReceipt } from "./lib/wait-receipt";
+import { sendWithNonceRetry } from "./lib/send-tx";
 
 const RELAYER_PK = process.env.BRIDGE_RELAYER_PRIVATE_KEY || process.env.DEPLOYER_PK;
 
@@ -62,14 +64,19 @@ async function main() {
   console.log(`Amount:  ${amountWei}`);
 
   const token = new ethers.Contract(tokenAddr, ERC20_ABI, wallet);
-  const tx = await token.transfer(recipient, BigInt(amountWei));
+  const tx = await sendWithNonceRetry(() =>
+    token.transfer(recipient, BigInt(amountWei)),
+  );
   // Emit the hash the instant the tx is in the mempool, before blocking on the
   // receipt. If a slow RPC pushes tx.wait() past the caller's timeout, the
   // caller recovers this hash instead of retrying and double-paying.
   console.log(JSON.stringify({ broadcastTxHash: tx.hash }));
-  const receipt = await tx.wait();
+  const receipt = await waitForReceipt(provider, tx.hash);
 
-  if (!receipt || receipt.status !== 1) {
+  if (!receipt) {
+    throw new Error(`ERC20.transfer receipt not observed (tx ${tx.hash})`);
+  }
+  if (receipt.status !== 1) {
     throw new Error(`ERC20.transfer reverted (tx ${tx.hash})`);
   }
 
@@ -77,11 +84,13 @@ async function main() {
 
   if (gasDropWei && BigInt(gasDropWei) > 0n) {
     console.log(`GasDrop: ${gasDropWei} wei`);
-    const drop = await wallet.sendTransaction({
-      to: recipient,
-      value: BigInt(gasDropWei),
-    });
-    const dropReceipt = await drop.wait();
+    const drop = await sendWithNonceRetry(() =>
+      wallet.sendTransaction({
+        to: recipient,
+        value: BigInt(gasDropWei),
+      }),
+    );
+    const dropReceipt = await waitForReceipt(provider, drop.hash);
 
     if (!dropReceipt || dropReceipt.status !== 1) {
       throw new Error(`Gas drop transfer reverted (tx ${drop.hash})`);

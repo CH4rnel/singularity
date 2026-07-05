@@ -19,6 +19,8 @@
  */
 import "dotenv/config";
 import { ethers } from "ethers";
+import { waitForReceipt } from "./lib/wait-receipt";
+import { sendWithNonceRetry } from "./lib/send-tx";
 
 const RELAYER_PK = process.env.BRIDGE_RELAYER_PRIVATE_KEY || process.env.DEPLOYER_PK;
 
@@ -60,10 +62,15 @@ async function main() {
   console.log(`Burn:    ${amountWei} wei from relayer's own balance`);
 
   const token = new ethers.Contract(tokenAddr, BURNABLE_ABI, wallet);
-  const tx = await token.burnFrom(wallet.address, BigInt(amountWei));
-  const receipt = await tx.wait();
+  const tx = await sendWithNonceRetry(() =>
+    token.burnFrom(wallet.address, BigInt(amountWei)),
+  );
+  const receipt = await waitForReceipt(provider, tx.hash);
 
-  if (!receipt || receipt.status !== 1) {
+  if (!receipt) {
+    throw new Error(`burnFrom() receipt not observed (tx ${tx.hash})`);
+  }
+  if (receipt.status !== 1) {
     throw new Error(`burnFrom() reverted (tx ${tx.hash})`);
   }
 

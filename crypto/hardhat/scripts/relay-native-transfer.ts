@@ -15,6 +15,8 @@
  */
 import "dotenv/config";
 import { ethers } from "ethers";
+import { waitForReceipt } from "./lib/wait-receipt";
+import { sendWithNonceRetry } from "./lib/send-tx";
 
 const RELAYER_PK = process.env.BRIDGE_RELAYER_PRIVATE_KEY || process.env.DEPLOYER_PK;
 
@@ -51,17 +53,25 @@ async function main() {
   console.log(`To:      ${recipient}`);
   console.log(`Amount:  ${amountWei} wei (chain ${CHAIN_ID})`);
 
-  const tx = await wallet.sendTransaction({
-    to: recipient,
-    value: BigInt(amountWei),
-  });
+  const tx = await sendWithNonceRetry(() =>
+    wallet.sendTransaction({
+      to: recipient,
+      value: BigInt(amountWei),
+    }),
+  );
   // Emit the hash the instant the tx is in the mempool, before blocking on the
   // receipt. If a slow RPC pushes tx.wait() past the caller's timeout, the
   // caller recovers this hash instead of retrying and double-paying.
   console.log(JSON.stringify({ broadcastTxHash: tx.hash }));
-  const receipt = await tx.wait();
+  const receipt = await waitForReceipt(provider, tx.hash);
 
-  if (!receipt || receipt.status !== 1) {
+  if (!receipt) {
+    // Broadcast but not confirmed within budget — exit non-zero so the caller
+    // recovers the broadcastTxHash above and reconciles it on-chain instead of
+    // retrying (which would double-pay).
+    throw new Error(`Native transfer receipt not observed (tx ${tx.hash})`);
+  }
+  if (receipt.status !== 1) {
     throw new Error(`Native transfer reverted (tx ${tx.hash})`);
   }
 

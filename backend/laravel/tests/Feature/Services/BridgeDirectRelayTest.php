@@ -2,6 +2,8 @@
 
 use App\Models\BridgeRequest;
 use App\Services\BridgeService;
+use Illuminate\Process\Exceptions\ProcessTimedOutException;
+use Illuminate\Process\ProcessResult;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 
@@ -325,6 +327,78 @@ test('extractRelayTxHash recovers the broadcast hash so a timed-out payout is no
 
     // Nothing usable (timed out before broadcasting) → null, safe to retry.
     expect($extract->invoke($service, "starting up\nnot json here"))->toBeNull();
+});
+
+test('a timed-out EVM relay is caught so a broadcast payout is not crashed into a false failure', function () {
+    // Laravel's Process::run() re-throws Symfony's timeout wrapped as
+    // Illuminate\Process\Exceptions\ProcessTimedOutException. runEvmRelayScript
+    // must catch THAT class: catching Symfony's lets the exception escape, so a
+    // slow-RPC payout that already broadcast on-chain is recorded as failed and
+    // a blind retry double-pays. Regression guard for that exact mismatch.
+    Process::fake([
+        '*relay-native-transfer*' => new ProcessTimedOutException(
+            new Symfony\Component\Process\Exception\ProcessTimedOutException(
+                new Symfony\Component\Process\Process(['true']),
+                Symfony\Component\Process\Exception\ProcessTimedOutException::TYPE_GENERAL,
+            ),
+            new ProcessResult(new Symfony\Component\Process\Process(['true'])),
+        ),
+    ]);
+
+    $run = new ReflectionMethod(BridgeService::class, 'runEvmRelayScript');
+    $run->setAccessible(true);
+
+    // Before the fix this invoke raised the uncaught Laravel timeout exception;
+    // now it is caught and returns null (no hash streamable in the fake, so the
+    // caller marks failed safely rather than the whole job crashing).
+    $result = $run->invoke(
+        app(BridgeService::class),
+        ['scripts/relay-native-transfer.ts', '0xRecipient', '874000000000000'],
+        config('bridge.chains.bnb'),
+        999,
+    );
+
+    expect($result)->toBeNull();
+});
+
+test('an EVM relay that broadcast then exited non-zero recovers the hash iff the tx did not revert on-chain', function () {
+    // The relay script can broadcast the payout and THEN exit 1 when the
+    // receipt wait hits a flaky RPC (`read ETIMEDOUT`). The tx is already
+    // mined, so we must recover the broadcast hash — unless the chain says it
+    // reverted — instead of false-failing and double-paying on retry.
+    $broadcast = '0x'.str_repeat('a', 64);
+
+    config()->set('bridge.chains.bnb.rpc_url', 'https://bsc-test-rpc.example');
+
+    Process::fake([
+        '*relay-native-transfer*' => Process::result(
+            output: "Relayer: 0xrelayer\nTo:      0xrec\n".json_encode(['broadcastTxHash' => $broadcast]),
+            errorOutput: 'read ETIMEDOUT',
+            exitCode: 1,
+        ),
+    ]);
+
+    $run = new ReflectionMethod(BridgeService::class, 'runEvmRelayScript');
+    $run->setAccessible(true);
+    $chain = config('bridge.chains.bnb');
+    $args = ['scripts/relay-native-transfer.ts', '0xRecipient', '874000000000000'];
+
+    // One receipt lookup per invocation, in order: confirmed, unknown, reverted.
+    Http::fake(['https://bsc-test-rpc.example*' => Http::sequence()
+        ->push(['result' => ['status' => '0x1']])   // mined & succeeded
+        ->push(['result' => null])                  // not mined yet / RPC blank
+        ->push(['result' => ['status' => '0x0']]),  // mined & reverted
+    ]);
+
+    // Confirmed on-chain → recover the hash, mark completed (no retry).
+    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))->toBe($broadcast);
+
+    // Not mined yet / RPC unreachable → still recover: the tx was broadcast, so
+    // recovering beats a double-paying retry.
+    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))->toBe($broadcast);
+
+    // Reverted on-chain → a real failure, return null (safe to retry).
+    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))->toBeNull();
 });
 
 test('evm_to_yenten burns the wrapper and runs the light-wallet payout', function () {

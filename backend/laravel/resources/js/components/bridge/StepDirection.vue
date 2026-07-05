@@ -35,6 +35,7 @@ const CHAIN_LOGOS: Record<string, string> = {
     cyberia: '/token-icons/cyberia.png',
     yenten: '/token-icons/yenten.png',
     base: '/token-icons/eth.svg',
+    bnb: '/token-icons/bnb.svg',
 };
 
 const chainLogo = (chain: string): string | null => CHAIN_LOGOS[chain] ?? null;

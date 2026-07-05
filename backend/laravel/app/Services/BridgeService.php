@@ -5,10 +5,10 @@ namespace App\Services;
 use App\Models\BridgeRequest;
 use App\Support\Environment;
 use App\Support\TokenAmount;
+use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
-use Symfony\Component\Process\Exception\ProcessTimedOutException;
 
 class BridgeService
 {
@@ -999,10 +999,64 @@ class BridgeService
         ]);
 
         if ($result->exitCode() !== 0) {
+            // The script can broadcast the payout and then exit non-zero while
+            // waiting for the receipt (a flaky destination RPC dropping the
+            // connection: `read ETIMEDOUT`). The tx is already on-chain, so a
+            // blind retry double-pays. If a broadcast hash reached us, confirm
+            // it on-chain: recover it unless the chain says it reverted.
+            $broadcastHash = $this->extractRelayTxHash($result->output());
+
+            if ($broadcastHash !== null
+                && $this->evmTxSucceeded((string) $chain['rpc_url'], $broadcastHash) !== false) {
+                Log::warning('Bridge relay evm script exited non-zero after broadcasting; recovered hash', [
+                    'id' => $requestId,
+                    'chain' => $chain['key'] ?? null,
+                    'script' => $args[0] ?? null,
+                    'broadcast_tx_hash' => $broadcastHash,
+                    'stderr' => $result->errorOutput(),
+                ]);
+
+                return $broadcastHash;
+            }
+
             return null;
         }
 
         return $this->extractRelayTxHash($result->output());
+    }
+
+    /**
+     * On-chain receipt status for a relayer payout hash:
+     *   true  = mined and succeeded,
+     *   false = mined and reverted (a real failure, safe to retry),
+     *   null  = not found yet / RPC unreachable (treat as still pending — the
+     *           tx was broadcast, so recovering its hash beats a double-pay).
+     */
+    private function evmTxSucceeded(string $rpcUrl, string $txHash): ?bool
+    {
+        try {
+            $response = Http::timeout(15)->post($rpcUrl, [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'eth_getTransactionReceipt',
+                'params' => [$txHash],
+            ]);
+
+            $receipt = $response->json('result');
+
+            if (! is_array($receipt)) {
+                return null;
+            }
+
+            return ($receipt['status'] ?? null) === '0x1';
+        } catch (\Throwable $e) {
+            Log::warning('Bridge: evmTxSucceeded receipt check failed', [
+                'tx' => $txHash,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     /**
