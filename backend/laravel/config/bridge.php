@@ -171,6 +171,12 @@ return [
     |--------------------------------------------------------------------------
     | Bridge routes. All auto-processed by the relayer.
     |--------------------------------------------------------------------------
+    | 'enabled' gates a corridor: disabled routes vanish from availableRoutes()
+    | so they are hidden from the UI and rejected at submit/quote time. Routes
+    | already submitted in a disabled direction still auto-process — the job
+    | reads config('bridge.routes') directly. Only the Solana <-> Cyberia pair
+    | is on by default; flip the matching env var to true to reopen a corridor
+    | without a deploy.
     */
 
     'routes' => [
@@ -179,60 +185,70 @@ return [
             'source_chain' => 'solana',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_SOL_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_sol' => [
             'direction' => 'evm_to_sol',
             'source_chain' => 'cyberia',
             'destination_chain' => 'solana',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_SOL_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'ton_to_evm' => [
             'direction' => 'ton_to_evm',
             'source_chain' => 'ton',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_TON_TO_EVM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_ton' => [
             'direction' => 'evm_to_ton',
             'source_chain' => 'cyberia',
             'destination_chain' => 'ton',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_TON_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
         'bnb_to_evm' => [
             'direction' => 'bnb_to_evm',
             'source_chain' => 'bnb',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_BNB_TO_EVM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_bnb' => [
             'direction' => 'evm_to_bnb',
             'source_chain' => 'cyberia',
             'destination_chain' => 'bnb',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BNB_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
         'base_to_evm' => [
             'direction' => 'base_to_evm',
             'source_chain' => 'base',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_BASE_TO_EVM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_base' => [
             'direction' => 'evm_to_base',
             'source_chain' => 'cyberia',
             'destination_chain' => 'base',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BASE_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
         'yenten_to_evm' => [
             'direction' => 'yenten_to_evm',
             'source_chain' => 'yenten',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_YENTEN_TO_EVM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_yenten' => [
             'direction' => 'evm_to_yenten',
             'source_chain' => 'cyberia',
             'destination_chain' => 'yenten',
             'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_YENTEN_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
     ],
 

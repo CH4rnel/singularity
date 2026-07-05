@@ -261,6 +261,9 @@ test('USDT stays off BNB routes and USDT.BNB off Solana routes', function () {
 });
 
 test('Base routes are available and offer native ETH plus shared USDC', function () {
+    config()->set('bridge.routes.base_to_evm.enabled', true);
+    config()->set('bridge.routes.evm_to_base.enabled', true);
+
     $service = app(BridgeConfigService::class);
     $routes = array_keys($service->availableRoutes());
 

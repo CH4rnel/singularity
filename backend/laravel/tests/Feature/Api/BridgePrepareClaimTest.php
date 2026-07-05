@@ -13,6 +13,8 @@ beforeEach(function () {
     config()->set('bridge.chains.yenten.deposit_address', 'YCentralWallet111111111111111111111');
     config()->set('bridge.chains.yenten.relayer_wif', 'central-wif');
     config()->set('bridge.chains.yenten.hd_seed', str_repeat('ab', 32));
+    config()->set('bridge.routes.yenten_to_evm.enabled', true);
+    config()->set('bridge.routes.evm_to_yenten.enabled', true);
 });
 
 function prepareYenten(string $recipient = EVM_RECIPIENT): array

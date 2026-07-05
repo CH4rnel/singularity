@@ -42,6 +42,12 @@ class BridgeConfigService
         $available = [];
 
         foreach (config('bridge.routes', []) as $direction => $route) {
+            // A corridor toggled off (config/bridge.php 'enabled') is hidden
+            // from the UI and rejected at submit/quote time.
+            if (($route['enabled'] ?? true) === false) {
+                continue;
+            }
+
             $source = $this->chain($route['source_chain'] ?? '');
             $destination = $this->chain($route['destination_chain'] ?? '');
 

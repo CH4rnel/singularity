@@ -67,6 +67,7 @@ test('accepts valid EVM destination for sol_to_evm', function () {
 test('accepts a valid Yenten destination for evm_to_yenten', function () {
     config()->set('bridge.chains.yenten.deposit_address', 'YXandTfYjFC7fuR8h9aRCo5ZwAz4tvbvDL');
     config()->set('bridge.chains.yenten.relayer_wif', 'configured-in-production');
+    config()->set('bridge.routes.evm_to_yenten.enabled', true);
 
     $this->postJson('/bridge/submit', [
         'direction' => 'evm_to_yenten',
