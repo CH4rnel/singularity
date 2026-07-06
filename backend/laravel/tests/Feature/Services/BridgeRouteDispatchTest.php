@@ -355,3 +355,15 @@ test('a deposit of the wrong jetton fails ton_to_evm verification', function () 
     $request->refresh();
     expect($request->status)->toBe('failed');
 });
+
+test('publicChains serves the browser-facing public RPC, never the internal one', function () {
+    // Prod points the relayer at the internal node; the browser must not get it.
+    config()->set('bridge.chains.cyberia.rpc_url', 'http://polygon-edge:8545');
+    config()->set('bridge.chains.cyberia.public_rpc_url', 'https://rpc.cyberia.church');
+
+    $chains = collect(app(BridgeConfigService::class)->publicChains())->keyBy('key');
+
+    expect($chains['cyberia']['rpcUrl'])->toBe('https://rpc.cyberia.church');
+    // Chains without a public override fall back to their (already public) rpc_url.
+    expect($chains['base']['rpcUrl'])->toBe(config('bridge.chains.base.rpc_url'));
+});

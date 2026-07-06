@@ -83,6 +83,12 @@ return [
             'wallet' => 'evm',
             'evm_chain_id' => 49406,
             'rpc_url' => env('BRIDGE_EVM_RPC_URL') ?: env('CYBERIA_RPC_URL', 'https://rpc.cyberia.church'),
+            // Browser-facing RPC for client-side reads (bridge token balances).
+            // MUST be publicly reachable, CORS-open and HTTPS. Kept separate
+            // from rpc_url because on prod that points at the internal node
+            // (http://polygon-edge:8545) for the relayer — an address the user's
+            // browser cannot reach, which silently zeroed out source balances.
+            'public_rpc_url' => env('BRIDGE_EVM_PUBLIC_RPC_URL', 'https://rpc.cyberia.church'),
             'explorer_tx' => 'https://explorer.cyberia.church/tx/{hash}',
             'native_currency' => ['name' => 'Cyber', 'symbol' => 'CYBER', 'decimals' => 18],
             'deposit_address' => null,

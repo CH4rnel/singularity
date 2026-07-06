@@ -177,7 +177,9 @@ class BridgeConfigService
             'addressType' => $chain['address_type'],
             'wallet' => $chain['wallet'] ?? 'manual',
             'evmChainId' => $chain['evm_chain_id'] ?? null,
-            'rpcUrl' => $chain['rpc_url'] ?? null,
+            // Browser-facing RPC: never leak an internal relayer URL (e.g.
+            // http://polygon-edge:8545) to the client — prefer public_rpc_url.
+            'rpcUrl' => $chain['public_rpc_url'] ?? $chain['rpc_url'] ?? null,
             'explorerTx' => $chain['explorer_tx'] ?? null,
             'nativeCurrency' => $chain['native_currency'] ?? null,
             'depositAddress' => $this->depositAddress($chain['key']),
