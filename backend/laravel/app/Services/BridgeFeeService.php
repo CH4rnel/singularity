@@ -83,8 +83,13 @@ class BridgeFeeService
             return (string) config('bridge.fee.yenten_payout_fee_ytn', '0.01');
         }
 
-        if (($chain['type'] ?? null) !== 'evm'
-            || ($chain['native_currency']['symbol'] ?? null) !== $token) {
+        // A native EVM payout: the token's destination entry is flagged native
+        // (checked above), so the payout IS this chain's native coin regardless
+        // of the wrapper's symbol. Do NOT gate on native_currency symbol ==
+        // token — an isolated wrapper (ETH.BASE pays native ETH on Base) has a
+        // different symbol than the chain's native coin and would wrongly get a
+        // zero gas reserve.
+        if (($chain['type'] ?? null) !== 'evm') {
             return '0';
         }
 

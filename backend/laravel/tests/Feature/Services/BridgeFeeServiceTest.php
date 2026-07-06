@@ -77,6 +77,29 @@ test('native BNB payout fee reserves destination gas with a safety margin', func
     expect($result['fee_usd'])->toBe('0');
 });
 
+test('native ETH.BASE payout fee reserves Base gas despite symbol mismatch', function () {
+    config()->set('bridge.fee.native_transfer_gas_limit', 21000);
+    config()->set('bridge.fee.native_gas_price_floor_gwei', '3');
+    config()->set('bridge.fee.native_gas_multiplier_bps', 20000);
+
+    Http::fake([
+        '*' => Http::response(['result' => '0x29b92700']), // 0.7 gwei; floor wins
+    ]);
+
+    $service = new BridgeFeeService(new CyberPriceService);
+    // Base's native symbol is ETH but the isolated wrapper is ETH.BASE — the
+    // native gas reserve must still be charged (regression: it returned 0).
+    $result = $service->feeForBridge('ETH.BASE', '1', 'evm_to_base');
+
+    expect($result['fee_amount'])->toBe('0.000126000000000000');
+    expect($result['fee_usd'])->toBe('0');
+
+    // And the frontend fee table must advertise it on the evm_to_base route.
+    $fees = $service->frontendNativeFees();
+    expect($fees['evm_to_base']['ETH.BASE'] ?? null)->not->toBeNull();
+    expect($fees['evm_to_base']['ETH.BASE'])->toBeGreaterThan(0.0);
+});
+
 test('evm_to_yenten payouts retain the flat YTN fee', function () {
     config()->set('bridge.fee.yenten_payout_fee_ytn', '0.01');
 
