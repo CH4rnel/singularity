@@ -24,6 +24,10 @@ const props = defineProps<{
     sourceWalletConnecting: boolean;
     sourceBalance: string | null;
     sourceMaxAmount: string | null;
+    /** Live max deliverable to the destination chain now; null = uncapped. */
+    destinationCapacity: string | null;
+    /** Destination chain label (e.g. "Base") for the capacity hint. */
+    destinationLabel: string | null;
     sourceDepositAddress: string | null;
     /** One-time deposit address returned by /bridge/prepare (Yenten). */
     preparedDepositAddress: string | null;
@@ -197,9 +201,21 @@ const maxReservesGas = computed(
         props.sourceBalance !== props.sourceMaxAmount,
 );
 
+// The relayer can only pay out what it holds on the destination chain right now.
+const overCapacity = computed(
+    () =>
+        props.destinationCapacity !== null &&
+        amountNum.value > 0 &&
+        amountNum.value > parseFloat(props.destinationCapacity),
+);
+
 const setMax = () => {
-    if (props.sourceMaxAmount !== null) {
-        localAmount.value = props.sourceMaxAmount;
+    const limits = [props.sourceMaxAmount, props.destinationCapacity]
+        .filter((v): v is string => v !== null)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+
+    if (limits.length > 0) {
+        localAmount.value = limits[0];
     }
 };
 
@@ -208,6 +224,7 @@ const canProceed = computed(
         props.sourceWalletConnected &&
         amountValid.value &&
         !amountExceedsBalance.value &&
+        !overCapacity.value &&
         manualFieldsValid.value &&
         validation.value.valid,
 );
@@ -460,6 +477,16 @@ const formatRelative = (ts: number): string => {
                     </button>
                 </span>
             </div>
+            <p
+                v-if="destinationCapacity !== null"
+                class="mb-1 text-xs text-[#706f6c] dark:text-[#A1A09A]"
+            >
+                Deliverable to {{ destinationLabel ?? 'destination' }} now:
+                <span class="font-mono">{{
+                    parseFloat(destinationCapacity).toFixed(4)
+                }}</span>
+                {{ token }}
+            </p>
             <input
                 id="bridge-amount"
                 v-model="localAmount"
@@ -469,7 +496,8 @@ const formatRelative = (ts: number): string => {
                 :disabled="inputsLocked"
                 class="w-full bg-transparent text-2xl font-light text-[#1b1b18] outline-none placeholder:text-[#c4c4c0] disabled:opacity-70 dark:text-[#EDEDEC] dark:placeholder:text-[#555]"
                 :class="{
-                    'text-red-500 dark:text-red-400': amountExceedsBalance,
+                    'text-red-500 dark:text-red-400':
+                        amountExceedsBalance || overCapacity,
                 }"
             />
             <p
@@ -481,6 +509,13 @@ const formatRelative = (ts: number): string => {
                         ? 'Amount plus network fee exceeds your balance'
                         : 'Amount exceeds your balance'
                 }}
+            </p>
+            <p
+                v-else-if="overCapacity"
+                class="mt-1 text-xs text-red-500 dark:text-red-400"
+            >
+                Exceeds what can be delivered to
+                {{ destinationLabel ?? 'the destination' }} right now
             </p>
         </div>
 
@@ -618,6 +653,7 @@ const formatRelative = (ts: number): string => {
             <span v-if="!sourceWalletConnected">Connect source wallet</span>
             <span v-else-if="!amountValid">Enter amount</span>
             <span v-else-if="amountExceedsBalance">Insufficient balance</span>
+            <span v-else-if="overCapacity">Insufficient liquidity</span>
             <span v-else-if="!manualFieldsValid">Enter source transaction</span>
             <span v-else-if="!validation.valid">Enter destination address</span>
             <span v-else>Review</span>

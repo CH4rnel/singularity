@@ -9,6 +9,7 @@ use App\Rules\ValidDestinationAddress;
 use App\Services\BridgeConfigService;
 use App\Services\BridgeEventLogger;
 use App\Services\BridgeFeeService;
+use App\Services\BridgeInventoryService;
 use App\Services\BridgeService;
 use App\Services\CyberiaRpcService;
 use App\Services\TonApiService;
@@ -29,6 +30,32 @@ class BridgeController extends Controller
         private BridgeConfigService $bridgeConfig,
         private CyberiaRpcService $rpc,
     ) {}
+
+    /**
+     * Live withdrawal capacity for a route+token: how much can be paid out to
+     * the destination chain right now. Returns { available: string|null },
+     * where null means uncapped (relayer mints on the home chain) or unknown.
+     */
+    public function capacity(Request $request, BridgeInventoryService $inventory): JsonResponse
+    {
+        $validated = $request->validate([
+            'direction' => ['required', 'string'],
+            'token' => ['required', 'string'],
+        ]);
+
+        $direction = $validated['direction'];
+        $token = $validated['token'];
+
+        // Only answer for corridors/tokens that are actually offered.
+        if (! isset($this->bridgeConfig->availableRoutes()[$direction])
+            || ! isset($this->bridgeConfig->tokensForRoute($direction)[$token])) {
+            return response()->json(['available' => null]);
+        }
+
+        return response()->json([
+            'available' => $inventory->destinationCapacity($direction, $token),
+        ]);
+    }
 
     /**
      * Submit a bridge request after the user has locked tokens on the source chain.

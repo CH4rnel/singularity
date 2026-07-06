@@ -79,6 +79,13 @@ const evmNativeMaxAmounts = ref<Record<string, string | null>>({});
 // Token-keyed balances, populated by fetchTokenBalance.
 const tokenBalances = ref<Record<string, string | null>>({});
 
+// Live per-destination withdrawal capacity, keyed by `${direction}:${symbol}`.
+// A null value means uncapped (the relayer mints on the home chain) or unknown.
+const destinationCapacities = ref<Record<string, string | null>>({});
+
+const capacityKey = (direction: string, symbol: string): string =>
+    `${direction}:${symbol}`;
+
 const balanceKey = (
     symbol: BridgeTokenSymbol,
     chain: 'evm' | 'solana',
@@ -731,6 +738,43 @@ export const useBridge = () => {
         return { txHash: signature, nonce: 0 };
     };
 
+    /**
+     * How much of `symbol` the relayer can pay out to `direction`'s destination
+     * chain right now (human units), from live relayer inventory. null result
+     * = uncapped (mint on the home chain) or a failed/unknown read.
+     */
+    const fetchDestinationCapacity = async (
+        direction: string,
+        symbol: BridgeTokenSymbol,
+    ): Promise<void> => {
+        const key = capacityKey(direction, symbol);
+
+        try {
+            const res = await fetch(
+                `/bridge/capacity?direction=${encodeURIComponent(direction)}&token=${encodeURIComponent(symbol)}`,
+                { headers: { Accept: 'application/json' } },
+            );
+            const json = await res.json();
+
+            destinationCapacities.value = {
+                ...destinationCapacities.value,
+                [key]: typeof json.available === 'string' ? json.available : null,
+            };
+        } catch (e) {
+            console.error('[bridge] fetchDestinationCapacity failed', e);
+            destinationCapacities.value = {
+                ...destinationCapacities.value,
+                [key]: null,
+            };
+        }
+    };
+
+    const getDestinationCapacity = (
+        direction: string,
+        symbol: BridgeTokenSymbol,
+    ): string | null =>
+        destinationCapacities.value[capacityKey(direction, symbol)] ?? null;
+
     return {
         cyberSolBalance,
         solanaCyberBalance,
@@ -738,6 +782,9 @@ export const useBridge = () => {
         evmNativeBalances,
         evmNativeMaxAmounts,
         tokenBalances,
+        destinationCapacities,
+        fetchDestinationCapacity,
+        getDestinationCapacity,
         fetchEvmNativeBalance,
         getEvmNativeBalance,
         getEvmNativeMaxAmount,

@@ -162,6 +162,27 @@ const sourceMaxAmount = computed(() => {
         : sourceBalance.value;
 });
 
+// Live max the relayer can pay out to the destination chain now; null = the
+// relayer mints on the home chain (uncapped) or the read failed.
+const destinationCapacity = computed(() =>
+    flow.context.direction
+        ? bridge.getDestinationCapacity(flow.context.direction, flow.context.token)
+        : null,
+);
+
+const destinationLabel = computed(() =>
+    flow.context.direction
+        ? (bridgeChainInfo(bridgeRoute(flow.context.direction).destination)
+              ?.label ?? null)
+        : null,
+);
+
+const refreshDestinationCapacity = () => {
+    if (flow.context.direction && flow.context.token) {
+        bridge.fetchDestinationCapacity(flow.context.direction, flow.context.token);
+    }
+};
+
 const refreshSourceBalance = () => {
     if (!flow.context.direction) {
         return;
@@ -218,6 +239,7 @@ watch(
         }
 
         refreshSourceBalance();
+        refreshDestinationCapacity();
     },
 );
 
@@ -260,6 +282,7 @@ const handleDirection = (
     }
 
     refreshSourceBalance();
+    refreshDestinationCapacity();
 };
 
 const handleConnectSource = async () => {
@@ -602,6 +625,8 @@ const handleReset = () => {
             :source-wallet-connecting="sourceWalletConnecting"
             :source-balance="sourceBalance"
             :source-max-amount="sourceMaxAmount"
+            :destination-capacity="destinationCapacity"
+            :destination-label="destinationLabel"
             :source-deposit-address="sourceDepositAddress"
             :prepared-deposit-address="flow.context.depositAddress"
             :deposit-expires-at="flow.context.depositExpiresAt"

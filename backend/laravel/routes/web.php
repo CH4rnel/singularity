@@ -135,6 +135,8 @@ Route::post('bridge/submit', [BridgeController::class, 'submit'])->name('bridge.
 // and returns a unique deposit address; claim verifies the deposit landed on it.
 Route::post('bridge/prepare', [BridgeController::class, 'prepare'])->name('bridge.prepare');
 Route::post('bridge/claim', [BridgeController::class, 'claim'])->name('bridge.claim');
+// Live withdrawal capacity (relayer inventory on the destination chain).
+Route::get('bridge/capacity', [BridgeController::class, 'capacity'])->name('bridge.capacity');
 
 // Bridge analytics (admin only)
 Route::middleware(['auth', EnsureBridgeAdmin::class])
