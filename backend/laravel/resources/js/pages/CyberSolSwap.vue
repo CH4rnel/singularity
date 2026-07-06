@@ -27,7 +27,7 @@ import { useWallet } from '@/composables/useWallet';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc11e';
+const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 

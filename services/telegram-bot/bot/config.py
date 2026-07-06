@@ -10,7 +10,7 @@ import sys
 import logging
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from web3 import Web3
 
 _PKG_DIR = Path(__file__).resolve().parent           # services/telegram-bot/bot
@@ -241,6 +241,59 @@ SWAP_URL = os.environ.get("SWAP_URL", "https://swap.cyberia.church")
 NFT_MARKET_URL = os.environ.get("NFT_MARKET_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/market")
 PIXEL_BATTLE_URL = os.environ.get("PIXEL_BATTLE_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/pixels")
 
+# --- AI assistant ------------------------------------------------------------
+# Any provider exposing the OpenAI-compatible /chat/completions API can be
+# used. The feature stays disabled until a key is supplied, so existing bot
+# deployments continue to work without an additional dependency or secret.
+# In the monorepo, the bot may reuse LainOS's OpenRouter configuration without
+# duplicating its secret. Explicit bot/process variables always take priority.
+_lainos_env_path = _SVC_DIR.parent / "lainos" / ".env"
+_lainos_ai_env = dotenv_values(_lainos_env_path) if _lainos_env_path.is_file() else {}
+_direct_ai_key = (
+    os.environ.get("AI_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
+).strip()
+_openrouter_key = (
+    os.environ.get("OPENROUTER_API_KEY")
+    or _lainos_ai_env.get("OPENROUTER_API_KEY")
+    or ""
+).strip()
+_using_openrouter = not _direct_ai_key and bool(_openrouter_key)
+AI_API_KEY = _direct_ai_key or _openrouter_key
+
+_openrouter_base = (
+    os.environ.get("OPENROUTER_BASE_URL")
+    or _lainos_ai_env.get("OPENROUTER_BASE_URL")
+    or "https://openrouter.ai/api/v1"
+).rstrip("/")
+_default_ai_url = (
+    f"{_openrouter_base}/chat/completions"
+    if _using_openrouter
+    else "https://api.openai.com/v1/chat/completions"
+)
+AI_API_URL = (os.environ.get("AI_API_URL", _default_ai_url) or "").strip()
+
+_default_ai_model = "gpt-4.1-mini"
+if _using_openrouter:
+    _default_ai_model = (
+        os.environ.get("OPENROUTER_MODEL_SMALL")
+        or _lainos_ai_env.get("OPENROUTER_MODEL_SMALL")
+        or "openrouter/free"
+    )
+AI_MODEL = (os.environ.get("AI_MODEL", _default_ai_model) or "").strip()
+del _lainos_ai_env
+AI_TIMEOUT_SECONDS = float(os.environ.get("AI_TIMEOUT_SECONDS", "45"))
+AI_MAX_OUTPUT_TOKENS = int(os.environ.get("AI_MAX_OUTPUT_TOKENS", "700"))
+AI_HISTORY_MESSAGES = max(0, int(os.environ.get("AI_HISTORY_MESSAGES", "8")))
+AI_USER_COOLDOWN_SECONDS = max(
+    0.0, float(os.environ.get("AI_USER_COOLDOWN_SECONDS", "3"))
+)
+AI_MAX_CONCURRENT_REQUESTS = max(
+    1, int(os.environ.get("AI_MAX_CONCURRENT_REQUESTS", "3"))
+)
+AI_MAX_QUESTION_CHARS = max(
+    100, int(os.environ.get("AI_MAX_QUESTION_CHARS", "4000"))
+)
+
 # Contract addresses surfaced by "ca". CYBER.sol is the community pump.fun token
 # (also gates the whales chat); its EVM counterpart is the bridged CYBER.sol on
 # Cyberia (matches PRICE_RELAY_TOKENS). Blank values are simply omitted.
@@ -327,11 +380,13 @@ LOG_FILE = Path(os.environ.get("BOT_LOG_FILE", str(_SVC_DIR / "bot.log")))
 
 
 class SecurityFilter(logging.Filter):
-    """Redact the bot token from any log record."""
+    """Redact API credentials from string log messages."""
 
     def filter(self, record):
-        if TELEGRAM_BOT_TOKEN and isinstance(record.msg, str):
-            record.msg = record.msg.replace(TELEGRAM_BOT_TOKEN, "***")
+        if isinstance(record.msg, str):
+            for secret_value in (TELEGRAM_BOT_TOKEN, AI_API_KEY):
+                if secret_value:
+                    record.msg = record.msg.replace(secret_value, "***")
         return True
 
 

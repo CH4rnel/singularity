@@ -120,6 +120,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/create_token [name] [interval] - (admins) create a chat reward token",
         "/set_rewards_interval <interval> - (admins) change payout interval",
         "/reward_now - (admins) trigger an extra payout right now",
+        "/ask <question> - ask the Cyberia AI assistant",
         "/website - project website",
     ]
 
@@ -155,8 +156,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/x - X (Twitter) and Telegram links (also replies to \"x\")\n"
         "/ca - CYBER contract address (also replies to \"ca\")\n"
         "/stats [window] - on-chain activity digest (default 24h, e.g. /stats 6h)\n"
+        "/ask <question> - ask the Cyberia AI assistant\n"
         "/set_channel_wallet <@channel> <0x..> - (channel admins) wallet that receives post NFTs\n"
         "/website - project website\n\n"
+        "In private chat you can also send the AI assistant a question as plain text. "
+        "In groups, mention the bot or reply to its message.\n\n"
         "You can chat in groups without a wallet -- rewards will be saved as "
         "pending and minted in one go when you /set_wallet.",
         reply_markup=_main_menu_kb(),
@@ -915,6 +919,10 @@ async def pending_input_handler(update: Update, context: ContextTypes.DEFAULT_TY
         return
     # If the user sent multiple tokens, take the first.
     candidate = text_value.split()[0]
+    # Message handlers in later groups also see this update. Mark it so the AI
+    # assistant does not answer the wallet address after this flow clears its
+    # awaiting state.
+    context.user_data["ai_skip_message_id"] = msg.message_id
     context.user_data.pop("awaiting_wallet", None)
     await _process_set_wallet(update, context, candidate)
 
@@ -948,6 +956,11 @@ async def pending_create_token_handler(update: Update, context: ContextTypes.DEF
     expected_bot_msg_id = context.user_data.get("awaiting_token_bot_msg_id")
     if not msg.reply_to_message or msg.reply_to_message.message_id != expected_bot_msg_id:
         return
+
+    # This reply belongs to the token wizard, not to the AI assistant. The
+    # final wizard step clears all awaiting flags before later handler groups
+    # run, so use the concrete update id as the hand-off marker.
+    context.user_data["ai_skip_message_id"] = msg.message_id
 
     # Use the first line as the value so multi-line pastes don't confuse us.
     value = text_value.splitlines()[0].strip()

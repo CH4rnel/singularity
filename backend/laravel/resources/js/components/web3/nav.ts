@@ -10,6 +10,7 @@ import {
     pixels,
     predictions,
     slots,
+    swap,
 } from '@/routes';
 import { index as daoIndex } from '@/routes/dao';
 import { index as tokensIndex } from '@/routes/tokens';
@@ -29,6 +30,7 @@ export const navGroups: Web3NavGroup[] = [
     {
         label: 'Trade',
         items: [
+            { title: 'Swap', href: swap().url },
             { title: 'Bridge', href: bridge().url },
             { title: 'Convert', href: convert().url },
             { title: 'Lending', href: lending().url },
@@ -37,7 +39,7 @@ export const navGroups: Web3NavGroup[] = [
             { title: 'Launchpad', href: launchpad().url },
             { title: 'Tokens', href: tokensIndex().url },
             {
-                title: 'Swap',
+                title: 'Ritual DEX',
                 href: 'https://swap.cyberia.church/',
                 external: true,
             },

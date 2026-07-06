@@ -21,10 +21,11 @@ import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
+import { CYBER_SOL_ADDRESS, WCYBER_ADDRESS } from '@/lib/cyberiaTokens';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc11e';
+const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
@@ -34,8 +35,16 @@ const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 const MASTERCHEF = '0xd540DEa828567160FFDe5e792ca359aDD1f6B03D';
 // Cyberia targets ~1s blocks, so daily emission ≈ rewardPerBlock × 86 400.
 const BLOCKS_PER_DAY = 86400n;
+const DAYS_PER_YEAR = 365;
 const EXPLORER = 'https://explorer.cyberia.church';
 const DEX_URL = 'https://swap.cyberia.church';
+
+// Ritual factory — used to price tokens in CYBER via their WCYBER pools so we
+// can quote each pool's TVL and APR without an off-chain indexer.
+const FACTORY = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
+const FACTORY_ABI = [
+    'function getPair(address,address) view returns (address)',
+];
 
 const MASTERCHEF_ABI = [
     'function poolLength() view returns (uint256)',
@@ -63,6 +72,8 @@ const ERC20_ABI = [
 const PAIR_ABI = [
     'function token0() view returns (address)',
     'function token1() view returns (address)',
+    'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32)',
+    'function totalSupply() view returns (uint256)',
 ];
 
 type Pool = {
@@ -78,6 +89,9 @@ type Pool = {
     walletBalance: bigint;
     allowance: bigint;
     totalStaked: bigint;
+    // Priced via WCYBER pools; null when a token has no CYBER route yet.
+    tvlCyber: number | null;
+    aprPct: number | null;
 };
 
 const wallet = useWallet();
@@ -151,21 +165,180 @@ const poolWeight = (pool: Pool): number => {
     return Number((pool.allocPoint * 10000n) / totalAllocPoint.value) / 100;
 };
 
-const symbolOf = async (addr: string): Promise<string> => {
+// Metadata + price caches: pools share tokens (WCYBER, ASH, …), so each
+// address is fetched once per page load no matter how many pools use it.
+const symbolCache = new Map<string, Promise<string>>();
+const decimalsCache = new Map<string, Promise<number>>();
+const priceCache = new Map<string, Promise<number | null>>();
+
+const factory = new Contract(FACTORY, FACTORY_ABI, readProvider);
+
+const symbolOf = (addr: string): Promise<string> => {
+    const key = addr.toLowerCase();
+    let p = symbolCache.get(key);
+
+    if (!p) {
+        p = (
+            new Contract(addr, ERC20_ABI, readProvider).symbol() as Promise<string>
+        ).catch(() => shortAddr(addr));
+        symbolCache.set(key, p);
+    }
+
+    return p;
+};
+
+const decimalsOf = (addr: string): Promise<number> => {
+    const key = addr.toLowerCase();
+    let p = decimalsCache.get(key);
+
+    if (!p) {
+        p = (new Contract(addr, ERC20_ABI, readProvider).decimals() as Promise<bigint>)
+            .then((d) => Number(d))
+            .catch(() => 18);
+        decimalsCache.set(key, p);
+    }
+
+    return p;
+};
+
+// Whole-unit reserves of the (token, quote) pool, or null when it doesn't exist.
+const pairReserves = async (
+    token: string,
+    quote: string,
+): Promise<{ token: number; quote: number } | null> => {
     try {
-        return (await new Contract(
-            addr,
-            ERC20_ABI,
-            readProvider,
-        ).symbol()) as string;
+        const pairAddr = (await factory.getPair(token, quote)) as string;
+
+        if (!pairAddr || /^0x0+$/.test(pairAddr)) {
+            return null;
+        }
+
+        const pair = new Contract(pairAddr, PAIR_ABI, readProvider);
+        const [t0, reserves, decT, decQ] = await Promise.all([
+            pair.token0() as Promise<string>,
+            pair.getReserves(),
+            decimalsOf(token),
+            decimalsOf(quote),
+        ]);
+        const tokenIs0 = String(t0).toLowerCase() === token.toLowerCase();
+        const rT = tokenIs0 ? (reserves[0] as bigint) : (reserves[1] as bigint);
+        const rQ = tokenIs0 ? (reserves[1] as bigint) : (reserves[0] as bigint);
+        const tWhole = Number(formatUnits(rT, decT));
+        const qWhole = Number(formatUnits(rQ, decQ));
+
+        return tWhole > 0 && qWhole > 0 ? { token: tWhole, quote: qWhole } : null;
     } catch {
-        return shortAddr(addr);
+        return null;
+    }
+};
+
+// Spot price of `addr` in native CYBER: direct WCYBER pool first, then one hop
+// through CYBER.sol. Dust pools (< 0.001 CYBER a side) are ignored as noise.
+const priceInCyber = (addr: string): Promise<number | null> => {
+    const key = addr.toLowerCase();
+
+    if (key === WCYBER_ADDRESS.toLowerCase()) {
+        return Promise.resolve(1);
+    }
+
+    let p = priceCache.get(key);
+
+    if (!p) {
+        p = (async () => {
+            const direct = await pairReserves(addr, WCYBER_ADDRESS);
+
+            if (direct && direct.quote >= 0.001) {
+                return direct.quote / direct.token;
+            }
+
+            if (key !== CYBER_SOL_ADDRESS.toLowerCase()) {
+                const [viaSol, solPrice] = await Promise.all([
+                    pairReserves(addr, CYBER_SOL_ADDRESS),
+                    priceInCyber(CYBER_SOL_ADDRESS),
+                ]);
+
+                if (viaSol && solPrice !== null && viaSol.quote >= 0.001) {
+                    return (viaSol.quote / viaSol.token) * solPrice;
+                }
+            }
+
+            return null;
+        })();
+        priceCache.set(key, p);
+    }
+
+    return p;
+};
+
+// TVL of a pool's staked amount, in whole CYBER (null if unpriceable).
+const poolTvlCyber = async (
+    lpToken: string,
+    isPair: boolean,
+    totalStaked: bigint,
+    decimals: number,
+): Promise<number | null> => {
+    if (totalStaked === 0n) {
+        return 0;
+    }
+
+    const stakedWhole = Number(formatUnits(totalStaked, decimals));
+
+    if (!isPair) {
+        const price = await priceInCyber(lpToken);
+
+        return price === null ? null : stakedWhole * price;
+    }
+
+    try {
+        const pair = new Contract(lpToken, PAIR_ABI, readProvider);
+        const [t0, t1, reserves, totalSupply] = await Promise.all([
+            pair.token0() as Promise<string>,
+            pair.token1() as Promise<string>,
+            pair.getReserves(),
+            pair.totalSupply() as Promise<bigint>,
+        ]);
+
+        if (totalSupply === 0n) {
+            return 0;
+        }
+
+        const [d0, d1, p0, p1] = await Promise.all([
+            decimalsOf(t0),
+            decimalsOf(t1),
+            priceInCyber(t0),
+            priceInCyber(t1),
+        ]);
+        const r0 = Number(formatUnits(reserves[0] as bigint, d0));
+        const r1 = Number(formatUnits(reserves[1] as bigint, d1));
+
+        // One priced side is enough: in an AMM both sides hold equal value.
+        let pairValue: number | null = null;
+
+        if (p0 !== null && p1 !== null) {
+            pairValue = r0 * p0 + r1 * p1;
+        } else if (p0 !== null) {
+            pairValue = 2 * r0 * p0;
+        } else if (p1 !== null) {
+            pairValue = 2 * r1 * p1;
+        }
+
+        if (pairValue === null) {
+            return null;
+        }
+
+        const supplyWhole = Number(formatUnits(totalSupply, 18));
+
+        return (stakedWhole / supplyWhole) * pairValue;
+    } catch {
+        return null;
     }
 };
 
 async function loadState(): Promise<void> {
     loading.value = true;
     error.value = null;
+    // Symbols/decimals are immutable; prices are not — refetch them per load.
+    priceCache.clear();
 
     try {
         const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, readProvider);
@@ -180,54 +353,51 @@ async function loadState(): Promise<void> {
         totalAllocPoint.value = totAlloc;
         rewardPerBlock.value = rpb;
 
-        const reward = new Contract(rewardAddr, ERC20_ABI, readProvider);
-        const [rSym, rDec] = await Promise.all([
-            reward.symbol() as Promise<string>,
-            reward.decimals() as Promise<bigint>,
+        const [rSym, rDec, rewardPrice] = await Promise.all([
+            symbolOf(rewardAddr),
+            decimalsOf(rewardAddr),
+            priceInCyber(rewardAddr),
         ]);
         rewardSymbol.value = rSym;
-        rewardDecimals.value = Number(rDec);
+        rewardDecimals.value = rDec;
 
-        const next: Pool[] = [];
+        const rewardPerYearWhole =
+            Number(formatUnits(rpb * BLOCKS_PER_DAY, rDec)) * DAYS_PER_YEAR;
 
-        for (let pid = 0; pid < Number(len); pid++) {
+        // All pools load in parallel; ethers batches same-tick RPC calls, so
+        // this is a handful of HTTP round-trips instead of ~10 per pool.
+        const loadPool = async (pid: number): Promise<Pool> => {
             const info = await chef.poolInfo(pid);
             const lpToken = info.lpToken as string;
             const allocPoint = info.allocPoint as bigint;
             const lp = new Contract(lpToken, ERC20_ABI, readProvider);
+            const pair = new Contract(lpToken, PAIR_ABI, readProvider);
 
-            let decimals = 18;
-
-            try {
-                decimals = Number(await lp.decimals());
-            } catch {
-                // Non-standard token; assume 18.
-            }
+            const [decimals, pairTokens, totalStaked] = await Promise.all([
+                decimalsOf(lpToken),
+                Promise.all([
+                    pair.token0() as Promise<string>,
+                    pair.token1() as Promise<string>,
+                ]).catch(() => null),
+                lp.balanceOf(MASTERCHEF) as Promise<bigint>,
+            ]);
 
             // Pair → "TOKEN0/TOKEN1 LP"; otherwise the token's own symbol.
-            let isPair = false;
+            const isPair = pairTokens !== null;
             let label: string;
             let symbols: string[];
 
-            try {
-                const pair = new Contract(lpToken, PAIR_ABI, readProvider);
-                const [t0, t1] = await Promise.all([
-                    pair.token0() as Promise<string>,
-                    pair.token1() as Promise<string>,
-                ]);
+            if (pairTokens) {
                 const [s0, s1] = await Promise.all([
-                    symbolOf(t0),
-                    symbolOf(t1),
+                    symbolOf(pairTokens[0]),
+                    symbolOf(pairTokens[1]),
                 ]);
-                isPair = true;
                 symbols = [s0, s1];
                 label = `${s0}/${s1} LP`;
-            } catch {
+            } else {
                 label = await symbolOf(lpToken);
                 symbols = [label];
             }
-
-            const totalStaked = (await lp.balanceOf(MASTERCHEF)) as bigint;
 
             let staked = 0n;
             let pending = 0n;
@@ -247,7 +417,29 @@ async function loadState(): Promise<void> {
                 allowance = allow;
             }
 
-            next.push({
+            const tvlCyber = await poolTvlCyber(
+                lpToken,
+                isPair,
+                totalStaked,
+                decimals,
+            );
+
+            let aprPct: number | null = null;
+
+            if (
+                rewardPrice !== null &&
+                tvlCyber !== null &&
+                tvlCyber > 0 &&
+                totAlloc > 0n
+            ) {
+                const yearlyRewardCyber =
+                    rewardPerYearWhole *
+                    (Number(allocPoint) / Number(totAlloc)) *
+                    rewardPrice;
+                aprPct = (yearlyRewardCyber / tvlCyber) * 100;
+            }
+
+            return {
                 pid,
                 lpToken,
                 allocPoint,
@@ -260,10 +452,14 @@ async function loadState(): Promise<void> {
                 walletBalance,
                 allowance,
                 totalStaked,
-            });
-        }
+                tvlCyber,
+                aprPct,
+            };
+        };
 
-        pools.value = next;
+        pools.value = await Promise.all(
+            Array.from({ length: Number(len) }, (_, pid) => loadPool(pid)),
+        );
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
     } finally {
@@ -475,6 +671,14 @@ const setUnstakeMax = (pool: Pool): void => {
 
 const explorerUrl = (addr: string): string => `${EXPLORER}/address/${addr}`;
 
+const fmtApr = (v: number): string =>
+    v >= 1000
+        ? Math.round(v).toLocaleString()
+        : v.toFixed(v >= 100 ? 0 : 1);
+
+const fmtCyber = (v: number): string =>
+    v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2);
+
 onMounted(async () => {
     // No shared layout here, so reconnect the saved wallet ourselves (mirrors
     // Bridge/Lending/CyberSolSwap) before the first read.
@@ -636,8 +840,21 @@ watch(() => wallet.address.value, loadState);
                             </a>
                         </div>
                         <div class="text-right">
+                            <p
+                                v-if="pool.aprPct !== null"
+                                class="font-mono text-lg font-semibold text-emerald-500"
+                            >
+                                {{ fmtApr(pool.aprPct) }}% APR
+                            </p>
+                            <p
+                                v-else
+                                class="text-xs text-muted-foreground"
+                                title="No CYBER price route for this pool's tokens yet"
+                            >
+                                APR —
+                            </p>
                             <span
-                                class="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/5 px-2 py-0.5 text-xs font-medium"
+                                class="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/5 px-2 py-0.5 text-xs font-medium"
                             >
                                 {{ poolWeight(pool) }}% weight
                             </span>
@@ -663,6 +880,12 @@ watch(() => wallet.address.value, loadState);
                             </p>
                             <p class="font-mono">
                                 {{ fmt(pool.totalStaked, pool.decimals) }}
+                            </p>
+                            <p
+                                v-if="pool.tvlCyber !== null"
+                                class="font-mono text-[11px] text-muted-foreground"
+                            >
+                                ≈ {{ fmtCyber(pool.tvlCyber) }} CYBER
                             </p>
                         </div>
                         <div

@@ -1,0 +1,35 @@
+[Unit]
+Description=LainOS Cyberia agent HTTP service
+Documentation=file:///home/lain/random/singularity/services/lainos/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/lain/random/singularity/services/lainos
+Environment=NODE_ENV=production
+Environment=PATH=/home/lain/.nvm/versions/node/v24.10.0/bin:/usr/local/bin:/usr/bin:/bin
+ExecStartPre=/home/lain/.nvm/versions/node/v24.10.0/bin/npm run build
+ExecStart=/home/lain/.nvm/versions/node/v24.10.0/bin/node --enable-source-maps dist/scripts/serve.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+UMask=0077
+
+# The agent may write only its memory, build output, and sandboxed workspace.
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/lain/random/singularity/services/lainos/data
+ReadWritePaths=/home/lain/random/singularity/services/lainos/dist
+ReadWritePaths=/home/lain/random/singularity/services/lainos/workspace
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target

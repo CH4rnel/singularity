@@ -38,6 +38,8 @@ Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.sho
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/pixels', 'PixelBattle')->name('pixels');
 Route::get('/liquidity', [LiquidityController::class, 'index'])->name('liquidity');
+// On-site swap UI over the Ritual router (same pool seed as /liquidity).
+Route::get('/swap', [LiquidityController::class, 'swap'])->name('swap');
 // Fixed-rate redeemer for bridged CYBER.sol -> native CYBER. It's a conversion,
 // not a swap, hence /convert; the old /cyber-sol-swap path 301s here.
 Route::inertia('/convert', 'CyberSolSwap')->name('convert');

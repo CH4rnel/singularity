@@ -21,10 +21,11 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useWallet } from '@/composables/useWallet';
+import { KNOWN_TOKENS, filterJunkPools } from '@/lib/cyberiaTokens';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc11e';
+const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 const EXPLORER = 'https://explorer.cyberia.church';
@@ -112,12 +113,22 @@ const deadline = (): bigint => BigInt(Math.floor(Date.now() / 1000) + 1200);
 const resolveAddr = (a: string): string => (a === NATIVE ? WCYBER : a);
 
 const customTokens = ref<Token[]>([]);
+// TEST* deploys, dust pools and unknown-token chat pairs stay out of the UI.
+const cleanPools = computed(() => filterJunkPools(props.pools ?? []));
 const tokens = computed<Token[]>(() => {
     const map = new Map<string, Token>();
     map.set(NATIVE, { address: NATIVE, symbol: 'CYBER', native: true });
-    map.set(WCYBER.toLowerCase(), { address: WCYBER, symbol: 'WCYBER' });
 
-    for (const p of props.pools ?? []) {
+    // Curated registry first: real assets (BNB, …) are pickable even before
+    // their first pool exists.
+    for (const t of KNOWN_TOKENS) {
+        map.set(t.address.toLowerCase(), {
+            address: t.address,
+            symbol: t.symbol,
+        });
+    }
+
+    for (const p of cleanPools.value) {
         map.set(p.token0.toLowerCase(), {
             address: p.token0,
             symbol: p.symbol0,
@@ -509,7 +520,7 @@ const loadPositions = async (): Promise<void> => {
 
     try {
         const found = await Promise.all(
-            (props.pools ?? []).map(async (row) => {
+            cleanPools.value.map(async (row) => {
                 try {
                     const p = new Contract(
                         row.pair_address,

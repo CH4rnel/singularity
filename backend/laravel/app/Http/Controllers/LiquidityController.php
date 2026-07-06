@@ -20,9 +20,20 @@ class LiquidityController extends Controller
 {
     public function index(): Response
     {
+        return $this->renderWithPools('Liquidity');
+    }
+
+    /** Swap page shares the same pool seed (token picker + routing graph). */
+    public function swap(): Response
+    {
+        return $this->renderWithPools('Swap');
+    }
+
+    private function renderWithPools(string $page): Response
+    {
         $hasPools = Schema::hasTable('dex_pools');
 
-        return Inertia::render('Liquidity', [
+        return Inertia::render($page, [
             'pools' => $hasPools ? DB::table('dex_pools')->get() : collect(),
             'indexerReady' => $hasPools,
         ]);

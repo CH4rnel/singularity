@@ -23,6 +23,7 @@ from bot.config import (
     MARKET_SNAPSHOT_SECONDS,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS,
     NFT_FROM_POSTS, NFT_FROM_POSTS_DRYRUN, CYBERIA_NFT_ADDRESS, IPFS_API_URL,
+    AI_API_KEY, AI_MODEL,
 )
 from bot.db import ensure_schema
 from bot.nft import (
@@ -38,6 +39,7 @@ from bot.handlers import (
     quick_reply_handler, on_chat_member_update, error_handler,
     _QUICK_REPLY_RE,
 )
+from bot.ai import ask_command, ai_message_handler
 from bot.announcers import (
     bridge_announcer_loop, swap_announcer_loop, liquidity_announcer_loop,
     lending_announcer_loop, cybersol_swap_announcer_loop, digest_loop,
@@ -63,6 +65,7 @@ async def post_init(application: Application):
             BotCommand("x", "Show X (Twitter) and Telegram links"),
             BotCommand("ca", "Show the CYBER contract address"),
             BotCommand("stats", "On-chain activity digest (default 24h)"),
+            BotCommand("ask", "Ask the Cyberia AI assistant"),
             BotCommand("whale", "Verify CYBER.sol to join the whales chat"),
             BotCommand("create_token", "(admins) Create a chat reward token"),
             BotCommand("set_rewards_interval", "(admins) Change rewards interval"),
@@ -149,6 +152,11 @@ async def post_init(application: Application):
     else:
         logger.info("NFT-from-posts disabled: NFT_FROM_POSTS off or no collection")
 
+    if AI_API_KEY:
+        logger.info("AI assistant enabled: model=%s", AI_MODEL)
+    else:
+        logger.info("AI assistant disabled: AI_API_KEY not set")
+
 
 def run_dispatcher():
     logger.info("Building application...")
@@ -191,6 +199,7 @@ def run_dispatcher():
     application.add_handler(CommandHandler("x", x_command))
     application.add_handler(CommandHandler("ca", ca_command))
     application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("ask", ask_command))
     application.add_handler(CommandHandler("set_channel_wallet", set_channel_wallet_command))
     application.add_handler(CommandHandler("channel_wallet", channel_wallet_command))
 
@@ -232,6 +241,18 @@ def run_dispatcher():
             quick_reply_handler,
         ),
         group=2,
+    )
+
+    # AI answers all ordinary text in DMs, but only explicit mentions/replies
+    # in groups. A separate handler group lets interactive wallet/token flows
+    # inspect the same update first; the AI handler checks those states itself.
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL
+            & ~filters.Regex(_QUICK_REPLY_RE),
+            ai_message_handler,
+        ),
+        group=4,
     )
 
     # Mint each new post in public channels the bot administers into CyberiaNFT.

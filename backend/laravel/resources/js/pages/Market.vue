@@ -16,14 +16,18 @@ import { useWallet } from '@/composables/useWallet';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc11e';
+const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
 const env =
     (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
-const NFT_CONTRACT = env.VITE_NFT_CONTRACT ?? '';
-const NFT_MARKET = env.VITE_NFT_MARKET ?? '';
+// Baked-in production deploys (deployments/cyberia-nft-market.json); env vars
+// only override them for staging/redeploys.
+const NFT_CONTRACT =
+    env.VITE_NFT_CONTRACT || '0x546462FAbf30734E63b64f32B30EC8ADD9B6EBa7';
+const NFT_MARKET =
+    env.VITE_NFT_MARKET || '0x12C3EC2019E814be06Bf6386df0F22aBB673Db90';
 const IPFS_GATEWAY = env.VITE_IPFS_GATEWAY ?? 'https://ipfs.io/ipfs/';
 const CYBER_SOL_ADDRESS = '0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA';
 

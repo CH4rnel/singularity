@@ -1,0 +1,23 @@
+{
+  "chainId": 49406,
+  "rpc": "https://rpc.cyberia.church",
+  "LaunchpadNative": "0x8034E6C09E0cEA00B5D692ADfD1A136fab339165",
+  "router": "0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62",
+  "wcyber": "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9",
+  "minLiquidity": "10000000000000000000",
+  "registered": {
+    "LAIN": {
+      "token": "0x05cd1AFd5b2DF3CCA6cEAb80CbC21168ec981E8B",
+      "pair": "0x9298d13f57D1e5bD14C443144b500aaa210a1175",
+      "tx": "0x43833a8ff7672b6601a8864a526c00c679ff70713ac4bc957006c04b34e229f3"
+    },
+    "MINE": {
+      "token": "0xD8c1f812ADd03ccdE8D3c7F86FeAD181980CD7Ec",
+      "pair": "0xF18bA050eFF63B2be2D244A423691D44BDDeF60d",
+      "tx": "0x67a1ad87a72a84e95aea03ff88a8d3ec78b49f112a03686a9980cb860d3ca845"
+    }
+  },
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployTx": "0x6aa283f29c54aa10266ce6902fc3390100c1f28ce5c98552968bc3c0694e94c0",
+  "timestamp": "2026-07-06T10:19:45.992Z"
+}

@@ -7,13 +7,16 @@ import { useWallet } from '@/composables/useWallet';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc11e';
+const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
 const env =
     (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
-const PIXEL_CONTRACT = env.VITE_PIXEL_CONTRACT ?? '';
+// Baked-in production deploy (deployments/cyberia-pixelbattle.json); the env
+// var only overrides it for staging/redeploys.
+const PIXEL_CONTRACT =
+    env.VITE_PIXEL_CONTRACT || '0x9BCB235E3Ab18c884e82db8679BfA5A5AC0dd45c';
 
 const WIDTH = 64;
 const HEIGHT = 64;

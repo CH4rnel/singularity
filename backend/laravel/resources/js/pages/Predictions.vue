@@ -17,13 +17,17 @@ import { useWallet } from '@/composables/useWallet';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
 
 const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc11e';
+const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
 const env =
     (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
-const PREDICTIONS_CONTRACT = env.VITE_PREDICTIONS_CONTRACT ?? '';
+// Baked-in production deploy (deployments/cyberia-predictions.json); the env
+// var only overrides it for staging/redeploys.
+const PREDICTIONS_CONTRACT =
+    env.VITE_PREDICTIONS_CONTRACT ||
+    '0xb88063Cb2db16473Fb6deB71BaE364aFd09fdE54';
 
 // Mirrors PredictionMarket.RESOLVE_WINDOW: unresolved markets refund after it.
 const RESOLVE_WINDOW = 30 * 24 * 3600;

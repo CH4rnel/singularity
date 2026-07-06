@@ -217,15 +217,15 @@ async def channel_post_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     # The NFT is minted then transferred to the wallet a channel admin
-    # registered via /set_channel_wallet. No wallet -> nothing to send to, so we
-    # don't mint (and don't waste IPFS/gas). Dry-run still pins to test the path.
+    # registered via /set_channel_wallet. Without one we still mint so the post
+    # shows up on the marketplace — the token stays custodial on the deployer
+    # until an admin registers a wallet.
     recipient = _get_channel_wallet(chat.id)
-    if not recipient and not NFT_FROM_POSTS_DRYRUN:
+    if not recipient:
         logger.info(
-            f"nft: no recipient wallet for @{username} "
-            f"(admin should DM /set_channel_wallet @{username} 0x...); skipping post {msg.message_id}"
+            f"nft: no recipient wallet for @{username}; minting custodial "
+            f"(admin can DM /set_channel_wallet @{username} 0x... to receive future posts)"
         )
-        return
 
     _inflight.add(key)
     if gkey is not None:

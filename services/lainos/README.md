@@ -61,6 +61,25 @@ npm run chat                # interactive REPL with Lain
 npm run serve               # HTTP bridge on :7777 (consumed by the Wired game)
 ```
 
+## systemd daemon
+
+The checked-in user unit runs the HTTP bridge as a persistent daemon. It builds
+TypeScript before each start, restarts after failures, and relies on
+`services/lainos/.env` through the service working directory.
+
+```bash
+mkdir -p ~/.config/systemd/user workspace
+ln -sfn "$PWD/deploy/lainos.service" ~/.config/systemd/user/lainos.service
+systemctl --user daemon-reload
+systemctl --user enable --now lainos.service
+curl --fail http://127.0.0.1:7777/health
+```
+
+Inspect it with `systemctl --user status lainos.service` and
+`journalctl --user -u lainos.service -f`. User lingering must be enabled for
+startup during boot without an interactive login (`loginctl show-user "$USER"
+-p Linger`); it is already enabled on the current Cyberia host.
+
 ## Built-in plugins
 
 - **bootstrap** — a `time` provider, a heuristic fact extractor, and long-term

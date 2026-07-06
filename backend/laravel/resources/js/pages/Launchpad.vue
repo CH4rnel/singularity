@@ -17,7 +17,6 @@ import {
     Contract,
     Interface,
     JsonRpcProvider,
-    MaxUint256,
     ZeroAddress,
     formatUnits,
     id,
@@ -49,31 +48,22 @@ Chart.register(
 );
 
 const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc11e';
+const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
 const CYBERIA_RPC = '/api/rpc/cyberia';
 const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
-const CYBER_SOL_ADDRESS = '0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA';
-
-const LAUNCHPAD_ADDRESS =
-    ((import.meta as { env?: Record<string, string | undefined> }).env
-        ?.VITE_LAUNCHPAD_ADDRESS as string | undefined) ?? '';
+// LaunchpadNative — fair launches paid in native CYBER (min 10), burned into
+// permanently locked liquidity. deployments/cyberia-launchpad-native.json.
+const LAUNCHPAD_ADDRESS = '0x8034E6C09E0cEA00B5D692ADfD1A136fab339165';
+const WCYBER_ADDRESS = '0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9';
 
 const LAUNCHPAD_ABI = [
-    'function cyberSol() view returns (address)',
     'function minLiquidity() view returns (uint256)',
     'function allTokensLength() view returns (uint256)',
     'function allTokens(uint256) view returns (address)',
-    'function launch(string,string,uint256,uint256) returns (address,address,uint256)',
-    'event TokenLaunched(address indexed token, address indexed creator, address pair, string name, string symbol, uint256 tokenSupply, uint256 cyberSolLiquidity, uint256 lpBurned)',
-];
-
-const ERC20_ABI = [
-    'function balanceOf(address) view returns (uint256)',
-    'function allowance(address,address) view returns (uint256)',
-    'function approve(address,uint256) returns (bool)',
-    'function decimals() view returns (uint8)',
-    'function symbol() view returns (string)',
+    'function pairOf(address) view returns (address)',
+    'function launch(string,string,uint256) payable returns (address,address,uint256)',
+    'event TokenLaunched(address indexed token, address indexed creator, address pair, string name, string symbol, uint256 tokenSupply, uint256 cyberLiquidity, uint256 lpBurned)',
 ];
 
 const PAIR_ABI = [
@@ -88,19 +78,6 @@ const FACTORY_ABI = [
     'function getPair(address tokenA, address tokenB) view returns (address)',
 ];
 const FACTORY_ADDRESS = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
-const LIQUIDITY_PAIR_OVERRIDES: Record<
-    string,
-    { pair: string; quoteSymbol: string }
-> = {
-    '0x05cd1afd5b2df3cca6ceab80cbc21168ec981e8b': {
-        pair: '0x9298d13f57D1e5bD14C443144b500aaa210a1175',
-        quoteSymbol: 'WCYBER',
-    },
-    '0xd8c1f812add03ccde8d3c7f86fead181980cd7ec': {
-        pair: '0xF18bA050eFF63B2be2D244A423691D44BDDeF60d',
-        quoteSymbol: 'WCYBER',
-    },
-};
 
 const ERC20_READ_ABI = [
     'function name() view returns (string)',
@@ -123,7 +100,7 @@ type LaunchedToken = {
     name: string;
     symbol: string;
     tokenSupply: bigint;
-    cyberSolLiquidity: bigint;
+    cyberLiquidity: bigint;
     quoteSymbol: string;
     txHash?: string;
     // Enriched off-chain.
@@ -187,7 +164,8 @@ const priceHistories = ref<Record<string, TokenTradeCandle[]>>({});
 const name = ref('');
 const symbol = ref('');
 const totalSupply = ref('1000000');
-const cyberSolLiquidity = ref('10000');
+// Native CYBER committed as liquidity (all of it ends up burned in the LP).
+const cyberLiquidity = ref('10');
 const description = ref('');
 const imageFile = ref<File | null>(null);
 const imagePreview = ref<string | null>(null);
@@ -241,8 +219,7 @@ const onImageChange = (event: Event): void => {
 };
 
 const minLiquidity = ref<bigint>(0n);
-const cyberSolBalance = ref<bigint>(0n);
-const cyberSolAllowance = ref<bigint>(0n);
+const cyberBalance = ref<bigint>(0n);
 const recent = ref<LaunchedToken[]>([]);
 
 const busy = ref(false);
@@ -262,11 +239,9 @@ const readProvider = new JsonRpcProvider(readRpcUrl, {
     name: 'cyberia',
 });
 
-const isConfigured = computed(() => !!LAUNCHPAD_ADDRESS);
-
 const liquidityBn = computed(() => {
     try {
-        return parseUnits(cyberSolLiquidity.value || '0', 18);
+        return parseUnits(cyberLiquidity.value || '0', 18);
     } catch {
         return 0n;
     }
@@ -280,12 +255,13 @@ const supplyBn = computed(() => {
     }
 });
 
-const needsApprove = computed(
-    () => liquidityBn.value > 0n && cyberSolAllowance.value < liquidityBn.value,
-);
+// Leave a little native headroom for gas on top of the liquidity itself.
+const GAS_HEADROOM = parseUnits('0.01', 18);
 
 const insufficientBalance = computed(
-    () => liquidityBn.value > 0n && cyberSolBalance.value < liquidityBn.value,
+    () =>
+        liquidityBn.value > 0n &&
+        cyberBalance.value < liquidityBn.value + GAS_HEADROOM,
 );
 
 const belowMin = computed(
@@ -296,7 +272,6 @@ const canLaunch = computed(
     () =>
         !busy.value &&
         wallet.isConnected.value &&
-        isConfigured.value &&
         name.value.trim().length > 0 &&
         symbol.value.trim().length > 0 &&
         supplyBn.value > 0n &&
@@ -352,16 +327,11 @@ const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
 };
 
 const loadOnchain = async (): Promise<void> => {
-    if (!isConfigured.value) {
-        return;
-    }
-
     const launchpad = new Contract(
         LAUNCHPAD_ADDRESS,
         LAUNCHPAD_ABI,
         readProvider,
     );
-    const cyber = new Contract(CYBER_SOL_ADDRESS, ERC20_ABI, readProvider);
 
     try {
         minLiquidity.value = await launchpad.minLiquidity();
@@ -371,10 +341,8 @@ const loadOnchain = async (): Promise<void> => {
 
     if (wallet.address.value) {
         try {
-            cyberSolBalance.value = await cyber.balanceOf(wallet.address.value);
-            cyberSolAllowance.value = await cyber.allowance(
+            cyberBalance.value = await readProvider.getBalance(
                 wallet.address.value,
-                LAUNCHPAD_ADDRESS,
             );
         } catch {
             // ignore
@@ -442,10 +410,6 @@ const fetchAddressLogs = async (
 
 const fetchLaunchEvents = async (): Promise<Map<string, LaunchEventMeta>> => {
     const map = new Map<string, LaunchEventMeta>();
-
-    if (!isConfigured.value) {
-        return map;
-    }
 
     try {
         const iface = new Interface(LAUNCHPAD_ABI);
@@ -714,10 +678,6 @@ const readPairTradeHistory = async (
 };
 
 const loadRecent = async (): Promise<void> => {
-    if (!isConfigured.value) {
-        return;
-    }
-
     try {
         const launchpad = new Contract(
             LAUNCHPAD_ADDRESS,
@@ -769,17 +729,14 @@ const loadRecent = async (): Promise<void> => {
                         erc20.symbol().catch(() => '') as Promise<string>,
                         erc20.totalSupply().catch(() => 0n) as Promise<bigint>,
                         factory
-                            .getPair(tokenAddr, CYBER_SOL_ADDRESS)
+                            .getPair(tokenAddr, WCYBER_ADDRESS)
                             .catch(() => ZeroAddress) as Promise<string>,
                     ]);
-                const pairOverride =
-                    LIQUIDITY_PAIR_OVERRIDES[tokenAddr.toLowerCase()];
                 const pairAddr =
-                    pairOverride?.pair ??
-                    (launchEvent?.pair && launchEvent.pair !== ZeroAddress
+                    launchEvent?.pair && launchEvent.pair !== ZeroAddress
                         ? launchEvent.pair
-                        : pairAddrFromFactory);
-                const quoteSymbol = pairOverride?.quoteSymbol ?? 'CYBER.sol';
+                        : pairAddrFromFactory;
+                const quoteSymbol = 'CYBER';
                 let reserveCyber = 0n;
                 let priceCyber: number | null = null;
                 let tokenIsToken0: boolean | null = null;
@@ -823,7 +780,7 @@ const loadRecent = async (): Promise<void> => {
                 name: d.name_ || md?.name || '',
                 symbol: d.symbol_ || md?.symbol || '',
                 tokenSupply: d.totalSupply_,
-                cyberSolLiquidity: d.reserveCyber,
+                cyberLiquidity: d.reserveCyber,
                 quoteSymbol: d.quoteSymbol,
                 description: md?.description ?? null,
                 imageUrl: md?.image_url ?? null,
@@ -931,7 +888,7 @@ const submitMetadata = async (tokenAddress: string): Promise<void> => {
 };
 
 const swapUrlFor = (tokenAddress: string): string =>
-    `${SWAP_BASE_URL}?inputCurrency=${CYBER_SOL_ADDRESS}&outputCurrency=${tokenAddress}`;
+    `${SWAP_BASE_URL}?inputCurrency=ETH&outputCurrency=${tokenAddress}`;
 
 const explorerAddressUrl = (address: string): string =>
     `${EXPLORER_BASE_URL}/address/${address}`;
@@ -1090,28 +1047,6 @@ const saveEditor = async (t: LaunchedToken): Promise<void> => {
     }
 };
 
-const handleApprove = async (): Promise<void> => {
-    error.value = null;
-    status.value = null;
-    busy.value = true;
-
-    try {
-        const provider = await ensureCyberiaNetwork();
-        const signer = await provider.getSigner();
-        const cyber = new Contract(CYBER_SOL_ADDRESS, ERC20_ABI, signer);
-        status.value = 'Confirm allowance in your wallet…';
-        const tx = await cyber.approve(LAUNCHPAD_ADDRESS, MaxUint256);
-        status.value = 'Waiting for transaction…';
-        await tx.wait();
-        status.value = 'Allowance confirmed.';
-        await loadOnchain();
-    } catch (e) {
-        error.value = (e as Error).message ?? String(e);
-    } finally {
-        busy.value = false;
-    }
-};
-
 const handleLaunch = async (): Promise<void> => {
     error.value = null;
     status.value = null;
@@ -1132,7 +1067,7 @@ const handleLaunch = async (): Promise<void> => {
             name.value.trim(),
             symbol.value.trim(),
             supplyBn.value,
-            liquidityBn.value,
+            { value: liquidityBn.value },
         );
         txHash.value = tx.hash;
         status.value = 'Transaction sent, waiting for block…';
@@ -1399,12 +1334,11 @@ const renderTokenCharts = async (): Promise<void> => {
     });
 };
 
-// Reload balance & allowance whenever the connected address changes.
+// Reload the native balance whenever the connected address changes.
 watch(
     () => wallet.address.value,
     () => {
-        cyberSolBalance.value = 0n;
-        cyberSolAllowance.value = 0n;
+        cyberBalance.value = 0n;
         loadOnchain();
     },
 );
@@ -1450,17 +1384,11 @@ onBeforeUnmount(() => {
             <header class="intro">
                 <h1>Launchpad</h1>
                 <p>
-                    Launch your own ERC-20 on Cyberia, paired with your
-                    CYBER.sol. 100% of the supply goes to the LP, and LP tokens
-                    are burned — liquidity can't be pulled.
+                    Launch your own ERC-20 on Cyberia by burning 10 native
+                    CYBER into liquidity. 100% of the supply goes to the LP,
+                    and LP tokens are burned — liquidity can't be pulled.
                 </p>
             </header>
-
-            <div v-if="!isConfigured" class="banner banner--warn">
-                Launchpad contract address is not configured. Set
-                <code>VITE_LAUNCHPAD_ADDRESS</code> in <code>.env</code> and
-                rebuild the frontend.
-            </div>
 
             <section class="card">
                 <h2>Create token</h2>
@@ -1487,9 +1415,9 @@ onBeforeUnmount(() => {
                         />
                     </label>
                     <label>
-                        <span>CYBER.sol liquidity</span>
+                        <span>CYBER liquidity (burned)</span>
                         <Input
-                            v-model="cyberSolLiquidity"
+                            v-model="cyberLiquidity"
                             type="text"
                             inputmode="decimal"
                         />
@@ -1537,16 +1465,16 @@ onBeforeUnmount(() => {
 
                 <div class="meta">
                     <div>
-                        Your CYBER.sol balance:
-                        <strong>{{ fmt(cyberSolBalance) }}</strong>
+                        Your CYBER balance:
+                        <strong>{{ fmt(cyberBalance) }}</strong>
                     </div>
                     <div v-if="minLiquidity > 0n">
                         Minimum:
-                        <strong>{{ fmt(minLiquidity) }}</strong> CYBER.sol
+                        <strong>{{ fmt(minLiquidity) }}</strong> CYBER
                     </div>
                     <div>
-                        Allowance:
-                        <strong>{{ fmt(cyberSolAllowance) }}</strong>
+                        The CYBER is paired with the full supply and the LP is
+                        burned — it cannot be withdrawn.
                     </div>
                 </div>
 
@@ -1562,32 +1490,18 @@ onBeforeUnmount(() => {
                         />
                         Connect MetaMask
                     </Button>
-                    <template v-else>
-                        <Button
-                            v-if="needsApprove"
-                            :disabled="busy || insufficientBalance || belowMin"
-                            @click="handleApprove"
-                        >
-                            <Loader2 v-if="busy" class="spin" />
-                            Approve CYBER.sol
-                        </Button>
-                        <Button
-                            v-else
-                            :disabled="!canLaunch"
-                            @click="handleLaunch"
-                        >
-                            <Loader2 v-if="busy" class="spin" />
-                            Launch token
-                        </Button>
-                    </template>
+                    <Button v-else :disabled="!canLaunch" @click="handleLaunch">
+                        <Loader2 v-if="busy" class="spin" />
+                        Launch token
+                    </Button>
                 </div>
 
                 <div v-if="insufficientBalance" class="hint hint--err">
-                    Not enough CYBER.sol for the chosen liquidity.
+                    Not enough CYBER for the chosen liquidity (plus gas).
                 </div>
                 <div v-else-if="belowMin" class="hint hint--err">
                     Liquidity below the minimum ({{ fmt(minLiquidity) }}
-                    CYBER.sol).
+                    CYBER).
                 </div>
                 <div v-if="status" class="hint">{{ status }}</div>
                 <div v-if="error" class="hint hint--err">{{ error }}</div>
@@ -1697,7 +1611,7 @@ onBeforeUnmount(() => {
                                         >Liquidity locked</span
                                     >
                                     <span class="statValue"
-                                        >{{ fmt(t.cyberSolLiquidity) }}
+                                        >{{ fmt(t.cyberLiquidity) }}
                                         {{ t.quoteSymbol }}</span
                                     >
                                 </div>

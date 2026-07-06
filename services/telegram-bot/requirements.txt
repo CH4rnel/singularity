@@ -3,6 +3,7 @@
 # satisfies them (the shim at scripts/python/telegram_airdrop_bot.py keeps using
 # that venv). eth-* packages come in transitively via web3.
 python-telegram-bot==22.7
+httpx==0.28.1
 web3==7.15.0
 SQLAlchemy==2.0.49
 python-dotenv==1.2.2
