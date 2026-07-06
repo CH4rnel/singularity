@@ -191,6 +191,20 @@
       "artifact": "contracts/USDTBNB.sol/USDTBNB.json",
       "address": "0x5664bcDDE27f0a1BB5b733530e261904b8dfE687",
       "burnable": true
+    },
+    {
+      "symbol": "ETH.BASE",
+      "contract": "ETHBase",
+      "artifact": "contracts/ETHBase.sol/ETHBase.json",
+      "address": null,
+      "burnable": true
+    },
+    {
+      "symbol": "USDC.BASE",
+      "contract": "USDCBase",
+      "artifact": "contracts/USDCBase.sol/USDCBase.json",
+      "address": null,
+      "burnable": true
     }
   ]
 }

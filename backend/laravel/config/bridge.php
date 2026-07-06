@@ -295,10 +295,10 @@ return [
                 'solana' => ['mint' => 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump', 'decimals' => 6, 'token_program' => 'token-2022'],
             ],
         ],
-        // USDC bridges native Circle USDC across Solana AND Base into the one
-        // Cyberia wrapper. Unlike USDT.BNB (a distinct BSC token), Base and
-        // Solana USDC are the same Circle-issued asset, so a shared reserve is
-        // sound — the relayer rebalances between chains via Circle.
+        // USDC (Solana reserve). Circle USDC on Base is a SEPARATE bridge token
+        // (USDC.BASE) with its own Cyberia wrapper — even though both are the
+        // same Circle-issued asset, per-source-chain reserves are never mixed
+        // (same rule as USDT vs USDT.BNB).
         'USDC' => [
             'symbol' => 'USDC',
             'model' => 'mint',
@@ -306,7 +306,6 @@ return [
             'chains' => [
                 'cyberia' => ['address' => '0xdc25597B19799010047F17e9591EFE08EFd40077', 'decimals' => 6],
                 'solana' => ['mint' => 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 'decimals' => 6, 'token_program' => 'token'],
-                'base' => ['address' => '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'decimals' => 6],
             ],
         ],
         // USDT (Solana reserve). Deliberately NOT bridged to BNB Chain — the
@@ -361,16 +360,30 @@ return [
                 'yenten' => ['native' => true, 'decimals' => 8],
             ],
         ],
-        // Native ETH on Base bridged into the existing Cyberia ETH wrapper
-        // (0xFDa2…1986, relayer-owned Ownable mint/burn ERC20, 18 decimals).
-        // Same native-coin pattern as BNB: mint on bridge-IN, native transfer
-        // on bridge-OUT.
-        'ETH' => [
-            'symbol' => 'ETH',
+        // Native ETH on Base bridged into a DEDICATED Cyberia wrapper
+        // (ETH.BASE, deployed via crypto/hardhat/scripts/deploy-eth-base.ts).
+        // Deliberately NOT the shared ETH token (0xFDa2…1986, a DEX/lending
+        // asset) — per-source-chain bridge reserves stay isolated. Native-coin
+        // pattern like BNB: mint on bridge-IN, native transfer on bridge-OUT.
+        // The route stays hidden while BRIDGE_ETH_BASE_WRAPPER_ADDRESS is unset.
+        'ETH.BASE' => [
+            'symbol' => 'ETH.BASE',
             'model' => 'mint',
             'chains' => [
-                'cyberia' => ['address' => '0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986', 'decimals' => 18],
+                'cyberia' => ['address' => env('BRIDGE_ETH_BASE_WRAPPER_ADDRESS', ''), 'decimals' => 18],
                 'base' => ['native' => true, 'decimals' => 18],
+            ],
+        ],
+        // Circle USDC on Base — a SEPARATE token from USDC (Solana reserve),
+        // with its own Cyberia wrapper (deployed via deploy-usdc-base.ts). Both
+        // wrapper and Base token use 6 decimals (no scaling).
+        'USDC.BASE' => [
+            'symbol' => 'USDC.BASE',
+            'model' => 'mint',
+            'fee_bearing' => true,
+            'chains' => [
+                'cyberia' => ['address' => env('BRIDGE_USDC_BASE_WRAPPER_ADDRESS', ''), 'decimals' => 6],
+                'base' => ['address' => '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'decimals' => 6],
             ],
         ],
         // Native BNB bridged into a Cyberia wrapper (deployed via
