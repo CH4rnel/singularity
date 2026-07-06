@@ -19,7 +19,7 @@
 import "dotenv/config";
 import { ethers } from "ethers";
 import { waitForReceipt } from "./lib/wait-receipt";
-import { sendWithNonceRetry } from "./lib/send-tx";
+import { broadcastWithRecovery } from "./lib/send-tx";
 
 const RELAYER_PK = process.env.BRIDGE_RELAYER_PRIVATE_KEY || process.env.DEPLOYER_PK;
 
@@ -64,39 +64,39 @@ async function main() {
   console.log(`Amount:  ${amountWei}`);
 
   const token = new ethers.Contract(tokenAddr, MINTABLE_ABI, wallet);
-  const tx = await sendWithNonceRetry(() =>
-    token.mint(recipient, BigInt(amountWei)),
+  const { hash } = await broadcastWithRecovery(
+    wallet,
+    provider,
+    await token.mint.populateTransaction(recipient, BigInt(amountWei)),
   );
   // Emit the hash the instant the tx is in the mempool, before blocking on the
-  // receipt. If a slow RPC pushes tx.wait() past the caller's timeout, the
-  // caller recovers this hash instead of retrying and double-paying.
-  console.log(JSON.stringify({ broadcastTxHash: tx.hash }));
-  const receipt = await waitForReceipt(provider, tx.hash);
+  // receipt. If a slow RPC pushes the receipt wait past the caller's timeout,
+  // the caller recovers this hash instead of retrying and double-paying.
+  console.log(JSON.stringify({ broadcastTxHash: hash }));
+  const receipt = await waitForReceipt(provider, hash);
 
   if (!receipt) {
-    throw new Error(`mint() receipt not observed (tx ${tx.hash})`);
+    throw new Error(`mint() receipt not observed (tx ${hash})`);
   }
   if (receipt.status !== 1) {
-    throw new Error(`mint() reverted (tx ${tx.hash})`);
+    throw new Error(`mint() reverted (tx ${hash})`);
   }
 
   let gasDropTxHash: string | null = null;
 
   if (gasDropWei && BigInt(gasDropWei) > 0n) {
     console.log(`GasDrop: ${gasDropWei} wei`);
-    const drop = await sendWithNonceRetry(() =>
-      wallet.sendTransaction({
-        to: recipient,
-        value: BigInt(gasDropWei),
-      }),
-    );
-    const dropReceipt = await waitForReceipt(provider, drop.hash);
+    const { hash: dropHash } = await broadcastWithRecovery(wallet, provider, {
+      to: recipient,
+      value: BigInt(gasDropWei),
+    });
+    const dropReceipt = await waitForReceipt(provider, dropHash);
 
     if (!dropReceipt || dropReceipt.status !== 1) {
-      throw new Error(`Gas drop transfer reverted (tx ${drop.hash})`);
+      throw new Error(`Gas drop transfer reverted (tx ${dropHash})`);
     }
 
-    gasDropTxHash = drop.hash;
+    gasDropTxHash = dropHash;
   }
 
   console.log(JSON.stringify({ txHash: receipt.hash, gasDropTxHash }));

@@ -20,7 +20,7 @@
 import "dotenv/config";
 import { ethers } from "ethers";
 import { waitForReceipt } from "./lib/wait-receipt";
-import { sendWithNonceRetry } from "./lib/send-tx";
+import { broadcastWithRecovery } from "./lib/send-tx";
 
 const RELAYER_PK = process.env.BRIDGE_RELAYER_PRIVATE_KEY || process.env.DEPLOYER_PK;
 
@@ -62,16 +62,18 @@ async function main() {
   console.log(`Burn:    ${amountWei} wei from relayer's own balance`);
 
   const token = new ethers.Contract(tokenAddr, BURNABLE_ABI, wallet);
-  const tx = await sendWithNonceRetry(() =>
-    token.burnFrom(wallet.address, BigInt(amountWei)),
+  const { hash } = await broadcastWithRecovery(
+    wallet,
+    provider,
+    await token.burnFrom.populateTransaction(wallet.address, BigInt(amountWei)),
   );
-  const receipt = await waitForReceipt(provider, tx.hash);
+  const receipt = await waitForReceipt(provider, hash);
 
   if (!receipt) {
-    throw new Error(`burnFrom() receipt not observed (tx ${tx.hash})`);
+    throw new Error(`burnFrom() receipt not observed (tx ${hash})`);
   }
   if (receipt.status !== 1) {
-    throw new Error(`burnFrom() reverted (tx ${tx.hash})`);
+    throw new Error(`burnFrom() reverted (tx ${hash})`);
   }
 
   console.log(JSON.stringify({ txHash: receipt.hash }));
