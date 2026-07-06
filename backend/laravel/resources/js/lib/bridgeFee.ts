@@ -26,7 +26,7 @@ export const priceUsd = (
     token: BridgeTokenSymbol,
     prices: TokenPrices,
 ): number => {
-    if (token === 'USDC' || token === 'USDT' || token === 'USDT.BNB') {
+    if (token === 'USDC' || token === 'USDT') {
         return 1;
     }
 
@@ -44,7 +44,6 @@ export const isFeeBearing = (
 ): boolean =>
     token === 'USDC' ||
     token === 'USDT' ||
-    token === 'USDT.BNB' ||
     (direction !== undefined &&
         (config.nativeRouteFees?.[direction]?.[token] ?? 0) > 0);
 

@@ -301,10 +301,11 @@ return [
                 'solana' => ['mint' => 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump', 'decimals' => 6, 'token_program' => 'token-2022'],
             ],
         ],
-        // USDC (Solana reserve). Circle USDC on Base is a SEPARATE bridge token
-        // (USDC.BASE) with its own Cyberia wrapper — even though both are the
-        // same Circle-issued asset, per-source-chain reserves are never mixed
-        // (same rule as USDT vs USDT.BNB).
+        // USDC — one unified wrapper across every source chain (Solana + Base),
+        // all Circle-issued and rebalanceable, so reserves are POOLED. Per-chain
+        // withdrawal capacity is enforced from the relayer's live inventory on
+        // the destination chain (see BridgeInventoryService), not by minting a
+        // separate wrapper per chain.
         'USDC' => [
             'symbol' => 'USDC',
             'model' => 'mint',
@@ -312,11 +313,12 @@ return [
             'chains' => [
                 'cyberia' => ['address' => '0xdc25597B19799010047F17e9591EFE08EFd40077', 'decimals' => 6],
                 'solana' => ['mint' => 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 'decimals' => 6, 'token_program' => 'token'],
+                'base' => ['address' => '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'decimals' => 6],
             ],
         ],
-        // USDT (Solana reserve). Deliberately NOT bridged to BNB Chain — the
-        // BSC-USDT reserve is a separate token (USDT.BNB) so the two reserves
-        // never mix.
+        // USDT — one unified wrapper across Solana + BNB Chain (pooled reserves,
+        // rebalanceable). The Cyberia wrapper is 6-dec; BSC-USDT is 18-dec, so
+        // the bridge scales each side by its own decimals (like CYBER.sol 18/6).
         'USDT' => [
             'symbol' => 'USDT',
             'model' => 'mint',
@@ -324,6 +326,7 @@ return [
             'chains' => [
                 'cyberia' => ['address' => '0x94845aF24a3E431593A2b941b2b31836dE45185D', 'decimals' => 6],
                 'solana' => ['mint' => 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', 'decimals' => 6, 'token_program' => 'token'],
+                'bnb' => ['address' => '0x55d398326f99059fF775485246999027B3197955', 'decimals' => 18],
             ],
         ],
         // HATCHER — Solana-native token bridged to Cyberia. Mint model: the
@@ -366,51 +369,28 @@ return [
                 'yenten' => ['native' => true, 'decimals' => 8],
             ],
         ],
-        // Native ETH on Base bridged into a DEDICATED Cyberia wrapper
-        // (ETH.BASE, deployed via crypto/hardhat/scripts/deploy-eth-base.ts).
-        // Deliberately NOT the shared ETH token (0xFDa2…1986, a DEX/lending
-        // asset) — per-source-chain bridge reserves stay isolated. Native-coin
-        // pattern like BNB: mint on bridge-IN, native transfer on bridge-OUT.
-        // The route stays hidden while BRIDGE_ETH_BASE_WRAPPER_ADDRESS is unset.
-        'ETH.BASE' => [
-            'symbol' => 'ETH.BASE',
+        // ETH — one unified wrapper (the canonical Cyberia ETH, 0xFDa2…1986,
+        // also the DEX/lending asset; relayer-owned Ownable mint/burn). Native
+        // ETH on every source chain (Base now, more later) maps to it; reserves
+        // are pooled and rebalanceable via the canonical L2 bridges. Native-coin
+        // pattern: mint on bridge-IN, native transfer on bridge-OUT.
+        'ETH' => [
+            'symbol' => 'ETH',
             'model' => 'mint',
             'chains' => [
-                'cyberia' => ['address' => env('BRIDGE_ETH_BASE_WRAPPER_ADDRESS', ''), 'decimals' => 18],
+                'cyberia' => ['address' => '0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986', 'decimals' => 18],
                 'base' => ['native' => true, 'decimals' => 18],
             ],
         ],
-        // Circle USDC on Base — a SEPARATE token from USDC (Solana reserve),
-        // with its own Cyberia wrapper (deployed via deploy-usdc-base.ts). Both
-        // wrapper and Base token use 6 decimals (no scaling).
-        'USDC.BASE' => [
-            'symbol' => 'USDC.BASE',
-            'model' => 'mint',
-            'fee_bearing' => true,
-            'chains' => [
-                'cyberia' => ['address' => env('BRIDGE_USDC_BASE_WRAPPER_ADDRESS', ''), 'decimals' => 6],
-                'base' => ['address' => '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'decimals' => 6],
-            ],
-        ],
         // Native BNB bridged into a Cyberia wrapper (deployed via
-        // crypto/hardhat/scripts/deploy-bnb.ts).
+        // crypto/hardhat/scripts/deploy-bnb.ts). BNB is its own asset (not a
+        // per-chain copy of a shared token), so no unification applies.
         'BNB' => [
             'symbol' => 'BNB',
             'model' => 'mint',
             'chains' => [
                 'cyberia' => ['address' => env('BRIDGE_BNB_WRAPPER_ADDRESS', ''), 'decimals' => 18],
                 'bnb' => ['native' => true, 'decimals' => 18],
-            ],
-        ],
-        // Tether USD from BNB Chain — a SEPARATE token from USDT (Solana
-        // reserve). Both wrapper and BSC token use 18 decimals (no scaling).
-        'USDT.BNB' => [
-            'symbol' => 'USDT.BNB',
-            'model' => 'mint',
-            'fee_bearing' => true,
-            'chains' => [
-                'cyberia' => ['address' => env('BRIDGE_USDT_BNB_WRAPPER_ADDRESS', ''), 'decimals' => 18],
-                'bnb' => ['address' => '0x55d398326f99059fF775485246999027B3197955', 'decimals' => 18],
             ],
         ],
     ],

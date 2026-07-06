@@ -86,9 +86,9 @@ class BridgeFeeService
         // A native EVM payout: the token's destination entry is flagged native
         // (checked above), so the payout IS this chain's native coin regardless
         // of the wrapper's symbol. Do NOT gate on native_currency symbol ==
-        // token — an isolated wrapper (ETH.BASE pays native ETH on Base) has a
-        // different symbol than the chain's native coin and would wrongly get a
-        // zero gas reserve.
+        // token — a wrapper whose symbol differs from the chain's native coin
+        // (e.g. the unified ETH wrapper paying native ETH on Base) would
+        // otherwise wrongly get a zero gas reserve.
         if (($chain['type'] ?? null) !== 'evm') {
             return '0';
         }
@@ -168,7 +168,7 @@ class BridgeFeeService
      */
     public function priceUsd(string $token): string
     {
-        if (in_array($token, ['USDC', 'USDT', 'USDT.BNB'], true)) {
+        if (in_array($token, ['USDC', 'USDT'], true)) {
             return '1';
         }
 

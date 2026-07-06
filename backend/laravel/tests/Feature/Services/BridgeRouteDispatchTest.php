@@ -21,14 +21,10 @@ beforeEach(function () {
     config()->set('bridge.chains.base.rpc_url', 'https://base-rpc.test');
     config()->set('bridge.chains.ton.api_url', 'https://tonapi.test');
     config()->set('bridge.chains.ton.deposit_address', TON_DEPOSIT);
-    // Token keys contain dots (USDT.BNB, ETH.BASE), so mutate the array
-    // wholesale instead of using config() dot-paths. Wrapper addresses default
-    // to '' (env-driven) so the corridors stay hidden until deployed.
+    // The native BNB wrapper is env-driven; give it an address so BNB routes
+    // are configured in tests. USDT/USDC/ETH wrappers are hardcoded in config.
     $tokens = config('bridge.tokens');
     $tokens['BNB']['chains']['cyberia']['address'] = '0x00000000000000000000000000000000000000b1';
-    $tokens['USDT.BNB']['chains']['cyberia']['address'] = '0x00000000000000000000000000000000000000b2';
-    $tokens['ETH.BASE']['chains']['cyberia']['address'] = '0x00000000000000000000000000000000000000e1';
-    $tokens['USDC.BASE']['chains']['cyberia']['address'] = '0x00000000000000000000000000000000000000e2';
     config()->set('bridge.tokens', $tokens);
 
     // Instant TON lookups in tests.
@@ -202,7 +198,7 @@ test('bnb_to_evm verifies a native BNB deposit and mints the wrapper', function 
     });
 });
 
-test('evm_to_bnb burns USDT.BNB on Cyberia and pays out on BSC', function () {
+test('evm_to_bnb burns the unified USDT wrapper on Cyberia and pays out on BSC', function () {
     $sender = '0x7777777777777777777777777777777777777777';
 
     Http::fake([
@@ -211,10 +207,10 @@ test('evm_to_bnb burns USDT.BNB on Cyberia and pays out on BSC', function () {
                 'status' => '0x1',
                 'logs' => [
                     erc20TransferLog(
-                        '0x00000000000000000000000000000000000000b2',
+                        '0x94845aF24a3E431593A2b941b2b31836dE45185D', // unified USDT wrapper (6-dec)
                         $sender,
                         RELAYER,
-                        '14d1120d7b160000',
+                        '16e360', // 1.5 USDT in 6-dec raw
                     ),
                 ],
             ],
@@ -228,7 +224,7 @@ test('evm_to_bnb burns USDT.BNB on Cyberia and pays out on BSC', function () {
 
     $request = makeRequest([
         'direction' => 'evm_to_bnb',
-        'token' => 'USDT.BNB',
+        'token' => 'USDT',
         'source_chain' => 'cyberia',
         'source_tx_hash' => '0x'.str_repeat('aa', 32),
         'sender_address' => $sender,
@@ -241,7 +237,7 @@ test('evm_to_bnb burns USDT.BNB on Cyberia and pays out on BSC', function () {
     expect($request->status)->toBe('completed')
         ->and($request->destination_tx_hash)->toBe('0xbscpayout');
 
-    // Payout goes to the canonical BSC USDT contract in 18-dec units.
+    // Payout goes to the canonical BSC USDT contract, scaled 6→18 dec.
     Process::assertRan(function ($process) {
         $command = implode(' ', $process->command);
 
@@ -251,20 +247,20 @@ test('evm_to_bnb burns USDT.BNB on Cyberia and pays out on BSC', function () {
     });
 });
 
-test('USDT stays off BNB routes and USDT.BNB off Solana routes', function () {
+test('unified USDT/USDC span every source chain (pooled reserves)', function () {
+    config()->set('bridge.routes.base_to_evm.enabled', true);
+    config()->set('bridge.routes.evm_to_base.enabled', true);
+
     $service = app(BridgeConfigService::class);
 
-    expect(array_keys($service->tokensForRoute('evm_to_bnb')))
-        ->not->toContain('USDT')
-        ->and(array_keys($service->tokensForRoute('bnb_to_evm')))
-        ->not->toContain('USDT')
-        ->and(array_keys($service->tokensForRoute('sol_to_evm')))
-        ->not->toContain('USDT.BNB')
-        ->and(array_keys($service->tokensForRoute('evm_to_bnb')))
-        ->toContain('USDT.BNB');
+    // One USDT across Solana AND BNB; one USDC across Solana AND Base.
+    expect(array_keys($service->tokensForRoute('evm_to_bnb')))->toContain('USDT')
+        ->and(array_keys($service->tokensForRoute('sol_to_evm')))->toContain('USDT')
+        ->and(array_keys($service->tokensForRoute('sol_to_evm')))->toContain('USDC')
+        ->and(array_keys($service->tokensForRoute('evm_to_base')))->toContain('USDC');
 });
 
-test('Base routes are available and offer dedicated ETH.BASE and USDC.BASE', function () {
+test('Base routes are available and offer unified ETH and USDC', function () {
     config()->set('bridge.routes.base_to_evm.enabled', true);
     config()->set('bridge.routes.evm_to_base.enabled', true);
 
@@ -273,53 +269,19 @@ test('Base routes are available and offer dedicated ETH.BASE and USDC.BASE', fun
 
     expect($routes)->toContain('base_to_evm')->toContain('evm_to_base');
 
-    // ETH.BASE bridges native on Base into its dedicated Cyberia wrapper;
-    // USDC.BASE is Circle USDC on Base into its own wrapper.
+    // Native ETH on Base maps to the unified ETH wrapper; Base USDC to the
+    // unified USDC wrapper — no per-chain tokens.
     expect(array_keys($service->tokensForRoute('base_to_evm')))
-        ->toContain('ETH.BASE')
-        ->toContain('USDC.BASE')
-        ->and(array_keys($service->tokensForRoute('evm_to_base')))
-        ->toContain('ETH.BASE')
-        ->toContain('USDC.BASE');
-
-    expect($service->tokenOnChain('ETH.BASE', 'base')['native'] ?? false)->toBeTrue();
-    expect($service->depositAddress('base'))->toBe(RELAYER);
-});
-
-test('Base and Solana reserves never mix: USDC.BASE off Solana, USDC off Base', function () {
-    config()->set('bridge.routes.base_to_evm.enabled', true);
-    config()->set('bridge.routes.evm_to_base.enabled', true);
-
-    $service = app(BridgeConfigService::class);
-
-    // The shared USDC (Solana reserve) must not appear on Base routes, and the
-    // Base-only USDC.BASE must not appear on Solana routes.
-    expect(array_keys($service->tokensForRoute('base_to_evm')))
-        ->not->toContain('USDC')
-        ->not->toContain('ETH')
-        ->and(array_keys($service->tokensForRoute('sol_to_evm')))
+        ->toContain('ETH')
         ->toContain('USDC')
+        ->not->toContain('ETH.BASE')
         ->not->toContain('USDC.BASE')
-        ->not->toContain('ETH.BASE');
-});
+        ->and(array_keys($service->tokensForRoute('evm_to_base')))
+        ->toContain('ETH')
+        ->toContain('USDC');
 
-test('Base tokens hide when their wrapper address is unset', function () {
-    config()->set('bridge.routes.base_to_evm.enabled', true);
-    config()->set('bridge.routes.evm_to_base.enabled', true);
-
-    // Simulate the default (env-unset) state: empty Cyberia wrapper addresses.
-    $tokens = config('bridge.tokens');
-    $tokens['ETH.BASE']['chains']['cyberia']['address'] = '';
-    $tokens['USDC.BASE']['chains']['cyberia']['address'] = '';
-    config()->set('bridge.tokens', $tokens);
-
-    $service = app(BridgeConfigService::class);
-
-    // No token configured on both chains → route drops out of availableRoutes.
-    expect($service->tokensForRoute('base_to_evm'))->toBe([]);
-    expect(array_keys($service->availableRoutes()))
-        ->not->toContain('base_to_evm')
-        ->not->toContain('evm_to_base');
+    expect($service->tokenOnChain('ETH', 'base')['native'] ?? false)->toBeTrue();
+    expect($service->depositAddress('base'))->toBe(RELAYER);
 });
 
 test('a deposit of the wrong jetton fails ton_to_evm verification', function () {

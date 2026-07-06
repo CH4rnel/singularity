@@ -7,9 +7,7 @@ export type BridgeTokenSymbol =
     | 'KRSQ'
     | 'GOAL'
     | 'BNB'
-    | 'USDT.BNB'
-    | 'ETH.BASE'
-    | 'USDC.BASE'
+    | 'ETH'
     // Config-driven tokens added in config/bridge.php arrive via server props.
     | (string & {});
 
@@ -110,9 +108,9 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenInfo> = {
         model: 'mint',
         solanaTokenProgram: 'token',
     },
-    // BNB Chain assets. The Cyberia wrapper addresses come from the server
-    // config (BRIDGE_BNB_WRAPPER_ADDRESS / BRIDGE_USDT_BNB_WRAPPER_ADDRESS);
-    // the empty placeholders are overridden at runtime via bridgeConfig.
+    // BNB — native BNB Chain coin bridged into a Cyberia wrapper (address from
+    // server config BRIDGE_BNB_WRAPPER_ADDRESS; placeholder overridden at
+    // runtime via bridgeConfig).
     BNB: {
         symbol: 'BNB',
         evmAddress: '0x0000000000000000000000000000000000000000',
@@ -122,35 +120,15 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenInfo> = {
         model: 'mint',
         solanaTokenProgram: 'token',
     },
-    'USDT.BNB': {
-        symbol: 'USDT.BNB',
-        evmAddress: '0x0000000000000000000000000000000000000000',
+    // ETH — one unified wrapper (canonical Cyberia ETH, 0xFDa2…1986); native
+    // ETH on every source chain (Base, …) maps to it. The Base side is the
+    // native coin; server config carries the per-chain identity.
+    ETH: {
+        symbol: 'ETH',
+        evmAddress: '0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986',
         solanaMint: '',
         evmDecimals: 18,
         solanaDecimals: 18,
-        model: 'mint',
-        solanaTokenProgram: 'token',
-    },
-    // Base assets. Dedicated per-source-chain wrappers (NOT the shared
-    // ETH/USDC tokens) so bridge reserves never mix. The Cyberia wrapper
-    // addresses come from server config (BRIDGE_ETH_BASE_WRAPPER_ADDRESS /
-    // BRIDGE_USDC_BASE_WRAPPER_ADDRESS); the placeholders are overridden at
-    // runtime via bridgeConfig. ETH.BASE's Base side is the native coin.
-    'ETH.BASE': {
-        symbol: 'ETH.BASE',
-        evmAddress: '0x0000000000000000000000000000000000000000',
-        solanaMint: '',
-        evmDecimals: 18,
-        solanaDecimals: 18,
-        model: 'mint',
-        solanaTokenProgram: 'token',
-    },
-    'USDC.BASE': {
-        symbol: 'USDC.BASE',
-        evmAddress: '0x0000000000000000000000000000000000000000',
-        solanaMint: '',
-        evmDecimals: 6,
-        solanaDecimals: 6,
         model: 'mint',
         solanaTokenProgram: 'token',
     },
