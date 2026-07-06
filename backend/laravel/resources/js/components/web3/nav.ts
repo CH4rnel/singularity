@@ -9,7 +9,6 @@ import {
     market,
     pixels,
     predictions,
-    slots,
     swap,
 } from '@/routes';
 import { index as daoIndex } from '@/routes/dao';
@@ -52,7 +51,6 @@ export const navGroups: Web3NavGroup[] = [
             { title: 'NFT Market', href: market().url },
             { title: 'Pixels', href: pixels().url },
             { title: 'Predictions', href: predictions().url },
-            { title: 'Slots', href: slots().url },
         ],
     },
     {

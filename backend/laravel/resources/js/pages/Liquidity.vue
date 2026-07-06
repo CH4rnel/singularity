@@ -460,7 +460,7 @@ const addLiquidity = async (): Promise<void> => {
         status.value = 'Liquidity added.';
         amountA.value = '';
         amountB.value = '';
-        await refreshPair();
+        await Promise.all([refreshPair(), loadSide('A'), loadSide('B')]);
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
         status.value = null;

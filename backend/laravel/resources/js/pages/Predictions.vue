@@ -155,23 +155,25 @@ const loadMarkets = async (): Promise<void> => {
             PREDICTIONS_ABI,
             readProvider,
         );
-        const count = Number(await c.marketCount());
-
-        if (count === 0) {
-            markets.value = [];
-
-            return;
-        }
-
-        const [raw, min, fee, own] = await Promise.all([
-            c.getMarkets(0, count),
+        const [rawCount, min, fee, own] = await Promise.all([
+            c.marketCount(),
             c.minBet(),
             c.createFee(),
             c.owner(),
         ]);
+        const count = Number(rawCount);
         minBet.value = min as bigint;
         createFee.value = fee as bigint;
         oracle.value = (own as string).toLowerCase();
+
+        if (count === 0) {
+            markets.value = [];
+            error.value = null;
+
+            return;
+        }
+
+        const raw = await c.getMarkets(0, count);
 
         let userYes: bigint[] = [];
         let userNo: bigint[] = [];
@@ -342,12 +344,18 @@ const createMarket = async (): Promise<void> => {
     try {
         const provider = await ensureCyberiaNetwork();
         const signer = await provider.getSigner();
+        const c = new Contract(PREDICTIONS_CONTRACT, PREDICTIONS_ABI, signer);
+        const [liveFee, liveOwner] = await Promise.all([
+            c.createFee() as Promise<bigint>,
+            c.owner() as Promise<string>,
+        ]);
+        createFee.value = liveFee;
+        oracle.value = liveOwner.toLowerCase();
         // The oracle creates for free; everyone else pays exactly createFee.
         const value =
-            (await signer.getAddress()).toLowerCase() === oracle.value
+            (await signer.getAddress()).toLowerCase() === liveOwner.toLowerCase()
                 ? 0n
-                : createFee.value;
-        const c = new Contract(PREDICTIONS_CONTRACT, PREDICTIONS_ABI, signer);
+                : liveFee;
         const tx = await c.createMarket(question, closeSec, { value });
         status.value = 'Waiting for block…';
         await tx.wait();

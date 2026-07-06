@@ -50,5 +50,14 @@
       { "pid": 20, "label": "CYBER/ETH LP",     "lpToken": "0x64252D0d9D9d2f27146c01CA15dD8680ACFFdEa2" },
       { "pid": 21, "label": "BTC/ETH LP",       "lpToken": "0x28521507A465Da62B73348C9FBB5561cCB1f311c", "pending": "pair not seeded on-chain yet; deterministic CREATE2 address" }
     ]
+  },
+  "bnbCyberFarm": {
+    "pid": 24,
+    "label": "BNB/CYBER LP",
+    "lpToken": "0xF4e6657946376Ed7f9c0aF26613C8863fFc97019",
+    "allocPoint": 100,
+    "transactionHash": "0x7dc8942380af237162fcb0c7cc36c6d303f9a639399b9988e81adc12671684f6",
+    "blockNumber": 12342276,
+    "timestamp": "2026-07-06T12:30:35Z"
   }
 }

@@ -20,9 +20,11 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useWallet } from '@/composables/useWallet';
 import { CYBER_SOL_ADDRESS, WCYBER_ADDRESS } from '@/lib/cyberiaTokens';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { formatUsd } from '@/lib/tokenFormat';
 
 const CYBERIA_CHAIN_ID = 49406;
 const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
@@ -42,6 +44,8 @@ const DEX_URL = 'https://swap.cyberia.church';
 // Ritual factory — used to price tokens in CYBER via their WCYBER pools so we
 // can quote each pool's TVL and APR without an off-chain indexer.
 const FACTORY = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
+const USDC_ADDRESS = '0xdc25597B19799010047F17e9591EFE08EFd40077';
+const USDT_ADDRESS = '0x94845aF24a3E431593A2b941b2b31836dE45185D';
 const FACTORY_ABI = [
     'function getPair(address,address) view returns (address)',
 ];
@@ -91,7 +95,9 @@ type Pool = {
     totalStaked: bigint;
     // Priced via WCYBER pools; null when a token has no CYBER route yet.
     tvlCyber: number | null;
-    aprPct: number | null;
+    tvlUsd: number | null;
+    userValueUsd: number | null;
+    apyPct: number | null;
 };
 
 const wallet = useWallet();
@@ -106,10 +112,18 @@ const readRpcUrl =
     typeof window !== 'undefined'
         ? window.location.origin + CYBERIA_RPC
         : CYBERIA_PUBLIC_RPC;
-const readProvider = new JsonRpcProvider(readRpcUrl, {
-    chainId: CYBERIA_CHAIN_ID,
-    name: 'cyberia',
-});
+const readProvider = new JsonRpcProvider(
+    readRpcUrl,
+    {
+        chainId: CYBERIA_CHAIN_ID,
+        name: 'cyberia',
+    },
+    {
+        // Cyberia RPC accepts at most 20 requests per JSON-RPC batch. Farm state
+        // fans out across every pool, so let ethers split larger reads for us.
+        batchMaxCount: 20,
+    },
+);
 
 const pools = ref<Pool[]>([]);
 const totalAllocPoint = ref<bigint>(0n);
@@ -117,9 +131,11 @@ const rewardPerBlock = ref<bigint>(0n);
 const rewardSymbol = ref('ASH');
 const rewardDecimals = ref(18);
 
-const loading = ref(false);
+const loading = ref(true);
 const status = ref<string | null>(null);
 const error = ref<string | null>(null);
+const sortBy = ref<'tvl' | 'apy'>('tvl');
+const harvestAllBusy = ref(false);
 
 // Per-pool form state, keyed by pid. `reactive` records add keys reactively, so
 // v-model can write a fresh pid the first time a card renders.
@@ -129,6 +145,29 @@ const busy = reactive<Record<string, boolean>>({});
 
 const hasWallet = computed(() => !!wallet.address.value);
 const connecting = ref(false);
+const harvestablePools = computed(() =>
+    pools.value.filter((pool) => pool.pending > 0n),
+);
+const sortedPools = computed(() =>
+    [...pools.value].sort((a, b) => {
+        const aValue = sortBy.value === 'tvl' ? a.tvlUsd : a.apyPct;
+        const bValue = sortBy.value === 'tvl' ? b.tvlUsd : b.apyPct;
+
+        if (aValue === null && bValue === null) {
+            return a.pid - b.pid;
+        }
+
+        if (aValue === null) {
+            return 1;
+        }
+
+        if (bValue === null) {
+            return -1;
+        }
+
+        return bValue - aValue || a.pid - b.pid;
+    }),
+);
 
 const isBusy = (pid: number, action: string): boolean =>
     busy[`${pid}:${action}`] ?? false;
@@ -141,6 +180,34 @@ const fmt = (v: bigint, decimals: number, digits = 4): string => {
     const [int, dec = ''] = s.split('.');
 
     return dec ? `${int}.${dec.slice(0, digits)}` : int;
+};
+
+// Preserve meaningful digits for tiny LP balances instead of rendering a
+// non-zero value such as 0.0000000054945825 as 0.0000.
+const fmtTokenAmount = (value: bigint, decimals: number): string => {
+    if (value === 0n) {
+        return '0';
+    }
+
+    const [integer, rawFraction = ''] = formatUnits(value, decimals).split('.');
+    const fraction = rawFraction.replace(/0+$/, '');
+
+    if (!fraction) {
+        return integer;
+    }
+
+    if (integer !== '0') {
+        const visible = fraction.slice(0, 6).replace(/0+$/, '');
+
+        return visible ? `${integer}.${visible}` : integer;
+    }
+
+    const firstSignificant = fraction.search(/[1-9]/);
+    const visible = fraction
+        .slice(0, Math.min(fraction.length, firstSignificant + 8))
+        .replace(/0+$/, '');
+
+    return `0.${visible}`;
 };
 
 const parseAmt = (v: unknown, decimals: number): bigint =>
@@ -173,6 +240,9 @@ const priceCache = new Map<string, Promise<number | null>>();
 
 const factory = new Contract(FACTORY, FACTORY_ABI, readProvider);
 
+const displaySymbol = (symbol: string): string =>
+    symbol.toUpperCase() === 'WCYBER' ? 'CYBER' : symbol;
+
 const symbolOf = (addr: string): Promise<string> => {
     const key = addr.toLowerCase();
     let p = symbolCache.get(key);
@@ -180,7 +250,9 @@ const symbolOf = (addr: string): Promise<string> => {
     if (!p) {
         p = (
             new Contract(addr, ERC20_ABI, readProvider).symbol() as Promise<string>
-        ).catch(() => shortAddr(addr));
+        )
+            .then(displaySymbol)
+            .catch(() => shortAddr(addr));
         symbolCache.set(key, p);
     }
 
@@ -270,6 +342,26 @@ const priceInCyber = (addr: string): Promise<number | null> => {
     return p;
 };
 
+const loadCyberUsdPrice = async (): Promise<number | null> => {
+    const markets = await Promise.all(
+        [USDC_ADDRESS, USDT_ADDRESS].map((stable) =>
+            pairReserves(WCYBER_ADDRESS, stable),
+        ),
+    );
+    const priced = markets.filter(
+        (market): market is { token: number; quote: number } => market !== null,
+    );
+
+    if (priced.length === 0) {
+        return null;
+    }
+
+    const cyberLiquidity = priced.reduce((sum, market) => sum + market.token, 0);
+    const usdLiquidity = priced.reduce((sum, market) => sum + market.quote, 0);
+
+    return cyberLiquidity > 0 ? usdLiquidity / cyberLiquidity : null;
+};
+
 // TVL of a pool's staked amount, in whole CYBER (null if unpriceable).
 const poolTvlCyber = async (
     lpToken: string,
@@ -353,10 +445,11 @@ async function loadState(): Promise<void> {
         totalAllocPoint.value = totAlloc;
         rewardPerBlock.value = rpb;
 
-        const [rSym, rDec, rewardPrice] = await Promise.all([
+        const [rSym, rDec, rewardPrice, cyberUsd] = await Promise.all([
             symbolOf(rewardAddr),
             decimalsOf(rewardAddr),
             priceInCyber(rewardAddr),
+            loadCyberUsdPrice(),
         ]);
         rewardSymbol.value = rSym;
         rewardDecimals.value = rDec;
@@ -364,10 +457,24 @@ async function loadState(): Promise<void> {
         const rewardPerYearWhole =
             Number(formatUnits(rpb * BLOCKS_PER_DAY, rDec)) * DAYS_PER_YEAR;
 
-        // All pools load in parallel; ethers batches same-tick RPC calls, so
-        // this is a handful of HTTP round-trips instead of ~10 per pool.
-        const loadPool = async (pid: number): Promise<Pool> => {
-            const info = await chef.poolInfo(pid);
+        // Read the small pool headers first so retired pools (allocPoint 0) can
+        // be excluded before their token metadata and pricing are requested.
+        const poolHeaders = await Promise.all(
+            Array.from({ length: Number(len) }, async (_, pid) => ({
+                pid,
+                info: await chef.poolInfo(pid),
+            })),
+        );
+        const activePoolHeaders = poolHeaders.filter(
+            ({ info }) => (info.allocPoint as bigint) > 0n,
+        );
+
+        // Active pools load in parallel; ethers splits same-tick calls into
+        // batches of at most 20 for the Cyberia RPC.
+        const loadPool = async (
+            pid: number,
+            info: (typeof activePoolHeaders)[number]['info'],
+        ): Promise<Pool> => {
             const lpToken = info.lpToken as string;
             const allocPoint = info.allocPoint as bigint;
             const lp = new Contract(lpToken, ERC20_ABI, readProvider);
@@ -424,7 +531,22 @@ async function loadState(): Promise<void> {
                 decimals,
             );
 
-            let aprPct: number | null = null;
+            const tvlUsd =
+                tvlCyber !== null && cyberUsd !== null
+                    ? tvlCyber * cyberUsd
+                    : null;
+            const userShare =
+                totalStaked > 0n
+                    ? Number(formatUnits(staked, decimals)) /
+                      Number(formatUnits(totalStaked, decimals))
+                    : 0;
+            const userValueUsd =
+                tvlUsd !== null && totalStaked > 0n
+                    ? tvlUsd * userShare
+                    : staked === 0n
+                      ? 0
+                      : null;
+            let apyPct: number | null = null;
 
             if (
                 rewardPrice !== null &&
@@ -436,7 +558,7 @@ async function loadState(): Promise<void> {
                     rewardPerYearWhole *
                     (Number(allocPoint) / Number(totAlloc)) *
                     rewardPrice;
-                aprPct = (yearlyRewardCyber / tvlCyber) * 100;
+                apyPct = (yearlyRewardCyber / tvlCyber) * 100;
             }
 
             return {
@@ -453,12 +575,14 @@ async function loadState(): Promise<void> {
                 allowance,
                 totalStaked,
                 tvlCyber,
-                aprPct,
+                tvlUsd,
+                userValueUsd,
+                apyPct,
             };
         };
 
         pools.value = await Promise.all(
-            Array.from({ length: Number(len) }, (_, pid) => loadPool(pid)),
+            activePoolHeaders.map(({ pid, info }) => loadPool(pid, info)),
         );
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
@@ -517,7 +641,6 @@ async function connectWallet(): Promise<void> {
 
     try {
         await wallet.connect();
-        await loadState();
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
     } finally {
@@ -636,6 +759,36 @@ async function harvest(pool: Pool): Promise<void> {
     });
 }
 
+async function harvestAll(): Promise<void> {
+    const targets = harvestablePools.value;
+
+    if (targets.length === 0) {
+        return;
+    }
+
+    error.value = null;
+    harvestAllBusy.value = true;
+
+    try {
+        const provider = await ensureCyberiaNetwork();
+        const signer = await provider.getSigner();
+        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, signer);
+
+        for (const [index, pool] of targets.entries()) {
+            status.value = `Harvesting ${index + 1}/${targets.length}: ${pool.label}…`;
+            const tx = await chef.deposit(pool.pid, 0n);
+            await tx.wait();
+        }
+
+        status.value = `Harvested ${rewardSymbol.value} from ${targets.length} farms.`;
+        await loadState();
+    } catch (e) {
+        error.value = (e as Error).message ?? String(e);
+    } finally {
+        harvestAllBusy.value = false;
+    }
+}
+
 // Emergency: pull the stake out and forfeit pending rewards. Last resort.
 async function emergencyUnstake(pool: Pool): Promise<void> {
     if (
@@ -671,21 +824,33 @@ const setUnstakeMax = (pool: Pool): void => {
 
 const explorerUrl = (addr: string): string => `${EXPLORER}/address/${addr}`;
 
-const fmtApr = (v: number): string =>
+const fmtApy = (v: number): string =>
     v >= 1000
         ? Math.round(v).toLocaleString()
         : v.toFixed(v >= 100 ? 0 : 1);
 
 const fmtCyber = (v: number): string =>
     v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2);
+const fmtUsdValue = (v: number): string =>
+    v === 0 ? '$0.00' : formatUsd(v);
+
+let watchWalletChanges = false;
 
 onMounted(async () => {
     // No shared layout here, so reconnect the saved wallet ourselves (mirrors
     // Bridge/Lending/CyberSolSwap) before the first read.
     await wallet.restore(authUser.value?.wallet_address ?? null);
     await loadState();
+    watchWalletChanges = true;
 });
-watch(() => wallet.address.value, loadState);
+watch(
+    () => wallet.address.value,
+    () => {
+        if (watchWalletChanges) {
+            void loadState();
+        }
+    },
+);
 </script>
 
 <template>
@@ -808,10 +973,96 @@ watch(() => wallet.address.value, loadState);
                 {{ error }}
             </p>
 
+            <section
+                v-if="pools.length > 0"
+                class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+                <div class="flex items-center gap-2 text-sm">
+                    <span class="text-muted-foreground">Sort by</span>
+                    <button
+                        type="button"
+                        class="rounded-lg border px-3 py-1.5 transition"
+                        :class="
+                            sortBy === 'tvl'
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border bg-card hover:border-foreground/30'
+                        "
+                        @click="sortBy = 'tvl'"
+                    >
+                        TVL
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-lg border px-3 py-1.5 transition"
+                        :class="
+                            sortBy === 'apy'
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border bg-card hover:border-foreground/30'
+                        "
+                        @click="sortBy = 'apy'"
+                    >
+                        APY
+                    </button>
+                </div>
+                <Button
+                    variant="outline"
+                    title="One wallet transaction per farm with pending rewards"
+                    :disabled="
+                        !hasWallet ||
+                        harvestablePools.length === 0 ||
+                        harvestAllBusy
+                    "
+                    @click="harvestAll"
+                >
+                    <Loader2
+                        v-if="harvestAllBusy"
+                        class="mr-2 h-4 w-4 animate-spin"
+                    />
+                    Harvest all
+                    <span v-if="harvestablePools.length > 0" class="ml-1">
+                        ({{ harvestablePools.length }})
+                    </span>
+                </Button>
+            </section>
+
+            <section
+                v-if="loading && pools.length === 0"
+                aria-label="Loading farms"
+                class="space-y-4"
+            >
+                <div class="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                    Loading farms…
+                </div>
+                <div class="grid gap-5 md:grid-cols-2">
+                    <div
+                        v-for="index in 4"
+                        :key="index"
+                        class="space-y-5 rounded-2xl border border-border bg-card p-5"
+                    >
+                        <div class="flex justify-between gap-4">
+                            <div class="flex flex-1 items-center gap-3">
+                                <Skeleton class="h-8 w-8 rounded-full" />
+                                <div class="flex-1 space-y-2">
+                                    <Skeleton class="h-4 w-32" />
+                                    <Skeleton class="h-3 w-24" />
+                                </div>
+                            </div>
+                            <Skeleton class="h-7 w-20" />
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <Skeleton class="h-20 rounded-xl" />
+                            <Skeleton class="h-20 rounded-xl" />
+                        </div>
+                        <Skeleton class="h-16 rounded-xl" />
+                    </div>
+                </div>
+            </section>
+
             <!-- POOLS -->
             <section v-if="pools.length > 0" class="grid gap-5 md:grid-cols-2">
                 <div
-                    v-for="pool in pools"
+                    v-for="pool in sortedPools"
                     :key="pool.pid"
                     class="space-y-4 rounded-2xl border border-border bg-card p-5"
                 >
@@ -841,17 +1092,17 @@ watch(() => wallet.address.value, loadState);
                         </div>
                         <div class="text-right">
                             <p
-                                v-if="pool.aprPct !== null"
+                                v-if="pool.apyPct !== null"
                                 class="font-mono text-lg font-semibold text-emerald-500"
                             >
-                                {{ fmtApr(pool.aprPct) }}% APR
+                                {{ fmtApy(pool.apyPct) }}% APY
                             </p>
                             <p
                                 v-else
                                 class="text-xs text-muted-foreground"
                                 title="No CYBER price route for this pool's tokens yet"
                             >
-                                APR —
+                                APY —
                             </p>
                             <span
                                 class="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/5 px-2 py-0.5 text-xs font-medium"
@@ -879,13 +1130,19 @@ watch(() => wallet.address.value, loadState);
                                 Total staked
                             </p>
                             <p class="font-mono">
-                                {{ fmt(pool.totalStaked, pool.decimals) }}
+                                {{ fmtTokenAmount(pool.totalStaked, pool.decimals) }}
                             </p>
                             <p
                                 v-if="pool.tvlCyber !== null"
                                 class="font-mono text-[11px] text-muted-foreground"
                             >
                                 ≈ {{ fmtCyber(pool.tvlCyber) }} CYBER
+                            </p>
+                            <p
+                                v-if="pool.tvlUsd !== null"
+                                class="font-mono text-xs font-medium"
+                            >
+                                {{ fmtUsdValue(pool.tvlUsd) }}
                             </p>
                         </div>
                         <div
@@ -897,9 +1154,18 @@ watch(() => wallet.address.value, loadState);
                             <p class="font-mono">
                                 {{
                                     hasWallet
-                                        ? fmt(pool.staked, pool.decimals)
+                                        ? fmtTokenAmount(
+                                              pool.staked,
+                                              pool.decimals,
+                                          )
                                         : '—'
                                 }}
+                            </p>
+                            <p
+                                v-if="hasWallet && pool.userValueUsd !== null"
+                                class="font-mono text-xs font-medium"
+                            >
+                                {{ fmtUsdValue(pool.userValueUsd) }}
                             </p>
                         </div>
                     </div>
@@ -926,6 +1192,7 @@ watch(() => wallet.address.value, loadState);
                             :disabled="
                                 !hasWallet ||
                                 pool.pending <= 0n ||
+                                harvestAllBusy ||
                                 isBusy(pool.pid, 'harvest')
                             "
                             @click="harvest(pool)"
@@ -947,7 +1214,12 @@ watch(() => wallet.address.value, loadState);
                                 <span>Stake</span>
                                 <span class="font-mono">
                                     Balance:
-                                    {{ fmt(pool.walletBalance, pool.decimals) }}
+                                    {{
+                                        fmtTokenAmount(
+                                            pool.walletBalance,
+                                            pool.decimals,
+                                        )
+                                    }}
                                 </span>
                             </div>
                             <div class="flex items-center gap-2">
@@ -987,7 +1259,12 @@ watch(() => wallet.address.value, loadState);
                                 <span>Unstake</span>
                                 <span class="font-mono">
                                     Staked:
-                                    {{ fmt(pool.staked, pool.decimals) }}
+                                    {{
+                                        fmtTokenAmount(
+                                            pool.staked,
+                                            pool.decimals,
+                                        )
+                                    }}
                                 </span>
                             </div>
                             <div class="flex items-center gap-2">

@@ -6,6 +6,7 @@ import { reactive } from 'vue';
 // To add a missing one: drop the file in public/token-icons/ and add a line here —
 // both pages pick it up. Tokens with no entry render a lettered gradient avatar.
 export const TOKEN_LOGOS: Record<string, string> = {
+    CYBER: '/token-icons/cyberia.png',
     WCYBER: '/token-icons/cyberia.png',
     'CYBER.sol': '/token-icons/CYBER.png',
     ASH: '/token-icons/ash.png',
