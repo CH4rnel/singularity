@@ -27,6 +27,7 @@ createInertiaApp({
             case name === 'Farm':
             case name === 'Launchpad':
             case name === 'CyberSolSwap':
+            case name === 'Swap':
             case name === 'Slots':
             case name === 'Predictions':
             case name === 'PixelBattle':

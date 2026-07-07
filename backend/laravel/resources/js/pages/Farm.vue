@@ -12,11 +12,12 @@ import {
     ExternalLink,
     Loader2,
     RefreshCw,
+    Search,
     Sparkles,
     Sprout,
     Wallet,
 } from 'lucide-vue-next';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,10 @@ const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 const MASTERCHEF = '0xd540DEa828567160FFDe5e792ca359aDD1f6B03D';
 // Cyberia targets ~1s blocks, so daily emission ≈ rewardPerBlock × 86 400.
 const BLOCKS_PER_DAY = 86400n;
+// Live pending ticker: extrapolate accrual every second, re-anchor to the
+// on-chain pendingReward every 15 s so drift never accumulates.
+const PENDING_TICK_MS = 1000;
+const PENDING_REFRESH_MS = 15000;
 const DAYS_PER_YEAR = 365;
 const EXPLORER = 'https://explorer.cyberia.church';
 const DEX_URL = 'https://swap.cyberia.church';
@@ -90,6 +95,9 @@ type Pool = {
     isPair: boolean;
     staked: bigint;
     pending: bigint;
+    // Snapshot time + per-second accrual so the UI can tick pending between reads.
+    pendingFetchedAt: number;
+    pendingPerSec: bigint;
     walletBalance: bigint;
     allowance: bigint;
     totalStaked: bigint;
@@ -145,9 +153,39 @@ const busy = reactive<Record<string, boolean>>({});
 
 const hasWallet = computed(() => !!wallet.address.value);
 const connecting = ref(false);
+
+// Clock driving the live pending counters (Cyberia mints ~1 block/second).
+const nowMs = ref(Date.now());
+
+// Chain-read pending plus extrapolated accrual since that read; re-anchored to
+// the real pendingReward every PENDING_REFRESH_MS.
+const livePending = (pool: Pool): bigint =>
+    pool.pending +
+    (pool.pendingPerSec *
+        BigInt(Math.max(0, nowMs.value - pool.pendingFetchedAt))) /
+        1000n;
+
 const harvestablePools = computed(() =>
-    pools.value.filter((pool) => pool.pending > 0n),
+    pools.value.filter((pool) => livePending(pool) > 0n),
 );
+const totalPendingLive = computed(() =>
+    harvestablePools.value.reduce((sum, pool) => sum + livePending(pool), 0n),
+);
+const poolSearch = ref('');
+const filteredPools = computed(() => {
+    const q = poolSearch.value.trim().toLowerCase();
+
+    if (!q) {
+        return sortedPools.value;
+    }
+
+    return sortedPools.value.filter(
+        (pool) =>
+            pool.label.toLowerCase().includes(q) ||
+            pool.symbols.some((s) => s.toLowerCase().includes(q)) ||
+            pool.lpToken.toLowerCase().includes(q),
+    );
+});
 const sortedPools = computed(() =>
     [...pools.value].sort((a, b) => {
         const aValue = sortBy.value === 'tvl' ? a.tvlUsd : a.apyPct;
@@ -524,6 +562,13 @@ async function loadState(): Promise<void> {
                 allowance = allow;
             }
 
+            // User accrual per second (~1 block/s): the user's stake share of
+            // this pool's slice of the per-block emission.
+            const pendingPerSec =
+                staked > 0n && totAlloc > 0n && totalStaked > 0n
+                    ? (rpb * allocPoint * staked) / (totAlloc * totalStaked)
+                    : 0n;
+
             const tvlCyber = await poolTvlCyber(
                 lpToken,
                 isPair,
@@ -571,6 +616,8 @@ async function loadState(): Promise<void> {
                 isPair,
                 staked,
                 pending,
+                pendingFetchedAt: Date.now(),
+                pendingPerSec,
                 walletBalance,
                 allowance,
                 totalStaked,
@@ -588,6 +635,62 @@ async function loadState(): Promise<void> {
         error.value = (e as Error).message ?? String(e);
     } finally {
         loading.value = false;
+    }
+}
+
+// Lightweight live refresh, batched by ethers and without the loading state:
+// re-anchors pending for the tickers and picks up balance/stake changes made
+// outside this page (lending, swap, transfers, other tabs).
+async function refreshLive(): Promise<void> {
+    const me = wallet.address.value;
+
+    if (!me || loading.value || pools.value.length === 0 || document.hidden) {
+        return;
+    }
+
+    try {
+        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, readProvider);
+        const updates = await Promise.all(
+            pools.value.map(async (pool) => {
+                const lp = new Contract(pool.lpToken, ERC20_ABI, readProvider);
+                const [pending, user, walletBalance, allowance, totalStaked] =
+                    await Promise.all([
+                        chef.pendingReward(pool.pid, me) as Promise<bigint>,
+                        chef.userInfo(pool.pid, me),
+                        lp.balanceOf(me) as Promise<bigint>,
+                        lp.allowance(me, MASTERCHEF) as Promise<bigint>,
+                        lp.balanceOf(MASTERCHEF) as Promise<bigint>,
+                    ]);
+
+                return {
+                    pool,
+                    pending,
+                    staked: user.amount as bigint,
+                    walletBalance,
+                    allowance,
+                    totalStaked,
+                };
+            }),
+        );
+        const fetchedAt = Date.now();
+
+        for (const u of updates) {
+            u.pool.pending = u.pending;
+            u.pool.pendingFetchedAt = fetchedAt;
+            u.pool.staked = u.staked;
+            u.pool.walletBalance = u.walletBalance;
+            u.pool.allowance = u.allowance;
+            u.pool.totalStaked = u.totalStaked;
+            u.pool.pendingPerSec =
+                u.staked > 0n &&
+                totalAllocPoint.value > 0n &&
+                u.totalStaked > 0n
+                    ? (rewardPerBlock.value * u.pool.allocPoint * u.staked) /
+                      (totalAllocPoint.value * u.totalStaked)
+                    : 0n;
+        }
+    } catch {
+        // Transient RPC failure — extrapolation keeps ticking until next poll.
     }
 }
 
@@ -749,13 +852,15 @@ async function unstake(pool: Pool): Promise<void> {
 
 // Harvest only: depositing 0 pays out pending rewards without moving the stake.
 async function harvest(pool: Pool): Promise<void> {
+    const expected = livePending(pool);
+
     await run(pool.pid, 'harvest', async (signer) => {
         status.value = 'Confirm the harvest in your wallet…';
         const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, signer);
         const tx = await chef.deposit(pool.pid, 0n);
         status.value = 'Waiting for block…';
         await tx.wait();
-        status.value = `Harvested ${rewardSymbol.value} from ${pool.label}.`;
+        status.value = `Harvested ≈ ${fmt(expected, rewardDecimals.value)} ${rewardSymbol.value} from ${pool.label}.`;
     });
 }
 
@@ -765,6 +870,11 @@ async function harvestAll(): Promise<void> {
     if (targets.length === 0) {
         return;
     }
+
+    const expectedTotal = targets.reduce(
+        (sum, pool) => sum + livePending(pool),
+        0n,
+    );
 
     error.value = null;
     harvestAllBusy.value = true;
@@ -780,7 +890,7 @@ async function harvestAll(): Promise<void> {
             await tx.wait();
         }
 
-        status.value = `Harvested ${rewardSymbol.value} from ${targets.length} farms.`;
+        status.value = `Harvested ≈ ${fmt(expectedTotal, rewardDecimals.value)} ${rewardSymbol.value} from ${targets.length} farms.`;
         await loadState();
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
@@ -835,13 +945,37 @@ const fmtUsdValue = (v: number): string =>
     v === 0 ? '$0.00' : formatUsd(v);
 
 let watchWalletChanges = false;
+let tickTimer: ReturnType<typeof setInterval> | undefined;
+let liveTimer: ReturnType<typeof setInterval> | undefined;
+
+// Returning to the tab refreshes balances/pending immediately instead of
+// waiting out the poll interval.
+const onTabVisible = (): void => {
+    if (!document.hidden) {
+        void refreshLive();
+    }
+};
 
 onMounted(async () => {
+    tickTimer = setInterval(() => {
+        nowMs.value = Date.now();
+    }, PENDING_TICK_MS);
+    liveTimer = setInterval(() => void refreshLive(), PENDING_REFRESH_MS);
+    window.addEventListener('focus', onTabVisible);
+    document.addEventListener('visibilitychange', onTabVisible);
+
     // No shared layout here, so reconnect the saved wallet ourselves (mirrors
     // Bridge/Lending/CyberSolSwap) before the first read.
     await wallet.restore(authUser.value?.wallet_address ?? null);
     await loadState();
     watchWalletChanges = true;
+});
+
+onBeforeUnmount(() => {
+    clearInterval(tickTimer);
+    clearInterval(liveTimer);
+    window.removeEventListener('focus', onTabVisible);
+    document.removeEventListener('visibilitychange', onTabVisible);
 });
 watch(
     () => wallet.address.value,
@@ -977,6 +1111,16 @@ watch(
                 v-if="pools.length > 0"
                 class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
             >
+                <div class="relative w-full sm:max-w-xs">
+                    <Search
+                        class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                        v-model="poolSearch"
+                        placeholder="Search pools…"
+                        class="pl-9"
+                    />
+                </div>
                 <div class="flex items-center gap-2 text-sm">
                     <span class="text-muted-foreground">Sort by</span>
                     <button
@@ -1019,8 +1163,13 @@ watch(
                         class="mr-2 h-4 w-4 animate-spin"
                     />
                     Harvest all
-                    <span v-if="harvestablePools.length > 0" class="ml-1">
-                        ({{ harvestablePools.length }})
+                    <span
+                        v-if="harvestablePools.length > 0"
+                        class="ml-1 font-mono"
+                    >
+                        ({{ harvestablePools.length }} ·
+                        {{ fmt(totalPendingLive, rewardDecimals) }}
+                        {{ rewardSymbol }})
                     </span>
                 </Button>
             </section>
@@ -1059,10 +1208,20 @@ watch(
                 </div>
             </section>
 
+            <section
+                v-if="pools.length > 0 && filteredPools.length === 0"
+                class="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground"
+            >
+                No pools match “{{ poolSearch }}”.
+            </section>
+
             <!-- POOLS -->
-            <section v-if="pools.length > 0" class="grid gap-5 md:grid-cols-2">
+            <section
+                v-if="filteredPools.length > 0"
+                class="grid gap-5 md:grid-cols-2"
+            >
                 <div
-                    v-for="pool in sortedPools"
+                    v-for="pool in filteredPools"
                     :key="pool.pid"
                     class="space-y-4 rounded-2xl border border-border bg-card p-5"
                 >
@@ -1181,7 +1340,11 @@ watch(
                             <p class="font-mono text-lg">
                                 {{
                                     hasWallet
-                                        ? fmt(pool.pending, rewardDecimals, 6)
+                                        ? fmt(
+                                              livePending(pool),
+                                              rewardDecimals,
+                                              6,
+                                          )
                                         : '—'
                                 }}
                             </p>
@@ -1191,7 +1354,7 @@ watch(
                             size="sm"
                             :disabled="
                                 !hasWallet ||
-                                pool.pending <= 0n ||
+                                livePending(pool) <= 0n ||
                                 harvestAllBusy ||
                                 isBusy(pool.pid, 'harvest')
                             "
@@ -1331,7 +1494,7 @@ watch(
             </section>
 
             <section
-                v-else-if="!loading"
+                v-else-if="!loading && pools.length === 0"
                 class="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground"
             >
                 <Sparkles class="mx-auto mb-2 h-5 w-5" />

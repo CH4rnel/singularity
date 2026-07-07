@@ -412,8 +412,16 @@ const usd2 = (n: number): string =>
 // liquidity so the deepest pools lead.
 const filteredMarkets = computed(() => {
     const q = marketFilter.value.trim().toLowerCase();
+    // Match the on-chain symbol, the displayed name (WCYBER shows as CYBER)
+    // and the market/underlying addresses, so pasted 0x… strings work too.
     const list = q
-        ? visibleMarkets.value.filter((m) => m.symbol.toLowerCase().includes(q))
+        ? visibleMarkets.value.filter(
+              (m) =>
+                  m.symbol.toLowerCase().includes(q) ||
+                  featuredName(m).toLowerCase().includes(q) ||
+                  m.address.toLowerCase().includes(q) ||
+                  m.underlying.toLowerCase().includes(q),
+          )
         : visibleMarkets.value.slice();
 
     return list.sort((a, b) => {
