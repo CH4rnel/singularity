@@ -46,11 +46,11 @@ Reveal должен попасть в один из следующих 256 бл�
 
 ## Сборка и установка
 
-Требуются JDK 21 и Gradle 8:
+Требуется JDK 21. Gradle поставляется через wrapper:
 
 ```bash
 cd services/minecraft-land
-gradle test build
+./gradlew test build
 cp build/libs/cyberia-minecraft-land-0.1.0.jar /path/to/paper/plugins/
 ```
 
