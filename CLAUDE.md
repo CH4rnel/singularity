@@ -24,6 +24,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `services/telegram-bot/` | Python, python-telegram-bot, web3, SQLAlchemy | Cyberia Telegram bot: wallet rewards, chat tokens, on-chain announcers, whales gate |
 | `services/lainos/` | TypeScript, Node, Anthropic SDK, viem | LainOS: autonomous AI agent framework (ElizaOS-like) with a Cyberia chain plugin |
 | `game/wired/` | Godot 4, GDScript | Wired: 3D on-chain game; NPCs think via LainOS, world reacts to the Cyberia chain |
+| `game/nocarrier/` | Godot 4, GDScript | NO CARRIER: first-person netstalking survival-horror sim (offline, no chain deps); world/UI built procedurally in code |
 | `scripts/` | Python, JS, Lisp | Airdrop bots, crawlers, price scripts, operations |
 | `linux/` | Linux build notes/config | Cyberia OS artifacts |
 
@@ -140,6 +141,7 @@ Use the smallest relevant check:
 - Ritual: `cd frontend/ritual && npx eslint <changed files>` or the deploy build flow above
 - Hardhat: `cd crypto/hardhat && npx hardhat test`
 - Anchor: `cd crypto/anchor && anchor test` or at least `anchor build`
+- NO CARRIER: `cd game/nocarrier && godot4 --headless --import . && godot4 --headless --path . -s tests/smoke.gd`
 - Jekyll: `cd frontend/jekyll && bundle exec jekyll build`
 - Static landing: inspect HTML and validate if a validator is available
 - Blockscout compose/proxy: `cd services/blockscout/docker-compose && docker compose config`

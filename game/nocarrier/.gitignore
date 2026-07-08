@@ -1,0 +1,5 @@
+# Godot 4 cache/import data
+.godot/
+
+# Export builds
+build/

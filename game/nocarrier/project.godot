@@ -1,0 +1,33 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="NO CARRIER"
+config/description="A first-person netstalking survival sim. You are the night sysop of NODE-07, a basement relay tapping the wired: trace stray carriers, download and decode what should not be on the network, keep the generator fed — and try not to attract attention."
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.4", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Sfx="*res://scripts/autoload/Sfx.gd"
+Net="*res://scripts/autoload/Net.gd"
+Events="*res://scripts/autoload/Events.gd"
+Game="*res://scripts/autoload/Game.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[rendering]
+
+environment/defaults/default_clear_color=Color(0.01, 0.012, 0.015, 1)
