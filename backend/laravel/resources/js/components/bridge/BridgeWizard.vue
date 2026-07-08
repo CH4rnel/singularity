@@ -5,6 +5,7 @@ import { useBridge } from '@/composables/useBridge';
 import { useBridgeAnalytics } from '@/composables/useBridgeAnalytics';
 import { useBridgeFlow } from '@/composables/useBridgeFlow';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
+import { useTonWallet } from '@/composables/useTonWallet';
 import { useWallet } from '@/composables/useWallet';
 import { bridgeRoute, isManualBridgeRoute } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
@@ -17,6 +18,7 @@ import {
 import type { BridgeFeeConfig } from '@/lib/bridgeFee';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
+import { sendTonDeposit, TON_GAS_RESERVE } from '@/lib/tonBridge';
 import StepConfigure from './StepConfigure.vue';
 import StepDirection from './StepDirection.vue';
 import StepReview from './StepReview.vue';
@@ -81,10 +83,13 @@ const flow = useBridgeFlow();
 const bridge = useBridge();
 const evmWallet = useWallet();
 const solanaWallet = useSolanaWallet();
+const tonWallet = useTonWallet();
 const analytics = useBridgeAnalytics();
 
 onMounted(() => {
     analytics.track('page_view');
+    // Restore a previously approved TON Connect session (no modal).
+    void tonWallet.restore();
 });
 
 const sourceWalletConnected = computed(() => {
@@ -92,15 +97,16 @@ const sourceWalletConnected = computed(() => {
         return false;
     }
 
-    const sourceWallet = bridgeRoute(flow.context.direction).sourceWallet;
-
-    if (sourceWallet === 'manual') {
-        return true;
+    switch (bridgeRoute(flow.context.direction).sourceWallet) {
+        case 'manual':
+            return true;
+        case 'solana':
+            return solanaWallet.isConnected.value;
+        case 'ton':
+            return tonWallet.isConnected.value;
+        default:
+            return evmWallet.isConnected.value;
     }
-
-    return sourceWallet === 'solana'
-        ? solanaWallet.isConnected.value
-        : evmWallet.isConnected.value;
 });
 
 const sourceWalletAddress = computed(() => {
@@ -108,17 +114,30 @@ const sourceWalletAddress = computed(() => {
         return null;
     }
 
-    return bridgeRoute(flow.context.direction).sourceWallet === 'solana'
-        ? solanaWallet.address.value
-        : evmWallet.address.value;
+    switch (bridgeRoute(flow.context.direction).sourceWallet) {
+        case 'solana':
+            return solanaWallet.address.value;
+        case 'ton':
+            return tonWallet.address.value;
+        default:
+            return evmWallet.address.value;
+    }
 });
 
-const sourceWalletConnecting = computed(() =>
-    flow.context.direction &&
-    bridgeRoute(flow.context.direction).sourceWallet === 'solana'
-        ? solanaWallet.isConnecting.value
-        : evmWallet.isConnecting.value,
-);
+const sourceWalletConnecting = computed(() => {
+    if (!flow.context.direction) {
+        return false;
+    }
+
+    switch (bridgeRoute(flow.context.direction).sourceWallet) {
+        case 'solana':
+            return solanaWallet.isConnecting.value;
+        case 'ton':
+            return tonWallet.isConnecting.value;
+        default:
+            return evmWallet.isConnecting.value;
+    }
+});
 
 const sourceBalance = computed(() => {
     if (!flow.context.direction) {
@@ -132,9 +151,13 @@ const sourceBalance = computed(() => {
         return bridge.getEvmNativeBalance(source);
     }
 
+    if (source === 'ton') {
+        return bridge.getTokenBalance(flow.context.token, 'ton');
+    }
+
     if (source !== 'solana' && source !== 'cyberia') {
-        // Manual-chain balances (TON, Yenten) aren't available through the
-        // connected EVM/Solana wallets.
+        // Manual-chain balances (Yenten) aren't available through the
+        // connected wallets.
         return null;
     }
 
@@ -157,9 +180,20 @@ const sourceMaxAmount = computed(() => {
     const source = bridgeRoute(flow.context.direction).source;
     const sourceToken = tokenOnChain(flow.context.token, source);
 
-    return bridgeChainInfo(source)?.type === 'evm' && sourceToken?.native
-        ? bridge.getEvmNativeMaxAmount(source)
-        : sourceBalance.value;
+    if (bridgeChainInfo(source)?.type === 'evm' && sourceToken?.native) {
+        return bridge.getEvmNativeMaxAmount(source);
+    }
+
+    // Native TON: keep back a small reserve for wallet message fees.
+    if (source === 'ton' && sourceToken?.native) {
+        const balance = parseFloat(sourceBalance.value ?? '');
+
+        return Number.isFinite(balance)
+            ? Math.max(0, balance - TON_GAS_RESERVE).toString()
+            : null;
+    }
+
+    return sourceBalance.value;
 });
 
 // Live max the relayer can pay out to the destination chain now; null = the
@@ -199,6 +233,8 @@ const refreshSourceBalance = () => {
         evmWallet.address.value
     ) {
         bridge.fetchEvmNativeBalance(source, evmWallet.address.value);
+    } else if (source === 'ton' && tonWallet.rawAddress.value) {
+        bridge.fetchTokenBalanceTon(token, tonWallet.rawAddress.value);
     } else if (source === 'solana' && solanaWallet.address.value) {
         if (token === 'CYBER.sol') {
             bridge.fetchSolanaCyberBalance(solanaWallet.address.value);
@@ -223,6 +259,8 @@ watch(sourceWalletConnected, (connected) => {
 
     if (sourceWallet === 'solana' && solanaWallet.address.value) {
         flow.context.sourceAddress = solanaWallet.address.value;
+    } else if (sourceWallet === 'ton' && tonWallet.address.value) {
+        flow.context.sourceAddress = tonWallet.address.value;
     } else if (sourceWallet === 'evm' && evmWallet.address.value) {
         flow.context.sourceAddress = evmWallet.address.value;
     }
@@ -277,6 +315,8 @@ const handleDirection = (
 
     if (sourceWallet === 'solana' && solanaWallet.address.value) {
         flow.context.sourceAddress = solanaWallet.address.value;
+    } else if (sourceWallet === 'ton' && tonWallet.address.value) {
+        flow.context.sourceAddress = tonWallet.address.value;
     } else if (sourceWallet === 'evm' && evmWallet.address.value) {
         flow.context.sourceAddress = evmWallet.address.value;
     }
@@ -290,13 +330,21 @@ const handleConnectSource = async () => {
         return;
     }
 
-    if (bridgeRoute(flow.context.direction).sourceWallet === 'solana') {
+    const sourceWallet = bridgeRoute(flow.context.direction).sourceWallet;
+
+    if (sourceWallet === 'solana') {
         const addr = await solanaWallet.connect();
 
         if (addr) {
             analytics.track('solana_wallet_connected', {
                 source_address: addr,
             });
+        }
+    } else if (sourceWallet === 'ton') {
+        const addr = await tonWallet.connect();
+
+        if (addr) {
+            analytics.track('ton_wallet_connected', { source_address: addr });
         }
     } else {
         const addr = await evmWallet.connect();
@@ -338,11 +386,35 @@ const handleConfirm = async () => {
         });
 
         const tokenInfo = BRIDGE_TOKENS[flow.context.token];
+        const sourceChainKey = bridgeRoute(flow.context.direction).source;
+        const sourceChainType = bridgeChainInfo(sourceChainKey)?.type;
 
         try {
             let result: { txHash: string; nonce: number } | null;
 
-            if (tokenInfo.model === 'native') {
+            if (sourceChainType === 'ton') {
+                // TON Connect (Tonkeeper): sign the deposit in the wallet,
+                // then resolve the message hash to the indexed transaction.
+                const depositAddress = bridgeDepositAddress('ton');
+                const tonEntry = tokenOnChain(flow.context.token, 'ton');
+
+                if (!depositAddress || !tonEntry) {
+                    throw new Error(
+                        'The TON bridge hot wallet is not configured on the server.',
+                    );
+                }
+
+                if (!tonWallet.rawAddress.value) {
+                    throw new Error('TON wallet not connected');
+                }
+
+                result = await sendTonDeposit({
+                    tokenEntry: tonEntry,
+                    amount: flow.context.amount,
+                    depositAddress,
+                    senderRawAddress: tonWallet.rawAddress.value,
+                });
+            } else if (tokenInfo?.model === 'native') {
                 // CYBER — through CyberBridge contract
                 result =
                     flow.context.direction === 'evm_to_sol'

@@ -3,6 +3,7 @@ import { Link as InertiaLink } from '@inertiajs/vue3';
 import { useTimeAgo } from '@vueuse/core';
 import { MessageSquare, ScrollText, Vote } from 'lucide-vue-next';
 import { computed } from 'vue';
+import MarkdownContent from '@/components/dao/MarkdownContent.vue';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
 import { show as proposalShow } from '@/routes/proposals';
 import { show as userShow } from '@/routes/users';
@@ -27,7 +28,7 @@ const meta = computed(() => {
                 action: 'created a proposal',
                 title: proposal?.title ?? '[deleted]',
                 url: proposal ? proposalShow(proposal.id).url : null,
-                body: proposal?.description ?? null,
+                bodyHtml: proposal?.description_html ?? null,
             };
         }
         case 'vote.cast': {
@@ -41,7 +42,7 @@ const meta = computed(() => {
                     : 'voted on',
                 title: vote?.proposal?.title ?? '[deleted]',
                 url: vote?.proposal ? proposalShow(vote.proposal.id).url : null,
-                body: null,
+                bodyHtml: null,
             };
         }
         case 'comment.posted': {
@@ -55,7 +56,7 @@ const meta = computed(() => {
                 url: comment?.proposal
                     ? proposalShow(comment.proposal.id).url
                     : null,
-                body: comment?.body ?? null,
+                bodyHtml: comment?.body_html ?? null,
             };
         }
         default:
@@ -65,7 +66,7 @@ const meta = computed(() => {
                 action: 'did something',
                 title: '[unknown]',
                 url: null,
-                body: null,
+                bodyHtml: null,
             };
     }
 });
@@ -111,12 +112,12 @@ const actorName = computed(
                 </span>
             </p>
 
-            <p
-                v-if="meta.body"
-                class="mt-1 line-clamp-2 text-sm text-muted-foreground"
-            >
-                {{ meta.body }}
-            </p>
+            <MarkdownContent
+                v-if="meta.bodyHtml"
+                class="mt-1 line-clamp-2"
+                :html="meta.bodyHtml"
+                compact
+            />
 
             <p class="mt-1 flex items-center gap-2 text-xs text-muted-foreground/70">
                 <component :is="meta.icon" class="h-3.5 w-3.5" :class="meta.iconClass" />

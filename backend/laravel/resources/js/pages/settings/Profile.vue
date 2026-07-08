@@ -14,6 +14,7 @@ import { send } from '@/routes/verification';
 type Props = {
     mustVerifyEmail: boolean;
     status?: string;
+    error?: string;
 };
 
 defineProps<Props>();
@@ -119,6 +120,52 @@ const user = computed(() => page.props.auth.user);
                 </Transition>
             </div>
         </Form>
+    </div>
+
+    <div class="mt-10 flex flex-col space-y-6">
+        <Heading
+            variant="small"
+            title="X (Twitter) account"
+            description="Link your X account to sign in with one click"
+        />
+
+        <p
+            v-if="status === 'X account linked.'"
+            class="text-sm font-medium text-green-600"
+        >
+            X account linked.
+        </p>
+        <p v-if="error" class="text-sm font-medium text-red-600">
+            {{ error }}
+        </p>
+
+        <p
+            v-if="user.twitter_id"
+            class="text-sm text-muted-foreground"
+        >
+            Linked to
+            <span class="font-medium text-foreground">
+                @{{ user.twitter_username ?? user.twitter_id }}
+            </span>
+        </p>
+        <div v-else>
+            <!-- Plain navigation: the OAuth redirect must be a full page
+                 load, not an Inertia visit. -->
+            <Button variant="outline" as-child>
+                <a href="/auth/twitter">
+                    <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        class="h-4 w-4 fill-current"
+                    >
+                        <path
+                            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+                        />
+                    </svg>
+                    Link X account
+                </a>
+            </Button>
+        </div>
     </div>
 
     <DeleteUser />

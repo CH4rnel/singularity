@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\Markdown;
 use Database\Factories\ProposalCommentFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,6 +22,8 @@ class ProposalComment extends Model
         'parent_id',
         'body',
     ];
+
+    protected $appends = ['body_html'];
 
     protected static function booted(): void
     {
@@ -41,6 +45,13 @@ class ProposalComment extends Model
     public function proposal(): BelongsTo
     {
         return $this->belongsTo(Proposal::class);
+    }
+
+    protected function bodyHtml(): Attribute
+    {
+        return Attribute::get(
+            fn () => Markdown::toSafeHtml($this->body),
+        );
     }
 
     public function user(): BelongsTo

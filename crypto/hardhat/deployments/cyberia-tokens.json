@@ -191,6 +191,13 @@
       "artifact": "contracts/USDTBNB.sol/USDTBNB.json",
       "address": "0x5664bcDDE27f0a1BB5b733530e261904b8dfE687",
       "burnable": true
+    },
+    {
+      "symbol": "TON",
+      "contract": "TON",
+      "artifact": "contracts/TON.sol/TON.json",
+      "address": "0x92aBF73698383176Aa2894F1f7263807C3a4e6e6",
+      "burnable": true
     }
   ]
 }

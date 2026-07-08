@@ -118,3 +118,16 @@ test('authenticated users can view a proposal', function () {
 
     $response->assertOk();
 });
+
+test('proposal descriptions expose safe markdown html', function () {
+    $proposal = Proposal::factory()->create([
+        'description' => "**Budget**\n\n<script>alert('x')</script>\n\n[bad](javascript:alert(1))",
+    ]);
+
+    $html = $proposal->toArray()['description_html'];
+
+    expect($html)
+        ->toContain('<strong>Budget</strong>')
+        ->not->toContain('<script>')
+        ->not->toContain('javascript:alert');
+});

@@ -29,6 +29,7 @@ export const TOKEN_LOGOS: Record<string, string> = {
     KRSQ: '/token-icons/karasique.webp',
     YTN: '/token-icons/yenten.png',
     BNB: '/token-icons/bnb.svg',
+    TON: '/token-icons/ton.svg',
     LAIN: '/token-icons/lain.jpg',
     MINE: '/token-icons/mine.jpg',
     GOAL: '/token-icons/goal.webp',

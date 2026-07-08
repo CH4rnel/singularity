@@ -3,6 +3,7 @@ import { Link as InertiaLink, router, usePage } from '@inertiajs/vue3';
 import { useTimeAgo } from '@vueuse/core';
 import { Reply, Trash2 } from 'lucide-vue-next';
 import { computed } from 'vue';
+import MarkdownContent from '@/components/dao/MarkdownContent.vue';
 import ReactionBar from '@/components/dao/ReactionBar.vue';
 import { Button } from '@/components/ui/button';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
@@ -60,9 +61,7 @@ function deleteComment() {
                 <span class="text-xs text-muted-foreground">{{ timeAgo }}</span>
             </div>
 
-            <p class="mt-1 text-sm leading-relaxed whitespace-pre-wrap">
-                {{ comment.body }}
-            </p>
+            <MarkdownContent class="mt-1" :html="comment.body_html" compact />
 
             <div class="mt-2 flex flex-wrap items-center gap-3">
                 <ReactionBar

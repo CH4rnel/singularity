@@ -21,6 +21,11 @@ import { bridgeChainInfo, tokenOnChain } from '@/lib/bridgeConfig';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenInfo, BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
+import {
+    fetchTonJettonBalance,
+    fetchTonNativeBalance,
+    fromRawUnits,
+} from '@/lib/tonBridge';
 
 const CYBERIA_RPC = 'https://rpc.cyberia.church';
 const CYBERIA_CHAIN_ID = 49406;
@@ -88,7 +93,7 @@ const capacityKey = (direction: string, symbol: string): string =>
 
 const balanceKey = (
     symbol: BridgeTokenSymbol,
-    chain: 'evm' | 'solana',
+    chain: 'evm' | 'solana' | 'ton',
 ): string => `${symbol}:${chain}`;
 
 const tokenProgramId = (token: BridgeTokenInfo): PublicKey =>
@@ -534,8 +539,53 @@ export const useBridge = () => {
 
     const getTokenBalance = (
         symbol: BridgeTokenSymbol,
-        chain: 'evm' | 'solana',
+        chain: 'evm' | 'solana' | 'ton',
     ): string | null => tokenBalances.value[balanceKey(symbol, chain)] ?? null;
+
+    /**
+     * TON-side balance of the connected TON Connect wallet: native Toncoin or
+     * a jetton, depending on the token's TON entry. `owner` is the raw
+     * ("0:hex") account address.
+     */
+    const fetchTokenBalanceTon = async (
+        symbol: BridgeTokenSymbol,
+        owner: string,
+    ): Promise<void> => {
+        const token = tokenOnChain(symbol, 'ton');
+        const key = balanceKey(symbol, 'ton');
+
+        try {
+            if (!token) {
+                throw new Error(`${symbol} is not configured on TON`);
+            }
+
+            if (token.native) {
+                tokenBalances.value = {
+                    ...tokenBalances.value,
+                    [key]: await fetchTonNativeBalance(owner),
+                };
+
+                return;
+            }
+
+            if (!token.master) {
+                throw new Error(`${symbol} has no jetton master configured`);
+            }
+
+            const { balance } = await fetchTonJettonBalance(
+                owner,
+                token.master,
+            );
+
+            tokenBalances.value = {
+                ...tokenBalances.value,
+                [key]: fromRawUnits(balance, token.decimals),
+            };
+        } catch (e) {
+            console.error('[bridge] fetchTokenBalanceTon failed', e);
+            tokenBalances.value = { ...tokenBalances.value, [key]: null };
+        }
+    };
 
     /**
      * EVM → Solana direct transfer: ERC20.transfer(relayerEvm, amount).
@@ -792,6 +842,7 @@ export const useBridge = () => {
         fetchSolanaCyberBalance,
         fetchTokenBalanceEvm,
         fetchTokenBalanceSolana,
+        fetchTokenBalanceTon,
         getTokenBalance,
         lockNativeOnSolana,
         redeemCyberSolOnEvm,

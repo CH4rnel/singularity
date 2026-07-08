@@ -58,3 +58,17 @@ test('guests cannot add comments', function () {
 
     $response->assertRedirect(route('login'));
 });
+
+test('proposal comments expose safe markdown html', function () {
+    $comment = ProposalComment::factory()->create([
+        'body' => "# Heading\n\n- item\n\n<img src=x onerror=alert(1)>",
+    ]);
+
+    $html = $comment->toArray()['body_html'];
+
+    expect($html)
+        ->toContain('<h1>Heading</h1>')
+        ->toContain('<li>item</li>')
+        ->not->toContain('<img')
+        ->not->toContain('onerror');
+});

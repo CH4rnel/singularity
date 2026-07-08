@@ -120,6 +120,18 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenInfo> = {
         model: 'mint',
         solanaTokenProgram: 'token',
     },
+    // TON — native Toncoin bridged into a Cyberia wrapper (18-dec ERC20; the
+    // TON side is 9-dec and the backend scales each side). Deposits are signed
+    // via TON Connect (Tonkeeper); the solana fields are unused.
+    TON: {
+        symbol: 'TON',
+        evmAddress: '0x92aBF73698383176Aa2894F1f7263807C3a4e6e6',
+        solanaMint: '',
+        evmDecimals: 18,
+        solanaDecimals: 9,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
     // ETH — one unified wrapper (canonical Cyberia ETH, 0xFDa2…1986); native
     // ETH on every source chain (Base, …) maps to it. The Base side is the
     // native coin; server config carries the per-chain identity.

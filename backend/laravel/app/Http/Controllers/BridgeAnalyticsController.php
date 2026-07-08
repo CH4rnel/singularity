@@ -16,6 +16,7 @@ class BridgeAnalyticsController extends Controller
         'direction_selected',
         'evm_wallet_connected',
         'solana_wallet_connected',
+        'ton_wallet_connected',
         'amount_entered',
         'destination_entered',
         'lock_tx_submitted',

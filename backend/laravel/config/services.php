@@ -52,6 +52,15 @@ return [
         'price_min_pool_usd' => (float) env('ANALYTICS_PRICE_MIN_POOL_USD', 0.01),
     ],
 
+    // X (Twitter) OAuth 2.0 login — Socialite's twitter-oauth-2 driver.
+    // Create the app at developer.x.com with the callback
+    // {APP_URL}/auth/twitter/callback ("users.read tweet.read" scopes).
+    'twitter-oauth-2' => [
+        'client_id' => env('TWITTER_CLIENT_ID'),
+        'client_secret' => env('TWITTER_CLIENT_SECRET'),
+        'redirect' => env('TWITTER_REDIRECT_URI', '/auth/twitter/callback'),
+    ],
+
     'bridge' => [
         'evm_rpc_url' => env('BRIDGE_EVM_RPC_URL', env('CYBERIA_RPC_URL')),
         'evm_bridge_address' => env('BRIDGE_EVM_CONTRACT_ADDRESS'),

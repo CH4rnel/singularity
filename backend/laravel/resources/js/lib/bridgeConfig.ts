@@ -18,7 +18,7 @@ export type PublicChain = {
     label: string;
     type: 'evm' | 'solana' | 'ton' | 'yenten' | (string & {});
     addressType: string;
-    wallet: 'evm' | 'solana' | 'manual';
+    wallet: 'evm' | 'solana' | 'ton' | 'manual';
     evmChainId: number | null;
     rpcUrl: string | null;
     explorerTx: string | null;

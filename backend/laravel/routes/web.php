@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\ApiController;
+use App\Http\Controllers\Auth\TwitterAuthController;
 use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
@@ -29,6 +30,13 @@ use App\Http\Middleware\EnsureBridgeAdmin;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
+Route::get('/tonconnect-manifest.json', fn () => response()->json([
+    'url' => 'https://cyberia.church/bridge',
+    'name' => 'Cyberia Bridge',
+    'iconUrl' => 'https://cyberia.church/apple-touch-icon.png',
+    'termsOfUseUrl' => 'https://cyberia.church',
+    'privacyPolicyUrl' => 'https://cyberia.church',
+], 200, [], JSON_UNESCAPED_SLASHES))->name('tonconnect.manifest');
 Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 // Public token directory + per-token pages the analytics list links into.
@@ -59,6 +67,11 @@ Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('p
 Route::get('u/{user}', [UserProfileController::class, 'show'])->name('users.show');
 
 Route::post('login/web3', Web3LoginController::class)->name('web3.login');
+
+// X (Twitter) OAuth: guests log in / register, signed-in users link the
+// account to their profile.
+Route::get('/auth/twitter', [TwitterAuthController::class, 'redirect'])->name('twitter.redirect');
+Route::get('/auth/twitter/callback', [TwitterAuthController::class, 'callback'])->name('twitter.callback');
 
 Route::get('/wallet-login', fn () => inertia('auth/WalletLogin'))->name('wallet.login')->middleware('guest');
 

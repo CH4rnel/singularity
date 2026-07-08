@@ -284,6 +284,142 @@ test('Base routes are available and offer unified ETH and USDC', function () {
     expect($service->depositAddress('base'))->toBe(RELAYER);
 });
 
+test('ton_to_evm verifies a native TON deposit, canonicalizes the hash and mints 9→18', function () {
+    $sender = 'UQDv2p2r_iB1nR7J8Ze5LGUeXENN-te4ezlHqU6JZvS9l9Ix';
+    $msgHash = str_repeat('1a', 32); // what TON Connect hands the frontend
+    $txHash = str_repeat('2b', 32); // the indexed root transaction
+
+    Http::fake([
+        "tonapi.test/v2/events/{$msgHash}" => Http::response(['error' => 'not found'], 404),
+        "tonapi.test/v2/blockchain/messages/{$msgHash}/transaction" => Http::response(['hash' => $txHash]),
+        "tonapi.test/v2/events/{$txHash}" => Http::response([
+            'event_id' => $txHash,
+            'in_progress' => false,
+            'actions' => [
+                [
+                    'type' => 'TonTransfer',
+                    'status' => 'ok',
+                    'TonTransfer' => [
+                        'sender' => ['address' => TonApiService::normalizeAddress($sender)],
+                        'recipient' => ['address' => TonApiService::normalizeAddress(TON_DEPOSIT)],
+                        'amount' => 1500000000, // 1.5 TON in nanotons
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    Process::fake([
+        '*relay-mint*' => Process::result(output: json_encode(['txHash' => '0xtonminted'])),
+    ]);
+
+    $request = makeRequest([
+        'direction' => 'ton_to_evm',
+        'token' => 'TON',
+        'source_chain' => 'ton',
+        'source_tx_hash' => $msgHash,
+        'sender_address' => $sender,
+        'recipient_address' => '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+    ]);
+
+    expect(app(BridgeService::class)->processDirectRelay($request))->toBeTrue();
+
+    $request->refresh();
+    expect($request->status)->toBe('completed')
+        ->and($request->destination_tx_hash)->toBe('0xtonminted')
+        // Replay protection: the request is re-pointed at the canonical tx
+        // hash so resubmitting under either encoding is a duplicate.
+        ->and($request->source_tx_hash)->toBe($txHash);
+
+    // 1.5 TON → 18-dec wrapper units on the deployed Cyberia TON wrapper.
+    Process::assertRan(function ($process) {
+        $command = implode(' ', $process->command);
+
+        return str_contains($command, 'relay-mint')
+            && str_contains($command, '0x92aBF73698383176Aa2894F1f7263807C3a4e6e6')
+            && str_contains($command, '1500000000000000000');
+    });
+});
+
+test('evm_to_ton burns the TON wrapper and pays out native TON minus the flat fee', function () {
+    $sender = '0x8888888888888888888888888888888888888888';
+
+    Http::fake([
+        '*cyberia-rpc.test*' => Http::response([
+            'result' => [
+                'status' => '0x1',
+                'logs' => [
+                    erc20TransferLog(
+                        '0x92aBF73698383176Aa2894F1f7263807C3a4e6e6',
+                        $sender,
+                        RELAYER,
+                        '14d1120d7b160000', // 1.5e18
+                    ),
+                ],
+            ],
+        ]),
+    ]);
+
+    Process::fake([
+        '*relay-burn*' => Process::result(output: json_encode(['txHash' => '0xburned'])),
+        '*relay-ton-transfer*' => Process::result(output: json_encode(['txHash' => 'tonnativepayout'])),
+    ]);
+
+    $request = makeRequest([
+        'direction' => 'evm_to_ton',
+        'token' => 'TON',
+        'source_chain' => 'cyberia',
+        'source_tx_hash' => '0x'.str_repeat('ce', 32),
+        'sender_address' => $sender,
+        'recipient_address' => 'UQDv2p2r_iB1nR7J8Ze5LGUeXENN-te4ezlHqU6JZvS9l9Ix',
+    ]);
+
+    expect(app(BridgeService::class)->processDirectRelay($request))->toBeTrue();
+
+    $request->refresh();
+    expect($request->status)->toBe('completed')
+        ->and($request->destination_tx_hash)->toBe('tonnativepayout');
+
+    Process::assertRan(fn ($process) => str_contains(implode(' ', $process->command), 'relay-burn'));
+
+    // 1.5 TON minus the 0.01 flat payout fee → 1.49 TON in nanotons,
+    // query_id = request id.
+    Process::assertRan(function ($process) use ($request) {
+        $command = implode(' ', $process->command);
+
+        return str_contains($command, 'relay-ton-transfer')
+            && str_contains($command, '1490000000')
+            && str_contains($command, (string) $request->id);
+    });
+});
+
+test('TON routes offer native TON alongside the jettons', function () {
+    $service = app(BridgeConfigService::class);
+
+    expect(array_keys($service->tokensForRoute('ton_to_evm')))
+        ->toContain('TON')
+        ->toContain('KRSQ')
+        ->toContain('GOAL')
+        ->and(array_keys($service->tokensForRoute('evm_to_ton')))
+        ->toContain('TON');
+
+    expect($service->tokenOnChain('TON', 'ton')['native'] ?? false)->toBeTrue();
+
+    // With the hot wallet + mnemonic configured (beforeEach), the corridors
+    // are live in both directions.
+    expect(array_keys($service->availableRoutes()))
+        ->toContain('ton_to_evm')
+        ->toContain('evm_to_ton');
+});
+
+test('TON routes hide while the hot wallet is unset', function () {
+    config()->set('bridge.chains.ton.deposit_address', null);
+
+    expect(array_keys(app(BridgeConfigService::class)->availableRoutes()))
+        ->not->toContain('ton_to_evm')
+        ->not->toContain('evm_to_ton');
+});
+
 test('a deposit of the wrong jetton fails ton_to_evm verification', function () {
     Http::fake([
         'tonapi.test/*' => Http::response([

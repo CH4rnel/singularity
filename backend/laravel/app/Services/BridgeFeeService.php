@@ -54,9 +54,10 @@ class BridgeFeeService
 
     /**
      * Fee retained from a native-coin payout to cover the destination network
-     * fee (EVM gas, Yenten transaction fee). EVM quotes use the larger of the
-     * configured gas-price floor and the live RPC price, then apply a safety
-     * multiplier for price movement; Yenten uses a flat configured amount.
+     * fee (EVM gas, TON message fee, Yenten transaction fee). EVM quotes use
+     * the larger of the configured gas-price floor and the live RPC price,
+     * then apply a safety multiplier for price movement; TON and Yenten use
+     * flat configured amounts.
      */
     public function nativePayoutFee(string $direction, string $token, bool $live = true): string
     {
@@ -81,6 +82,10 @@ class BridgeFeeService
 
         if (($chain['type'] ?? null) === 'yenten') {
             return (string) config('bridge.fee.yenten_payout_fee_ytn', '0.01');
+        }
+
+        if (($chain['type'] ?? null) === 'ton') {
+            return (string) config('bridge.fee.ton_payout_fee_ton', '0.01');
         }
 
         // A native EVM payout: the token's destination entry is flagged native

@@ -24,6 +24,7 @@ export type Proposal = {
     user_id: number;
     title: string;
     description: string | null;
+    description_html: string | null;
     ends_at: string | null;
     /** Computed server-side from ends_at. */
     status: 'open' | 'closed';
@@ -46,6 +47,7 @@ export type ProposalComment = {
     user_id: number;
     parent_id: number | null;
     body: string;
+    body_html: string | null;
     user?: User;
     replies?: ProposalComment[];
     reactions?: Reaction[];

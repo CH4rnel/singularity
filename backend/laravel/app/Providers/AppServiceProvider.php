@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\TonApiService;
 use App\Support\Environment;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -17,7 +18,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // TonApiService takes scalar config (endpoint + key), so the container
+        // can't autowire it — build it from the bridge chain config.
+        $this->app->singleton(TonApiService::class, fn () => new TonApiService(
+            (string) (config('bridge.chains.ton.api_url') ?: 'https://tonapi.io'),
+            config('bridge.chains.ton.api_key') ?: null,
+        ));
     }
 
     /**

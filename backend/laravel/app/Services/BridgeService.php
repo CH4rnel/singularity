@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BridgeRequest;
 use App\Support\Environment;
 use App\Support\TokenAmount;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -596,10 +597,9 @@ class BridgeService
     {
         $txHash = TonApiService::normalizeTxHash($request->source_tx_hash);
         $sender = TonApiService::normalizeAddress($request->sender_address);
-        $master = TonApiService::normalizeAddress((string) $tokenEntry['master']);
         $recipient = TonApiService::normalizeAddress((string) ($chain['deposit_address'] ?? ''));
 
-        if (! $txHash || ! $sender || ! $master || ! $recipient) {
+        if (! $txHash || ! $sender || ! $recipient) {
             Log::warning('Bridge: TON deposit fields failed normalization', [
                 'id' => $request->id,
                 'tx_ok' => (bool) $txHash,
@@ -609,7 +609,42 @@ class BridgeService
             return null;
         }
 
-        return app(TonApiService::class)->verifyJettonDeposit($txHash, $sender, $master, $recipient);
+        $tonApi = app(TonApiService::class);
+
+        if ($tokenEntry['native'] ?? false) {
+            $verified = $tonApi->verifyNativeDeposit($txHash, $sender, $recipient);
+        } else {
+            $master = TonApiService::normalizeAddress((string) $tokenEntry['master']);
+
+            if (! $master) {
+                return null;
+            }
+
+            $verified = $tonApi->verifyJettonDeposit($txHash, $sender, $master, $recipient);
+        }
+
+        if ($verified === null) {
+            return null;
+        }
+
+        // TON Connect submits the external-message hash, not the transaction
+        // hash. Re-point the request at the canonical event id so the same
+        // deposit resubmitted under its other encoding trips the
+        // source_tx_hash unique constraint instead of double-minting.
+        if ($verified['event_id'] !== $txHash) {
+            try {
+                $request->update(['source_tx_hash' => $verified['event_id']]);
+            } catch (UniqueConstraintViolationException) {
+                Log::warning('Bridge: TON deposit already claimed under its canonical hash', [
+                    'id' => $request->id,
+                    'event_id' => $verified['event_id'],
+                ]);
+
+                return null;
+            }
+        }
+
+        return $verified['amount'];
     }
 
     /**
@@ -757,8 +792,9 @@ class BridgeService
     }
 
     /**
-     * Jetton payout on TON via crypto/ton/scripts/relay-jetton-transfer.ts.
-     * query_id = request id makes the transfer idempotent: the script checks
+     * TON payout via crypto/ton relay scripts: native Toncoin through
+     * relay-ton-transfer.ts, jettons through relay-jetton-transfer.ts.
+     * query_id = request id makes the transfer idempotent: each script checks
      * for an existing outgoing transfer with the same query_id before sending.
      *
      * @param  array<string, mixed>  $chain
@@ -780,6 +816,21 @@ class BridgeService
             ? '/singularity/crypto/ton'
             : base_path('/../../crypto/ton');
 
+        $args = ($tokenEntry['native'] ?? false)
+            ? [
+                'scripts/relay-ton-transfer.ts',
+                $request->recipient_address,
+                $amountRaw,
+                (string) $request->id,
+            ]
+            : [
+                'scripts/relay-jetton-transfer.ts',
+                (string) $tokenEntry['master'],
+                $request->recipient_address,
+                $amountRaw,
+                (string) $request->id,
+            ];
+
         $result = Process::path($scriptDir)
             ->env([
                 'TON_RELAYER_MNEMONIC' => $mnemonic,
@@ -789,13 +840,7 @@ class BridgeService
                 'TONAPI_KEY' => (string) ($chain['api_key'] ?? ''),
             ])
             ->timeout(240)
-            ->run([
-                'npx', 'tsx', 'scripts/relay-jetton-transfer.ts',
-                (string) $tokenEntry['master'],
-                $request->recipient_address,
-                $amountRaw,
-                (string) $request->id,
-            ]);
+            ->run(['npx', 'tsx', ...$args]);
 
         Log::info('Bridge relay payout ton', [
             'id' => $request->id,

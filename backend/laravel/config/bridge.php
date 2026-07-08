@@ -47,6 +47,10 @@ return [
         // well under 0.001 YTN even for many-input transactions) is paid out
         // of this reserve and the remainder accrues to the relayer pool.
         'yenten_payout_fee_ytn' => env('BRIDGE_YENTEN_PAYOUT_FEE_YTN', '0.01'),
+        // Flat TON retained from evm_to_ton native payouts; the TON message
+        // fee (~0.004 TON) is paid out of this reserve and the remainder
+        // accrues to the relayer hot wallet.
+        'ton_payout_fee_ton' => env('BRIDGE_TON_PAYOUT_FEE_TON', '0.01'),
     ],
 
     /*
@@ -108,7 +112,9 @@ return [
             'label' => 'TON',
             'type' => 'ton',
             'address_type' => 'ton',
-            'wallet' => 'manual',
+            // TON Connect (Tonkeeper & friends): deposits are signed in the
+            // user's wallet and verified automatically — no manual tx pasting.
+            'wallet' => 'ton',
             // tonapi.io — deposit verification + payout tx lookup.
             'api_url' => env('BRIDGE_TON_API_URL', 'https://tonapi.io'),
             'api_key' => env('TONAPI_KEY'),
@@ -180,9 +186,9 @@ return [
     | 'enabled' gates a corridor: disabled routes vanish from availableRoutes()
     | so they are hidden from the UI and rejected at submit/quote time. Routes
     | already submitted in a disabled direction still auto-process — the job
-    | reads config('bridge.routes') directly. Only the Solana <-> Cyberia pair
-    | is on by default; flip the matching env var to true to reopen a corridor
-    | without a deploy.
+    | reads config('bridge.routes') directly. Solana <-> Cyberia and TON <-> Cyberia
+    | are on by default (TON still hides until its hot wallet is configured);
+    | flip the matching env var to reopen/close a corridor without a deploy.
     */
 
     'routes' => [
@@ -205,14 +211,14 @@ return [
             'source_chain' => 'ton',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
-            'enabled' => filter_var(env('BRIDGE_ROUTE_TON_TO_EVM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'enabled' => filter_var(env('BRIDGE_ROUTE_TON_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_ton' => [
             'direction' => 'evm_to_ton',
             'source_chain' => 'cyberia',
             'destination_chain' => 'ton',
             'auto_process' => true,
-            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_TON_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_TON_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'bnb_to_evm' => [
             'direction' => 'bnb_to_evm',
@@ -339,6 +345,18 @@ return [
             'chains' => [
                 'cyberia' => ['address' => '0x621021F18b6404123f98b1395c418868418ACF36', 'decimals' => 9],
                 'solana' => ['mint' => 'Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump', 'decimals' => 6, 'token_program' => 'token-2022'],
+            ],
+        ],
+        // Native Toncoin bridged into a Cyberia wrapper (deployed via
+        // crypto/hardhat/scripts/deploy-ton.ts, relayer-owned mint/burn).
+        // Native TON is 9-dec; the wrapper keeps the 18-dec ERC20 default and
+        // the bridge scales each side independently.
+        'TON' => [
+            'symbol' => 'TON',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => '0x92aBF73698383176Aa2894F1f7263807C3a4e6e6', 'decimals' => 18],
+                'ton' => ['native' => true, 'decimals' => 9],
             ],
         ],
         // KARASIQUE — TON jetton bridged to the existing Cyberia ERC20.

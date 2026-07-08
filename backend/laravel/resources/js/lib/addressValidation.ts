@@ -11,7 +11,7 @@ export type BridgeChain =
     // Config-driven chains added in config/bridge.php arrive via server props.
     | (string & {});
 export type BridgeAddressType = 'solana' | 'evm' | 'ton' | 'yenten';
-export type SourceWalletType = 'solana' | 'evm' | 'manual';
+export type SourceWalletType = 'solana' | 'evm' | 'ton' | 'manual';
 
 export type BridgeDirection =
     | 'sol_to_evm'
@@ -77,7 +77,7 @@ export const BRIDGE_ROUTES: Record<string, BridgeRoute> = {
         destination: 'cyberia',
         sourceLabel: 'TON',
         destinationLabel: 'Cyberia EVM',
-        sourceWallet: 'manual',
+        sourceWallet: 'ton',
         destinationAddressType: 'evm',
         autoProcess: true,
     },

@@ -60,7 +60,8 @@ class BridgeInventoryService
         return match ($chain['type'] ?? '') {
             'evm' => $this->evmCapacity($direction, $token, $chain, $entry),
             'solana' => $this->solanaCapacity($chain, $entry),
-            default => null, // TON / Yenten: not computed (manual reserves)
+            'ton' => $this->tonCapacity($direction, $token, $chain, $entry),
+            default => null, // Yenten: not computed (manual reserves)
         };
     }
 
@@ -133,6 +134,66 @@ class BridgeInventoryService
         } catch (\Throwable $e) {
             Log::warning('Bridge inventory: evm read failed', [
                 'method' => $method,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * TON hot-wallet inventory via tonapi: native Toncoin balance for TON
+     * payouts (minus the retained fee reserve), jetton balance for jetton
+     * payouts.
+     *
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $entry
+     */
+    private function tonCapacity(string $direction, string $token, array $chain, array $entry): ?string
+    {
+        $hotWallet = (string) ($chain['deposit_address'] ?? '');
+        $apiUrl = rtrim((string) ($chain['api_url'] ?? 'https://tonapi.io'), '/');
+        $decimals = (int) ($entry['decimals'] ?? 9);
+
+        if ($hotWallet === '') {
+            return null;
+        }
+
+        $path = ($entry['native'] ?? false)
+            ? '/v2/accounts/'.rawurlencode($hotWallet)
+            : '/v2/accounts/'.rawurlencode($hotWallet).'/jettons/'.rawurlencode((string) ($entry['master'] ?? ''));
+
+        try {
+            $request = Http::timeout(8)->acceptJson();
+
+            if (! empty($chain['api_key'])) {
+                $request = $request->withToken((string) $chain['api_key']);
+            }
+
+            $response = $request->get($apiUrl.$path);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $balanceRaw = (string) $response->json('balance');
+
+            if (! ctype_digit($balanceRaw)) {
+                return null;
+            }
+
+            if ($entry['native'] ?? false) {
+                // Keep back the flat payout fee reserve so the shown max is
+                // actually deliverable.
+                $reserveRaw = TokenAmount::toRaw($this->fee->nativePayoutFee($direction, $token), $decimals);
+                $balanceRaw = bccomp($balanceRaw, $reserveRaw, 0) > 0
+                    ? bcsub($balanceRaw, $reserveRaw, 0)
+                    : '0';
+            }
+
+            return TokenAmount::fromRaw($balanceRaw, $decimals);
+        } catch (\Throwable $e) {
+            Log::warning('Bridge inventory: ton read failed', [
                 'error' => $e->getMessage(),
             ]);
 

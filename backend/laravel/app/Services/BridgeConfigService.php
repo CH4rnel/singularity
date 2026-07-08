@@ -55,13 +55,13 @@ class BridgeConfigService
                 continue;
             }
 
-            // Opt-in chains with manual deposits (TON, Yenten) are hidden
-            // until their hot wallet is configured. EVM/Solana chains have
+            // Opt-in chains with operator hot wallets (TON, Yenten) are hidden
+            // until their deposit address is configured. EVM/Solana chains have
             // built-in defaults (relayer EOA / configured hot wallet), so a
             // missing relayer key there is an operational error surfaced at
             // processing time, not a reason to hide core routes.
             foreach ([$source, $destination] as $chain) {
-                if (($chain['wallet'] ?? '') === 'manual'
+                if (in_array($chain['wallet'] ?? '', ['manual', 'ton'], true)
                     && $this->depositAddress($chain['key']) === null) {
                     continue 2;
                 }

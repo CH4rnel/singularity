@@ -10,10 +10,22 @@ const props = defineProps<{
     phase: 'signing' | 'submitting';
 }>();
 
-const chainName = computed(() =>
-    bridgeRoute(props.direction).sourceWallet === 'solana'
-        ? 'your Solana wallet'
-        : 'your EVM wallet',
+const chainName = computed(() => {
+    switch (bridgeRoute(props.direction).sourceWallet) {
+        case 'solana':
+            return 'your Solana wallet';
+        case 'ton':
+            return 'your TON wallet (Tonkeeper)';
+        default:
+            return 'your EVM wallet';
+    }
+});
+
+// TON deposits keep the signing phase alive while the transaction finalizes
+// and the indexer picks it up (~15–60 s) — say so instead of implying a stuck
+// wallet popup.
+const tonSource = computed(
+    () => bridgeRoute(props.direction).sourceWallet === 'ton',
 );
 </script>
 
@@ -33,7 +45,9 @@ const chainName = computed(() =>
             <p class="mt-1 text-sm text-[#706f6c] dark:text-[#A1A09A]">
                 {{
                     phase === 'signing'
-                        ? 'Check your wallet popup. Do not close this page.'
+                        ? tonSource
+                            ? 'Approve in the wallet, then we wait for the TON network to confirm (~30 s). Do not close this page.'
+                            : 'Check your wallet popup. Do not close this page.'
                         : 'This usually takes a few seconds.'
                 }}
             </p>

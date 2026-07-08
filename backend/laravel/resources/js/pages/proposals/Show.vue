@@ -3,6 +3,7 @@ import { Head, Link as InertiaLink } from '@inertiajs/vue3';
 import { useTimeAgo } from '@vueuse/core';
 import { computed } from 'vue';
 import CommentThread from '@/components/dao/CommentThread.vue';
+import MarkdownContent from '@/components/dao/MarkdownContent.vue';
 import ReactionBar from '@/components/dao/ReactionBar.vue';
 import VotePanel from '@/components/dao/VotePanel.vue';
 import { Badge } from '@/components/ui/badge';
@@ -69,12 +70,10 @@ const createdAgo = useTimeAgo(computed(() => props.proposal.created_at));
                 <span>{{ createdAgo }}</span>
             </div>
 
-            <p
-                v-if="props.proposal.description"
-                class="mt-4 text-sm leading-relaxed whitespace-pre-wrap"
-            >
-                {{ props.proposal.description }}
-            </p>
+            <MarkdownContent
+                class="mt-4"
+                :html="props.proposal.description_html"
+            />
 
             <div class="mt-4">
                 <ReactionBar

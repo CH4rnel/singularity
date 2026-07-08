@@ -21,8 +21,10 @@ defineOptions({
 
 defineProps<{
     status?: string;
+    error?: string;
     canResetPassword: boolean;
     canRegister: boolean;
+    canTwitterLogin?: boolean;
 }>();
 </script>
 
@@ -34,6 +36,13 @@ defineProps<{
         class="mb-4 text-center text-sm font-medium text-green-600"
     >
         {{ status }}
+    </div>
+
+    <div
+        v-if="error"
+        class="mb-4 text-center text-sm font-medium text-red-600"
+    >
+        {{ error }}
     </div>
 
     <Form
@@ -97,6 +106,31 @@ defineProps<{
             >
                 <Spinner v-if="processing" />
                 Log in
+            </Button>
+        </div>
+
+        <div v-if="canTwitterLogin" class="grid gap-4">
+            <div class="flex items-center gap-3">
+                <span class="h-px flex-1 bg-border" />
+                <span class="text-xs text-muted-foreground">or</span>
+                <span class="h-px flex-1 bg-border" />
+            </div>
+
+            <!-- Plain navigation: the OAuth redirect must be a full page load,
+                 not an Inertia visit. -->
+            <Button variant="outline" as-child class="w-full" :tabindex="6">
+                <a href="/auth/twitter">
+                    <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        class="h-4 w-4 fill-current"
+                    >
+                        <path
+                            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+                        />
+                    </svg>
+                    Continue with X
+                </a>
             </Button>
         </div>
 

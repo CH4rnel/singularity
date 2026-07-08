@@ -66,6 +66,7 @@ test('verifyJettonDeposit returns the raw amount for a matching transfer', funct
 
     Http::fake([
         'tonapi.test/*' => Http::response([
+            'event_id' => str_repeat('ef', 32),
             'in_progress' => false,
             'actions' => [
                 [
@@ -82,14 +83,100 @@ test('verifyJettonDeposit returns the raw amount for a matching transfer', funct
         ]),
     ]);
 
-    $amount = tonService()->verifyJettonDeposit(
+    $verified = tonService()->verifyJettonDeposit(
         str_repeat('ab', 32),
         $sender,
         $master,
         $recipient,
     );
 
-    expect($amount)->toBe('1500000000');
+    expect($verified)->toBe([
+        'amount' => '1500000000',
+        'event_id' => str_repeat('ef', 32),
+    ]);
+});
+
+test('verifyNativeDeposit returns nanotons for a matching TonTransfer', function () {
+    $sender = '0:'.str_repeat('11', 32);
+    $recipient = '0:'.str_repeat('22', 32);
+
+    Http::fake([
+        'tonapi.test/*' => Http::response([
+            'event_id' => str_repeat('cd', 32),
+            'in_progress' => false,
+            'actions' => [
+                [
+                    'type' => 'TonTransfer',
+                    'status' => 'ok',
+                    // tonapi encodes TonTransfer amounts as JSON integers.
+                    'TonTransfer' => [
+                        'sender' => ['address' => $sender],
+                        'recipient' => ['address' => $recipient],
+                        'amount' => 1500000000,
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    expect(tonService()->verifyNativeDeposit(str_repeat('ab', 32), $sender, $recipient))
+        ->toBe(['amount' => '1500000000', 'event_id' => str_repeat('cd', 32)]);
+});
+
+test('verifyNativeDeposit rejects a transfer to the wrong recipient', function () {
+    $sender = '0:'.str_repeat('11', 32);
+
+    Http::fake([
+        'tonapi.test/*' => Http::response([
+            'in_progress' => false,
+            'actions' => [
+                [
+                    'type' => 'TonTransfer',
+                    'status' => 'ok',
+                    'TonTransfer' => [
+                        'sender' => ['address' => $sender],
+                        'recipient' => ['address' => '0:'.str_repeat('99', 32)],
+                        'amount' => 1500000000,
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    expect(tonService()->verifyNativeDeposit(str_repeat('ab', 32), $sender, '0:'.str_repeat('22', 32)))
+        ->toBeNull();
+});
+
+test('an external-message hash resolves to its transaction before event lookup', function () {
+    $sender = '0:'.str_repeat('11', 32);
+    $recipient = '0:'.str_repeat('22', 32);
+    $msgHash = str_repeat('aa', 32);
+    $txHash = str_repeat('bb', 32);
+
+    // The event id 404s (TON Connect returned only the message hash), the
+    // message lookup resolves the real transaction, then the event succeeds.
+    Http::fake([
+        "tonapi.test/v2/events/{$msgHash}" => Http::response(['error' => 'not found'], 404),
+        "tonapi.test/v2/blockchain/messages/{$msgHash}/transaction" => Http::response(['hash' => $txHash]),
+        "tonapi.test/v2/events/{$txHash}" => Http::response([
+            'event_id' => $txHash,
+            'in_progress' => false,
+            'actions' => [
+                [
+                    'type' => 'TonTransfer',
+                    'status' => 'ok',
+                    'TonTransfer' => [
+                        'sender' => ['address' => $sender],
+                        'recipient' => ['address' => $recipient],
+                        'amount' => 777,
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    expect(tonService()->verifyNativeDeposit($msgHash, $sender, $recipient))
+        ->toBe(['amount' => '777', 'event_id' => $txHash]);
 });
 
 test('verifyJettonDeposit rejects wrong jetton or recipient', function () {
@@ -123,9 +210,12 @@ test('verifyJettonDeposit retries a 404 until the event is indexed', function ()
     $sender = '0:'.str_repeat('11', 32);
     $recipient = '0:'.str_repeat('22', 32);
     $master = '0:'.str_repeat('33', 32);
+    $txHash = str_repeat('ab', 32);
 
     Http::fake([
-        'tonapi.test/*' => Http::sequence()
+        // Not a message hash — the resolution probe keeps 404ing.
+        "tonapi.test/v2/blockchain/messages/{$txHash}/transaction" => Http::response(['error' => 'not found'], 404),
+        "tonapi.test/v2/events/{$txHash}" => Http::sequence()
             ->push(['error' => 'not found'], 404)
             ->push([
                 'in_progress' => false,
@@ -144,6 +234,6 @@ test('verifyJettonDeposit retries a 404 until the event is indexed', function ()
             ]),
     ]);
 
-    expect(tonService()->verifyJettonDeposit(str_repeat('ab', 32), $sender, $master, $recipient))
-        ->toBe('777');
+    expect(tonService()->verifyJettonDeposit($txHash, $sender, $master, $recipient))
+        ->toBe(['amount' => '777', 'event_id' => $txHash]);
 });

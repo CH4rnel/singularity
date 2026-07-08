@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Markdown;
 use Database\Factories\ProposalFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,7 +25,7 @@ class Proposal extends Model
     ];
 
     /** Computed status keeps the JSON shape of the old stored column. */
-    protected $appends = ['status'];
+    protected $appends = ['status', 'description_html'];
 
     protected function casts(): array
     {
@@ -73,6 +74,13 @@ class Proposal extends Model
     {
         return Attribute::get(
             fn () => $this->isOpen() ? 'open' : 'closed',
+        );
+    }
+
+    protected function descriptionHtml(): Attribute
+    {
+        return Attribute::get(
+            fn () => Markdown::toSafeHtml($this->description),
         );
     }
 
