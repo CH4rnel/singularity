@@ -1,5 +1,6 @@
 import React from 'react';
 import SwapProChart from './SwapProChart';
+import CyberiaPoolChart from './CyberiaPoolChart';
 import { ChainId, Token } from '@uniswap/sdk';
 import { Box } from '@material-ui/core';
 import { Height } from '@material-ui/icons';
@@ -10,7 +11,6 @@ import dayjs from 'dayjs';
 import { useActiveWeb3React } from 'hooks';
 import { TableVirtuoso } from 'react-virtuoso';
 import { useTranslation } from 'react-i18next';
-import { V2_MATIC_USDT_PAIR } from 'constants/v3/addresses';
 
 const SwapProChartTrade: React.FC<{
   showChart: boolean;
@@ -116,15 +116,16 @@ const SwapProChartTrade: React.FC<{
     <ReflexContainer orientation='horizontal'>
       {showChart && (
         <ReflexElement className='top-pane' minSize={200}>
-          <SwapProChart
-            pairName={`${token1?.symbol ?? 'MATIC'}/${token2?.symbol ??
-              'USDT'}`}
-            pairAddress={
-              pairAddress ??
-              V2_MATIC_USDT_PAIR[chainId ? chainId : ChainId.MATIC]
-            }
-            pairTokenReversed={pairTokenReversed}
-          />
+          {chainId === ChainId.CYBERIA || !pairAddress ? (
+            <CyberiaPoolChart token1={token1} token2={token2} />
+          ) : (
+            <SwapProChart
+              pairName={`${token1?.symbol ?? 'MATIC'}/${token2?.symbol ??
+                'USDT'}`}
+              pairAddress={pairAddress}
+              pairTokenReversed={pairTokenReversed}
+            />
+          )}
         </ReflexElement>
       )}
       {showChart && showTrades && pairAddress && (

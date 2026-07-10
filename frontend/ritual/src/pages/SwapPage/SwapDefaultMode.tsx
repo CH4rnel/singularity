@@ -4,6 +4,7 @@ import { SwapTokenDetailsHorizontal } from 'components';
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { SwapBuySellMiniWidget } from './BuySellWidget';
+import CyberiaPoolChart from './CyberiaPoolChart';
 import LiquidityPools from './LiquidityPools';
 import SwapMain from './SwapMain';
 import SwapNewsWidget from './SwapNewWidget';
@@ -48,6 +49,9 @@ const SwapDefaultMode: React.FC<{
         <>
           <Box className='wrapper'>
             <SwapMain />
+          </Box>
+          <Box className='wrapper swapChartWrapper' mt={2}>
+            <CyberiaPoolChart token1={token1} token2={token2} />
           </Box>
           {/* <Box className='wrapper' mt={2}>
             {token1 && (
@@ -142,7 +146,19 @@ const SwapDefaultMode: React.FC<{
                 )}
               </Grid>
             </Grid> */}
-            <Grid item xs={12} sm={12} md={6} lg={4}>
+            <Grid item xs={12} lg={7} className='swap-chart-grid-item'>
+              <Box className='wrapper swapChartWrapper'>
+                <CyberiaPoolChart token1={token1} token2={token2} />
+              </Box>
+            </Grid>
+            <Grid
+              item
+              xs={12}
+              sm={12}
+              md={6}
+              lg={4}
+              className='swap-form-grid-item'
+            >
               {/* <Box mb={1} sx={{ display: { xs: 'none', md: 'block' } }}>
                 <LiquidityHubAd />
               </Box> */}
