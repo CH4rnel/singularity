@@ -24,7 +24,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `services/telegram-bot/` | Python, python-telegram-bot, web3, SQLAlchemy | Cyberia Telegram bot: wallet rewards, chat tokens, on-chain announcers, whales gate |
 | `services/lainos/` | TypeScript, Node, Anthropic SDK, viem | LainOS: autonomous AI agent framework (ElizaOS-like) with a Cyberia chain plugin |
 | `game/wired/` | Godot 4, GDScript | Wired: 3D on-chain game; NPCs think via LainOS, world reacts to the Cyberia chain |
-| `game/nocarrier/` | Godot 4, GDScript | NO CARRIER: first-person netstalking survival-horror sim (offline, no chain deps); world/UI built procedurally in code |
+| `game/nocarrier/` | Godot 4, GDScript | NO CARRIER: first-person netstalking survival-horror sim (en/ru); world/UI/audio built procedurally in code; browser build connects a wallet and mints decoded anomalies as CyberiaNFTs |
 | `scripts/` | Python, JS, Lisp | Airdrop bots, crawlers, price scripts, operations |
 | `linux/` | Linux build notes/config | Cyberia OS artifacts |
 
@@ -131,6 +131,7 @@ Be careful with production-host paths such as `/root/singularity/...`.
 - Laravel frontend wallet/bridge composables live under `backend/laravel/resources/js/composables/`.
 - EVM contracts include bridge (`CyberBridge.sol`, `WrappedCyberSol.sol`), tokens (`USDC.sol`, `USDT.sol`, `BTC.sol`, `LTC.sol`, `SOL.sol`, `RUB.sol`, `GOLD.sol`, etc.), DAO (`contracts/dao/`), lending (`contracts/lending/`), launchpad/NFT, and QuickSwap forks.
 - Anchor bridge instructions live in `crypto/anchor/programs/anchor/src/instructions/`.
+- Profile page (`/profile`): per-user CEX-style deposit addresses (BTC/LTC/YTN P2PKH from per-chain HD seeds, XMR integrated address; `UserDepositAddressService`, operator command `bridge:user-deposit`) plus on-chain nicknames/achievements via the `CyberiaProfile` contract at `0xa9101ee859850c037b0867156b3535F78A387C0d` (`crypto/hardhat/contracts/CyberiaProfile.sol`, Laravel `ProfileOnchainService`/`AchievementService`, override via `CYBERIA_PROFILE_ADDRESS`).
 
 ## Verification
 

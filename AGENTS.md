@@ -39,7 +39,7 @@ singularity/
 ├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, whales gate
 ├── services/lainos/      # LainOS: autonomous AI agent framework (TypeScript), Cyberia chain plugin
 ├── game/wired/           # Wired: 3D on-chain game (Godot 4), NPCs powered by LainOS
-├── game/nocarrier/       # NO CARRIER: first-person netstalking survival-horror sim (Godot 4, offline)
+├── game/nocarrier/       # NO CARRIER: netstalking survival-horror sim (Godot 4, en/ru, optional on-chain NFT sealing)
 ├── scripts/              # Python, JS, and Lisp operational scripts/bots
 ├── linux/                # Cyberia OS build notes/config
 └── logs/                 # Runtime logs
