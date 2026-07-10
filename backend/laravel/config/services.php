@@ -114,4 +114,12 @@ return [
         'pumpfun_bulk_top_n' => env('SLOT_PUMPFUN_BULK_TOP_N', 200),
     ],
 
+    // CyberiaProfile contract (on-chain nicknames + achievements). Deployed
+    // 2026-07-10 via crypto/hardhat/scripts/deploy-profile.ts; owner = bridge
+    // relayer. Set CYBERIA_PROFILE_ADDRESS= (empty) to hide the profile-page
+    // section, or to a new address after a redeploy.
+    'profile' => [
+        'contract_address' => env('CYBERIA_PROFILE_ADDRESS', '0xa9101ee859850c037b0867156b3535F78A387C0d'),
+    ],
+
 ];

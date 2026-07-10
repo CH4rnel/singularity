@@ -18,6 +18,7 @@ use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\LinkController;
 use App\Http\Controllers\LiquidityController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
@@ -83,6 +84,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::middleware(['auth'])->group(function () {
+    // Own profile: account info + bridge deposit addresses for every chain.
+    Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
+    // On-chain identity: nickname (relayer-submitted) and achievement checks.
+    // Throttled — each hit can cost a relayer transaction on Cyberia.
+    Route::patch('profile/nickname', [ProfileController::class, 'updateNickname'])
+        ->middleware('throttle:6,1')->name('profile.nickname');
+    Route::post('profile/achievements/check', [ProfileController::class, 'checkAchievements'])
+        ->middleware('throttle:6,1')->name('profile.achievements.check');
+
     Route::get('invitations/{invitation}/accept', [TeamInvitationController::class, 'accept'])->name('invitations.accept');
     Route::resource('links', LinkController::class)->names([
         'index' => 'links',

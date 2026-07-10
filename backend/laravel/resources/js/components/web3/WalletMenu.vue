@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { ChevronDown, LogOut, Wallet } from 'lucide-vue-next';
+import { ChevronDown, LogOut, User, Wallet } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +15,7 @@ import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
 import { logout as logoutRoute } from '@/routes';
+import { show as profileRoute } from '@/routes/profile';
 
 const page = usePage();
 
@@ -194,6 +195,12 @@ function signOut() {
                         {{ displayAddress }}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        @select="router.visit(profileRoute().url)"
+                    >
+                        <User class="mr-2 h-4 w-4" />
+                        Profile
+                    </DropdownMenuItem>
                     <DropdownMenuItem @select="signOut">
                         <LogOut class="mr-2 h-4 w-4" />
                         Sign out

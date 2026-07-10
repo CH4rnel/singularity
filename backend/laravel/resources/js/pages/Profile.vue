@@ -1,0 +1,567 @@
+<script setup lang="ts">
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { useTimeAgo } from '@vueuse/core';
+import {
+    ArrowRightLeft,
+    AtSign,
+    Check,
+    Copy,
+    Droplets,
+    HandCoins,
+    Repeat2,
+    Settings,
+    Trophy,
+    Wallet,
+    Waypoints,
+} from 'lucide-vue-next';
+import { computed, ref } from 'vue';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import WalletAvatar from '@/components/web3/WalletAvatar.vue';
+import { useSolanaWallet } from '@/composables/useSolanaWallet';
+import { useWallet } from '@/composables/useWallet';
+import { useWalletAuth } from '@/composables/useWalletAuth';
+import { bridge } from '@/routes';
+import { edit as profileEdit, nickname as nicknameRoute } from '@/routes/profile';
+import { check as achievementsCheck } from '@/routes/profile/achievements';
+import { show as userShow } from '@/routes/users';
+import type { Auth } from '@/types/auth';
+
+type DepositChain = {
+    key: string;
+    label: string;
+    type: string;
+    addressType: string;
+    address: string | null;
+    /** CEX-style address issued to this user alone (BTC/LTC/YTN/XMR). */
+    personal: boolean;
+    oneTime: boolean;
+};
+
+type Achievement = {
+    id: number;
+    key: string;
+    title: string;
+    description: string;
+    icon: string;
+    earned: boolean;
+};
+
+const props = defineProps<{
+    depositChains: DepositChain[];
+    /** CyberiaProfile contract address; null while not deployed/configured. */
+    profileContract: string | null;
+    /** Current on-chain nickname of the linked EVM wallet. */
+    nickname: string | null;
+    achievements: Achievement[];
+}>();
+
+const page = usePage<{ auth: Auth }>();
+const user = computed(() => page.props.auth.user);
+
+const ACHIEVEMENT_ICONS: Record<string, unknown> = {
+    swap: ArrowRightLeft,
+    bridge: Waypoints,
+    liquidity: Droplets,
+    convert: Repeat2,
+    lend: HandCoins,
+    nickname: AtSign,
+};
+
+const nicknameForm = useForm({ nickname: props.nickname ?? '' });
+
+function saveNickname() {
+    nicknameForm.patch(nicknameRoute().url, { preserveScroll: true });
+}
+
+const checkForm = useForm({});
+
+function checkAchievements() {
+    checkForm.post(achievementsCheck().url, { preserveScroll: true });
+}
+
+const achievementsFlash = computed(() => {
+    const status = (page.props as { flash?: { status?: string } }).flash
+        ?.status;
+
+    if (status === 'achievements-none') {
+        return 'No new achievements yet — keep exploring Cyberia.';
+    }
+
+    if (status?.startsWith('achievements-awarded:')) {
+        return `Unlocked ${status.split(':')[1]} new achievement(s) on-chain!`;
+    }
+
+    return null;
+});
+
+const earnedCount = computed(
+    () => props.achievements.filter((a) => a.earned).length,
+);
+
+const joinedAgo = useTimeAgo(computed(() => user.value.created_at ?? ''));
+
+const displayName = computed(
+    () =>
+        user.value.name ||
+        (user.value.wallet_address
+            ? user.value.wallet_address.slice(0, 6) +
+              '…' +
+              user.value.wallet_address.slice(-4)
+            : `User #${user.value.id}`),
+);
+
+const wallets = computed(() =>
+    [
+        { key: 'evm', label: 'EVM', address: user.value.wallet_address },
+        {
+            key: 'solana',
+            label: 'Solana',
+            address: user.value.solana_wallet_address,
+        },
+    ].filter((wallet) => !!wallet.address),
+);
+
+// Link a self-custodial wallet to this account so on-chain nicknames,
+// achievements and reads bind to it. The user is already authenticated
+// (email/X), so this attaches rather than logs in.
+const evmWallet = useWallet();
+const solanaWallet = useSolanaWallet();
+const walletAuth = useWalletAuth();
+
+const linking = ref<'evm' | 'solana' | null>(null);
+const linkError = ref<string | null>(null);
+
+async function connectEvm() {
+    if (linking.value) {
+        return;
+    }
+
+    linking.value = 'evm';
+    linkError.value = null;
+
+    try {
+        const address = await evmWallet.connect();
+
+        if (!address) {
+            return;
+        }
+
+        const { nonce } = await walletAuth.generateNonce(address);
+        const signature = await evmWallet.signMessage(
+            `Sign this message to link your wallet. Nonce: ${nonce}`,
+        );
+
+        if (!signature) {
+            return;
+        }
+
+        await walletAuth.attachEvmWallet(address, signature);
+        router.reload();
+    } catch (e) {
+        linkError.value =
+            e instanceof Error ? e.message : 'Failed to link EVM wallet.';
+    } finally {
+        linking.value = null;
+    }
+}
+
+async function connectSolana() {
+    if (linking.value) {
+        return;
+    }
+
+    linking.value = 'solana';
+    linkError.value = null;
+
+    try {
+        const address = await solanaWallet.connect();
+
+        if (!address) {
+            return;
+        }
+
+        const { nonce } = await walletAuth.generateSolanaNonce(address);
+        const signature = await solanaWallet.signMessage(
+            `Sign this message to link your wallet. Nonce: ${nonce}`,
+        );
+
+        if (!signature) {
+            return;
+        }
+
+        await walletAuth.attachSolanaWallet(address, signature);
+        router.reload();
+    } catch (e) {
+        linkError.value =
+            e instanceof Error ? e.message : 'Failed to link Solana wallet.';
+    } finally {
+        linking.value = null;
+    }
+}
+
+const copiedKey = ref<string | null>(null);
+
+async function copy(key: string, value: string | null | undefined) {
+    if (!value) {
+        return;
+    }
+
+    await navigator.clipboard.writeText(value);
+    copiedKey.value = key;
+    setTimeout(() => {
+        if (copiedKey.value === key) {
+            copiedKey.value = null;
+        }
+    }, 1500);
+}
+</script>
+
+<template>
+    <Head title="Profile" />
+
+    <div class="mx-auto max-w-4xl px-4 py-8">
+        <!-- Profile hero -->
+        <header
+            class="mb-6 flex flex-col items-start gap-4 rounded-lg border border-border/70 bg-card p-6 sm:flex-row sm:items-center"
+        >
+            <WalletAvatar
+                :seed="user.wallet_address"
+                :name="user.name"
+                size="lg"
+            />
+            <div class="min-w-0 flex-1">
+                <h1 class="text-2xl font-extrabold tracking-tight">
+                    {{ displayName }}
+                </h1>
+                <div class="mt-1 flex flex-wrap items-center gap-2">
+                    <template
+                        v-for="wallet in wallets"
+                        :key="wallet.key"
+                    >
+                        <Badge
+                            variant="secondary"
+                            class="max-w-full font-mono text-xs"
+                        >
+                            <span class="truncate">{{ wallet.address }}</span>
+                        </Badge>
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            :aria-label="`Copy ${wallet.label} wallet address`"
+                            @click="copy(`wallet-${wallet.key}`, wallet.address)"
+                        >
+                            <Check
+                                v-if="copiedKey === `wallet-${wallet.key}`"
+                                class="h-3.5 w-3.5 text-brand-cyan"
+                            />
+                            <Copy v-else class="h-3.5 w-3.5" />
+                        </Button>
+                    </template>
+                    <Button
+                        v-if="!user.wallet_address"
+                        variant="outline"
+                        size="sm"
+                        :disabled="linking === 'evm'"
+                        @click="connectEvm"
+                    >
+                        <Wallet class="h-3.5 w-3.5" />
+                        {{
+                            linking === 'evm' ? 'Connecting…' : 'Connect EVM'
+                        }}
+                    </Button>
+                    <Button
+                        v-if="!user.solana_wallet_address"
+                        variant="outline"
+                        size="sm"
+                        :disabled="linking === 'solana'"
+                        @click="connectSolana"
+                    >
+                        <Wallet class="h-3.5 w-3.5" />
+                        {{
+                            linking === 'solana'
+                                ? 'Connecting…'
+                                : 'Connect Solana'
+                        }}
+                    </Button>
+                    <span
+                        v-if="user.twitter_username || user.twitter_id"
+                        class="text-xs text-muted-foreground"
+                    >
+                        @{{ user.twitter_username ?? user.twitter_id }}
+                    </span>
+                    <span
+                        v-if="user.created_at"
+                        class="text-xs text-muted-foreground"
+                    >
+                        joined {{ joinedAgo }}
+                    </span>
+                </div>
+                <p
+                    v-if="linkError"
+                    class="mt-2 text-xs text-destructive"
+                >
+                    {{ linkError }}
+                </p>
+            </div>
+            <div class="flex shrink-0 gap-2">
+                <Button variant="outline" size="sm" as-child>
+                    <Link :href="userShow(user.id)">Public profile</Link>
+                </Button>
+                <Button variant="outline" size="sm" as-child>
+                    <Link :href="profileEdit()">
+                        <Settings class="h-3.5 w-3.5" />
+                        Settings
+                    </Link>
+                </Button>
+            </div>
+        </header>
+
+        <!-- On-chain identity: nickname + achievements (CyberiaProfile) -->
+        <section v-if="props.profileContract" class="mb-6 space-y-3">
+            <h2
+                class="text-sm font-semibold tracking-widest text-muted-foreground uppercase"
+            >
+                On-chain identity
+            </h2>
+
+            <!-- Nickname -->
+            <div
+                class="flex flex-col gap-3 rounded-lg border border-border/70 bg-card p-4"
+            >
+                <div class="flex items-center gap-2">
+                    <AtSign class="h-4 w-4 text-brand-cyan" />
+                    <span class="text-sm font-semibold">Nickname</span>
+                    <Badge
+                        variant="outline"
+                        class="text-[10px] tracking-widest uppercase"
+                    >
+                        on-chain
+                    </Badge>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    Globally unique, stored in the CyberiaProfile contract on
+                    Cyberia. Lowercase letters, digits and underscores, 3–20
+                    characters. The relayer pays the gas.
+                </p>
+                <form
+                    class="flex flex-col gap-2 sm:flex-row sm:items-center"
+                    @submit.prevent="saveNickname"
+                >
+                    <Input
+                        v-model="nicknameForm.nickname"
+                        type="text"
+                        placeholder="your_nickname"
+                        maxlength="20"
+                        class="font-mono sm:max-w-64"
+                        :disabled="!user.wallet_address"
+                    />
+                    <Button
+                        type="submit"
+                        size="sm"
+                        :disabled="
+                            nicknameForm.processing ||
+                            !user.wallet_address ||
+                            !nicknameForm.nickname ||
+                            nicknameForm.nickname === (props.nickname ?? '')
+                        "
+                    >
+                        {{ nicknameForm.processing ? 'Minting…' : 'Save' }}
+                    </Button>
+                    <span
+                        v-if="props.nickname"
+                        class="text-xs text-muted-foreground"
+                    >
+                        current: @{{ props.nickname }}
+                    </span>
+                </form>
+                <p
+                    v-if="nicknameForm.errors.nickname"
+                    class="text-xs text-destructive"
+                >
+                    {{ nicknameForm.errors.nickname }}
+                </p>
+                <div
+                    v-if="!user.wallet_address"
+                    class="flex flex-wrap items-center gap-2"
+                >
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        :disabled="linking === 'evm'"
+                        @click="connectEvm"
+                    >
+                        <Wallet class="h-3.5 w-3.5" />
+                        {{
+                            linking === 'evm'
+                                ? 'Connecting…'
+                                : 'Connect EVM wallet'
+                        }}
+                    </Button>
+                    <span class="text-xs text-muted-foreground">
+                        Nicknames live on-chain — connect a wallet to claim one.
+                    </span>
+                </div>
+            </div>
+
+            <!-- Achievements -->
+            <div
+                class="flex flex-col gap-3 rounded-lg border border-border/70 bg-card p-4"
+            >
+                <div class="flex flex-wrap items-center gap-2">
+                    <Trophy class="h-4 w-4 text-brand-cyan" />
+                    <span class="text-sm font-semibold">Achievements</span>
+                    <Badge
+                        variant="outline"
+                        class="text-[10px] tracking-widest uppercase"
+                    >
+                        {{ earnedCount }}/{{ props.achievements.length }}
+                    </Badge>
+                    <div class="ml-auto flex items-center gap-2">
+                        <span
+                            v-if="achievementsFlash"
+                            class="text-xs text-muted-foreground"
+                        >
+                            {{ achievementsFlash }}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            :disabled="
+                                checkForm.processing || !user.wallet_address
+                            "
+                            @click="checkAchievements"
+                        >
+                            {{
+                                checkForm.processing
+                                    ? 'Checking…'
+                                    : 'Check for new'
+                            }}
+                        </Button>
+                    </div>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div
+                        v-for="achievement in props.achievements"
+                        :key="achievement.id"
+                        class="flex items-start gap-3 rounded-lg border p-3"
+                        :class="
+                            achievement.earned
+                                ? 'border-brand-cyan/50 bg-brand-cyan/5'
+                                : 'border-border/70 opacity-50'
+                        "
+                    >
+                        <component
+                            :is="ACHIEVEMENT_ICONS[achievement.icon] ?? Trophy"
+                            class="mt-0.5 h-5 w-5 shrink-0"
+                            :class="
+                                achievement.earned
+                                    ? 'text-brand-cyan'
+                                    : 'text-muted-foreground'
+                            "
+                        />
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold">
+                                {{ achievement.title }}
+                            </p>
+                            <p class="text-xs text-muted-foreground">
+                                {{ achievement.description }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    Badges are minted to your wallet in the CyberiaProfile
+                    contract — verifiable by anyone on the Cyberia explorer.
+                </p>
+            </div>
+        </section>
+
+        <!-- Deposit addresses -->
+        <section class="space-y-3">
+            <h2
+                class="text-sm font-semibold tracking-widest text-muted-foreground uppercase"
+            >
+                Deposit addresses
+            </h2>
+            <p class="text-sm text-muted-foreground">
+                Deposit addresses for every supported network. Addresses marked
+                <Badge
+                    variant="outline"
+                    class="mx-0.5 align-middle text-[10px] tracking-widest text-brand-cyan uppercase"
+                    >personal</Badge
+                >
+                are issued to you alone, like on an exchange — anything sent
+                there is credited to your account. Shared addresses require
+                starting from the
+                <Link
+                    :href="bridge()"
+                    class="text-foreground underline underline-offset-4"
+                    >Bridge</Link
+                >
+                page so your deposit is matched to a request.
+            </p>
+            <div
+                v-for="chain in props.depositChains"
+                :key="chain.key"
+                class="flex flex-col gap-2 rounded-lg border border-border/70 bg-card p-4 sm:flex-row sm:items-center"
+            >
+                <div class="flex w-44 shrink-0 flex-wrap items-center gap-2">
+                    <span class="text-sm font-semibold">{{ chain.label }}</span>
+                    <Badge
+                        variant="outline"
+                        class="text-[10px] tracking-widest uppercase"
+                    >
+                        {{ chain.addressType }}
+                    </Badge>
+                    <Badge
+                        v-if="chain.personal"
+                        variant="outline"
+                        class="text-[10px] tracking-widest text-brand-cyan uppercase"
+                    >
+                        personal
+                    </Badge>
+                </div>
+                <div class="flex min-w-0 flex-1 items-center gap-2">
+                    <template v-if="chain.address">
+                        <code
+                            class="min-w-0 break-all font-mono text-xs text-foreground/90"
+                        >
+                            {{ chain.address }}
+                        </code>
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            class="shrink-0"
+                            :aria-label="`Copy ${chain.label} deposit address`"
+                            @click="copy(`chain-${chain.key}`, chain.address)"
+                        >
+                            <Check
+                                v-if="copiedKey === `chain-${chain.key}`"
+                                class="h-3.5 w-3.5 text-brand-cyan"
+                            />
+                            <Copy v-else class="h-3.5 w-3.5" />
+                        </Button>
+                    </template>
+                    <p
+                        v-else-if="chain.oneTime"
+                        class="text-xs text-muted-foreground"
+                    >
+                        One-time address — a unique deposit address is issued
+                        for each request on the
+                        <Link
+                            :href="bridge()"
+                            class="text-foreground underline underline-offset-4"
+                            >Bridge</Link
+                        >
+                        page.
+                    </p>
+                    <p v-else class="text-xs text-muted-foreground">
+                        Not configured yet.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </div>
+</template>
