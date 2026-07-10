@@ -24,15 +24,18 @@ import type { BridgeFeeConfig } from '@/lib/bridgeFee';
 type BridgeHistoryItem = {
     id: number;
     direction: string;
+    token: string;
     source_chain: string;
-    source_tx_hash: string;
+    source_tx_hash: string | null;
     sender_address: string | null;
     recipient_address: string;
+    deposit_address: string | null;
     amount: string;
     status: string;
     destination_tx_hash: string | null;
     created_at: string;
     completed_at: string | null;
+    expires_at: string | null;
 };
 
 const props = withDefaults(
@@ -42,6 +45,7 @@ const props = withDefaults(
             priceUsd: number;
         } | null;
         bridgeHistory?: BridgeHistoryItem[];
+        bridgeActiveRequests?: BridgeHistoryItem[];
         bridgeRelayerEvm?: string | null;
         bridgeChains?: PublicChain[];
         bridgeRoutes?: PublicRouteData[];
@@ -55,6 +59,7 @@ const props = withDefaults(
     {
         price: null,
         bridgeHistory: () => [],
+        bridgeActiveRequests: () => [],
         bridgeRelayerEvm: null,
         bridgeChains: () => [],
         bridgeRoutes: () => [],
@@ -207,6 +212,7 @@ const statusColor = (status: string) => {
                 <BridgeWizard
                     :relayer-evm-address="props.bridgeRelayerEvm"
                     :available-directions="props.bridgeDirections"
+                    :active-requests="props.bridgeActiveRequests"
                     :yenten-deposit-address="props.bridgeYentenDepositAddress"
                     :cyber-sol-usd="
                         props.price ? Number(props.price.priceUsd) : null
@@ -263,7 +269,7 @@ const statusColor = (status: string) => {
                                         rel="noopener noreferrer"
                                         class="inline-flex items-center gap-1 font-mono text-muted-foreground hover:text-foreground"
                                     >
-                                        {{ formatHash(item.source_tx_hash) }}
+                                        {{ formatHash(item.source_tx_hash!) }}
                                         <ExternalLink class="h-3 w-3" />
                                     </a>
                                     <span

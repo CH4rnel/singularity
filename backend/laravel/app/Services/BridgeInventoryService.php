@@ -211,7 +211,17 @@ class BridgeInventoryService
         $mint = (string) ($entry['mint'] ?? '');
         $rpc = (string) ($chain['rpc_url'] ?? '');
 
-        if ($hotWallet === '' || $mint === '' || $rpc === '') {
+        if ($hotWallet === '' || $rpc === '') {
+            return null;
+        }
+
+        // Native SOL payout: hot-wallet lamports minus a reserve that keeps
+        // the account rent-exempt and covers transaction fees.
+        if ($entry['native'] ?? false) {
+            return $this->solanaNativeCapacity($hotWallet, $rpc, (int) ($entry['decimals'] ?? 9));
+        }
+
+        if ($mint === '') {
             return null;
         }
 
@@ -247,6 +257,41 @@ class BridgeInventoryService
             return $total;
         } catch (\Throwable $e) {
             Log::warning('Bridge inventory: solana read failed', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    private function solanaNativeCapacity(string $hotWallet, string $rpc, int $decimals): ?string
+    {
+        // 0.01 SOL held back: rent-exempt minimum (~0.00089 SOL) plus
+        // headroom for SPL payout fees from the same hot wallet.
+        $reserveRaw = TokenAmount::toRaw('0.01', $decimals);
+
+        try {
+            $response = Http::timeout(8)->post($rpc, [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'getBalance',
+                'params' => [$hotWallet],
+            ]);
+
+            $lamports = $response->json('result.value');
+
+            if (! is_int($lamports) && ! is_string($lamports)) {
+                return null;
+            }
+
+            $balanceRaw = (string) $lamports;
+            $available = bccomp($balanceRaw, $reserveRaw, 0) > 0
+                ? bcsub($balanceRaw, $reserveRaw, 0)
+                : '0';
+
+            return TokenAmount::fromRaw($available, $decimals);
+        } catch (\Throwable $e) {
+            Log::warning('Bridge inventory: solana native read failed', [
                 'error' => $e->getMessage(),
             ]);
 

@@ -28,10 +28,67 @@ test('a disabled corridor is dropped while the Solana pair stays available', fun
     expect($routes)->not->toHaveKey('bnb_to_evm');
 });
 
+test('native SOL is offered on both Solana routes', function () {
+    $service = app(BridgeConfigService::class);
+
+    expect($service->tokensForRoute('sol_to_evm'))->toHaveKey('SOL');
+    expect($service->tokensForRoute('evm_to_sol'))->toHaveKey('SOL');
+});
+
 test('hides Yenten routes until the relayer WIF is configured', function () {
     config()->set('bridge.chains.yenten.relayer_wif', null);
 
     $routes = app(BridgeConfigService::class)->availableRoutes();
 
     expect($routes)->not->toHaveKeys(['yenten_to_evm', 'evm_to_yenten']);
+});
+
+test('external BTC LTC XMR routes require a configured wallet before submit', function () {
+    $service = app(BridgeConfigService::class);
+
+    expect($service->availableRoutes())->not->toHaveKeys([
+        'btc_to_evm',
+        'evm_to_btc',
+        'ltc_to_evm',
+        'evm_to_ltc',
+        'xmr_to_evm',
+        'evm_to_xmr',
+    ]);
+
+    config()->set('bridge.chains.bitcoin.deposit_address', '12ZEw5Hcv1hTb6YUQJ69y1V7uhcoDz92PH');
+    config()->set('bridge.routes.btc_to_evm.enabled', true);
+    config()->set('bridge.routes.evm_to_btc.enabled', true);
+
+    $routes = $service->availableRoutes();
+
+    expect($routes)->toHaveKeys(['btc_to_evm', 'evm_to_btc'])
+        ->and($routes['btc_to_evm']['auto_process'])->toBeFalse()
+        ->and($service->tokensForRoute('btc_to_evm'))->toHaveKey('BTC')
+        ->and($service->tokensForRoute('evm_to_btc'))->toHaveKey('BTC');
+});
+
+test('external routes are visible before operator setup but marked unavailable', function () {
+    $service = app(BridgeConfigService::class);
+    $routes = collect($service->publicRoutes())->keyBy('direction');
+
+    expect($routes)->toHaveKeys([
+        'btc_to_evm',
+        'evm_to_btc',
+        'ltc_to_evm',
+        'evm_to_ltc',
+        'xmr_to_evm',
+        'evm_to_xmr',
+    ]);
+
+    expect($routes['btc_to_evm']['operational'])->toBeFalse()
+        ->and($routes['btc_to_evm']['tokens'])->toBe(['BTC'])
+        ->and($routes['ltc_to_evm']['tokens'])->toBe(['LTC'])
+        ->and($routes['xmr_to_evm']['tokens'])->toBe(['XMR']);
+});
+
+test('public chain config exposes Yenten explorer fallback', function () {
+    $chains = collect(app(BridgeConfigService::class)->publicChains())->keyBy('key');
+
+    expect($chains['yenten']['explorerTx'])->toBe('https://explorer.yentencoin.info/tx/{hash}')
+        ->and($chains['yenten']['explorerTxFallbacks'])->toContain('https://explorer2.yentencoin.info/tx/{hash}');
 });

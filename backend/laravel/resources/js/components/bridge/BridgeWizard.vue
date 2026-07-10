@@ -25,10 +25,28 @@ import StepReview from './StepReview.vue';
 import StepSigning from './StepSigning.vue';
 import StepTracking from './StepTracking.vue';
 
+export type ActiveBridgeRequest = {
+    id: number;
+    direction: string;
+    token?: string;
+    source_chain: string;
+    source_tx_hash: string | null;
+    sender_address: string | null;
+    recipient_address: string;
+    deposit_address: string | null;
+    amount: string;
+    status: string;
+    destination_tx_hash: string | null;
+    created_at: string;
+    completed_at: string | null;
+    expires_at: string | null;
+};
+
 const props = withDefaults(
     defineProps<{
         relayerEvmAddress?: string | null;
         availableDirections?: string[];
+        activeRequests?: ActiveBridgeRequest[];
         yentenDepositAddress?: string | null;
         cyberSolUsd?: number | null;
         feeConfig?: BridgeFeeConfig;
@@ -38,6 +56,7 @@ const props = withDefaults(
     {
         relayerEvmAddress: null,
         availableDirections: () => [],
+        activeRequests: () => [],
         yentenDepositAddress: null,
         cyberSolUsd: null,
         feeConfig: () => ({ flatUsd: 0.1, rateBps: 0 }),
@@ -78,6 +97,9 @@ const checkEvmRecipientNeedsGas = async (
         return false;
     }
 };
+
+// Native SOL kept back from "Max" so the deposit transaction fee is payable.
+const SOL_FEE_RESERVE = 0.001;
 
 const flow = useBridgeFlow();
 const bridge = useBridge();
@@ -190,6 +212,15 @@ const sourceMaxAmount = computed(() => {
 
         return Number.isFinite(balance)
             ? Math.max(0, balance - TON_GAS_RESERVE).toString()
+            : null;
+    }
+
+    // Native SOL: keep back a small reserve for the transaction fee.
+    if (source === 'solana' && sourceToken?.native) {
+        const balance = parseFloat(sourceBalance.value ?? '');
+
+        return Number.isFinite(balance)
+            ? Math.max(0, balance - SOL_FEE_RESERVE).toString()
             : null;
     }
 
@@ -459,10 +490,16 @@ const handleConfirm = async () => {
                           sourceChain,
                       );
             } else {
-                result = await bridge.splTransferToHotWallet(
-                    flow.context.token,
-                    flow.context.amount,
-                );
+                const solanaEntry = tokenOnChain(flow.context.token, 'solana');
+
+                result = solanaEntry?.native
+                    ? await bridge.nativeSolTransferToHotWallet(
+                          flow.context.amount,
+                      )
+                    : await bridge.splTransferToHotWallet(
+                          flow.context.token,
+                          flow.context.amount,
+                      );
             }
 
             if (!result) {
@@ -669,15 +706,114 @@ const handleReset = () => {
     flow.reset();
     claimError.value = null;
 };
+
+const formatActiveRequestTime = (iso: string | null): string => {
+    if (!iso) {
+        return '';
+    }
+
+    const date = new Date(iso);
+
+    return Number.isNaN(date.getTime())
+        ? ''
+        : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const activeRequestAction = (request: ActiveBridgeRequest): string => {
+    if (request.status === 'awaiting_deposit' && request.deposit_address) {
+        return 'Continue deposit';
+    }
+
+    return 'Track';
+};
+
+const activeRequestRouteLabel = (request: ActiveBridgeRequest): string => {
+    const route = bridgeRoute(request.direction as BridgeDirection);
+
+    return `${route.sourceLabel} -> ${route.destinationLabel}`;
+};
+
+const resumeActiveRequest = (request: ActiveBridgeRequest): void => {
+    const direction = request.direction as BridgeDirection;
+
+    flow.chooseDirection(direction);
+    flow.context.token = (request.token ?? 'YTN') as BridgeTokenSymbol;
+    flow.context.destinationAddress = request.recipient_address;
+    flow.context.sourceAddress = request.sender_address ?? '';
+    flow.context.sourceTxHash = request.source_tx_hash ?? '';
+    flow.context.amount = parseFloat(request.amount) > 0 ? request.amount : '';
+    flow.context.bridgeRequestId = request.id;
+    flow.context.depositAddress = request.deposit_address;
+    flow.context.depositExpiresAt = request.expires_at;
+    flow.context.destinationTxHash = request.destination_tx_hash;
+    flow.context.error = null;
+    claimError.value = null;
+
+    if (request.status !== 'awaiting_deposit') {
+        flow.beginTracking(request.id);
+    }
+};
 </script>
 
 <template>
     <div class="w-full">
-        <StepDirection
-            v-if="flow.step.value === 'idle'"
-            :available-directions="props.availableDirections"
-            @select="handleDirection"
-        />
+        <div v-if="flow.step.value === 'idle'" class="flex flex-col gap-4">
+            <div
+                v-if="props.activeRequests.length > 0"
+                class="rounded-xl border border-border p-4"
+            >
+                <h2 class="text-sm font-semibold text-foreground">
+                    Active bridge requests
+                </h2>
+                <div class="mt-3 flex flex-col gap-2">
+                    <div
+                        v-for="request in props.activeRequests"
+                        :key="request.id"
+                        class="rounded-lg bg-muted/50 px-3 py-2"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <p
+                                    class="text-xs font-medium text-foreground"
+                                >
+                                    {{ activeRequestRouteLabel(request) }}
+                                    · {{ request.token ?? 'YTN' }}
+                                </p>
+                                <p
+                                    v-if="request.deposit_address"
+                                    class="mt-1 truncate font-mono text-[10px] text-muted-foreground"
+                                >
+                                    {{ request.deposit_address }}
+                                </p>
+                                <p class="mt-1 text-[10px] text-muted-foreground">
+                                    {{ request.status
+                                    }}<template v-if="request.expires_at">
+                                        · active until
+                                        {{
+                                            formatActiveRequestTime(
+                                                request.expires_at,
+                                            )
+                                        }}</template
+                                    >
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                class="shrink-0 rounded border border-border px-2 py-1 text-[10px] font-medium text-foreground hover:border-foreground/40"
+                                @click="resumeActiveRequest(request)"
+                            >
+                                {{ activeRequestAction(request) }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <StepDirection
+                :available-directions="props.availableDirections"
+                @select="handleDirection"
+            />
+        </div>
 
         <StepConfigure
             v-else-if="

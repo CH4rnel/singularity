@@ -5,7 +5,12 @@ import {
     createAssociatedTokenAccountInstruction,
     TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
+import {
+    Connection,
+    PublicKey,
+    SystemProgram,
+    Transaction,
+} from '@solana/web3.js';
 import {
     BrowserProvider,
     Contract,
@@ -506,6 +511,26 @@ export const useBridge = () => {
         const token = BRIDGE_TOKENS[symbol];
         const key = balanceKey(symbol, 'solana');
 
+        // Native SOL: lamport balance of the wallet itself, no token account.
+        if (tokenOnChain(symbol, 'solana')?.native) {
+            try {
+                const connection = new Connection(SOLANA_RPC, 'confirmed');
+                const lamports = await connection.getBalance(
+                    new PublicKey(owner),
+                );
+
+                tokenBalances.value = {
+                    ...tokenBalances.value,
+                    [key]: (lamports / 1e9).toString(),
+                };
+            } catch (e) {
+                console.error('[bridge] fetchTokenBalanceSolana failed', e);
+                tokenBalances.value = { ...tokenBalances.value, [key]: '0' };
+            }
+
+            return;
+        }
+
         try {
             const res = await fetch(SOLANA_RPC, {
                 method: 'POST',
@@ -789,6 +814,73 @@ export const useBridge = () => {
     };
 
     /**
+     * Solana → EVM native SOL deposit: plain SystemProgram.transfer to the
+     * bridge hot wallet. Returns the Solana signature.
+     */
+    const nativeSolTransferToHotWallet = async (
+        amount: string,
+    ): Promise<{ txHash: string; nonce: number } | null> => {
+        const phantom = getPhantom();
+
+        if (!phantom?.publicKey) {
+            throw new Error('Solana wallet not connected');
+        }
+
+        const connection = new Connection(SOLANA_RPC, 'confirmed');
+        const userPubkey = new PublicKey(phantom.publicKey.toBase58());
+        const lamports = BigInt(Math.round(parseFloat(amount) * 1e9));
+
+        const tx = new Transaction().add(
+            SystemProgram.transfer({
+                fromPubkey: userPubkey,
+                toPubkey: BRIDGE_HOT_WALLET,
+                lamports,
+            }),
+        );
+
+        const { blockhash, lastValidBlockHeight } =
+            await connection.getLatestBlockhash('confirmed');
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = userPubkey;
+
+        const { signature } = await phantom.signAndSendTransaction(
+            tx,
+            SOLANA_TX_SEND_OPTIONS,
+        );
+
+        try {
+            await connection.confirmTransaction(
+                { signature, blockhash, lastValidBlockHeight },
+                'confirmed',
+            );
+        } catch (error) {
+            const status = await connection.getSignatureStatus(signature, {
+                searchTransactionHistory: true,
+            });
+
+            if (
+                status.value?.confirmationStatus === 'confirmed' ||
+                status.value?.confirmationStatus === 'finalized'
+            ) {
+                return { txHash: signature, nonce: 0 };
+            }
+
+            if (
+                error instanceof Error &&
+                error.message.includes('block height exceeded')
+            ) {
+                throw new Error(
+                    'Solana transaction expired before confirmation. Please try again.',
+                );
+            }
+
+            throw error;
+        }
+
+        return { txHash: signature, nonce: 0 };
+    };
+
+    /**
      * How much of `symbol` the relayer can pay out to `direction`'s destination
      * chain right now (human units), from live relayer inventory. null result
      * = uncapped (mint on the home chain) or a failed/unknown read.
@@ -851,6 +943,7 @@ export const useBridge = () => {
         ensureNetwork,
         ensureCyberiaNetwork,
         splTransferToHotWallet,
+        nativeSolTransferToHotWallet,
     };
 };
 

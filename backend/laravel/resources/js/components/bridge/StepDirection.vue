@@ -37,6 +37,9 @@ const CHAIN_LOGOS: Record<string, string> = {
     base: '/token-icons/eth.svg',
     bnb: '/token-icons/bnb.svg',
     ton: '/token-icons/ton.svg',
+    bitcoin: '/token-icons/btc.svg',
+    litecoin: '/token-icons/ltc.svg',
+    monero: '/token-icons/monero.svg',
 };
 
 const chainLogo = (chain: string): string | null => CHAIN_LOGOS[chain] ?? null;
@@ -113,6 +116,10 @@ const selectedRoute = computed(
             (route) =>
                 route.source === from.value && route.destination === to.value,
         ) ?? null,
+);
+
+const selectedRouteOperational = computed(
+    () => selectedRoute.value?.operational !== false,
 );
 
 // Tokens available on the chosen route — the picker keeps a valid selection as
@@ -313,8 +320,12 @@ const proceed = () => {
             <Wallet v-else class="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
                 {{
-                    selectedRoute.sourceWallet === 'manual'
-                        ? `Send from any ${selectedRoute.sourceLabel} wallet to the bridge address, then paste the transaction hash — verification and delivery are automatic.`
+                    !selectedRouteOperational
+                        ? `${selectedRoute.sourceLabel} → ${selectedRoute.destinationLabel} is visible, but operator setup is not complete yet.`
+                        : selectedRoute.sourceWallet === 'manual'
+                        ? selectedRoute.autoProcess
+                            ? `Send from any ${selectedRoute.sourceLabel} wallet to the bridge address, then paste the transaction hash — verification and delivery are automatic.`
+                            : `Send from any ${selectedRoute.sourceLabel} wallet to the bridge address, then paste the transaction hash — an operator verifies and settles the request.`
                         : `Sign with your ${selectedRoute.sourceLabel} wallet, receive on ${selectedRoute.destinationLabel}.`
                 }}
             </span>
@@ -323,10 +334,11 @@ const proceed = () => {
         <button
             type="button"
             class="group flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-            :disabled="!selectedRoute"
+            :disabled="!selectedRoute || !selectedRouteOperational"
             @click="proceed"
         >
-            Continue
+            <span v-if="!selectedRouteOperational">Operator setup pending</span>
+            <span v-else>Continue</span>
             <ArrowRight
                 class="h-4 w-4 transition-transform group-hover:translate-x-1"
             />

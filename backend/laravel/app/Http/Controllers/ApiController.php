@@ -21,20 +21,46 @@ class ApiController extends Controller
         $price = $cyber->get();
 
         $bridgeHistory = [];
+        $bridgeActiveRequests = [];
         if (auth()->check()) {
             $bridgeHistory = BridgeRequest::where('user_id', auth()->id())
                 ->orderByDesc('created_at')
                 ->limit(20)
                 ->get([
-                    'id', 'direction', 'source_chain', 'source_tx_hash',
-                    'sender_address', 'recipient_address', 'amount',
-                    'status', 'destination_tx_hash', 'created_at', 'completed_at',
-                ]);
+                    'id', 'direction', 'token', 'source_chain', 'source_tx_hash',
+                    'sender_address', 'recipient_address', 'deposit_address',
+                    'amount', 'status', 'destination_tx_hash', 'created_at',
+                    'completed_at',
+                ])
+                ->map(fn (BridgeRequest $request) => $this->bridgeRequestPayload($request));
+
+            $bridgeActiveRequests = BridgeRequest::where('user_id', auth()->id())
+                ->whereIn('status', ['awaiting_deposit', 'pending', 'processing'])
+                ->orderByDesc('created_at')
+                ->limit(50)
+                ->get([
+                    'id', 'direction', 'token', 'source_chain',
+                    'source_tx_hash', 'sender_address', 'recipient_address',
+                    'deposit_address', 'amount', 'status',
+                    'destination_tx_hash', 'created_at', 'completed_at',
+                ])
+                ->filter(function (BridgeRequest $request) {
+                    if ($this->bridgeRequestExpiredForUi($request)) {
+                        $request->markExpired();
+
+                        return false;
+                    }
+
+                    return true;
+                })
+                ->values()
+                ->map(fn (BridgeRequest $request) => $this->bridgeRequestPayload($request));
         }
 
         return Inertia::render('Bridge', [
             'price' => $price,
             'bridgeHistory' => $bridgeHistory,
+            'bridgeActiveRequests' => $bridgeActiveRequests,
             'bridgeRelayerEvm' => app(BridgeRelayerService::class)->evmAddress(),
             // Full bridge config for the frontend: chains, routes and tokens
             // all come from config/bridge.php — adding an EVM chain is a
@@ -58,6 +84,45 @@ class ApiController extends Controller
                 'rate' => (int) config('bridge.convert.rate', 1000),
             ],
         ]);
+    }
+
+    private function bridgeRequestExpiredForUi(BridgeRequest $request): bool
+    {
+        return $request->status === 'awaiting_deposit'
+            && $request->source_chain === 'yenten'
+            && $request->created_at->lte(now()->subMinutes($this->yentenDepositTtlMinutes()));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function bridgeRequestPayload(BridgeRequest $request): array
+    {
+        $expiresAt = $request->status === 'awaiting_deposit' && $request->source_chain === 'yenten'
+            ? $request->created_at->copy()->addMinutes($this->yentenDepositTtlMinutes())->toIso8601String()
+            : null;
+
+        return [
+            'id' => $request->id,
+            'direction' => $request->direction,
+            'token' => $request->token,
+            'source_chain' => $request->source_chain,
+            'source_tx_hash' => $request->source_tx_hash,
+            'sender_address' => $request->sender_address,
+            'recipient_address' => $request->recipient_address,
+            'deposit_address' => $request->deposit_address,
+            'amount' => $request->amount,
+            'status' => $request->status,
+            'destination_tx_hash' => $request->destination_tx_hash,
+            'created_at' => $request->created_at,
+            'completed_at' => $request->completed_at,
+            'expires_at' => $expiresAt,
+        ];
+    }
+
+    private function yentenDepositTtlMinutes(): int
+    {
+        return max(1, (int) config('bridge.chains.yenten.deposit_ttl_minutes', 60));
     }
 
     // public function index(YesNoApiService $yesNo, CataasApiService $cataas, CyberPriceService $cyber)

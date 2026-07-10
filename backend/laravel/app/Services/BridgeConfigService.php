@@ -51,38 +51,7 @@ class BridgeConfigService
             $source = $this->chain($route['source_chain'] ?? '');
             $destination = $this->chain($route['destination_chain'] ?? '');
 
-            if (! $source || ! $destination) {
-                continue;
-            }
-
-            // Opt-in chains with operator hot wallets (TON, Yenten) are hidden
-            // until their deposit address is configured. EVM/Solana chains have
-            // built-in defaults (relayer EOA / configured hot wallet), so a
-            // missing relayer key there is an operational error surfaced at
-            // processing time, not a reason to hide core routes.
-            foreach ([$source, $destination] as $chain) {
-                if (in_array($chain['wallet'] ?? '', ['manual', 'ton'], true)
-                    && $this->depositAddress($chain['key']) === null) {
-                    continue 2;
-                }
-            }
-
-            // TON payouts additionally need the relayer wallet mnemonic.
-            if (($destination['type'] ?? '') === 'ton'
-                && ! config('services.bridge.ton_relayer_mnemonic')) {
-                continue;
-            }
-
-            if (($source['type'] ?? '') === 'yenten' || ($destination['type'] ?? '') === 'yenten') {
-                $yenten = $this->chain('yenten');
-
-                if (! is_string($yenten['relayer_wif'] ?? null)
-                    || $yenten['relayer_wif'] === '') {
-                    continue;
-                }
-            }
-
-            if ($this->tokensForRoute($direction) === []) {
+            if (! $this->routeOperational($direction, $route, $source, $destination)) {
                 continue;
             }
 
@@ -181,6 +150,7 @@ class BridgeConfigService
             // http://polygon-edge:8545) to the client — prefer public_rpc_url.
             'rpcUrl' => $chain['public_rpc_url'] ?? $chain['rpc_url'] ?? null,
             'explorerTx' => $chain['explorer_tx'] ?? null,
+            'explorerTxFallbacks' => $chain['explorer_tx_fallbacks'] ?? [],
             'nativeCurrency' => $chain['native_currency'] ?? null,
             'depositAddress' => $this->depositAddress($chain['key']),
         ], $this->chains()));
@@ -193,9 +163,15 @@ class BridgeConfigService
     {
         $routes = [];
 
-        foreach ($this->availableRoutes() as $direction => $route) {
+        foreach ($this->visibleRoutes() as $direction => $route) {
             $source = $this->chain($route['source_chain']);
             $destination = $this->chain($route['destination_chain']);
+
+            if (! $source || ! $destination) {
+                continue;
+            }
+
+            $operational = $this->routeOperational($direction, $route, $source, $destination);
 
             $routes[] = [
                 'direction' => $direction,
@@ -206,6 +182,8 @@ class BridgeConfigService
                 'sourceWallet' => $source['wallet'] ?? 'manual',
                 'destinationAddressType' => $destination['address_type'],
                 'autoProcess' => (bool) ($route['auto_process'] ?? false),
+                'operational' => $operational,
+                'unavailableReason' => $operational ? null : 'Operator setup pending',
                 'tokens' => array_keys($this->tokensForRoute($direction)),
             ];
         }
@@ -268,5 +246,58 @@ class BridgeConfigService
         }
 
         return false;
+    }
+
+    /**
+     * Enabled routes shown in the UI. A route may be visible but not yet
+     * operational; publicRoutes() exposes that state so the frontend can show
+     * the corridor without allowing a broken request.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function visibleRoutes(): array
+    {
+        return array_filter(
+            config('bridge.routes', []),
+            fn (array $route) => ($route['enabled'] ?? true) !== false,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $route
+     * @param  array<string, mixed>|null  $source
+     * @param  array<string, mixed>|null  $destination
+     */
+    private function routeOperational(string $direction, array $route, ?array $source, ?array $destination): bool
+    {
+        if (! $source || ! $destination) {
+            return false;
+        }
+
+        // Opt-in chains with operator hot wallets (TON, Yenten, manual native
+        // coins) need a configured deposit/payout address before requests are
+        // accepted. EVM/Solana chains have built-in defaults.
+        foreach ([$source, $destination] as $chain) {
+            if (in_array($chain['wallet'] ?? '', ['manual', 'ton'], true)
+                && $this->depositAddress($chain['key']) === null) {
+                return false;
+            }
+        }
+
+        if (($destination['type'] ?? '') === 'ton'
+            && ! config('services.bridge.ton_relayer_mnemonic')) {
+            return false;
+        }
+
+        if (($source['type'] ?? '') === 'yenten' || ($destination['type'] ?? '') === 'yenten') {
+            $yenten = $this->chain('yenten');
+
+            if (! is_string($yenten['relayer_wif'] ?? null)
+                || $yenten['relayer_wif'] === '') {
+                return false;
+            }
+        }
+
+        return $this->tokensForRoute($direction) !== [];
     }
 }

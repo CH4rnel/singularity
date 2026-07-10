@@ -64,3 +64,42 @@ test('rejects EVM hex of wrong length', function () {
     expect(validateAddr('sol_to_evm', '0xabc'))->not->toBeEmpty();
     expect(validateAddr('sol_to_evm', '0x'.str_repeat('a', 41)))->not->toBeEmpty();
 });
+
+test('accepts Bitcoin addresses for evm_to_btc', function () {
+    config()->set('bridge.routes.evm_to_btc.enabled', true);
+
+    expect(validateAddr('evm_to_btc', '12ZEw5Hcv1hTb6YUQJ69y1V7uhcoDz92PH'))
+        ->toBeEmpty()
+        ->and(validateAddr('evm_to_btc', 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080'))
+        ->toBeEmpty();
+});
+
+test('accepts Litecoin addresses for evm_to_ltc', function () {
+    config()->set('bridge.routes.evm_to_ltc.enabled', true);
+
+    expect(validateAddr('evm_to_ltc', 'LLnCCHbSzfwWquEdaS5TF2Yt7uz5Qb1SZ1'))
+        ->toBeEmpty()
+        ->and(validateAddr('evm_to_ltc', 'M9TQAWC2R2sGUmWodGk6DH6TNvVxiqXnU6'))
+        ->toBeEmpty()
+        ->and(validateAddr('evm_to_ltc', 'ltc1qgghl4v0w4d4w7j7zh4j3jy8az6h7x38wqx4u0s'))
+        ->toBeEmpty();
+});
+
+test('accepts Monero addresses for evm_to_xmr', function () {
+    config()->set('bridge.routes.evm_to_xmr.enabled', true);
+
+    expect(validateAddr('evm_to_xmr', '4'.str_repeat('A', 94)))
+        ->toBeEmpty()
+        ->and(validateAddr('evm_to_xmr', '8'.str_repeat('A', 94)))
+        ->toBeEmpty();
+});
+
+test('rejects wrong native address type for external chain routes', function () {
+    config()->set('bridge.routes.evm_to_btc.enabled', true);
+    config()->set('bridge.routes.evm_to_ltc.enabled', true);
+    config()->set('bridge.routes.evm_to_xmr.enabled', true);
+
+    expect(validateAddr('evm_to_btc', 'LLnCCHbSzfwWquEdaS5TF2Yt7uz5Qb1SZ1'))->not->toBeEmpty()
+        ->and(validateAddr('evm_to_ltc', '12ZEw5Hcv1hTb6YUQJ69y1V7uhcoDz92PH'))->not->toBeEmpty()
+        ->and(validateAddr('evm_to_xmr', '12ZEw5Hcv1hTb6YUQJ69y1V7uhcoDz92PH'))->not->toBeEmpty();
+});

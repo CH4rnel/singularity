@@ -30,15 +30,88 @@ class YentenApiService
      */
     public function addressBalances(string $address): ?array
     {
+        foreach ($this->apiUrls() as $apiUrl) {
+            $balances = $this->addressBalancesFromApi($apiUrl, $address);
+
+            if ($balances !== null) {
+                return $balances;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{confirmed: string, pending: string}|null
+     */
+    private function addressBalancesFromApi(string $apiUrl, string $address): ?array
+    {
+        $blockbook = $this->addressBalancesFromBlockbook($apiUrl, $address);
+
+        if ($blockbook !== null) {
+            return $blockbook;
+        }
+
+        return $this->addressBalancesFromUnspent($apiUrl, $address);
+    }
+
+    /**
+     * Blockbook-compatible explorer2 endpoint. It returns confirmed and
+     * unconfirmed balances as raw smallest-unit strings.
+     *
+     * @return array{confirmed: string, pending: string}|null
+     */
+    private function addressBalancesFromBlockbook(string $apiUrl, string $address): ?array
+    {
         try {
             $response = Http::acceptJson()
                 ->timeout(20)
                 ->retry(2, 250)
-                ->get($this->apiUrl().'/unspent/'.rawurlencode($address).'?amount=0');
+                ->get($apiUrl.'/api/address/'.rawurlencode($address));
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $confirmed = $response->json('balance');
+            $pending = $response->json('unconfirmedBalance');
+
+            if (! $this->validRawAmount($confirmed) || ! $this->validRawAmount($pending)) {
+                return null;
+            }
+
+            return [
+                'confirmed' => (string) $confirmed,
+                'pending' => (string) $pending,
+            ];
+        } catch (\Throwable $exception) {
+            Log::warning('Bridge: Yenten Blockbook balance lookup failed', [
+                'address' => $address,
+                'api_url' => $apiUrl,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Legacy light-wallet endpoint. It returns UTXOs with values in satoshis.
+     *
+     * @return array{confirmed: string, pending: string}|null
+     */
+    private function addressBalancesFromUnspent(string $apiUrl, string $address): ?array
+    {
+        try {
+            $response = Http::acceptJson()
+                ->timeout(20)
+                ->retry(2, 250)
+                ->get($apiUrl.'/unspent/'.rawurlencode($address).'?amount=0');
 
             if (! $response->successful() || $response->json('error') !== null) {
                 Log::warning('Bridge: Yenten unspent lookup failed', [
                     'address' => $address,
+                    'api_url' => $apiUrl,
                     'status' => $response->status(),
                 ]);
 
@@ -74,6 +147,7 @@ class YentenApiService
         } catch (\Throwable $exception) {
             Log::error('Bridge: Yenten address balance lookup failed', [
                 'address' => $address,
+                'api_url' => $apiUrl,
                 'error' => $exception->getMessage(),
             ]);
 
@@ -81,8 +155,29 @@ class YentenApiService
         }
     }
 
-    private function apiUrl(): string
+    private function validRawAmount(mixed $value): bool
     {
-        return rtrim((string) config('bridge.chains.yenten.api_url', 'https://api.yentencoin.info'), '/');
+        return is_int($value) || (is_string($value) && ctype_digit($value));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function apiUrls(): array
+    {
+        $configured = config('bridge.chains.yenten.balance_api_urls');
+        $urls = is_array($configured) ? $configured : [];
+
+        if ($urls === []) {
+            $urls = [
+                'https://explorer2.yentencoin.info',
+                (string) config('bridge.chains.yenten.api_url', 'https://api.yentencoin.info'),
+            ];
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            fn (string $url) => rtrim($url, '/'),
+            $urls,
+        ))));
     }
 }

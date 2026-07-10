@@ -22,11 +22,16 @@ export type PublicChain = {
     evmChainId: number | null;
     rpcUrl: string | null;
     explorerTx: string | null;
+    explorerTxFallbacks?: string[];
     nativeCurrency: { name: string; symbol: string; decimals: number } | null;
     depositAddress: string | null;
 };
 
 export type PublicRouteData = BridgeRoute & {
+    /** Whether the server will currently accept submissions for this route. */
+    operational?: boolean;
+    /** Optional operator-facing reason for a visible but disabled route. */
+    unavailableReason?: string | null;
     /** Token symbols available on this route (server-computed). */
     tokens: string[];
 };
@@ -77,6 +82,13 @@ const FALLBACK_EXPLORERS: Record<string, string> = {
     bnb: 'https://bscscan.com/tx/{hash}',
     base: 'https://basescan.org/tx/{hash}',
     yenten: 'https://explorer.yentencoin.info/tx/{hash}',
+    bitcoin: 'https://mempool.space/tx/{hash}',
+    litecoin: 'https://litecoinspace.org/tx/{hash}',
+    monero: 'https://xmrchain.net/tx/{hash}',
+};
+
+const FALLBACK_EXPLORER_FALLBACKS: Record<string, string[]> = {
+    yenten: ['https://explorer2.yentencoin.info/tx/{hash}'],
 };
 
 const FALLBACK_CHAINS: Record<string, Partial<PublicChain>> = {
@@ -104,6 +116,24 @@ const FALLBACK_CHAINS: Record<string, Partial<PublicChain>> = {
         rpcUrl: 'https://mainnet.base.org',
         nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
     },
+    bitcoin: {
+        label: 'Bitcoin',
+        type: 'bitcoin',
+        addressType: 'bitcoin',
+        wallet: 'manual',
+    },
+    litecoin: {
+        label: 'Litecoin',
+        type: 'litecoin',
+        addressType: 'litecoin',
+        wallet: 'manual',
+    },
+    monero: {
+        label: 'Monero',
+        type: 'monero',
+        addressType: 'monero',
+        wallet: 'manual',
+    },
 };
 
 export function bridgeChainInfo(key: BridgeChain): PublicChain | null {
@@ -121,11 +151,12 @@ export function bridgeChainInfo(key: BridgeChain): PublicChain | null {
         key,
         label: fallback.label ?? key,
         type: fallback.type ?? 'evm',
-        addressType: 'evm',
+        addressType: fallback.addressType ?? 'evm',
         wallet: fallback.wallet ?? 'evm',
         evmChainId: fallback.evmChainId ?? null,
         rpcUrl: fallback.rpcUrl ?? null,
         explorerTx: FALLBACK_EXPLORERS[key] ?? null,
+        explorerTxFallbacks: FALLBACK_EXPLORER_FALLBACKS[key] ?? [],
         nativeCurrency: fallback.nativeCurrency ?? null,
         depositAddress: null,
     };
@@ -144,6 +175,18 @@ export function explorerTxUrl(chainKey: BridgeChain, hash: string): string {
     return template.replace('{hash}', hash);
 }
 
+export function explorerTxFallbackUrls(
+    chainKey: BridgeChain,
+    hash: string,
+): string[] {
+    const templates =
+        chainMap?.[chainKey]?.explorerTxFallbacks ??
+        FALLBACK_EXPLORER_FALLBACKS[chainKey] ??
+        [];
+
+    return templates.map((template) => template.replace('{hash}', hash));
+}
+
 /** Symbols offered on a route (server-computed availability). */
 export function tokensForRoute(direction: BridgeDirection): string[] {
     const route = routeList?.find((entry) => entry.direction === direction);
@@ -157,7 +200,21 @@ export function tokensForRoute(direction: BridgeDirection): string[] {
         return ['YTN'];
     }
 
-    return Object.keys(BRIDGE_TOKENS).filter((symbol) => symbol !== 'YTN');
+    if (direction === 'btc_to_evm' || direction === 'evm_to_btc') {
+        return ['BTC'];
+    }
+
+    if (direction === 'ltc_to_evm' || direction === 'evm_to_ltc') {
+        return ['LTC'];
+    }
+
+    if (direction === 'xmr_to_evm' || direction === 'evm_to_xmr') {
+        return ['XMR'];
+    }
+
+    return Object.keys(BRIDGE_TOKENS).filter(
+        (symbol) => !['YTN', 'BTC', 'LTC', 'XMR'].includes(symbol),
+    );
 }
 
 export function bridgeTokenInfo(symbol: string): PublicToken | null {

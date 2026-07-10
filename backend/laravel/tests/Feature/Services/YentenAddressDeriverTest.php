@@ -12,6 +12,13 @@ test('derives valid Yenten P2PKH addresses', function () {
         ->and($deriver->depositAddress(1))->toMatch('/^Y[1-9A-HJ-NP-Za-km-z]{25,34}$/');
 });
 
+test('derivation matches the pinned pre-refactor vector', function () {
+    // Live one-time deposit addresses were issued under this exact KDF
+    // ('ytn-deposit:{index}:{counter}'); any drift strands real deposits.
+    expect((new YentenAddressDeriver(TEST_SEED))->depositAddress(7))
+        ->toBe('YjfVNJXfykmVCdRXLRx6ssySnBnPtQweqQ');
+});
+
 test('derivation is deterministic per index', function () {
     $a = new YentenAddressDeriver(TEST_SEED);
     $b = new YentenAddressDeriver(TEST_SEED);

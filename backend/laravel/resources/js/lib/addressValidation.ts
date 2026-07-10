@@ -8,9 +8,19 @@ export type BridgeChain =
     | 'bnb'
     | 'base'
     | 'yenten'
+    | 'bitcoin'
+    | 'litecoin'
+    | 'monero'
     // Config-driven chains added in config/bridge.php arrive via server props.
     | (string & {});
-export type BridgeAddressType = 'solana' | 'evm' | 'ton' | 'yenten';
+export type BridgeAddressType =
+    | 'solana'
+    | 'evm'
+    | 'ton'
+    | 'yenten'
+    | 'bitcoin'
+    | 'litecoin'
+    | 'monero';
 export type SourceWalletType = 'solana' | 'evm' | 'ton' | 'manual';
 
 export type BridgeDirection =
@@ -24,6 +34,12 @@ export type BridgeDirection =
     | 'evm_to_base'
     | 'yenten_to_evm'
     | 'evm_to_yenten'
+    | 'btc_to_evm'
+    | 'evm_to_btc'
+    | 'ltc_to_evm'
+    | 'evm_to_ltc'
+    | 'xmr_to_evm'
+    | 'evm_to_xmr'
     // Config-driven routes added in config/bridge.php arrive via server props.
     | (string & {});
 
@@ -36,6 +52,8 @@ export type BridgeRoute = {
     sourceWallet: SourceWalletType;
     destinationAddressType: BridgeAddressType;
     autoProcess: boolean;
+    operational?: boolean;
+    unavailableReason?: string | null;
 };
 
 export type ValidationResult = {
@@ -150,6 +168,66 @@ export const BRIDGE_ROUTES: Record<string, BridgeRoute> = {
         sourceWallet: 'evm',
         destinationAddressType: 'yenten',
         autoProcess: true,
+    },
+    btc_to_evm: {
+        direction: 'btc_to_evm',
+        source: 'bitcoin',
+        destination: 'cyberia',
+        sourceLabel: 'Bitcoin',
+        destinationLabel: 'Cyberia EVM',
+        sourceWallet: 'manual',
+        destinationAddressType: 'evm',
+        autoProcess: false,
+    },
+    evm_to_btc: {
+        direction: 'evm_to_btc',
+        source: 'cyberia',
+        destination: 'bitcoin',
+        sourceLabel: 'Cyberia EVM',
+        destinationLabel: 'Bitcoin',
+        sourceWallet: 'evm',
+        destinationAddressType: 'bitcoin',
+        autoProcess: false,
+    },
+    ltc_to_evm: {
+        direction: 'ltc_to_evm',
+        source: 'litecoin',
+        destination: 'cyberia',
+        sourceLabel: 'Litecoin',
+        destinationLabel: 'Cyberia EVM',
+        sourceWallet: 'manual',
+        destinationAddressType: 'evm',
+        autoProcess: false,
+    },
+    evm_to_ltc: {
+        direction: 'evm_to_ltc',
+        source: 'cyberia',
+        destination: 'litecoin',
+        sourceLabel: 'Cyberia EVM',
+        destinationLabel: 'Litecoin',
+        sourceWallet: 'evm',
+        destinationAddressType: 'litecoin',
+        autoProcess: false,
+    },
+    xmr_to_evm: {
+        direction: 'xmr_to_evm',
+        source: 'monero',
+        destination: 'cyberia',
+        sourceLabel: 'Monero',
+        destinationLabel: 'Cyberia EVM',
+        sourceWallet: 'manual',
+        destinationAddressType: 'evm',
+        autoProcess: false,
+    },
+    evm_to_xmr: {
+        direction: 'evm_to_xmr',
+        source: 'cyberia',
+        destination: 'monero',
+        sourceLabel: 'Cyberia EVM',
+        destinationLabel: 'Monero',
+        sourceWallet: 'evm',
+        destinationAddressType: 'monero',
+        autoProcess: false,
     },
 };
 
@@ -267,6 +345,98 @@ export const isYentenAddress = (s: string): ValidationResult => {
     return { valid: true, normalized: trimmed };
 };
 
+const BASE58_ALPHABET =
+    '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+const base58Decode = (input: string): Uint8Array | null => {
+    let num = 0n;
+
+    for (const char of input) {
+        const index = BASE58_ALPHABET.indexOf(char);
+
+        if (index === -1) {
+            return null;
+        }
+
+        num = num * 58n + BigInt(index);
+    }
+
+    const bytes: number[] = [];
+
+    while (num > 0n) {
+        bytes.unshift(Number(num % 256n));
+        num /= 256n;
+    }
+
+    for (const char of input) {
+        if (char !== '1') {
+            break;
+        }
+
+        bytes.unshift(0);
+    }
+
+    return new Uint8Array(bytes);
+};
+
+const hasBase58Version = (address: string, versions: number[]): boolean => {
+    if (!/^[1-9A-HJ-NP-Za-km-z]{26,35}$/.test(address)) {
+        return false;
+    }
+
+    const decoded = base58Decode(address);
+
+    return decoded !== null && decoded.length === 25 && versions.includes(decoded[0]);
+};
+
+const bech32Like = (address: string, hrp: string): boolean => {
+    const lower = address.toLowerCase();
+
+    if (address !== lower && address !== address.toUpperCase()) {
+        return false;
+    }
+
+    return new RegExp(`^${hrp}1[ac-hj-np-z02-9]{11,71}$`).test(lower);
+};
+
+export const isBitcoinAddress = (s: string): ValidationResult => {
+    const trimmed = s.trim();
+
+    if (bech32Like(trimmed, 'bc') || hasBase58Version(trimmed, [0x00, 0x05])) {
+        return { valid: true, normalized: trimmed };
+    }
+
+    return { valid: false, error: 'Not a valid Bitcoin address' };
+};
+
+export const isLitecoinAddress = (s: string): ValidationResult => {
+    const trimmed = s.trim();
+
+    if (
+        bech32Like(trimmed, 'ltc') ||
+        hasBase58Version(trimmed, [0x30, 0x32, 0x05])
+    ) {
+        return { valid: true, normalized: trimmed };
+    }
+
+    return { valid: false, error: 'Not a valid Litecoin address' };
+};
+
+export const isMoneroAddress = (s: string): ValidationResult => {
+    const trimmed = s.trim();
+
+    if (
+        /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{95}([123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{11})?$/.test(
+            trimmed,
+        ) &&
+        (trimmed.startsWith('4') || trimmed.startsWith('8'))
+    ) {
+        return { valid: true, normalized: trimmed };
+    }
+
+    return { valid: false, error: 'Not a valid Monero address' };
+};
+
 export const validateDestination = (
     direction: BridgeDirection,
     address: string,
@@ -295,6 +465,18 @@ export const validateDestination = (
 
     if (route.destinationAddressType === 'yenten') {
         return isYentenAddress(trimmed);
+    }
+
+    if (route.destinationAddressType === 'bitcoin') {
+        return isBitcoinAddress(trimmed);
+    }
+
+    if (route.destinationAddressType === 'litecoin') {
+        return isLitecoinAddress(trimmed);
+    }
+
+    if (route.destinationAddressType === 'monero') {
+        return isMoneroAddress(trimmed);
     }
 
     if (B58_RE.test(trimmed) && !HEX_ADDR_RE.test(trimmed)) {

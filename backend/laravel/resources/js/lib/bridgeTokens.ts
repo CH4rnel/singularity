@@ -1,9 +1,13 @@
 export type BridgeTokenSymbol =
     | 'CYBER.sol'
+    | 'SOL'
     | 'USDC'
     | 'USDT'
     | 'HATCHER'
     | 'YTN'
+    | 'BTC'
+    | 'LTC'
+    | 'XMR'
     | 'KRSQ'
     | 'GOAL'
     | 'BNB'
@@ -46,6 +50,18 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenInfo> = {
         model: 'native',
         solanaTokenProgram: 'token-2022',
     },
+    // SOL — native SOL bridged into a Cyberia wrapper (9-dec, matching
+    // lamports; relayer-owned mint/burn). The Solana side is the native coin
+    // (no mint) — deposits are plain system transfers to the hot wallet.
+    SOL: {
+        symbol: 'SOL',
+        evmAddress: '0x53450B1d205f1e41d10B653FBBDEa74160dafFf4',
+        solanaMint: '',
+        evmDecimals: 9,
+        solanaDecimals: 9,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
     // USDC/USDT on Cyberia are owner-mintable wrappers (Ownable + mint/burnFrom).
     // The relayer EOA is the owner, so we mint/burn directly without intermediation.
     USDC: {
@@ -85,6 +101,33 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenInfo> = {
         solanaMint: '',
         evmDecimals: 18,
         solanaDecimals: 8,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
+    BTC: {
+        symbol: 'BTC',
+        evmAddress: '0x9332081f308BC978fe259237850fA253131b46Fa',
+        solanaMint: '',
+        evmDecimals: 8,
+        solanaDecimals: 8,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
+    LTC: {
+        symbol: 'LTC',
+        evmAddress: '0x001AFD19C9d890b0cf0fcd6D654f9BFe4f264F14',
+        solanaMint: '',
+        evmDecimals: 8,
+        solanaDecimals: 8,
+        model: 'mint',
+        solanaTokenProgram: 'token',
+    },
+    XMR: {
+        symbol: 'XMR',
+        evmAddress: '0xe2E8D51C18d6e0FDDbb9Ff4BF63235D688dd00Ae',
+        solanaMint: '',
+        evmDecimals: 12,
+        solanaDecimals: 12,
         model: 'mint',
         solanaTokenProgram: 'token',
     },
@@ -155,10 +198,14 @@ export const CYBERSOL_TO_NATIVE_RATE = 1000;
 
 export const SUPPORTED_TOKEN_SYMBOLS: BridgeTokenSymbol[] = [
     'CYBER.sol',
+    'SOL',
     'USDC',
     'USDT',
     'HATCHER',
     'YTN',
+    'BTC',
+    'LTC',
+    'XMR',
 ];
 
 export const tokenBySymbol = (symbol: string): BridgeTokenInfo | null => {

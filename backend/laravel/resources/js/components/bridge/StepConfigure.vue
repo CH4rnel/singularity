@@ -97,6 +97,10 @@ const route = computed(() => bridgeRoute(props.direction));
 
 const manualRoute = computed(() => isManualBridgeRoute(props.direction));
 
+const manualReviewRoute = computed(
+    () => manualRoute.value && !route.value.autoProcess,
+);
+
 // Yenten uses a two-phase one-time-address flow (prepare → claim): the deposit
 // address is unique per request and the recipient is committed at prepare time.
 // Other manual routes (TON) keep the shared-address flow for now.
@@ -168,7 +172,27 @@ const destPlaceholder = computed(() => {
         return 'Y... address that will receive native YTN';
     }
 
+    if (route.value.destinationAddressType === 'bitcoin') {
+        return 'Bitcoin address that will receive native BTC';
+    }
+
+    if (route.value.destinationAddressType === 'litecoin') {
+        return 'Litecoin address that will receive native LTC';
+    }
+
+    if (route.value.destinationAddressType === 'monero') {
+        return 'Monero address that will receive native XMR';
+    }
+
     return 'Solana address that will receive the funds';
+});
+
+const sourceWalletUrl = computed(() => {
+    if (route.value.source === 'yenten') {
+        return 'https://wallet.yentencoin.info/';
+    }
+
+    return null;
 });
 
 const amountNum = computed(() => parseFloat(localAmount.value));
@@ -369,9 +393,16 @@ const formatRelative = (ts: number): string => {
             class="rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"
         >
             <p class="mb-3 text-xs text-[#706f6c] dark:text-[#A1A09A]">
-                Send the amount to the bridge deposit address first, then paste
-                the sender address and transaction hash. The relayer verifies
-                the confirmed transaction automatically.
+                <template v-if="manualReviewRoute">
+                    Send the amount to the bridge deposit address first, then
+                    paste the sender address and transaction hash. The request
+                    will stay pending until an operator verifies and settles it.
+                </template>
+                <template v-else>
+                    Send the amount to the bridge deposit address first, then
+                    paste the sender address and transaction hash. The relayer
+                    verifies the confirmed transaction automatically.
+                </template>
             </p>
             <div
                 v-if="sourceDepositAddress"
@@ -386,7 +417,8 @@ const formatRelative = (ts: number): string => {
                     {{ sourceDepositAddress }}
                 </code>
                 <a
-                    href="https://wallet.yentencoin.info/"
+                    v-if="sourceWalletUrl"
+                    :href="sourceWalletUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="mt-2 block text-xs underline"

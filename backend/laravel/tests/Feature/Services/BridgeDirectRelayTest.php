@@ -12,6 +12,7 @@ beforeEach(function () {
     config()->set('services.bridge.relayer_private_key', '0x'.str_repeat('1', 64));
     config()->set('bridge.chains.solana.rpc_url', 'https://mainnet.helius-rpc.com/?api-key=test');
     config()->set('bridge.chains.solana.deposit_address', 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w');
+    config()->set('bridge.chains.yenten.balance_api_urls', ['https://api.yentencoin.info']);
 });
 
 function makeDirectRequest(array $overrides = []): BridgeRequest
@@ -223,6 +224,126 @@ test('evm_to_sol direct relay completes via Solana script', function () {
     Process::assertRan(fn ($p) => str_contains(
         is_array($p->command) ? implode(' ', $p->command) : $p->command,
         'relay-burn.ts',
+    ));
+});
+
+test('sol_to_evm native SOL deposit is verified by lamport delta and mints the wrapper', function () {
+    Http::fake([
+        '*helius-rpc.com*' => Http::response([
+            'result' => [
+                'transaction' => [
+                    'message' => [
+                        'accountKeys' => [
+                            ['pubkey' => 'SenderSolanaAddrXyz12345678901234567890', 'signer' => true],
+                            ['pubkey' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w', 'signer' => false],
+                            ['pubkey' => '11111111111111111111111111111111', 'signer' => false],
+                        ],
+                    ],
+                ],
+                'meta' => [
+                    'err' => null,
+                    // Sender pays 10 SOL + 5000 lamports fee; hot wallet gains 10 SOL.
+                    'preBalances' => [20000005000, 1000000000, 1],
+                    'postBalances' => [10000000000, 11000000000, 1],
+                ],
+            ],
+        ]),
+    ]);
+
+    Process::fake([
+        '*relay-mint*' => Process::result(
+            output: json_encode(['txHash' => '0xsolmint', 'gasDropTxHash' => null]),
+            exitCode: 0,
+        ),
+    ]);
+
+    $request = makeDirectRequest(['token' => 'SOL']);
+    app(BridgeService::class)->processDirectRelay($request);
+    $request->refresh();
+
+    expect($request->status)->toBe('completed');
+    expect($request->destination_tx_hash)->toBe('0xsolmint');
+});
+
+test('sol_to_evm native SOL fails when the hot wallet lamports do not increase', function () {
+    Http::fake([
+        '*helius-rpc.com*' => Http::response([
+            'result' => [
+                'transaction' => [
+                    'message' => [
+                        'accountKeys' => [
+                            ['pubkey' => 'SenderSolanaAddrXyz12345678901234567890'],
+                            ['pubkey' => 'SomeOtherRecipient1111111111111111111111'],
+                        ],
+                    ],
+                ],
+                'meta' => [
+                    'err' => null,
+                    'preBalances' => [20000005000, 0],
+                    'postBalances' => [10000000000, 10000000000],
+                ],
+            ],
+        ]),
+    ]);
+
+    $request = makeDirectRequest(['token' => 'SOL']);
+    app(BridgeService::class)->processDirectRelay($request);
+    $request->refresh();
+
+    expect($request->status)->toBe('failed');
+    expect($request->error_message)->toContain('verify Solana deposit');
+});
+
+test('evm_to_sol native SOL pays out via the system-transfer relay script', function () {
+    Http::fake([
+        'https://rpc.cyberia.church' => Http::response([
+            'result' => [
+                'status' => '0x1',
+                'logs' => [
+                    [
+                        'address' => '0x53450B1d205f1e41d10B653FBBDEa74160dafFf4',
+                        'topics' => [
+                            '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+                            '0x0000000000000000000000005555555555555555555555555555555555555555',
+                            '0x0000000000000000000000000000000000000000000000000000000000abcdef',
+                        ],
+                        // 10 SOL at 9 decimals = 10000000000 = 0x2540be400
+                        'data' => '0x00000000000000000000000000000000000000000000000000000002540be400',
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    Process::fake([
+        '*relay-burn*' => Process::result(
+            output: json_encode(['txHash' => '0xburn']),
+            exitCode: 0,
+        ),
+        '*relay-sol-transfer*' => Process::result(
+            output: json_encode(['txHash' => 'nativeSolSig', 'status' => 'success']),
+            exitCode: 0,
+        ),
+    ]);
+
+    $request = makeDirectRequest([
+        'direction' => 'evm_to_sol',
+        'token' => 'SOL',
+        'source_chain' => 'cyberia',
+        'source_tx_hash' => '0xevmtx-sol',
+        'sender_address' => '0x5555555555555555555555555555555555555555',
+        'recipient_address' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w',
+    ]);
+
+    app(BridgeService::class)->processDirectRelay($request);
+    $request->refresh();
+
+    expect($request->status)->toBe('completed');
+    expect($request->destination_tx_hash)->toBe('nativeSolSig');
+
+    Process::assertRan(fn ($p) => str_contains(
+        is_array($p->command) ? implode(' ', $p->command) : $p->command,
+        'relay-sol-transfer.ts',
     ));
 });
 

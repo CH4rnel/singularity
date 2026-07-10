@@ -45,6 +45,9 @@ class ValidDestinationAddress implements ValidationRule
             'solana' => $this->validateSolana($trimmed, $fail),
             'ton' => $this->validateTon($trimmed, $fail),
             'yenten' => $this->validateYenten($trimmed, $fail),
+            'bitcoin' => $this->validateBitcoin($trimmed, $fail),
+            'litecoin' => $this->validateLitecoin($trimmed, $fail),
+            'monero' => $this->validateMonero($trimmed, $fail),
             default => $fail('Unknown direction.'),
         };
     }
@@ -130,6 +133,86 @@ class ValidDestinationAddress implements ValidationRule
         if (! hash_equals($expected, $checksum)) {
             $fail('Yenten address checksum is invalid.');
         }
+    }
+
+    private function validateBitcoin(string $address, Closure $fail): void
+    {
+        if ($this->validateBech32Like($address, 'bc')) {
+            return;
+        }
+
+        if (! $this->validateBase58CheckVersion($address, [0x00, 0x05])) {
+            $fail('Not a valid Bitcoin address.');
+        }
+    }
+
+    private function validateLitecoin(string $address, Closure $fail): void
+    {
+        if ($this->validateBech32Like($address, 'ltc')) {
+            return;
+        }
+
+        // 0x30 = L..., 0x32 = M..., 0x05 = legacy 3... P2SH.
+        if (! $this->validateBase58CheckVersion($address, [0x30, 0x32, 0x05])) {
+            $fail('Not a valid Litecoin address.');
+        }
+    }
+
+    private function validateMonero(string $address, Closure $fail): void
+    {
+        // Monero uses its own base58 chunking and checksum. Keep this as a
+        // conservative format guard; native-chain verification remains manual.
+        if (! preg_match('/^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{95}([123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{11})?$/', $address)) {
+            $fail('Not a valid Monero address.');
+
+            return;
+        }
+
+        if (! str_starts_with($address, '4') && ! str_starts_with($address, '8')) {
+            $fail('Not a valid Monero address.');
+        }
+    }
+
+    private function validateBech32Like(string $address, string $hrp): bool
+    {
+        $lower = strtolower($address);
+
+        if ($address !== $lower && $address !== strtoupper($address)) {
+            return false;
+        }
+
+        return preg_match('/^'.preg_quote($hrp, '/').'1[ac-hj-np-z02-9]{11,71}$/', $lower) === 1;
+    }
+
+    /**
+     * @param  array<int, int>  $versions
+     */
+    private function validateBase58CheckVersion(string $address, array $versions): bool
+    {
+        if (! preg_match('/^[1-9A-HJ-NP-Za-km-z]{26,35}$/', $address)) {
+            return false;
+        }
+
+        $decoded = self::base58Decode($address);
+
+        if ($decoded === null || strlen($decoded) !== 25 || ! in_array(ord($decoded[0]), $versions, true)) {
+            return false;
+        }
+
+        return self::passesBase58Check($decoded);
+    }
+
+    private static function passesBase58Check(string $decoded): bool
+    {
+        if (strlen($decoded) < 5) {
+            return false;
+        }
+
+        $payload = substr($decoded, 0, -4);
+        $checksum = substr($decoded, -4);
+        $expected = substr(hash('sha256', hash('sha256', $payload, true), true), 0, 4);
+
+        return hash_equals($expected, $checksum);
     }
 
     private static function looksLikeSolana(string $s): bool

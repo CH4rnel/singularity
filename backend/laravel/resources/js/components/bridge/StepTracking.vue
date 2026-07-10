@@ -10,7 +10,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { bridgeRoute } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
-import { explorerTxUrl } from '@/lib/bridgeConfig';
+import { explorerTxFallbackUrls, explorerTxUrl } from '@/lib/bridgeConfig';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import AddressDisplay from './AddressDisplay.vue';
 
@@ -42,6 +42,10 @@ const sourceExplorer = computed(() =>
     explorerUrl(bridgeRoute(props.direction).source, props.sourceTxHash),
 );
 
+const sourceExplorerFallbacks = computed(() =>
+    explorerTxFallbackUrls(bridgeRoute(props.direction).source, props.sourceTxHash),
+);
+
 const destExplorer = computed(() => {
     if (!destinationTxHash.value) {
         return null;
@@ -52,6 +56,17 @@ const destExplorer = computed(() => {
         destinationTxHash.value,
     );
 });
+
+const destExplorerFallbacks = computed(() =>
+    destinationTxHash.value
+        ? explorerTxFallbackUrls(
+              bridgeRoute(props.direction).destination,
+              destinationTxHash.value,
+          )
+        : [],
+);
+
+const manualReview = computed(() => !bridgeRoute(props.direction).autoProcess);
 
 const poll = async () => {
     try {
@@ -107,7 +122,7 @@ const steps = computed(() => [
         state: 'done',
     },
     {
-        label: 'Relayer processing',
+        label: manualReview.value ? 'Operator review' : 'Relayer processing',
         state:
             status.value === 'completed'
                 ? 'done'
@@ -135,7 +150,9 @@ const steps = computed(() => [
                     ? 'Bridge complete'
                     : status === 'failed'
                       ? 'Bridge failed'
-                      : 'Bridging your funds…'
+                      : manualReview
+                        ? 'Request pending review'
+                        : 'Bridging your funds…'
             }}
         </h2>
 
@@ -218,6 +235,17 @@ const steps = computed(() => [
                     {{ sourceTxHash.slice(0, 10) }}…
                     <ExternalLink class="h-3 w-3" />
                 </a>
+                <a
+                    v-for="url in sourceExplorerFallbacks"
+                    :key="url"
+                    :href="url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 text-[#706f6c] underline dark:text-[#A1A09A]"
+                >
+                    fallback
+                    <ExternalLink class="h-3 w-3" />
+                </a>
             </div>
             <div v-if="destExplorer" class="flex items-center gap-2">
                 <span class="text-[#706f6c] dark:text-[#A1A09A]">
@@ -230,6 +258,17 @@ const steps = computed(() => [
                     class="inline-flex items-center gap-1 font-mono text-[#1b1b18] underline dark:text-[#EDEDEC]"
                 >
                     {{ destinationTxHash!.slice(0, 10) }}…
+                    <ExternalLink class="h-3 w-3" />
+                </a>
+                <a
+                    v-for="url in destExplorerFallbacks"
+                    :key="url"
+                    :href="url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1 text-[#706f6c] underline dark:text-[#A1A09A]"
+                >
+                    fallback
                     <ExternalLink class="h-3 w-3" />
                 </a>
             </div>

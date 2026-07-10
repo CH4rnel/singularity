@@ -72,6 +72,8 @@ return [
     | Supported chains.
     |--------------------------------------------------------------------------
     | type drives the verify/payout strategy: evm | solana | ton | yenten.
+    | Chains with other type values are manual-review corridors unless a
+    | verifier/payout implementation is added and auto_process is enabled.
     | deposit_address is where users send source-chain deposits; null on EVM
     | chains means "the relayer EOA" (same key works on every EVM chain).
     | Adding a new EVM chain = add an entry here (+ routes + token chain maps
@@ -160,7 +162,19 @@ return [
             // Official light-wallet API: transaction/UTXO reads and raw-tx
             // broadcast. No local yentend or blockchain download is required.
             'api_url' => env('BRIDGE_YENTEN_API_URL', 'https://api.yentencoin.info'),
+            // Deposit detection checks explorer2 first because the old
+            // light-wallet API can lag behind the public Blockbook indexer.
+            'balance_api_urls' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) env(
+                    'BRIDGE_YENTEN_BALANCE_API_URLS',
+                    'https://explorer2.yentencoin.info,https://api.yentencoin.info',
+                )),
+            ))),
             'explorer_tx' => 'https://explorer.yentencoin.info/tx/{hash}',
+            'explorer_tx_fallbacks' => [
+                'https://explorer2.yentencoin.info/tx/{hash}',
+            ],
             // Central wallet: receives swept deposits and pays out evm_to_yenten.
             'deposit_address' => env('BRIDGE_YENTEN_DEPOSIT_ADDRESS'),
             'relayer_wif' => env('BRIDGE_YENTEN_RELAYER_WIF'),
@@ -176,6 +190,49 @@ return [
             // honored on claim). Keeps dead addresses from accumulating in
             // the API polling set.
             'deposit_ttl_minutes' => (int) env('BRIDGE_YENTEN_DEPOSIT_TTL_MINUTES', 60),
+        ],
+        'bitcoin' => [
+            'key' => 'bitcoin',
+            'label' => 'Bitcoin',
+            'type' => 'bitcoin',
+            'address_type' => 'bitcoin',
+            'wallet' => 'manual',
+            'explorer_tx' => 'https://mempool.space/tx/{hash}',
+            'deposit_address' => env('BRIDGE_BTC_DEPOSIT_ADDRESS'),
+            // Master seed for per-user profile deposit addresses (CEX-style).
+            // Each user gets a P2PKH address derived at index = user id; the
+            // WIF spending key is re-derivable for sweeping. Only the seed is
+            // secret. Generate: php -r 'echo bin2hex(random_bytes(32));'
+            'hd_seed' => env('BRIDGE_BTC_HD_SEED'),
+            'minimum_confirmations' => (int) env('BRIDGE_BTC_MIN_CONFIRMATIONS', 3),
+        ],
+        'litecoin' => [
+            'key' => 'litecoin',
+            'label' => 'Litecoin',
+            'type' => 'litecoin',
+            'address_type' => 'litecoin',
+            'wallet' => 'manual',
+            'explorer_tx' => 'https://litecoinspace.org/tx/{hash}',
+            'deposit_address' => env('BRIDGE_LTC_DEPOSIT_ADDRESS'),
+            // Per-user profile deposit addresses — see the bitcoin entry.
+            'hd_seed' => env('BRIDGE_LTC_HD_SEED'),
+            'minimum_confirmations' => (int) env('BRIDGE_LTC_MIN_CONFIRMATIONS', 6),
+        ],
+        'monero' => [
+            'key' => 'monero',
+            'label' => 'Monero',
+            'type' => 'monero',
+            'address_type' => 'monero',
+            'wallet' => 'manual',
+            'explorer_tx' => 'https://xmrchain.net/tx/{hash}',
+            'deposit_address' => env('BRIDGE_XMR_DEPOSIT_ADDRESS'),
+            // Monero has no per-address keys to hand out: per-user deposit
+            // addresses are INTEGRATED addresses (deposit_address + an 8-byte
+            // payment id derived from this seed at index = user id), so funds
+            // land directly in the main wallet while staying attributable.
+            // Requires deposit_address to be a standard (4...) address.
+            'hd_seed' => env('BRIDGE_XMR_HD_SEED'),
+            'minimum_confirmations' => (int) env('BRIDGE_XMR_MIN_CONFIRMATIONS', 10),
         ],
     ],
 
@@ -253,14 +310,56 @@ return [
             'source_chain' => 'yenten',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
-            'enabled' => filter_var(env('BRIDGE_ROUTE_YENTEN_TO_EVM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'enabled' => filter_var(env('BRIDGE_ROUTE_YENTEN_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_yenten' => [
             'direction' => 'evm_to_yenten',
             'source_chain' => 'cyberia',
             'destination_chain' => 'yenten',
             'auto_process' => true,
-            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_YENTEN_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_YENTEN_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'btc_to_evm' => [
+            'direction' => 'btc_to_evm',
+            'source_chain' => 'bitcoin',
+            'destination_chain' => 'cyberia',
+            'auto_process' => false,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_BTC_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'evm_to_btc' => [
+            'direction' => 'evm_to_btc',
+            'source_chain' => 'cyberia',
+            'destination_chain' => 'bitcoin',
+            'auto_process' => false,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BTC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'ltc_to_evm' => [
+            'direction' => 'ltc_to_evm',
+            'source_chain' => 'litecoin',
+            'destination_chain' => 'cyberia',
+            'auto_process' => false,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_LTC_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'evm_to_ltc' => [
+            'direction' => 'evm_to_ltc',
+            'source_chain' => 'cyberia',
+            'destination_chain' => 'litecoin',
+            'auto_process' => false,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_LTC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'xmr_to_evm' => [
+            'direction' => 'xmr_to_evm',
+            'source_chain' => 'monero',
+            'destination_chain' => 'cyberia',
+            'auto_process' => false,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_XMR_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'evm_to_xmr' => [
+            'direction' => 'evm_to_xmr',
+            'source_chain' => 'cyberia',
+            'destination_chain' => 'monero',
+            'auto_process' => false,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_XMR_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
         ],
     ],
 
@@ -347,6 +446,18 @@ return [
                 'solana' => ['mint' => 'Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump', 'decimals' => 6, 'token_program' => 'token-2022'],
             ],
         ],
+        // Native SOL bridged into the Cyberia SOL wrapper (9-dec, matching
+        // lamports; relayer-owned Ownable mint/burn). Deposits are plain
+        // system transfers to the Solana hot wallet; payouts are native SOL
+        // from the same wallet (crypto/anchor/scripts/relay-sol-transfer.ts).
+        'SOL' => [
+            'symbol' => 'SOL',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => '0x53450B1d205f1e41d10B653FBBDEa74160dafFf4', 'decimals' => 9],
+                'solana' => ['native' => true, 'decimals' => 9],
+            ],
+        ],
         // Native Toncoin bridged into a Cyberia wrapper (deployed via
         // crypto/hardhat/scripts/deploy-ton.ts, relayer-owned mint/burn).
         // Native TON is 9-dec; the wrapper keeps the 18-dec ERC20 default and
@@ -385,6 +496,33 @@ return [
             'chains' => [
                 'cyberia' => ['address' => '0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6', 'decimals' => 18],
                 'yenten' => ['native' => true, 'decimals' => 8],
+            ],
+        ],
+        // Manual Bitcoin/Litecoin/Monero bridge corridors. The Cyberia side is
+        // owner-minted/burnable; native-chain deposits and payouts stay pending
+        // for operator review until dedicated verifiers/relayers are wired.
+        'BTC' => [
+            'symbol' => 'BTC',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => '0x9332081f308BC978fe259237850fA253131b46Fa', 'decimals' => 8],
+                'bitcoin' => ['native' => true, 'decimals' => 8],
+            ],
+        ],
+        'LTC' => [
+            'symbol' => 'LTC',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => '0x001AFD19C9d890b0cf0fcd6D654f9BFe4f264F14', 'decimals' => 8],
+                'litecoin' => ['native' => true, 'decimals' => 8],
+            ],
+        ],
+        'XMR' => [
+            'symbol' => 'XMR',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => '0xe2E8D51C18d6e0FDDbb9Ff4BF63235D688dd00Ae', 'decimals' => 12],
+                'monero' => ['native' => true, 'decimals' => 12],
             ],
         ],
         // ETH — one unified wrapper (the canonical Cyberia ETH, 0xFDa2…1986,

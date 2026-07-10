@@ -268,6 +268,107 @@ class BridgeService
     }
 
     /**
+     * Verify a native SOL deposit by computing the lamport balance delta on
+     * the hot wallet (system-transfer deposits carry no token balances). The
+     * sender must have lost lamports in the same transaction so a transfer
+     * between third parties can't be replayed as a deposit.
+     *
+     * @return string|null raw lamport delta on the hot wallet, or null if not a valid deposit
+     */
+    public function verifySolanaNativeDeposit(
+        string $txHash,
+        string $expectedSender,
+        ?string $expectedRecipient = null,
+    ): ?string {
+        $expectedRecipient ??= $this->solanaHotWallet();
+
+        try {
+            $response = Http::timeout(30)->post($this->solanaRpc(), [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'getTransaction',
+                'params' => [
+                    $txHash,
+                    ['encoding' => 'jsonParsed', 'commitment' => 'confirmed', 'maxSupportedTransactionVersion' => 0],
+                ],
+            ]);
+
+            if (! $response->successful()) {
+                Log::error('Bridge: Solana RPC HTTP error', ['tx' => $txHash, 'status' => $response->status()]);
+
+                return null;
+            }
+
+            $result = $response->json('result');
+
+            if (! $result || ($result['meta']['err'] ?? null) !== null) {
+                Log::warning('Bridge: Solana tx not found or failed', ['tx' => $txHash]);
+
+                return null;
+            }
+
+            $lamports = $this->indexLamportBalances($result);
+            [$recipientPre, $recipientPost] = $lamports[$expectedRecipient] ?? ['0', '0'];
+
+            if (bccomp($recipientPost, $recipientPre, 0) <= 0) {
+                Log::warning('Bridge: hot wallet lamports did not increase', [
+                    'tx' => $txHash,
+                    'pre' => $recipientPre,
+                    'post' => $recipientPost,
+                ]);
+
+                return null;
+            }
+
+            [$senderPre, $senderPost] = $lamports[$expectedSender] ?? [null, null];
+
+            if ($senderPre === null || bccomp($senderPre, (string) $senderPost, 0) <= 0) {
+                Log::warning('Bridge: sender lamports did not decrease', [
+                    'tx' => $txHash,
+                    'sender' => $expectedSender,
+                ]);
+
+                return null;
+            }
+
+            return bcsub($recipientPost, $recipientPre, 0);
+        } catch (\Exception $e) {
+            Log::error('Bridge: verifySolanaNativeDeposit failed', [
+                'tx' => $txHash,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Index meta.preBalances/postBalances by account pubkey → [pre, post]
+     * lamport strings, using the parallel transaction.message.accountKeys.
+     *
+     * @param  array<string, mixed>  $result  getTransaction result (jsonParsed)
+     * @return array<string, array{0: string, 1: string}>
+     */
+    private function indexLamportBalances(array $result): array
+    {
+        $accountKeys = $result['transaction']['message']['accountKeys'] ?? [];
+        $pre = $result['meta']['preBalances'] ?? [];
+        $post = $result['meta']['postBalances'] ?? [];
+
+        $indexed = [];
+
+        foreach (array_values($accountKeys) as $i => $entry) {
+            $pubkey = is_array($entry) ? ($entry['pubkey'] ?? null) : $entry;
+
+            if (is_string($pubkey) && isset($pre[$i], $post[$i])) {
+                $indexed[$pubkey] = [(string) $pre[$i], (string) $post[$i]];
+            }
+        }
+
+        return $indexed;
+    }
+
+    /**
      * Index pre/postTokenBalances entries by "owner:mint" → raw amount string.
      *
      * @param  array<int, array<string, mixed>>  $entries
@@ -558,12 +659,18 @@ class BridgeService
     private function verifySourceDeposit(BridgeRequest $request, array $chain, array $tokenEntry): ?string
     {
         return match ($chain['type'] ?? '') {
-            'solana' => $this->verifySolanaTokenDeposit(
-                $request->source_tx_hash,
-                $request->sender_address,
-                (string) $tokenEntry['mint'],
-                $chain['deposit_address'] ?? null,
-            ),
+            'solana' => ($tokenEntry['native'] ?? false)
+                ? $this->verifySolanaNativeDeposit(
+                    $request->source_tx_hash,
+                    $request->sender_address,
+                    $chain['deposit_address'] ?? null,
+                )
+                : $this->verifySolanaTokenDeposit(
+                    $request->source_tx_hash,
+                    $request->sender_address,
+                    (string) $tokenEntry['mint'],
+                    $chain['deposit_address'] ?? null,
+                ),
             'evm' => ($tokenEntry['native'] ?? false)
                 ? $this->verifyEvmNativeDeposit(
                     $request->source_tx_hash,
@@ -751,19 +858,29 @@ class BridgeService
             ? '/solana/id.json'
             : $home.'/.config/solana/id.json';
 
+        // Native SOL pays out with a plain system transfer from the hot
+        // wallet; SPL tokens go through the parametrised token relay.
+        $args = ($tokenEntry['native'] ?? false)
+            ? [
+                'scripts/relay-sol-transfer.ts',
+                $request->recipient_address,
+                $amountRaw,
+            ]
+            : [
+                'scripts/relay-spl-transfer.ts',
+                (string) $tokenEntry['mint'],
+                $request->recipient_address,
+                $amountRaw,
+                (string) ($tokenEntry['token_program'] ?? 'token'),
+            ];
+
         $result = Process::path($scriptDir)
             ->env([
                 'ANCHOR_PROVIDER_URL' => (string) $chain['rpc_url'],
                 'ANCHOR_WALLET' => $walletPath,
             ])
             ->timeout(120)
-            ->run([
-                'npx', 'ts-node', '--transpile-only', 'scripts/relay-spl-transfer.ts',
-                (string) $tokenEntry['mint'],
-                $request->recipient_address,
-                $amountRaw,
-                (string) ($tokenEntry['token_program'] ?? 'token'),
-            ]);
+            ->run(['npx', 'ts-node', '--transpile-only', ...$args]);
 
         Log::info('Bridge relay payout solana', [
             'id' => $request->id,
