@@ -32,9 +32,34 @@ class LiquidityController extends Controller
     private function renderWithPools(string $page): Response
     {
         $hasPools = Schema::hasTable('dex_pools');
+        $hasEvents = Schema::hasTable('activity_events');
+        $swapHistorySince = now('UTC')->subDays(7)->toDateTimeString();
 
         return Inertia::render($page, [
             'pools' => $hasPools ? DB::table('dex_pools')->get() : collect(),
+            'daily' => $hasEvents
+                ? collect(DB::select(
+                    "SELECT DATE(created_at) AS day,
+                            COALESCE(SUM(usd), 0) AS swap_usd,
+                            COUNT(*) AS swaps
+                     FROM activity_events
+                     WHERE kind = 'swap' AND created_at >= ?
+                     GROUP BY day ORDER BY day",
+                    [$swapHistorySince],
+                ))
+                : collect(),
+            'priceHistory' => $hasEvents
+                ? DB::table('activity_events')
+                    ->where('kind', 'swap')
+                    ->where('created_at', '>=', $swapHistorySince)
+                    ->whereNotNull('sym_in')
+                    ->whereNotNull('sym_out')
+                    ->where('amt_in', '>', 0)
+                    ->where('amt_out', '>', 0)
+                    ->orderBy('created_at')
+                    ->orderBy('id')
+                    ->get(['id', 'sym_in', 'amt_in', 'sym_out', 'amt_out', 'meta', 'created_at'])
+                : collect(),
             'indexerReady' => $hasPools,
         ]);
     }

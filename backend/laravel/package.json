@@ -48,6 +48,7 @@
         "clsx": "^2.1.1",
         "ethers": "^6.16.0",
         "laravel-vite-plugin": "^3.0.0",
+        "lightweight-charts": "^5.2.0",
         "lucide-vue-next": "^0.468.0",
         "reka-ui": "^2.6.1",
         "tailwind-merge": "^3.2.0",

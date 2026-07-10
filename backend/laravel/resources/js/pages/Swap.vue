@@ -8,8 +8,27 @@ import {
     formatUnits,
     parseUnits,
 } from 'ethers';
+import {
+    AreaSeries,
+    ColorType,
+    CrosshairMode,
+    createChart,
+} from 'lightweight-charts';
+import type {
+    AreaData,
+    IChartApi,
+    ISeriesApi,
+    UTCTimestamp,
+} from 'lightweight-charts';
 import { ArrowDownUp, Loader2 } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+} from 'vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +59,8 @@ const ROUTER = '0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62';
 const WCYBER = WCYBER_ADDRESS;
 // Sentinel for native CYBER in the token pickers (maps to WCYBER on-chain).
 const NATIVE = 'NATIVE';
+const MARKET_HISTORY_DAYS = 7;
+const MARKET_HISTORY_MS = MARKET_HISTORY_DAYS * 24 * 60 * 60 * 1000;
 
 const ROUTER_ABI = [
     'function getAmountsOut(uint amountIn, address[] path) view returns (uint[] amounts)',
@@ -61,6 +82,7 @@ const FACTORY_ABI = [
 const PAIR_ABI = [
     'function token0() view returns (address)',
     'function token1() view returns (address)',
+    'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
 ];
 const ERC20_ABI = [
     'function balanceOf(address) view returns (uint256)',
@@ -80,9 +102,36 @@ type PoolRow = {
     reserve0: number;
     reserve1: number;
     tvl_usd: number | null;
+    updated_at?: string | null;
 };
 
-const props = defineProps<{ pools: PoolRow[]; indexerReady: boolean }>();
+type DailyRow = {
+    day: string;
+    swap_usd: number;
+    swaps: number;
+};
+
+type PriceHistoryRow = {
+    id: number;
+    sym_in: string | null;
+    amt_in: number | null;
+    sym_out: string | null;
+    amt_out: number | null;
+    meta: string | null;
+    created_at: string;
+};
+type PricePoint = { at: number; price: number };
+type SwapEventMeta = {
+    in_addr?: string;
+    out_addr?: string;
+};
+
+const props = defineProps<{
+    pools: PoolRow[];
+    daily: DailyRow[];
+    priceHistory: PriceHistoryRow[];
+    indexerReady: boolean;
+}>();
 
 const wallet = useWallet();
 const page = usePage();
@@ -125,6 +174,363 @@ const deadline = (): bigint => BigInt(Math.floor(Date.now() / 1000) + 1200);
 const resolveAddr = (a: string): string => (a === NATIVE ? WCYBER : a);
 
 const cleanPools = computed(() => filterJunkPools(props.pools ?? []));
+const liveSelectedPool = ref<{
+    pairAddress: string;
+    token0: string;
+    token1: string;
+    reserve0: number;
+    reserve1: number;
+    updatedAt: number;
+} | null>(null);
+const livePriceHistory = ref<PricePoint[]>([]);
+const chartContainer = ref<HTMLDivElement | null>(null);
+let marketChart: IChartApi | null = null;
+let marketSeries: ISeriesApi<'Area'> | null = null;
+let chartResizeObserver: ResizeObserver | null = null;
+const maxDailyUsd = computed(() =>
+    Math.max(1, ...props.daily.map((d) => Number(d.swap_usd) || 0)),
+);
+const topPools = computed(() =>
+    cleanPools.value
+        .filter((p) => Number(p.reserve0) > 0 && Number(p.reserve1) > 0)
+        .slice()
+        .sort((a, b) => Number(b.tvl_usd ?? 0) - Number(a.tvl_usd ?? 0))
+        .slice(0, 8),
+);
+
+const selectedPool = computed(() => {
+    if (!tokenIn.value || !tokenOut.value || tokenIn.value === tokenOut.value) {
+        return null;
+    }
+
+    const a = resolveAddr(tokenIn.value).toLowerCase();
+    const b = resolveAddr(tokenOut.value).toLowerCase();
+
+    return (
+        cleanPools.value.find((p) => {
+            const t0 = p.token0.toLowerCase();
+            const t1 = p.token1.toLowerCase();
+
+            return (t0 === a && t1 === b) || (t0 === b && t1 === a);
+        }) ?? null
+    );
+});
+
+const symbolAliases = (addr: string): Set<string> => {
+    const symbol = symbolOf(addr);
+    const aliases = new Set([symbol.toUpperCase()]);
+
+    if (addr === NATIVE || symbol.toUpperCase() === 'CYBER') {
+        aliases.add('WCYBER');
+    }
+
+    return aliases;
+};
+
+const parseEventTime = (value: string): number => {
+    const normalized = value.includes('T')
+        ? value
+        : `${value.replace(' ', 'T')}Z`;
+
+    return Date.parse(normalized);
+};
+
+const parseSwapEventMeta = (value: string | null): SwapEventMeta | null => {
+    if (!value) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(value) as SwapEventMeta;
+
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
+    }
+};
+
+const sameTokenAddress = (a: string, b: string): boolean =>
+    resolveAddr(a).toLowerCase() === resolveAddr(b).toLowerCase();
+
+const matchesHistoryLeg = (
+    selectedAddress: string,
+    selectedSymbols: Set<string>,
+    eventAddress: string | undefined,
+    eventSymbol: string | undefined,
+): boolean => {
+    if (eventAddress) {
+        return sameTokenAddress(selectedAddress, eventAddress);
+    }
+
+    return eventSymbol ? selectedSymbols.has(eventSymbol) : false;
+};
+
+const historicalPricePoints = computed<PricePoint[]>(() => {
+    if (!tokenIn.value || !tokenOut.value || tokenIn.value === tokenOut.value) {
+        return [];
+    }
+
+    const inSymbols = symbolAliases(tokenIn.value);
+    const outSymbols = symbolAliases(tokenOut.value);
+
+    return props.priceHistory
+        .flatMap((row) => {
+            const symIn = row.sym_in?.toUpperCase();
+            const symOut = row.sym_out?.toUpperCase();
+            const amtIn = Number(row.amt_in);
+            const amtOut = Number(row.amt_out);
+            const at = parseEventTime(row.created_at);
+            const meta = parseSwapEventMeta(row.meta);
+
+            if (
+                !symIn ||
+                !symOut ||
+                !Number.isFinite(amtIn) ||
+                !Number.isFinite(amtOut) ||
+                !Number.isFinite(at) ||
+                amtIn <= 0 ||
+                amtOut <= 0
+            ) {
+                return [];
+            }
+
+            if (
+                matchesHistoryLeg(
+                    tokenIn.value,
+                    inSymbols,
+                    meta?.in_addr,
+                    symIn,
+                ) &&
+                matchesHistoryLeg(
+                    tokenOut.value,
+                    outSymbols,
+                    meta?.out_addr,
+                    symOut,
+                )
+            ) {
+                return [{ at, price: amtOut / amtIn }];
+            }
+
+            if (
+                matchesHistoryLeg(
+                    tokenIn.value,
+                    inSymbols,
+                    meta?.out_addr,
+                    symOut,
+                ) &&
+                matchesHistoryLeg(
+                    tokenOut.value,
+                    outSymbols,
+                    meta?.in_addr,
+                    symIn,
+                )
+            ) {
+                return [{ at, price: amtIn / amtOut }];
+            }
+
+            return [];
+        })
+        .sort((a, b) => a.at - b.at);
+});
+
+const selectedPoolChart = computed(() => {
+    const points = [...historicalPricePoints.value, ...livePriceHistory.value];
+    const cutoff = Date.now() - MARKET_HISTORY_MS;
+
+    return points
+        .filter((point) => point.at >= cutoff)
+        .map((point) => ({
+            x: Math.floor(point.at / 1000),
+            y: point.price,
+        }));
+});
+
+const selectedPoolReserves = computed(() => {
+    const pool = selectedPool.value;
+
+    if (!pool && !liveSelectedPool.value) {
+        return null;
+    }
+
+    return {
+        token0: liveSelectedPool.value?.token0 ?? pool!.token0,
+        token1: liveSelectedPool.value?.token1 ?? pool!.token1,
+        reserve0: liveSelectedPool.value?.reserve0 ?? Number(pool!.reserve0),
+        reserve1: liveSelectedPool.value?.reserve1 ?? Number(pool!.reserve1),
+    };
+});
+
+const spotFromReserves = (reserves: {
+    token0: string;
+    token1: string;
+    reserve0: number;
+    reserve1: number;
+}): number | null => {
+    const inputIsToken0 =
+        resolveAddr(tokenIn.value).toLowerCase() ===
+        reserves.token0.toLowerCase();
+    const reserveIn = inputIsToken0 ? reserves.reserve0 : reserves.reserve1;
+    const reserveOut = inputIsToken0 ? reserves.reserve1 : reserves.reserve0;
+
+    if (reserveIn <= 0 || reserveOut <= 0) {
+        return null;
+    }
+
+    return reserveOut / reserveIn;
+};
+
+const liveSpotPrice = computed(() =>
+    selectedPoolReserves.value
+        ? spotFromReserves(selectedPoolReserves.value)
+        : null,
+);
+
+const spotChangePct = computed(() => {
+    const points = selectedPoolChart.value;
+
+    if (points.length < 2) {
+        return null;
+    }
+
+    const first = points[0].y;
+    const last = points[points.length - 1].y;
+
+    return first > 0 ? ((last - first) / first) * 100 : null;
+});
+
+const tradingViewData = computed<AreaData<UTCTimestamp>[]>(() => {
+    let lastTime = 0;
+
+    return selectedPoolChart.value
+        .filter(
+            (point) =>
+                Number.isFinite(point.x) &&
+                Number.isFinite(point.y) &&
+                point.x > 0 &&
+                point.y > 0,
+        )
+        .sort((a, b) => a.x - b.x)
+        .map((point) => {
+            const time = Math.max(point.x, lastTime + 1);
+            lastTime = time;
+
+            return {
+                time: time as UTCTimestamp,
+                value: point.y,
+            };
+        });
+});
+
+const updateMarketChartData = (): void => {
+    if (!marketSeries || !marketChart) {
+        return;
+    }
+
+    marketSeries.setData(tradingViewData.value);
+    marketChart.timeScale().fitContent();
+};
+
+const destroyMarketChart = (): void => {
+    chartResizeObserver?.disconnect();
+    chartResizeObserver = null;
+    marketChart?.remove();
+    marketChart = null;
+    marketSeries = null;
+};
+
+const createMarketChart = (): void => {
+    if (!chartContainer.value || marketChart) {
+        return;
+    }
+
+    const container = chartContainer.value;
+    const resizeChart = (): void => {
+        marketChart?.applyOptions({
+            width: container.clientWidth,
+            height: container.clientHeight || 260,
+        });
+    };
+
+    marketChart = createChart(container, {
+        width: container.clientWidth,
+        height: container.clientHeight || 260,
+        layout: {
+            background: { type: ColorType.Solid, color: 'transparent' },
+            textColor: '#94a3b8',
+            fontSize: 11,
+        },
+        grid: {
+            vertLines: { color: 'rgba(148, 163, 184, 0.12)' },
+            horzLines: { color: 'rgba(148, 163, 184, 0.12)' },
+        },
+        crosshair: { mode: CrosshairMode.Normal },
+        rightPriceScale: {
+            borderColor: 'rgba(148, 163, 184, 0.2)',
+        },
+        timeScale: {
+            borderColor: 'rgba(148, 163, 184, 0.2)',
+            timeVisible: true,
+            secondsVisible: false,
+        },
+        localization: {
+            priceFormatter: (price: number): string =>
+                price.toLocaleString(undefined, {
+                    maximumSignificantDigits: 6,
+                }),
+        },
+    });
+
+    marketSeries = marketChart.addSeries(AreaSeries, {
+        lineColor: '#10b981',
+        topColor: 'rgba(16, 185, 129, 0.28)',
+        bottomColor: 'rgba(16, 185, 129, 0.02)',
+        lineWidth: 2,
+        pointMarkersVisible: true,
+        pointMarkersRadius: 3,
+        priceLineVisible: true,
+        lastValueVisible: true,
+    });
+
+    chartResizeObserver = new ResizeObserver(resizeChart);
+    chartResizeObserver.observe(container);
+    updateMarketChartData();
+};
+
+const formatUsd = (value: number | null | undefined): string => {
+    if (value === null || value === undefined) {
+        return '—';
+    }
+
+    return (
+        '$' +
+        Number(value).toLocaleString('en-US', {
+            maximumFractionDigits: Number(value) >= 1000 ? 0 : 2,
+        })
+    );
+};
+
+const selectedPoolPairAddress = computed(
+    () =>
+        liveSelectedPool.value?.pairAddress ?? selectedPool.value?.pair_address,
+);
+
+const resetLivePriceHistory = (): void => {
+    liveSelectedPool.value = null;
+    livePriceHistory.value = [];
+};
+
+const recordLiveSpotPrice = (): void => {
+    const price = liveSpotPrice.value;
+
+    if (price === null || !Number.isFinite(price)) {
+        return;
+    }
+
+    livePriceHistory.value = [
+        ...livePriceHistory.value,
+        { at: Date.now(), price },
+    ];
+};
 
 const customTokens = ref<Token[]>([]);
 const tokens = computed<Token[]>(() => {
@@ -184,6 +590,78 @@ const tokenMeta = async (
     metaCache.set(key, meta);
 
     return meta;
+};
+
+const loadSelectedPoolReserves = async (): Promise<void> => {
+    if (!tokenIn.value || !tokenOut.value || tokenIn.value === tokenOut.value) {
+        liveSelectedPool.value = null;
+
+        return;
+    }
+
+    const from = resolveAddr(tokenIn.value);
+    const to = resolveAddr(tokenOut.value);
+
+    if (from.toLowerCase() === to.toLowerCase()) {
+        liveSelectedPool.value = null;
+
+        return;
+    }
+
+    try {
+        let pairAddress = selectedPool.value?.pair_address;
+
+        if (!pairAddress) {
+            const factory = new Contract(
+                FACTORY,
+                [
+                    'function getPair(address tokenA, address tokenB) view returns (address)',
+                ],
+                readProvider,
+            );
+            pairAddress = (await factory.getPair(from, to)) as string;
+
+            if (/^0x0{40}$/i.test(pairAddress)) {
+                liveSelectedPool.value = null;
+
+                return;
+            }
+        }
+
+        const pair = new Contract(pairAddress, PAIR_ABI, readProvider);
+        const [token0, token1, reserves, meta0, meta1] = await Promise.all([
+            pair.token0() as Promise<string>,
+            pair.token1() as Promise<string>,
+            pair.getReserves() as Promise<[bigint, bigint, number]>,
+            tokenMeta(from),
+            tokenMeta(to),
+        ]);
+        const token0IsFrom = token0.toLowerCase() === from.toLowerCase();
+        const reserve0 = Number(
+            formatUnits(
+                reserves[0],
+                token0IsFrom ? meta0.decimals : meta1.decimals,
+            ),
+        );
+        const reserve1 = Number(
+            formatUnits(
+                reserves[1],
+                token0IsFrom ? meta1.decimals : meta0.decimals,
+            ),
+        );
+
+        liveSelectedPool.value = {
+            pairAddress,
+            token0,
+            token1,
+            reserve0,
+            reserve1,
+            updatedAt: Date.now(),
+        };
+        recordLiveSpotPrice();
+    } catch {
+        liveSelectedPool.value = null;
+    }
 };
 
 // --- swap form state ------------------------------------------------------
@@ -583,8 +1061,32 @@ const onAmountEdited = (side: 'in' | 'out'): void => {
 };
 
 watch([tokenIn, tokenOut], scheduleQuote);
+watch(
+    [tokenIn, tokenOut],
+    () => {
+        resetLivePriceHistory();
+        void loadSelectedPoolReserves();
+    },
+    { immediate: true },
+);
 // A late-loading pair list can unlock better routes for an existing quote.
 watch(chainEdges, scheduleQuote);
+watch(
+    tradingViewData,
+    async (points) => {
+        await nextTick();
+
+        if (points.length === 0) {
+            destroyMarketChart();
+
+            return;
+        }
+
+        createMarketChart();
+        updateMarketChartData();
+    },
+    { flush: 'post' },
+);
 
 // --- balances ---------------------------------------------------------------
 const loadBalance = async (token: string): Promise<bigint> => {
@@ -644,7 +1146,9 @@ watch([tokenOut, () => wallet.address.value], () => void loadSide('out'), {
 // so refresh them on a slow poll while visible and immediately on return to
 // the tab — no page reload needed.
 const BALANCE_POLL_MS = 10000;
+const CHART_POLL_MS = 8000;
 let balanceTimer: ReturnType<typeof setInterval> | undefined;
+let chartTimer: ReturnType<typeof setInterval> | undefined;
 
 const refreshBalances = (): void => {
     void loadSide('in');
@@ -654,6 +1158,7 @@ const refreshBalances = (): void => {
 const onTabVisible = (): void => {
     if (!document.hidden) {
         refreshBalances();
+        void loadSelectedPoolReserves();
     }
 };
 
@@ -668,7 +1173,8 @@ const flip = (): void => {
 };
 
 const setMaxIn = (): void => {
-    amountIn.value = balIn.value > 0n ? formatUnits(balIn.value, decIn.value) : '';
+    amountIn.value =
+        balIn.value > 0n ? formatUnits(balIn.value, decIn.value) : '';
     mode.value = 'in';
     scheduleQuote();
 };
@@ -848,7 +1354,11 @@ const doSwap = async (): Promise<void> => {
         amountIn.value = '';
         amountOut.value = '';
         quote.value = null;
-        await Promise.all([loadSide('in'), loadSide('out')]);
+        await Promise.all([
+            loadSide('in'),
+            loadSide('out'),
+            loadSelectedPoolReserves(),
+        ]);
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
         status.value = null;
@@ -881,6 +1391,8 @@ const addCustomToken = async (): Promise<void> => {
 };
 
 onMounted(async () => {
+    await nextTick();
+    createMarketChart();
     void loadChainEdges();
 
     balanceTimer = setInterval(() => {
@@ -888,6 +1400,11 @@ onMounted(async () => {
             refreshBalances();
         }
     }, BALANCE_POLL_MS);
+    chartTimer = setInterval(() => {
+        if (!document.hidden) {
+            void loadSelectedPoolReserves();
+        }
+    }, CHART_POLL_MS);
     window.addEventListener('focus', onTabVisible);
     document.addEventListener('visibilitychange', onTabVisible);
 
@@ -898,6 +1415,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
     clearInterval(balanceTimer);
+    clearInterval(chartTimer);
+    destroyMarketChart();
     window.removeEventListener('focus', onTabVisible);
     document.removeEventListener('visibilitychange', onTabVisible);
 });
@@ -906,7 +1425,7 @@ onBeforeUnmount(() => {
 <template>
     <Head title="Cyberia Swap" />
 
-    <div class="mx-auto max-w-xl px-4 py-6">
+    <div class="mx-auto max-w-5xl px-4 py-6">
         <header class="mb-4">
             <h1 class="text-2xl font-bold">Swap</h1>
             <p class="text-sm text-muted-foreground">
@@ -920,194 +1439,350 @@ onBeforeUnmount(() => {
             <Input v-model="slippage" class="w-16" />
         </div>
 
-        <div class="space-y-3 rounded-lg border p-4">
-            <!-- FROM -->
-            <div class="rounded-md border p-3">
-                <div class="mb-2 flex items-center justify-between text-sm">
-                    <Select
-                        :model-value="tokenIn"
-                        @update:model-value="pickToken('in', $event)"
-                    >
-                        <SelectTrigger
-                            class="h-9 w-[170px] border-0 bg-transparent px-2 shadow-none focus:ring-0"
-                        >
-                            <span
-                                v-if="tokenIn"
-                                class="flex items-center gap-2 font-medium"
-                            >
-                                <TokenIcon :symbol="symbolOf(tokenIn)" :size="20" />
-                                {{ symbolOf(tokenIn) }}
-                            </span>
-                            <SelectValue v-else placeholder="Select token" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem
-                                v-for="t in tokens"
-                                :key="t.address"
-                                :value="t.address"
-                            >
-                                <span class="flex items-center gap-2">
-                                    <TokenIcon :symbol="t.symbol" :size="20" />
-                                    {{ t.symbol }}
-                                </span>
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <button
-                        class="text-xs text-muted-foreground hover:underline"
-                        @click="setMaxIn"
-                    >
-                        Balance: {{ fmt(balIn, decIn) }} (max)
-                    </button>
-                </div>
-                <Input
-                    v-model="amountIn"
-                    placeholder="0.0"
-                    inputmode="decimal"
-                    @update:model-value="onAmountEdited('in')"
-                />
-            </div>
-
-            <!-- flip -->
-            <div class="flex justify-center">
-                <button
-                    type="button"
-                    class="rounded-full border border-border p-2 text-muted-foreground transition hover:text-foreground"
-                    title="Flip direction"
-                    @click="flip"
-                >
-                    <ArrowDownUp class="h-4 w-4" />
-                </button>
-            </div>
-
-            <!-- TO -->
-            <div class="rounded-md border p-3">
-                <div class="mb-2 flex items-center justify-between text-sm">
-                    <Select
-                        :model-value="tokenOut"
-                        @update:model-value="pickToken('out', $event)"
-                    >
-                        <SelectTrigger
-                            class="h-9 w-[170px] border-0 bg-transparent px-2 shadow-none focus:ring-0"
-                        >
-                            <span
-                                v-if="tokenOut"
-                                class="flex items-center gap-2 font-medium"
-                            >
-                                <TokenIcon
-                                    :symbol="symbolOf(tokenOut)"
-                                    :size="20"
-                                />
-                                {{ symbolOf(tokenOut) }}
-                            </span>
-                            <SelectValue v-else placeholder="Select token" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem
-                                v-for="t in tokens.filter(
-                                    (t) => t.address !== tokenIn,
-                                )"
-                                :key="t.address"
-                                :value="t.address"
-                            >
-                                <span class="flex items-center gap-2">
-                                    <TokenIcon :symbol="t.symbol" :size="20" />
-                                    {{ t.symbol }}
-                                </span>
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <span class="text-xs text-muted-foreground">
-                        Balance: {{ fmt(balOut, decOut) }}
-                    </span>
-                </div>
-                <div class="relative">
-                    <Input
-                        v-model="amountOut"
-                        placeholder="0.0"
-                        inputmode="decimal"
-                        class="pr-8"
-                        @update:model-value="onAmountEdited('out')"
-                    />
-                    <Loader2
-                        v-if="quoting"
-                        class="absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground"
-                    />
-                </div>
-            </div>
-
-            <!-- quote details -->
-            <div
-                v-if="quote"
-                class="space-y-1 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground"
-            >
-                <p v-if="rate">
-                    1 {{ symbolOf(tokenIn) }} ≈
-                    <span class="font-mono">{{
-                        rate.toLocaleString(undefined, {
-                            maximumSignificantDigits: 6,
-                        })
-                    }}</span>
-                    {{ symbolOf(tokenOut) }}
-                </p>
-                <p>
-                    Price impact:
-                    <span class="font-mono" :class="impactClass">
+        <div class="grid gap-4 lg:grid-cols-[1fr_28rem] lg:items-start">
+            <section class="space-y-4 rounded-lg border p-4">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h2 class="font-semibold">Ritual market</h2>
+                        <p class="text-xs text-muted-foreground">
+                            7-day chart and indexed swap volume.
+                        </p>
+                    </div>
+                    <span class="rounded bg-muted px-2 py-1 font-mono text-xs">
                         {{
-                            quote.impactPct === null
-                                ? '—'
-                                : quote.impactPct < 0.01
-                                  ? '<0.01%'
-                                  : `${quote.impactPct.toFixed(2)}%`
+                            selectedPoolPairAddress
+                                ? shortAddr(selectedPoolPairAddress)
+                                : 'No pair'
                         }}
                     </span>
-                </p>
-                <p>
-                    Liquidity Provider Fee:
-                    <span class="font-mono">{{ fmt(lpFee, decIn, 8) }}</span>
-                    {{ symbolOf(tokenIn) }} (0.3% per hop)
-                </p>
-                <p v-if="mode === 'in'">
-                    Min received:
-                    <span class="font-mono">{{
-                        fmt(minReceived, decOut)
-                    }}</span>
-                    {{ symbolOf(tokenOut) }} ({{ slippage }}% slippage)
-                </p>
-                <p v-else>
-                    Max sold:
-                    <span class="font-mono">{{
-                        fmt(maxSpent, decIn, 8)
-                    }}</span>
-                    {{ symbolOf(tokenIn) }} ({{ slippage }}% slippage)
-                </p>
-                <p>Route: {{ routeSymbols.join(' → ') }}</p>
-            </div>
+                </div>
 
-            <p
-                v-if="quote && quote.impactPct !== null && quote.impactPct >= 5"
-                class="rounded-md bg-red-500/10 p-2 text-xs text-red-500"
-            >
-                High price impact: this trade moves the pool price by
-                {{ quote.impactPct.toFixed(1) }}%. Consider a smaller amount.
-            </p>
+                <div class="min-h-[190px] rounded-md bg-muted/30 p-3">
+                    <template v-if="tradingViewData.length > 0">
+                        <div class="mb-3 grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                                <p class="text-muted-foreground">Pair</p>
+                                <p class="font-mono">
+                                    {{
+                                        selectedPool?.symbol0 ??
+                                        symbolOf(tokenIn)
+                                    }}/{{
+                                        selectedPool?.symbol1 ??
+                                        symbolOf(tokenOut)
+                                    }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-muted-foreground">TVL</p>
+                                <p class="font-mono">
+                                    {{ formatUsd(selectedPool?.tvl_usd) }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-muted-foreground">
+                                    Spot
+                                    <span
+                                        v-if="liveSelectedPool"
+                                        class="text-emerald-500"
+                                        >live</span
+                                    >
+                                </p>
+                                <p class="font-mono">
+                                    {{
+                                        liveSpotPrice?.toLocaleString(
+                                            undefined,
+                                            { maximumSignificantDigits: 6 },
+                                        )
+                                    }}
+                                </p>
+                                <p
+                                    v-if="spotChangePct !== null"
+                                    class="font-mono text-[0.68rem]"
+                                    :class="
+                                        spotChangePct >= 0
+                                            ? 'text-emerald-500'
+                                            : 'text-red-500'
+                                    "
+                                >
+                                    {{ spotChangePct >= 0 ? '+' : ''
+                                    }}{{ spotChangePct.toFixed(2) }}%
+                                </p>
+                            </div>
+                        </div>
+                        <div
+                            ref="chartContainer"
+                            class="h-64 w-full overflow-hidden rounded border border-border/60"
+                            role="img"
+                            aria-label="Selected pool TradingView price chart"
+                        />
+                    </template>
+                    <div
+                        v-else
+                        class="flex h-40 items-center justify-center text-center text-sm text-muted-foreground"
+                    >
+                        Select a direct pool pair to view its TradingView chart.
+                    </div>
+                </div>
 
-            <Button
-                class="w-full"
-                :disabled="busy || quoting || !quote"
-                @click="doSwap"
-            >
-                <Loader2 v-if="busy" class="mr-2 h-4 w-4 animate-spin" />
-                {{ wallet.isConnected.value ? 'Swap' : 'Connect wallet' }}
-            </Button>
+                <div v-if="daily.length > 0" class="space-y-2">
+                    <h3 class="text-sm font-medium">Daily volume 7d</h3>
+                    <div
+                        v-for="d in daily"
+                        :key="d.day"
+                        class="grid grid-cols-[5rem_1fr_5rem] items-center gap-2 text-xs"
+                    >
+                        <span class="font-mono text-muted-foreground">
+                            {{ d.day.slice(5) }}
+                        </span>
+                        <div class="h-3 rounded bg-muted">
+                            <div
+                                class="h-3 rounded bg-blue-500/70"
+                                :style="{
+                                    width:
+                                        (Number(d.swap_usd) / maxDailyUsd) *
+                                            100 +
+                                        '%',
+                                }"
+                            />
+                        </div>
+                        <span class="text-right font-mono">
+                            {{ formatUsd(Number(d.swap_usd)) }}
+                        </span>
+                    </div>
+                </div>
 
-            <div class="flex gap-2 pt-1">
-                <Input
-                    v-model="customAddr"
-                    placeholder="Add token by 0x address"
-                    class="text-xs"
-                />
-                <Button variant="outline" @click="addCustomToken">Add</Button>
+                <div v-else-if="topPools.length > 0" class="space-y-2">
+                    <h3 class="text-sm font-medium">Top pools</h3>
+                    <div
+                        v-for="pool in topPools"
+                        :key="pool.pair_address"
+                        class="grid grid-cols-[1fr_5.5rem] gap-2 text-xs"
+                    >
+                        <span class="truncate font-mono">
+                            {{ pool.symbol0 }}/{{ pool.symbol1 }}
+                        </span>
+                        <span
+                            class="text-right font-mono text-muted-foreground"
+                        >
+                            {{ formatUsd(pool.tvl_usd) }}
+                        </span>
+                    </div>
+                </div>
+            </section>
+
+            <div class="space-y-3 rounded-lg border p-4">
+                <!-- FROM -->
+                <div class="rounded-md border p-3">
+                    <div class="mb-2 flex items-center justify-between text-sm">
+                        <Select
+                            :model-value="tokenIn"
+                            @update:model-value="pickToken('in', $event)"
+                        >
+                            <SelectTrigger
+                                class="h-9 w-[170px] border-0 bg-transparent px-2 shadow-none focus:ring-0"
+                            >
+                                <span
+                                    v-if="tokenIn"
+                                    class="flex items-center gap-2 font-medium"
+                                >
+                                    <TokenIcon
+                                        :symbol="symbolOf(tokenIn)"
+                                        :size="20"
+                                    />
+                                    {{ symbolOf(tokenIn) }}
+                                </span>
+                                <SelectValue
+                                    v-else
+                                    placeholder="Select token"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="t in tokens"
+                                    :key="t.address"
+                                    :value="t.address"
+                                >
+                                    <span class="flex items-center gap-2">
+                                        <TokenIcon
+                                            :symbol="t.symbol"
+                                            :size="20"
+                                        />
+                                        {{ t.symbol }}
+                                    </span>
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <button
+                            class="text-xs text-muted-foreground hover:underline"
+                            @click="setMaxIn"
+                        >
+                            Balance: {{ fmt(balIn, decIn) }} (max)
+                        </button>
+                    </div>
+                    <Input
+                        v-model="amountIn"
+                        placeholder="0.0"
+                        inputmode="decimal"
+                        @update:model-value="onAmountEdited('in')"
+                    />
+                </div>
+
+                <!-- flip -->
+                <div class="flex justify-center">
+                    <button
+                        type="button"
+                        class="rounded-full border border-border p-2 text-muted-foreground transition hover:text-foreground"
+                        title="Flip direction"
+                        @click="flip"
+                    >
+                        <ArrowDownUp class="h-4 w-4" />
+                    </button>
+                </div>
+
+                <!-- TO -->
+                <div class="rounded-md border p-3">
+                    <div class="mb-2 flex items-center justify-between text-sm">
+                        <Select
+                            :model-value="tokenOut"
+                            @update:model-value="pickToken('out', $event)"
+                        >
+                            <SelectTrigger
+                                class="h-9 w-[170px] border-0 bg-transparent px-2 shadow-none focus:ring-0"
+                            >
+                                <span
+                                    v-if="tokenOut"
+                                    class="flex items-center gap-2 font-medium"
+                                >
+                                    <TokenIcon
+                                        :symbol="symbolOf(tokenOut)"
+                                        :size="20"
+                                    />
+                                    {{ symbolOf(tokenOut) }}
+                                </span>
+                                <SelectValue
+                                    v-else
+                                    placeholder="Select token"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="t in tokens.filter(
+                                        (t) => t.address !== tokenIn,
+                                    )"
+                                    :key="t.address"
+                                    :value="t.address"
+                                >
+                                    <span class="flex items-center gap-2">
+                                        <TokenIcon
+                                            :symbol="t.symbol"
+                                            :size="20"
+                                        />
+                                        {{ t.symbol }}
+                                    </span>
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <span class="text-xs text-muted-foreground">
+                            Balance: {{ fmt(balOut, decOut) }}
+                        </span>
+                    </div>
+                    <div class="relative">
+                        <Input
+                            v-model="amountOut"
+                            placeholder="0.0"
+                            inputmode="decimal"
+                            class="pr-8"
+                            @update:model-value="onAmountEdited('out')"
+                        />
+                        <Loader2
+                            v-if="quoting"
+                            class="absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground"
+                        />
+                    </div>
+                </div>
+
+                <!-- quote details -->
+                <div
+                    v-if="quote"
+                    class="space-y-1 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground"
+                >
+                    <p v-if="rate">
+                        1 {{ symbolOf(tokenIn) }} ≈
+                        <span class="font-mono">{{
+                            rate.toLocaleString(undefined, {
+                                maximumSignificantDigits: 6,
+                            })
+                        }}</span>
+                        {{ symbolOf(tokenOut) }}
+                    </p>
+                    <p>
+                        Price impact:
+                        <span class="font-mono" :class="impactClass">
+                            {{
+                                quote.impactPct === null
+                                    ? '—'
+                                    : quote.impactPct < 0.01
+                                      ? '<0.01%'
+                                      : `${quote.impactPct.toFixed(2)}%`
+                            }}
+                        </span>
+                    </p>
+                    <p>
+                        Liquidity Provider Fee:
+                        <span class="font-mono">{{
+                            fmt(lpFee, decIn, 8)
+                        }}</span>
+                        {{ symbolOf(tokenIn) }} (0.3% per hop)
+                    </p>
+                    <p v-if="mode === 'in'">
+                        Min received:
+                        <span class="font-mono">{{
+                            fmt(minReceived, decOut)
+                        }}</span>
+                        {{ symbolOf(tokenOut) }} ({{ slippage }}% slippage)
+                    </p>
+                    <p v-else>
+                        Max sold:
+                        <span class="font-mono">{{
+                            fmt(maxSpent, decIn, 8)
+                        }}</span>
+                        {{ symbolOf(tokenIn) }} ({{ slippage }}% slippage)
+                    </p>
+                    <p>Route: {{ routeSymbols.join(' → ') }}</p>
+                </div>
+
+                <p
+                    v-if="
+                        quote &&
+                        quote.impactPct !== null &&
+                        quote.impactPct >= 5
+                    "
+                    class="rounded-md bg-red-500/10 p-2 text-xs text-red-500"
+                >
+                    High price impact: this trade moves the pool price by
+                    {{ quote.impactPct.toFixed(1) }}%. Consider a smaller
+                    amount.
+                </p>
+
+                <Button
+                    class="w-full"
+                    :disabled="busy || quoting || !quote"
+                    @click="doSwap"
+                >
+                    <Loader2 v-if="busy" class="mr-2 h-4 w-4 animate-spin" />
+                    {{ wallet.isConnected.value ? 'Swap' : 'Connect wallet' }}
+                </Button>
+
+                <div class="flex gap-2 pt-1">
+                    <Input
+                        v-model="customAddr"
+                        placeholder="Add token by 0x address"
+                        class="text-xs"
+                    />
+                    <Button variant="outline" @click="addCustomToken"
+                        >Add</Button
+                    >
+                </div>
             </div>
         </div>
 
