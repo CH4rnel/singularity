@@ -1,14 +1,29 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
 import {
-    BookOpen,
-    FolderGit2,
+    ArrowRightLeft,
+    Bell,
+    ChartColumn,
+    CircleUser,
+    Coins,
+    Compass,
+    Dices,
+    Droplets,
+    Folder,
+    Globe,
+    Grid3x3,
+    HandCoins,
     LayoutGrid,
     Link as LinkIcon,
-    Folder,
+    Repeat2,
+    Rocket,
+    Sprout,
+    Store,
+    TrendingUp,
     Users,
     Vote,
     Wallet,
+    Waypoints,
 } from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
@@ -59,15 +74,97 @@ const mainNavItems = computed<NavItem[]>(() => [
         icon: LayoutGrid,
     },
     {
-        title: 'Links',
-        href: '/links',
-        icon: LinkIcon,
+        title: 'Profile',
+        href: '/profile',
+        icon: CircleUser,
     },
     {
-        title: 'Categories',
-        href: '/categories',
-        icon: Folder,
+        title: 'Notifications',
+        href: '/notifications',
+        icon: Bell,
     },
+]);
+
+const defiNavItems: NavItem[] = [
+    {
+        title: 'Bridge',
+        href: '/bridge',
+        icon: Waypoints,
+    },
+    {
+        title: 'Swap',
+        href: '/swap',
+        icon: ArrowRightLeft,
+    },
+    {
+        title: 'Liquidity',
+        href: '/liquidity',
+        icon: Droplets,
+    },
+    {
+        title: 'Farm',
+        href: '/farm',
+        icon: Sprout,
+    },
+    {
+        title: 'Lending',
+        href: '/lending',
+        icon: HandCoins,
+    },
+    {
+        title: 'Convert',
+        href: '/convert',
+        icon: Repeat2,
+    },
+    {
+        title: 'Launchpad',
+        href: '/launchpad',
+        icon: Rocket,
+    },
+];
+
+const exploreNavItems: NavItem[] = [
+    {
+        title: 'Tokens',
+        href: '/tokens',
+        icon: Coins,
+    },
+    {
+        title: 'Analytics',
+        href: '/analytics',
+        icon: ChartColumn,
+    },
+    {
+        title: 'NFT Market',
+        href: '/market',
+        icon: Store,
+    },
+    {
+        title: 'Fediverse',
+        href: '/fediverse',
+        icon: Globe,
+    },
+];
+
+const gamesNavItems: NavItem[] = [
+    {
+        title: 'Slots',
+        href: '/slots',
+        icon: Dices,
+    },
+    {
+        title: 'Predictions',
+        href: '/predictions',
+        icon: TrendingUp,
+    },
+    {
+        title: 'Pixel Battle',
+        href: '/pixels',
+        icon: Grid3x3,
+    },
+];
+
+const workspaceNavItems: NavItem[] = [
     {
         title: 'DAO',
         href: '/dao',
@@ -78,18 +175,28 @@ const mainNavItems = computed<NavItem[]>(() => [
         href: '/crm',
         icon: Users,
     },
-]);
+    {
+        title: 'Links',
+        href: '/links',
+        icon: LinkIcon,
+    },
+    {
+        title: 'Categories',
+        href: '/categories',
+        icon: Folder,
+    },
+];
 
 const footerNavItems: NavItem[] = [
     {
-        title: 'Repository',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: FolderGit2,
+        title: 'Explorer',
+        href: 'https://explorer.cyberia.church',
+        icon: Compass,
     },
     {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#vue',
-        icon: BookOpen,
+        title: 'cyberia.church',
+        href: 'https://cyberia.church',
+        icon: Globe,
     },
 ];
 
@@ -257,6 +364,10 @@ const formatCyberBalance = (balance: string): string => {
 
         <SidebarContent>
             <NavMain :items="mainNavItems" />
+            <NavMain label="DeFi" :items="defiNavItems" />
+            <NavMain label="Explore" :items="exploreNavItems" />
+            <NavMain label="Games" :items="gamesNavItems" />
+            <NavMain label="Workspace" :items="workspaceNavItems" />
         </SidebarContent>
 
         <SidebarFooter>
