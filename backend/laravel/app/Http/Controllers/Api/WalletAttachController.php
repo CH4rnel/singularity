@@ -45,12 +45,22 @@ class WalletAttachController extends Controller
             ], 422);
         }
 
-        // Use the same verification logic — reconstruct the message
+        // Verify the signature recovers to the claimed address before binding
+        // it — otherwise anyone could attach a wallet they do not control
+        // (the nonce alone is not a secret: it is minted on request for any
+        // address). The message prefix differs from login, so we recover the
+        // signer directly rather than going through handle().
         $message = "Sign this message to link your wallet. Nonce: {$nonce->nonce}";
+        $recovered = app(VerifyWalletSignature::class)->recover($message, $signature);
 
-        // For attach, we verify with a different message prefix
-        // We rely on the VerifyWalletSignature's crypto logic indirectly
-        // but we verify in-place here to avoid creating a new user
+        if (Str::lower($recovered) !== $walletAddress) {
+            $nonce->delete();
+
+            return response()->json([
+                'message' => 'Signature verification failed.',
+            ], 401);
+        }
+
         $nonce->delete();
 
         $request->user()->update([

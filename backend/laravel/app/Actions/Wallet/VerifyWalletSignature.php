@@ -42,6 +42,16 @@ class VerifyWalletSignature
         return $this->authenticateOrRegister($walletAddress);
     }
 
+    /**
+     * Recover the signer address of an arbitrary personal_sign message.
+     * Public so callers that verify a different message (e.g. wallet attach,
+     * whose message prefix differs from login) can reuse the same crypto.
+     */
+    public function recover(string $message, string $signature): string
+    {
+        return $this->recoverAddress($message, $signature);
+    }
+
     private function recoverAddress(string $message, string $signature): string
     {
         $msgHash = $this->hashPersonalMessage($message);
@@ -51,7 +61,7 @@ class VerifyWalletSignature
             throw new \Exception('Invalid signature format.');
         }
 
-        $recoveryParam = $this->getRecoveryParam($msgHash, $sig);
+        $recoveryParam = $this->getRecoveryParam($sig);
 
         $keyPair = $this->ec->keyFromPublic($this->ec->recoverPubKey($msgHash, $sig, $recoveryParam)->encode('array'));
 
@@ -78,36 +88,32 @@ class VerifyWalletSignature
         return [
             'r' => '0x'.substr($sig, 0, 64),
             's' => '0x'.substr($sig, 64, 64),
+            // Trailing byte is v (recovery id). Normalize to 0..3: wallets
+            // emit 27/28 (EIP-191) or occasionally EIP-155 chain-encoded
+            // values; the low bit carries the parity we need.
+            'v' => hexdec(substr($sig, 128, 2)),
         ];
     }
 
-    private function getRecoveryParam(string $msgHash, array $sig): int
+    /**
+     * Recovery id (0..3) from the signature's v byte. The recovery id MUST
+     * come from the signature — the pubkey-recovery math succeeds for the
+     * wrong id too, so guessing (e.g. always 0) silently recovers a different
+     * address for every v=28 signature.
+     *
+     * @param  array{r: string, s: string, v: int}  $sig
+     */
+    private function getRecoveryParam(array $sig): int
     {
-        $msgHashInt = gmp_init($msgHash, 16);
-        $r = gmp_init($sig['r'], 16);
-        $s = gmp_init($sig['s'], 16);
+        $v = $sig['v'];
 
-        for ($recId = 0; $recId < 4; $recId++) {
-            try {
-                $pubKey = $this->ec->recoverPubKey($msgHashInt, [
-                    'r' => $r,
-                    's' => $s,
-                ], $recId);
-
-                $p = $pubKey->encode('array');
-                if (count($p) === 65 && $p[0] === 0x04) {
-                    array_shift($p);
-                }
-
-                $addr = '0x'.substr($this->keccak256($p), 24);
-
-                return $recId;
-            } catch (\Exception $e) {
-                continue;
-            }
+        if ($v >= 27) {
+            // EIP-191 (27/28) or EIP-155 (chainId*2 + 35/36); the parity is
+            // the low bit either way.
+            return ($v - 27) & 1;
         }
 
-        return 0;
+        return $v & 1;
     }
 
     private function hashPersonalMessage(string $message): string
