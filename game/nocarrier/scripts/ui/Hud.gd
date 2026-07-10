@@ -2,7 +2,8 @@ class_name NcHud
 extends CanvasLayer
 ## Diegetic-ish text HUD: status, needs bars, warnings, interact hint, toast
 ## feed, a tiny numbered modal, full-screen fades, the NO CARRIER takeover
-## and the game-over screens. Everything is built in _ready.
+## and the game-over screens. Everything is built in _ready; all strings
+## resolve through Loc.
 
 const GREEN := Color(0.42, 1.0, 0.62)
 const DIM := Color(0.30, 0.55, 0.40)
@@ -146,6 +147,9 @@ func _ready() -> void:
 
 	Game.toasted.connect(toast)
 	Game.game_over.connect(_show_over)
+	# a loaded save can already be finished — restore the ending screen
+	if Game.over:
+		_show_over(Game.over_kind if Game.over_kind != "" else "terminated")
 
 
 func _rtl(font: Font, fsize: int) -> RichTextLabel:
@@ -175,36 +179,47 @@ func _refresh() -> void:
 	var noise := ""
 	for i in 5:
 		noise += "█" if i < noise_cells else "·"
-	_status.text = "[color=#6cffa0]NODE-07[/color][color=#4d8a63]  day %d  %s\ncredits %d   mail %s\nline noise [%s][/color]" % [
-		Game.day, Game.fmt_clock(), Game.money,
-		("%d unread" % Game.unread_mail()) if Game.unread_mail() > 0 else "-",
-		noise,
+	var mail_str := Loc.t("ui.mail_n", [Game.unread_mail()]) if Game.unread_mail() > 0 else "-"
+	_status.text = "[color=#6cffa0]NODE-07[/color][color=#4d8a63]  %s  %s\n%s   %s\n%s [%s][/color]" % [
+		Loc.t("ui.day", [Game.day]), Game.fmt_clock(),
+		Loc.t("ui.credits", [Game.money]), Loc.t("ui.mail", [mail_str]),
+		Loc.t("ui.noise"), noise,
 	]
 
-	_needs.text = "[color=#4d8a63]energy [color=#%s]%s[/color]\nfood   [color=#%s]%s[/color][/color]" % [
-		_bar_color(Game.energy), _bar(Game.energy),
-		_bar_color(Game.hunger), _bar(Game.hunger),
+	_needs.text = "[color=#4d8a63]%s [color=#%s]%s[/color]\n%s [color=#%s]%s[/color][/color]" % [
+		Loc.t("ui.energy"), _bar_color(Game.energy), _bar(Game.energy),
+		Loc.t("ui.food"), _bar_color(Game.hunger), _bar(Game.hunger),
 	]
 
 	var warns: Array = []
 	if not Game.power_on():
-		warns.append("!! NO POWER")
-	elif Game.fuel <= 20.0:
-		warns.append("! fuel %d%%" % int(Game.fuel))
+		warns.append(Loc.t("warn.nopower"))
+	elif Game.on_battery():
+		warns.append(Loc.t("warn.battery", [int(Game.battery)]))
+	if Game.fuel <= 20.0:
+		warns.append(Loc.t("warn.fuel", [int(Game.fuel)]))
 	if Game.heat >= 85.0:
-		warns.append("!! RACK OVERHEAT %d°" % int(Game.heat))
+		warns.append(Loc.t("warn.heat", [int(Game.heat)]))
 	elif Game.coolant <= 15.0:
-		warns.append("! coolant %d%%" % int(Game.coolant))
-	if Net.disk_total > 0.0 and Net.disk_used() / Net.disk_total > 0.9:
-		warns.append("! disk %d/%d MB" % [int(Net.disk_used()), int(Net.disk_total)])
+		warns.append(Loc.t("warn.coolant", [int(Game.coolant)]))
+	if Media.hdd_total() > 0.0 and Net.disk_used() / Media.hdd_total() > 0.9:
+		warns.append(Loc.t("warn.disk", [int(Net.disk_used()), int(Media.hdd_total())]))
+	elif Media.hdds().is_empty():
+		warns.append(Loc.t("warn.nohdd"))
+	if Media.anoms_on_hdd() > 0:
+		warns.append(Loc.t("warn.leak", [Media.anoms_on_hdd()]))
+	if Media.head_dirt >= 70.0:
+		warns.append(Loc.t("warn.heads", [int(Media.head_dirt)]))
 	if Game.bin >= Game.BIN_MAX:
-		warns.append("! the bin overflows")
+		warns.append(Loc.t("warn.bin"))
 	if Game.carrying_trash:
-		warns.append("• holding trash bag")
+		warns.append(Loc.t("warn.bag"))
 	if Game.day == Game.quota_due_day() - 1:
-		warns.append("! quota settles tomorrow: %d/%d" % [Game.sold_since_quota, Game.quota_needed()])
+		warns.append(Loc.t("warn.quota", [Game.sold_since_quota, Game.quota_needed()]))
 	if Game.strikes > 0:
-		warns.append("! strikes %d/3" % Game.strikes)
+		warns.append(Loc.t("warn.strikes", [Game.strikes]))
+	if Game.debt > 0:
+		warns.append(Loc.t("warn.debt", [Game.debt]))
 	_warn.text = "[right][color=#ff5c52]%s[/color][/right]" % "\n".join(warns)
 
 
@@ -252,7 +267,7 @@ func modal(title: String, options: Array, cb: Callable) -> void:
 	var lines := "[color=#6cffa0]%s[/color]\n\n" % title
 	for i in options.size():
 		lines += "[color=#4d8a63][%d][/color] [color=#b8ffcf]%s[/color]\n" % [i + 1, options[i]]
-	lines += "\n[color=#4d8a63][esc] never mind[/color]"
+	lines += "\n[color=#4d8a63]%s[/color]" % Loc.t("modal.cancel")
 	_modal_text.text = lines
 	_modal.visible = true
 	modal_open = true
@@ -269,6 +284,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if over_shown:
 		if key.physical_keycode == KEY_R:
+			NcMenu.skip_title = true
 			Game.reset_all()
 		get_viewport().set_input_as_handled()
 		return
@@ -310,16 +326,16 @@ func _show_over(kind: String) -> void:
 	var title: String
 	var body: String
 	if kind == "terminated":
-		title = "CONTRACT TERMINATED"
-		body = "three missed settlements. the OPERATOR thanks you for your\nservice and reminds you that the door was never locked for you."
+		title = Loc.t("over.terminated.title")
+		body = Loc.t("over.terminated.body")
 	else:
-		title = "NO CARRIER"
-		body = "NODE-07 fell out of the mesh at %s, day %d.\nnobody logged the disconnect. nobody was left to." % [Game.fmt_clock(), Game.day]
+		title = Loc.t("over.lost.title")
+		body = Loc.t("over.lost.body", [Game.fmt_clock(), Game.day])
 	_over.text = ("[color=#6cffa0][font_size=44]%s[/font_size][/color]\n\n" +
 		"[color=#b8ffcf]%s[/color]\n\n" +
-		"[color=#4d8a63]days on shift     %d\ncredits earned    %d\ncaptures decoded  %d\nnonstandard held  %d\n\n[R] wipe the node, sign a new contract[/color]") % [
-		title, body, Game.day, Game.lifetime_earned,
-		int(Game.stats["decoded"]), int(Game.stats["anomalies"]),
+		"[color=#4d8a63]%s[/color]") % [
+		title, body, Loc.t("over.stats", [Game.day, Game.lifetime_earned,
+			int(Game.stats["decoded"]), int(Game.stats["anomalies"])]),
 	]
 	_over.visible = true
 	Sfx.set_hum(false)

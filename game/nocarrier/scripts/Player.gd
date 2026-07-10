@@ -64,8 +64,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	var motion := event as InputEventMouseMotion
 	if motion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		rotate_y(-motion.relative.x * MOUSE_SENS)
-		_head.rotate_x(-motion.relative.y * MOUSE_SENS)
+		var sens := MOUSE_SENS * Settings.mouse_factor()
+		rotate_y(-motion.relative.x * sens)
+		_head.rotate_x(-motion.relative.y * sens)
 		_head.rotation.x = clamp(_head.rotation.x, -1.45, 1.45)
 		return
 
@@ -78,8 +79,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_F:
 				_lamp.visible = not _lamp.visible
 				Sfx.play("blip", -16.0)
+			KEY_C:
+				if Wallet.available():
+					Wallet.connect_wallet()
+				else:
+					Game.toast(Loc.t("t.wallet_only"))
 			KEY_ESCAPE:
-				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+				if main != null:
+					main.request_pause()
 
 
 func _physics_process(delta: float) -> void:

@@ -57,8 +57,11 @@ func _fire() -> void:
 		pool.append("silhouette")
 	if a >= 30.0:
 		pool.append("breaker")
+		pool.append("printer")
 	if a >= 35.0:
 		pool.append("lights_room")
+	if a >= 40.0 and not Media.tapes().is_empty():
+		pool.append("tape_whir")
 	if a >= 50.0:
 		pool.append("blackout")
 	if a >= 60.0 and _entity_day != Game.day:
@@ -95,6 +98,13 @@ func _fire() -> void:
 			Sfx.play("thud")
 			Game.toast(Loc.t("t.ev_dark"))
 			Game.anomaly = minf(Game.anomaly + 1.5, 100.0)
+		"printer":
+			Media.ghost_print()
+			Game.anomaly = minf(Game.anomaly + 1.0, 100.0)
+		"tape_whir":
+			Sfx.play("whir", -12.0)
+			Game.toast(Loc.t("t.tape_whir"))
+			Game.anomaly = minf(Game.anomaly + 0.5, 100.0)
 		"entity":
 			_entity_day = Game.day
 			main.entity_walk()
@@ -104,7 +114,7 @@ func _fire() -> void:
 
 
 func _process(delta: float) -> void:
-	if not phone_ringing or Game.over:
+	if not phone_ringing or Game.over or Game.paused:
 		return
 	_ring_left -= delta
 	_ring_gap -= delta

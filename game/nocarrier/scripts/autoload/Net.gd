@@ -14,9 +14,8 @@ const GLYPHS := "#$%&@=+*"
 
 var carriers: Array = []       # {id, pos: Vector2, cls, size, sig, found, locked}
 var taps: Array = [null, null] # per slot: null | {cid, got, corrupt}
-var files: Array = []          # {id, name, ti, cls, size, decoded, quality, corrupt, read}
+var files: Array = []          # {id, name, ti, cls, size, decoded, quality, corrupt, read, media}
 var tap_slots := 2
-var disk_total := 512.0
 var modem_lvl := 1
 var filter_lvl := 1
 var next_id := 1
@@ -162,7 +161,7 @@ func advance(m: float) -> void:
 		if c.is_empty():
 			taps[i] = null
 			continue
-		if disk_used() >= disk_total:
+		if Media.hdd_free() <= 0.0:
 			if not _disk_warned:
 				_disk_warned = true
 				Game.toast(Loc.t("t.disk_full"))
@@ -185,6 +184,7 @@ func _complete(slot: int, c: Dictionary) -> void:
 		"quality": 0.0,
 		"corrupt": bool(taps[slot]["corrupt"]),
 		"read": false,
+		"media": Media.pick_hdd(),
 	}
 	files.append(f)
 	taps[slot] = null
@@ -202,10 +202,11 @@ func heat_corrupt(m: float) -> void:
 			Game.toast(Loc.t("t.thermal"))
 
 
+## Only spinning storage is exposed: tapes are dormant, CD-Rs are sealed.
 func corrupt_random_file() -> void:
 	var clean: Array = []
 	for f in files:
-		if not bool(f["corrupt"]):
+		if not bool(f["corrupt"]) and Media.kind_of(int(f.get("media", -1))) == "hdd":
 			clean.append(f)
 	if clean.is_empty():
 		return
@@ -214,14 +215,24 @@ func corrupt_random_file() -> void:
 	net_changed.emit()
 
 
+## Working-set usage: captures on hard disks plus running taps.
 func disk_used() -> float:
 	var used := 0.0
 	for f in files:
-		used += float(f["size"])
+		if Media.kind_of(int(f.get("media", -1))) == "hdd":
+			used += float(f["size"])
 	for t in taps:
 		if t != null:
 			used += float(t["got"])
 	return used
+
+
+func hdd_files() -> Array:
+	var out: Array = []
+	for f in files:
+		if Media.kind_of(int(f.get("media", -1))) == "hdd":
+			out.append(f)
+	return out
 
 
 ## --- files / decode / market --------------------------------------------------
@@ -311,6 +322,7 @@ func seal_file(fid: int, tx: String) -> void:
 		if int(f["id"]) == fid:
 			Game.minted.append({"name": f["name"], "title": title_of(f), "tx": tx})
 			Game.anomaly = maxf(Game.anomaly - 3.0, 0.0)
+			Media.on_file_sealed(f)
 			files.erase(f)
 			Game.toast(Loc.t("up.sealed"))
 			Sfx.play("beep")
@@ -326,18 +338,6 @@ func sell(f: Dictionary) -> int:
 	files.erase(f)
 	net_changed.emit()
 	return v
-
-
-func archive(f: Dictionary) -> bool:
-	if f["cls"] != "anom" or int(Game.inventory["tape"]) <= 0:
-		return false
-	Game.inventory["tape"] = int(Game.inventory["tape"]) - 1
-	Game.earn_market(60)
-	Game.anomaly = minf(Game.anomaly + 2.0, 100.0)
-	files.erase(f)
-	Game.toast(Loc.t("t.tape_warm"))
-	net_changed.emit()
-	return true
 
 
 func purge(f: Dictionary) -> void:
@@ -362,8 +362,8 @@ func read_echo(f: Dictionary) -> String:
 func apply_upgrade(id: String) -> void:
 	match id:
 		"disk":
-			disk_total += 256.0
-			Game.toast(Loc.t("t.up_disk", [int(disk_total)]))
+			var it := Media.add_hdd(256.0)
+			Game.toast(Loc.t("t.up_disk", [str(it["label"]), int(Media.hdd_total())]))
 		"modem":
 			modem_lvl = mini(modem_lvl + 1, 3)
 			Game.toast(Loc.t("t.up_modem", [modem_lvl]))
@@ -386,7 +386,7 @@ func get_state() -> Dictionary:
 		cs.append(d)
 	return {
 		"carriers": cs, "taps": taps, "files": files,
-		"tap_slots": tap_slots, "disk_total": disk_total,
+		"tap_slots": tap_slots,
 		"modem_lvl": modem_lvl, "filter_lvl": filter_lvl,
 		"next_id": next_id, "lore_idx": lore_idx,
 	}
@@ -404,10 +404,13 @@ func set_state(data: Dictionary) -> void:
 		carriers.append(d)
 	taps = data.get("taps", [null, null])
 	files = data.get("files", [])
+	# v2 saves predate physical media: stray captures land on the first disk
+	for f in files:
+		if not f.has("media") or Media.by_id(int(f["media"])).is_empty():
+			f["media"] = Media.pick_hdd()
 	tap_slots = int(data.get("tap_slots", 2))
 	while taps.size() < tap_slots:
 		taps.append(null)
-	disk_total = float(data.get("disk_total", 512.0))
 	modem_lvl = int(data.get("modem_lvl", 1))
 	filter_lvl = int(data.get("filter_lvl", 1))
 	next_id = int(data.get("next_id", 1))
@@ -420,7 +423,6 @@ func reset() -> void:
 	taps = [null, null]
 	files = []
 	tap_slots = 2
-	disk_total = 512.0
 	modem_lvl = 1
 	filter_lvl = 1
 	next_id = 1

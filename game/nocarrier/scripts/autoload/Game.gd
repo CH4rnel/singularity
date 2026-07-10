@@ -27,6 +27,7 @@ const QUOTA_BASE := 500
 const QUOTA_STEP := 250
 const DELIVERY_MIN := 120.0              # order lead time, in-game minutes
 const BAILOUT_DEBT := 60
+const DISK_BAILOUT_DEBT := 80
 const SCRAP_PRICE := 4
 const CRANK_BATTERY := 8.0
 const CRANK_ENERGY := 10.0
@@ -43,6 +44,9 @@ const SHOP := [
 	{"id": "coffee", "price": 10},
 	{"id": "fuel", "price": 40},
 	{"id": "coolant", "price": 30},
+	{"id": "paper", "price": 10},
+	{"id": "cdr", "price": 15},
+	{"id": "alcohol", "price": 25},
 	{"id": "tape", "price": 20},
 	{"id": "disk", "price": 120},
 	{"id": "modem", "price": 250},
@@ -79,7 +83,8 @@ var sold_since_quota := 0
 var quota_week := 1
 var debt := 0
 
-var inventory := {"noodles": 2, "coffee": 1, "fuel": 2, "coolant": 1, "tape": 0, "scrap": 0}
+var inventory := {"noodles": 2, "coffee": 1, "fuel": 2, "coolant": 1, "scrap": 0,
+	"paper": 12, "cdr": 0, "alcohol": 0, "docs": 0}
 
 var generator_on := true
 var breaker_ok := true
@@ -98,6 +103,7 @@ var minted: Array = []                   # sealed captures: [{name, title, tx}]
 var stats := {"decoded": 0, "sold": 0, "anomalies": 0}
 
 var asleep := false
+var paused := false                      # menu open — simulation halted
 var over := false
 var over_kind := ""
 var time_scale := TIME_SCALE             # NC_TIME_SCALE env overrides, for stress runs
@@ -108,6 +114,7 @@ var _last_whole_min := -1
 var _fuel_warned := 100
 var _heat_warn_cd := 0.0
 var _bailout_sent := false
+var _disk_bailout_sent := false
 var _anomaly_mail_sent: Array = []
 
 
@@ -126,7 +133,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if over:
+	if over or paused:
 		return
 	advance_minutes(delta * time_scale)
 	if not asleep and energy <= 0.0:
@@ -175,10 +182,12 @@ func _step(m: float) -> void:
 		coolant = maxf(coolant - 0.07 * load * m, 0.0)
 	if heat >= 90.0:
 		Net.heat_corrupt(m)
+		Media.heat_stress(m)
 
 	anomaly = maxf(anomaly - 0.2 / 60.0 * m, 0.0)
 
 	Net.advance(m)
+	Media.advance(m)
 	Events.advance(m)
 
 	# clock
@@ -246,6 +255,7 @@ func _on_minute() -> void:
 		toast(Loc.t("t.overheat"))
 		Sfx.play("alarm")
 	_check_bailout()
+	_check_disk_bailout()
 
 
 ## The OPERATOR never lets the node die of poverty: total blackout with an
@@ -264,9 +274,29 @@ func _check_bailout() -> void:
 	state_changed.emit()
 
 
+## Same no-dead-ends promise for storage: a node with zero working disks
+## cannot capture anything, so the OPERATOR ships a refurb drive on credit.
+func _check_disk_bailout() -> void:
+	if _disk_bailout_sent or not Media.hdds().is_empty():
+		return
+	if int(hatch.get("disk", 0)) > 0 or money >= 120:
+		return
+	for d in deliveries:
+		if int(d["items"].get("disk", 0)) > 0:
+			return
+	_disk_bailout_sent = true
+	debt += DISK_BAILOUT_DEBT
+	hatch["disk"] = int(hatch.get("disk", 0)) + 1
+	add_mail("from.op", "mail.dbail.subj", [], "mail.dbail.body", [])
+	toast(Loc.t("t.delivery"))
+	Sfx.play("thud")
+	state_changed.emit()
+
+
 func _on_new_day() -> void:
 	day_tick.emit(day)
 	Net.new_day()
+	Media.new_day()
 	if day in SCRIPTED_MAIL:
 		var m: Array = SCRIPTED_MAIL[day]
 		add_mail(m[0], m[1], [], m[2], [])
@@ -296,6 +326,7 @@ func _settle_quota() -> void:
 	quota_week += 1
 	sold_since_quota = 0
 	_bailout_sent = false
+	_disk_bailout_sent = false
 	state_changed.emit()
 	if strikes >= 3:
 		finish("terminated")
@@ -493,6 +524,13 @@ func pick_scrap() -> void:
 	state_changed.emit()
 
 
+func pick_doc() -> void:
+	inventory["docs"] = int(inventory["docs"]) + 1
+	toast(Loc.t("t.doc_pick", [int(inventory["docs"])]))
+	Sfx.play("blip")
+	state_changed.emit()
+
+
 func sell_scrap() -> int:
 	var n := int(inventory["scrap"])
 	if n <= 0:
@@ -589,6 +627,13 @@ func collect_hatch() -> void:
 			for i in n:
 				Net.apply_upgrade(id)
 			parts.append(Loc.t("shop.%s.n" % id))
+		elif id == "tape":
+			for i in n:
+				Media.add_tape()
+			parts.append("%s x%d" % [Loc.t("shop.%s.n" % id), n])
+		elif id == "paper":
+			inventory["paper"] = int(inventory["paper"]) + Media.PAPER_PER_PACK * n
+			parts.append("%s x%d" % [Loc.t("shop.%s.n" % id), n])
 		else:
 			inventory[id] = int(inventory.get(id, 0)) + n
 			parts.append("%s x%d" % [Loc.t("shop.%s.n" % id), n])
@@ -651,7 +696,7 @@ func _first_day() -> void:
 
 func save() -> void:
 	var data := {
-		"v": 2,
+		"v": 3,
 		"day": day, "time_min": time_min, "money": money,
 		"lifetime_earned": lifetime_earned,
 		"energy": energy, "hunger": hunger, "anomaly": anomaly,
@@ -663,8 +708,10 @@ func save() -> void:
 		"deliveries": deliveries, "hatch": hatch, "mails": mails,
 		"minted": minted, "stats": stats,
 		"over": over, "over_kind": over_kind,
-		"bailout_sent": _bailout_sent, "anomaly_mail_sent": _anomaly_mail_sent,
+		"bailout_sent": _bailout_sent, "disk_bailout_sent": _disk_bailout_sent,
+		"anomaly_mail_sent": _anomaly_mail_sent,
 		"net": Net.get_state(),
+		"media": Media.get_state(),
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f:
@@ -712,8 +759,12 @@ func _load() -> void:
 	over = bool(data.get("over", false))
 	over_kind = str(data.get("over_kind", ""))
 	_bailout_sent = bool(data.get("bailout_sent", false))
+	_disk_bailout_sent = bool(data.get("disk_bailout_sent", false))
 	_anomaly_mail_sent = data.get("anomaly_mail_sent", [])
-	Net.set_state(data.get("net", {}))
+	# media first: Net's migration assigns strays to an existing disk
+	var net_data: Dictionary = data.get("net", {})
+	Media.set_state(data.get("media", {}), float(net_data.get("disk_total", 512.0)))
+	Net.set_state(net_data)
 	_was_power = power_on()
 	_was_gen = gen_running()
 	_fuel_warned = int(fuel)
@@ -734,7 +785,8 @@ func reset_all() -> void:
 	sold_since_quota = 0
 	quota_week = 1
 	debt = 0
-	inventory = {"noodles": 2, "coffee": 1, "fuel": 2, "coolant": 1, "tape": 0, "scrap": 0}
+	inventory = {"noodles": 2, "coffee": 1, "fuel": 2, "coolant": 1, "scrap": 0,
+		"paper": 12, "cdr": 0, "alcohol": 0, "docs": 0}
 	generator_on = true
 	breaker_ok = true
 	fuel = 80.0
@@ -756,7 +808,9 @@ func reset_all() -> void:
 	_last_whole_min = -1
 	_fuel_warned = 100
 	_bailout_sent = false
+	_disk_bailout_sent = false
 	_anomaly_mail_sent = []
+	Media.reset()
 	Net.reset()
 	Events.reset()
 	_first_day()

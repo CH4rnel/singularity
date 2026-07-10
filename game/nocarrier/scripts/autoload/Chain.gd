@@ -16,7 +16,15 @@ var player_cyber := 0.0
 
 var _http_block: HTTPRequest
 var _http_balance: HTTPRequest
+var _block_busy := false
+var _bal_busy := false
 var _id := 0
+
+# on-demand JSON-RPC calls (nonce, gas, sendRawTransaction), serialized
+var _call_http: HTTPRequest
+var _call_q: Array = []
+var _call_cur: Callable
+var _call_busy := false
 
 
 func _ready() -> void:
@@ -28,12 +36,64 @@ func _ready() -> void:
 	add_child(_http_balance)
 	_http_balance.request_completed.connect(_on_balance_completed)
 
+	_call_http = HTTPRequest.new()
+	add_child(_call_http)
+	_call_http.request_completed.connect(_on_call_completed)
+
 	var timer := Timer.new()
 	timer.wait_time = POLL_INTERVAL
 	timer.autostart = true
 	add_child(timer)
 	timer.timeout.connect(_poll)
 	_poll()
+
+
+## Fire an arbitrary JSON-RPC call; cb.call(ok: bool, value: String) on reply.
+## Calls are serialized so the single HTTPRequest is never reused mid-flight.
+func call_rpc(method: String, params: Array, cb: Callable) -> void:
+	_id += 1
+	var body := JSON.stringify({"jsonrpc": "2.0", "id": _id, "method": method, "params": params})
+	_call_q.append({"body": body, "cb": cb})
+	_pump_calls()
+
+
+func _pump_calls() -> void:
+	if _call_busy or _call_q.is_empty():
+		return
+	var item: Dictionary = _call_q.pop_front()
+	_call_busy = true
+	_call_cur = item["cb"]
+	var headers := PackedStringArray(["Content-Type: application/json"])
+	var err := _call_http.request(RPC_URL, headers, HTTPClient.METHOD_POST, item["body"])
+	if err != OK:
+		_call_busy = false
+		if _call_cur.is_valid():
+			_call_cur.call(false, "request failed to start")
+		_pump_calls()
+
+
+func _on_call_completed(_result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	_call_busy = false
+	var cb := _call_cur
+	if code != 200:
+		if cb.is_valid():
+			cb.call(false, "http %d" % code)
+		_pump_calls()
+		return
+	var data: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(data) == TYPE_DICTIONARY and data.has("result") and data["result"] != null:
+		if cb.is_valid():
+			cb.call(true, str(data["result"]))
+	elif typeof(data) == TYPE_DICTIONARY and data.has("error"):
+		var msg := "rpc error"
+		if typeof(data["error"]) == TYPE_DICTIONARY and data["error"].has("message"):
+			msg = str(data["error"]["message"])
+		if cb.is_valid():
+			cb.call(false, msg)
+	else:
+		if cb.is_valid():
+			cb.call(false, "no result")
+	_pump_calls()
 
 
 func set_player(address: String) -> void:
@@ -46,8 +106,11 @@ func set_player(address: String) -> void:
 
 
 func _poll() -> void:
-	_rpc(_http_block, "eth_blockNumber", [])
-	if player_address != "":
+	if not _block_busy:
+		_block_busy = true
+		_rpc(_http_block, "eth_blockNumber", [])
+	if player_address != "" and not _bal_busy:
+		_bal_busy = true
 		_rpc(_http_balance, "eth_getBalance", [player_address, "latest"])
 
 
@@ -64,6 +127,7 @@ func _rpc(http: HTTPRequest, method: String, params: Array) -> void:
 
 
 func _on_block_completed(_result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	_block_busy = false
 	var data: Variant = _parse(code, body)
 	if data == null or not data.has("result"):
 		return
@@ -72,6 +136,7 @@ func _on_block_completed(_result: int, code: int, _headers: PackedStringArray, b
 
 
 func _on_balance_completed(_result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	_bal_busy = false
 	var data: Variant = _parse(code, body)
 	if data == null or not data.has("result"):
 		return

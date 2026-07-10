@@ -17,6 +17,8 @@ func _ready() -> void:
 	_hum_player = AudioStreamPlayer.new()
 	_hum_player.stream = _build("hum")
 	_hum_player.volume_db = -22.0
+	if AudioServer.get_bus_index("Amb") != -1:
+		_hum_player.bus = "Amb"
 	add_child(_hum_player)
 	_hum_player.play()
 
@@ -42,6 +44,8 @@ func play(name: String, vol_db := -8.0) -> void:
 	var p := AudioStreamPlayer.new()
 	p.stream = stream
 	p.volume_db = vol_db
+	if AudioServer.get_bus_index("Sfx") != -1:
+		p.bus = "Sfx"
 	add_child(p)
 	p.finished.connect(p.queue_free)
 	p.play()
@@ -118,6 +122,31 @@ func _build(name: String) -> AudioStreamWAV:
 				var f := lerpf(40.0, 160.0, t / 0.7)
 				phase += TAU * f / RATE
 				s[i] = 0.35 * minf(t * 6.0, 1.0) * sin(phase)
+			return _pcm(s)
+		"print":
+			# dot-matrix chatter: rapid square-wave bursts with paper-feed gaps
+			var s := PackedFloat32Array()
+			for k in 10:
+				s.append_array(_tone(150.0 + 30.0 * (k % 3), 0.06, 0.35, 6.0, 1))
+				s.append_array(_silence_f(0.03 if k % 4 != 3 else 0.1))
+			return _pcm(s)
+		"whir":
+			# tape transport: motor ramp under soft hiss
+			var s := _silence(0.9)
+			var phase := 0.0
+			for i in s.size():
+				var t := float(i) / RATE
+				var f := lerpf(70.0, 210.0, minf(t / 0.5, 1.0))
+				phase += TAU * f / RATE
+				s[i] = 0.22 * sin(phase) + 0.06 * randf_range(-1.0, 1.0)
+			return _pcm(s)
+		"degauss":
+			# the coil: a heavy mains hum that swells and dies
+			var s := _silence(1.4)
+			for i in s.size():
+				var t := float(i) / RATE
+				var env := minf(t * 4.0, 1.0) * (1.0 - t / 1.4)
+				s[i] = env * (0.5 * sin(TAU * 50.0 * t) + 0.2 * sin(TAU * 100.0 * t))
 			return _pcm(s)
 	return _pcm(_tone(440.0, 0.1, 0.3, 20.0))
 

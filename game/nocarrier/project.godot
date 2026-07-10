@@ -18,8 +18,15 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Loc="*res://scripts/autoload/Loc.gd"
+Settings="*res://scripts/autoload/Settings.gd"
 Sfx="*res://scripts/autoload/Sfx.gd"
 Net="*res://scripts/autoload/Net.gd"
+Media="*res://scripts/autoload/Media.gd"
+Chain="*res://scripts/autoload/Chain.gd"
+Wallet="*res://scripts/autoload/Wallet.gd"
+Signer="*res://scripts/autoload/Signer.gd"
+Ledger="*res://scripts/autoload/Ledger.gd"
 Events="*res://scripts/autoload/Events.gd"
 Game="*res://scripts/autoload/Game.gd"
 

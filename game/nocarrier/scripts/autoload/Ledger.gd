@@ -1,83 +1,145 @@
 extends Node
 ## On-chain sealing for NO CARRIER. Decoded NONSTANDARD / echo captures can be
-## "sealed to the chain": a real `mint(string)` on the shared CyberiaNFT
-## collection, signed by the player's own browser wallet. Reads (balanceOf)
-## are anonymous JSON-RPC and work on desktop too.
-##
-## Contract: CyberiaNFT 0x546462FAbf30734E63b64f32B30EC8ADD9B6EBa7 (Cyberia).
+## sealed to the Cyberia chain as CyberiaNFTs via `mint(string)`. Two signing
+## backends:
+##   • native  — Godot signs locally (Signer); default everywhere, the only
+##               path on desktop. Fetches nonce/gas, builds+signs+sends raw.
+##   • browser — MetaMask / EIP-1193 (Wallet); optional, web only.
+## Reads (balanceOf) are anonymous JSON-RPC and work on desktop too.
 
 signal balance_updated(count: int)
 signal seal_result(ok: bool, info: String)
 
 const NFT_ADDRESS := "0x546462FAbf30734E63b64f32B30EC8ADD9B6EBa7"
 const RPC_URL := "https://rpc.cyberia.church"
+const CHAIN_ID := 49406
 const SEL_MINT := "d85d3d27"       # mint(string)
 const SEL_BALANCEOF := "70a08231"  # balanceOf(address)
 
-var player := ""
 var balance := 0
-var pending_file_id := -1          # capture waiting for its seal tx
+var pending_file_id := -1
 
-var _http: HTTPRequest
+var _active := ""
+# in-flight native seal
+var _seal_data := ""
+var _seal_id := -1
+var _nonce := -1
+var _gas_price := -1
+var _gas := -1
 
 
 func _ready() -> void:
-	_http = HTTPRequest.new()
-	add_child(_http)
-	_http.request_completed.connect(_on_completed)
-	Wallet.address_changed.connect(_on_address)
-	Wallet.tx_sent.connect(_on_tx_sent)
-	Wallet.tx_failed.connect(_on_tx_failed)
+	Wallet.address_changed.connect(func(_a: String) -> void: _sync_active())
+	Wallet.status_changed.connect(func(_s: String) -> void: _sync_active())
+	Wallet.tx_sent.connect(_on_meta_tx_sent)
+	Wallet.tx_failed.connect(_on_meta_tx_failed)
+	Signer.wallet_ready.connect(func(_a: String) -> void: _sync_active())
+	call_deferred("_sync_active")
 
 
-func _on_address(addr: String) -> void:
-	player = addr.to_lower()
-	Chain.set_player(addr)
-	if addr != "":
-		Game.toast(Loc.t("t.wallet_conn", [Wallet.short_address()]))
-		refresh()
+## Whichever wallet is authoritative right now.
+func using_metamask() -> bool:
+	return Wallet.available() and Wallet.is_connected_wallet()
+
+
+func active_address() -> String:
+	if using_metamask():
+		return Wallet.get_address()
+	if Signer.has_key():
+		return Signer.address()
+	return ""
+
+
+func _sync_active() -> void:
+	var a := active_address()
+	if a == _active:
+		return
+	_active = a
+	Chain.set_player(a)
+	balance = 0
+	balance_updated.emit(0)
+	refresh()
 
 
 func refresh() -> void:
-	if player == "":
+	if _active == "":
 		return
-	var body := JSON.stringify({
-		"jsonrpc": "2.0", "id": 1, "method": "eth_call",
-		"params": [{"to": NFT_ADDRESS, "data": "0x" + SEL_BALANCEOF + _word_address(player)}, "latest"],
-	})
-	var headers := PackedStringArray(["Content-Type: application/json"])
-	_http.request(RPC_URL, headers, HTTPClient.METHOD_POST, body)
+	# routed through Chain's serialized queue so it never collides with the
+	# balance poll or an in-flight seal call
+	Chain.call_rpc("eth_call",
+		[{"to": NFT_ADDRESS, "data": "0x" + SEL_BALANCEOF + _word_address(_active)}, "latest"],
+		_on_balance)
 
 
-func _on_completed(_result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
-	if code != 200:
+func _on_balance(ok: bool, val: String) -> void:
+	if not ok:
 		return
-	var data: Variant = JSON.parse_string(body.get_string_from_utf8())
-	if typeof(data) != TYPE_DICTIONARY or not data.has("result"):
-		return
-	var h := String(data["result"])
-	balance = 0 if h == "" or h == "0x" else h.hex_to_int()
+	balance = 0 if val == "" or val == "0x" else val.hex_to_int()
 	balance_updated.emit(balance)
 
 
-## Ask the wallet to seal a capture. The file is only consumed once the tx
-## is actually submitted (tx_sent).
+## --- sealing ------------------------------------------------------------------
+
 func seal(f: Dictionary) -> void:
-	if not Wallet.available() or not Wallet.is_connected_wallet():
-		seal_result.emit(false, Loc.t("up.connect_first"))
-		return
 	if pending_file_id >= 0:
 		seal_result.emit(false, Loc.t("up.pending"))
 		return
-	pending_file_id = int(f["id"])
-	# chain metadata is language-independent (always en)
-	var title := Loc.t_in("en", "title." + str(f["cls"]), [int(f.get("ti", 0))])
-	var uri := "nocarrier://day%d/%s/%s" % [Game.day, str(f["name"]), title]
+	var uri := _uri_for(f)
 	var data := "0x" + SEL_MINT + _encode_string_arg(uri)
-	Wallet.send_transaction(NFT_ADDRESS, data)
+	if using_metamask():
+		pending_file_id = int(f["id"])
+		Wallet.send_transaction(NFT_ADDRESS, data)
+		return
+	if not Signer.has_key():
+		seal_result.emit(false, Loc.t("up.connect_first"))
+		return
+	# native path
+	pending_file_id = int(f["id"])
+	_seal_id = int(f["id"])
+	_seal_data = data
+	_nonce = -1
+	_gas_price = -1
+	_gas = -1
+	Chain.call_rpc("eth_getTransactionCount", [_active, "pending"], _on_rpc.bind("nonce"))
+	Chain.call_rpc("eth_gasPrice", [], _on_rpc.bind("gasprice"))
+	Chain.call_rpc("eth_estimateGas", [{"from": _active, "to": NFT_ADDRESS, "data": data}], _on_rpc.bind("gas"))
 
 
-func _on_tx_sent(tx: String) -> void:
+func _on_rpc(ok: bool, val: String, which: String) -> void:
+	match which:
+		"nonce":
+			_nonce = val.hex_to_int() if ok else 0
+		"gasprice":
+			_gas_price = val.hex_to_int() if ok else 1000000000
+		"gas":
+			_gas = int(val.hex_to_int() * 1.25) if ok else 300000
+	if _nonce >= 0 and _gas_price >= 0 and _gas >= 0:
+		_do_native_send()
+
+
+func _do_native_send() -> void:
+	# signing is pure GDScript (~0.4s); acceptable for an occasional mint
+	var raw := Signer.build_raw(_nonce, _gas_price, _gas, NFT_ADDRESS, 0, _seal_data, CHAIN_ID)
+	# reset the accumulator so a later reply can't re-trigger
+	_nonce = -1
+	_gas_price = -1
+	_gas = -1
+	Chain.call_rpc("eth_sendRawTransaction", [raw], _on_native_sent)
+
+
+func _on_native_sent(ok: bool, val: String) -> void:
+	if ok:
+		Net.seal_file(_seal_id, val)
+		seal_result.emit(true, val)
+		refresh()
+	else:
+		Game.toast(Loc.t("up.txfail", [val.left(60)]))
+		seal_result.emit(false, val)
+	pending_file_id = -1
+	_seal_id = -1
+
+
+func _on_meta_tx_sent(tx: String) -> void:
 	if pending_file_id < 0:
 		return
 	var fid := pending_file_id
@@ -87,10 +149,18 @@ func _on_tx_sent(tx: String) -> void:
 	refresh()
 
 
-func _on_tx_failed(msg: String) -> void:
+func _on_meta_tx_failed(msg: String) -> void:
+	if pending_file_id < 0:
+		return
 	pending_file_id = -1
 	seal_result.emit(false, msg)
 	Game.toast(Loc.t("up.txfail", [msg.left(60)]))
+
+
+func _uri_for(f: Dictionary) -> String:
+	# chain metadata is language-independent (always en)
+	var title := Loc.t_in("en", "title." + str(f["cls"]), [int(f.get("ti", 0))])
+	return "nocarrier://day%d/%s/%s" % [Game.day, str(f["name"]), title]
 
 
 ## --- abi helpers -----------------------------------------------------------
@@ -114,8 +184,8 @@ func _word_address(addr: String) -> String:
 func _encode_string_arg(s: String) -> String:
 	var bytes := s.to_utf8_buffer()
 	var n := bytes.size()
-	var out := _word_hex(32)           # offset to the string data
-	out += _word_hex(n)                # string length
+	var out := _word_hex(32)
+	out += _word_hex(n)
 	var data_hex := bytes.hex_encode()
 	var pad := (32 - (n % 32)) % 32
 	for _i in pad:
