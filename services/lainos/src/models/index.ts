@@ -40,6 +40,11 @@ export function createModelProvider(
   const explicit = getSetting("LAINOS_MODEL_PROVIDER")?.toLowerCase();
   const openrouterKey = getSetting("OPENROUTER_API_KEY");
   const anthropicKey = getSetting("ANTHROPIC_API_KEY");
+  // Proxy for model API traffic only (hosts where the provider is blocked).
+  const proxy =
+    getSetting("LAINOS_MODEL_PROXY") ??
+    getSetting("HTTPS_PROXY") ??
+    getSetting("https_proxy");
 
   const wantOpenRouter =
     explicit === "openrouter" || (!explicit && Boolean(openrouterKey));
@@ -63,6 +68,7 @@ export function createModelProvider(
       models: tierOverrides(getSetting, "OPENROUTER_MODEL"),
       referer: getSetting("OPENROUTER_REFERER"),
       title: getSetting("OPENROUTER_TITLE"),
+      proxy,
     });
   }
 
@@ -75,6 +81,7 @@ export function createModelProvider(
     return new AnthropicModelProvider({
       apiKey: anthropicKey,
       models: tierOverrides(getSetting, "LAINOS_MODEL"),
+      proxy,
     });
   }
 

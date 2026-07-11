@@ -12,15 +12,21 @@ import {
   VERSION,
   loadCursor,
   loadEffort,
+  loadPulse,
   loadSkin,
   saveCursor,
   saveEffort,
+  savePulse,
   saveSkin,
   THEME_ORDER,
   THEMES,
   type Theme,
 } from "./theme.js";
 import { editLine } from "./editor.js";
+import { ChainPulse } from "./pulse.js";
+import type { ForgeService } from "../../plugins/forge/index.js";
+import type { ScoutService } from "../../plugins/scout/index.js";
+import type { SentinelService } from "../../plugins/sentinel/index.js";
 
 // ------------------------------------------------------------- theme ctx
 
@@ -37,7 +43,7 @@ type ToolBlock = {
   summary?: string;
 };
 type Part = { kind: "text"; text: string } | { kind: "tool"; tool: ToolBlock };
-type Role = "you" | "lain" | "sys" | "banner";
+type Role = "you" | "lain" | "sys" | "banner" | "pulse";
 type Turn = { id: string; role: Role; parts: Part[] };
 
 type PickerOption = { value: string; label: string; hint?: string };
@@ -54,6 +60,11 @@ type PickerState = {
 const COMMANDS = [
   { name: "/help", desc: "show commands" },
   { name: "/skills", desc: "list chain skills" },
+  { name: "/facts", desc: "durable facts lain remembers" },
+  { name: "/watches", desc: "active background watches" },
+  { name: "/wishes", desc: "the forge wishboard" },
+  { name: "/research", desc: "scout research topics" },
+  { name: "/pulse", desc: "toggle ambient chain murmurs" },
   { name: "/skin", desc: "pick a colour skin (arrows)" },
   { name: "/effort", desc: "set reply depth (arrows)" },
   { name: "/cursor", desc: "cursor style + blink (arrows)" },
@@ -293,7 +304,9 @@ function TurnView({ turn }: { turn: Turn }) {
       ? { label: `${GLYPH.you} you`, color: c.secondary }
       : turn.role === "lain"
         ? { label: `${GLYPH.lain} lain`, color: c.primary }
-        : { label: `${GLYPH.dot} sys`, color: c.mutedDim };
+        : turn.role === "pulse"
+          ? { label: `${GLYPH.spark} wired`, color: c.muted }
+          : { label: `${GLYPH.dot} sys`, color: c.mutedDim };
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text color={meta.color} bold>
@@ -304,7 +317,12 @@ function TurnView({ turn }: { turn: Turn }) {
           <ToolCard key={i} tool={part.tool} />
         ) : part.text.trim() ? (
           <Box key={i} marginLeft={2}>
-            <Text color={turn.role === "sys" ? c.mutedDim : c.fg}>{part.text.trimEnd()}</Text>
+            <Text
+              color={turn.role === "sys" ? c.mutedDim : turn.role === "pulse" ? c.muted : c.fg}
+              italic={turn.role === "pulse"}
+            >
+              {part.text.trimEnd()}
+            </Text>
           </Box>
         ) : null,
       )}
@@ -423,6 +441,11 @@ const HELP = [
   "commands:",
   "  /help          this list",
   "  /skills        list the chain skills Lain can use",
+  "  /facts         durable facts Lain has learned",
+  "  /watches       active background balance watches",
+  "  /wishes        the forge wishboard (holder requests → branches)",
+  "  /research      topics the scout researches (digests on schedule)",
+  "  /pulse         toggle ambient chain murmurs (whales, quiet spells)",
   "  /skin          pick a colour skin with the arrow keys",
   "  /effort        set reply depth (low … max) with the arrow keys",
   "  /cursor        cursor style — block/line, blink/steady",
@@ -463,7 +486,8 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const provider = runtime.model.name;
   const model = runtime.model.modelFor(character.modelTier ?? ModelTier.LARGE);
   const tagline = "the wired remembers  ·  autonomous agent of cyberia";
-  const block = useChainHeight(process.env.CYBERIA_RPC_URL ?? "https://rpc.cyberia.church");
+  const rpc = process.env.CYBERIA_RPC_URL ?? "https://rpc.cyberia.church";
+  const block = useChainHeight(rpc);
 
   const [skin, setSkin] = useState<string>(() => loadSkin());
   const [previewSkin, setPreviewSkin] = useState<string | null>(null);
@@ -511,6 +535,11 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const draftRef = useRef<string>("");
 
   const tokens = useMemo(() => estimateTokens(history, live), [history, live]);
+  const [pulseOn, setPulseOn] = useState<boolean>(() => loadPulse());
+  useEffect(() => {
+    savePulse(pulseOn);
+  }, [pulseOn]);
+
   const suggestions = useMemo(() => suggestionsFor(value), [value]);
   const menuItems = browsing ? [] : suggestions;
   const acIdx = menuItems.length ? Math.min(acIndex, menuItems.length - 1) : 0;
@@ -520,6 +549,43 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     const id = setInterval(() => setBlink((b) => !b), 530);
     return () => clearInterval(id);
   }, []);
+
+  // Ambient chain watcher — Lain notices whale transfers and quiet spells.
+  useEffect(() => {
+    if (!pulseOn) return;
+    const pulse = new ChainPulse(rpc, (ev) => {
+      pushHistory({ id: nextId(), role: "pulse", parts: [{ kind: "text", text: ev.text }] });
+    });
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseOn, pushHistory, rpc]);
+
+  // Sentinel alerts (background balance watches) surface live in the feed.
+  useEffect(() => {
+    const sentinel = runtime.getService<SentinelService>("sentinel");
+    if (!sentinel?.onAlert) return;
+    return sentinel.onAlert((alert) => {
+      pushHistory({ id: nextId(), role: "pulse", parts: [{ kind: "text", text: `⚠ ${alert.text}` }] });
+    });
+  }, [pushHistory, runtime]);
+
+  // Forge progress (wishes being built) surfaces live too.
+  useEffect(() => {
+    const forge = runtime.getService<ForgeService>("forge");
+    if (!forge?.onEvent) return;
+    return forge.onEvent((ev) => {
+      pushHistory({ id: nextId(), role: "pulse", parts: [{ kind: "text", text: ev.text }] });
+    });
+  }, [pushHistory, runtime]);
+
+  // Research digests from the scout land in the feed as well.
+  useEffect(() => {
+    const scout = runtime.getService<ScoutService>("scout");
+    if (!scout?.onEvent) return;
+    return scout.onEvent((ev) => {
+      pushHistory({ id: nextId(), role: "pulse", parts: [{ kind: "text", text: ev.text }] });
+    });
+  }, [pushHistory, runtime]);
 
   const openSkinPicker = useCallback(() => {
     setPicker({
@@ -566,6 +632,76 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         case "skills":
           pushHistory(sysTurn(skillsList(runtime.actions)));
           break;
+        case "facts":
+          void runtime.memory.facts(30).then((facts) => {
+            pushHistory(
+              sysTurn(
+                facts.length
+                  ? `durable facts (${facts.length}):\n${facts.map((f) => `  · ${f}`).join("\n")}`
+                  : "no durable facts yet — say “remember that …” to teach me.",
+              ),
+            );
+          });
+          break;
+        case "watches": {
+          const sentinel = runtime.getService<SentinelService>("sentinel");
+          const watches = sentinel?.listWatches() ?? [];
+          pushHistory(
+            sysTurn(
+              watches.length
+                ? `active watches (${watches.length}):\n${watches
+                    .map(
+                      (w) =>
+                        `  ${w.id}  ${w.token ? w.token.toUpperCase() : "CYBER"} of ${w.address}` +
+                        `  ${w.kind === "change" ? "on change" : `${w.kind} ${w.threshold}`}` +
+                        `${w.note ? `  — ${w.note}` : ""}${w.lastValue !== undefined ? `  (last ${w.lastValue})` : ""}`,
+                    )
+                    .join("\n")}`
+                : "no background watches. ask lain: “watch 0x… and warn me below 5 CYBER”.",
+            ),
+          );
+          break;
+        }
+        case "wishes": {
+          const forge = runtime.getService<ForgeService>("forge");
+          const wishes = forge?.listWishes() ?? [];
+          pushHistory(
+            sysTurn(
+              wishes.length
+                ? `wishboard (${wishes.length}):\n${wishes
+                    .map((w) => `  ${w.id} [${w.status}] ${w.title} — ${w.reporter}${w.branch ? `, ${w.branch}` : ""}`)
+                    .join("\n")}`
+                : "the wishboard is empty — tell lain what you wish for.",
+            ),
+          );
+          break;
+        }
+        case "research": {
+          const scout = runtime.getService<ScoutService>("scout");
+          const topics = scout?.listTopics() ?? [];
+          pushHistory(
+            sysTurn(
+              topics.length
+                ? `research topics (${topics.length}):\n${topics
+                    .map(
+                      (t) =>
+                        `  ${t.id} "${t.query}" every ${Math.round(t.intervalMs / 3_600_000)}h` +
+                        `${t.note ? ` — ${t.note}` : ""}`,
+                    )
+                    .join("\n")}`
+                : "no research topics — try: “следи за Solana и сообщай только важное”.",
+            ),
+          );
+          break;
+        }
+        case "pulse": {
+          const next = !pulseOn;
+          setPulseOn(next);
+          pushHistory(
+            sysTurn(next ? "pulse on — i'll murmur when the chain moves." : "pulse off — the wired goes quiet."),
+          );
+          break;
+        }
         case "skin":
         case "theme":
           openSkinPicker();
@@ -593,7 +729,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           pushHistory(sysTurn(`unknown command: /${cmd}  (try /help)`));
       }
     },
-    [exit, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pushHistory, runtime],
+    [exit, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pulseOn, pushHistory, runtime],
   );
 
   const send = useCallback(

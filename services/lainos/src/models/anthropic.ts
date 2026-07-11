@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { fetch as undiciFetch, ProxyAgent } from "undici";
 import { createLogger } from "../logger.js";
 import {
   ModelTier,
@@ -19,6 +20,8 @@ export const DEFAULT_MODELS: Record<ModelTier, string> = {
 export interface AnthropicProviderOptions {
   apiKey: string;
   models?: Partial<Record<ModelTier, string>>;
+  /** Optional HTTP(S) proxy for API traffic (hosts where api.anthropic.com is blocked). */
+  proxy?: string;
 }
 
 /** Anthropic Claude backend implementing the LainOS ModelProvider contract. */
@@ -28,7 +31,17 @@ export class AnthropicModelProvider implements ModelProvider {
   private models: Record<ModelTier, string>;
 
   constructor(opts: AnthropicProviderOptions) {
-    this.client = new Anthropic({ apiKey: opts.apiKey });
+    let fetch: typeof globalThis.fetch | undefined;
+    if (opts.proxy) {
+      const dispatcher = new ProxyAgent(opts.proxy);
+      log.info(`routing Anthropic traffic via proxy ${opts.proxy}`);
+      fetch = ((url: unknown, init?: unknown) =>
+        undiciFetch(url as Parameters<typeof undiciFetch>[0], {
+          ...(init as Record<string, unknown>),
+          dispatcher,
+        })) as unknown as typeof globalThis.fetch;
+    }
+    this.client = new Anthropic({ apiKey: opts.apiKey, fetch });
     this.models = { ...DEFAULT_MODELS, ...opts.models };
   }
 

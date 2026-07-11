@@ -14,6 +14,9 @@ import { FileMemoryStore } from "./memory/store.js";
 import { createModelProvider } from "./models/index.js";
 import { bootstrapPlugin } from "./plugins/bootstrap/index.js";
 import { cyberiaPlugin } from "./plugins/cyberia/index.js";
+import { forgePlugin } from "./plugins/forge/index.js";
+import { scoutPlugin } from "./plugins/scout/index.js";
+import { sentinelPlugin } from "./plugins/sentinel/index.js";
 import { systemPlugin } from "./plugins/system/index.js";
 import { AgentRuntime } from "./runtime.js";
 import type { Character, Plugin } from "./types.js";
@@ -35,6 +38,13 @@ export {
 } from "./memory/embeddings.js";
 export { cyberiaPlugin, cyberiaChain, CYBERIA_TOKENS } from "./plugins/cyberia/index.js";
 export { systemPlugin } from "./plugins/system/index.js";
+export { sentinelPlugin, SentinelService } from "./plugins/sentinel/index.js";
+export type { Alert, Watch, WatchKind } from "./plugins/sentinel/index.js";
+export { forgePlugin, ForgeService } from "./plugins/forge/index.js";
+export type { ForgeEvent, ForgeJob, Wish, WishStatus } from "./plugins/forge/index.js";
+export { scoutPlugin, ScoutService, parseRss } from "./plugins/scout/index.js";
+export type { ScoutEvent, ScoutItem, Topic } from "./plugins/scout/index.js";
+export { TelegramClient } from "./clients/telegram.js";
 export { lain } from "./characters/lain.js";
 
 const log = createLogger("boot");
@@ -44,6 +54,9 @@ const BUILTIN_PLUGINS: Record<string, Plugin> = {
   bootstrap: bootstrapPlugin,
   cyberia: cyberiaPlugin,
   system: systemPlugin,
+  sentinel: sentinelPlugin,
+  forge: forgePlugin,
+  scout: scoutPlugin,
 };
 
 export interface CreateAgentOptions {
@@ -61,7 +74,14 @@ export async function createAgent(opts: CreateAgentOptions): Promise<AgentRuntim
   const memory = new FileMemoryStore(dataDir, embedder);
   const model = createModelProvider(getSetting);
 
-  const runtime = new AgentRuntime({ character: opts.character, memory, model });
+  // Pin the data dir in settings so services (sentinel, telegram) that read
+  // LAINOS_DATA_DIR land in the same place as the memory store.
+  const runtime = new AgentRuntime({
+    character: opts.character,
+    memory,
+    model,
+    settings: { ...process.env, LAINOS_DATA_DIR: dataDir },
+  });
 
   const wanted = new Set(opts.character.plugins ?? ["bootstrap"]);
   for (const name of wanted) {

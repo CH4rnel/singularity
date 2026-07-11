@@ -115,6 +115,7 @@ interface Prefs {
   skin?: string;
   effort?: string;
   cursor?: string; // "block-blink" | "block-steady" | "line-blink" | "line-steady"
+  pulse?: boolean; // ambient chain-watcher murmurs on/off
 }
 
 function prefsPath(): string {
@@ -159,6 +160,18 @@ export function loadEffort(): string {
 /** Persist the chosen effort, keeping other prefs intact. */
 export function saveEffort(effort: string): void {
   writePrefs({ ...readPrefs(), effort });
+}
+
+/** Whether the ambient chain pulse is on: env override → saved → on. */
+export function loadPulse(): boolean {
+  const env = process.env.LAINOS_TUI_PULSE;
+  if (env !== undefined) return env !== "0" && env !== "off";
+  return readPrefs().pulse ?? true;
+}
+
+/** Persist the pulse toggle, keeping other prefs intact. */
+export function savePulse(pulse: boolean): void {
+  writePrefs({ ...readPrefs(), pulse });
 }
 
 /** Cursor style+blink, e.g. "block-blink". env override → saved → default. */

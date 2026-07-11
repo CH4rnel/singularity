@@ -1,5 +1,9 @@
 import { createServer, type Server } from "node:http";
+import { runCyberiaStudyNow } from "../cyberia-study.js";
 import { createLogger } from "../logger.js";
+import type { ForgeService } from "../plugins/forge/index.js";
+import type { ScoutService } from "../plugins/scout/index.js";
+import type { SentinelService } from "../plugins/sentinel/index.js";
 import type { IAgentRuntime } from "../types.js";
 
 const log = createLogger("http");
@@ -14,6 +18,10 @@ export interface HttpOptions {
  * Godot game's NPCs) can talk to the agent.
  *
  *   GET  /health           -> { ok, agent }
+ *   GET  /alerts            -> { alerts } (recent sentinel alerts)
+ *   GET  /wishes            -> { wishes } (the forge wishboard)
+ *   GET  /research          -> { topics } (the scout's subscriptions)
+ *   POST /research/cyberia-study/run -> { topic, digest }
  *   POST /chat {roomId,userId,text} -> { text, actions }
  */
 export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {}): Server {
@@ -31,6 +39,38 @@ export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {})
 
     if (req.method === "GET" && req.url === "/health") {
       return json(res, 200, { ok: true, agent: runtime.character.name });
+    }
+
+    if (req.method === "GET" && req.url?.startsWith("/alerts")) {
+      const sentinel = runtime.getService<SentinelService>("sentinel");
+      return json(res, 200, { alerts: sentinel?.recentAlerts(50) ?? [] });
+    }
+
+    if (req.method === "GET" && req.url?.startsWith("/wishes")) {
+      const forge = runtime.getService<ForgeService>("forge");
+      return json(res, 200, { wishes: forge?.listWishes() ?? [] });
+    }
+
+    if (req.method === "GET" && req.url?.startsWith("/research")) {
+      const scout = runtime.getService<ScoutService>("scout");
+      return json(res, 200, { topics: scout?.listTopics() ?? [] });
+    }
+
+    if (req.method === "POST" && req.url === "/research/cyberia-study/run") {
+      const scout = runtime.getService<ScoutService>("scout");
+      if (!scout) return json(res, 503, { error: "scout offline" });
+      try {
+        const result = await runCyberiaStudyNow(scout);
+        if (!result) return json(res, 409, { error: "cyberia study disabled" });
+        return json(res, 200, {
+          topic: result.topic,
+          digest: result.digest,
+          message: result.digest ?? "study note created",
+        });
+      } catch (err) {
+        log.error("cyberia study trigger failed", err);
+        return json(res, 500, { error: "cyberia study failed" });
+      }
     }
 
     if (req.method === "POST" && req.url === "/chat") {
@@ -55,6 +95,18 @@ export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {})
     json(res, 404, { error: "not found" });
   });
 
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      log.error(
+        `port ${port} is already taken — another LainOS instance is probably running ` +
+          `(try: systemctl --user status lainos.service). ` +
+          `Stop it first, or set LAINOS_HTTP_PORT to a free port. ` +
+          `Never run two instances of one agent: they would fight over memory files and the Telegram poller.`,
+      );
+      process.exit(1);
+    }
+    throw err;
+  });
   server.listen(port, host, () => {
     log.info(`HTTP bridge for ${runtime.character.name} on http://${host}:${port}`);
   });

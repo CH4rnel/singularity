@@ -23,6 +23,9 @@ import {
 
 const log = createLogger("runtime");
 
+/** Upper bound on think→act rounds within one turn. */
+const MAX_TOOL_ROUNDS = 4;
+
 export interface RuntimeOptions {
   character: Character;
   memory: MemoryStore;
@@ -211,25 +214,45 @@ export class AgentRuntime implements IAgentRuntime {
     const messages = this.memoriesToMessages(state.recent);
     const tier = this.character.modelTier ?? ModelTier.LARGE;
 
-    // --- Think (streamed, with tools) ---
+    // --- Think → act loop (streamed, with tools) ---
+    // The model may chain several tool rounds (read a file, then check a
+    // balance, then send). Bounded by MAX_TOOL_ROUNDS; an exactly repeated
+    // call (same tool, same input) short-circuits into the final reply so a
+    // confused model can never loop.
     onEvent({ type: "thinking" });
     let res = await this.streamOrGenerate(
       { tier, system, messages, tools, maxTokens: this.maxTokens },
       (delta) => onEvent({ type: "text", delta }),
     );
     const ranActions: TurnResult["actions"] = [];
+    const convo = [...messages];
+    const seenCalls = new Set<string>();
+    let rounds = 0;
 
-    // --- Act ---
-    if (res.toolCalls.length) {
+    while (res.toolCalls.length) {
+      rounds += 1;
       const toolSummaries: string[] = [];
+      let sawRepeat = false;
+
       for (const call of res.toolCalls) {
         const action = this.actions.find(
           (a) => a.name === call.name || a.similes.includes(call.name),
         );
         if (!action) {
           log.warn(`model called unknown action: ${call.name}`);
+          toolSummaries.push(`Tool ${call.name} -> unknown tool`);
           continue;
         }
+        const callKey = `${action.name}:${JSON.stringify(call.input)}`;
+        if (seenCalls.has(callKey)) {
+          sawRepeat = true;
+          toolSummaries.push(
+            `Tool ${action.name} -> (already called with these arguments; see earlier result)`,
+          );
+          continue;
+        }
+        seenCalls.add(callKey);
+
         const id = randomUUID();
         onEvent({ type: "tool", id, name: action.name, input: call.input });
         let result: ActionResult;
@@ -252,30 +275,35 @@ export class AgentRuntime implements IAgentRuntime {
         );
       }
 
-      // --- Synthesise a natural reply from tool results (streamed) ---
+      const canContinue = rounds < MAX_TOOL_ROUNDS && !sawRepeat;
+      convo.push(
+        {
+          role: "assistant",
+          content:
+            res.text || `(called tools: ${res.toolCalls.map((c) => c.name).join(", ")})`,
+        },
+        {
+          role: "user",
+          content:
+            `Tool results:\n${toolSummaries.join("\n") || "(no tool output)"}\n\n` +
+            (canContinue
+              ? `Continue. Call another tool if the task needs it, otherwise reply to me in character using these results.`
+              : `Now reply to me in character using these results. Do not call more tools.`),
+        },
+      );
+
       onEvent({ type: "thinking" });
       const followup = await this.streamOrGenerate(
         {
           tier,
           system,
           maxTokens: this.maxTokens,
-          messages: [
-            ...messages,
-            {
-              role: "assistant",
-              content: `(called tools: ${res.toolCalls.map((c) => c.name).join(", ")})`,
-            },
-            {
-              role: "user",
-              content:
-                `Tool results:\n${toolSummaries.join("\n")}\n\n` +
-                `Now reply to me in character using these results. Do not call more tools.`,
-            },
-          ],
+          messages: convo,
+          tools: canContinue ? tools : undefined,
         },
         (delta) => onEvent({ type: "text", delta }),
       );
-      res = { ...followup, toolCalls: [] };
+      res = canContinue ? followup : { ...followup, toolCalls: [] };
     }
 
     const replyText =

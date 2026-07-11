@@ -46,6 +46,20 @@ export class MockModelProvider implements ModelProvider {
       }
     }
 
+    // Synthesis round after tool calls: report the results instead of echoing
+    // the runtime's scaffolding back at the user.
+    if (text.startsWith("Tool results:")) {
+      const results = text
+        .split("\n")
+        .filter((l) => l.startsWith("Tool ") && l.includes("->"))
+        .join("; ");
+      return {
+        text: `[offline] ${truncate(results, 300)}`,
+        toolCalls: [],
+        model: this.modelFor(request.tier),
+      };
+    }
+
     const reply = text
       ? `[offline] I hear you: "${truncate(text, 160)}". Set ANTHROPIC_API_KEY for a real mind.`
       : "[offline] ...the Wired is quiet. Set ANTHROPIC_API_KEY to wake me.";

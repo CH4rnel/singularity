@@ -1,3 +1,4 @@
+import { fetch as undiciFetch, ProxyAgent, type Dispatcher } from "undici";
 import { createLogger } from "../logger.js";
 import {
   ModelTier,
@@ -31,6 +32,8 @@ export interface OpenRouterProviderOptions {
   /** Optional attribution headers OpenRouter shows on its dashboard. */
   referer?: string;
   title?: string;
+  /** Optional HTTP(S) proxy for API traffic (hosts where openrouter.ai is blocked). */
+  proxy?: string;
 }
 
 // Minimal shapes of the OpenAI-compatible chat completion response.
@@ -68,6 +71,7 @@ export class OpenRouterModelProvider implements ModelProvider {
   private models: Record<ModelTier, string>;
   private referer: string;
   private title: string;
+  private dispatcher?: Dispatcher;
 
   constructor(opts: OpenRouterProviderOptions) {
     this.apiKey = opts.apiKey;
@@ -75,6 +79,10 @@ export class OpenRouterModelProvider implements ModelProvider {
     this.models = { ...DEFAULT_OPENROUTER_MODELS, ...opts.models };
     this.referer = opts.referer ?? "https://cyberia.church";
     this.title = opts.title ?? "LainOS";
+    if (opts.proxy) {
+      this.dispatcher = new ProxyAgent(opts.proxy);
+      log.info(`routing OpenRouter traffic via proxy ${opts.proxy}`);
+    }
   }
 
   modelFor(tier: ModelTier): string {
@@ -99,7 +107,7 @@ export class OpenRouterModelProvider implements ModelProvider {
       },
     }));
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+    const res = await undiciFetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -115,6 +123,7 @@ export class OpenRouterModelProvider implements ModelProvider {
         tools,
         tool_choice: tools && tools.length ? "auto" : undefined,
       }),
+      dispatcher: this.dispatcher,
     });
 
     if (!res.ok) {
@@ -153,7 +162,7 @@ export class OpenRouterModelProvider implements ModelProvider {
       function: { name: t.name, description: t.description, parameters: t.input_schema },
     }));
 
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+    const res = await undiciFetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -170,6 +179,7 @@ export class OpenRouterModelProvider implements ModelProvider {
         tool_choice: tools && tools.length ? "auto" : undefined,
         stream: true,
       }),
+      dispatcher: this.dispatcher,
     });
 
     if (!res.ok || !res.body) {
