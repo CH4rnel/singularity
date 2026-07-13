@@ -31,6 +31,7 @@ use App\Http\Middleware\EnsureBridgeAdmin;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
+Route::get('/thesis', fn () => response()->file(resource_path('views/landing/index1.html')))->name('thesis');
 Route::get('/tonconnect-manifest.json', fn () => response()->json([
     'url' => 'https://cyberia.church/bridge',
     'name' => 'Cyberia Bridge',

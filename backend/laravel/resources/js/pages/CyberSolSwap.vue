@@ -21,6 +21,7 @@ import {
     Wallet,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
+import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
@@ -607,10 +608,7 @@ watch(mode, () => {
                                 <div
                                     class="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-3"
                                 >
-                                    <span
-                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-teal-300 text-xs font-bold text-white"
-                                        >◎</span
-                                    >
+                                    <TokenIcon symbol="CYBER.sol" :size="28" />
                                     <div class="text-left leading-tight">
                                         <div class="text-sm font-semibold">
                                             CYBER.sol
@@ -687,10 +685,7 @@ watch(mode, () => {
                                 <div
                                     class="flex shrink-0 items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/5 py-1 pl-1 pr-3"
                                 >
-                                    <span
-                                        class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-teal-300 to-teal-400 text-xs font-bold text-white"
-                                        >C</span
-                                    >
+                                    <TokenIcon symbol="CYBER" :size="28" />
                                     <div class="text-left leading-tight">
                                         <div class="text-sm font-semibold">
                                             CYBER
@@ -775,10 +770,7 @@ watch(mode, () => {
                     class="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/50 px-4 py-3 text-sm"
                 >
                     <span class="flex items-center gap-2 text-muted-foreground">
-                        <span
-                            class="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-teal-300 text-[10px] font-bold text-white"
-                            >◎</span
-                        >
+                        <TokenIcon symbol="CYBER.sol" :size="24" />
                         CYBER still on Solana?
                     </span>
                     <a

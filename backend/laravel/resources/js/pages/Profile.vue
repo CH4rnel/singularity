@@ -486,21 +486,22 @@ async function copy(key: string, value: string | null | undefined) {
                 Deposit addresses
             </h2>
             <p class="text-sm text-muted-foreground">
-                Deposit addresses for every supported network. Addresses marked
+                Addresses marked
                 <Badge
                     variant="outline"
                     class="mx-0.5 align-middle text-[10px] tracking-widest text-brand-cyan uppercase"
                     >personal</Badge
                 >
                 are issued to you alone, like on an exchange — anything sent
-                there is credited to your account. Shared addresses require
-                starting from the
+                there is credited to your account. Networks without one yet
+                will get a unique per-user address soon; until then, deposit
+                through the
                 <Link
                     :href="bridge()"
                     class="text-foreground underline underline-offset-4"
                     >Bridge</Link
                 >
-                page so your deposit is matched to a request.
+                page so your transfer is matched to a request.
             </p>
             <div
                 v-for="chain in props.depositChains"
@@ -558,7 +559,14 @@ async function copy(key: string, value: string | null | undefined) {
                         page.
                     </p>
                     <p v-else class="text-xs text-muted-foreground">
-                        Not configured yet.
+                        A unique deposit address for your account is coming
+                        soon. For now, deposit via the
+                        <Link
+                            :href="bridge()"
+                            class="text-foreground underline underline-offset-4"
+                            >Bridge</Link
+                        >
+                        page.
                     </p>
                 </div>
             </div>

@@ -30,6 +30,19 @@ class BridgeConfigService
     }
 
     /**
+     * Chain-level kill switch ('enabled' in config/bridge.php, default on).
+     * Disabled chains stay in chains()/chain() so in-flight requests can
+     * still be processed, but vanish from the frontend and their routes
+     * are rejected.
+     */
+    public function chainEnabled(string $key): bool
+    {
+        $chain = $this->chain($key);
+
+        return $chain !== null && ($chain['enabled'] ?? true) !== false;
+    }
+
+    /**
      * Routes whose chains are operational: both chains exist and the source
      * chain has a deposit address (TON routes disappear while
      * BRIDGE_TON_DEPOSIT_ADDRESS is unset; evm_to_ton also requires it since
@@ -139,6 +152,11 @@ class BridgeConfigService
      */
     public function publicChains(): array
     {
+        $enabled = array_filter(
+            $this->chains(),
+            fn (array $chain) => ($chain['enabled'] ?? true) !== false,
+        );
+
         return array_values(array_map(fn (array $chain) => [
             'key' => $chain['key'],
             'label' => $chain['label'],
@@ -153,7 +171,7 @@ class BridgeConfigService
             'explorerTxFallbacks' => $chain['explorer_tx_fallbacks'] ?? [],
             'nativeCurrency' => $chain['native_currency'] ?? null,
             'depositAddress' => $this->depositAddress($chain['key']),
-        ], $this->chains()));
+        ], $enabled));
     }
 
     /**
@@ -259,7 +277,9 @@ class BridgeConfigService
     {
         return array_filter(
             config('bridge.routes', []),
-            fn (array $route) => ($route['enabled'] ?? true) !== false,
+            fn (array $route) => ($route['enabled'] ?? true) !== false
+                && $this->chainEnabled($route['source_chain'] ?? '')
+                && $this->chainEnabled($route['destination_chain'] ?? ''),
         );
     }
 
@@ -271,6 +291,10 @@ class BridgeConfigService
     private function routeOperational(string $direction, array $route, ?array $source, ?array $destination): bool
     {
         if (! $source || ! $destination) {
+            return false;
+        }
+
+        if (! $this->chainEnabled($source['key']) || ! $this->chainEnabled($destination['key'])) {
             return false;
         }
 

@@ -11,10 +11,11 @@ use Inertia\Inertia;
 
 /**
  * Signed-in user's own profile page (the public one is UserProfileController).
- * Alongside account info it lists a deposit address for every supported chain:
- * personal CEX-style addresses on BTC/LTC/YTN/XMR (derived per user, deposits
- * are attributable without a bridge request) and the shared bridge wallets on
- * EVM/Solana/TON chains, where attribution comes from the wizard flow.
+ * Alongside account info it lists a deposit address for every enabled chain,
+ * but ONLY personal CEX-style ones (derived per user, deposits attributable
+ * without a bridge request). Shared bridge wallets (relayer EOA, hot wallets)
+ * are never shown here — a bare deposit to them cannot be credited to anyone;
+ * chains without a personal address advertise one as coming soon instead.
  * On-chain identity (CyberiaProfile contract) also lives here: a globally
  * unique nickname and service-usage achievements, both minted on Cyberia.
  */
@@ -100,12 +101,12 @@ class ProfileController extends Controller
     }
 
     /**
-     * Deposit address per supported chain. Chains with a personal per-user
-     * address show that; the rest fall back to the shared bridge wallet.
-     * Yenten without a configured seed exposes no static address at all: its
-     * request flow binds deposits to one-time HD addresses, and funds sent to
-     * the central sweep wallet directly cannot be credited — the row carries
-     * a oneTime flag instead.
+     * Deposit address per enabled chain — personal per-user addresses only.
+     * Shared bridge wallets are deliberately never exposed here: a deposit to
+     * them can't be attributed to a user, and those chains will get personal
+     * addresses of their own later. Yenten without a configured seed carries
+     * a oneTime flag instead (its request flow binds deposits to one-time HD
+     * addresses on the Bridge page).
      *
      * @param  array<string, string>  $personal  chain key => personal address
      * @return array<int, array<string, mixed>>
@@ -120,8 +121,7 @@ class ProfileController extends Controller
                 'label' => $chain['label'],
                 'type' => $chain['type'],
                 'addressType' => $chain['addressType'],
-                'address' => $personalAddress
-                    ?? ($chain['type'] === 'yenten' ? null : $chain['depositAddress']),
+                'address' => $personalAddress,
                 'personal' => $personalAddress !== null,
                 'oneTime' => $personalAddress === null && $chain['type'] === 'yenten',
             ];

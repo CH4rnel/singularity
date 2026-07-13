@@ -24,6 +24,9 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Manrope',ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  /* clip (not hidden): kills sideways scroll from glitch trails without
+     creating a scroll container, so position:sticky on the nav keeps working */
+  html,body{overflow-x:clip}
   a{color:inherit;text-decoration:none}
   img{display:block;max-width:100%}
   ::selection{background:var(--cyan);color:#000}
@@ -618,6 +621,192 @@
     line-height:1.25;
   }
   .creed .tenet p{font-size:14.5px;line-height:1.55;color:var(--ink-2);margin:0}
+  .creed .tenet ul{list-style:none;margin:0;padding:0}
+  .creed .tenet li{
+    font-size:14.5px;line-height:1.5;color:var(--ink-2);
+    padding:9px 0 9px 20px;position:relative;
+    border-bottom:1px solid var(--rule);
+  }
+  .creed .tenet li:last-child{border-bottom:none}
+  .creed .tenet li::before{content:"—";position:absolute;left:0;color:var(--cyan-strong)}
+
+  /* ====== PHILOSOPHY PILLARS ====== */
+  .pillars{
+    display:grid;grid-template-columns:1fr 1fr;
+    border:1px solid var(--ink);margin-top:64px;
+  }
+  .pillar{
+    padding:30px 32px;
+    border-right:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+  }
+  .pillar:nth-child(2n){border-right:none}
+  .pillar:nth-last-child(-n+2){border-bottom:none}
+  .pillar .num{
+    font-family:ui-monospace,monospace;font-size:12px;color:var(--cyan-strong);
+    letter-spacing:.18em;margin-bottom:14px;
+  }
+  .pillar h3{
+    font-size:19px;font-weight:700;letter-spacing:-.01em;
+    margin:0 0 10px;color:var(--ink);line-height:1.25;
+  }
+  .pillar p{font-size:14.5px;line-height:1.55;color:var(--ink-2);margin:0}
+
+  /* ====== PHILOSOPHY — DARK BAND ====== */
+  .phil{
+    max-width:none;padding:0;position:relative;color:#eceff1;
+    background:
+      radial-gradient(1000px 460px at 88% -5%, rgba(0,229,209,.10), transparent 60%),
+      radial-gradient(800px 420px at 4% 105%, rgba(255,43,214,.07), transparent 60%),
+      #0b0d0f;
+  }
+  .phil::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.028) 0 1px, transparent 1px 4px);
+  }
+  .phil::after{
+    content:"";position:absolute;left:0;right:0;top:0;height:2px;
+    background:linear-gradient(90deg, var(--cyan), rgba(0,229,209,0) 65%);
+  }
+  .phil-inner{max-width:var(--max);margin:0 auto;padding:130px 40px;position:relative}
+  .phil .chapter-index{color:rgba(255,255,255,.6)}
+  .phil .chapter-index .num{color:var(--cyan)}
+  .phil .chapter-h{font-size:52px;max-width:880px;color:#fff}
+  .phil .body p{color:rgba(255,255,255,.7)}
+  .phil .body p.lead{color:#fff}
+  .phil .body strong{color:var(--cyan);font-weight:600}
+  .phil .creed{border-top-color:rgba(255,255,255,.18)}
+  .phil .creed .tenet{border-right-color:rgba(255,255,255,.1)}
+  .phil .creed .tenet h3{color:#fff}
+  .phil .creed .tenet p{color:rgba(255,255,255,.66)}
+  .phil .creed .tenet .num{color:var(--cyan)}
+  .phil .pillars{border-color:rgba(255,255,255,.4)}
+  .phil .pillar{border-right-color:rgba(255,255,255,.1);border-bottom-color:rgba(255,255,255,.1)}
+  .phil .pillar h3{color:#fff}
+  .phil .pillar p{color:rgba(255,255,255,.66)}
+  .phil .pillar .num{color:var(--cyan)}
+  .phil .btn.ghost{border-color:rgba(255,255,255,.9);color:#fff}
+  .phil .btn.ghost:hover{background:#fff;color:var(--ink)}
+
+  /* ====== ECOSYSTEM ====== */
+  .eco-sub{
+    display:flex;align-items:center;gap:16px;
+    margin:72px 0 20px;
+    font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;
+  }
+  .eco-sub::after{content:"";flex:1;height:1px;background:var(--rule)}
+  .eco-sub:first-of-type{margin-top:56px}
+  .prod-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    border:1px solid var(--ink);
+  }
+  .prod{
+    display:flex;flex-direction:column;gap:10px;
+    padding:26px 28px 22px;min-height:190px;
+    border-right:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+    color:var(--ink);text-decoration:none;
+    transition:background .15s,color .15s;
+  }
+  .prod:nth-child(3n){border-right:none}
+  .prod:nth-last-child(-n+3){border-bottom:none}
+  a.prod:hover{background:var(--ink);color:#fff}
+  .prod-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+  .prod-ic{
+    width:42px;height:42px;flex:0 0 42px;
+    display:inline-flex;align-items:center;justify-content:center;
+    border:1px solid var(--rule);border-radius:3px;color:var(--ink);
+    transition:border-color .15s,color .15s,box-shadow .15s;
+  }
+  .prod-ic svg{width:21px;height:21px}
+  a.prod:hover .prod-ic{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 20px rgba(0,229,209,.35)}
+  .prod.soon .prod-ic{color:var(--muted)}
+  .prod.soon{cursor:default}
+  .prod-k{
+    font-size:11px;color:var(--cyan-strong);
+    text-transform:uppercase;letter-spacing:.16em;font-weight:700;
+    text-align:right;
+  }
+  a.prod:hover .prod-k{color:var(--cyan)}
+  .prod h3{
+    font-size:20px;font-weight:700;letter-spacing:-.01em;
+    margin:0;line-height:1.2;
+  }
+  .prod p{font-size:14px;line-height:1.55;color:var(--ink-2);margin:0;flex:1}
+  a.prod:hover p{color:rgba(255,255,255,.75)}
+  .prod-foot{
+    display:flex;align-items:center;justify-content:space-between;margin-top:8px;
+  }
+  .prod-status{
+    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
+    padding:4px 9px;border:1px solid currentColor;border-radius:2px;
+  }
+  .prod-status.live{color:var(--cyan-strong);display:inline-flex;align-items:center;gap:7px}
+  .prod-status.live::before{
+    content:"";width:6px;height:6px;border-radius:50%;background:currentColor;
+    animation:chipBlink 1.8s ease-in-out infinite;
+  }
+  @keyframes chipBlink{0%,100%{opacity:1}50%{opacity:.2}}
+  a.prod:hover .prod-status.live{color:var(--cyan)}
+  .prod-status.running{color:var(--ink)}
+  a.prod:hover .prod-status.running{color:#fff}
+  .prod-status.dev{color:var(--muted)}
+  .prod-arr{opacity:.45;transition:transform .15s,opacity .15s}
+  a.prod:hover .prod-arr{opacity:1;transform:translate(2px,-2px)}
+
+  /* ====== TICKER TAPE ====== */
+  .tape{
+    overflow:hidden;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+    padding:13px 0;background:#fff;
+  }
+  .tape-track{
+    display:inline-flex;white-space:nowrap;width:max-content;
+    animation:tapeMove 44s linear infinite;
+  }
+  .tape.rev .tape-track{animation-direction:reverse}
+  .tape span{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--ink-2);
+  }
+  .tape i{font-style:normal;color:var(--cyan-strong);padding:0 16px}
+  @keyframes tapeMove{to{transform:translateX(-50%)}}
+
+  /* ====== LIVE BLOCK ====== */
+  .sv.live-block{
+    display:inline-flex;align-items:center;gap:10px;justify-content:center;
+    transition:color .3s;
+  }
+  .sv.live-block.flash{color:var(--cyan-strong)}
+  .pulse{
+    width:8px;height:8px;border-radius:50%;background:var(--cyan-strong);
+    box-shadow:0 0 0 0 rgba(0,229,209,.55);
+    animation:pulseDot 1.8s ease-out infinite;
+  }
+  @keyframes pulseDot{
+    0%{box-shadow:0 0 0 0 rgba(0,229,209,.55)}
+    70%{box-shadow:0 0 0 9px rgba(0,229,209,0)}
+    100%{box-shadow:0 0 0 0 rgba(0,229,209,0)}
+  }
+
+  /* ====== SCROLL REVEAL ====== */
+  [data-reveal]{opacity:0}
+  [data-reveal].revealed{opacity:1;animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+  @keyframes rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+  .prod-grid .prod.revealed:nth-child(3n+2){animation-delay:.08s}
+  .prod-grid .prod.revealed:nth-child(3n+3){animation-delay:.16s}
+  .creed .tenet.revealed:nth-child(2){animation-delay:.1s}
+  .creed .tenet.revealed:nth-child(3){animation-delay:.2s}
+  .pillars .pillar.revealed:nth-child(2){animation-delay:.08s}
+  .pillars .pillar.revealed:nth-child(3){animation-delay:.16s}
+  .pillars .pillar.revealed:nth-child(4){animation-delay:.24s}
+  @media (prefers-reduced-motion: reduce){
+    [data-reveal]{opacity:1 !important}
+    [data-reveal].revealed{animation:none !important}
+    .tape-track{animation:none !important}
+    .pulse,.prod-status.live::before{animation:none !important}
+  }
 
   /* ====== Responsive ====== */
   @media (max-width: 880px){
@@ -644,6 +833,17 @@
     .creed{grid-template-columns:1fr}
     .creed .tenet{border-right:none;border-bottom:1px solid var(--rule)}
     .creed .tenet:last-child{border-bottom:none}
+    .pillars{grid-template-columns:1fr}
+    .pillar{border-right:none !important;border-bottom:1px solid var(--rule) !important}
+    .pillars > .pillar:last-child{border-bottom:none !important}
+    .prod-grid{grid-template-columns:1fr}
+    .prod{min-height:0;border-right:none !important;border-bottom:1px solid var(--rule) !important}
+    .prod-grid > .prod:last-child{border-bottom:none !important}
+    .phil-inner{padding:84px 22px}
+    .phil .chapter-h{font-size:30px}
+    .phil .creed .tenet{border-bottom-color:rgba(255,255,255,.12)}
+    .phil .pillar{border-bottom-color:rgba(255,255,255,.12) !important}
+    .tape span{font-size:10px}
   }
 </style>
 </head>
@@ -787,10 +987,10 @@ function Nav(){
       <div className="nav-inner">
         <CyberiaLogo />
         <nav className="nav-links">
+          <a href="#philosophy">Philosophy</a>
+          <a href="#ecosystem">Ecosystem</a>
           <a href="#doctrine">Doctrine</a>
           <a href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">Roadmap</a>
-          <a href="/dao">DAO</a>
-          <a href="/lending">Lending</a>
           <a href="/bridge">Bridge</a>
           <a href="https://swap.cyberia.church" target="_blank" rel="noopener">Swap</a>
           <a href="https://explorer.cyberia.church/" target="_blank" rel="noopener">Explorer</a>
@@ -798,6 +998,71 @@ function Nav(){
         </nav>
       </div>
     </header>
+  );
+}
+
+/* ------------ Live block height (proof the chain is alive) ------------ */
+function LiveBlock(){
+  const [block, setBlock] = useState(null);
+  const [flash, setFlash] = useState(false);
+  useEffect(()=>{
+    let alive = true, timer;
+    const tick = ()=>{
+      fetch(NETWORK.rpc, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'eth_blockNumber', params:[] }),
+      })
+        .then(r => r.json())
+        .then(j => {
+          if(!alive || !j || !j.result) return;
+          const n = parseInt(j.result, 16);
+          setBlock(prev => {
+            if(prev !== null && n !== prev){
+              setFlash(true);
+              setTimeout(()=>{ if(alive) setFlash(false); }, 450);
+            }
+            return n;
+          });
+        })
+        .catch(()=>{})
+        .finally(()=>{ if(alive) timer = setTimeout(tick, 4000); });
+    };
+    tick();
+    return ()=>{ alive = false; clearTimeout(timer); };
+  },[]);
+  if(block === null){
+    return (
+      <div className="stat">
+        <div className="sv">L1</div>
+        <div className="sk">Cyberia mainnet</div>
+      </div>
+    );
+  }
+  return (
+    <div className="stat">
+      <div className={`sv live-block ${flash?'flash':''}`}>
+        <span className="pulse" aria-hidden="true"></span>
+        {block.toLocaleString('en-US')}
+      </div>
+      <div className="sk">Live block · ~1s chain</div>
+    </div>
+  );
+}
+
+/* ------------ Ticker tape ------------ */
+const TAPE_ITEMS = [
+  'Swap','Bridge','DAO','Lending','Launchpad','Markets','Profile','Arcade',
+  'Explorer','LainOS','Wired','NO CARRIER','Telegram','Cyberia OS',
+  'Chain ID 49406','~1s blocks','GPL-3.0',
+];
+function Tape({ reverse }){
+  const half = TAPE_ITEMS.map((w,i)=>(<span key={i}>{w}<i>◆</i></span>));
+  const dup  = TAPE_ITEMS.map((w,i)=>(<span key={'d'+i}>{w}<i>◆</i></span>));
+  return (
+    <div className={`tape ${reverse?'rev':''}`} aria-hidden="true">
+      <div className="tape-track">{half}{dup}</div>
+    </div>
   );
 }
 
@@ -829,10 +1094,7 @@ function Hero(){
           <div className="sv">pump.fun</div>
           <div className="sk">Trading venue</div>
         </div>
-        <div className="stat">
-          <div className="sv">L1</div>
-          <div className="sk">Cyberia mainnet</div>
-        </div>
+        <LiveBlock />
         <div className="stat">
           <div className="sv">CYBER</div>
           <div className="sk">L1 native gas</div>
@@ -844,7 +1106,7 @@ function Hero(){
 
 function Doctrine(){
   return (
-    <section className="founding" id="doctrine" data-screen-label="02 Why $CYBER.sol">
+    <section className="founding" id="doctrine" data-screen-label="04 Why $CYBER.sol">
       <div className="eyebrow"><span className="dash"></span>Why $CYBER.sol<span className="dash"></span></div>
       <h1>
         <span className="b1">A Solana token from</span>
@@ -862,7 +1124,7 @@ function Doctrine(){
         chain has its own native gas token (CYBER). $CYBER.sol is what trades.
       </p>
 
-      <div className="creed" aria-label="Why Cyberia">
+      <div className="creed" aria-label="Why Cyberia" data-reveal="">
         <div className="tenet">
           <div className="num">— 01</div>
           <h3><Glitch minGap={5200} maxGap={9000}>Live, not vapor.</Glitch></h3>
@@ -885,7 +1147,7 @@ function Doctrine(){
 
 function Problem(){
   return (
-    <section className="problem" id="token" data-screen-label="03 $CYBER.sol">
+    <section className="problem" id="token" data-screen-label="05 $CYBER.sol">
       <div className="chapter-index">
         <span className="num">¤</span>
         <span>$CYBER.sol — the community asset</span>
@@ -902,7 +1164,7 @@ function Problem(){
           is what the market holds while the chain grows up around it.
         </p>
 
-        <div className="util-grid">
+        <div className="util-grid" data-reveal="">
           <div className="util">
             <div className="util-k">Liquid on Solana</div>
             <div className="util-v">Live on pump.fun today. Buy from Phantom, Backpack, Solflare in under a minute. No KYC, no allowlist.</div>
@@ -934,7 +1196,7 @@ function Problem(){
         The chain is what the cult is building.”
       </blockquote>
 
-      <div className="token-card">
+      <div className="token-card" data-reveal="">
         <div className="tc-head">
           <div className="tc-tick">$CYBER.sol</div>
           <div className="tc-chain">Solana SPL · pump.fun</div>
@@ -1038,7 +1300,7 @@ function Rite(){
     }
   };
   return (
-    <section className="rite" id="join" data-screen-label="04 The L1">
+    <section className="rite" id="join" data-screen-label="06 The L1">
       <div className="rite-inner">
         <div className="eyebrow"><span className="dash"></span>The L1<span className="dash"></span></div>
         <h2>
@@ -1051,7 +1313,7 @@ function Rite(){
           run on this chain. Add it to your wallet to use the apps.
         </p>
 
-        <div className="params">
+        <div className="params" data-reveal="">
           <div className="param">
             <div className="k">Network name</div>
             <div className="v">{NETWORK.name}</div>
@@ -1113,7 +1375,7 @@ function Contact(){
       icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 5h12a3 3 0 0 1 3 3v11H7a3 3 0 0 1-3-3V5z"/><path d="M19 19a3 3 0 0 1-3-3V5"/><path d="M8 9h7M8 13h7M8 17h4"/></svg>) },
   ];
   return (
-    <footer className="footer" id="contact" data-screen-label="05 Channels">
+    <footer className="footer" id="contact" data-screen-label="07 Channels">
       <div className="channels-inner">
         <div className="channels-head">
           <div className="eyebrow"><span className="dash"></span>Channels<span className="dash"></span></div>
@@ -1149,11 +1411,272 @@ function Contact(){
   );
 }
 
+/* ------------ Philosophy ------------ */
+function Philosophy(){
+  return (
+    <section className="phil" id="philosophy" data-screen-label="02 Philosophy">
+      <div className="phil-inner">
+      <div className="chapter-index">
+        <span className="num">†</span>
+        <span>The philosophy — why Cyberia exists</span>
+      </div>
+      <h2 className="chapter-h" data-reveal="">
+        <Glitch>Open source built the world.</Glitch>
+        <Glitch>The world forgot to pay it back.</Glitch>
+      </h2>
+      <div className="body" data-reveal="">
+        <p className="lead">
+          Every bank, every hospital, every AI model, every phone runs on code
+          written and maintained by people who are mostly not paid for it.
+          Researchers at Harvard Business School put the demand-side value of
+          open-source software near <strong>$8.8&nbsp;trillion</strong>. What
+          its maintainers actually receive is a rounding error on that figure.
+        </p>
+        <p>
+          This is not a failure of goodwill — it is a failure of infrastructure.
+          Capital markets have clearing houses. Commerce has payment networks.
+          Open-source work has no settlement layer at all: contribution flows
+          in one direction, value flows everywhere else.
+        </p>
+        <p>
+          Cyberia is built to be that missing layer — a sovereign chain where an
+          act of contribution (code, content, moderation, capital) is a native
+          economic event: recorded, verifiable, rewardable. Change what the
+          network can see, and you change what the economy can reward. Change
+          the perception — and the whole world changes with it.
+        </p>
+      </div>
+
+      <div className="creed" aria-label="Mission, vision, promise">
+        <div className="tenet" data-reveal="">
+          <div className="num">MISSION</div>
+          <h3><Glitch minGap={6000} maxGap={9800}>Settle the work.</Glitch></h3>
+          <p>Build the settlement layer that lets open-source work flow at the speed of the economy it powers.</p>
+        </div>
+        <div className="tenet" data-reveal="">
+          <div className="num">VISION</div>
+          <h3><Glitch minGap={6600} maxGap={10400}>Contribution is capital.</Glitch></h3>
+          <p>A world where contribution is a first-class economic event — measured, rewarded, and settled on neutral rails.</p>
+        </div>
+        <div className="tenet" data-reveal="">
+          <div className="num">PROMISE</div>
+          <h3><Glitch minGap={7200} maxGap={11000}>Verify everything.</Glitch></h3>
+          <p>Every claim this network makes is verifiable on-chain or in the open repository. If you cannot verify it, we did not say it.</p>
+        </div>
+      </div>
+
+      <div className="pillars" aria-label="Operating principles">
+        <div className="pillar" data-reveal="">
+          <div className="num">— 01</div>
+          <h3>Built in public. Always.</h3>
+          <p>Every line of code is written in the open. No private repo, no off-the-record roadmap, no information asymmetry between the team and the cult. Transparency is the production environment.</p>
+        </div>
+        <div className="pillar" data-reveal="">
+          <div className="num">— 02</div>
+          <h3>Contribution is measured.</h3>
+          <p>The protocol is neutral about who contributes and in what form. It is not neutral about whether contribution is rewarded. If work was done, it is recorded; if value was created, it can settle.</p>
+        </div>
+        <div className="pillar" data-reveal="">
+          <div className="num">— 03</div>
+          <h3>Infrastructure first. Hype never.</h3>
+          <p>Cyberia grows slower than speculation-first chains, on purpose. Foundational infrastructure accumulates value through durability. This network is built to still be running in 2036.</p>
+        </div>
+        <div className="pillar" data-reveal="">
+          <div className="num">— 04</div>
+          <h3>Sovereign by default. Forkable by design.</h3>
+          <p>GPL-3.0 from consensus to UI. If any party — including the founder — tries to compromise the network, the whole stack forks without friction. Not a feature: the architecture.</p>
+        </div>
+      </div>
+
+      <div className="rite-actions" style={{marginTop:40}} data-reveal="">
+        <a className="btn ghost" href="/thesis">
+          Read the founding thesis
+          <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------ Ecosystem ------------ */
+const ICONS = {
+  swap: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h13M14 3l4 4-4 4"/><path d="M20 17H7M10 13l-4 4 4 4"/></svg>),
+  bridge: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 18v-5a9 9 0 0 1 18 0v5"/><path d="M2 18h20"/><path d="M8 18v-3M16 18v-3"/></svg>),
+  dao: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 21h16"/><path d="M6 21v-9M10 21v-9M14 21v-9M18 21v-9"/><path d="M3 12l9-7 9 7"/></svg>),
+  lending: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M9 15l6-6"/><circle cx="9.3" cy="9.3" r="1"/><circle cx="14.7" cy="14.7" r="1"/></svg>),
+  launchpad: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3c3 2 5 5.5 5 9l-2.5 2.5h-5L7 12c0-3.5 2-7 5-9z"/><path d="M9.5 14.5L7.5 20l2.8-1.2L12 21l1.7-2.2L16.5 20l-2-5.5"/><circle cx="12" cy="9" r="1.5"/></svg>),
+  markets: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-7"/></svg>),
+  profile: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="9" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>),
+  arcade: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/><circle cx="9" cy="15" r="1"/><circle cx="15" cy="15" r="1"/></svg>),
+  explorer: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7.5" height="7.5"/><rect x="13.5" y="3" width="7.5" height="7.5"/><rect x="3" y="13.5" width="7.5" height="7.5"/><circle cx="17" cy="17" r="3"/><path d="M19.2 19.2L22 22"/></svg>),
+  lainos: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 15h4"/><path d="M9 21h6"/></svg>),
+  wired: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c3 3 3 15 0 18"/><path d="M12 3c-3 3-3 15 0 18"/></svg>),
+  nocarrier: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 13v8"/><circle cx="12" cy="11" r="1.6"/><path d="M8.5 7.5a5 5 0 0 0 0 7M15.5 7.5a5 5 0 0 1 0 7"/><path d="M5.8 5a9 9 0 0 0 0 12M18.2 5a9 9 0 0 1 0 12"/></svg>),
+  tg: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4z"/></svg>),
+  os: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>),
+  blog: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 3h9l5 5v13H5z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h5"/></svg>),
+};
+
+const ECO_APPS = [
+  { ic:'swap', k:'DEX', name:'Ritual Swap', href:'https://swap.cyberia.church', status:'live',
+    desc:'The native exchange of Cyberia. AMM pools for CYBER and every ecosystem token, with routing across the whole pair graph.' },
+  { ic:'bridge', k:'Interchain', name:'Bridge', href:'/bridge', status:'live',
+    desc:'Move value between Solana, TON, BSC, Bitcoin-family chains and Cyberia — personal deposit addresses included, plus direct $CYBER.sol ⇄ CYBER conversion.' },
+  { ic:'dao', k:'Governance', name:'DAO', href:'/dao', status:'live',
+    desc:'On-chain organizations: proposals, votes, comments, treasuries. Governance as running software, not committee theatre.' },
+  { ic:'lending', k:'DeFi', name:'Lending', href:'/lending', status:'live',
+    desc:'Collateralized lending and borrowing with on-chain liquidations, plus yield farming on top of the DEX.' },
+  { ic:'launchpad', k:'Token factory', name:'Launchpad', href:'/launchpad', status:'live',
+    desc:'Launch a token on Cyberia in one transaction. Ten CYBER burned into locked liquidity at birth — no rug lever to pull.' },
+  { ic:'markets', k:'Data', name:'Markets & Analytics', href:'/market', status:'live',
+    desc:'Live token markets, pool depth and network analytics — the tape of the whole ecosystem in one place.' },
+  { ic:'profile', k:'Identity', name:'Profile', href:'/profile', status:'live',
+    desc:'Your on-chain self: a nickname and achievements written to the CyberiaProfile contract, plus per-user deposit addresses.' },
+  { ic:'arcade', k:'Arcade', name:'Slots · Predictions · Pixels', href:'/predictions', status:'live',
+    desc:'Small games with real settlement: a slot machine, prediction markets and a collaborative pixel canvas.' },
+  { ic:'explorer', k:'Infrastructure', name:'Explorer', href:'https://explorer.cyberia.church/', status:'live',
+    desc:'Every block, transaction and contract in the open. The chain has no back office.' },
+];
+
+const ECO_WORLDS = [
+  { ic:'lainos', k:'AI agents', name:'LainOS', href:null, status:'running',
+    desc:'An autonomous agent framework born of the Wired. Agents hold their own wallets, read Cyberia and act on it — a mind with a private key.' },
+  { ic:'wired', k:'3D world', name:'Wired', href:null, status:'dev',
+    desc:'A 3D on-chain world. NPCs think through LainOS; the world itself listens to Cyberia blocks and reacts.' },
+  { ic:'nocarrier', k:'Survival horror', name:'NO CARRIER', href:null, status:'dev',
+    desc:'First-person netstalking horror. Tune dead frequencies, decode anomalies out of the noise — and mint what you find as CyberiaNFTs.' },
+  { ic:'tg', k:'Community rails', name:'Telegram', href:'https://t.me/cyberia_network', status:'live',
+    desc:'The temple’s town square: the news channel, the chat, and the rewards bot minting chat tokens and wallet drops.' },
+  { ic:'os', k:'Operating system', name:'Cyberia OS', href:null, status:'dev',
+    desc:'A Linux build that carries the chain in its base image. Boot the temple.' },
+  { ic:'blog', k:'Signal', name:'Blog', href:'https://cyberia-temple.github.io', status:'live',
+    desc:'Long-form writing from the temple: devlogs, research notes, doctrine.' },
+];
+
+const STATUS_LABEL = { live:'Live', running:'Running', dev:'In dev' };
+
+function ProdCard({ p }){
+  const inner = (
+    <>
+      <div className="prod-top">
+        <span className="prod-ic" aria-hidden="true">{ICONS[p.ic]}</span>
+        <span className="prod-k">{p.k}</span>
+      </div>
+      <h3>{p.name}</h3>
+      <p>{p.desc}</p>
+      <div className="prod-foot">
+        <span className={`prod-status ${p.status}`}>{STATUS_LABEL[p.status]}</span>
+        {p.href && (
+          <svg className="prod-arr" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M9 7h8v8"/></svg>
+        )}
+      </div>
+    </>
+  );
+  if(!p.href){
+    return <div className="prod soon" data-reveal="">{inner}</div>;
+  }
+  const ext = p.href.startsWith('http');
+  const extProps = ext ? { target:'_blank', rel:'noopener' } : {};
+  return (
+    <a className="prod" data-reveal="" href={p.href} {...extProps}>{inner}</a>
+  );
+}
+
+function Ecosystem(){
+  return (
+    <section className="eco" id="ecosystem" data-screen-label="03 Ecosystem">
+      <div className="chapter-index">
+        <span className="num">◆</span>
+        <span>The ecosystem — what the cult has built</span>
+      </div>
+      <h2 className="chapter-h" data-reveal="">
+        <Glitch>One chain.</Glitch>
+        <Glitch>Many doors in.</Glitch>
+      </h2>
+      <div className="body" data-reveal="">
+        <p className="lead">
+          Cyberia is not a token with a roadmap — it is a working stack.
+          Exchange, bridge, governance, credit, games, AI agents and an
+          operating system, all running against the same L1. Everything below
+          is open source; most of it is live right now.
+        </p>
+      </div>
+
+      <div className="eco-sub">On the chain</div>
+      <div className="prod-grid" aria-label="On-chain applications">
+        {ECO_APPS.map(p => <ProdCard key={p.name} p={p} />)}
+      </div>
+
+      <div className="eco-sub">Beyond the chain</div>
+      <div className="prod-grid" aria-label="Worlds and agents">
+        {ECO_WORLDS.map(p => <ProdCard key={p.name} p={p} />)}
+      </div>
+
+      <div className="eco-sub">Trajectory</div>
+      <div className="creed" style={{marginTop:0, borderTop:'none'}} aria-label="Roadmap">
+        <div className="tenet" data-reveal="">
+          <div className="num">SHIPPED</div>
+          <h3>Already running.</h3>
+          <ul>
+            <li>Sovereign EVM L1 — chain ID 49406, ~1s blocks</li>
+            <li>DEX, bridge, explorer, DAO, lending, launchpad</li>
+            <li>Contribution tokens (GITHUB, TG, X) minted on verifiable engagement</li>
+            <li>On-chain profiles and achievements</li>
+          </ul>
+        </div>
+        <div className="tenet" data-reveal="">
+          <div className="num">IN MOTION</div>
+          <h3>Being built in the open.</h3>
+          <ul>
+            <li>AI agents transacting on-chain (LainOS)</li>
+            <li>On-chain worlds: Wired and NO CARRIER</li>
+            <li>Second network node — the road to more validators</li>
+            <li>TON and Bitcoin-family bridge lanes</li>
+          </ul>
+        </div>
+        <div className="tenet" data-reveal="">
+          <div className="num">NEXT</div>
+          <h3>Where this is going.</h3>
+          <ul>
+            <li>Independent validator set</li>
+            <li>Contribution-weighted governance</li>
+            <li>Settlement rails for open-source work at full speed</li>
+            <li>Cyberia OS</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function App(){
+  // Scroll-reveal: elements tagged data-reveal slide in when they enter view.
+  useEffect(()=>{
+    const els = Array.from(document.querySelectorAll('[data-reveal]'));
+    if(!('IntersectionObserver' in window)){
+      els.forEach(el => el.classList.add('revealed'));
+      return;
+    }
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach(en=>{
+        if(en.isIntersecting){
+          en.target.classList.add('revealed');
+          io.unobserve(en.target);
+        }
+      });
+    }, { rootMargin:'0px 0px -8% 0px', threshold:0.08 });
+    els.forEach(el => io.observe(el));
+    return ()=> io.disconnect();
+  },[]);
   return (
     <>
       <Nav />
       <Hero />
+      <Tape />
+      <Philosophy />
+      <Ecosystem />
+      <Tape reverse />
       <Doctrine />
       <Problem />
       <Rite />

@@ -1,18 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import {
-    CategoryScale,
-    Chart,
-    Legend,
-    LinearScale,
-    LogarithmicScale,
-    Tooltip,
-} from 'chart.js';
-import {
-    CandlestickController,
-    CandlestickElement,
-} from 'chartjs-chart-financial';
-import {
     BrowserProvider,
     Contract,
     Interface,
@@ -22,30 +10,15 @@ import {
     id,
     parseUnits,
 } from 'ethers';
+import type { UTCTimestamp } from 'lightweight-charts';
 import { Loader2 } from 'lucide-vue-next';
-import {
-    computed,
-    nextTick,
-    onBeforeUnmount,
-    onMounted,
-    ref,
-    watch,
-} from 'vue';
-import { Button } from '@/components/ui/button';
+import { computed, onMounted, ref, watch } from 'vue';
+import TokenCandlesChart from '@/components/launchpad/TokenCandlesChart.vue';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
-
-// Chart.js
-Chart.register(
-    CandlestickController,
-    CandlestickElement,
-    LinearScale,
-    LogarithmicScale,
-    CategoryScale,
-    Tooltip,
-    Legend,
-);
+import { formatNum, formatPrice } from '@/lib/launchpadChart';
+import type { TokenCandle } from '@/lib/launchpadChart';
 
 const CYBERIA_CHAIN_ID = 49406;
 const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
@@ -130,17 +103,7 @@ type LaunchEventMeta = {
     txHash: string;
 };
 
-type TokenTradeCandle = {
-    x: number;
-    o: number;
-    h: number;
-    l: number;
-    c: number;
-    label: string;
-    blockNumber: number;
-    transactionHash: string;
-    logIndex: number;
-};
+type RawCandle = Omit<TokenCandle, 'time'>;
 
 type ExplorerLog = {
     transaction_hash: string;
@@ -157,9 +120,8 @@ type ExplorerLogsResponse = {
 
 const wallet = useWallet();
 
-// Chart instances map
-const chartInstances = new Map<string, Chart<'candlestick'>>();
-const priceHistories = ref<Record<string, TokenTradeCandle[]>>({});
+const priceHistories = ref<Record<string, TokenCandle[]>>({});
+const historyLoaded = ref<Record<string, boolean>>({});
 
 const name = ref('');
 const symbol = ref('');
@@ -221,6 +183,7 @@ const onImageChange = (event: Event): void => {
 const minLiquidity = ref<bigint>(0n);
 const cyberBalance = ref<bigint>(0n);
 const recent = ref<LaunchedToken[]>([]);
+const totalLaunches = ref(0);
 
 const busy = ref(false);
 const status = ref<string | null>(null);
@@ -279,6 +242,43 @@ const canLaunch = computed(
         !insufficientBalance.value &&
         !belowMin.value,
 );
+
+const totalCyberLocked = computed(() =>
+    recent.value.reduce((acc, t) => acc + t.cyberLiquidity, 0n),
+);
+
+type SortKey = 'new' | 'mcap' | 'liq';
+const sortBy = ref<SortKey>('new');
+const sortTabs: { key: SortKey; label: string }[] = [
+    { key: 'new', label: 'Newest' },
+    { key: 'mcap', label: 'Market cap' },
+    { key: 'liq', label: 'Liquidity' },
+];
+
+const sortedRecent = computed<LaunchedToken[]>(() => {
+    // 'new' keeps the on-chain newest-first order.
+    if (sortBy.value === 'new') {
+        return recent.value;
+    }
+
+    const list = [...recent.value];
+
+    if (sortBy.value === 'mcap') {
+        list.sort(
+            (a, b) => (b.marketCapCyber ?? 0) - (a.marketCapCyber ?? 0),
+        );
+    } else {
+        list.sort((a, b) =>
+            b.cyberLiquidity > a.cyberLiquidity
+                ? 1
+                : b.cyberLiquidity < a.cyberLiquidity
+                  ? -1
+                  : 0,
+        );
+    }
+
+    return list;
+});
 
 const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
     const eth = getMetaMaskProvider();
@@ -512,13 +512,13 @@ const readPairPrice = async (
     }
 };
 
-const tradePriceFromSwap = (
+const swapBreakdown = (
     amount0In: bigint,
     amount1In: bigint,
     amount0Out: bigint,
     amount1Out: bigint,
     tokenIsToken0: boolean,
-): number | null => {
+): { executionPrice: number; cyberVolume: number } | null => {
     const tokenAmount = tokenIsToken0
         ? amount0In + amount0Out
         : amount1In + amount1Out;
@@ -542,13 +542,18 @@ const tradePriceFromSwap = (
         return null;
     }
 
-    return cyberWhole / tokenWhole;
+    return {
+        executionPrice: cyberWhole / tokenWhole,
+        cyberVolume: cyberWhole,
+    };
 };
 
+// One candle per block: trades landing in the same block are merged, which
+// also guarantees strictly increasing chart times.
 const readPairTradeHistory = async (
     pairAddr: string,
     tokenIsToken0: boolean,
-): Promise<TokenTradeCandle[]> => {
+): Promise<RawCandle[]> => {
     if (!pairAddr || pairAddr === ZeroAddress) {
         return [];
     }
@@ -575,97 +580,101 @@ const readPairTradeHistory = async (
             syncsByTransaction.set(key, transactionSyncs);
         });
 
-        const candles: TokenTradeCandle[] = [];
+        const candles: RawCandle[] = [];
         let previousClose: number | null = null;
 
         logs.forEach((log) => {
-            const candle = (() => {
-                try {
-                    const parsed = iface.parseLog({
-                        topics: log.topics.filter(
+            try {
+                const parsed = iface.parseLog({
+                    topics: log.topics.filter(
+                        (topic): topic is string => topic !== null,
+                    ),
+                    data: log.data,
+                });
+
+                if (parsed?.name !== 'Swap') {
+                    return;
+                }
+
+                const amount0In = parsed.args.amount0In as bigint;
+                const amount1In = parsed.args.amount1In as bigint;
+                const amount0Out = parsed.args.amount0Out as bigint;
+                const amount1Out = parsed.args.amount1Out as bigint;
+                const breakdown = swapBreakdown(
+                    amount0In,
+                    amount1In,
+                    amount0Out,
+                    amount1Out,
+                    tokenIsToken0,
+                );
+                const matchingSync = syncsByTransaction
+                    .get(log.transaction_hash.toLowerCase())
+                    ?.filter((sync) => sync.index < log.index)
+                    .sort((left, right) => right.index - left.index)[0];
+                let open = previousClose ?? breakdown?.executionPrice ?? null;
+                let close = breakdown?.executionPrice ?? null;
+
+                if (matchingSync) {
+                    const parsedSync = iface.parseLog({
+                        topics: matchingSync.topics.filter(
                             (topic): topic is string => topic !== null,
                         ),
-                        data: log.data,
+                        data: matchingSync.data,
                     });
 
-                    if (parsed?.name !== 'Swap') {
-                        return null;
+                    if (parsedSync?.name === 'Sync') {
+                        const reserve0After = parsedSync.args
+                            .reserve0 as bigint;
+                        const reserve1After = parsedSync.args
+                            .reserve1 as bigint;
+                        const reserve0Before =
+                            reserve0After - amount0In + amount0Out;
+                        const reserve1Before =
+                            reserve1After - amount1In + amount1Out;
+                        const before = priceFromReserves(
+                            reserve0Before,
+                            reserve1Before,
+                            tokenIsToken0,
+                        );
+                        const after = priceFromReserves(
+                            reserve0After,
+                            reserve1After,
+                            tokenIsToken0,
+                        );
+
+                        open = before?.priceCyber ?? open;
+                        close = after?.priceCyber ?? close;
                     }
-
-                    const amount0In = parsed.args.amount0In as bigint;
-                    const amount1In = parsed.args.amount1In as bigint;
-                    const amount0Out = parsed.args.amount0Out as bigint;
-                    const amount1Out = parsed.args.amount1Out as bigint;
-                    const executionPrice = tradePriceFromSwap(
-                        amount0In,
-                        amount1In,
-                        amount0Out,
-                        amount1Out,
-                        tokenIsToken0,
-                    );
-                    const matchingSync = syncsByTransaction
-                        .get(log.transaction_hash.toLowerCase())
-                        ?.filter((sync) => sync.index < log.index)
-                        .sort((left, right) => right.index - left.index)[0];
-                    let open = previousClose ?? executionPrice;
-                    let close = executionPrice;
-
-                    if (matchingSync) {
-                        const parsedSync = iface.parseLog({
-                            topics: matchingSync.topics.filter(
-                                (topic): topic is string => topic !== null,
-                            ),
-                            data: matchingSync.data,
-                        });
-
-                        if (parsedSync?.name === 'Sync') {
-                            const reserve0After = parsedSync.args
-                                .reserve0 as bigint;
-                            const reserve1After = parsedSync.args
-                                .reserve1 as bigint;
-                            const reserve0Before =
-                                reserve0After - amount0In + amount0Out;
-                            const reserve1Before =
-                                reserve1After - amount1In + amount1Out;
-                            const before = priceFromReserves(
-                                reserve0Before,
-                                reserve1Before,
-                                tokenIsToken0,
-                            );
-                            const after = priceFromReserves(
-                                reserve0After,
-                                reserve1After,
-                                tokenIsToken0,
-                            );
-
-                            open = before?.priceCyber ?? open;
-                            close = after?.priceCyber ?? close;
-                        }
-                    }
-
-                    if (open === null || close === null) {
-                        return null;
-                    }
-
-                    return {
-                        x: candles.length + 1,
-                        o: open,
-                        h: Math.max(open, close),
-                        l: Math.min(open, close),
-                        c: close,
-                        label: `Trade ${candles.length + 1} · #${log.block_number.toLocaleString()}`,
-                        blockNumber: log.block_number,
-                        transactionHash: log.transaction_hash,
-                        logIndex: log.index,
-                    };
-                } catch {
-                    return null;
                 }
-            })();
 
-            if (candle) {
-                candles.push(candle);
-                previousClose = candle.c;
+                if (open === null || close === null) {
+                    return;
+                }
+
+                const volume = breakdown?.cyberVolume ?? 0;
+                const last = candles[candles.length - 1];
+
+                if (last && last.block === log.block_number) {
+                    last.high = Math.max(last.high, open, close);
+                    last.low = Math.min(last.low, open, close);
+                    last.close = close;
+                    last.volumeCyber += volume;
+                    last.trades += 1;
+                } else {
+                    candles.push({
+                        block: log.block_number,
+                        open,
+                        high: Math.max(open, close),
+                        low: Math.min(open, close),
+                        close,
+                        volumeCyber: volume,
+                        trades: 1,
+                    });
+                }
+
+                previousClose = close;
+            } catch {
+                // Skip malformed logs.
             }
         });
 
@@ -675,6 +684,54 @@ const readPairTradeHistory = async (
 
         return [];
     }
+};
+
+// Explorer logs carry block numbers but no timestamps. Fetch the real
+// timestamps of the first and last candle blocks and interpolate between
+// them — Cyberia blocks are near-uniform, so this is accurate enough for
+// the chart's time axis.
+const attachCandleTimes = async (
+    candles: RawCandle[],
+): Promise<TokenCandle[]> => {
+    if (candles.length === 0) {
+        return [];
+    }
+
+    const firstBlock = candles[0].block;
+    const lastBlock = candles[candles.length - 1].block;
+    let firstTs: number | null = null;
+    let lastTs: number | null = null;
+
+    try {
+        const [first, last] = await Promise.all([
+            readProvider.getBlock(firstBlock),
+            firstBlock === lastBlock ? null : readProvider.getBlock(lastBlock),
+        ]);
+        firstTs = first?.timestamp ?? null;
+        lastTs = firstBlock === lastBlock ? firstTs : (last?.timestamp ?? null);
+    } catch {
+        // Fall back to the ~1s-per-block estimate below.
+    }
+
+    if (firstTs === null || lastTs === null) {
+        lastTs = Math.floor(Date.now() / 1000);
+        firstTs = lastTs - (lastBlock - firstBlock);
+    }
+
+    const startTs = firstTs;
+    const blockSpan = Math.max(1, lastBlock - firstBlock);
+    const timeSpan = Math.max(0, lastTs - firstTs);
+    let previousTime = 0;
+
+    return candles.map((candle) => {
+        const interpolated =
+            startTs +
+            Math.round(((candle.block - firstBlock) / blockSpan) * timeSpan);
+        const time = Math.max(interpolated, previousTime + 1);
+        previousTime = time;
+
+        return { ...candle, time: time as UTCTimestamp };
+    });
 };
 
 const loadRecent = async (): Promise<void> => {
@@ -692,11 +749,12 @@ const loadRecent = async (): Promise<void> => {
 
         const lengthBn = (await launchpad.allTokensLength()) as bigint;
         const length = Number(lengthBn);
+        totalLaunches.value = length;
 
         if (length === 0) {
             recent.value = [];
             priceHistories.value = {};
-            await renderTokenCharts();
+            historyLoaded.value = {};
 
             return;
         }
@@ -792,12 +850,14 @@ const loadRecent = async (): Promise<void> => {
             };
         });
 
-        const nextHistories: Record<string, TokenTradeCandle[]> = {};
+        const nextHistories: Record<string, TokenCandle[]> = {};
+        const nextLoaded: Record<string, boolean> = {};
         recent.value.forEach((t) => {
-            nextHistories[t.token.toLowerCase()] = [];
+            nextHistories[chartKey(t.token)] = [];
+            nextLoaded[chartKey(t.token)] = false;
         });
         priceHistories.value = nextHistories;
-        await renderTokenCharts();
+        historyLoaded.value = nextLoaded;
 
         void loadPriceHistories(
             recent.value.map((t, i) => ({
@@ -814,16 +874,17 @@ const loadPriceHistories = async (
     tokens: { token: LaunchedToken; tokenIsToken0: boolean | null }[],
 ): Promise<void> => {
     for (const { token, tokenIsToken0 } of tokens) {
+        const key = chartKey(token.token);
+
         if (tokenIsToken0 === null) {
+            historyLoaded.value = { ...historyLoaded.value, [key]: true };
             continue;
         }
 
-        const points = await readPairTradeHistory(token.pair, tokenIsToken0);
-        priceHistories.value = {
-            ...priceHistories.value,
-            [token.token.toLowerCase()]: points,
-        };
-        await renderTokenCharts();
+        const raw = await readPairTradeHistory(token.pair, tokenIsToken0);
+        const points = await attachCandleTimes(raw);
+        priceHistories.value = { ...priceHistories.value, [key]: points };
+        historyLoaded.value = { ...historyLoaded.value, [key]: true };
     }
 };
 
@@ -1143,195 +1204,34 @@ const fmt = (v: bigint, decimals = 18): string => {
 
 const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
-const formatNum = (n: number): string => {
-    if (!isFinite(n)) {
-        return '—';
-    }
-
-    if (n === 0) {
-        return '0';
-    }
-
-    if (n >= 1_000_000_000) {
-        return `${(n / 1_000_000_000).toFixed(2)}B`;
-    }
-
-    if (n >= 1_000_000) {
-        return `${(n / 1_000_000).toFixed(2)}M`;
-    }
-
-    if (n >= 1_000) {
-        return `${(n / 1_000).toFixed(2)}K`;
-    }
-
-    return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
-};
-
-const formatPrice = (n: number): string => {
-    if (!isFinite(n) || n <= 0) {
-        return '0';
-    }
-
-    if (n < 1e-6) {
-        return n.toExponential(2);
-    }
-
-    if (n < 1) {
-        return n.toPrecision(4);
-    }
-
-    return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
-};
-
 const chartKey = (tokenAddress: string): string => tokenAddress.toLowerCase();
 
-const chartId = (tokenAddress: string): string =>
-    `launchpad-price-chart-${chartKey(tokenAddress)}`;
-
-const chartPointsFor = (t: LaunchedToken): TokenTradeCandle[] =>
+const chartPointsFor = (t: LaunchedToken): TokenCandle[] =>
     priceHistories.value[chartKey(t.token)] ?? [];
 
-const destroyMissingCharts = (): void => {
-    const active = new Set(recent.value.map((t) => chartKey(t.token)));
-
-    for (const [key, chart] of chartInstances.entries()) {
-        if (!active.has(key)) {
-            chart.destroy();
-            chartInstances.delete(key);
-        }
-    }
-};
-
-function updateTokenChart(
-    tokenAddress: string,
-    points: TokenTradeCandle[],
-    quoteSymbol: string,
-): void {
-    const key = chartKey(tokenAddress);
-    const existing = chartInstances.get(key);
+// Change since launch, derived from the trade history.
+const changeBadgeFor = (
+    t: LaunchedToken,
+): { up: boolean; text: string } | null => {
+    const points = chartPointsFor(t);
 
     if (points.length === 0) {
-        if (existing) {
-            existing.destroy();
-            chartInstances.delete(key);
-        }
-
-        return;
+        return null;
     }
 
-    const canvas = document.getElementById(
-        chartId(tokenAddress),
-    ) as HTMLCanvasElement | null;
+    const first = points[0].open;
+    const last = points[points.length - 1].close;
 
-    if (!canvas) {
-        return;
+    if (!isFinite(first) || first <= 0) {
+        return null;
     }
 
-    const candles = points.map(({ x, o, h, l, c }) => ({ x, o, h, l, c }));
-    const lowest = Math.min(...points.map((point) => point.l));
-    const highest = Math.max(...points.map((point) => point.h));
-    const logPriceSpan = Math.log(highest / lowest) || Math.log(1.05);
-    const scalePadding = Math.exp(logPriceSpan * 0.06);
-    const yMin = lowest / scalePadding;
-    const yMax = highest * scalePadding;
+    const pct = ((last - first) / first) * 100;
 
-    if (existing) {
-        existing.data.datasets[0].data = candles;
-        existing.update('none');
-
-        return;
-    }
-
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-        return;
-    }
-
-    const chart = new Chart<'candlestick'>(ctx, {
-        type: 'candlestick',
-        data: {
-            datasets: [
-                {
-                    label: `Trade price (${quoteSymbol})`,
-                    data: candles,
-                    borderColors: {
-                        up: '#22c55e',
-                        down: '#ef4444',
-                        unchanged: '#94a3b8',
-                    },
-                    backgroundColors: {
-                        up: 'rgba(34, 197, 94, 0.55)',
-                        down: 'rgba(239, 68, 68, 0.55)',
-                        unchanged: 'rgba(148, 163, 184, 0.55)',
-                    },
-                },
-            ],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        title: (contexts) => {
-                            const point = points[contexts[0]?.dataIndex ?? -1];
-
-                            return point?.label ?? '';
-                        },
-                        label: (context) => {
-                            const point = points[context.dataIndex];
-
-                            if (!point) {
-                                return '';
-                            }
-
-                            return [
-                                `Open: ${formatPrice(point.o)} ${quoteSymbol}`,
-                                `High: ${formatPrice(point.h)} ${quoteSymbol}`,
-                                `Low: ${formatPrice(point.l)} ${quoteSymbol}`,
-                                `Close: ${formatPrice(point.c)} ${quoteSymbol}`,
-                                `Tx: ${short(point.transactionHash)}`,
-                            ];
-                        },
-                    },
-                },
-            },
-            scales: {
-                x: {
-                    type: 'linear',
-                    display: false,
-                    grid: { display: false },
-                },
-                y: {
-                    type: 'logarithmic',
-                    min: yMin,
-                    max: yMax,
-                    grid: { color: 'rgba(148, 163, 184, 0.12)' },
-                    ticks: {
-                        color: '#94a3b8',
-                        maxTicksLimit: 4,
-                        callback: (value) => formatPrice(Number(value)),
-                    },
-                },
-            },
-        },
-    });
-    chartInstances.set(key, chart);
-}
-
-const renderTokenCharts = async (): Promise<void> => {
-    await nextTick();
-    destroyMissingCharts();
-    recent.value.forEach((t) => {
-        updateTokenChart(t.token, chartPointsFor(t), t.quoteSymbol);
-    });
+    return {
+        up: pct >= 0,
+        text: `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%`,
+    };
 };
 
 // Reload the native balance whenever the connected address changes.
@@ -1366,14 +1266,6 @@ onMounted(async () => {
     await loadOnchain();
     await loadRecent();
 });
-
-onBeforeUnmount(() => {
-    for (const chart of chartInstances.values()) {
-        chart.destroy();
-    }
-
-    chartInstances.clear();
-});
 </script>
 
 <template>
@@ -1381,16 +1273,34 @@ onBeforeUnmount(() => {
 
     <div class="launchpad-page">
         <div class="launchpad">
-            <header class="intro">
-                <h1>Launchpad</h1>
+            <header class="hero">
+                <div class="heroBadge">
+                    Fair launch · 100% LP burned · no presale
+                </div>
+                <h1>Cyberia <span class="heroGrad">Launchpad</span></h1>
                 <p>
-                    Launch your own ERC-20 on Cyberia by burning 10 native
-                    CYBER into liquidity. 100% of the supply goes to the LP,
-                    and LP tokens are burned — liquidity can't be pulled.
+                    Launch your own ERC-20 on Cyberia in one transaction. The
+                    full supply is paired with your CYBER on Ritual DEX and the
+                    LP tokens are burned on the spot — liquidity can never be
+                    pulled.
                 </p>
+                <div class="heroStats">
+                    <div class="stat">
+                        <span class="statNum">{{ totalLaunches }}</span>
+                        <span class="statCap">tokens launched</span>
+                    </div>
+                    <div class="stat">
+                        <span class="statNum">{{ fmt(totalCyberLocked) }}</span>
+                        <span class="statCap">CYBER locked in LPs</span>
+                    </div>
+                    <div class="stat">
+                        <span class="statNum">100%</span>
+                        <span class="statCap">of every LP burned</span>
+                    </div>
+                </div>
             </header>
 
-            <section class="card">
+            <section class="card card--form">
                 <h2>Create token</h2>
 
                 <div class="grid">
@@ -1479,8 +1389,10 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="actions">
-                    <Button
+                    <button
                         v-if="!wallet.isConnected.value"
+                        class="ctaBtn"
+                        type="button"
                         :disabled="wallet.isConnecting.value"
                         @click="handleConnect"
                     >
@@ -1489,11 +1401,17 @@ onBeforeUnmount(() => {
                             class="spin"
                         />
                         Connect MetaMask
-                    </Button>
-                    <Button v-else :disabled="!canLaunch" @click="handleLaunch">
+                    </button>
+                    <button
+                        v-else
+                        class="ctaBtn"
+                        type="button"
+                        :disabled="!canLaunch"
+                        @click="handleLaunch"
+                    >
                         <Loader2 v-if="busy" class="spin" />
                         Launch token
-                    </Button>
+                    </button>
                 </div>
 
                 <div v-if="insufficientBalance" class="hint hint--err">
@@ -1510,10 +1428,27 @@ onBeforeUnmount(() => {
                 </div>
             </section>
 
-            <section v-if="recent.length" class="card">
-                <h2>Launched tokens</h2>
+            <section v-if="recent.length" class="launches">
+                <div class="launchesHead">
+                    <h2>Live launches</h2>
+                    <div class="sortTabs" role="tablist" aria-label="Sort by">
+                        <button
+                            v-for="tab in sortTabs"
+                            :key="tab.key"
+                            type="button"
+                            :class="{ active: sortBy === tab.key }"
+                            @click="sortBy = tab.key"
+                        >
+                            {{ tab.label }}
+                        </button>
+                    </div>
+                </div>
                 <ul class="tokenList">
-                    <li v-for="t in recent" :key="t.token" class="tokenItem">
+                    <li
+                        v-for="t in sortedRecent"
+                        :key="t.token"
+                        class="tokenItem"
+                    >
                         <div class="tokenImage">
                             <img
                                 v-if="t.imageUrl"
@@ -1534,6 +1469,17 @@ onBeforeUnmount(() => {
                                         <span class="muted">
                                             · {{ t.name }}</span
                                         >
+                                        <span
+                                            v-if="changeBadgeFor(t)"
+                                            class="pricePill"
+                                            :class="
+                                                changeBadgeFor(t)?.up
+                                                    ? 'pricePill--up'
+                                                    : 'pricePill--down'
+                                            "
+                                        >
+                                            {{ changeBadgeFor(t)?.text }}
+                                        </span>
                                     </div>
                                     <div class="muted small">
                                         <a
@@ -1634,18 +1580,18 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
 
-                            <div
+                            <TokenCandlesChart
                                 v-if="chartPointsFor(t).length > 0"
-                                class="tokenChart"
-                            >
-                                <canvas
-                                    :id="chartId(t.token)"
-                                    :aria-label="`${t.symbol || 'Token'} price chart`"
-                                ></canvas>
-                            </div>
+                                class="tokenChartWrap"
+                                :candles="chartPointsFor(t)"
+                                :quote-symbol="t.quoteSymbol"
+                            />
                             <div v-else class="chartEmpty">
-                                Candlestick chart will appear after the first
-                                trade. One candle represents one trade.
+                                {{
+                                    historyLoaded[chartKey(t.token)]
+                                        ? 'No trades yet — the chart lights up with the first swap.'
+                                        : 'Loading trade history…'
+                                }}
                             </div>
 
                             <div v-if="editingToken === t.token" class="editor">
@@ -1693,13 +1639,15 @@ onBeforeUnmount(() => {
                                     {{ editError }}
                                 </div>
                                 <div class="editorActions">
-                                    <Button
+                                    <button
+                                        class="ctaBtn ctaBtn--sm"
+                                        type="button"
                                         :disabled="editBusy"
                                         @click="saveEditor(t)"
                                     >
                                         <Loader2 v-if="editBusy" class="spin" />
                                         Save
-                                    </Button>
+                                    </button>
                                     <button
                                         type="button"
                                         class="editBtn"
@@ -1720,48 +1668,163 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .launchpad-page {
+    position: relative;
+    isolation: isolate;
+    overflow-x: clip;
     min-height: 100vh;
     background: var(--background, #0d0d0d);
     color: var(--foreground, #e5e7eb);
 }
+/* Ambient glows behind the hero — decorative only. */
+.launchpad-page::before,
+.launchpad-page::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    border-radius: 50%;
+    pointer-events: none;
+}
+.launchpad-page::before {
+    top: -220px;
+    left: 50%;
+    width: 680px;
+    height: 680px;
+    transform: translateX(-72%);
+    background: radial-gradient(
+        circle,
+        rgba(16, 185, 129, 0.16),
+        transparent 60%
+    );
+}
+.launchpad-page::after {
+    top: 80px;
+    left: 50%;
+    width: 560px;
+    height: 560px;
+    transform: translateX(12%);
+    background: radial-gradient(
+        circle,
+        rgba(139, 92, 246, 0.12),
+        transparent 60%
+    );
+}
 .launchpad {
-    max-width: 900px;
+    max-width: 1040px;
     margin: 0 auto;
-    padding: 32px 16px 64px;
+    padding: 48px 16px 72px;
     color: var(--foreground, #e5e7eb);
 }
-.intro h1 {
-    margin: 0 0 6px;
-    font-size: 28px;
-    font-weight: 700;
+.hero {
+    text-align: center;
+    margin-bottom: 36px;
 }
-.intro p {
-    color: var(--muted-foreground, #94a3b8);
-    margin: 0 0 24px;
-    max-width: 620px;
-    line-height: 1.5;
-}
-.banner {
-    padding: 12px 14px;
-    border-radius: 8px;
+.heroBadge {
+    display: inline-block;
+    padding: 6px 14px;
     margin-bottom: 16px;
-    font-size: 13px;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.08);
+    color: #6ee7b7;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
 }
-.banner--warn {
-    background: rgba(234, 179, 8, 0.1);
-    border: 1px solid rgba(234, 179, 8, 0.4);
-    color: #facc15;
+.hero h1 {
+    margin: 0 0 12px;
+    font-size: clamp(32px, 6vw, 48px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+.heroGrad {
+    background: linear-gradient(90deg, #34d399, #22d3ee 55%, #a78bfa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.hero p {
+    max-width: 560px;
+    margin: 0 auto 24px;
+    color: var(--muted-foreground, #94a3b8);
+    line-height: 1.55;
+}
+.heroStats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+}
+.stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 150px;
+    padding: 14px 20px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card);
+}
+.statNum {
+    font-size: 22px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+.statCap {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted-foreground, #94a3b8);
 }
 .card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 20px;
+    border-radius: 16px;
+    padding: 22px;
+    margin-bottom: 28px;
 }
-.card h2 {
+.card--form {
+    border-color: rgba(16, 185, 129, 0.25);
+    box-shadow: 0 0 48px rgba(16, 185, 129, 0.06);
+}
+.card h2,
+.launchesHead h2 {
     margin: 0 0 16px;
     font-size: 18px;
+    font-weight: 700;
+}
+.launchesHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.launchesHead h2 {
+    margin: 0;
+}
+.sortTabs {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+}
+.sortTabs button {
+    border: none;
+    background: transparent;
+    color: var(--muted-foreground, #94a3b8);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+.sortTabs button.active {
+    background: rgba(16, 185, 129, 0.14);
+    color: #6ee7b7;
     font-weight: 600;
 }
 .grid {
@@ -1814,7 +1877,40 @@ onBeforeUnmount(() => {
 .actions {
     display: flex;
     gap: 10px;
-    margin-top: 16px;
+    margin-top: 18px;
+}
+.ctaBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 28px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #10b981, #06b6d4);
+    color: #04110d;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.35);
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+}
+.ctaBtn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 0 36px rgba(16, 185, 129, 0.5);
+}
+.ctaBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+.ctaBtn--sm {
+    padding: 8px 18px;
+    font-size: 13px;
+    border-radius: 10px;
 }
 .hint {
     margin-top: 10px;
@@ -1828,7 +1924,6 @@ onBeforeUnmount(() => {
 .spin {
     width: 16px;
     height: 16px;
-    margin-right: 6px;
     animation: spin 0.8s linear infinite;
 }
 .muted {
@@ -1840,29 +1935,39 @@ onBeforeUnmount(() => {
 .tokenList {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     list-style: none;
     margin: 0;
     padding: 0;
 }
 .tokenItem {
     display: flex;
-    gap: 14px;
-    padding: 14px;
+    gap: 16px;
+    padding: 18px;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 16px;
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
+}
+.tokenItem:hover {
+    border-color: rgba(16, 185, 129, 0.45);
+    box-shadow: 0 8px 32px rgba(16, 185, 129, 0.08);
+    transform: translateY(-2px);
 }
 .tokenImage {
     flex-shrink: 0;
-    width: 72px;
-    height: 72px;
-    border-radius: 12px;
+    width: 84px;
+    height: 84px;
+    border-radius: 14px;
     overflow: hidden;
     background: var(--muted);
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15);
 }
 .tokenImage img {
     width: 100%;
@@ -1870,9 +1975,12 @@ onBeforeUnmount(() => {
     object-fit: cover;
 }
 .tokenImageFallback {
-    color: var(--muted-foreground, #94a3b8);
-    font-weight: 700;
-    font-size: 18px;
+    background: linear-gradient(135deg, #34d399, #22d3ee);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-weight: 800;
+    font-size: 22px;
 }
 .tokenBody {
     flex: 1;
@@ -1885,7 +1993,26 @@ onBeforeUnmount(() => {
     gap: 10px;
 }
 .tokenTitle {
-    font-size: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 16px;
+}
+.pricePill {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.pricePill--up {
+    color: #26a69a;
+    background: rgba(38, 166, 154, 0.12);
+}
+.pricePill--down {
+    color: #ef5350;
+    background: rgba(239, 83, 80, 0.12);
 }
 .rowActions {
     display: flex;
@@ -1953,7 +2080,7 @@ onBeforeUnmount(() => {
     white-space: pre-wrap;
 }
 .tokenStats {
-    margin-top: 10px;
+    margin-top: 12px;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 10px;
@@ -1967,6 +2094,7 @@ onBeforeUnmount(() => {
 }
 .statValue {
     font-size: 13px;
+    font-variant-numeric: tabular-nums;
     color: var(--foreground, #e5e7eb);
 }
 .addrLink {
@@ -1975,6 +2103,17 @@ onBeforeUnmount(() => {
 }
 .addrLink:hover {
     text-decoration: underline;
+}
+.tokenChartWrap {
+    margin-top: 14px;
+}
+.chartEmpty {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px dashed rgba(148, 163, 184, 0.28);
+    border-radius: 10px;
+    color: var(--muted-foreground, #94a3b8);
+    font-size: 12px;
 }
 @keyframes spin {
     to {
@@ -1985,28 +2124,8 @@ onBeforeUnmount(() => {
     .grid {
         grid-template-columns: 1fr;
     }
-}
-
-.tokenChart {
-    margin-top: 14px;
-    width: 100%;
-    height: 220px;
-    padding: 10px 8px 4px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: rgba(15, 23, 42, 0.28);
-}
-.tokenChart canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-.chartEmpty {
-    margin-top: 12px;
-    padding: 12px;
-    border: 1px dashed rgba(148, 163, 184, 0.28);
-    border-radius: 10px;
-    color: var(--muted-foreground, #94a3b8);
-    font-size: 12px;
+    .tokenItem {
+        flex-direction: column;
+    }
 }
 </style>

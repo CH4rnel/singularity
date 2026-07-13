@@ -50,10 +50,12 @@ class BridgeInventoryService
             return null;
         }
 
-        // Into the home chain with a mint-model token: the relayer mints on
-        // demand, so there is no inventory cap.
+        // Into the home chain with a minting token there is no inventory cap:
+        // 'mint' — the relayer mints the wrapper on demand; 'native' — the
+        // CyberBridge contract mints on release (releaseCyberSol), so the
+        // relayer's own wallet balance (mostly accrued fees) is irrelevant.
         if ($chainKey === config('bridge.home_chain', 'cyberia')
-            && ($tokenConfig['model'] ?? 'direct') === 'mint') {
+            && in_array($tokenConfig['model'] ?? 'direct', ['mint', 'native'], true)) {
             return null;
         }
 

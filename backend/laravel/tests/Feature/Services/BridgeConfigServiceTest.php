@@ -86,6 +86,23 @@ test('external routes are visible before operator setup but marked unavailable',
         ->and($routes['xmr_to_evm']['tokens'])->toBe(['XMR']);
 });
 
+test('a disabled chain vanishes from public config and all its routes', function () {
+    // Fully configured — only the chain-level switch turns it off.
+    config()->set('bridge.chains.bitcoin.deposit_address', '12ZEw5Hcv1hTb6YUQJ69y1V7uhcoDz92PH');
+    config()->set('bridge.chains.bitcoin.enabled', false);
+
+    $service = app(BridgeConfigService::class);
+
+    expect(collect($service->publicChains())->pluck('key'))->not->toContain('bitcoin');
+    expect($service->availableRoutes())->not->toHaveKeys(['btc_to_evm', 'evm_to_btc']);
+    expect(collect($service->publicRoutes())->pluck('direction'))
+        ->not->toContain('btc_to_evm')
+        ->not->toContain('evm_to_btc');
+    // Backend processing of in-flight requests still reads the chain config.
+    expect($service->chain('bitcoin'))->not->toBeNull();
+    expect($service->chainEnabled('bitcoin'))->toBeFalse();
+});
+
 test('public chain config exposes Yenten explorer fallback', function () {
     $chains = collect(app(BridgeConfigService::class)->publicChains())->keyBy('key');
 

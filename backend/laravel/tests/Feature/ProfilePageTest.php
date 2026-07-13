@@ -7,7 +7,7 @@ it('redirects guests to login', function () {
     $this->get('/profile')->assertRedirect('/login');
 });
 
-it('lists a deposit address for every supported chain', function () {
+it('never exposes shared bridge wallets — only personal addresses appear', function () {
     config()->set('services.bridge.relayer_address', '0x0000000000000000000000000000000000abcdef');
     config()->set('bridge.chains.solana.deposit_address', 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w');
 
@@ -18,9 +18,31 @@ it('lists a deposit address for every supported chain', function () {
             ->component('Profile')
             ->has('depositChains', count(config('bridge.chains')))
             ->where('depositChains.0.key', 'cyberia')
-            ->where('depositChains.0.address', '0x0000000000000000000000000000000000abcdef')
+            ->where('depositChains.0.address', null)
+            ->where('depositChains.0.personal', false)
             ->where('depositChains.1.key', 'solana')
-            ->where('depositChains.1.address', 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w'));
+            ->where('depositChains.1.address', null)
+            ->where('depositChains', fn ($chains) => collect($chains)
+                ->every(fn ($chain) => $chain['address'] === null || $chain['personal'] === true)));
+});
+
+it('drops disabled chains from the deposit list', function () {
+    config()->set('services.bridge.relayer_address', '0x0000000000000000000000000000000000abcdef');
+
+    foreach (['yenten', 'bitcoin', 'litecoin', 'monero'] as $key) {
+        config()->set("bridge.chains.{$key}.enabled", false);
+    }
+
+    $this->actingAs(User::factory()->create())
+        ->get('/profile')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Profile')
+            ->has('depositChains', count(config('bridge.chains')) - 4)
+            ->where('depositChains', fn ($chains) => collect($chains)
+                ->pluck('key')
+                ->intersect(['yenten', 'bitcoin', 'litecoin', 'monero'])
+                ->isEmpty()));
 });
 
 it('exposes no static Yenten address — deposits use one-time per-request addresses', function () {
@@ -84,8 +106,9 @@ it('shows personal CEX-style addresses once the per-user seeds are configured', 
         expect($chainA['address'])->not->toBe($chainB['address']);
     }
 
-    // EVM chains keep the shared relayer EOA, unmarked.
+    // EVM chains have no personal address yet — the shared relayer EOA is
+    // hidden rather than shown as a deposit target.
     $bnb = $a->firstWhere('key', 'bnb');
     expect($bnb['personal'])->toBeFalse();
-    expect($bnb['address'])->toBe('0x0000000000000000000000000000000000abcdef');
+    expect($bnb['address'])->toBeNull();
 });

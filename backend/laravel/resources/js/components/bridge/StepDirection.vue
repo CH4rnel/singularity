@@ -186,7 +186,7 @@ const proceed = () => {
             </p>
             <Select v-model="from">
                 <SelectTrigger
-                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0"
+                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0 dark:bg-transparent dark:hover:bg-transparent"
                 >
                     <span class="flex items-center gap-2.5">
                         <TokenIcon
@@ -240,7 +240,7 @@ const proceed = () => {
             </p>
             <Select v-model="to">
                 <SelectTrigger
-                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0"
+                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0 dark:bg-transparent dark:hover:bg-transparent"
                 >
                     <span class="flex items-center gap-2.5">
                         <TokenIcon
@@ -284,7 +284,7 @@ const proceed = () => {
             </p>
             <Select v-model="token">
                 <SelectTrigger
-                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0"
+                    class="h-auto w-full border-0 bg-transparent p-0 shadow-none hover:opacity-80 focus-visible:ring-0 dark:bg-transparent dark:hover:bg-transparent"
                 >
                     <span class="flex items-center gap-2.5">
                         <TokenIcon :symbol="token" :size="24" />

@@ -43,6 +43,34 @@ test('minting into the home chain is uncapped (null)', function () {
     expect($available)->toBeNull();
 });
 
+test('native-model CYBER.sol into the home chain is uncapped — CyberBridge mints on release', function () {
+    // Must NOT fall into the ERC20 branch: balanceOf(relayer) is just accrued
+    // fees, and showing it falsely capped sol_to_evm bridges.
+    Http::fake();
+
+    $available = app(BridgeInventoryService::class)->destinationCapacity('sol_to_evm', 'CYBER.sol');
+
+    expect($available)->toBeNull();
+    Http::assertNothingSent();
+});
+
+test('CYBER.sol out to Solana still reports the hot-wallet SPL inventory', function () {
+    config()->set('bridge.chains.solana.rpc_url', 'https://sol-rpc.test');
+
+    Http::fake([
+        '*sol-rpc.test*' => Http::response(['result' => ['value' => [[
+            'account' => ['data' => ['parsed' => ['info' => ['tokenAmount' => [
+                'amount' => '7000000',
+                'decimals' => 6,
+            ]]]]],
+        ]]]]),
+    ]);
+
+    $available = app(BridgeInventoryService::class)->destinationCapacity('evm_to_sol', 'CYBER.sol');
+
+    expect($available)->toBe('7.000000000000000000');
+});
+
 test('capacity endpoint returns live inventory for an available route', function () {
     config()->set('bridge.routes.evm_to_base.enabled', true);
 

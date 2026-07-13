@@ -159,6 +159,10 @@ return [
             'type' => 'yenten',
             'address_type' => 'yenten',
             'wallet' => 'manual',
+            // Chain-level kill switch: a disabled chain disappears from the
+            // frontend (bridge + profile) and every route touching it is
+            // rejected. Off until per-user deposit crediting runs unattended.
+            'enabled' => filter_var(env('BRIDGE_CHAIN_YENTEN_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
             // Official light-wallet API: transaction/UTXO reads and raw-tx
             // broadcast. No local yentend or blockchain download is required.
             'api_url' => env('BRIDGE_YENTEN_API_URL', 'https://api.yentencoin.info'),
@@ -197,6 +201,7 @@ return [
             'type' => 'bitcoin',
             'address_type' => 'bitcoin',
             'wallet' => 'manual',
+            'enabled' => filter_var(env('BRIDGE_CHAIN_BTC_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
             'explorer_tx' => 'https://mempool.space/tx/{hash}',
             'deposit_address' => env('BRIDGE_BTC_DEPOSIT_ADDRESS'),
             // Master seed for per-user profile deposit addresses (CEX-style).
@@ -212,6 +217,7 @@ return [
             'type' => 'litecoin',
             'address_type' => 'litecoin',
             'wallet' => 'manual',
+            'enabled' => filter_var(env('BRIDGE_CHAIN_LTC_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
             'explorer_tx' => 'https://litecoinspace.org/tx/{hash}',
             'deposit_address' => env('BRIDGE_LTC_DEPOSIT_ADDRESS'),
             // Per-user profile deposit addresses — see the bitcoin entry.
@@ -224,6 +230,7 @@ return [
             'type' => 'monero',
             'address_type' => 'monero',
             'wallet' => 'manual',
+            'enabled' => filter_var(env('BRIDGE_CHAIN_XMR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
             'explorer_tx' => 'https://xmrchain.net/tx/{hash}',
             'deposit_address' => env('BRIDGE_XMR_DEPOSIT_ADDRESS'),
             // Monero has no per-address keys to hand out: per-user deposit
