@@ -605,10 +605,30 @@ class BridgeService
 
             $claimedRaw = TokenAmount::toRaw((string) $request->amount, (int) $sourceToken['decimals']);
 
+            // The on-chain transfer is the ground truth. The requested amount
+            // can drift a few wei ABOVE what actually arrived (float casts in
+            // the web layer and SQLite's REAL storage round 18-dec strings at
+            // ~15 significant digits), and a user can also simply deposit less
+            // than they typed. Either way settle for what the chain says —
+            // never fail the request, never pay out more than was received.
             if (bccomp($verified, $claimedRaw, 0) < 0) {
-                $request->markFailed("Deposit underfunded: verified={$verified} claimed={$claimedRaw}");
+                $verifiedAmount = TokenAmount::fromRaw($verified, (int) $sourceToken['decimals']);
 
-                return false;
+                Log::warning('Bridge: deposit below claimed amount, settling for verified', [
+                    'id' => $request->id,
+                    'claimed' => $claimedRaw,
+                    'verified' => $verified,
+                ]);
+
+                $request->update(['amount' => $verifiedAmount]);
+                $claimedRaw = $verified;
+                $netAmount = bcsub($verifiedAmount, $feeAmount, 18);
+
+                if (bccomp($netAmount, '0', 18) <= 0) {
+                    $request->markFailed('Net amount after fee is zero or negative');
+
+                    return false;
+                }
             }
 
             // Leaving the wrapper's home chain with a mint-model token:

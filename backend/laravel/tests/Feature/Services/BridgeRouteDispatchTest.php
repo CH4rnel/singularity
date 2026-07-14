@@ -247,6 +247,62 @@ test('evm_to_bnb burns the unified USDT wrapper on Cyberia and pays out on BSC',
     });
 });
 
+test('a deposit a few wei short of the claimed amount settles for the verified amount', function () {
+    $sender = '0x9999999999999999999999999999999999999999';
+    // What the user actually transferred on Robinhood Chain. The web layer
+    // recorded 0.024891167519865 (443 wei MORE — float/SQLite rounding of the
+    // 18-dec string at ~15 significant digits); the request must settle for
+    // the on-chain truth instead of failing "Deposit underfunded".
+    $verifiedRaw = 24891167519864557;
+
+    config()->set('bridge.chains.robinhood.rpc_url', 'https://robinhood-rpc.test');
+
+    Http::fake([
+        '*robinhood-rpc.test*' => Http::response([
+            'result' => [
+                'status' => '0x1',
+                'logs' => [
+                    erc20TransferLog(
+                        '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', // SPY on Robinhood
+                        $sender,
+                        RELAYER,
+                        dechex($verifiedRaw),
+                    ),
+                ],
+            ],
+        ]),
+    ]);
+
+    Process::fake([
+        '*relay-mint*' => Process::result(output: json_encode(['txHash' => '0xminted'])),
+    ]);
+
+    $request = makeRequest([
+        'direction' => 'robinhood_to_evm',
+        'token' => 'SPY',
+        'source_chain' => 'robinhood',
+        'source_tx_hash' => '0x'.str_repeat('cd', 32),
+        'sender_address' => $sender,
+        'recipient_address' => '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+        'amount' => '0.024891167519865',
+    ]);
+
+    expect(app(BridgeService::class)->processDirectRelay($request))->toBeTrue();
+
+    $request->refresh();
+    expect($request->status)->toBe('completed');
+
+    // The Cyberia SPY wrapper mints exactly what arrived on-chain, not the
+    // inflated claimed amount.
+    Process::assertRan(function ($process) {
+        $command = implode(' ', $process->command);
+
+        return str_contains($command, 'relay-mint')
+            && str_contains($command, '0xc9961a657A726f620107B7435937aE5A3893d1Ea')
+            && str_contains($command, '24891167519864557');
+    });
+});
+
 test('unified USDT/USDC span every source chain (pooled reserves)', function () {
     config()->set('bridge.routes.base_to_evm.enabled', true);
     config()->set('bridge.routes.evm_to_base.enabled', true);

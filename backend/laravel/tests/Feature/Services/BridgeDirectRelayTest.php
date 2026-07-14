@@ -83,7 +83,7 @@ test('sol_to_evm direct relay completes and records destination tx', function ()
     expect($request->destination_tx_hash)->toBe('0xdesttx');
 });
 
-test('sol_to_evm fails when Solana deposit is underfunded', function () {
+test('sol_to_evm settles for the verified amount when the deposit is short', function () {
     Http::fake([
         '*helius-rpc.com*' => Http::response([
             'result' => [
@@ -102,12 +102,27 @@ test('sol_to_evm fails when Solana deposit is underfunded', function () {
         ]),
     ]);
 
+    Process::fake([
+        '*relay-mint*' => Process::result(
+            output: json_encode(['txHash' => '0xdesttx', 'gasDropTxHash' => null]),
+        ),
+    ]);
+
     $request = makeDirectRequest();
     app(BridgeService::class)->processDirectRelay($request);
     $request->refresh();
 
-    expect($request->status)->toBe('failed');
-    expect($request->error_message)->toContain('underfunded');
+    // The chain is the ground truth: the user gets what they actually sent
+    // (1 USDC) minus the fee, instead of a dead "underfunded" request.
+    expect($request->status)->toBe('completed')
+        ->and((float) $request->amount)->toBe(1.0);
+
+    Process::assertRan(function ($process) {
+        $command = implode(' ', $process->command);
+
+        return str_contains($command, 'relay-mint')
+            && str_contains($command, '900000'); // (1 − 0.1 fee) USDC, 6-dec raw
+    });
 });
 
 test('sol_to_evm fails when hot wallet balance does not increase', function () {
