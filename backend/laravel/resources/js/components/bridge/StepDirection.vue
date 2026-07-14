@@ -40,6 +40,7 @@ const CHAIN_LOGOS: Record<string, string> = {
     bitcoin: '/token-icons/btc.svg',
     litecoin: '/token-icons/ltc.svg',
     monero: '/token-icons/monero.svg',
+    robinhood: '/token-icons/robinhood.svg',
 };
 
 const chainLogo = (chain: string): string | null => CHAIN_LOGOS[chain] ?? null;

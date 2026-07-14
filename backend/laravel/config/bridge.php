@@ -596,6 +596,20 @@ return [
                 'robinhood' => ['native' => true, 'decimals' => 18],
             ],
         ],
+        // SPY — Robinhood tokenized stock (SPDR S&P 500 ETF Trust) bridged
+        // into a Cyberia wrapper (deployed via deploy-spy.ts, relayer-owned
+        // mint/burn). Both sides are 18-dec ERC20s; bridge-IN deposits go to
+        // the relayer EOA on Robinhood Chain, bridge-OUT pays from that SPY
+        // reserve (the evm_to_robinhood corridor stays "Coming soon" until
+        // the relayer holds gas + inventory there).
+        'SPY' => [
+            'symbol' => 'SPY',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => '0xc9961a657A726f620107B7435937aE5A3893d1Ea', 'decimals' => 18],
+                'robinhood' => ['address' => '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', 'decimals' => 18],
+            ],
+        ],
         // Native BNB bridged into a Cyberia wrapper (deployed via
         // crypto/hardhat/scripts/deploy-bnb.ts). BNB is its own asset (not a
         // per-chain copy of a shared token), so no unification applies.

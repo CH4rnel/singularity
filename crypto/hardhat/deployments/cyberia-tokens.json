@@ -198,6 +198,13 @@
       "artifact": "contracts/TON.sol/TON.json",
       "address": "0x92aBF73698383176Aa2894F1f7263807C3a4e6e6",
       "burnable": true
+    },
+    {
+      "symbol": "SPY",
+      "contract": "SPY",
+      "artifact": "contracts/SPY.sol/SPY.json",
+      "address": "0xc9961a657A726f620107B7435937aE5A3893d1Ea",
+      "burnable": true
     }
   ]
 }

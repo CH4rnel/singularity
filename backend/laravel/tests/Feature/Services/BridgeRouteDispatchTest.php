@@ -295,11 +295,17 @@ test('Robinhood Chain routes are available and offer unified ETH', function () {
 
     expect($routes)->toContain('robinhood_to_evm')->toContain('evm_to_robinhood');
 
-    // Native ETH on Robinhood Chain maps to the unified ETH wrapper.
+    // Native ETH on Robinhood Chain maps to the unified ETH wrapper; SPY
+    // (tokenized stock) bridges into its own relayer-owned Cyberia wrapper.
     expect(array_keys($service->tokensForRoute('robinhood_to_evm')))
         ->toContain('ETH')
+        ->toContain('SPY')
         ->and(array_keys($service->tokensForRoute('evm_to_robinhood')))
-        ->toContain('ETH');
+        ->toContain('ETH')
+        ->toContain('SPY');
+
+    expect($service->tokenOnChain('SPY', 'robinhood')['address'])
+        ->toBe('0x117cc2133c37B721F49dE2A7a74833232B3B4C0C');
 
     expect($service->tokenOnChain('ETH', 'robinhood')['native'] ?? false)->toBeTrue();
     expect($service->depositAddress('robinhood'))->toBe(RELAYER);

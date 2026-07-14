@@ -34,6 +34,7 @@ export const TOKEN_LOGOS: Record<string, string> = {
     MINE: '/token-icons/mine.jpg',
     GOAL: '/token-icons/goal.webp',
     TG: '/token-icons/telegram.svg',
+    SPY: '/token-icons/spy.svg',
 };
 
 // Symbols whose <img> failed to load (404). Module-level so a single failure is
