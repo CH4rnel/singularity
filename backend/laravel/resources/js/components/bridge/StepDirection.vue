@@ -93,8 +93,16 @@ watch(
             return;
         }
 
-        if (!list.some((route) => route.source === from.value)) {
-            from.value = list[0].source;
+        // Default to an operational source — pending chains are visible in
+        // the picker but disabled, so they must never be auto-selected.
+        if (
+            !list.some((route) => route.source === from.value) ||
+            sourcePending(from.value)
+        ) {
+            const firstOpen = list.find(
+                (route) => route.operational !== false,
+            );
+            from.value = (firstOpen ?? list[0]).source;
         }
     },
     { immediate: true },
@@ -103,8 +111,16 @@ watch(
 watch(
     [from, destinationChains],
     () => {
-        if (!destinationChains.value.includes(to.value)) {
-            to.value = destinationChains.value[0] ?? '';
+        if (
+            !destinationChains.value.includes(to.value) ||
+            destinationPending(to.value)
+        ) {
+            to.value =
+                destinationChains.value.find(
+                    (chain) => !destinationPending(chain),
+                ) ??
+                destinationChains.value[0] ??
+                '';
         }
     },
     { immediate: true },
@@ -122,18 +138,41 @@ const selectedRouteOperational = computed(
     () => selectedRoute.value?.operational !== false,
 );
 
-// True when every route from `from` into `chain` is non-operational — the
-// destination stays listed (coming-soon tease) but gets a "soon" badge.
-const destinationPending = (chain: string): boolean => {
-    const candidates = routes.value.filter(
-        (route) => route.source === from.value && route.destination === chain,
+// A chain is "pending" in a picker when every route through it in that role
+// is non-operational: it stays listed (coming-soon tease) but is greyed out
+// and cannot be picked.
+const allPending = (candidates: BridgeRoute[]): boolean =>
+    candidates.length > 0 &&
+    candidates.every((route) => route.operational === false);
+
+const sourcePending = (chain: string): boolean =>
+    allPending(routes.value.filter((route) => route.source === chain));
+
+const destinationPending = (chain: string): boolean =>
+    allPending(
+        routes.value.filter(
+            (route) =>
+                route.source === from.value && route.destination === chain,
+        ),
     );
 
-    return (
-        candidates.length > 0 &&
-        candidates.every((route) => route.operational === false)
+// Badge text comes from the server's unavailableReason so a corridor teased
+// as "Coming soon" reads differently from one mid operator setup.
+const pendingLabel = (candidates: BridgeRoute[]): string =>
+    candidates.some((route) => route.unavailableReason === 'Coming soon')
+        ? 'coming soon'
+        : 'setup pending';
+
+const sourcePendingLabel = (chain: string): string =>
+    pendingLabel(routes.value.filter((route) => route.source === chain));
+
+const destinationPendingLabel = (chain: string): string =>
+    pendingLabel(
+        routes.value.filter(
+            (route) =>
+                route.source === from.value && route.destination === chain,
+        ),
     );
-};
 
 // Tokens available on the chosen route — the picker keeps a valid selection as
 // the route changes, so the choice made here carries straight into the flow.
@@ -156,7 +195,9 @@ watch(
 const canFlip = computed(() =>
     routes.value.some(
         (route) =>
-            route.source === to.value && route.destination === from.value,
+            route.source === to.value &&
+            route.destination === from.value &&
+            route.operational !== false,
     ),
 );
 
@@ -217,6 +258,7 @@ const proceed = () => {
                         v-for="chain in sourceChains"
                         :key="chain"
                         :value="chain"
+                        :disabled="sourcePending(chain)"
                     >
                         <span class="flex items-center gap-2.5">
                             <TokenIcon
@@ -225,6 +267,12 @@ const proceed = () => {
                                 :size="22"
                             />
                             {{ labelFor(chain) }}
+                            <span
+                                v-if="sourcePending(chain)"
+                                class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                {{ sourcePendingLabel(chain) }}
+                            </span>
                         </span>
                     </SelectItem>
                 </SelectContent>
@@ -271,7 +319,7 @@ const proceed = () => {
                         v-for="chain in destinationChains"
                         :key="chain"
                         :value="chain"
-                        :class="destinationPending(chain) ? 'opacity-60' : ''"
+                        :disabled="destinationPending(chain)"
                     >
                         <span class="flex items-center gap-2.5">
                             <TokenIcon
@@ -284,7 +332,7 @@ const proceed = () => {
                                 v-if="destinationPending(chain)"
                                 class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
                             >
-                                soon
+                                {{ destinationPendingLabel(chain) }}
                             </span>
                         </span>
                     </SelectItem>
