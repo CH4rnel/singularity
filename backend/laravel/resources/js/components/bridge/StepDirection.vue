@@ -122,6 +122,19 @@ const selectedRouteOperational = computed(
     () => selectedRoute.value?.operational !== false,
 );
 
+// True when every route from `from` into `chain` is non-operational — the
+// destination stays listed (coming-soon tease) but gets a "soon" badge.
+const destinationPending = (chain: string): boolean => {
+    const candidates = routes.value.filter(
+        (route) => route.source === from.value && route.destination === chain,
+    );
+
+    return (
+        candidates.length > 0 &&
+        candidates.every((route) => route.operational === false)
+    );
+};
+
 // Tokens available on the chosen route — the picker keeps a valid selection as
 // the route changes, so the choice made here carries straight into the flow.
 const availableTokens = computed<string[]>(() =>
@@ -258,6 +271,7 @@ const proceed = () => {
                         v-for="chain in destinationChains"
                         :key="chain"
                         :value="chain"
+                        :class="destinationPending(chain) ? 'opacity-60' : ''"
                     >
                         <span class="flex items-center gap-2.5">
                             <TokenIcon
@@ -266,6 +280,12 @@ const proceed = () => {
                                 :size="22"
                             />
                             {{ labelFor(chain) }}
+                            <span
+                                v-if="destinationPending(chain)"
+                                class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
+                            >
+                                soon
+                            </span>
                         </span>
                     </SelectItem>
                 </SelectContent>
@@ -321,7 +341,9 @@ const proceed = () => {
             <span>
                 {{
                     !selectedRouteOperational
-                        ? `${selectedRoute.sourceLabel} → ${selectedRoute.destinationLabel} is visible, but operator setup is not complete yet.`
+                        ? selectedRoute.unavailableReason === 'Coming soon'
+                            ? `${selectedRoute.sourceLabel} → ${selectedRoute.destinationLabel} is coming soon — this corridor is not open yet.`
+                            : `${selectedRoute.sourceLabel} → ${selectedRoute.destinationLabel} is visible, but operator setup is not complete yet.`
                         : selectedRoute.sourceWallet === 'manual'
                         ? selectedRoute.autoProcess
                             ? `Send from any ${selectedRoute.sourceLabel} wallet to the bridge address, then paste the transaction hash — verification and delivery are automatic.`
@@ -337,7 +359,9 @@ const proceed = () => {
             :disabled="!selectedRoute || !selectedRouteOperational"
             @click="proceed"
         >
-            <span v-if="!selectedRouteOperational">Operator setup pending</span>
+            <span v-if="!selectedRouteOperational">
+                {{ selectedRoute?.unavailableReason ?? 'Unavailable' }}
+            </span>
             <span v-else>Continue</span>
             <ArrowRight
                 class="h-4 w-4 transition-transform group-hover:translate-x-1"

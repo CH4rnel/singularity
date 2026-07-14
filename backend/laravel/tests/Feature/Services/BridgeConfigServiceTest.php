@@ -11,6 +11,8 @@ test('exposes both Yenten routes after the light relayer is configured', functio
     config()->set('bridge.chains.yenten.relayer_wif', 'configured-secret');
     config()->set('bridge.routes.yenten_to_evm.enabled', true);
     config()->set('bridge.routes.evm_to_yenten.enabled', true);
+    config()->set('bridge.routes.yenten_to_evm.coming_soon', false);
+    config()->set('bridge.routes.evm_to_yenten.coming_soon', false);
 
     $routes = app(BridgeConfigService::class)->availableRoutes();
 
@@ -58,6 +60,8 @@ test('external BTC LTC XMR routes require a configured wallet before submit', fu
     config()->set('bridge.chains.bitcoin.deposit_address', '12ZEw5Hcv1hTb6YUQJ69y1V7uhcoDz92PH');
     config()->set('bridge.routes.btc_to_evm.enabled', true);
     config()->set('bridge.routes.evm_to_btc.enabled', true);
+    config()->set('bridge.routes.btc_to_evm.coming_soon', false);
+    config()->set('bridge.routes.evm_to_btc.coming_soon', false);
 
     $routes = $service->availableRoutes();
 
@@ -86,7 +90,21 @@ test('external routes are visible before operator setup but marked unavailable',
         ->and($routes['xmr_to_evm']['tokens'])->toBe(['XMR']);
 });
 
-test('a disabled chain vanishes from public config and all its routes', function () {
+test('coming-soon corridors are visible but rejected everywhere', function () {
+    // Fully operational on paper — coming_soon alone must still block it.
+    config()->set('bridge.chains.bitcoin.deposit_address', '12ZEw5Hcv1hTb6YUQJ69y1V7uhcoDz92PH');
+    config()->set('bridge.chains.bitcoin.enabled', true);
+    config()->set('bridge.routes.btc_to_evm.enabled', true);
+
+    $service = app(BridgeConfigService::class);
+    $routes = collect($service->publicRoutes())->keyBy('direction');
+
+    expect($routes['btc_to_evm']['operational'])->toBeFalse()
+        ->and($routes['btc_to_evm']['unavailableReason'])->toBe('Coming soon');
+    expect($service->availableRoutes())->not->toHaveKey('btc_to_evm');
+});
+
+test('a disabled chain vanishes from public config and its non-teased routes', function () {
     // Fully configured — only the chain-level switch turns it off.
     config()->set('bridge.chains.bitcoin.deposit_address', '12ZEw5Hcv1hTb6YUQJ69y1V7uhcoDz92PH');
     config()->set('bridge.chains.bitcoin.enabled', false);
@@ -95,6 +113,15 @@ test('a disabled chain vanishes from public config and all its routes', function
 
     expect(collect($service->publicChains())->pluck('key'))->not->toContain('bitcoin');
     expect($service->availableRoutes())->not->toHaveKeys(['btc_to_evm', 'evm_to_btc']);
+
+    // Coming-soon teasers deliberately survive the chain switch…
+    $public = collect($service->publicRoutes())->keyBy('direction');
+    expect($public['btc_to_evm']['operational'])->toBeFalse()
+        ->and($public['btc_to_evm']['unavailableReason'])->toBe('Coming soon');
+
+    // …but without the tease the routes vanish along with the chain.
+    config()->set('bridge.routes.btc_to_evm.coming_soon', false);
+    config()->set('bridge.routes.evm_to_btc.coming_soon', false);
     expect(collect($service->publicRoutes())->pluck('direction'))
         ->not->toContain('btc_to_evm')
         ->not->toContain('evm_to_btc');

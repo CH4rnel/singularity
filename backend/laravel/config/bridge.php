@@ -266,6 +266,11 @@ return [
     | reads config('bridge.routes') directly. Solana <-> Cyberia and TON <-> Cyberia
     | are on by default (TON still hides until its hot wallet is configured);
     | flip the matching env var to reopen/close a corridor without a deploy.
+    |
+    | 'coming_soon' is the third state: the corridor stays VISIBLE in the UI
+    | (greyed out, "Coming soon", not selectable) but is rejected at
+    | submit/quote time regardless of 'enabled'. Use it for corridors being
+    | teased before operator setup is done.
     */
 
     'routes' => [
@@ -325,26 +330,37 @@ return [
             'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BASE_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
+        // Inbound is live by default: deposits go to the relayer EOA on
+        // Robinhood Chain and the payout is a mint on Cyberia, so no
+        // Robinhood-side gas or inventory is required.
         'robinhood_to_evm' => [
             'direction' => 'robinhood_to_evm',
             'source_chain' => 'robinhood',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
-            'enabled' => filter_var(env('BRIDGE_ROUTE_ROBINHOOD_TO_EVM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'enabled' => filter_var(env('BRIDGE_ROUTE_ROBINHOOD_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
         ],
+        // Outbound needs relayer ETH on Robinhood Chain for payouts — teased
+        // as "Coming soon" until the hot wallet is funded, then flip both vars.
         'evm_to_robinhood' => [
             'direction' => 'evm_to_robinhood',
             'source_chain' => 'cyberia',
             'destination_chain' => 'robinhood',
             'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_ROBINHOOD_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_EVM_TO_ROBINHOOD_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
+        // The Yenten/Bitcoin/Litecoin/Monero corridors are teased as "Coming
+        // soon" (visible, not selectable) until per-user deposit crediting is
+        // trusted to run unattended. Set BRIDGE_ROUTE_*_COMING_SOON=false to
+        // open a corridor for real.
         'yenten_to_evm' => [
             'direction' => 'yenten_to_evm',
             'source_chain' => 'yenten',
             'destination_chain' => 'cyberia',
             'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_YENTEN_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_YENTEN_TO_EVM_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_yenten' => [
             'direction' => 'evm_to_yenten',
@@ -352,6 +368,7 @@ return [
             'destination_chain' => 'yenten',
             'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_YENTEN_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_EVM_TO_YENTEN_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'btc_to_evm' => [
             'direction' => 'btc_to_evm',
@@ -359,6 +376,7 @@ return [
             'destination_chain' => 'cyberia',
             'auto_process' => false,
             'enabled' => filter_var(env('BRIDGE_ROUTE_BTC_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_BTC_TO_EVM_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_btc' => [
             'direction' => 'evm_to_btc',
@@ -366,6 +384,7 @@ return [
             'destination_chain' => 'bitcoin',
             'auto_process' => false,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BTC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BTC_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'ltc_to_evm' => [
             'direction' => 'ltc_to_evm',
@@ -373,6 +392,7 @@ return [
             'destination_chain' => 'cyberia',
             'auto_process' => false,
             'enabled' => filter_var(env('BRIDGE_ROUTE_LTC_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_LTC_TO_EVM_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_ltc' => [
             'direction' => 'evm_to_ltc',
@@ -380,6 +400,7 @@ return [
             'destination_chain' => 'litecoin',
             'auto_process' => false,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_LTC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_EVM_TO_LTC_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'xmr_to_evm' => [
             'direction' => 'xmr_to_evm',
@@ -387,6 +408,7 @@ return [
             'destination_chain' => 'cyberia',
             'auto_process' => false,
             'enabled' => filter_var(env('BRIDGE_ROUTE_XMR_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_XMR_TO_EVM_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
         'evm_to_xmr' => [
             'direction' => 'evm_to_xmr',
@@ -394,6 +416,7 @@ return [
             'destination_chain' => 'monero',
             'auto_process' => false,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_XMR_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'coming_soon' => filter_var(env('BRIDGE_ROUTE_EVM_TO_XMR_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
     ],
 

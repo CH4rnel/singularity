@@ -28,6 +28,12 @@ class DexAprService
     /** LP fee share of volume on the QuickSwap fork (0.3%, no protocol cut). */
     private const FEE_RATE = 0.003;
 
+    /** MasterChef farm (Farm.vue reads the same contract client-side). */
+    private const MASTERCHEF = '0xd540DEa828567160FFDe5e792ca359aDD1f6B03D';
+
+    /** ~1s Cyberia blocks. */
+    private const BLOCKS_PER_YEAR = 86400 * 365;
+
     public static function cached(): ?array
     {
         return Cache::get(self::CACHE_KEY);
@@ -35,10 +41,13 @@ class DexAprService
 
     public function snapshot(): array
     {
+        $prices = $this->tokenPrices();
+
         $data = [
             'updated_at' => now('UTC')->toIso8601String(),
             'window_hours' => 24,
-            'pools' => $this->computePools(),
+            'pools' => $this->computePools($prices),
+            'farms' => $this->computeFarms($prices),
         ];
 
         // Forever: a stale snapshot beats an empty page; updated_at lets
@@ -48,7 +57,19 @@ class DexAprService
         return $data;
     }
 
-    private function computePools(): array
+    /** @return array<string, float> token address (lowercase) => USD price */
+    private function tokenPrices(): array
+    {
+        return Schema::hasTable('token_prices')
+            ? DB::table('token_prices')
+                ->whereNotNull('price_usd')
+                ->pluck('price_usd', 'address')
+                ->mapWithKeys(fn ($p, $a) => [strtolower($a) => (float) $p])
+                ->all()
+            : [];
+    }
+
+    private function computePools(array $prices): array
     {
         if (! Schema::hasTable('dex_pools')) {
             return [];
@@ -59,14 +80,6 @@ class DexAprService
         if ($pools->isEmpty()) {
             return [];
         }
-
-        $prices = Schema::hasTable('token_prices')
-            ? DB::table('token_prices')
-                ->whereNotNull('price_usd')
-                ->pluck('price_usd', 'address')
-                ->mapWithKeys(fn ($p, $a) => [strtolower($a) => (float) $p])
-                ->all()
-            : [];
 
         $volumes = $this->volumeByPair(
             $pools->pluck('pair_address')->map(fn ($a) => strtolower($a))->all(),
@@ -100,6 +113,150 @@ class DexAprService
             ->sortByDesc(fn ($row) => $row['apr'] ?? -1)
             ->values()
             ->all();
+    }
+
+    /**
+     * Farm APY per active MasterChef pool: annual reward emission valued in
+     * USD against the USD value of what's staked. This is the same math
+     * Farm.vue runs client-side (there in CYBER terms), so the landing quotes
+     * the number farmers actually see.
+     */
+    private function computeFarms(array $prices): array
+    {
+        $chef = strtolower(config('services.dex.masterchef', self::MASTERCHEF));
+
+        $poolLength = (int) ($this->callUint($chef, '0x081e3eda') ?? 0); // poolLength()
+        $totalAlloc = $this->callUint($chef, '0x17caf6f1');              // totalAllocPoint()
+        $rewardPerBlock = $this->callUint($chef, '0x8ae39cac');          // rewardPerBlock()
+        $rewardToken = $this->callAddress($chef, '0xf7c618c1');          // rewardToken()
+
+        if ($poolLength === 0 || ! $totalAlloc || $rewardPerBlock === null || $rewardToken === null) {
+            return [];
+        }
+
+        $pairs = Schema::hasTable('dex_pools')
+            ? DB::table('dex_pools')->get()->keyBy(fn ($p) => strtolower($p->pair_address))
+            : collect();
+
+        $rewardPrice = $this->resolvePrice($rewardToken, $prices, $pairs);
+        $rewardPerYearUsd = $rewardPrice !== null
+            ? $rewardPerBlock / 10 ** $this->tokenDecimals($rewardToken) * self::BLOCKS_PER_YEAR * $rewardPrice
+            : null;
+        $symbols = Schema::hasTable('token_prices')
+            ? DB::table('token_prices')
+                ->whereNotNull('symbol')
+                ->pluck('symbol', 'address')
+                ->mapWithKeys(fn ($s, $a) => [strtolower($a) => $s])
+                ->all()
+            : [];
+
+        // Emission against a near-empty stake produces a headline number that
+        // evaporates on the first real deposit — not worth advertising.
+        $minStaked = (float) config('services.dex.apr_min_farm_tvl_usd', 1);
+
+        $farms = [];
+
+        for ($pid = 0; $pid < $poolLength; $pid++) {
+            // poolInfo(uint256) → (lpToken, allocPoint, lastRewardBlock, accRewardPerShare)
+            $info = $this->rpc('eth_call', [
+                ['to' => $chef, 'data' => '0x1526fe27'.str_pad(dechex($pid), 64, '0', STR_PAD_LEFT)],
+                'latest',
+            ]);
+
+            if (! is_string($info) || strlen($info) < 2 + 128) {
+                continue;
+            }
+
+            $words = str_split(substr($info, 2), 64);
+            $lpToken = '0x'.substr($words[0], 24);
+            $allocPoint = (float) hexdec($words[1]);
+
+            if ($allocPoint <= 0) {
+                continue; // retired pool
+            }
+
+            $staked = $this->callUint($lpToken, '0x70a08231'.str_pad(substr($chef, 2), 64, '0', STR_PAD_LEFT));
+            $pair = $pairs[$lpToken] ?? null;
+
+            if ($pair !== null) {
+                $supply = $this->callUint($lpToken, '0x18160ddd'); // totalSupply()
+                $stakedUsd = ($supply ?? 0.0) > 0
+                    ? (float) ($pair->tvl_usd ?? 0) * ($staked ?? 0.0) / $supply
+                    : 0.0;
+                $label = "{$pair->symbol0}/{$pair->symbol1} LP";
+            } else {
+                $price = $this->resolvePrice($lpToken, $prices, $pairs);
+                $stakedUsd = $price !== null && $staked !== null
+                    ? $staked / 10 ** $this->tokenDecimals($lpToken) * $price
+                    : null;
+                $label = $symbols[$lpToken] ?? substr($lpToken, 0, 6).'…'.substr($lpToken, -4);
+            }
+
+            $share = $allocPoint / $totalAlloc;
+            $apy = $rewardPerYearUsd !== null && $stakedUsd !== null && $stakedUsd >= $minStaked
+                ? round($rewardPerYearUsd * $share / $stakedUsd * 100, 2)
+                : null;
+
+            $farms[] = [
+                'pid' => $pid,
+                'label' => $label,
+                'staked_usd' => $stakedUsd !== null ? round($stakedUsd, 2) : null,
+                'reward_share' => round($share, 4),
+                'apy' => $apy,
+            ];
+        }
+
+        usort($farms, fn ($a, $b) => ($b['apy'] ?? -1) <=> ($a['apy'] ?? -1));
+
+        return $farms;
+    }
+
+    /**
+     * USD price of a token: the bot's token_prices first, else derived from
+     * any dex_pools pair whose other side is priced (spot from reserves —
+     * the same fallback Farm.vue uses when the price walker comes up empty,
+     * e.g. for a freshly launched reward token like ASH).
+     */
+    private function resolvePrice(string $token, array $prices, $pairs): ?float
+    {
+        if (isset($prices[$token])) {
+            return $prices[$token];
+        }
+
+        foreach ($pairs as $pair) {
+            $t0 = strtolower((string) $pair->token0);
+            $t1 = strtolower((string) $pair->token1);
+            $r0 = (float) ($pair->reserve0 ?? 0);
+            $r1 = (float) ($pair->reserve1 ?? 0);
+
+            if ($token === $t0 && isset($prices[$t1]) && $r0 > 0) {
+                return $r1 * $prices[$t1] / $r0;
+            }
+
+            if ($token === $t1 && isset($prices[$t0]) && $r1 > 0) {
+                return $r0 * $prices[$t0] / $r1;
+            }
+        }
+
+        return null;
+    }
+
+    private function callUint(string $to, string $data): ?float
+    {
+        $result = $this->rpc('eth_call', [['to' => $to, 'data' => $data], 'latest']);
+
+        return is_string($result) && $result !== '0x'
+            ? (float) hexdec(substr($result, 2))
+            : null;
+    }
+
+    private function callAddress(string $to, string $data): ?string
+    {
+        $result = $this->rpc('eth_call', [['to' => $to, 'data' => $data], 'latest']);
+
+        return is_string($result) && strlen($result) === 66
+            ? '0x'.substr($result, 26)
+            : null;
     }
 
     /** @return array<string, float> pair address (lowercase) => 24h USD volume */

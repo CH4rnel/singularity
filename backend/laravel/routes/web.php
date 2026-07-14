@@ -40,7 +40,7 @@ Route::get('/thesis', fn () => response()->file(resource_path('views/landing/ind
 // the landing hero and any external site can quote real yield numbers.
 Route::get('/api/dex/apr', fn () => response()->json(
     DexAprService::cached()
-        ?? ['updated_at' => null, 'window_hours' => 24, 'pools' => []],
+        ?? ['updated_at' => null, 'window_hours' => 24, 'pools' => [], 'farms' => []],
 ))->name('dex.apr');
 // Funnel-event ingest (page views, wallet connects, swaps, LP adds) feeding
 // the CRM analytics page. Web middleware so the session resolves the user;

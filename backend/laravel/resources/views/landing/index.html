@@ -1052,7 +1052,7 @@ function Nav(){
           <a href="#doctrine">Doctrine</a>
           <a href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">Roadmap</a>
           <a href="/bridge">Bridge</a>
-          <a href="https://swap.cyberia.church" target="_blank" rel="noopener">Swap</a>
+          <a href="/swap">Swap</a>
           <a href="https://explorer.cyberia.church/" target="_blank" rel="noopener">Explorer</a>
           <NavUser />
         </nav>
@@ -1110,26 +1110,36 @@ function LiveBlock(){
   );
 }
 
-/* ------------ Top LP APR (real 24h fees, /api/dex/apr) ------------ */
-/* Shows the best pool APR as a hero stat linking to /liquidity; until the
-   first snapshot lands it falls back to the static trading-venue stat. */
+/* ------------ Top yield (live /api/dex/apr snapshot) ------------ */
+/* Farm APY headlines when farms are emitting (that's where the 4-digit
+   numbers live); pool fee APR is the fallback, the static trading-venue
+   stat the last resort before the first snapshot lands. */
 function AprStat(){
-  const [apr, setApr] = useState(null);
+  const [stat, setStat] = useState(null);
   useEffect(()=>{
     let alive = true;
+    const best = (rows, key) => {
+      const values = (rows || [])
+        .map(r => r[key])
+        .filter(v => typeof v === 'number' && isFinite(v) && v > 0);
+      return values.length ? Math.max(...values) : null;
+    };
     fetch('/api/dex/apr', { headers:{ Accept:'application/json' } })
       .then(r => r.ok ? r.json() : null)
       .then(j => {
-        if(!alive || !j || !Array.isArray(j.pools)) return;
-        const values = j.pools
-          .map(p => p.apr)
-          .filter(v => typeof v === 'number' && isFinite(v) && v > 0);
-        if(values.length) setApr(Math.max(...values));
+        if(!alive || !j) return;
+        const farmApy = best(j.farms, 'apy');
+        const poolApr = best(j.pools, 'apr');
+        if(farmApy !== null){
+          setStat({ value: farmApy, sk: 'Top Farm APY · live rewards', href: '/farm' });
+        } else if(poolApr !== null){
+          setStat({ value: poolApr, sk: 'Top LP APR · real 24h fees', href: '/liquidity' });
+        }
       })
       .catch(()=>{});
     return ()=>{ alive = false; };
   },[]);
-  if(apr === null){
+  if(stat === null){
     return (
       <div className="stat">
         <div className="sv">pump.fun</div>
@@ -1137,11 +1147,13 @@ function AprStat(){
       </div>
     );
   }
-  const label = apr >= 1000 ? Math.round(apr).toLocaleString('en-US') : apr.toFixed(1);
+  const label = stat.value >= 1000
+    ? Math.round(stat.value).toLocaleString('en-US')
+    : stat.value.toFixed(1);
   return (
-    <a className="stat" href="/liquidity">
+    <a className="stat" href={stat.href}>
       <div className="sv apr-value">{label}%</div>
-      <div className="sk">Top LP APR · real 24h fees</div>
+      <div className="sk">{stat.sk}</div>
     </a>
   );
 }
@@ -1443,7 +1455,7 @@ function Rite(){
             Open explorer
             <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M9 7h8v8"/></svg>
           </a>
-          <a className="btn ghost" href="https://swap.cyberia.church" target="_blank" rel="noopener">
+          <a className="btn ghost" href="/swap">
             Enter Swap
             <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M9 7h8v8"/></svg>
           </a>
@@ -1612,7 +1624,7 @@ const ICONS = {
 };
 
 const ECO_APPS = [
-  { ic:'swap', k:'DEX', name:'Ritual Swap', href:'https://swap.cyberia.church', status:'live',
+  { ic:'swap', k:'DEX', name:'Ritual Swap', href:'/swap', status:'live',
     desc:'The native exchange of Cyberia. AMM pools for CYBER and every ecosystem token, with routing across the whole pair graph.' },
   { ic:'bridge', k:'Interchain', name:'Bridge', href:'/bridge', status:'live',
     desc:'Move value between Solana, TON, BSC, Bitcoin-family chains and Cyberia — personal deposit addresses included, plus direct $CYBER.sol ⇄ CYBER conversion.' },

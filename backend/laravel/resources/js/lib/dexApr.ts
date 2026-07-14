@@ -14,10 +14,19 @@ export type PoolApr = {
     apr: number | null;
 };
 
+export type FarmApr = {
+    pid: number;
+    label: string;
+    staked_usd: number | null;
+    reward_share: number;
+    apy: number | null;
+};
+
 export type AprSnapshot = {
     updated_at: string | null;
     window_hours: number;
     pools: PoolApr[];
+    farms?: FarmApr[];
 };
 
 export function aprByPair(

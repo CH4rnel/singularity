@@ -16,6 +16,8 @@ beforeEach(function () {
     config()->set('bridge.chains.yenten.balance_api_urls', ['https://api.yentencoin.info']);
     config()->set('bridge.routes.yenten_to_evm.enabled', true);
     config()->set('bridge.routes.evm_to_yenten.enabled', true);
+    config()->set('bridge.routes.yenten_to_evm.coming_soon', false);
+    config()->set('bridge.routes.evm_to_yenten.coming_soon', false);
 });
 
 function prepareYenten(string $recipient = EVM_RECIPIENT): array

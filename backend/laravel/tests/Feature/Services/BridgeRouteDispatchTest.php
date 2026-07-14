@@ -285,8 +285,10 @@ test('Base routes are available and offer unified ETH and USDC', function () {
 });
 
 test('Robinhood Chain routes are available and offer unified ETH', function () {
-    config()->set('bridge.routes.robinhood_to_evm.enabled', true);
+    // Inbound is on by default; outbound opens once the relayer is funded
+    // (enabled=true + coming_soon=false).
     config()->set('bridge.routes.evm_to_robinhood.enabled', true);
+    config()->set('bridge.routes.evm_to_robinhood.coming_soon', false);
 
     $service = app(BridgeConfigService::class);
     $routes = array_keys($service->availableRoutes());

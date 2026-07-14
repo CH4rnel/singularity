@@ -56,8 +56,9 @@ class BridgeConfigService
 
         foreach (config('bridge.routes', []) as $direction => $route) {
             // A corridor toggled off (config/bridge.php 'enabled') is hidden
-            // from the UI and rejected at submit/quote time.
-            if (($route['enabled'] ?? true) === false) {
+            // from the UI and rejected at submit/quote time. A coming-soon
+            // corridor stays visible in the UI but is rejected here too.
+            if (($route['enabled'] ?? true) === false || $this->routeComingSoon($route)) {
                 continue;
             }
 
@@ -189,7 +190,9 @@ class BridgeConfigService
                 continue;
             }
 
-            $operational = $this->routeOperational($direction, $route, $source, $destination);
+            $comingSoon = $this->routeComingSoon($route);
+            $operational = ! $comingSoon
+                && $this->routeOperational($direction, $route, $source, $destination);
 
             $routes[] = [
                 'direction' => $direction,
@@ -201,7 +204,11 @@ class BridgeConfigService
                 'destinationAddressType' => $destination['address_type'],
                 'autoProcess' => (bool) ($route['auto_process'] ?? false),
                 'operational' => $operational,
-                'unavailableReason' => $operational ? null : 'Operator setup pending',
+                'unavailableReason' => match (true) {
+                    $operational => null,
+                    $comingSoon => 'Coming soon',
+                    default => 'Operator setup pending',
+                },
                 'tokens' => array_keys($this->tokensForRoute($direction)),
             ];
         }
@@ -267,9 +274,11 @@ class BridgeConfigService
     }
 
     /**
-     * Enabled routes shown in the UI. A route may be visible but not yet
-     * operational; publicRoutes() exposes that state so the frontend can show
-     * the corridor without allowing a broken request.
+     * Routes shown in the UI. A route may be visible but not yet operational;
+     * publicRoutes() exposes that state so the frontend can show the corridor
+     * without allowing a broken request. Coming-soon corridors are always
+     * visible — even over a disabled chain — that's the whole point of the
+     * tease.
      *
      * @return array<string, array<string, mixed>>
      */
@@ -277,10 +286,19 @@ class BridgeConfigService
     {
         return array_filter(
             config('bridge.routes', []),
-            fn (array $route) => ($route['enabled'] ?? true) !== false
-                && $this->chainEnabled($route['source_chain'] ?? '')
-                && $this->chainEnabled($route['destination_chain'] ?? ''),
+            fn (array $route) => $this->routeComingSoon($route)
+                || (($route['enabled'] ?? true) !== false
+                    && $this->chainEnabled($route['source_chain'] ?? '')
+                    && $this->chainEnabled($route['destination_chain'] ?? '')),
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $route
+     */
+    private function routeComingSoon(array $route): bool
+    {
+        return ($route['coming_soon'] ?? false) === true;
     }
 
     /**
