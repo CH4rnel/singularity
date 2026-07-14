@@ -81,6 +81,7 @@ const FALLBACK_EXPLORERS: Record<string, string> = {
     ton: 'https://tonviewer.com/transaction/{hash}',
     bnb: 'https://bscscan.com/tx/{hash}',
     base: 'https://basescan.org/tx/{hash}',
+    robinhood: 'https://robinhoodchain.blockscout.com/tx/{hash}',
     yenten: 'https://explorer.yentencoin.info/tx/{hash}',
     bitcoin: 'https://mempool.space/tx/{hash}',
     litecoin: 'https://litecoinspace.org/tx/{hash}',
@@ -114,6 +115,14 @@ const FALLBACK_CHAINS: Record<string, Partial<PublicChain>> = {
         wallet: 'evm',
         evmChainId: 8453,
         rpcUrl: 'https://mainnet.base.org',
+        nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
+    },
+    robinhood: {
+        label: 'Robinhood Chain',
+        type: 'evm',
+        wallet: 'evm',
+        evmChainId: 4663,
+        rpcUrl: 'https://rpc.mainnet.chain.robinhood.com',
         nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
     },
     bitcoin: {

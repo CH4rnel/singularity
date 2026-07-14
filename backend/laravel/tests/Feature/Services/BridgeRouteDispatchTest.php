@@ -284,6 +284,26 @@ test('Base routes are available and offer unified ETH and USDC', function () {
     expect($service->depositAddress('base'))->toBe(RELAYER);
 });
 
+test('Robinhood Chain routes are available and offer unified ETH', function () {
+    config()->set('bridge.routes.robinhood_to_evm.enabled', true);
+    config()->set('bridge.routes.evm_to_robinhood.enabled', true);
+
+    $service = app(BridgeConfigService::class);
+    $routes = array_keys($service->availableRoutes());
+
+    expect($routes)->toContain('robinhood_to_evm')->toContain('evm_to_robinhood');
+
+    // Native ETH on Robinhood Chain maps to the unified ETH wrapper.
+    expect(array_keys($service->tokensForRoute('robinhood_to_evm')))
+        ->toContain('ETH')
+        ->and(array_keys($service->tokensForRoute('evm_to_robinhood')))
+        ->toContain('ETH');
+
+    expect($service->tokenOnChain('ETH', 'robinhood')['native'] ?? false)->toBeTrue();
+    expect($service->depositAddress('robinhood'))->toBe(RELAYER);
+    expect(config('bridge.chains.robinhood.evm_chain_id'))->toBe(4663);
+});
+
 test('ton_to_evm verifies a native TON deposit, canonicalizes the hash and mints 9→18', function () {
     $sender = 'UQDv2p2r_iB1nR7J8Ze5LGUeXENN-te4ezlHqU6JZvS9l9Ix';
     $msgHash = str_repeat('1a', 32); // what TON Connect hands the frontend

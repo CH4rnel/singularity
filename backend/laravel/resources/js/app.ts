@@ -3,12 +3,13 @@
 // module (e.g. the Solana-using bridge chunk) references it. See polyfills.ts.
 import './polyfills';
 
-import { createInertiaApp } from '@inertiajs/vue3';
+import { createInertiaApp, router } from '@inertiajs/vue3';
 import { initializeTheme } from '@/composables/useAppearance';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import Web3Layout from '@/layouts/Web3Layout.vue';
+import { track } from '@/lib/track';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -52,3 +53,10 @@ createInertiaApp({
 
 // This will set light / dark mode on page load...
 initializeTheme();
+
+// Funnel: one page_view per Inertia navigation (initial load included).
+router.on('navigate', (event) => {
+    track('page_view', {
+        page: new URL(event.detail.page.url, window.location.origin).pathname,
+    });
+});

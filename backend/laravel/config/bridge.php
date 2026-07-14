@@ -153,6 +153,19 @@ return [
             'native_currency' => ['name' => 'Ethereum', 'symbol' => 'ETH', 'decimals' => 18],
             'deposit_address' => null,
         ],
+        'robinhood' => [
+            'key' => 'robinhood',
+            'label' => 'Robinhood Chain',
+            'type' => 'evm',
+            'address_type' => 'evm',
+            'wallet' => 'evm',
+            // Arbitrum-stack L2, mainnet since 2026-07-01. Gas token is ETH.
+            'evm_chain_id' => 4663,
+            'rpc_url' => env('BRIDGE_ROBINHOOD_RPC_URL', 'https://rpc.mainnet.chain.robinhood.com'),
+            'explorer_tx' => 'https://robinhoodchain.blockscout.com/tx/{hash}',
+            'native_currency' => ['name' => 'Ethereum', 'symbol' => 'ETH', 'decimals' => 18],
+            'deposit_address' => null,
+        ],
         'yenten' => [
             'key' => 'yenten',
             'label' => 'Yenten',
@@ -311,6 +324,20 @@ return [
             'destination_chain' => 'base',
             'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BASE_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'robinhood_to_evm' => [
+            'direction' => 'robinhood_to_evm',
+            'source_chain' => 'robinhood',
+            'destination_chain' => 'cyberia',
+            'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_ROBINHOOD_TO_EVM_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'evm_to_robinhood' => [
+            'direction' => 'evm_to_robinhood',
+            'source_chain' => 'cyberia',
+            'destination_chain' => 'robinhood',
+            'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_ROBINHOOD_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         ],
         'yenten_to_evm' => [
             'direction' => 'yenten_to_evm',
@@ -534,15 +561,16 @@ return [
         ],
         // ETH — one unified wrapper (the canonical Cyberia ETH, 0xFDa2…1986,
         // also the DEX/lending asset; relayer-owned Ownable mint/burn). Native
-        // ETH on every source chain (Base now, more later) maps to it; reserves
-        // are pooled and rebalanceable via the canonical L2 bridges. Native-coin
-        // pattern: mint on bridge-IN, native transfer on bridge-OUT.
+        // ETH on every source chain (Base + Robinhood Chain) maps to it;
+        // reserves are pooled and rebalanceable via the canonical L2 bridges.
+        // Native-coin pattern: mint on bridge-IN, native transfer on bridge-OUT.
         'ETH' => [
             'symbol' => 'ETH',
             'model' => 'mint',
             'chains' => [
                 'cyberia' => ['address' => '0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986', 'decimals' => 18],
                 'base' => ['native' => true, 'decimals' => 18],
+                'robinhood' => ['native' => true, 'decimals' => 18],
             ],
         ],
         // Native BNB bridged into a Cyberia wrapper (deployed via

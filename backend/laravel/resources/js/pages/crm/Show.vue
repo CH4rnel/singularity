@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Languages, Trash2 } from 'lucide-vue-next';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useLocale } from '@/composables/useLocale';
+import { crmMessages } from '@/lib/crmMessages';
 import type { CrmBridgeActivity, CrmContact } from '@/types';
 
 type Props = {
@@ -18,6 +20,8 @@ type Props = {
 };
 
 const props = defineProps<Props>();
+
+const { locale, toggleLocale, t } = useLocale(crmMessages);
 
 const detailsForm = useForm({
     name: props.contact.name ?? '',
@@ -54,7 +58,7 @@ function deleteNote(id: number) {
 }
 
 function deleteContact() {
-    if (confirm('Delete this contact?')) {
+    if (confirm(t('confirmDelete'))) {
         router.delete(`/crm/${props.contact.id}`);
     }
 }
@@ -77,7 +81,7 @@ defineOptions({
 </script>
 
 <template>
-    <Head :title="contact.name || 'Contact'" />
+    <Head :title="contact.name || t('contact')" />
 
     <div class="m-2 flex flex-col space-y-6">
         <div class="flex items-center justify-between">
@@ -92,18 +96,26 @@ defineOptions({
                     :title="
                         contact.name ||
                         contact.email ||
-                        `Contact #${contact.id}`
+                        `${t('contact')} #${contact.id}`
                     "
                     :description="
-                        contact.source +
-                        ' · joined ' +
+                        t(`source.${contact.source}`) +
+                        ' · ' +
+                        t('joined') +
+                        ' ' +
                         contact.created_at.slice(0, 10)
                     "
                 />
             </div>
-            <Button variant="ghost" size="sm" @click="deleteContact">
-                <Trash2 class="h-4 w-4" /> Delete
-            </Button>
+            <div class="flex items-center gap-2">
+                <Button variant="ghost" size="sm" @click="toggleLocale">
+                    <Languages class="h-4 w-4" />
+                    {{ locale === 'ru' ? 'EN' : 'RU' }}
+                </Button>
+                <Button variant="ghost" size="sm" @click="deleteContact">
+                    <Trash2 class="h-4 w-4" /> {{ t('delete') }}
+                </Button>
+            </div>
         </div>
 
         <div class="grid gap-6 lg:grid-cols-3">
@@ -111,14 +123,14 @@ defineOptions({
             <div class="space-y-6 lg:col-span-2">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Details</CardTitle>
+                        <CardTitle>{{ t('details') }}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <form @submit.prevent="saveDetails" class="space-y-4">
                             <div class="grid gap-4 md:grid-cols-2">
                                 <div>
                                     <label class="text-sm font-medium">
-                                        Name
+                                        {{ t('name') }}
                                     </label>
                                     <Input
                                         v-model="detailsForm.name"
@@ -127,7 +139,7 @@ defineOptions({
                                 </div>
                                 <div>
                                     <label class="text-sm font-medium">
-                                        Email
+                                        {{ t('email') }}
                                     </label>
                                     <Input
                                         v-model="detailsForm.email"
@@ -146,7 +158,7 @@ defineOptions({
                                 </div>
                                 <div>
                                     <label class="text-sm font-medium">
-                                        Tags (comma-separated)
+                                        {{ t('tags') }}
                                     </label>
                                     <Input
                                         v-model="detailsForm.tags"
@@ -155,35 +167,35 @@ defineOptions({
                                 </div>
                                 <div>
                                     <label class="text-sm font-medium">
-                                        Type
+                                        {{ t('type') }}
                                     </label>
                                     <select
                                         v-model="detailsForm.type"
                                         class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                                     >
                                         <option
-                                            v-for="t in options.types"
-                                            :key="t"
-                                            :value="t"
+                                            v-for="option in options.types"
+                                            :key="option"
+                                            :value="option"
                                         >
-                                            {{ t }}
+                                            {{ t(`type.${option}`) }}
                                         </option>
                                     </select>
                                 </div>
                                 <div>
                                     <label class="text-sm font-medium">
-                                        Status
+                                        {{ t('status') }}
                                     </label>
                                     <select
                                         v-model="detailsForm.status"
                                         class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                                     >
                                         <option
-                                            v-for="s in options.statuses"
-                                            :key="s"
-                                            :value="s"
+                                            v-for="option in options.statuses"
+                                            :key="option"
+                                            :value="option"
                                         >
-                                            {{ s }}
+                                            {{ t(`status.${option}`) }}
                                         </option>
                                     </select>
                                 </div>
@@ -192,7 +204,7 @@ defineOptions({
                                 type="submit"
                                 :disabled="detailsForm.processing"
                             >
-                                Save
+                                {{ t('save') }}
                             </Button>
                         </form>
                     </CardContent>
@@ -201,13 +213,13 @@ defineOptions({
                 <!-- Notes / activity -->
                 <Card>
                     <CardHeader>
-                        <CardTitle>Notes</CardTitle>
+                        <CardTitle>{{ t('notes') }}</CardTitle>
                     </CardHeader>
                     <CardContent class="space-y-4">
                         <form @submit.prevent="addNote" class="flex gap-2">
                             <Input
                                 v-model="noteForm.body"
-                                placeholder="Add a note…"
+                                :placeholder="t('addNotePlaceholder')"
                             />
                             <Button
                                 type="submit"
@@ -215,7 +227,7 @@ defineOptions({
                                     noteForm.processing || !noteForm.body
                                 "
                             >
-                                Add
+                                {{ t('add') }}
                             </Button>
                         </form>
 
@@ -227,7 +239,7 @@ defineOptions({
                             <div>
                                 <p class="text-sm">{{ note.body }}</p>
                                 <p class="mt-1 text-xs text-muted-foreground">
-                                    {{ note.author?.name || 'System' }} ·
+                                    {{ note.author?.name || t('system') }} ·
                                     {{
                                         note.created_at
                                             .slice(0, 16)
@@ -247,7 +259,7 @@ defineOptions({
                             v-if="!contact.notes || contact.notes.length === 0"
                             class="text-sm text-muted-foreground"
                         >
-                            No notes yet.
+                            {{ t('noNotes') }}
                         </p>
                     </CardContent>
                 </Card>
@@ -257,12 +269,12 @@ defineOptions({
             <div class="space-y-6">
                 <Card>
                     <CardHeader>
-                        <CardTitle>On-chain</CardTitle>
+                        <CardTitle>{{ t('onchain') }}</CardTitle>
                     </CardHeader>
                     <CardContent class="space-y-3 text-sm">
                         <div>
                             <div class="text-xs text-muted-foreground">
-                                EVM address
+                                {{ t('evmAddress') }}
                             </div>
                             <div class="font-mono break-all">
                                 {{ contact.evm_address || '—' }}
@@ -270,7 +282,7 @@ defineOptions({
                         </div>
                         <div>
                             <div class="text-xs text-muted-foreground">
-                                Solana address
+                                {{ t('solanaAddress') }}
                             </div>
                             <div class="font-mono break-all">
                                 {{ contact.solana_address || '—' }}
@@ -292,7 +304,7 @@ defineOptions({
                             v-if="contact.last_synced_at"
                             class="text-xs text-muted-foreground"
                         >
-                            Synced
+                            {{ t('synced') }}
                             {{
                                 contact.last_synced_at
                                     .slice(0, 16)
@@ -304,7 +316,7 @@ defineOptions({
 
                 <Card v-if="bridgeActivity.length">
                     <CardHeader>
-                        <CardTitle>Bridge activity</CardTitle>
+                        <CardTitle>{{ t('bridgeActivity') }}</CardTitle>
                     </CardHeader>
                     <CardContent class="space-y-2 text-sm">
                         <div

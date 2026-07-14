@@ -1,6 +1,7 @@
 import { BrowserProvider, Contract, formatEther, formatUnits } from 'ethers';
 import { ref } from 'vue';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { track } from '@/lib/track';
 import type { EthereumProvider } from '@/types/global';
 
 export type WalletState = {
@@ -114,6 +115,8 @@ export const useWallet = () => {
 
             address.value = accounts[0];
             isConnected.value = true;
+
+            track('wallet_connected', { wallet_address: accounts[0] });
 
             await fetchBalance();
             await fetchChainId();

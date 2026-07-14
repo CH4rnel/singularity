@@ -7,6 +7,7 @@ export type BridgeChain =
     | 'ton'
     | 'bnb'
     | 'base'
+    | 'robinhood'
     | 'yenten'
     | 'bitcoin'
     | 'litecoin'
@@ -32,6 +33,8 @@ export type BridgeDirection =
     | 'evm_to_bnb'
     | 'base_to_evm'
     | 'evm_to_base'
+    | 'robinhood_to_evm'
+    | 'evm_to_robinhood'
     | 'yenten_to_evm'
     | 'evm_to_yenten'
     | 'btc_to_evm'
@@ -145,6 +148,26 @@ export const BRIDGE_ROUTES: Record<string, BridgeRoute> = {
         destination: 'base',
         sourceLabel: 'Cyberia EVM',
         destinationLabel: 'Base',
+        sourceWallet: 'evm',
+        destinationAddressType: 'evm',
+        autoProcess: true,
+    },
+    robinhood_to_evm: {
+        direction: 'robinhood_to_evm',
+        source: 'robinhood',
+        destination: 'cyberia',
+        sourceLabel: 'Robinhood Chain',
+        destinationLabel: 'Cyberia EVM',
+        sourceWallet: 'evm',
+        destinationAddressType: 'evm',
+        autoProcess: true,
+    },
+    evm_to_robinhood: {
+        direction: 'evm_to_robinhood',
+        source: 'cyberia',
+        destination: 'robinhood',
+        sourceLabel: 'Cyberia EVM',
+        destinationLabel: 'Robinhood Chain',
         sourceWallet: 'evm',
         destinationAddressType: 'evm',
         autoProcess: true,

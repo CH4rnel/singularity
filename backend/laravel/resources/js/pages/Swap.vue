@@ -46,7 +46,10 @@ import {
     WCYBER_ADDRESS,
     filterJunkPools,
 } from '@/lib/cyberiaTokens';
+import type { AprSnapshot } from '@/lib/dexApr';
+import { aprByPair, formatApr } from '@/lib/dexApr';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { track } from '@/lib/track';
 
 const CYBERIA_CHAIN_ID = 49406;
 const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
@@ -131,7 +134,14 @@ const props = defineProps<{
     daily: DailyRow[];
     priceHistory: PriceHistoryRow[];
     indexerReady: boolean;
+    apr?: AprSnapshot | null;
 }>();
+
+const aprMap = computed(() => aprByPair(props.apr));
+const poolApr = (pairAddress?: string | null): number | null =>
+    pairAddress
+        ? (aprMap.value.get(pairAddress.toLowerCase())?.apr ?? null)
+        : null;
 
 const wallet = useWallet();
 const page = usePage();
@@ -1351,6 +1361,13 @@ const doSwap = async (): Promise<void> => {
         status.value = 'Waiting for block…';
         await tx.wait();
         status.value = `Swapped ${fmt(q.amountIn, decIn.value)} ${symbolOf(tokenIn.value)} → ${fmt(q.amountOut, decOut.value)} ${symbolOf(tokenOut.value)}.`;
+        track('swap_executed', {
+            wallet_address: wallet.address.value ?? undefined,
+            metadata: {
+                in: symbolOf(tokenIn.value),
+                out: symbolOf(tokenOut.value),
+            },
+        });
         amountIn.value = '';
         amountOut.value = '';
         quote.value = null;
@@ -1459,7 +1476,7 @@ onBeforeUnmount(() => {
 
                 <div class="min-h-[190px] rounded-md bg-muted/30 p-3">
                     <template v-if="tradingViewData.length > 0">
-                        <div class="mb-3 grid grid-cols-3 gap-2 text-xs">
+                        <div class="mb-3 grid grid-cols-4 gap-2 text-xs">
                             <div>
                                 <p class="text-muted-foreground">Pair</p>
                                 <p class="font-mono">
@@ -1476,6 +1493,24 @@ onBeforeUnmount(() => {
                                 <p class="text-muted-foreground">TVL</p>
                                 <p class="font-mono">
                                     {{ formatUsd(selectedPool?.tvl_usd) }}
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-muted-foreground">LP APR</p>
+                                <p
+                                    class="font-mono"
+                                    :class="
+                                        (poolApr(selectedPoolPairAddress) ??
+                                            0) > 0
+                                            ? 'text-emerald-500'
+                                            : ''
+                                    "
+                                >
+                                    {{
+                                        formatApr(
+                                            poolApr(selectedPoolPairAddress),
+                                        )
+                                    }}
                                 </p>
                             </div>
                             <div>
@@ -1556,7 +1591,7 @@ onBeforeUnmount(() => {
                     <div
                         v-for="pool in topPools"
                         :key="pool.pair_address"
-                        class="grid grid-cols-[1fr_5.5rem] gap-2 text-xs"
+                        class="grid grid-cols-[1fr_5.5rem_4.5rem] gap-2 text-xs"
                     >
                         <span class="truncate font-mono">
                             {{ pool.symbol0 }}/{{ pool.symbol1 }}
@@ -1565,6 +1600,16 @@ onBeforeUnmount(() => {
                             class="text-right font-mono text-muted-foreground"
                         >
                             {{ formatUsd(pool.tvl_usd) }}
+                        </span>
+                        <span
+                            class="text-right font-mono"
+                            :class="
+                                (poolApr(pool.pair_address) ?? 0) > 0
+                                    ? 'text-emerald-500'
+                                    : 'text-muted-foreground'
+                            "
+                        >
+                            {{ formatApr(poolApr(pool.pair_address)) }}
                         </span>
                     </div>
                 </div>

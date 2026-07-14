@@ -67,6 +67,23 @@
   }
   .nav-links a.nav-cta:hover{background:var(--ink);color:#fff}
   .nav-links a.nav-cta::after{display:none}
+  .nav-links a.nav-user{
+    display:flex;align-items:center;gap:9px;
+    color:var(--ink);font-weight:600;
+    padding:5px 14px 5px 6px;border:1px solid var(--ink);border-radius:999px;
+    transition:background .15s,color .15s;
+  }
+  .nav-links a.nav-user:hover{background:var(--ink);color:#fff}
+  .nav-links a.nav-user::after{display:none}
+  .nav-user-ava{
+    width:26px;height:26px;border-radius:50%;object-fit:cover;
+    background:var(--cyan);
+  }
+  .nav-user-initials{
+    display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:800;letter-spacing:.04em;color:#000;
+  }
+  .nav-user-name{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* ====== GLITCH TEXT ======
      Discrete, event-driven glitches: hard band slices + RGB tear.
@@ -774,6 +791,8 @@
   @keyframes tapeMove{to{transform:translateX(-50%)}}
 
   /* ====== LIVE BLOCK ====== */
+  .hero-stats a.stat:hover .sv{color:var(--cyan-strong)}
+  .sv.apr-value{color:var(--cyan-strong)}
   .sv.live-block{
     display:inline-flex;align-items:center;gap:10px;justify-content:center;
     transition:color .3s;
@@ -852,6 +871,22 @@
 
 <script type="text/babel" data-presets="env,react">
 const { useEffect, useRef, useState, useMemo } = React;
+
+/* Funnel: one page_view per landing load. Shares the app's localStorage
+   session id so a visitor who later opens /bridge or /swap stays one session
+   in CRM analytics (/api/events is CSRF-exempt for this static page). */
+(function(){
+  try{
+    let sid = localStorage.getItem('site.session_id');
+    if(!sid){ sid = crypto.randomUUID(); localStorage.setItem('site.session_id', sid); }
+    fetch('/api/events', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', Accept:'application/json' },
+      credentials:'same-origin',
+      body: JSON.stringify({ session_id: sid, event:'page_view', page: window.location.pathname }),
+    }).catch(()=>{});
+  }catch(e){ /* analytics must never break the page */ }
+})();
 
 /* ------------ Glitch text utilities ------------ */
 // Drives a discrete glitch event by toggling a .glitching class on/off.
@@ -973,6 +1008,31 @@ function Cube(){
   );
 }
 
+/* ------------ Nav user chip ------------ */
+/* Logged-in visitors get avatar (or initials) + username instead of the
+   Connect CTA. Auth state comes from the same-origin session probe. */
+function NavUser(){
+  const [user, setUser] = useState(null);
+  useEffect(()=>{
+    let alive = true;
+    fetch('/api/session-user', { headers:{ Accept:'application/json' }, credentials:'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if(alive && j && j.authenticated) setUser(j); })
+      .catch(()=>{});
+    return ()=>{ alive = false; };
+  },[]);
+  if(!user) return <a href="#join" className="nav-cta">Connect</a>;
+  const initials = (user.name || '?').trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
+  return (
+    <a href="/profile" className="nav-user" title={user.name}>
+      {user.avatar
+        ? <img className="nav-user-ava" src={user.avatar} alt="" />
+        : <span className="nav-user-ava nav-user-initials">{initials}</span>}
+      <span className="nav-user-name">{user.name}</span>
+    </a>
+  );
+}
+
 /* ------------ Nav ------------ */
 function Nav(){
   const [scrolled, setScrolled] = useState(false);
@@ -994,7 +1054,7 @@ function Nav(){
           <a href="/bridge">Bridge</a>
           <a href="https://swap.cyberia.church" target="_blank" rel="noopener">Swap</a>
           <a href="https://explorer.cyberia.church/" target="_blank" rel="noopener">Explorer</a>
-          <a href="#join" className="nav-cta">Connect</a>
+          <NavUser />
         </nav>
       </div>
     </header>
@@ -1050,6 +1110,42 @@ function LiveBlock(){
   );
 }
 
+/* ------------ Top LP APR (real 24h fees, /api/dex/apr) ------------ */
+/* Shows the best pool APR as a hero stat linking to /liquidity; until the
+   first snapshot lands it falls back to the static trading-venue stat. */
+function AprStat(){
+  const [apr, setApr] = useState(null);
+  useEffect(()=>{
+    let alive = true;
+    fetch('/api/dex/apr', { headers:{ Accept:'application/json' } })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if(!alive || !j || !Array.isArray(j.pools)) return;
+        const values = j.pools
+          .map(p => p.apr)
+          .filter(v => typeof v === 'number' && isFinite(v) && v > 0);
+        if(values.length) setApr(Math.max(...values));
+      })
+      .catch(()=>{});
+    return ()=>{ alive = false; };
+  },[]);
+  if(apr === null){
+    return (
+      <div className="stat">
+        <div className="sv">pump.fun</div>
+        <div className="sk">Trading venue</div>
+      </div>
+    );
+  }
+  const label = apr >= 1000 ? Math.round(apr).toLocaleString('en-US') : apr.toFixed(1);
+  return (
+    <a className="stat" href="/liquidity">
+      <div className="sv apr-value">{label}%</div>
+      <div className="sk">Top LP APR · real 24h fees</div>
+    </a>
+  );
+}
+
 /* ------------ Ticker tape ------------ */
 const TAPE_ITEMS = [
   'Swap','Bridge','DAO','Lending','Launchpad','Markets','Profile','Arcade',
@@ -1090,10 +1186,7 @@ function Hero(){
           <div className="sv">$CYBER.sol</div>
           <div className="sk">Solana · live now</div>
         </div>
-        <div className="stat">
-          <div className="sv">pump.fun</div>
-          <div className="sk">Trading venue</div>
-        </div>
+        <AprStat />
         <LiveBlock />
         <div className="stat">
           <div className="sv">CYBER</div>

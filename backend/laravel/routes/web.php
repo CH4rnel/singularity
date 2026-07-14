@@ -3,6 +3,7 @@
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\LaunchpadController;
+use App\Http\Controllers\Api\SiteEventController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\ApiController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Auth\TwitterAuthController;
 use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CrmAnalyticsController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmNoteController;
@@ -28,10 +30,38 @@ use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Middleware\EnsureBridgeAdmin;
+use App\Services\DexAprService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
 Route::get('/thesis', fn () => response()->file(resource_path('views/landing/index1.html')))->name('thesis');
+// Cached per-pool LP APR (written by the scheduled dex:apr command). Public:
+// the landing hero and any external site can quote real yield numbers.
+Route::get('/api/dex/apr', fn () => response()->json(
+    DexAprService::cached()
+        ?? ['updated_at' => null, 'window_hours' => 24, 'pools' => []],
+))->name('dex.apr');
+// Funnel-event ingest (page views, wallet connects, swaps, LP adds) feeding
+// the CRM analytics page. Web middleware so the session resolves the user;
+// CSRF-exempt in bootstrap/app.php so the static landing can report too.
+Route::post('/api/events', [SiteEventController::class, 'store'])
+    ->middleware('throttle:60,1')
+    ->name('site.events');
+// Session probe for the static landing: the React nav swaps the Connect CTA
+// for an avatar + username chip when a session cookie is present. Lives in
+// web.php (not routes/api.php) so the session guard resolves the user.
+Route::get('/api/session-user', function (Request $request) {
+    $user = $request->user();
+
+    return $user
+        ? response()->json([
+            'authenticated' => true,
+            'name' => $user->name,
+            'avatar' => $user->avatar ?? null,
+        ])
+        : response()->json(['authenticated' => false]);
+})->name('session.user');
 Route::get('/tonconnect-manifest.json', fn () => response()->json([
     'url' => 'https://cyberia.church/bridge',
     'name' => 'Cyberia Bridge',
@@ -138,6 +168,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('crm')->name('crm.')->group(function () {
         Route::post('sync', [CrmController::class, 'sync'])->name('sync');
         Route::get('export', [CrmController::class, 'export'])->name('export');
+        Route::get('analytics', [CrmAnalyticsController::class, 'index'])->name('analytics');
         Route::get('/', [CrmContactController::class, 'index'])->name('index');
         Route::post('/', [CrmContactController::class, 'store'])->name('store');
         Route::get('{contact}', [CrmContactController::class, 'show'])->name('show');

@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
+        // Anonymous funnel ingest must also work from the static landing,
+        // which has no CSRF token. Throttled + whitelisted-events only.
+        $middleware->validateCsrfTokens(except: ['api/events']);
+
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,

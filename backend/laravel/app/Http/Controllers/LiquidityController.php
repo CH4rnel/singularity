@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\DexAprService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
@@ -61,6 +62,9 @@ class LiquidityController extends Controller
                     ->get(['id', 'sym_in', 'amt_in', 'sym_out', 'amt_out', 'meta', 'created_at'])
                 : collect(),
             'indexerReady' => $hasPools,
+            // Cached per-pool LP APR snapshot (scheduled dex:apr command);
+            // null until the first run completes.
+            'apr' => DexAprService::cached(),
         ]);
     }
 }

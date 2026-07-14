@@ -22,7 +22,10 @@ import {
 } from '@/components/ui/select';
 import { useWallet } from '@/composables/useWallet';
 import { KNOWN_TOKENS, filterJunkPools } from '@/lib/cyberiaTokens';
+import type { AprSnapshot } from '@/lib/dexApr';
+import { aprByPair, formatApr } from '@/lib/dexApr';
 import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { track } from '@/lib/track';
 
 const CYBERIA_CHAIN_ID = 49406;
 const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
@@ -76,7 +79,17 @@ type PoolRow = {
     tvl_usd: number | null;
 };
 
-const props = defineProps<{ pools: PoolRow[]; indexerReady: boolean }>();
+const props = defineProps<{
+    pools: PoolRow[];
+    indexerReady: boolean;
+    apr?: AprSnapshot | null;
+}>();
+
+const aprMap = computed(() => aprByPair(props.apr));
+const poolApr = (pairAddress?: string | null): number | null =>
+    pairAddress
+        ? (aprMap.value.get(pairAddress.toLowerCase())?.apr ?? null)
+        : null;
 
 const wallet = useWallet();
 const page = usePage();
@@ -187,6 +200,7 @@ const decA = ref(18);
 const decB = ref(18);
 const pair = ref<{
     exists: boolean;
+    address: string | null;
     reserveA: bigint;
     reserveB: bigint;
 } | null>(null);
@@ -238,7 +252,12 @@ const refreshPair = async (): Promise<void> => {
         const pairAddr: string = await factory.getPair(addrA, addrB);
 
         if (!pairAddr || /^0x0+$/.test(pairAddr)) {
-            pair.value = { exists: false, reserveA: 0n, reserveB: 0n };
+            pair.value = {
+                exists: false,
+                address: null,
+                reserveA: 0n,
+                reserveB: 0n,
+            };
 
             return;
         }
@@ -248,6 +267,7 @@ const refreshPair = async (): Promise<void> => {
         const aIsToken0 = String(t0).toLowerCase() === addrA.toLowerCase();
         pair.value = {
             exists: true,
+            address: pairAddr,
             reserveA: aIsToken0 ? reserves[0] : reserves[1],
             reserveB: aIsToken0 ? reserves[1] : reserves[0],
         };
@@ -458,6 +478,13 @@ const addLiquidity = async (): Promise<void> => {
         }
 
         status.value = 'Liquidity added.';
+        track('liquidity_added', {
+            wallet_address: wallet.address.value ?? undefined,
+            metadata: {
+                tokenA: symbolOf(tokenA.value),
+                tokenB: symbolOf(tokenB.value),
+            },
+        });
         amountA.value = '';
         amountB.value = '';
         await Promise.all([refreshPair(), loadSide('A'), loadSide('B')]);
@@ -807,6 +834,15 @@ onMounted(async () => {
                     New pool — you set the initial price by choosing both
                     amounts.
                 </p>
+                <p
+                    v-else-if="poolApr(pair?.address) !== null"
+                    class="text-xs text-muted-foreground"
+                >
+                    LP APR (24h fees, annualized):
+                    <span class="font-mono text-emerald-500">
+                        {{ formatApr(poolApr(pair?.address)) }}
+                    </span>
+                </p>
 
                 <Button class="w-full" :disabled="busy" @click="addLiquidity">
                     <Loader2 v-if="busy" class="mr-2 h-4 w-4 animate-spin" />
@@ -870,8 +906,16 @@ onMounted(async () => {
                                 >{{ p.symbol0 }}/{{ p.symbol1 }}</span
                             >
                         </span>
-                        <span class="font-mono text-xs text-muted-foreground">
-                            {{ fmt(p.lp, 18) }} LP
+                        <span class="text-right font-mono text-xs">
+                            <span class="text-muted-foreground">
+                                {{ fmt(p.lp, 18) }} LP
+                            </span>
+                            <span
+                                v-if="poolApr(p.pairAddress) !== null"
+                                class="ml-2 text-emerald-500"
+                            >
+                                {{ formatApr(poolApr(p.pairAddress)) }}
+                            </span>
                         </span>
                     </button>
 

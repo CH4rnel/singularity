@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Download, Plus, RefreshCw, Trash2, Users } from 'lucide-vue-next';
+import {
+    BarChart3,
+    Download,
+    Languages,
+    Plus,
+    RefreshCw,
+    Trash2,
+    Users,
+} from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useLocale } from '@/composables/useLocale';
+import { crmMessages } from '@/lib/crmMessages';
 import type { CrmContact, CrmContactType, Paginated } from '@/types';
 
 type Filters = {
@@ -34,6 +44,8 @@ type Props = {
 };
 
 const props = defineProps<Props>();
+
+const { locale, toggleLocale, t } = useLocale(crmMessages);
 
 const typeVariant: Record<CrmContactType, string> = {
     lead: 'secondary',
@@ -102,7 +114,9 @@ function syncNow() {
 }
 
 function deleteContact(contact: CrmContact) {
-    if (confirm(`Delete "${contact.name || contact.email || contact.id}"?`)) {
+    const label = contact.name || contact.email || `#${contact.id}`;
+
+    if (confirm(`${t('confirmDelete')} (${label})`)) {
         router.delete(`/crm/${contact.id}`, { preserveScroll: true });
     }
 }
@@ -147,24 +161,33 @@ defineOptions({
         <div class="flex items-center justify-between">
             <Heading
                 variant="small"
-                title="CRM"
-                description="Contacts, holders and whales across the ecosystem"
+                :title="t('title')"
+                :description="t('description')"
             />
             <div class="flex flex-wrap items-center gap-2">
+                <Button variant="ghost" size="sm" @click="toggleLocale">
+                    <Languages class="h-4 w-4" />
+                    {{ locale === 'ru' ? 'EN' : 'RU' }}
+                </Button>
+                <Link href="/crm/analytics">
+                    <Button variant="outline">
+                        <BarChart3 class="h-4 w-4" /> {{ t('analytics') }}
+                    </Button>
+                </Link>
                 <Button variant="outline" :disabled="syncing" @click="syncNow">
                     <RefreshCw
                         class="h-4 w-4"
                         :class="syncing ? 'animate-spin' : ''"
                     />
-                    Sync
+                    {{ t('sync') }}
                 </Button>
                 <a href="/crm/export">
                     <Button variant="outline">
-                        <Download class="h-4 w-4" /> Export
+                        <Download class="h-4 w-4" /> {{ t('export') }}
                     </Button>
                 </a>
                 <Button @click="showForm = !showForm">
-                    <Plus class="h-4 w-4" /> Add contact
+                    <Plus class="h-4 w-4" /> {{ t('addContact') }}
                 </Button>
             </div>
         </div>
@@ -173,11 +196,11 @@ defineOptions({
         <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
             <Card
                 v-for="card in [
-                    { label: 'Total', value: stats.total },
-                    { label: 'Leads', value: stats.leads },
-                    { label: 'Holders', value: stats.holders },
-                    { label: 'Whales', value: stats.whales },
-                    { label: 'Customers', value: stats.customers },
+                    { label: t('statTotal'), value: stats.total },
+                    { label: t('statLeads'), value: stats.leads },
+                    { label: t('statHolders'), value: stats.holders },
+                    { label: t('statWhales'), value: stats.whales },
+                    { label: t('statCustomers'), value: stats.customers },
                 ]"
                 :key="card.label"
             >
@@ -196,15 +219,19 @@ defineOptions({
 
         <!-- Create form -->
         <div v-if="showForm" class="rounded-lg border p-4">
-            <h3 class="mb-4 text-lg font-medium">New contact</h3>
+            <h3 class="mb-4 text-lg font-medium">{{ t('newContact') }}</h3>
             <form @submit.prevent="submitCreate" class="space-y-4">
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
-                        <label class="text-sm font-medium">Name</label>
+                        <label class="text-sm font-medium">
+                            {{ t('name') }}
+                        </label>
                         <Input v-model="createForm.name" class="mt-1" />
                     </div>
                     <div>
-                        <label class="text-sm font-medium">Email</label>
+                        <label class="text-sm font-medium">
+                            {{ t('email') }}
+                        </label>
                         <Input
                             v-model="createForm.email"
                             type="email"
@@ -217,38 +244,44 @@ defineOptions({
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         <div>
-                            <label class="text-sm font-medium">Type</label>
+                            <label class="text-sm font-medium">
+                                {{ t('type') }}
+                            </label>
                             <select
                                 v-model="createForm.type"
                                 class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                             >
                                 <option
-                                    v-for="t in options.types"
-                                    :key="t"
-                                    :value="t"
+                                    v-for="option in options.types"
+                                    :key="option"
+                                    :value="option"
                                 >
-                                    {{ t }}
+                                    {{ t(`type.${option}`) }}
                                 </option>
                             </select>
                         </div>
                         <div>
-                            <label class="text-sm font-medium">Status</label>
+                            <label class="text-sm font-medium">
+                                {{ t('status') }}
+                            </label>
                             <select
                                 v-model="createForm.status"
                                 class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                             >
                                 <option
-                                    v-for="s in options.statuses"
-                                    :key="s"
-                                    :value="s"
+                                    v-for="option in options.statuses"
+                                    :key="option"
+                                    :value="option"
                                 >
-                                    {{ s }}
+                                    {{ t(`status.${option}`) }}
                                 </option>
                             </select>
                         </div>
                     </div>
                     <div>
-                        <label class="text-sm font-medium">EVM address</label>
+                        <label class="text-sm font-medium">
+                            {{ t('evmAddress') }}
+                        </label>
                         <Input
                             v-model="createForm.evm_address"
                             class="mt-1 font-mono"
@@ -262,9 +295,9 @@ defineOptions({
                         </p>
                     </div>
                     <div>
-                        <label class="text-sm font-medium"
-                            >Solana address</label
-                        >
+                        <label class="text-sm font-medium">
+                            {{ t('solanaAddress') }}
+                        </label>
                         <Input
                             v-model="createForm.solana_address"
                             class="mt-1 font-mono"
@@ -279,14 +312,14 @@ defineOptions({
                 </div>
                 <div class="flex gap-2">
                     <Button type="submit" :disabled="createForm.processing">
-                        Create
+                        {{ t('create') }}
                     </Button>
                     <Button
                         type="button"
                         variant="outline"
                         @click="showForm = false"
                     >
-                        Cancel
+                        {{ t('cancel') }}
                     </Button>
                 </div>
             </form>
@@ -296,34 +329,46 @@ defineOptions({
         <div class="flex flex-wrap items-center gap-2">
             <Input
                 v-model="search"
-                placeholder="Search name, email, address…"
+                :placeholder="t('searchPlaceholder')"
                 class="max-w-xs"
             />
             <select
                 v-model="type"
                 class="rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-                <option value="">All types</option>
-                <option v-for="t in options.types" :key="t" :value="t">
-                    {{ t }}
+                <option value="">{{ t('allTypes') }}</option>
+                <option
+                    v-for="option in options.types"
+                    :key="option"
+                    :value="option"
+                >
+                    {{ t(`type.${option}`) }}
                 </option>
             </select>
             <select
                 v-model="status"
                 class="rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-                <option value="">All statuses</option>
-                <option v-for="s in options.statuses" :key="s" :value="s">
-                    {{ s }}
+                <option value="">{{ t('allStatuses') }}</option>
+                <option
+                    v-for="option in options.statuses"
+                    :key="option"
+                    :value="option"
+                >
+                    {{ t(`status.${option}`) }}
                 </option>
             </select>
             <select
                 v-model="source"
                 class="rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-                <option value="">All sources</option>
-                <option v-for="s in options.sources" :key="s" :value="s">
-                    {{ s }}
+                <option value="">{{ t('allSources') }}</option>
+                <option
+                    v-for="option in options.sources"
+                    :key="option"
+                    :value="option"
+                >
+                    {{ t(`source.${option}`) }}
                 </option>
             </select>
         </div>
@@ -335,15 +380,21 @@ defineOptions({
                     class="border-b bg-muted/50 text-left text-muted-foreground"
                 >
                     <tr>
-                        <th class="px-4 py-2 font-medium">Contact</th>
-                        <th class="px-4 py-2 font-medium">Addresses</th>
-                        <th class="px-4 py-2 font-medium">Type</th>
-                        <th class="px-4 py-2 font-medium">Status</th>
+                        <th class="px-4 py-2 font-medium">
+                            {{ t('colContact') }}
+                        </th>
+                        <th class="px-4 py-2 font-medium">
+                            {{ t('colAddresses') }}
+                        </th>
+                        <th class="px-4 py-2 font-medium">{{ t('type') }}</th>
+                        <th class="px-4 py-2 font-medium">{{ t('status') }}</th>
                         <th class="px-4 py-2 text-right font-medium">CYBER</th>
                         <th class="px-4 py-2 text-right font-medium">
                             CYBER.sol
                         </th>
-                        <th class="px-4 py-2 font-medium">Source</th>
+                        <th class="px-4 py-2 font-medium">
+                            {{ t('colSource') }}
+                        </th>
                         <th class="px-4 py-2"></th>
                     </tr>
                 </thead>
@@ -383,12 +434,12 @@ defineOptions({
                             <Badge
                                 :variant="typeVariant[contact.type] as never"
                             >
-                                {{ contact.type }}
+                                {{ t(`type.${contact.type}`) }}
                             </Badge>
                         </td>
                         <td class="px-4 py-2">
                             <Badge variant="outline">{{
-                                contact.status
+                                t(`status.${contact.status}`)
                             }}</Badge>
                         </td>
                         <td class="px-4 py-2 text-right font-mono">
@@ -399,7 +450,7 @@ defineOptions({
                         </td>
                         <td class="px-4 py-2">
                             <span class="text-xs text-muted-foreground">
-                                {{ contact.source }}
+                                {{ t(`source.${contact.source}`) }}
                             </span>
                         </td>
                         <td class="px-4 py-2 text-right">
@@ -420,7 +471,7 @@ defineOptions({
                 class="flex flex-col items-center gap-2 py-12 text-muted-foreground"
             >
                 <Users class="h-8 w-8" />
-                <p>No contacts found. Add one or run a sync.</p>
+                <p>{{ t('noContacts') }}</p>
             </div>
         </div>
 
@@ -430,7 +481,8 @@ defineOptions({
             class="flex flex-wrap items-center justify-between gap-2"
         >
             <span class="text-xs text-muted-foreground">
-                {{ contacts.from }}–{{ contacts.to }} of {{ contacts.total }}
+                {{ contacts.from }}–{{ contacts.to }} {{ t('of') }}
+                {{ contacts.total }}
             </span>
             <div class="flex flex-wrap gap-1">
                 <Link
