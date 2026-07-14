@@ -86,61 +86,12 @@ const destinationChains = computed(() =>
     ),
 );
 
-watch(
-    routes,
-    (list) => {
-        if (list.length === 0) {
-            return;
-        }
-
-        // Default to an operational source — pending chains are visible in
-        // the picker but disabled, so they must never be auto-selected.
-        if (
-            !list.some((route) => route.source === from.value) ||
-            sourcePending(from.value)
-        ) {
-            const firstOpen = list.find(
-                (route) => route.operational !== false,
-            );
-            from.value = (firstOpen ?? list[0]).source;
-        }
-    },
-    { immediate: true },
-);
-
-watch(
-    [from, destinationChains],
-    () => {
-        if (
-            !destinationChains.value.includes(to.value) ||
-            destinationPending(to.value)
-        ) {
-            to.value =
-                destinationChains.value.find(
-                    (chain) => !destinationPending(chain),
-                ) ??
-                destinationChains.value[0] ??
-                '';
-        }
-    },
-    { immediate: true },
-);
-
-const selectedRoute = computed(
-    () =>
-        routes.value.find(
-            (route) =>
-                route.source === from.value && route.destination === to.value,
-        ) ?? null,
-);
-
-const selectedRouteOperational = computed(
-    () => selectedRoute.value?.operational !== false,
-);
-
 // A chain is "pending" in a picker when every route through it in that role
 // is non-operational: it stays listed (coming-soon tease) but is greyed out
-// and cannot be picked.
+// and cannot be picked. Declared BEFORE the immediate watchers below — they
+// call these synchronously during setup, and a later `const` would be a
+// silent ReferenceError inside the watcher (Vue swallows it), leaving the
+// defaults unset.
 const allPending = (candidates: BridgeRoute[]): boolean =>
     candidates.length > 0 &&
     candidates.every((route) => route.operational === false);
@@ -173,6 +124,61 @@ const destinationPendingLabel = (chain: string): string =>
                 route.source === from.value && route.destination === chain,
         ),
     );
+
+watch(
+    routes,
+    (list) => {
+        if (list.length === 0) {
+            return;
+        }
+
+        // Default to an operational source — pending chains are visible in
+        // the picker but disabled, so they must never be auto-selected.
+        if (
+            !list.some((route) => route.source === from.value) ||
+            sourcePending(from.value)
+        ) {
+            const firstOpen = list.find(
+                (route) => route.operational !== false,
+            );
+            from.value = (firstOpen ?? list[0]).source;
+        }
+    },
+    { immediate: true },
+);
+
+watch(
+    [from, destinationChains],
+    () => {
+        if (
+            !destinationChains.value.includes(to.value) ||
+            destinationPending(to.value)
+        ) {
+            // Cyberia is the home chain — when it's a valid destination it is
+            // always the default.
+            const open = destinationChains.value.filter(
+                (chain) => !destinationPending(chain),
+            );
+            to.value =
+                (open.includes('cyberia') ? 'cyberia' : open[0]) ??
+                destinationChains.value[0] ??
+                '';
+        }
+    },
+    { immediate: true },
+);
+
+const selectedRoute = computed(
+    () =>
+        routes.value.find(
+            (route) =>
+                route.source === from.value && route.destination === to.value,
+        ) ?? null,
+);
+
+const selectedRouteOperational = computed(
+    () => selectedRoute.value?.operational !== false,
+);
 
 // Tokens available on the chosen route — the picker keeps a valid selection as
 // the route changes, so the choice made here carries straight into the flow.
