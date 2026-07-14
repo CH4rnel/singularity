@@ -177,21 +177,23 @@ const sourceBalance = computed(() => {
         return bridge.getTokenBalance(flow.context.token, 'ton');
     }
 
-    if (source !== 'solana' && source !== 'cyberia') {
-        // Manual-chain balances (Yenten) aren't available through the
-        // connected wallets.
-        return null;
-    }
-
-    const chain: 'evm' | 'solana' = source === 'solana' ? 'solana' : 'evm';
-
-    if (flow.context.token === 'CYBER.sol') {
-        return chain === 'solana'
+    if (source === 'solana') {
+        return flow.context.token === 'CYBER.sol'
             ? bridge.solanaCyberBalance.value
-            : bridge.cyberSolBalance.value;
+            : bridge.getTokenBalance(flow.context.token, 'solana');
     }
 
-    return bridge.getTokenBalance(flow.context.token, chain);
+    // ERC20 on any EVM source — Cyberia or an external chain (SPY on
+    // Robinhood, USDT on BSC, USDC on Base): fetched via that chain's RPC.
+    if (bridgeChainInfo(source)?.type === 'evm') {
+        return flow.context.token === 'CYBER.sol'
+            ? bridge.cyberSolBalance.value
+            : bridge.getTokenBalance(flow.context.token, 'evm');
+    }
+
+    // Manual-chain balances (Yenten/BTC/…) aren't available through the
+    // connected wallets.
+    return null;
 });
 
 const sourceMaxAmount = computed(() => {
@@ -272,8 +274,13 @@ const refreshSourceBalance = () => {
         } else {
             bridge.fetchTokenBalanceSolana(token, solanaWallet.address.value);
         }
-    } else if (source === 'cyberia' && evmWallet.address.value) {
-        if (token === 'CYBER.sol') {
+    } else if (
+        bridgeChainInfo(source)?.type === 'evm' &&
+        evmWallet.address.value
+    ) {
+        // ERC20 on any EVM source chain (Cyberia, Robinhood, BSC, Base…) —
+        // native coins were handled by the first branch.
+        if (token === 'CYBER.sol' && source === 'cyberia') {
             bridge.fetchCyberSolBalance(evmWallet.address.value);
         } else {
             bridge.fetchTokenBalanceEvm(token, evmWallet.address.value, source);
