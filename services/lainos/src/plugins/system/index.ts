@@ -2,7 +2,7 @@ import { exec } from "node:child_process";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { Action, Plugin } from "../../types.js";
+import type { Action, Plugin, Provider } from "../../types.js";
 
 const execAsync = promisify(exec);
 
@@ -12,9 +12,20 @@ const execAsync = promisify(exec);
  * refused if it escapes; shell commands run with that workspace as cwd, a hard
  * timeout, and truncated output. This is a powerful, dual-use capability — load
  * it only for agents you trust, and set LAINOS_WORKSPACE to scope it.
+ *
+ * The default workspace is `./workspace` under the daemon's cwd — never the
+ * cwd itself, or the agent could read the daemon's .env (bot token, signer
+ * key) and litter the repo it runs from.
  */
 function workspaceRoot(): string {
-  return resolve(process.env.LAINOS_WORKSPACE ?? process.cwd());
+  return resolve(process.env.LAINOS_WORKSPACE ?? "workspace");
+}
+
+/** Make sure the workspace exists (exec with a missing cwd throws). */
+async function ensureWorkspace(): Promise<string> {
+  const root = workspaceRoot();
+  await mkdir(root, { recursive: true });
+  return root;
 }
 
 /** Resolve a user-supplied path against the workspace, refusing escapes. */
@@ -57,6 +68,7 @@ const runShellAction: Action = {
   async handler(_runtime, _state, params) {
     const command = String(params.command ?? "").trim();
     if (!command) return { ok: false, text: "No command given." };
+    await ensureWorkspace();
     const cwd = params.cwd ? safePath(String(params.cwd)) : workspaceRoot();
     if (!cwd) return { ok: false, text: "cwd escapes the workspace." };
     const timeout = Number(process.env.LAINOS_SHELL_TIMEOUT_MS ?? 30_000);
@@ -164,6 +176,7 @@ const listDirAction: Action = {
   },
   async handler(_runtime, _state, params) {
     const rel = String(params.path ?? ".");
+    await ensureWorkspace();
     const p = safePath(rel);
     if (!p) return { ok: false, text: "Path escapes the workspace." };
     try {
@@ -180,9 +193,22 @@ const listDirAction: Action = {
   },
 };
 
+const systemProvider: Provider = {
+  name: "system",
+  async get() {
+    return (
+      `You have a real terminal and filesystem in your workspace (${workspaceRoot()}): ` +
+      `run_shell executes commands, read_file/write_file/list_dir manage files. ` +
+      `When a user asks you to run or check something there, do it yourself with these tools and report the actual output — ` +
+      `never tell the user to run commands for you, and never invent file listings or command output.`
+    );
+  },
+};
+
 export const systemPlugin: Plugin = {
   name: "system",
   description:
     "Terminal and filesystem skills: run shell commands and read/write/list files within a sandboxed workspace.",
+  providers: [systemProvider],
   actions: [runShellAction, readFileAction, writeFileAction, listDirAction],
 };

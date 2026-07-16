@@ -13,8 +13,10 @@ import { createEmbeddingProvider } from "./memory/embeddings.js";
 import { FileMemoryStore } from "./memory/store.js";
 import { createModelProvider } from "./models/index.js";
 import { bootstrapPlugin } from "./plugins/bootstrap/index.js";
+import { channelPlugin } from "./plugins/channel/index.js";
 import { cyberiaPlugin } from "./plugins/cyberia/index.js";
 import { forgePlugin } from "./plugins/forge/index.js";
+import { githubPlugin } from "./plugins/github/index.js";
 import { scoutPlugin } from "./plugins/scout/index.js";
 import { sentinelPlugin } from "./plugins/sentinel/index.js";
 import { systemPlugin } from "./plugins/system/index.js";
@@ -42,8 +44,18 @@ export { sentinelPlugin, SentinelService } from "./plugins/sentinel/index.js";
 export type { Alert, Watch, WatchKind } from "./plugins/sentinel/index.js";
 export { forgePlugin, ForgeService } from "./plugins/forge/index.js";
 export type { ForgeEvent, ForgeJob, Wish, WishStatus } from "./plugins/forge/index.js";
-export { scoutPlugin, ScoutService, parseRss } from "./plugins/scout/index.js";
+export { scoutPlugin, ScoutService, parseRss, looksLikeNothing } from "./plugins/scout/index.js";
 export type { ScoutEvent, ScoutItem, Topic } from "./plugins/scout/index.js";
+export { githubPlugin, GithubStreakService, parseContributionDay } from "./plugins/github/index.js";
+export type { ContributionDay, GithubEvent, GithubWatch } from "./plugins/github/index.js";
+export {
+  channelPlugin,
+  ChannelWatchService,
+  parseChannelPosts,
+  normalizeChannel,
+  localDay,
+} from "./plugins/channel/index.js";
+export type { ChannelActivity, ChannelEvent, ChannelWatch } from "./plugins/channel/index.js";
 export { TelegramClient } from "./clients/telegram.js";
 export { lain } from "./characters/lain.js";
 
@@ -57,6 +69,8 @@ const BUILTIN_PLUGINS: Record<string, Plugin> = {
   sentinel: sentinelPlugin,
   forge: forgePlugin,
   scout: scoutPlugin,
+  github: githubPlugin,
+  channel: channelPlugin,
 };
 
 export interface CreateAgentOptions {

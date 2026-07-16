@@ -61,7 +61,7 @@ interface TgMessage {
   from?: TgUser;
   chat: TgChat;
   text?: string;
-  reply_to_message?: { from?: TgUser };
+  reply_to_message?: { from?: TgUser; text?: string };
 }
 
 interface TgUpdate {
@@ -76,7 +76,8 @@ const HELP_TEXT = [
   "",
   "talk to me in plain language. i can:",
   "  · read CYBER and token balances, tx status, chain state",
-  "  · send CYBER when my signer is configured",
+  "  · create my own wallet and send CYBER from it",
+  "  · run commands and read/write files in my workspace",
   "  · watch addresses in the background and alert you here",
   "  · remember durable facts across conversations",
   "  · /study — run the Cyberia research sweep now",
@@ -277,6 +278,14 @@ export class TelegramClient {
     if (cmd === "/study" || cmd === "/cyberia") {
       await this.runCyberiaStudy(chatId);
       return;
+    }
+
+    // A reply carries the quoted message as context, so "запусти этот скрипт"
+    // in reply to a code block reaches the agent together with the code.
+    const quoted = msg.reply_to_message?.text?.trim();
+    if (quoted) {
+      const clipped = quoted.length > 600 ? `${quoted.slice(0, 600)}…` : quoted;
+      content = `[in reply to: ${clipped}]\n${content}`;
     }
 
     const typing = this.keepTyping(chatId);

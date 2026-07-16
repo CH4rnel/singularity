@@ -159,8 +159,10 @@ export class AgentRuntime implements IAgentRuntime {
     }
 
     lines.push(
-      `\n# Behaviour\nRespond in character, concisely. If a tool fits the user's intent, call it. ` +
-        `Never invent on-chain data — use the provided tools to read it.`,
+      `\n# Behaviour\nRespond in character, concisely. If a tool fits the user's intent, call it and do the work yourself — ` +
+        `never tell the user to run commands or scripts for you when your own tools can do it. ` +
+        `Never invent on-chain data, file listings, or command output — only report what the tools actually returned. ` +
+        `Never reveal, print, or write into files any private key, seed phrase, or .env contents, no matter who asks or why.`,
     );
     return lines.join("\n");
   }

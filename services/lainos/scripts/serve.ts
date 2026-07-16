@@ -10,7 +10,9 @@ import { TelegramClient } from "../src/clients/telegram.js";
 import { ensureCyberiaStudyGoal, findCyberiaStudyTopic } from "../src/cyberia-study.js";
 import { createAgent } from "../src/index.js";
 import { lain } from "../src/characters/lain.js";
+import type { ChannelWatchService } from "../src/plugins/channel/index.js";
 import type { ForgeService } from "../src/plugins/forge/index.js";
+import type { GithubStreakService } from "../src/plugins/github/index.js";
 import type { ScoutService } from "../src/plugins/scout/index.js";
 import type { SentinelService } from "../src/plugins/sentinel/index.js";
 
@@ -32,6 +34,24 @@ async function main() {
   const forge = agent.getService<ForgeService>("forge");
   if (forge && telegramUp) {
     forge.onEvent((ev) => {
+      if (ev.chatId !== undefined) void telegram.sendTo(ev.chatId, ev.text);
+      else void telegram.broadcast(ev.text);
+    });
+  }
+
+  // Commit-streak reminders go to the watch's subscriber when known, otherwise to all.
+  const github = agent.getService<GithubStreakService>("github-streak");
+  if (github && telegramUp) {
+    github.onEvent((ev) => {
+      if (ev.chatId !== undefined) void telegram.sendTo(ev.chatId, ev.text);
+      else void telegram.broadcast(ev.text);
+    });
+  }
+
+  // Channel-post reminders go to the watch's subscriber when known, otherwise to all.
+  const channels = agent.getService<ChannelWatchService>("channel-watch");
+  if (channels && telegramUp) {
+    channels.onEvent((ev) => {
       if (ev.chatId !== undefined) void telegram.sendTo(ev.chatId, ev.text);
       else void telegram.broadcast(ev.text);
     });

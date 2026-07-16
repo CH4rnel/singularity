@@ -432,7 +432,8 @@ export class ScoutService implements Service {
       `Write in the language of the instruction (default Russian). ` +
       `Start with a one- or two-sentence takeaway, then up to 8 bullet lines, each ending with its link. ` +
       `Plain text only, no markdown headers. ` +
-      `If nothing clears the bar, reply with exactly: NOTHING`;
+      `If nothing clears the bar, reply with exactly the single word: NOTHING — ` +
+      `never write "ничего не найдено", "no relevant news", or any other explanation instead.`;
     const res = await this.runtime.model.generate({
       tier: ModelTier.MEDIUM,
       system,
@@ -449,7 +450,7 @@ export class ScoutService implements Service {
       temperature: 0.4,
     });
     const text = res.text.trim();
-    if (!text || /^NOTHING\b/i.test(text)) return null;
+    if (looksLikeNothing(text)) return null;
     return text;
   }
 
@@ -461,6 +462,31 @@ export class ScoutService implements Service {
 }
 
 // ------------------------------------------------------------------ helpers
+
+/**
+ * True when a distilled reply is a "nothing found" note rather than a digest.
+ * The prompt demands the exact word NOTHING, but weaker models improvise
+ * ("Ничего не найдено по теме…", "No relevant news.") — and a digest that
+ * leads with emptiness must never be delivered: silence is the contract.
+ * Exported for tests.
+ */
+export function looksLikeNothing(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  const first = trimmed
+    .split("\n", 1)[0]
+    .replace(/^[^\p{L}]+/u, "")
+    .toLowerCase();
+  if (/^nothing(\s|[.,:!—-]|$)/.test(first)) return true;
+  const singleNote = !trimmed.includes("\n") && trimmed.length <= 300;
+  return (
+    singleNote &&
+    (/^(ничего|нет)(\s|[.,:!—-]|$)/.test(first) ||
+      /(не найдено|ничего нового|ничего важного|ничего значимого|nothing (new|found|important|relevant)|no (relevant|new|important|significant) (news|items|updates|results))/.test(
+        first,
+      ))
+  );
+}
 
 /** Minimal RSS/Atom feed parser (dependency-free). Exported for tests. */
 export function parseRss(xml: string, source: string, limit = 15): ScoutItem[] {

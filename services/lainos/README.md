@@ -156,6 +156,22 @@ startup during boot without an interactive login (`loginctl show-user "$USER"
   Run it manually with `/study` in Telegram, or from the host with
   `npm run study:cyberia` while the daemon is up; manual runs always return
   either a digest or a short study note.
+- **github** — a streak keeper: `watch_github_commits <username>` watches the
+  account's public contribution graph and sends one Telegram reminder in the
+  evening of any day still without commits (silence on days with them);
+  `check_github_commits` answers "did I commit today?" on demand and
+  `stop_github_watch` removes the watch. Watches persist in `data/github.json`;
+  tune with `LAINOS_GITHUB_REMIND_HOUR` (default 18), `LAINOS_GITHUB_INTERVAL_MS`
+  and `LAINOS_GITHUB_PROXY`.
+- **channel** — a Telegram channel keeper: `watch_channel_posts <name>` watches
+  a public channel's web preview (`t.me/s/<name>`, no admin rights needed) and
+  sends one reminder in the evening of any day the channel published nothing —
+  the channel's posts mirror to Twitter, which moves CYBER.sol, so postless
+  days cost signal. `check_channel_posts` answers "did the channel post
+  today?" on demand and `stop_channel_watch` removes the watch. Watches
+  persist in `data/channels.json`; tune with `LAINOS_CHANNEL_REMIND_HOUR`
+  (default 18), `LAINOS_CHANNEL_INTERVAL_MS` and `LAINOS_CHANNEL_PROXY`
+  (falls back to `TELEGRAM_PROXY`).
 - **system** — a terminal and filesystem, confined to a workspace
   (`LAINOS_WORKSPACE`, default `./workspace`):
   - `run_shell` — run a shell command (cwd = workspace, hard timeout, clipped output)
@@ -260,6 +276,8 @@ src/
   plugins/sentinel/   background balance watches -> alerts (push + next-turn)
   plugins/forge/      wishboard + coding-agent jobs (holder wishes -> branches)
   plugins/scout/      autonomous researcher (topics -> scheduled digests)
+  plugins/github/     commit-streak keeper (daily reminder on commitless days)
+  plugins/channel/    telegram channel keeper (daily reminder on postless days)
   plugins/system/     terminal + filesystem skills (sandboxed workspace)
   clients/            cli.ts (REPL) | http.ts (bridge) | telegram.ts (bot) | tui/
   characters/lain.ts  the resident mind of Cyberia

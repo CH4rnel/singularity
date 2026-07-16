@@ -155,6 +155,30 @@ function useChainHeight(rpc: string): number | null {
   return block;
 }
 
+/** Terminal size that tracks window resizes (Ink re-lays out, but React
+ *  needs a state change to re-render height-bound boxes). */
+function useStdoutDimensions(): { width: number; rows: number } {
+  const { stdout } = useStdout();
+  const [size, setSize] = useState(() => ({
+    width: stdout?.columns ?? 80,
+    rows: stdout?.rows ?? 24,
+  }));
+  useEffect(() => {
+    if (!stdout) return;
+    const onResize = () => {
+      // The old frame was laid out for a different geometry; wipe it so the
+      // repaint doesn't leave a shredded banner / lost composer behind.
+      stdout.write("\x1b[2J\x1b[3J\x1b[H");
+      setSize({ width: stdout.columns ?? 80, rows: stdout.rows ?? 24 });
+    };
+    stdout.on("resize", onResize);
+    return () => {
+      stdout.off("resize", onResize);
+    };
+  }, [stdout]);
+  return size;
+}
+
 // ------------------------------------------------------------ components
 
 function GradientText({ text, from, to }: { text: string; from: string; to: string }) {
@@ -173,7 +197,7 @@ function GradientText({ text, from, to }: { text: string; from: string; to: stri
 function Banner({ tagline }: { tagline: string }) {
   const c = useTheme();
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={1} flexShrink={0}>
       {BANNER.map((row, i) => (
         <Text key={i} color={lerpColor(c.gradFrom, c.gradTo, BANNER.length <= 1 ? 0 : i / (BANNER.length - 1))}>
           {row}
@@ -333,7 +357,7 @@ function TurnView({ turn }: { turn: Turn }) {
 function Autocomplete({ items, index }: { items: typeof COMMANDS; index: number }) {
   const c = useTheme();
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column" marginTop={1} flexShrink={0}>
       {items.map((it, i) => {
         const on = i === index;
         return (
@@ -353,7 +377,7 @@ function Autocomplete({ items, index }: { items: typeof COMMANDS; index: number 
 function Picker({ state }: { state: PickerState }) {
   const c = useTheme();
   return (
-    <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={c.primary} paddingX={1}>
+    <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={c.primary} paddingX={1} flexShrink={0}>
       <Text>
         <Text color={c.primary} bold>
           {state.title}
@@ -410,7 +434,7 @@ function Composer(props: {
       </Text>
     );
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexShrink={0}>
       <Box marginTop={1}>
         <Text color={busy ? c.mutedDim : c.primary}>{GLYPH.you} </Text>
         <Text color={c.fg}>{before}</Text>
@@ -477,10 +501,8 @@ function skillsList(actions: readonly { name: string; description: string }[]): 
 
 export function App({ runtime }: { runtime: IAgentRuntime }) {
   const { exit } = useApp();
-  const { stdout } = useStdout();
   const { isRawModeSupported } = useStdin();
-  const width = stdout?.columns ?? 80;
-  const rows = stdout?.rows ?? 24;
+  const { width, rows } = useStdoutDimensions();
 
   const character = runtime.character;
   const provider = runtime.model.name;
@@ -893,9 +915,10 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       <Box flexDirection="column" height={rows}>
         <Banner tagline={tagline} />
 
-        {showBoot ? <BootCard runtime={runtime} block={block} session={session} /> : null}
-
+        {/* Only this region may shrink/clip when the terminal is short — the
+            boot card lives inside it so the composer never gets squeezed out. */}
         <Box flexDirection="column" flexGrow={1} overflow="hidden" justifyContent="flex-end">
+          {showBoot ? <BootCard runtime={runtime} block={block} session={session} /> : null}
           {convo.map((turn) => (
             <TurnView key={turn.id} turn={turn} />
           ))}
@@ -903,7 +926,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         </Box>
 
         {status === "thinking" ? (
-          <Box marginLeft={2}>
+          <Box marginLeft={2} flexShrink={0}>
             <Text color={theme.warn}>
               <Spinner type="dots" />
             </Text>
@@ -957,7 +980,7 @@ function StatusBar(props: {
   const c = useTheme();
   const dot = props.status === "idle" ? c.ok : c.warn;
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column" marginTop={1} flexShrink={0}>
       <Text color={c.mutedDim}>{"─".repeat(Math.max(8, props.width))}</Text>
       <Box>
         <Text color={dot}>● </Text>

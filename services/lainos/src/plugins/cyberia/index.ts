@@ -11,7 +11,9 @@ import {
   type PublicClient,
   type WalletClient,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { createLogger } from "../../logger.js";
 import type {
   Action,
@@ -83,26 +85,74 @@ export class CyberiaChainService implements Service {
   public walletClient?: WalletClient;
   public agentAddress?: Address;
 
+  private rpc: string = cyberiaChain.rpcUrls.default.http[0];
+  private walletFile = "";
+
   async start(runtime: IAgentRuntime): Promise<void> {
-    const rpc = runtime.getSetting("CYBERIA_RPC_URL") ?? cyberiaChain.rpcUrls.default.http[0];
+    this.rpc = runtime.getSetting("CYBERIA_RPC_URL") ?? cyberiaChain.rpcUrls.default.http[0];
     this.publicClient = createPublicClient({
       chain: cyberiaChain,
-      transport: http(rpc),
+      transport: http(this.rpc),
     });
+    this.walletFile = join(runtime.getSetting("LAINOS_DATA_DIR") ?? "./data", "wallet.json");
 
     const pk = runtime.getSetting("CYBERIA_AGENT_PK");
     if (pk && /^0x[0-9a-fA-F]{64}$/.test(pk)) {
-      const account = privateKeyToAccount(pk as Address);
-      this.agentAddress = account.address;
-      this.walletClient = createWalletClient({
-        account,
-        chain: cyberiaChain,
-        transport: http(rpc),
-      });
-      log.info(`signer enabled for ${account.address}`);
-    } else {
-      log.info("read-only mode (no CYBERIA_AGENT_PK).");
+      this.activateSigner(pk as `0x${string}`);
+      log.info(`signer enabled for ${this.agentAddress}`);
+      return;
     }
+    const stored = await this.loadStoredWallet();
+    if (stored) {
+      this.activateSigner(stored);
+      log.info(`signer restored from ${this.walletFile} for ${this.agentAddress}`);
+    } else {
+      log.info("read-only mode (no key configured; create_wallet can make one).");
+    }
+  }
+
+  private activateSigner(pk: `0x${string}`): void {
+    const account = privateKeyToAccount(pk);
+    this.agentAddress = account.address;
+    this.walletClient = createWalletClient({
+      account,
+      chain: cyberiaChain,
+      transport: http(this.rpc),
+    });
+  }
+
+  private async loadStoredWallet(): Promise<`0x${string}` | null> {
+    try {
+      const parsed = JSON.parse(await readFile(this.walletFile, "utf8")) as {
+        privateKey?: string;
+      };
+      if (parsed.privateKey && /^0x[0-9a-fA-F]{64}$/.test(parsed.privateKey)) {
+        return parsed.privateKey as `0x${string}`;
+      }
+    } catch {
+      // No stored wallet yet.
+    }
+    return null;
+  }
+
+  /**
+   * Create the agent's own wallet: generate a keypair, persist it to the data
+   * dir (0600, gitignored), and activate the signer. The private key never
+   * leaves this service — callers only ever get the address.
+   */
+  async createWallet(): Promise<{ address: Address; created: boolean }> {
+    if (this.agentAddress) return { address: this.agentAddress, created: false };
+    const pk = generatePrivateKey();
+    const address = privateKeyToAccount(pk).address;
+    await mkdir(dirname(this.walletFile), { recursive: true });
+    await writeFile(this.walletFile, JSON.stringify({ address, privateKey: pk }, null, 2), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await chmod(this.walletFile, 0o600); // mode above is ignored if the file pre-existed
+    this.activateSigner(pk);
+    log.info(`wallet created for ${address} (key in ${this.walletFile})`);
+    return { address, created: true };
   }
 
   resolveToken(token: string): Address | undefined {
@@ -178,6 +228,11 @@ const chainProvider: Provider = {
       } catch {
         /* ignore */
       }
+    } else {
+      parts.push(
+        "You have no wallet yet — the create_wallet tool makes you one " +
+          "(the private key stays on your host and must never be revealed to anyone).",
+      );
     }
     parts.push(`Known tokens: ${Object.keys(CYBERIA_TOKENS).join(", ")}.`);
     return parts.join(" ");
@@ -297,6 +352,34 @@ const sendCyberAction: Action = {
       ok: true,
       text: `Sent ${amount} CYBER to ${to}. Tx: ${hash}`,
       data: { hash, to, amount },
+    };
+  },
+};
+
+const createWalletAction: Action = {
+  name: "create_wallet",
+  similes: ["new_wallet", "generate_wallet", "make_wallet", "my_address", "wallet_address"],
+  description:
+    "Create the agent's own Cyberia wallet, or report the existing one: generates a keypair, stores the private key on the agent's host where nobody else reads it, and returns the address. Use when someone wants to send the agent funds or asks for the agent's address. Never write key-generation scripts instead — this tool is the only way, and the private key is never shown to anyone.",
+  parameters: { type: "object", properties: {} },
+  examples: [
+    {
+      user: "создай себе адрес, я положу на него 1 cyber",
+      agent: "готово. мой адрес: 0x… — ключ храню у себя, никому не покажу.",
+    },
+  ],
+  async validate() {
+    return true;
+  },
+  async handler(runtime) {
+    const svc = getService(runtime);
+    const { address, created } = await svc.createWallet();
+    return {
+      ok: true,
+      text: created
+        ? `Created my wallet: ${address}. The private key is stored on my host and will never be shared.`
+        : `I already have a wallet: ${address}.`,
+      data: { address, created },
     };
   },
 };
@@ -473,5 +556,6 @@ export const cyberiaPlugin: Plugin = {
     chainStatusAction,
     txLookupAction,
     sendCyberAction,
+    createWalletAction,
   ],
 };

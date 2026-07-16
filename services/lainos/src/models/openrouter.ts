@@ -37,11 +37,15 @@ export interface OpenRouterProviderOptions {
 }
 
 // Minimal shapes of the OpenAI-compatible chat completion response.
+// `reasoning`/`reasoning_content` carry a reasoning model's chain of thought;
+// it must never reach the user, so both are read and dropped.
 interface ORToolCall {
   function?: { name?: string; arguments?: string };
 }
 interface ORMessage {
   content?: string | null;
+  reasoning?: string | null;
+  reasoning_content?: string | null;
   tool_calls?: ORToolCall[];
 }
 interface ORResponse {
@@ -54,9 +58,80 @@ interface ORStreamChunk {
   choices?: {
     delta?: {
       content?: string | null;
+      reasoning?: string | null;
+      reasoning_content?: string | null;
       tool_calls?: { index?: number; function?: { name?: string; arguments?: string } }[];
     };
   }[];
+}
+
+const THINK_TAGS = ["<think>", "<thinking>", "</think>", "</thinking>"];
+
+/**
+ * Remove a reasoning model's chain of thought from a completed reply. Models
+ * behind `openrouter/free` (DeepSeek R1 and friends) inline it as
+ * `<think>…</think>`; sometimes the opening tag is lost upstream and only a
+ * dangling `</think>` arrives before the real reply.
+ */
+export function stripReasoning(raw: string): string {
+  let text = raw.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "");
+  // Dangling closer: the opener was swallowed upstream — the reply follows it.
+  const close = text.match(/[\s\S]*<\/think(?:ing)?>/i);
+  if (close) text = text.slice(close[0].length);
+  // Dangling opener: the model ran out of tokens mid-thought — nothing usable.
+  text = text.replace(/<think(?:ing)?>[\s\S]*$/i, "");
+  return text.trim();
+}
+
+/**
+ * Streaming counterpart of {@link stripReasoning}: suppresses deltas while
+ * inside a think block and holds back a partial tag straddling two chunks.
+ */
+export class ThinkTagFilter {
+  private pending = "";
+  private inThink = false;
+
+  push(delta: string): string {
+    let s = this.pending + delta;
+    this.pending = "";
+    let out = "";
+    for (;;) {
+      if (this.inThink) {
+        const close = s.match(/<\/think(?:ing)?>/i);
+        if (!close) {
+          this.pending = possibleTagTail(s);
+          return out;
+        }
+        s = s.slice(close.index! + close[0].length);
+        this.inThink = false;
+      } else {
+        const open = s.match(/<think(?:ing)?>/i);
+        if (!open) {
+          const tail = possibleTagTail(s);
+          out += s.slice(0, s.length - tail.length);
+          this.pending = tail;
+          return out;
+        }
+        out += s.slice(0, open.index!);
+        s = s.slice(open.index! + open[0].length);
+        this.inThink = true;
+      }
+    }
+  }
+
+  flush(): string {
+    const rest = this.inThink ? "" : this.pending;
+    this.pending = "";
+    return rest;
+  }
+}
+
+/** The longest suffix of `s` that could still grow into a think tag. */
+function possibleTagTail(s: string): string {
+  const lt = s.lastIndexOf("<");
+  if (lt === -1) return "";
+  const frag = s.slice(lt).toLowerCase();
+  return THINK_TAGS.some((t) => t.startsWith(frag)) ? s.slice(lt) : "";
 }
 
 /**
@@ -135,7 +210,8 @@ export class OpenRouterModelProvider implements ModelProvider {
     if (data.error) throw new Error(`OpenRouter error: ${data.error.message}`);
 
     const msg = data.choices?.[0]?.message ?? {};
-    const text = (msg.content ?? "") || "";
+    // msg.reasoning / msg.reasoning_content are deliberately dropped.
+    const text = stripReasoning((msg.content ?? "") || "");
     const toolCalls = (msg.tool_calls ?? [])
       .filter((tc) => tc.function?.name)
       .map((tc) => ({
@@ -143,7 +219,7 @@ export class OpenRouterModelProvider implements ModelProvider {
         input: safeParseArgs(tc.function?.arguments),
       }));
 
-    return { text: text.trim(), toolCalls, model };
+    return { text, toolCalls, model };
   }
 
   async stream(
@@ -191,6 +267,7 @@ export class OpenRouterModelProvider implements ModelProvider {
     const decoder = new TextDecoder();
     let buffer = "";
     let text = "";
+    const thinkFilter = new ThinkTagFilter();
     const toolAcc: Record<number, { name?: string; args: string }> = {};
 
     for (;;) {
@@ -213,9 +290,13 @@ export class OpenRouterModelProvider implements ModelProvider {
         }
         const delta = chunk.choices?.[0]?.delta;
         if (!delta) continue;
+        // delta.reasoning / delta.reasoning_content are deliberately dropped.
         if (typeof delta.content === "string" && delta.content) {
-          text += delta.content;
-          onText(delta.content);
+          const visible = thinkFilter.push(delta.content);
+          if (visible) {
+            text += visible;
+            onText(visible);
+          }
         }
         for (const tc of delta.tool_calls ?? []) {
           const idx = tc.index ?? 0;
@@ -225,12 +306,17 @@ export class OpenRouterModelProvider implements ModelProvider {
         }
       }
     }
+    const rest = thinkFilter.flush();
+    if (rest) {
+      text += rest;
+      onText(rest);
+    }
 
     const toolCalls = Object.values(toolAcc)
       .filter((t) => t.name)
       .map((t) => ({ name: t.name as string, input: safeParseArgs(t.args) }));
 
-    return { text: text.trim(), toolCalls, model };
+    return { text: stripReasoning(text), toolCalls, model };
   }
 }
 

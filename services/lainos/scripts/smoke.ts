@@ -3,14 +3,26 @@
  * End-to-end smoke test: drives the runtime through several turns with the
  * offline mock model and a real Cyberia chain read. Run: npm run smoke
  */
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgent } from "../src/index.js";
 import { lain } from "../src/characters/lain.js";
 import { splitMessage } from "../src/clients/telegram.js";
+import { stripReasoning, ThinkTagFilter } from "../src/models/openrouter.js";
+import {
+  localDay,
+  normalizeChannel,
+  parseChannelPosts,
+  type ChannelWatchService,
+} from "../src/plugins/channel/index.js";
+import type { CyberiaChainService } from "../src/plugins/cyberia/index.js";
 import type { ForgeEvent, ForgeService } from "../src/plugins/forge/index.js";
-import { parseRss, type ScoutService } from "../src/plugins/scout/index.js";
+import {
+  parseContributionDay,
+  type GithubStreakService,
+} from "../src/plugins/github/index.js";
+import { looksLikeNothing, parseRss, type ScoutService } from "../src/plugins/scout/index.js";
 import type { SentinelService } from "../src/plugins/sentinel/index.js";
 
 async function main() {
@@ -54,6 +66,28 @@ async function main() {
     // The alerts provider should hand the alert to the next turn and mark it delivered.
     await say("anything happen while I was away?");
     alertDelivered = sentinel.recentAlerts(5).every((a) => a.delivered);
+  }
+
+  // --- cyberia: the agent can mint its own wallet; the key never surfaces ---
+  const chain = agent.getService<CyberiaChainService>("cyberia-chain");
+  let walletOk = false;
+  if (chain) {
+    if (chain.agentAddress) {
+      // A signer is preconfigured (CYBERIA_AGENT_PK) — create_wallet must be a no-op.
+      const res = await chain.createWallet();
+      walletOk = !res.created && res.address === chain.agentAddress;
+    } else {
+      const first = await chain.createWallet();
+      const again = await chain.createWallet();
+      const stored = readFileSync(join(dataDir, "wallet.json"), "utf8");
+      walletOk =
+        first.created &&
+        /^0x[0-9a-fA-F]{40}$/.test(first.address) &&
+        !again.created &&
+        again.address === first.address &&
+        chain.agentAddress === first.address &&
+        stored.includes(first.address);
+    }
   }
 
   // --- telegram: message splitting respects the API limit ---
@@ -109,6 +143,82 @@ async function main() {
     scoutOk = listed && removed && !scout.getTopic(topic.id);
   }
 
+  // --- openrouter: a reasoning model's chain of thought must never surface ---
+  const filter = new ThinkTagFilter();
+  const streamed =
+    filter.push("<thi") +
+    filter.push("nk>secret plan ") +
+    filter.push("continues</th") +
+    filter.push("ink>ответ: ") +
+    filter.push("готово") +
+    filter.flush();
+  const reasoningOk =
+    stripReasoning("<think>hidden</think>привет") === "привет" &&
+    stripReasoning("lost opener reasoning…</think>\n\nреальный ответ") === "реальный ответ" &&
+    stripReasoning("<think>ran out of tokens mid-thought") === "" &&
+    stripReasoning("обычный ответ без тегов") === "обычный ответ без тегов" &&
+    streamed === "ответ: готово";
+
+  // --- github: contribution-graph parsing + watch add/remove ---
+  const calendarHtml =
+    `<td id="contribution-day-component-2-3" data-date="2026-07-16" data-level="0" class="ContributionCalendar-day"></td>` +
+    `<td id="contribution-day-component-2-4" data-date="2026-07-15" data-level="3" class="ContributionCalendar-day"></td>` +
+    `<tool-tip for="contribution-day-component-2-3">No contributions on July 16th.</tool-tip>` +
+    `<tool-tip for="contribution-day-component-2-4">7 contributions on July 15th.</tool-tip>`;
+  const emptyDay = parseContributionDay(calendarHtml, "2026-07-16");
+  const busyDay = parseContributionDay(calendarHtml, "2026-07-15");
+  const parseOk =
+    emptyDay?.level === 0 &&
+    emptyDay?.count === 0 &&
+    busyDay?.level === 3 &&
+    busyDay?.count === 7 &&
+    parseContributionDay(calendarHtml, "2026-07-14") === null;
+  const github = agent.getService<GithubStreakService>("github-streak");
+  let githubOk = false;
+  if (github) {
+    const watch = await github.addWatch({ username: "cyberia-temple", reporter: "tester" });
+    const rejected = await github.addWatch({ username: "not a user!!", reporter: "tester" });
+    const listed = github.listWatches().some((w) => w.id === watch?.id);
+    const removed = watch ? await github.removeWatch(watch.username) : false;
+    githubOk = Boolean(watch) && rejected === null && listed && removed && parseOk;
+  }
+
+  // --- channel: preview parsing + watch add/remove ---
+  const nowTs = Date.now();
+  const previewHtml =
+    `<div class="tgme_widget_message" data-post="cyberia/41">` +
+    `<a class="tgme_widget_message_date"><time datetime="${new Date(nowTs - 3_600_000).toISOString()}" class="time">x</time></a></div>` +
+    `<div class="tgme_widget_message" data-post="cyberia/42">` +
+    `<a class="tgme_widget_message_date"><time datetime="${new Date(nowTs).toISOString()}" class="time">x</time></a></div>` +
+    `<div class="tgme_widget_message" data-post="cyberia/1">` +
+    `<a class="tgme_widget_message_date"><time datetime="2020-01-01T00:00:00+00:00" class="time">x</time></a></div>`;
+  const activity = parseChannelPosts(previewHtml, localDay(new Date(nowTs)));
+  const channelParseOk =
+    activity.postsToday === 2 &&
+    activity.lastPostAt === nowTs &&
+    parseChannelPosts("<html>no posts here</html>", localDay()).lastPostAt === null &&
+    normalizeChannel("https://t.me/s/cyberia_church?before=41") === "cyberia_church" &&
+    normalizeChannel("@cyberia_church") === "cyberia_church";
+  const channels = agent.getService<ChannelWatchService>("channel-watch");
+  let channelOk = false;
+  if (channels) {
+    const watch = await channels.addWatch({ channel: "t.me/cyberia_church", reporter: "tester" });
+    const rejected = await channels.addWatch({ channel: "not a channel!!", reporter: "tester" });
+    const listed = channels.listWatches().some((w) => w.id === watch?.id);
+    const removed = watch ? await channels.removeWatch(watch.channel) : false;
+    channelOk = Boolean(watch) && rejected === null && listed && removed && channelParseOk;
+  }
+
+  // --- scout: "nothing found" replies must read as silence, digests must not ---
+  const nothingOk =
+    looksLikeNothing("NOTHING") &&
+    looksLikeNothing("NOTHING.") &&
+    looksLikeNothing("Ничего не найдено по теме Cyberia (сеть, Ritual DEX, LainOS, токен CYBER).") &&
+    looksLikeNothing("No relevant news.") &&
+    looksLikeNothing("") &&
+    !looksLikeNothing("Solana выкатила Firedancer в мейннет — детали: https://example.com/a") &&
+    !looksLikeNothing("Главное за день: релиз zkVM 2.0.\n- подробности — https://example.com/b");
+
   // --- assertions ---
   const facts = await agent.memory.facts(50);
   const learnedName = facts.some((f) => /operator/i.test(f));
@@ -124,15 +234,21 @@ async function main() {
   console.log(`sentinel watch fired     : ${sentinelFired ? "PASS" : "FAIL"}`);
   console.log(`alert delivered in turn  : ${alertDelivered ? "PASS" : "FAIL"}`);
   console.log(`telegram splitMessage    : ${splitOk ? "PASS" : "FAIL"}`);
+  console.log(`agent wallet lifecycle   : ${walletOk ? "PASS" : "FAIL"}`);
   console.log(`forge wish logged        : ${wishLogged ? "PASS" : "FAIL"}`);
   console.log(`forge wish -> review     : ${wishForged ? "PASS" : "FAIL"}`);
   console.log(`scout rss parser         : ${rssOk ? "PASS" : "FAIL"}`);
   console.log(`scout topic add/remove   : ${scoutOk ? "PASS" : "FAIL"}`);
+  console.log(`scout NOTHING = silence  : ${nothingOk ? "PASS" : "FAIL"}`);
+  console.log(`reasoning never leaks    : ${reasoningOk ? "PASS" : "FAIL"}`);
+  console.log(`github streak watch      : ${githubOk ? "PASS" : "FAIL"}`);
+  console.log(`channel post watch       : ${channelOk ? "PASS" : "FAIL"}`);
 
   await agent.stop();
   const ok =
     learnedName && ranBalance && nullIsZero && sentinelFired && alertDelivered && splitOk &&
-    wishLogged && wishForged && rssOk && scoutOk;
+    walletOk && wishLogged && wishForged && rssOk && scoutOk && nothingOk && reasoningOk &&
+    githubOk && channelOk;
   console.log(`\n${ok ? "✅ smoke OK" : "❌ smoke FAILED"}`);
   process.exit(ok ? 0 : 1);
 }
