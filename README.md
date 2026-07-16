@@ -4,6 +4,8 @@ Singularity is the open-source monorepo for **Cyberia**: an experimental EVM Lay
 
 If you arrived from **pump.fun**: `CYBER.sol` is the Solana-facing community asset. The chain itself is **Cyberia** (`chainId 49406`) and uses native **CYBER** for gas. Singularity is the software stack that connects those surfaces: the website, bridge, DEX, launchpad, analytics, contracts, bots, and explorer configuration.
 
+**Using Cyberia rather than developing it?** Start with the **[User Guide](docs/user-guide/README.md)**: wallet setup, the bridge, the DEX, token addresses, and troubleshooting.
+
 ## What Is This?
 
 Cyberia is trying to solve a specific problem: open-source and community work creates real value, but most of that work is not recorded, rewarded, or governed by durable infrastructure.
@@ -285,6 +287,7 @@ This subtree is **deployment configuration only**: it runs the official Blocksco
 
 ## Development Notes
 
+- User-facing documentation (wallet setup, bridge, DEX, tokens, profile, FAQ) lives in [`docs/user-guide/`](docs/user-guide/README.md).
 - Agent/developer instructions live in [`AGENTS.md`](AGENTS.md).
 - Laravel-specific agent instructions live in [`backend/laravel/AGENTS.md`](backend/laravel/AGENTS.md).
 - Do not commit `.env` files, wallet keys, cookies, or private keys.
