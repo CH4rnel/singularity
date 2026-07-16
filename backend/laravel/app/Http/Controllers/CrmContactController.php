@@ -20,6 +20,7 @@ class CrmContactController extends Controller
             'type' => $request->string('type')->value() ?: null,
             'status' => $request->string('status')->value() ?: null,
             'source' => $request->string('source')->value() ?: null,
+            'chain' => $request->string('chain')->value() ?: null,
         ];
 
         $contacts = CrmContact::query()
@@ -27,6 +28,7 @@ class CrmContactController extends Controller
             ->when($filters['type'], fn ($q, $type) => $q->where('type', $type))
             ->when($filters['status'], fn ($q, $status) => $q->where('status', $status))
             ->when($filters['source'], fn ($q, $source) => $q->where('source', $source))
+            ->chain($filters['chain'])
             ->withCount('notes')
             ->latest()
             ->paginate(25)
@@ -40,6 +42,7 @@ class CrmContactController extends Controller
                 'types' => CrmContact::TYPES,
                 'statuses' => CrmContact::STATUSES,
                 'sources' => CrmContact::SOURCES,
+                'chains' => CrmContact::CHAINS,
             ],
         ]);
     }
@@ -106,6 +109,9 @@ class CrmContactController extends Controller
             'holders' => CrmContact::where('type', 'holder')->count(),
             'whales' => CrmContact::where('type', 'whale')->count(),
             'customers' => CrmContact::where('status', 'customer')->count(),
+            'evm' => CrmContact::query()->chain('evm')->count(),
+            'solana' => CrmContact::query()->chain('solana')->count(),
+            'both' => CrmContact::query()->chain('both')->count(),
         ];
     }
 }

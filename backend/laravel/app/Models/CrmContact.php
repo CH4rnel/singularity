@@ -41,6 +41,8 @@ class CrmContact extends Model
 
     public const SOURCES = ['manual', 'platform', 'bridge', 'whale_bot'];
 
+    public const CHAINS = ['evm', 'solana', 'both', 'none'];
+
     protected $fillable = [
         'name',
         'email',
@@ -107,5 +109,22 @@ class CrmContact extends Model
                 ->orWhere('evm_address', 'like', $like)
                 ->orWhere('solana_address', 'like', $like);
         });
+    }
+
+    /**
+     * Filter by wallet chain: evm/solana count any contact holding that
+     * address (so a contact with both wallets matches either filter).
+     *
+     * @param  Builder<CrmContact>  $query
+     */
+    public function scopeChain(Builder $query, ?string $chain): void
+    {
+        match ($chain) {
+            'evm' => $query->whereNotNull('evm_address'),
+            'solana' => $query->whereNotNull('solana_address'),
+            'both' => $query->whereNotNull('evm_address')->whereNotNull('solana_address'),
+            'none' => $query->whereNull('evm_address')->whereNull('solana_address'),
+            default => null,
+        };
     }
 }

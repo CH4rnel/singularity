@@ -35,6 +35,38 @@ test('the search filter narrows the list', function () {
         ->assertInertia(fn (Assert $page) => $page->has('contacts.data', 1));
 });
 
+test('the chain filter narrows the list and stats break down by chain', function () {
+    $user = User::factory()->create();
+    CrmContact::factory()->create(['name' => 'EvmOnly', 'solana_address' => null]);
+    CrmContact::factory()->create(['name' => 'SolOnly', 'evm_address' => null]);
+    CrmContact::factory()->create(['name' => 'BothChains']);
+
+    $this->actingAs($user)
+        ->get(route('crm.index', ['chain' => 'evm']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('contacts.data', 2)
+            ->where('stats.evm', 2)
+            ->where('stats.solana', 2)
+            ->where('stats.both', 1)
+        );
+
+    $this->actingAs($user)
+        ->get(route('crm.index', ['chain' => 'solana']))
+        ->assertInertia(fn (Assert $page) => $page->has('contacts.data', 2));
+
+    $this->actingAs($user)
+        ->get(route('crm.index', ['chain' => 'both']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('contacts.data', 1)
+            ->where('contacts.data.0.name', 'BothChains')
+        );
+
+    $this->actingAs($user)
+        ->get(route('crm.index', ['chain' => 'none']))
+        ->assertInertia(fn (Assert $page) => $page->has('contacts.data', 0));
+});
+
 test('a contact can be created', function () {
     $user = User::factory()->create();
 

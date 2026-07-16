@@ -24,6 +24,7 @@ type Filters = {
     type: string | null;
     status: string | null;
     source: string | null;
+    chain: string | null;
 };
 
 type Props = {
@@ -35,11 +36,15 @@ type Props = {
         holders: number;
         whales: number;
         customers: number;
+        evm: number;
+        solana: number;
+        both: number;
     };
     options: {
         types: string[];
         statuses: string[];
         sources: string[];
+        chains: string[];
     };
 };
 
@@ -57,6 +62,7 @@ const search = ref(props.filters.q ?? '');
 const type = ref(props.filters.type ?? '');
 const status = ref(props.filters.status ?? '');
 const source = ref(props.filters.source ?? '');
+const chain = ref(props.filters.chain ?? '');
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -68,6 +74,7 @@ function applyFilters() {
             type: type.value || undefined,
             status: status.value || undefined,
             source: source.value || undefined,
+            chain: chain.value || undefined,
         },
         { preserveState: true, replace: true, preserveScroll: true },
     );
@@ -77,7 +84,7 @@ watch(search, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(applyFilters, 300);
 });
-watch([type, status, source], applyFilters);
+watch([type, status, source, chain], applyFilters);
 
 const showForm = ref(false);
 const createForm = useForm({
@@ -193,7 +200,7 @@ defineOptions({
         </div>
 
         <!-- Stat cards -->
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Card
                 v-for="card in [
                     { label: t('statTotal'), value: stats.total },
@@ -201,6 +208,9 @@ defineOptions({
                     { label: t('statHolders'), value: stats.holders },
                     { label: t('statWhales'), value: stats.whales },
                     { label: t('statCustomers'), value: stats.customers },
+                    { label: t('statEvm'), value: stats.evm },
+                    { label: t('statSolana'), value: stats.solana },
+                    { label: t('statBoth'), value: stats.both },
                 ]"
                 :key="card.label"
             >
@@ -369,6 +379,19 @@ defineOptions({
                     :value="option"
                 >
                     {{ t(`source.${option}`) }}
+                </option>
+            </select>
+            <select
+                v-model="chain"
+                class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+                <option value="">{{ t('allChains') }}</option>
+                <option
+                    v-for="option in options.chains"
+                    :key="option"
+                    :value="option"
+                >
+                    {{ t(`chain.${option}`) }}
                 </option>
             </select>
         </div>
