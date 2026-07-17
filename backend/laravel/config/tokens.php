@@ -228,7 +228,7 @@ return [
             'logo' => '/hatcher.jpg',
             'category' => 'partner',
             'tagline' => 'Partner project — bridged to Cyberia from Solana.',
-            'what' => 'HATCHER is the token of a Cyberia partner project, bridged in from Solana with 9 decimals. Supply on Cyberia is minted and burned by the bridge, backed 1:1 by the Solana-side reserve.',
+            'what' => 'Hatcher is a managed AI Agents hosting platform. It has features like easy agent deployment just by chatting, out-of-box preconfigured agents, mobile apps available, a full 3D city and rooms for agents, e-mails and many more.',
             'why' => 'As a partner token it trades on the Ritual DEX and is a listed lending market, bringing its community and Solana liquidity onto the Cyberia chain.',
             'links' => [
                 ['label' => 'Website', 'url' => 'https://hatcher.host/'],

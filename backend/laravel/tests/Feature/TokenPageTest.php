@@ -7,6 +7,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 // graph. Addresses match config/tokens.php (lowercased).
 const USDC = '0xdc25597b19799010047f17e9591efe08efd40077';
 const WCYBER = '0x78272aad03e4b9d7a9134e874ba6d419b534f6c9';
+const HATCHER = '0x621021f18b6404123f98b1395c418868418acf36';
 
 it('lists the token directory grouped by category', function () {
     $this->get('/tokens')
@@ -35,6 +36,15 @@ it('resolves a token by symbol, case-insensitively', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('Token')
             ->where('token.address', USDC));
+});
+
+it('renders the Hatcher platform copy', function () {
+    $this->get('/token/'.HATCHER)
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Token')
+            ->where('token.symbol', 'HATCHER')
+            ->where('token.what', 'Hatcher is a managed AI Agents hosting platform. It has features like easy agent deployment just by chatting, out-of-box preconfigured agents, mobile apps available, a full 3D city and rooms for agents, e-mails and many more.'));
 });
 
 it('still renders an undocumented but well-formed address instead of 404', function () {
