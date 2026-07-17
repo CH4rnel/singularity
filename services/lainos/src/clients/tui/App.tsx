@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Text, useApp, useInput, useStdin, useStdout, type Key } from "ink";
+import { Box, Static, Text, useApp, useInput, useStdin, useStdout, type Key } from "ink";
 import Spinner from "ink-spinner";
 import { ModelTier, type AgentEvent, type IAgentRuntime } from "../../types.js";
 import {
@@ -68,6 +68,8 @@ const COMMANDS = [
   { name: "/skin", desc: "pick a colour skin (arrows)" },
   { name: "/effort", desc: "set reply depth (arrows)" },
   { name: "/cursor", desc: "cursor style + blink (arrows)" },
+  { name: "/clear", desc: "clear the screen (memory intact)" },
+  { name: "/copy", desc: "copy lain's last reply to the clipboard" },
   { name: "/reset", desc: "fresh memory room" },
   { name: "/model", desc: "show provider + model" },
   { name: "/exit", desc: "leave the wired" },
@@ -156,7 +158,8 @@ function useChainHeight(rpc: string): number | null {
 }
 
 /** Terminal size that tracks window resizes (Ink re-lays out, but React
- *  needs a state change to re-render height-bound boxes). */
+ *  needs a state change to re-render width-bound rules). Never wipes the
+ *  screen: the transcript lives in real scrollback and must survive. */
 function useStdoutDimensions(): { width: number; rows: number } {
   const { stdout } = useStdout();
   const [size, setSize] = useState(() => ({
@@ -165,12 +168,7 @@ function useStdoutDimensions(): { width: number; rows: number } {
   }));
   useEffect(() => {
     if (!stdout) return;
-    const onResize = () => {
-      // The old frame was laid out for a different geometry; wipe it so the
-      // repaint doesn't leave a shredded banner / lost composer behind.
-      stdout.write("\x1b[2J\x1b[3J\x1b[H");
-      setSize({ width: stdout.columns ?? 80, rows: stdout.rows ?? 24 });
-    };
+    const onResize = () => setSize({ width: stdout.columns ?? 80, rows: stdout.rows ?? 24 });
     stdout.on("resize", onResize);
     return () => {
       stdout.off("resize", onResize);
@@ -473,6 +471,8 @@ const HELP = [
   "  /skin          pick a colour skin with the arrow keys",
   "  /effort        set reply depth (low … max) with the arrow keys",
   "  /cursor        cursor style — block/line, blink/steady",
+  "  /clear         clear the screen (conversation memory stays)",
+  "  /copy          copy lain's last reply to the clipboard (OSC 52)",
   "  /reset         start a fresh memory room",
   "  /model         show the active provider + model",
   "  /exit /quit    leave the wired",
@@ -502,7 +502,8 @@ function skillsList(actions: readonly { name: string; description: string }[]): 
 export function App({ runtime }: { runtime: IAgentRuntime }) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
-  const { width, rows } = useStdoutDimensions();
+  const { stdout } = useStdout();
+  const { width } = useStdoutDimensions();
 
   const character = runtime.character;
   const provider = runtime.model.name;
@@ -533,6 +534,9 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
 
   const [room, setRoom] = useState("tui");
   const [history, setHistory] = useState<Turn[]>(() => []);
+  // Bumped by /clear: remounts <Static> so its internal cursor resets and the
+  // banner + boot card are printed afresh onto the wiped screen.
+  const [gen, setGen] = useState(0);
   const session = useMemo(() => {
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, "0");
@@ -541,6 +545,14 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const [live, setLive] = useState<Turn | null>(null);
   const [status, setStatus] = useState<"idle" | "thinking" | "streaming">("idle");
   const busy = status !== "idle";
+
+  // Terminal/window title (OSC 0) — without it the tab shows the launcher
+  // command ("npm lainos"). Tracks activity so the tab shows when she is
+  // busy. In VS Code the tab picks this up via the "${sequence}" variable of
+  // terminal.integrated.tabs.title.
+  useEffect(() => {
+    stdout?.write(`\x1b]0;${busy ? "Lain OS ✦ thinking…" : "Lain OS · the wired"}\x07`);
+  }, [busy, stdout]);
 
   // input line + ui
   const [value, setValue] = useState("");
@@ -567,9 +579,25 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const acIdx = menuItems.length ? Math.min(acIndex, menuItems.length - 1) : 0;
   const pushHistory = useCallback((t: Turn) => setHistory((h) => [...h, t]), []);
 
+  // Blink only around actual typing. A permanent 530ms repaint wipes mouse
+  // selection in the terminal, making copy/paste impossible; once the keyboard
+  // has been idle for a spell the cursor goes solid and repaints stop — which
+  // is exactly when people select text to copy.
+  const [blinkAlive, setBlinkAlive] = useState(true);
+  const blinkIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    if (!blinkEnabled || !blinkAlive) {
+      setBlink(true);
+      return;
+    }
     const id = setInterval(() => setBlink((b) => !b), 530);
     return () => clearInterval(id);
+  }, [blinkEnabled, blinkAlive]);
+  useEffect(() => {
+    blinkIdleRef.current = setTimeout(() => setBlinkAlive(false), 10_000);
+    return () => {
+      if (blinkIdleRef.current) clearTimeout(blinkIdleRef.current);
+    };
   }, []);
 
   // Ambient chain watcher — Lain notices whale transfers and quiet spells.
@@ -651,6 +679,35 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         case "help":
           pushHistory(sysTurn(HELP));
           break;
+        case "clear":
+          // Wipe the scrollback too, so what was cleared is really gone.
+          stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+          setLive(null);
+          setHistory([]);
+          setGen((g) => g + 1);
+          break;
+        case "copy": {
+          const lastLain = [...history].reverse().find((t) => t.role === "lain");
+          const reply = (lastLain?.parts ?? [])
+            .flatMap((p) => (p.kind === "text" ? [p.text] : []))
+            .join("\n")
+            .trim();
+          if (!reply) {
+            pushHistory(sysTurn("nothing to copy yet — ask lain something first."));
+            break;
+          }
+          // OSC 52 sets the system clipboard through the terminal itself, so
+          // it survives SSH. Terminals cap the payload, so trim huge replies.
+          const b64 = Buffer.from(reply.slice(0, 65536), "utf8").toString("base64");
+          stdout?.write(`\x1b]52;c;${b64}\x07`);
+          pushHistory(
+            sysTurn(
+              `copied lain's last reply (${reply.length} chars) to the clipboard.` +
+                ` if it didn't land, your terminal blocks OSC 52 (tmux needs "set -g set-clipboard on").`,
+            ),
+          );
+          break;
+        }
         case "skills":
           pushHistory(sysTurn(skillsList(runtime.actions)));
           break;
@@ -751,7 +808,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           pushHistory(sysTurn(`unknown command: /${cmd}  (try /help)`));
       }
     },
-    [exit, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pulseOn, pushHistory, runtime],
+    [exit, history, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pulseOn, pushHistory, runtime, stdout],
   );
 
   const send = useCallback(
@@ -806,6 +863,9 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const onKey = useCallback(
     (input: string, key: Key) => {
       setBlink(true);
+      setBlinkAlive(true);
+      if (blinkIdleRef.current) clearTimeout(blinkIdleRef.current);
+      blinkIdleRef.current = setTimeout(() => setBlinkAlive(false), 10_000);
 
       // 1) picker captures everything
       if (picker) {
@@ -904,26 +964,40 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     [acIndex, browsing, busy, command, cursor, picker, send, value],
   );
 
-  // Banner + conversation live in the dynamic frame (so they recolour with the
-  // skin). The whole app is bounded to the terminal height; the conversation
-  // body clips its overflow and pins the newest turns to the bottom.
-  const convo = history.slice(-150);
-  const showBoot = history.length === 0 && !live;
+  // Completed turns are printed permanently into the terminal's own
+  // scrollback via <Static> — ink never repaints them, so selecting and
+  // copying transcript text survives cursor blinks, status updates, and
+  // streaming. Only the small bottom widget (live turn, status bar, composer)
+  // is a dynamic frame that gets rewritten.
+  type FeedItem =
+    | { key: string; kind: "banner" }
+    | { key: string; kind: "boot" }
+    | { key: string; kind: "turn"; turn: Turn };
+  const feed = useMemo<FeedItem[]>(
+    () => [
+      { key: "banner", kind: "banner" },
+      { key: "boot", kind: "boot" },
+      ...history.map((t) => ({ key: t.id, kind: "turn" as const, turn: t })),
+    ],
+    [history],
+  );
 
   return (
     <ThemeContext.Provider value={theme}>
-      <Box flexDirection="column" height={rows}>
-        <Banner tagline={tagline} />
+      <Static key={`gen-${gen}`} items={feed}>
+        {(item) =>
+          item.kind === "banner" ? (
+            <Banner key={item.key} tagline={tagline} />
+          ) : item.kind === "boot" ? (
+            <BootCard key={item.key} runtime={runtime} block={block} session={session} />
+          ) : (
+            <TurnView key={item.key} turn={item.turn} />
+          )
+        }
+      </Static>
 
-        {/* Only this region may shrink/clip when the terminal is short — the
-            boot card lives inside it so the composer never gets squeezed out. */}
-        <Box flexDirection="column" flexGrow={1} overflow="hidden" justifyContent="flex-end">
-          {showBoot ? <BootCard runtime={runtime} block={block} session={session} /> : null}
-          {convo.map((turn) => (
-            <TurnView key={turn.id} turn={turn} />
-          ))}
-          {live ? <TurnView turn={live} /> : null}
-        </Box>
+      <Box flexDirection="column">
+        {live ? <TurnView turn={live} /> : null}
 
         {status === "thinking" ? (
           <Box marginLeft={2} flexShrink={0}>
