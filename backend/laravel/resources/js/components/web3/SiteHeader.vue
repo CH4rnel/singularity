@@ -2,6 +2,7 @@
 import { Link as InertiaLink, usePage } from '@inertiajs/vue3';
 import { ExternalLink, Menu } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import AppVersionMenu from '@/components/AppVersionMenu.vue';
 import NotificationBell from '@/components/notifications/NotificationBell.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -188,6 +189,7 @@ function isGroupActive(items: { href: string; external?: boolean }[]): boolean {
                 class="flex flex-1 items-center justify-end gap-2 lg:flex-none"
             >
                 <slot name="right" />
+                <AppVersionMenu />
                 <NotificationBell v-if="isAuthenticated" />
                 <WalletMenu />
             </div>

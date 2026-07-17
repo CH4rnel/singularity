@@ -11,6 +11,7 @@ use App\Http\Controllers\Auth\TwitterAuthController;
 use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\CrmAnalyticsController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
@@ -75,6 +76,7 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 // {token} accepts a 0x address or a symbol (e.g. /token/CYBER.sol).
 Route::get('/tokens', [TokenController::class, 'index'])->name('tokens.index');
 Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.show');
+Route::get('/changelog', ChangelogController::class)->name('changelog');
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/pixels', 'PixelBattle')->name('pixels');
 Route::get('/liquidity', [LiquidityController::class, 'index'])->name('liquidity');

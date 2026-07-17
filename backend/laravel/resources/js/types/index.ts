@@ -1,4 +1,5 @@
 export * from './auth';
+export * from './changelog';
 export * from './navigation';
 export * from './teams';
 export * from './links';

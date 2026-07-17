@@ -1,4 +1,5 @@
 import type { Auth } from '@/types/auth';
+import type { AppRelease } from '@/types/changelog';
 import type { Team } from '@/types/teams';
 
 export type EthereumProvider = {
@@ -38,6 +39,7 @@ declare module '@inertiajs/core' {
     export interface InertiaConfig {
         sharedPageProps: {
             name: string;
+            release: AppRelease;
             auth: Auth;
             sidebarOpen: boolean;
             currentTeam: Team | null;
