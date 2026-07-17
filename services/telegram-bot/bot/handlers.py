@@ -120,6 +120,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/create_token [name] [interval] - (admins) create a chat reward token",
         "/set_rewards_interval <interval> - (admins) change payout interval",
         "/reward_now - (admins) trigger an extra payout right now",
+        "Reply \"thank you\" or \"thanks\" to someone's message to reward them with this chat's token",
         "/ask <question> - ask the Cyberia AI assistant",
         "/website - project website",
     ]
@@ -151,6 +152,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "   e.g. /create_token MyChatToken 1h\n"
         "/set_rewards_interval <interval> - (admins) change payout interval\n"
         "/reward_now - (admins) trigger an extra payout right now\n"
+        "Reply \"thank you\" or \"thanks\" to someone's message to reward them with this chat's token\n"
         "/github <username> <address> - link GitHub for GITHUB token airdrop\n"
         "/whale - verify CYBER.sol holdings to join the whales chat\n"
         "/x - X (Twitter) and Telegram links (also replies to \"x\")\n"
@@ -231,9 +233,21 @@ _QUICK_REPLY_RE = re.compile(
     re.IGNORECASE,
 )
 
+_THANK_YOU_RE = re.compile(
+    r"(?<!\w)(?:thank\s+you|thanks|спасибо)(?!\w)",
+    re.IGNORECASE,
+)
+
 
 def _normalize_trigger(text_value: str) -> str:
     return text_value.strip().strip("?!.,").strip().lower()
+
+
+def _is_thank_you_text(text_value: str | None) -> bool:
+    """True when a message contains a supported thank-you trigger."""
+    if not text_value:
+        return False
+    return _THANK_YOU_RE.search(text_value) is not None
 
 
 async def quick_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -578,6 +592,166 @@ def _forget_chat_member(chat_id: int, user_id: int):
         conn.execute(
             text("DELETE FROM chat_members WHERE chat_id = :c AND user_id = :u"),
             {"c": chat_id, "u": user_id},
+        )
+
+
+def _credit_pending_reward(chat_id: int, user_id: int, amount: int) -> None:
+    """Accumulate a uint256 reward as text so SQLite integer limits do not bite."""
+    if amount <= 0:
+        return
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("SELECT amount FROM pending_rewards WHERE chat_id = :c AND user_id = :u"),
+            {"c": chat_id, "u": user_id},
+        ).fetchone()
+        current = int(row[0]) if row and row[0] else 0
+        new_amount = str(current + amount)
+        conn.execute(
+            text("""
+                INSERT INTO pending_rewards (chat_id, user_id, amount, updated_at)
+                VALUES (:c, :u, :a, datetime('now'))
+                ON CONFLICT(chat_id, user_id) DO UPDATE SET
+                    amount = excluded.amount,
+                    updated_at = datetime('now')
+            """),
+            {"c": chat_id, "u": user_id, "a": new_amount},
+        )
+
+
+def _wallet_for_user(user_id: int) -> str | None:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT address FROM tg_wallets WHERE user_id = :u"),
+            {"u": user_id},
+        ).fetchone()
+    return row[0] if row else None
+
+
+def _mint_chat_reward(token_address: str, recipient: str, amount: int) -> str:
+    if not DEPLOYER_PK:
+        raise RuntimeError("DEPLOYER_PK is not configured")
+
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    acct = w3.eth.account.from_key(DEPLOYER_PK)
+    contract = w3.eth.contract(
+        address=Web3.to_checksum_address(token_address),
+        abi=CHAT_TOKEN_MINT_ABI,
+    )
+    to = Web3.to_checksum_address(recipient)
+    nonce = w3.eth.get_transaction_count(acct.address, "pending")
+    mint_fn = contract.functions.mint(to, amount)
+    try:
+        estimated_gas = mint_fn.estimate_gas({"from": acct.address})
+    except Exception as e:
+        logger.warning("thank_you_reward: estimate_gas failed, using fallback: %s", e)
+        estimated_gas = 150_000
+    tx = mint_fn.build_transaction({
+        "from": acct.address,
+        "nonce": nonce,
+        "gas": int(estimated_gas * 1.25) + 25_000,
+        "gasPrice": w3.eth.gas_price,
+        "chainId": CHAIN_ID,
+    })
+    signed = acct.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+    if receipt.status != 1:
+        raise RuntimeError(f"mint reverted: {tx_hash.hex()}")
+    return tx_hash.hex()
+
+
+async def thank_you_reward_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mint this chat's token to the author of the message being thanked."""
+    chat = update.effective_chat
+    message = update.effective_message
+    sender = update.effective_user
+    if (
+        chat is None
+        or chat.type not in ("group", "supergroup")
+        or message is None
+        or sender is None
+        or sender.is_bot
+        or not _is_thank_you_text(message.text)
+    ):
+        return
+
+    replied = message.reply_to_message
+    recipient_user = getattr(replied, "from_user", None) if replied is not None else None
+    if (
+        recipient_user is None
+        or recipient_user.is_bot
+        or recipient_user.id == sender.id
+    ):
+        return
+
+    chat_token = get_chat_token(chat.id)
+    if chat_token is None:
+        return
+    _chat_id_col, _name, symbol, token_address, _interval, reward_amount = chat_token
+    if not token_address:
+        return
+
+    try:
+        amount = int(reward_amount)
+    except (TypeError, ValueError):
+        logger.error(
+            "thank_you_reward: bad reward_amount chat=%s symbol=%s value=%r",
+            chat.id, symbol, reward_amount,
+        )
+        return
+    if amount <= 0:
+        return
+
+    for user_id in (sender.id, recipient_user.id):
+        try:
+            _record_chat_member(chat.id, user_id)
+        except Exception as e:
+            logger.debug("thank_you_reward member tracking failed: %s", e)
+
+    context.user_data["ai_skip_message_id"] = message.message_id
+
+    recipient_wallet = _wallet_for_user(recipient_user.id)
+    human_amount = amount / 10**18
+    recipient_name = (
+        recipient_user.full_name
+        or recipient_user.username
+        or str(recipient_user.id)
+    )
+
+    if not recipient_wallet:
+        try:
+            _credit_pending_reward(chat.id, recipient_user.id, amount)
+            await message.reply_text(
+                f"🙏 +{human_amount:g} {symbol} queued for {recipient_name}. "
+                "They can claim it with /set_wallet."
+            )
+        except Exception as e:
+            logger.error(
+                "thank_you_reward: pending credit failed chat=%s recipient=%s: %s",
+                chat.id, recipient_user.id, e,
+            )
+        return
+
+    try:
+        tx_hash = await asyncio.to_thread(
+            _mint_chat_reward, token_address, recipient_wallet, amount
+        )
+        logger.info(
+            "thank_you_reward: minted %s %s chat=%s from_user=%s to_user=%s wallet=%s tx=%s",
+            amount, symbol, chat.id, sender.id, recipient_user.id, recipient_wallet, tx_hash,
+        )
+        await message.reply_text(
+            f"🙏 +{human_amount:g} {symbol} to {recipient_name}\n"
+            f"{EXPLORER_URL}/tx/{tx_hash}",
+            disable_web_page_preview=True,
+        )
+    except Exception as e:
+        logger.error(
+            "thank_you_reward: mint failed chat=%s recipient=%s wallet=%s: %s",
+            chat.id, recipient_user.id, recipient_wallet, e,
+        )
+        await message.reply_text(
+            f"Could not mint {symbol} right now. The operator should check bot logs."
         )
 
 

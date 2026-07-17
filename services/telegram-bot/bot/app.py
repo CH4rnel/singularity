@@ -36,7 +36,8 @@ from bot.handlers import (
     set_rewards_interval_command, reward_now_command, whois_command,
     whale_command, x_command, ca_command, stats_command,
     pending_input_handler, pending_create_token_handler, track_chat_member,
-    quick_reply_handler, on_chat_member_update, error_handler,
+    quick_reply_handler, thank_you_reward_handler,
+    on_chat_member_update, error_handler,
     _QUICK_REPLY_RE,
 )
 from bot.ai import ask_command, ai_message_handler
@@ -241,6 +242,17 @@ def run_dispatcher():
             quick_reply_handler,
         ),
         group=2,
+    )
+
+    # Replying "спасибо" to another user's message mints this chat's token to
+    # that user, or queues the reward until they link a wallet.
+    application.add_handler(
+        MessageHandler(
+            (filters.ChatType.GROUPS | filters.ChatType.SUPERGROUP)
+            & filters.TEXT & ~filters.COMMAND,
+            thank_you_reward_handler,
+        ),
+        group=3,
     )
 
     # AI answers all ordinary text in DMs, but only explicit mentions/replies
