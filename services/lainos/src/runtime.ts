@@ -308,10 +308,38 @@ export class AgentRuntime implements IAgentRuntime {
       res = canContinue ? followup : { ...followup, toolCalls: [] };
     }
 
-    const replyText =
-      res.text ||
-      ranActions.map((a) => a.result.text).filter(Boolean).join(" ") ||
-      "...";
+    let replyText =
+      res.text || ranActions.map((a) => a.result.text).filter(Boolean).join(" ");
+    if (!replyText) {
+      // A reasoning model can burn the whole reply budget "thinking" and ship
+      // nothing visible (openrouter/free routes to R1-style models); the user
+      // would see a bare "…". One plain retry with a bigger budget instead.
+      log.warn("empty model reply — retrying once in plain-answer mode");
+      onEvent({ type: "thinking" });
+      try {
+        const retry = await this.streamOrGenerate(
+          {
+            tier,
+            system,
+            maxTokens: Math.max(this.maxTokens, 2048),
+            messages: [
+              ...convo,
+              {
+                role: "user",
+                content:
+                  "Your previous reply came through empty. Answer now, in character, " +
+                  "plain text only — no thinking out loud, no tool calls.",
+              },
+            ],
+          },
+          (delta) => onEvent({ type: "text", delta }),
+        );
+        replyText = retry.text;
+      } catch (err) {
+        log.warn("empty-reply retry failed", err);
+      }
+    }
+    if (!replyText) replyText = "...";
 
     const reply: Memory = {
       id: randomUUID(),

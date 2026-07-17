@@ -58,6 +58,8 @@ export interface ForgeJob {
   logFile: string;
   /** Tail of the transcript, for quick status reports. */
   summary?: string;
+  /** Original agent when the job was re-run on the fallback CLI. */
+  fallbackFrom?: string;
 }
 
 export interface ForgeEvent {
@@ -87,6 +89,7 @@ export class ForgeService implements Service {
   private repo = "";
   private agentBin: string | null = null;
   private agentKind: "claude" | "codex" | "custom" | null = null;
+  private fallback: { kind: "claude" | "codex"; bin: string } | null = null;
   private runtime?: IAgentRuntime;
   private child: ChildProcess | null = null;
   private activeJobId: string | null = null;
@@ -130,7 +133,8 @@ export class ForgeService implements Service {
       this.autoTimer.unref?.();
     }
     log.info(
-      `forge online: repo ${this.repo}, agent ${this.agentKind ?? "none"}, ` +
+      `forge online: repo ${this.repo}, agent ${this.agentKind ?? "none"}` +
+        `${this.fallback ? ` (fallback ${this.fallback.kind})` : ""}, ` +
         `${this.openWishes().length} open wish(es), auto ${auto && this.agentBin ? "on" : "off"}`,
     );
   }
@@ -252,7 +256,7 @@ export class ForgeService implements Service {
     await this.persist();
 
     const prompt = this.buildPrompt(wish, job);
-    const { cmd, args, shell } = this.buildCommand(prompt);
+    const { cmd, args, shell } = this.buildCommand(prompt, this.jobAgent(job));
     const timeout = Number(this.runtime?.getSetting("LAINOS_FORGE_TIMEOUT_MS") ?? 2_400_000);
 
     log.info(`job ${job.id} starts (${job.agent}) for ${wish?.id ?? "ad-hoc"}`);
@@ -292,6 +296,7 @@ export class ForgeService implements Service {
       this.activeJobId = null;
       job.status = code === 0 ? "ok" : "failed";
       job.endedAt = Date.now();
+      if (job.status === "failed" && this.tryFallback(job)) return void this.runNext();
       void this.finishJob(job, wish);
       void this.runNext();
     });
@@ -302,9 +307,41 @@ export class ForgeService implements Service {
       this.activeJobId = null;
       job.status = "failed";
       job.endedAt = Date.now();
+      if (this.tryFallback(job)) return void this.runNext();
       void this.finishJob(job, wish);
       void this.runNext();
     });
+  }
+
+  /**
+   * An instant failure means the agent never got to work — auth, subscription,
+   * or quota died at startup (e.g. "organization has disabled Claude
+   * subscription access") — so rerun the job once on the other CLI instead of
+   * failing the wish. Slow failures are real attempts and are not retried.
+   */
+  private tryFallback(job: ForgeJob): boolean {
+    const windowMs = Number(this.runtime?.getSetting("LAINOS_FORGE_FALLBACK_MS") ?? 180_000);
+    if (!this.fallback || windowMs <= 0 || job.fallbackFrom) return false;
+    if (job.agent === this.fallback.kind) return false;
+    const ran = (job.endedAt ?? 0) - (job.startedAt ?? 0);
+    if (ran >= windowMs) return false;
+    log.warn(
+      `job ${job.id} died in ${Math.round(ran / 1000)}s on ${job.agent} — retrying with ${this.fallback.kind}`,
+    );
+    job.fallbackFrom = job.agent;
+    job.agent = this.fallback.kind;
+    job.status = "queued";
+    job.startedAt = undefined;
+    job.endedAt = undefined;
+    this.queue.unshift(job.id);
+    void this.persist();
+    return true;
+  }
+
+  /** Bin/kind to run this job with: its recorded agent, else the primary. */
+  private jobAgent(job: ForgeJob): { kind: string; bin: string } {
+    if (this.fallback && job.agent === this.fallback.kind) return this.fallback;
+    return { kind: this.agentKind ?? "custom", bin: this.agentBin ?? "custom" };
   }
 
   private async finishJob(job: ForgeJob, wish?: Wish): Promise<void> {
@@ -313,12 +350,13 @@ export class ForgeService implements Service {
     await this.persist();
     const mins = job.startedAt && job.endedAt ? Math.round((job.endedAt - job.startedAt) / 60_000) : 0;
     log.info(`job ${job.id} ${job.status} after ~${mins}m`);
+    const reason = job.status === "failed" ? failureReason(job.summary) : "";
     this.emit({
       kind: "job_finished",
       text: wish
         ? job.status === "ok"
           ? `✅ ${wish.id} "${wish.title}" is forged — branch ${wish.branch} is ready for review.`
-          : `✖ forging ${wish.id} "${wish.title}" failed — i kept the transcript, ask me for forge status.`
+          : `✖ forging ${wish.id} "${wish.title}" failed${reason ? ` ("${reason}")` : ""} — i kept the transcript, ask me for forge status.`
         : `forge job ${job.id} ${job.status}`,
       job,
       wish,
@@ -348,16 +386,19 @@ export class ForgeService implements Service {
   }
 
   /** Compose the agent command. LAINOS_FORGE_CMD overrides everything (test hook). */
-  private buildCommand(prompt: string): { cmd: string; args: string[]; shell: boolean } {
+  private buildCommand(
+    prompt: string,
+    agent: { kind: string; bin: string },
+  ): { cmd: string; args: string[]; shell: boolean } {
     const override = this.runtime?.getSetting("LAINOS_FORGE_CMD");
     if (override) return { cmd: override, args: [], shell: true };
-    if (this.agentKind === "codex") {
+    if (agent.kind === "codex") {
       const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CODEX_ARGS"));
-      return { cmd: this.agentBin!, args: ["exec", "--full-auto", ...extra, prompt], shell: false };
+      return { cmd: agent.bin, args: ["exec", "--full-auto", ...extra, prompt], shell: false };
     }
     const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CLAUDE_ARGS"));
     return {
-      cmd: this.agentBin!,
+      cmd: agent.bin,
       args: [
         "-p",
         prompt,
@@ -409,10 +450,21 @@ export class ForgeService implements Service {
       if (bin.includes("/") ? existsSync(bin) : whichSync(bin)) {
         this.agentKind = kind;
         this.agentBin = bin;
+        break;
+      }
+    }
+    if (!this.agentBin) {
+      log.warn("no coding agent found (claude/codex) — forge can log wishes but not build them.");
+      return;
+    }
+    // The other CLI, when installed, rescues jobs the primary instantly fails.
+    for (const [kind, bin] of candidates) {
+      if (kind === this.agentKind) continue;
+      if (bin.includes("/") ? existsSync(bin) : whichSync(bin)) {
+        this.fallback = { kind, bin };
         return;
       }
     }
-    log.warn("no coding agent found (claude/codex) — forge can log wishes but not build them.");
   }
 
   private setStatus(wish: Wish, status: WishStatus): void {
@@ -457,6 +509,16 @@ function whichSync(bin: string): boolean {
 
 function splitArgs(raw?: string): string[] {
   return (raw ?? "").split(/\s+/).filter(Boolean);
+}
+
+/** Last meaningful transcript line, trimmed to fit a chat notification. */
+function failureReason(summary?: string): string {
+  const lines = (summary ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+  const last = lines[lines.length - 1] ?? "";
+  return last.length > 160 ? `${last.slice(0, 157)}…` : last;
 }
 
 async function tailFile(path: string, chars: number): Promise<string> {
