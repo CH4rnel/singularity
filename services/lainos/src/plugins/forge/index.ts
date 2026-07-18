@@ -54,6 +54,8 @@ export interface ForgeJob {
   id: string;
   wishId?: string;
   agent: string;
+  /** Coding model passed to the agent CLI, when explicitly configured. */
+  model?: string;
   status: "queued" | "running" | "ok" | "failed";
   startedAt?: number;
   endedAt?: number;
@@ -224,6 +226,7 @@ export class ForgeService implements Service {
       id: `job${this.counter}`,
       wishId: wish.id,
       agent: this.agentKind ?? "custom",
+      model: this.agentModel(this.agentKind ?? "custom"),
       status: "queued",
       logFile: join(this.logDir, `job${this.counter}.log`),
     };
@@ -266,11 +269,11 @@ export class ForgeService implements Service {
     const { cmd, args, shell } = this.buildCommand(prompt, this.jobAgent(job));
     const timeout = Number(this.runtime?.getSetting("LAINOS_FORGE_TIMEOUT_MS") ?? 2_400_000);
 
-    log.info(`job ${job.id} starts (${job.agent}) for ${wish?.id ?? "ad-hoc"}`);
+    log.info(`job ${job.id} starts (${this.agentLabel(job)}) for ${wish?.id ?? "ad-hoc"}`);
     this.emit({
       kind: "job_started",
       text: wish
-        ? `🔧 forging ${wish.id} — "${wish.title}" (${job.agent})`
+        ? `🔧 forging ${wish.id} — "${wish.title}" (${this.agentLabel(job)})`
         : `🔧 forge job ${job.id} started`,
       job,
       wish,
@@ -278,7 +281,7 @@ export class ForgeService implements Service {
     });
 
     const out = createWriteStream(job.logFile, { flags: "a" });
-    out.write(`# ${job.id} · ${new Date().toISOString()} · ${job.agent}\n# wish: ${wish?.id} ${wish?.title}\n\n`);
+    out.write(`# ${job.id} · ${new Date().toISOString()} · ${this.agentLabel(job)}\n# wish: ${wish?.id} ${wish?.title}\n\n`);
 
     const child = spawn(cmd, args, {
       cwd: this.repo,
@@ -337,6 +340,7 @@ export class ForgeService implements Service {
     );
     job.fallbackFrom = job.agent;
     job.agent = this.fallback.kind;
+    job.model = this.agentModel(this.fallback.kind);
     job.status = "queued";
     job.startedAt = undefined;
     job.endedAt = undefined;
@@ -403,6 +407,8 @@ export class ForgeService implements Service {
     if (agent.kind === "codex") {
       const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CODEX_ARGS"));
       const args = ["exec", "-C", this.repo, "--color", "never"];
+      const model = this.agentModel("codex");
+      if (model) args.push("-m", model);
       if (this.forgeYolo()) {
         args.push("--dangerously-bypass-approvals-and-sandbox");
       } else {
@@ -411,14 +417,17 @@ export class ForgeService implements Service {
       return { cmd: agent.bin, args: [...args, ...extra, prompt], shell: false };
     }
     const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CLAUDE_ARGS"));
+    const model = this.agentModel("claude");
+    const modelArgs = model ? ["--model", model] : [];
     const permissionArgs = this.forgeYolo()
-      ? ["--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"]
+      ? ["--dangerously-skip-permissions"]
       : ["--permission-mode", "acceptEdits", "--allowedTools", "Bash,Edit,Write"];
     return {
       cmd: agent.bin,
       args: [
         "-p",
         prompt,
+        ...modelArgs,
         ...permissionArgs,
         "--output-format",
         "text",
@@ -426,6 +435,24 @@ export class ForgeService implements Service {
       ],
       shell: false,
     };
+  }
+
+  private agentModel(kind: string): string | undefined {
+    const setting = (key: string): string | undefined => {
+      const value = this.runtime?.getSetting(key)?.trim();
+      return value || undefined;
+    };
+    if (kind === "claude") {
+      return setting("LAINOS_FORGE_CLAUDE_MODEL") ?? setting("LAINOS_FORGE_MODEL");
+    }
+    if (kind === "codex") {
+      return setting("LAINOS_FORGE_CODEX_MODEL") ?? setting("LAINOS_FORGE_MODEL");
+    }
+    return undefined;
+  }
+
+  agentLabel(job: ForgeJob): string {
+    return job.model ? `${job.agent}/${job.model}` : job.agent;
   }
 
   /** Job environment: pass the prompt and route agent traffic via the proxy. */
@@ -774,7 +801,7 @@ const forgeStatusAction: Action = {
     if (active) {
       const wish = active.wishId ? svc.getWish(active.wishId) : undefined;
       const mins = active.startedAt ? Math.round((Date.now() - active.startedAt) / 60_000) : 0;
-      lines.push(`forging now: ${active.id} for ${wish?.id} "${wish?.title}" (~${mins}m in)`);
+      lines.push(`forging now: ${active.id} on ${svc.agentLabel(active)} for ${wish?.id} "${wish?.title}" (~${mins}m in)`);
     } else {
       lines.push("the forge is cold — no job running.");
     }
@@ -787,7 +814,7 @@ const forgeStatusAction: Action = {
       .recentJobs(3)
       .filter((j) => j.status === "ok" || j.status === "failed");
     for (const j of recent) {
-      lines.push(`· ${j.id} ${j.status}${j.summary ? ` — ${j.summary.slice(-160).replace(/\s+/g, " ")}` : ""}`);
+      lines.push(`· ${j.id} ${j.status} on ${svc.agentLabel(j)}${j.summary ? ` — ${j.summary.slice(-160).replace(/\s+/g, " ")}` : ""}`);
     }
     return { ok: true, text: lines.join("\n") };
   },

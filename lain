@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)"
+LAINOS_DIR="$ROOT_DIR/services/lainos"
+
+usage() {
+	printf '%s\n' \
+		"Usage: lain [command] [args...]" \
+		"" \
+		"Commands:" \
+		"  tui          Start the full-screen terminal UI (default)" \
+		"  chat         Start the simple interactive REPL" \
+		"  serve        Start the HTTP/Telegram daemon in the foreground" \
+		"  daemon       Alias for serve" \
+		"  wired        Start the Wired HTTP bridge" \
+		"  smoke        Run the LainOS smoke test" \
+		"  study        Run the Cyberia study task" \
+		"  build        Compile TypeScript" \
+		"  typecheck    Type-check without emitting files" \
+		"  install      Install npm dependencies for LainOS" \
+		"  status       Show the user systemd service status" \
+		"  logs         Follow the user systemd service logs" \
+		"  restart      Restart the user systemd service" \
+		"  stop         Stop the user systemd service" \
+		"  help         Show this help" \
+		"" \
+		"Examples:" \
+		"  lain" \
+		"  lain chat" \
+		"  lain serve" \
+		"  lain logs"
+}
+
+die() {
+	printf 'lain: %s\n' "$*" >&2
+	exit 1
+}
+
+require_lainos_dir() {
+	[ -f "$LAINOS_DIR/package.json" ] || die "cannot find services/lainos/package.json from $ROOT_DIR"
+}
+
+require_node_modules() {
+	[ -d "$LAINOS_DIR/node_modules" ] || die "missing services/lainos/node_modules; run: lain install"
+}
+
+run_npm_script() {
+	local script="$1"
+	shift
+	require_lainos_dir
+	require_node_modules
+	cd "$LAINOS_DIR"
+	exec npm run "$script" -- "$@"
+}
+
+cmd="${1:-tui}"
+if [ "$#" -gt 0 ]; then
+	shift
+fi
+
+case "$cmd" in
+	tui)
+		run_npm_script tui "$@"
+		;;
+	chat)
+		run_npm_script chat "$@"
+		;;
+	serve|daemon)
+		run_npm_script serve "$@"
+		;;
+	wired)
+		run_npm_script serve:wired "$@"
+		;;
+	smoke)
+		run_npm_script smoke "$@"
+		;;
+	study)
+		run_npm_script study:cyberia "$@"
+		;;
+	build)
+		run_npm_script build "$@"
+		;;
+	typecheck)
+		run_npm_script typecheck "$@"
+		;;
+	install)
+		require_lainos_dir
+		cd "$LAINOS_DIR"
+		exec npm install "$@"
+		;;
+	status)
+		exec systemctl --user status lainos.service "$@"
+		;;
+	logs)
+		exec journalctl --user -u lainos.service -f "$@"
+		;;
+	restart)
+		exec systemctl --user restart lainos.service "$@"
+		;;
+	stop)
+		exec systemctl --user stop lainos.service "$@"
+		;;
+	help|-h|--help)
+		usage
+		;;
+	*)
+		usage >&2
+		exit 2
+		;;
+esac

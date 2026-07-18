@@ -99,6 +99,17 @@ Inspect it with `systemctl --user status lainos.service` and
 startup during boot without an interactive login (`loginctl show-user "$USER"
 -p Linger`); it is already enabled on the current Cyberia host.
 
+## Debugging model/tool decisions
+
+Every turn writes a JSON transcript under `data/model-transcripts/` by default.
+Use these files to see the exact prompt sent to Codex/Claude/OpenRouter, the
+model response, requested tool calls, tool results, and the final reply. Disable
+with `LAINOS_MODEL_TRANSCRIPTS=0` or redirect with
+`LAINOS_MODEL_TRANSCRIPTS_DIR=/path/to/logs`. Secret-like env values, private
+keys, and bot-token-shaped strings are redacted before the file is written.
+
+Forge coding-agent jobs have their own longer transcripts in `data/forge/*.log`.
+
 ## Built-in plugins
 
 - **bootstrap** — a `time` provider, a heuristic fact extractor, and long-term
@@ -158,11 +169,13 @@ startup during boot without an interactive login (`loginctl show-user "$USER"
     current branch and commits it** — her learning lands in place, no
     `lain/<wish-id>` side branches. Commits are **never pushed**; publishing
     stays with the operator.
-    Force Codex with `LAINOS_FORGE_AGENT=codex`. For unattended self-upgrades
-    on a trusted host, set `LAINOS_FORGE_YOLO=1`: Codex is launched with
-    `--dangerously-bypass-approvals-and-sandbox`, and Claude with
-    `bypassPermissions`. Leave it unset to keep the normal workspace-limited
-    Codex sandbox / Claude `acceptEdits` mode.
+    Force an agent with `LAINOS_FORGE_AGENT=claude|codex`. Choose the coding
+    model with `LAINOS_FORGE_MODEL` (or `LAINOS_FORGE_CLAUDE_MODEL` /
+    `LAINOS_FORGE_CODEX_MODEL` for per-agent overrides). For unattended
+    self-upgrades on a trusted host, set `LAINOS_FORGE_YOLO=1`: Codex is
+    launched with `--dangerously-bypass-approvals-and-sandbox`, and Claude with
+    `--dangerously-skip-permissions`. Leave it unset to keep the normal
+    workspace-limited Codex sandbox / Claude `acceptEdits` mode.
   - `learn_skill` — when Lain discovers a missing capability in herself, she
     logs that capability as a wish and immediately starts `build_wish`; this is
     the deep-change path (new services, signing flows). Small self-contained

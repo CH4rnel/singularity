@@ -16,7 +16,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createLogger } from "../../logger.js";
-import { TradeJournal } from "./journal.js";
+import { TradeJournal, type Position } from "./journal.js";
 import type {
   Action,
   IAgentRuntime,
@@ -324,6 +324,28 @@ export interface RitualLiquidityQuote {
   slippageBps: number;
   confirmation: string | null;
   confirmationReason: string | null;
+}
+
+interface ReconstructedBasis {
+  positions: Map<string, Position>;
+  feesWei: bigint;
+}
+
+interface ExplorerTransaction {
+  hash: string;
+  from?: { hash?: string };
+  to?: { hash?: string };
+  value?: string;
+  fee?: { value?: string } | string;
+  method?: string | null;
+  status?: string;
+}
+
+interface ExplorerTokenTransfer {
+  transaction_hash?: string;
+  to?: { hash?: string };
+  token?: { address_hash?: string; symbol?: string };
+  total?: { value?: string };
 }
 
 interface SpeculateConfig {
@@ -2047,11 +2069,18 @@ const portfolioPnlAction: Action = {
     if (!svc.agentAddress) return { ok: false, text: "I have no wallet yet (create_wallet makes one)." };
     const address = svc.agentAddress;
     const native = await svc.publicClient.getBalance({ address });
+    const reconstructed = await reconstructRitualBuyBasis(address).catch(() => ({
+      positions: new Map<string, Position>(),
+      feesWei: 0n,
+    }));
 
     // Positions = union of journaled tokens and the known-token registry.
     const tokens = new Map<string, Address>();
     for (const addr of Object.values(CYBERIA_TOKENS)) tokens.set(addr.toLowerCase(), addr);
     for (const pos of svc.journal.positions()) {
+      if (isAddress(pos.token)) tokens.set(pos.token.toLowerCase(), pos.token as Address);
+    }
+    for (const pos of reconstructed.positions.values()) {
       if (isAddress(pos.token)) tokens.set(pos.token.toLowerCase(), pos.token as Address);
     }
 
@@ -2074,7 +2103,10 @@ const portfolioPnlAction: Action = {
         } catch {
           // Unquotable dust stays listed with zero live value.
         }
-        const pos = svc.journal.positionOf(token);
+        const journalPos = svc.journal.positionOf(token);
+        const reconstructedPos = reconstructed.positions.get(token.toLowerCase());
+        const pos = journalPos ?? reconstructedPos;
+        const basisSource = journalPos ? "journal" : reconstructedPos ? "onchain" : null;
         let basisWei: bigint | null = null;
         if (pos) {
           const posQty = BigInt(pos.qtyWei);
@@ -2099,19 +2131,28 @@ const portfolioPnlAction: Action = {
           amount: formatUnits(raw, decimals),
           valueCyber: formatEther(valueWei),
           basisCyber: basisWei !== null ? formatEther(basisWei) : null,
+          unrealizedCyber: basisWei !== null ? formatEther(valueWei - basisWei) : null,
+          unrealizedPct:
+            basisWei !== null && basisWei > 0n
+              ? `${valueWei >= basisWei ? "+" : ""}${Number(((valueWei - basisWei) * 10_000n) / basisWei) / 100}%`
+              : null,
+          basisSource,
         });
       } catch {
         // Unreadable token contracts are skipped, not fatal.
       }
     }
 
+    const unrealizedWei = totalBasisWei > 0n ? totalValueWei - totalBasisWei : null;
+    const afterGasWei = unrealizedWei !== null ? unrealizedWei - reconstructed.feesWei : null;
     const totalPnl =
-      totalBasisWei > 0n
-        ? `${totalValueWei >= totalBasisWei ? "+" : ""}${formatEther(totalValueWei - totalBasisWei)} CYBER unrealised`
+      unrealizedWei !== null
+        ? `${unrealizedWei >= 0n ? "+" : ""}${formatEther(unrealizedWei)} CYBER unrealised`
         : "no basis recorded yet";
     const header =
       `Treasury: ${formatEther(native)} CYBER native + ${formatEther(totalValueWei)} CYBER in ${positions.length} position(s) (${totalPnl}` +
       (unknownBasis ? `, ${unknownBasis} position(s) without basis` : "") +
+      (afterGasWei !== null && reconstructed.feesWei > 0n ? `, ${afterGasWei >= 0n ? "+" : ""}${formatEther(afterGasWei)} after reconstructed gas` : "") +
       `).`;
     return {
       ok: true,
@@ -2122,11 +2163,93 @@ const portfolioPnlAction: Action = {
         positions,
         totalValueCyber: formatEther(totalValueWei),
         totalBasisCyber: formatEther(totalBasisWei),
+        unrealizedCyber: unrealizedWei !== null ? formatEther(unrealizedWei) : null,
+        unrealizedPct:
+          unrealizedWei !== null && totalBasisWei > 0n
+            ? `${unrealizedWei >= 0n ? "+" : ""}${Number((unrealizedWei * 10_000n) / totalBasisWei) / 100}%`
+            : null,
+        reconstructedGasFeesCyber: formatEther(reconstructed.feesWei),
+        unrealizedAfterGasCyber: afterGasWei !== null ? formatEther(afterGasWei) : null,
+        positionsWithoutBasis: unknownBasis,
         recentTrades: svc.journal.recentTrades(5),
       },
     };
   },
 };
+
+async function explorerItems<T>(path: string): Promise<T[]> {
+  const base = process.env.CYBERIA_EXPLORER_API_URL ?? "https://explorer.cyberia.church/api/v2";
+  const out: T[] = [];
+  let params: Record<string, string> | null = {};
+
+  while (params) {
+    const url = new URL(`${base}${path}`);
+    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`explorer ${path} failed: HTTP ${res.status}`);
+    const body = (await res.json()) as {
+      items?: T[];
+      next_page_params?: Record<string, unknown> | null;
+    };
+    out.push(...(body.items ?? []));
+    params = body.next_page_params
+      ? Object.fromEntries(Object.entries(body.next_page_params).map(([key, value]) => [key, String(value)]))
+      : null;
+  }
+
+  return out;
+}
+
+function mergeReconstructedPosition(positions: Map<string, Position>, input: Position): void {
+  const key = input.token.toLowerCase();
+  const prev = positions.get(key);
+  if (!prev) {
+    positions.set(key, input);
+    return;
+  }
+  positions.set(key, {
+    ...prev,
+    qtyWei: (BigInt(prev.qtyWei) + BigInt(input.qtyWei)).toString(),
+    costWei: (BigInt(prev.costWei) + BigInt(input.costWei)).toString(),
+  });
+}
+
+async function reconstructRitualBuyBasis(address: Address): Promise<ReconstructedBasis> {
+  const [transactions, transfers] = await Promise.all([
+    explorerItems<ExplorerTransaction>(`/addresses/${address}/transactions`),
+    explorerItems<ExplorerTokenTransfer>(`/addresses/${address}/token-transfers`),
+  ]);
+  const txByHash = new Map(transactions.map((tx) => [tx.hash.toLowerCase(), tx]));
+  const positions = new Map<string, Position>();
+  let feesWei = 0n;
+
+  for (const transfer of transfers) {
+    const hash = transfer.transaction_hash?.toLowerCase();
+    const token = transfer.token?.address_hash;
+    const qtyWei = transfer.total?.value;
+    if (!hash || !token || !isAddress(token) || !qtyWei) continue;
+    if (!sameAddress(transfer.to?.hash ?? "", address)) continue;
+
+    const tx = txByHash.get(hash);
+    if (!tx || tx.status !== "ok") continue;
+    if (!sameAddress(tx.from?.hash ?? "", address)) continue;
+    if (!sameAddress(tx.to?.hash ?? "", RITUAL_V2.router)) continue;
+    if ((tx.method ?? "").toLowerCase() !== "0x7ff36ab5") continue; // swapExactETHForTokens
+
+    const costWei = BigInt(tx.value ?? "0");
+    if (costWei <= 0n) continue;
+    const feeWei = typeof tx.fee === "string" ? tx.fee : tx.fee?.value;
+    feesWei += BigInt(feeWei ?? "0");
+    mergeReconstructedPosition(positions, {
+      token,
+      symbol: transfer.token?.symbol ?? "TOKEN",
+      qtyWei,
+      costWei: costWei.toString(),
+    });
+  }
+
+  return { positions, feesWei };
+}
 
 export const cyberiaPlugin: Plugin = {
   name: "cyberia",

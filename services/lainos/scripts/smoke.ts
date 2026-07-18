@@ -3,10 +3,10 @@
  * End-to-end smoke test: drives the runtime through several turns with the
  * offline mock model and a real Cyberia chain read. Run: npm run smoke
  */
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAgent } from "../src/index.js";
+import { AgentRuntime, createAgent, FileMemoryStore, type ModelProvider, type ModelRequest } from "../src/index.js";
 import { lain } from "../src/characters/lain.js";
 import { splitMessage } from "../src/clients/telegram.js";
 import { stripReasoning, ThinkTagFilter } from "../src/models/openrouter.js";
@@ -18,7 +18,7 @@ import {
 } from "../src/plugins/channel/index.js";
 import type { CyberiaChainService } from "../src/plugins/cyberia/index.js";
 import { applyBuy, applySell, TradeJournal, type Position } from "../src/plugins/cyberia/journal.js";
-import type { ForgeEvent, ForgeService } from "../src/plugins/forge/index.js";
+import { forgePlugin, ForgeService, type ForgeEvent } from "../src/plugins/forge/index.js";
 import { InitiativeService } from "../src/plugins/initiative/index.js";
 import type { SkillsService } from "../src/plugins/skills/index.js";
 import {
@@ -35,6 +35,46 @@ async function main() {
   process.env.LAINOS_FORGE_AUTO = "0";
   // Skills: hot-load from a scratch dir, not the repo's skills/.
   process.env.LAINOS_SKILLS_DIR = mkdtempSync(join(tmpdir(), "lainos-skills-"));
+
+  // --- runtime guard: a missing-capability refusal must become a forge job ---
+  const refusalDataDir = mkdtempSync(join(tmpdir(), "lainos-refusal-"));
+  const refusalModel: ModelProvider = {
+    name: "refusal-stub",
+    modelFor: () => "refusal-stub",
+    async generate(_request: ModelRequest) {
+      return {
+        text: "не могу выполнить: нет инструмента для этого действия",
+        toolCalls: [],
+        model: "refusal-stub",
+      };
+    },
+  };
+  const refusalRuntime = new AgentRuntime({
+    character: lain,
+    memory: new FileMemoryStore(refusalDataDir),
+    model: refusalModel,
+    settings: {
+      ...process.env,
+      LAINOS_DATA_DIR: refusalDataDir,
+      LAINOS_FORGE_CMD: process.env.LAINOS_FORGE_CMD,
+      LAINOS_FORGE_AUTO: "0",
+    },
+  });
+  refusalRuntime.use({
+    ...forgePlugin,
+    services: [new ForgeService()],
+  });
+  await refusalRuntime.start();
+  const refusal = await refusalRuntime.handleMessage({
+    roomId: "refusal-smoke",
+    userId: "tester",
+    text: "сделай новый тестовый рабочий инструмент",
+  });
+  const autoLearnOk =
+    refusal.actions.some((a) => a.name === "learn_skill" && a.result.ok) &&
+    refusal.text.includes("План:") &&
+    !refusal.text.includes("не могу выполнить");
+  await refusalRuntime.stop();
 
   const dataDir = mkdtempSync(join(tmpdir(), "lainos-smoke-"));
   const agent = await createAgent({ character: lain, dataDir });
@@ -55,6 +95,7 @@ async function main() {
   const bal = await say(
     "what is the balance of 0x0000000000000000000000000000000000000000?",
   );
+  const pnl = await say("посчитай нереализованную прибыль/убыток");
 
   // --- sentinel: watch the null address below 1 CYBER; one forced tick must fire ---
   const sentinel = agent.getService<SentinelService>("sentinel");
@@ -329,11 +370,18 @@ async function main() {
   const nullIsZero = bal.actions.some(
     (a) => a.name === "check_balance" && a.result.data?.balance === "0",
   );
+  const forcedPnl = pnl.actions.some((a) => a.name === "portfolio_pnl");
+  const transcriptOk = readdirSync(join(dataDir, "model-transcripts")).some((name) =>
+    name.endsWith(".json"),
+  );
 
   console.log("\n=== assertions ===");
   console.log(`fact 'operator' learned : ${learnedName ? "PASS" : "FAIL"}`);
   console.log(`check_balance ran ok     : ${ranBalance ? "PASS" : "FAIL"}`);
   console.log(`null address == 0 CYBER  : ${nullIsZero ? "PASS" : "FAIL"}`);
+  console.log(`forced portfolio_pnl     : ${forcedPnl ? "PASS" : "FAIL"}`);
+  console.log(`refusal -> learn_skill   : ${autoLearnOk ? "PASS" : "FAIL"}`);
+  console.log(`model transcript saved   : ${transcriptOk ? "PASS" : "FAIL"}`);
   console.log(`sentinel watch fired     : ${sentinelFired ? "PASS" : "FAIL"}`);
   console.log(`alert delivered in turn  : ${alertDelivered ? "PASS" : "FAIL"}`);
   console.log(`telegram splitMessage    : ${splitOk ? "PASS" : "FAIL"}`);
@@ -354,7 +402,7 @@ async function main() {
 
   await agent.stop();
   const ok =
-    learnedName && ranBalance && nullIsZero && sentinelFired && alertDelivered && splitOk &&
+    learnedName && ranBalance && nullIsZero && forcedPnl && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
     walletOk && lainTokenKnown && wishLogged && wishForged && skillsOk && journalOk && quietOk &&
     rssOk && scoutOk && nothingOk && reasoningOk &&
     githubOk && channelOk && telegramOk;

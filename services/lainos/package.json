@@ -18,6 +18,7 @@
     "tui": "tsx scripts/tui.ts",
     "serve": "tsx scripts/serve.ts",
     "serve:wired": "tsx scripts/serve-wired.ts",
+    "portfolio:pnl": "tsx scripts/portfolio-pnl.ts",
     "study:cyberia": "tsx scripts/study-cyberia.ts",
     "smoke": "tsx scripts/smoke.ts",
     "wired:smoke": "tsx scripts/wired-smoke.ts",

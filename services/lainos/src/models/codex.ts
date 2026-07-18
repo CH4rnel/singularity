@@ -212,9 +212,10 @@ function onPath(bin: string): boolean {
 export function renderPrompt(request: ModelRequest): string {
   const lines: string[] = [
     "This response is generated through the Codex CLI model provider — you are not " +
-      "a coding agent here. Do not run shell commands, do not read or write " +
-      "files, do not explore the workspace: compose the reply from this prompt " +
-      "alone and finish in one message.",
+      "the forge worker for this reply. Do not use Codex CLI's own shell, file " +
+      "access, or workspace exploration. If LainOS tools are listed below, they " +
+      "are allowed: request them by emitting the exact tool-call JSON, then wait " +
+      "for LainOS to execute the tool and send the result back.",
     "",
     "# Persona and context",
     request.system,
@@ -239,6 +240,8 @@ function renderTools(tools: ToolSchema[]): string {
     .map((t) => `- ${t.name}: ${t.description}\n  input schema: ${JSON.stringify(t.input_schema)}`)
     .join("\n");
   return (
+    "These are LainOS tools, not Codex CLI shell access. They are available in this turn. " +
+    "Do not say tools are forbidden or unavailable when a listed tool fits the task.\n" +
     "To use a tool, output ONLY this JSON as your entire reply (no prose around it, no code fences):\n" +
     '{"tool":"<name>","input":{<arguments matching the schema>}}\n' +
     "One tool call per reply; you will receive the result and can then answer or call another.\n" +
