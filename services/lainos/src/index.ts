@@ -74,7 +74,7 @@ export { initiativePlugin, InitiativeService } from "./plugins/initiative/index.
 export { traderPlugin, TraderService } from "./plugins/trader/index.js";
 export type { TraderEvent } from "./plugins/trader/index.js";
 export { TradeJournal, applyBuy, applySell } from "./plugins/cyberia/journal.js";
-export type { Position, TradeRecord } from "./plugins/cyberia/journal.js";
+export type { LiquidityRecord, Position, TradeRecord } from "./plugins/cyberia/journal.js";
 export { lain } from "./characters/lain.js";
 
 const log = createLogger("boot");

@@ -32,6 +32,21 @@ export interface TradeRecord {
   realizedWei?: string;
 }
 
+export interface LiquidityRecord {
+  ts: number;
+  side: "add";
+  pair: string;
+  tokenA: string;
+  symbolA: string;
+  amountAWei: string;
+  tokenB: string;
+  symbolB: string;
+  amountBWei: string;
+  lpWei: string;
+  txHash: string;
+  reason?: string;
+}
+
 export interface Position {
   token: string;
   symbol: string;
@@ -43,9 +58,11 @@ export interface Position {
 interface JournalFile {
   trades: TradeRecord[];
   positions: Record<string, Position>;
+  liquidity?: LiquidityRecord[];
 }
 
 const TRADE_CAP = 500;
+const LIQUIDITY_CAP = 500;
 
 /** Moving-average position after a buy. */
 export function applyBuy(pos: Position | undefined, base: Position, qty: bigint, cost: bigint): Position {
@@ -92,7 +109,11 @@ export class TradeJournal {
   async load(): Promise<void> {
     try {
       const parsed = JSON.parse(await readFile(this.file, "utf8")) as JournalFile;
-      this.data = { trades: parsed.trades ?? [], positions: parsed.positions ?? {} };
+      this.data = {
+        trades: parsed.trades ?? [],
+        positions: parsed.positions ?? {},
+        liquidity: parsed.liquidity ?? [],
+      };
     } catch {
       // Fresh journal.
     }
@@ -110,6 +131,10 @@ export class TradeJournal {
 
   recentTrades(limit = 10): TradeRecord[] {
     return this.data.trades.slice(-limit);
+  }
+
+  recentLiquidity(limit = 10): LiquidityRecord[] {
+    return (this.data.liquidity ?? []).slice(-limit);
   }
 
   async recordBuy(input: {
@@ -164,6 +189,39 @@ export class TradeJournal {
     });
     await this.persist();
     return realizedWei;
+  }
+
+  async recordLiquidityAdd(input: {
+    pair: string;
+    tokenA: string;
+    symbolA: string;
+    amountAWei: bigint;
+    tokenB: string;
+    symbolB: string;
+    amountBWei: bigint;
+    lpWei: bigint;
+    txHash: string;
+    reason?: string;
+  }): Promise<void> {
+    this.data.liquidity ??= [];
+    this.data.liquidity.push({
+      ts: Date.now(),
+      side: "add",
+      pair: input.pair,
+      tokenA: input.tokenA,
+      symbolA: input.symbolA,
+      amountAWei: input.amountAWei.toString(),
+      tokenB: input.tokenB,
+      symbolB: input.symbolB,
+      amountBWei: input.amountBWei.toString(),
+      lpWei: input.lpWei.toString(),
+      txHash: input.txHash,
+      reason: input.reason,
+    });
+    if (this.data.liquidity.length > LIQUIDITY_CAP) {
+      this.data.liquidity = this.data.liquidity.slice(-LIQUIDITY_CAP);
+    }
+    await this.persist();
   }
 
   private push(trade: TradeRecord): void {
