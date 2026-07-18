@@ -104,7 +104,8 @@ export class ForgeService implements Service {
     const dataDir = runtime.getSetting("LAINOS_DATA_DIR") ?? "./data";
     this.file = join(dataDir, "forge.json");
     this.logDir = join(dataDir, "forge");
-    this.repo = runtime.getSetting("LAINOS_FORGE_REPO") ?? findGitRoot(process.cwd());
+    const repoSetting = runtime.getSetting("LAINOS_FORGE_REPO")?.trim();
+    this.repo = repoSetting || findGitRoot(process.cwd());
 
     try {
       const parsed = JSON.parse(await readFile(this.file, "utf8")) as ForgeFile;
