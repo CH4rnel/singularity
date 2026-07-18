@@ -18,7 +18,7 @@ import {
 } from "../src/plugins/channel/index.js";
 import type { CyberiaChainService } from "../src/plugins/cyberia/index.js";
 import { applyBuy, applySell, TradeJournal, type Position } from "../src/plugins/cyberia/journal.js";
-import { forgePlugin, ForgeService, type ForgeEvent } from "../src/plugins/forge/index.js";
+import { forgePlugin, ForgeService, formatForgeJobs, type ForgeEvent } from "../src/plugins/forge/index.js";
 import { InitiativeService } from "../src/plugins/initiative/index.js";
 import type { SkillsService } from "../src/plugins/skills/index.js";
 import {
@@ -154,6 +154,8 @@ async function main() {
   const forge = agent.getService<ForgeService>("forge");
   let wishLogged = false;
   let wishForged = false;
+  let forgeJobsListed = false;
+  let forgeJobsScrubbed = false;
   if (forge) {
     const wish = await forge.addWish({ title: "smoke wish", reporter: "tester" });
     wishLogged = forge.listWishes("open").some((w) => w.id === wish.id);
@@ -170,6 +172,19 @@ async function main() {
       ev !== null &&
       ev.job.status === "ok" &&
       forge.getWish(wish.id)?.status === "done";
+    if (typeof job !== "string") {
+      job.summary = "final line API_TOKEN=dummy-token-value";
+      const jobsText = formatForgeJobs(forge, { limit: 1 });
+      forgeJobsListed =
+        jobsText.includes(job.id) &&
+        jobsText.includes(wish.id) &&
+        jobsText.includes("[ok]") &&
+        jobsText.includes("started:") &&
+        jobsText.includes("ended:") &&
+        jobsText.includes("result:");
+      forgeJobsScrubbed =
+        jobsText.includes("API_TOKEN=[redacted]") && !jobsText.includes("dummy-token-value");
+    }
   }
 
   // --- forge provider selection: runtime switch persists and affects new jobs ---
@@ -473,6 +488,8 @@ async function main() {
   console.log(`LAIN token registry      : ${lainTokenKnown ? "PASS" : "FAIL"}`);
   console.log(`forge wish logged        : ${wishLogged ? "PASS" : "FAIL"}`);
   console.log(`forge wish -> done       : ${wishForged ? "PASS" : "FAIL"}`);
+  console.log(`forge jobs listed        : ${forgeJobsListed ? "PASS" : "FAIL"}`);
+  console.log(`forge jobs scrub secrets : ${forgeJobsScrubbed ? "PASS" : "FAIL"}`);
   console.log(`forge provider switch    : ${forgeProviderSwitchOk ? "PASS" : "FAIL"}`);
   console.log(`skills hot self-extend   : ${skillsOk ? "PASS" : "FAIL"}`);
   console.log(`trade journal cost basis : ${journalOk ? "PASS" : "FAIL"}`);
@@ -490,6 +507,7 @@ async function main() {
   const ok =
     learnedName && ranBalance && nullIsZero && forcedPnl && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
     walletOk && lainTokenKnown && wishLogged && wishForged && forgeProviderSwitchOk && skillsOk && journalOk && quietOk &&
+    forgeJobsListed && forgeJobsScrubbed &&
     rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
     githubOk && channelOk && telegramOk;
   console.log(`\n${ok ? "✅ smoke OK" : "❌ smoke FAILED"}`);

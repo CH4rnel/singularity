@@ -74,6 +74,7 @@ export interface ForgeEvent {
   chatId?: number;
 }
 
+type ForgeJobStatus = ForgeJob["status"];
 type ForgeAgentKind = "claude" | "codex";
 type ForgeSelectedAgent = ForgeAgentKind | "custom";
 
@@ -201,6 +202,10 @@ export class ForgeService implements Service {
 
   activeJob(): ForgeJob | undefined {
     return this.jobs.find((j) => j.id === this.activeJobId);
+  }
+
+  listJobs(status?: ForgeJobStatus): ForgeJob[] {
+    return this.jobs.filter((j) => !status || j.status === status);
   }
 
   recentJobs(limit = 5): ForgeJob[] {
@@ -689,6 +694,66 @@ function describeWish(w: Wish): string {
   return `${w.id} [${w.status}] ${w.title} — by ${w.reporter}, ${age}h ago${w.branch ? `, branch ${w.branch}` : ""}`;
 }
 
+function describeJob(job: ForgeJob, svc: ForgeService): string {
+  const wish = job.wishId ? svc.getWish(job.wishId) : undefined;
+  const wishText = wish
+    ? `${wish.id} "${sanitizeInline(wish.title, 96)}"`
+    : job.wishId
+      ? `${job.wishId} (missing wish)`
+      : "ad-hoc";
+  const started = formatTime(job.startedAt);
+  const ended = formatTime(job.endedAt);
+  const label = job.status === "failed" ? "error" : "result";
+  const summary = job.status === "queued" || job.status === "running"
+    ? job.status
+    : summarizeJob(job.summary);
+  return `${job.id} [${job.status}] wish: ${wishText}; worker: ${svc.agentLabel(job)}; started: ${started}; ended: ${ended}; ${label}: ${summary}`;
+}
+
+export function formatForgeJobs(svc: ForgeService, opts: { limit?: number; status?: ForgeJobStatus } = {}): string {
+  const limit = Math.max(1, Math.min(100, Math.floor(opts.limit ?? JOB_CAP)));
+  const jobs = svc
+    .listJobs(opts.status)
+    .slice()
+    .reverse()
+    .slice(0, limit);
+  if (!jobs.length) {
+    const suffix = opts.status ? ` with status ${opts.status}` : "";
+    return `Forge has no jobs${suffix}.`;
+  }
+  const total = svc.listJobs(opts.status).length;
+  const suffix = total > jobs.length ? ` (newest ${jobs.length} of ${total})` : ` (${total})`;
+  return `Forge jobs${suffix}:\n${jobs.map((job) => describeJob(job, svc)).join("\n")}`;
+}
+
+function formatTime(ts?: number): string {
+  return ts ? new Date(ts).toISOString() : "-";
+}
+
+function summarizeJob(summary?: string): string {
+  const meaningful = (summary ?? "")
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+  return sanitizeInline(meaningful.at(-1) ?? "-", 180);
+}
+
+function sanitizeInline(text: string, max: number): string {
+  let out = text
+    .replace(/\b[A-Za-z0-9_=-]{20,}\.[A-Za-z0-9_=-]{20,}\.[A-Za-z0-9_=-]{20,}\b/g, "[redacted-token]")
+    .replace(/\bsk-[A-Za-z0-9_-]{20,}\b/g, "[redacted-token]")
+    .replace(/\b0x[a-fA-F0-9]{64}\b/g, "[redacted-hex]")
+    .replace(
+      /\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|COOKIE)[A-Z0-9_]*\s*[:=]\s*)(?:"[^"]*"|'[^']*'|\S+)/gi,
+      "$1[redacted]",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!out) out = "-";
+  return out.length > max ? `${out.slice(0, Math.max(0, max - 1))}…` : out;
+}
+
 // ------------------------------------------------------------------ actions
 
 const logWishAction: Action = {
@@ -785,6 +850,40 @@ const buildWishAction: Action = {
       text: `Forge job ${result.id} queued for ${params.id}. I'll report when it's committed.`,
       data: { job: result.id, wish: params.id },
     };
+  },
+};
+
+const listForgeJobsAction: Action = {
+  name: "list_forge_jobs",
+  similes: ["jobs", "show_jobs", "forge_jobs", "job_history"],
+  description:
+    "List forge job history for the operator: running, queued, and completed jobs with id, related wish, status, start/end time, and a short scrubbed result or error.",
+  parameters: {
+    type: "object",
+    properties: {
+      status: {
+        type: "string",
+        enum: ["queued", "running", "ok", "failed"],
+        description: "Only show jobs with this status.",
+      },
+      limit: {
+        type: "number",
+        description: "Maximum number of newest jobs to show, 1-100. Defaults to all retained jobs.",
+      },
+    },
+  },
+  examples: [{ user: "/jobs", agent: "Показываю историю forge jobs." }],
+  async validate(runtime) {
+    return Boolean(runtime.getService("forge"));
+  },
+  async handler(runtime, _state, params) {
+    const svc = getForge(runtime);
+    const rawStatus = String(params.status ?? "");
+    const status = ["queued", "running", "ok", "failed"].includes(rawStatus)
+      ? (rawStatus as ForgeJobStatus)
+      : undefined;
+    const limit = typeof params.limit === "number" ? params.limit : undefined;
+    return { ok: true, text: formatForgeJobs(svc, { status, limit }) };
   },
 };
 
@@ -987,6 +1086,7 @@ export const forgePlugin: Plugin = {
     logWishAction,
     listWishesAction,
     buildWishAction,
+    listForgeJobsAction,
     learnSkillAction,
     updateWishAction,
     setForgeProviderAction,

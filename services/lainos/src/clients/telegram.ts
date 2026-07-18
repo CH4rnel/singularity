@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fetch as undiciFetch, ProxyAgent, type Dispatcher } from "undici";
 import { runCyberiaStudyNow } from "../cyberia-study.js";
 import { createLogger } from "../logger.js";
+import { formatForgeJobs, type ForgeService } from "../plugins/forge/index.js";
 import type { ScoutService } from "../plugins/scout/index.js";
 import type { IAgentRuntime } from "../types.js";
 
@@ -81,6 +82,7 @@ const HELP_TEXT = [
   "  · watch addresses in the background and alert you here",
   "  · remember durable facts across conversations",
   "  · /study — run the Cyberia research sweep now",
+  "  · /jobs — show forge job history",
   "",
   "try: \"watch 0x… and warn me below 5 CYBER\"",
 ].join("\n");
@@ -279,6 +281,10 @@ export class TelegramClient {
       await this.runCyberiaStudy(chatId);
       return;
     }
+    if (cmd === "/jobs") {
+      await this.showForgeJobs(chatId, content.split(/\s+/).slice(1));
+      return;
+    }
 
     // A reply carries the quoted message as context, so "запусти этот скрипт"
     // in reply to a code block reaches the agent together with the code.
@@ -334,6 +340,25 @@ export class TelegramClient {
     } finally {
       typing();
     }
+  }
+
+  private async showForgeJobs(chatId: number, args: string[]): Promise<void> {
+    const forge = this.runtime.getService<ForgeService>("forge");
+    if (!forge) {
+      await this.sendChunked(chatId, "forge is offline.");
+      return;
+    }
+    const statuses = new Set(["queued", "running", "ok", "failed"]);
+    const status = args.find((arg) => statuses.has(arg.toLowerCase()))?.toLowerCase() as
+      | "queued"
+      | "running"
+      | "ok"
+      | "failed"
+      | undefined;
+    const rawLimit = args.find((arg) => /^\d+$/.test(arg));
+    const limit = rawLimit ? Number(rawLimit) : undefined;
+    await this.rememberChat(chatId);
+    await this.sendChunked(chatId, formatForgeJobs(forge, { status, limit }));
   }
 
   private isAllowed(chatId: number): boolean {
