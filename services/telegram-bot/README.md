@@ -52,6 +52,11 @@ from, in order: `$BOT_ENV_FILE`, `services/telegram-bot/.env`,
 `scripts/python/.env` (so the prod shim keeps working). `DEPLOYER_PK` is never
 logged.
 
+The periodic activity digest can be muted with `DIGEST_INTERVAL_SECONDS=0`.
+Small price changes are hidden by default (`DIGEST_PRICE_CHANGE_MIN_BPS=100`),
+and the digest includes a compact `Prices` line from the bot's `token_prices`
+snapshot so the chat can see which on-chain token prices are being used.
+
 ### AI assistant
 
 Set `AI_API_KEY` to enable the assistant. `AI_API_URL` defaults to OpenAI's chat

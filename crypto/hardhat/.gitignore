@@ -20,3 +20,5 @@
 /coverage
 
 .env
+.dca.env
+.dca-wallet.json

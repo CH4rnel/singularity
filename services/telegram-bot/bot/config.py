@@ -132,6 +132,10 @@ DIGEST_ANNOUNCE_CHAT = os.environ.get("DIGEST_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CH
 DIGEST_INTERVAL_SECONDS = int(os.environ.get("DIGEST_INTERVAL_SECONDS", str(6 * 3600)))
 # Recorded events older than this are pruned (the digest never looks that far back).
 DIGEST_RETENTION_DAYS = int(os.environ.get("DIGEST_RETENTION_DAYS", "30"))
+# Hide tiny price wiggles in the regular digest. Default: 100 bps = 1%.
+DIGEST_PRICE_CHANGE_MIN_BPS = int(os.environ.get("DIGEST_PRICE_CHANGE_MIN_BPS", "100"))
+# Number of priced tokens to include in the digest's market line.
+DIGEST_PRICE_TOKEN_LIMIT = max(0, int(os.environ.get("DIGEST_PRICE_TOKEN_LIMIT", "8")))
 
 # Tokens pegged to $1 — anchor points for the price walker. Comma-separated
 # addresses. Default: USDC + USDT on Cyberia.

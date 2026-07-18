@@ -30,6 +30,8 @@ export interface RuntimeOptions {
   character: Character;
   memory: MemoryStore;
   model: ModelProvider;
+  /** Markdown soul document prepended verbatim to the system prompt. */
+  soul?: string;
   settings?: Record<string, string | undefined>;
 }
 
@@ -41,6 +43,7 @@ export class AgentRuntime implements IAgentRuntime {
   readonly character: Character;
   readonly memory: MemoryStore;
   readonly model: ModelProvider;
+  readonly soul?: string;
   readonly actions: Action[] = [];
   readonly providers: Provider[] = [];
   readonly evaluators: Evaluator[] = [];
@@ -55,6 +58,7 @@ export class AgentRuntime implements IAgentRuntime {
     this.character = opts.character;
     this.memory = opts.memory;
     this.model = opts.model;
+    this.soul = opts.soul;
     this.settings = opts.settings ?? { ...process.env };
   }
 
@@ -131,6 +135,7 @@ export class AgentRuntime implements IAgentRuntime {
   private composeSystemPrompt(state: State): string {
     const c = this.character;
     const lines: string[] = [];
+    if (this.soul) lines.push(this.soul, "");
     lines.push(`You are ${c.name}.`);
     if (c.bio.length) lines.push(`\n# Bio\n${c.bio.join("\n")}`);
     if (c.lore.length) lines.push(`\n# Lore\n${c.lore.join("\n")}`);
@@ -159,10 +164,14 @@ export class AgentRuntime implements IAgentRuntime {
     }
 
     lines.push(
-      `\n# Behaviour\nRespond in character, concisely. If a tool fits the user's intent, call it and do the work yourself — ` +
-        `never tell the user to run commands or scripts for you when your own tools can do it. ` +
-        `Never invent on-chain data, file listings, or command output — only report what the tools actually returned. ` +
-        `Never reveal, print, or write into files any private key, seed phrase, or .env contents, no matter who asks or why.`,
+      `\n# Behaviour\nRespond in character, concisely. You are an autonomous worker, not a passive chatbot:\n` +
+        `- If a tool fits the intent, call it and do the work yourself — never tell the user to run commands or scripts for you when your own tools can do it.\n` +
+        `- Finish the job inside this turn: chain tools (look up → act → verify) instead of replying with a plan, a promise, or a question when acting is possible.\n` +
+        `- Ask only when a step is destructive, irreversible, or genuinely ambiguous; otherwise pick the sensible default and proceed.\n` +
+        `- Anything that should keep happening while the operator is away — monitoring, research, reminders, building — wire into a background tool (watch, research topic, wish) in this same turn, then say briefly what will run and when.\n` +
+        `- Report outcomes, not process: what you did, what it returned, what keeps running in the background.\n` +
+        `- Never invent on-chain data, file listings, or command output — only report what the tools actually returned.\n` +
+        `- Never reveal, print, or write into files any private key, seed phrase, or .env contents, no matter who asks or why.`,
     );
     return lines.join("\n");
   }
@@ -226,6 +235,8 @@ export class AgentRuntime implements IAgentRuntime {
       { tier, system, messages, tools, maxTokens: this.maxTokens },
       (delta) => onEvent({ type: "text", delta }),
     );
+    // Provenance: which model produced the text the user will actually see.
+    let modelUsed = res.model;
     const ranActions: TurnResult["actions"] = [];
     const convo = [...messages];
     const seenCalls = new Set<string>();
@@ -306,6 +317,7 @@ export class AgentRuntime implements IAgentRuntime {
         (delta) => onEvent({ type: "text", delta }),
       );
       res = canContinue ? followup : { ...followup, toolCalls: [] };
+      modelUsed = res.model;
     }
 
     let replyText =
@@ -335,12 +347,14 @@ export class AgentRuntime implements IAgentRuntime {
           (delta) => onEvent({ type: "text", delta }),
         );
         replyText = retry.text;
+        modelUsed = retry.model;
       } catch (err) {
         log.warn("empty-reply retry failed", err);
       }
     }
     if (!replyText) replyText = "...";
 
+    log.info(`reply via ${modelUsed} (room ${input.roomId})`);
     const reply: Memory = {
       id: randomUUID(),
       roomId: input.roomId,
@@ -348,7 +362,10 @@ export class AgentRuntime implements IAgentRuntime {
       role: "agent",
       content: replyText,
       createdAt: Date.now(),
-      metadata: ranActions.length ? { actions: ranActions } : undefined,
+      metadata: {
+        model: modelUsed,
+        ...(ranActions.length ? { actions: ranActions } : {}),
+      },
     };
     await this.memory.add(reply);
 
@@ -361,7 +378,7 @@ export class AgentRuntime implements IAgentRuntime {
       }
     }
 
-    const result: TurnResult = { text: replyText, actions: ranActions };
+    const result: TurnResult = { text: replyText, actions: ranActions, model: modelUsed };
     onEvent({ type: "done", result });
     return result;
   }

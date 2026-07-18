@@ -65,23 +65,6 @@ export const GLYPH = {
 export const VERSION = "0.1.0";
 export const CHAIN_ID = 49406;
 
-/** Copland OS / Navi sigil (Serial Experiments Lain) for the boot card. */
-export const LAIN_ART = `
-              ◦              
-     ╱    ╭───────╮    ╲     
-    ╱     │ ╭───╮ │     ╲    
-   ╱      │ │ ◉ │ │      ╲   
-    ╲     │ ╰───╯ │     ╱    
-     ╲    ╰───┬───╯    ╱     
-  ◦           │           ◦  
-           ╭──┴──╮           
-          ╱       ╲          
-          ╰╮     ╭╯          
-           ╰     ╯           
-`
-  .replace(/^\n|\n$/g, "")
-  .split("\n");
-
 /** "LAIN OS" in the ANSI Shadow figure font. */
 export const BANNER = [
   "██╗      █████╗ ██╗███╗   ██╗    ██████╗ ███████╗",

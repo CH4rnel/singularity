@@ -208,3 +208,20 @@ Recipient balance: 1000 USDC
   `burnFrom(from, amount)` via standard ERC20 allowance.
 - If you need to rotate the bridge owner, call `transferOwnership(newOwner)`
   from the current owner.
+
+## DCA Buy Bot
+
+`npm run dca:buy -- --once` runs a dry-run cycle. Add `--execute` only after the
+dedicated DCA wallet is funded:
+
+```shell
+cd crypto/hardhat
+DCA_PRIVATE_KEY=0x... npm run dca:buy -- --once --execute
+```
+
+The DCA bot intentionally ignores `DEPLOYER_PK` and refuses a `DCA_PRIVATE_KEY`
+or `DCA_WALLET_KEYFILE` that equals `DEPLOYER_PK`. Use a separate key/address so
+bridge/deployer funds cannot be spent by this process. Stablecoin targets
+(`USDC`, `USDT`) are blocked by default because the script spends native CYBER;
+set `allowStableTargets: true` in the config only when selling CYBER for stables
+is intentional.

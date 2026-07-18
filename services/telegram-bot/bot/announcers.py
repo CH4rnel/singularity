@@ -23,6 +23,7 @@ from bot.config import (
     CYBERSOL_SWAP_POLL_SECONDS, CYBERSOL_SWAP_MAX_BLOCK_RANGE,
     MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD, RITUAL_V2_FACTORY,
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, DIGEST_RETENTION_DAYS,
+    DIGEST_PRICE_CHANGE_MIN_BPS, DIGEST_PRICE_TOKEN_LIMIT,
     MARKET_SNAPSHOT_SECONDS, CYBER_CA_EVM,
     SOLANA_RPC_URL, CYBER_SOL_MINT, CYBER_SOL_DECIMALS, WHALE_MIN_RAW,
     WHALE_CHAT_ID, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS, DB_PATH,
@@ -749,8 +750,22 @@ async def cybersol_swap_announcer_loop(application: Application) -> None:
 _KV_LAST_DIGEST_AT = "last_digest_at"
 _KV_PREV_CYBER_PRICE = "digest_prev_cyber_price"
 _SQLITE_TS = "%Y-%m-%d %H:%M:%S"
-def _cyber_price_line(update_prev: bool = False) -> str | None:
-    """'💰 CYBER: $… (+x% …)' line, or None when CYBER can't be priced.
+_PRICE_PRIORITY = {
+    "CYBER.SOL": 0,
+    "WCYBER": 1,
+    "USDC": 2,
+    "USDT": 3,
+}
+
+
+def _fmt_price_usd(value: float) -> str:
+    if value >= 1:
+        return f"${value:,.4f}".rstrip("0").rstrip(".")
+    return f"${value:.8f}".rstrip("0").rstrip(".")
+
+
+def _cyber_price_line(update_prev: bool = False, include_unchanged: bool = True) -> str | None:
+    """'💰 CYBER.sol: $… (+x% …)' line, or None when CYBER.sol can't be priced.
     `update_prev` stores the fresh price as the next digest's comparison base."""
     if not CYBER_CA_EVM:
         return None
@@ -762,16 +777,59 @@ def _cyber_price_line(update_prev: bool = False) -> str | None:
         return None
     if price is None or price <= 0:
         return None
-    line = f"💰 CYBER: ${price:.6f}"
+    line = f"💰 CYBER.sol: ${price:.6f}"
     try:
         prev = float(_kv_get(_KV_PREV_CYBER_PRICE) or 0)
     except ValueError:
         prev = 0.0
     if prev > 0:
-        line += f" ({(price - prev) / prev * 100:+.1f}% since last digest)"
+        change_pct = (price - prev) / prev * 100
+        if abs(change_pct) * 100 >= DIGEST_PRICE_CHANGE_MIN_BPS:
+            line += f" ({change_pct:+.1f}% since last digest)"
+        elif not include_unchanged:
+            line = None
+    elif not include_unchanged:
+        line = None
     if update_prev:
         _kv_set(_KV_PREV_CYBER_PRICE, f"{price:.12g}")
     return line
+
+
+def _market_price_line() -> str | None:
+    """Compact list of the on-chain prices currently stored by the snapshotter."""
+    if DIGEST_PRICE_TOKEN_LIMIT <= 0:
+        return None
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT symbol, price_usd
+                FROM token_prices
+                WHERE price_usd IS NOT NULL AND price_usd > 0
+            """),
+        ).fetchall()
+    if not rows:
+        return None
+
+    def sort_key(row) -> tuple[int, str]:
+        sym = str(row[0] or "").upper()
+        return (_PRICE_PRIORITY.get(sym, 100), sym)
+
+    parts = []
+    seen: set[str] = set()
+    for sym, price in sorted(rows, key=sort_key):
+        label = str(sym or "?")
+        key = label.upper()
+        if key in seen:
+            continue
+        seen.add(key)
+        parts.append(f"{label} {_fmt_price_usd(float(price))}")
+        if len(parts) >= DIGEST_PRICE_TOKEN_LIMIT:
+            break
+    if not parts:
+        return None
+    return "💱 Prices: " + " · ".join(parts)
+
+
 def _build_digest_text(since: str, window_label: str) -> str | None:
     """Summary of activity_events recorded after `since` (sqlite UTC text).
     Returns None when the window is empty so quiet periods stay silent."""
@@ -905,8 +963,14 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
             conv_line += f" · {_fmt_usd(c_usd)}"
         lines.append(conv_line)
 
+    price_line = _market_price_line()
+    if price_line:
+        lines.append(price_line)
+
     return "\n".join(lines)
 async def _digest_tick(bot) -> None:
+    if DIGEST_INTERVAL_SECONDS <= 0:
+        return
     now = datetime.now(timezone.utc)
     last_raw = _kv_get(_KV_LAST_DIGEST_AT)
     if last_raw is None:
@@ -932,7 +996,7 @@ async def _digest_tick(bot) -> None:
         logger.info(f"digest: no activity since {since}, skipping post")
         return
 
-    price_line = await asyncio.to_thread(_cyber_price_line)
+    price_line = await asyncio.to_thread(_cyber_price_line, False, False)
     if price_line:
         digest += "\n\n" + price_line
 

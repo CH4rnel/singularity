@@ -22,6 +22,11 @@ const DEFAULT_BLOCKED_TOKEN_ADDRESSES = new Set([
   "0x992fca0a89dd95afb17751f6cc233adb9b089df5",
   "0xd199e6ae74b992f017f8940b26fa18a7dd30ee86",
 ]);
+const DEFAULT_STABLE_TOKEN_SYMBOLS = new Set(["USDC", "USDT"]);
+const DEFAULT_STABLE_TOKEN_ADDRESSES = new Set([
+  "0xdc25597b19799010047f17e9591efe08efd40077",
+  "0x94845af24a3e431593a2b941b2b31836de45185d",
+]);
 
 const chain = {
   id: 49406,
@@ -114,7 +119,8 @@ Safety:
   ASH is blocked by default and cannot be bought by this bot.
 
 Private key:
-  Set DCA_PRIVATE_KEY, DEPLOYER_PK, or DCA_WALLET_KEYFILE.
+  Set DCA_PRIVATE_KEY or DCA_WALLET_KEYFILE. DEPLOYER_PK is intentionally ignored
+  so this bot cannot spend bridge/deployer funds by accident.
   DCA_WALLET_KEYFILE can contain either {"privateKey":"0x..."} or a raw key string.
 `);
 }
@@ -169,6 +175,7 @@ function loadConfig(configPath) {
     slippageBps: Number(config.slippageBps ?? 100),
     deadlineSeconds: Number(config.deadlineSeconds ?? 300),
     maxHops: Number(config.maxHops ?? 4),
+    allowStableTargets: config.allowStableTargets === true,
     tokens: Array.isArray(config.tokens) ? config.tokens : [],
   };
 
@@ -199,6 +206,15 @@ function loadConfig(configPath) {
     if (DEFAULT_BLOCKED_TOKEN_SYMBOLS.has(symbol) || DEFAULT_BLOCKED_TOKEN_ADDRESSES.has(token.address.toLowerCase())) {
       throw new Error(`Token ${token.symbol || token.address} is blocked and will not be bought`);
     }
+    if (
+      !normalized.allowStableTargets &&
+      (DEFAULT_STABLE_TOKEN_SYMBOLS.has(symbol) || DEFAULT_STABLE_TOKEN_ADDRESSES.has(token.address.toLowerCase()))
+    ) {
+      throw new Error(
+        `Token ${token.symbol || token.address} is a stablecoin target. ` +
+          "DCA buys spend native CYBER; set allowStableTargets=true only if selling CYBER for stables is intentional."
+      );
+    }
     if (!token.spendCyber) throw new Error(`Token ${token.symbol || token.address} is missing spendCyber`);
     parseEther(String(token.spendCyber));
     if (token.path !== undefined) {
@@ -227,19 +243,30 @@ function normalizePrivateKey(raw) {
 }
 
 function loadPrivateKey() {
-  const envKey = normalizePrivateKey(process.env.DCA_PRIVATE_KEY || process.env.DEPLOYER_PK);
-  if (envKey) return envKey;
+  const deployerKey = normalizePrivateKey(process.env.DEPLOYER_PK);
+  const envKey = normalizePrivateKey(process.env.DCA_PRIVATE_KEY);
+  if (envKey) {
+    if (deployerKey && envKey.toLowerCase() === deployerKey.toLowerCase()) {
+      throw new Error("DCA_PRIVATE_KEY must be a dedicated key and must not equal DEPLOYER_PK");
+    }
+    return envKey;
+  }
 
   if (!process.env.DCA_WALLET_KEYFILE) return null;
 
   const keyfile = path.resolve(process.env.DCA_WALLET_KEYFILE);
   const raw = fs.readFileSync(keyfile, "utf8").trim();
+  let key;
   try {
     const parsed = JSON.parse(raw);
-    return normalizePrivateKey(parsed.privateKey);
+    key = normalizePrivateKey(parsed.privateKey);
   } catch {
-    return normalizePrivateKey(raw);
+    key = normalizePrivateKey(raw);
   }
+  if (key && deployerKey && key.toLowerCase() === deployerKey.toLowerCase()) {
+    throw new Error("DCA_WALLET_KEYFILE must contain a dedicated key and must not equal DEPLOYER_PK");
+  }
+  return key;
 }
 
 function minOutWithSlippage(expectedOut, slippageBps) {
@@ -486,7 +513,7 @@ async function main() {
   const account = privateKey ? privateKeyToAccount(privateKey) : null;
 
   if (!dryRun && !account) {
-    throw new Error("Execution requires DCA_PRIVATE_KEY, DEPLOYER_PK, or DCA_WALLET_KEYFILE");
+    throw new Error("Execution requires DCA_PRIVATE_KEY or DCA_WALLET_KEYFILE; DEPLOYER_PK is ignored by this bot");
   }
   if (!dryRun && config.recipient === "self") {
     log(`wallet: ${account.address}`);

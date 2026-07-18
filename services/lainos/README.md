@@ -16,6 +16,7 @@ and repeat-protected.
 | Primitive | Role |
 |-----------|------|
 | **Character** | identity, voice, lore, model tier, requested plugins |
+| **Soul** | `soul.md` at the package root — a markdown constitution prepended verbatim to the system prompt (override path via `LAINOS_SOUL_PATH`; loaded once at boot) |
 | **MemoryStore** | conversation + durable learned facts; keyword/recency retrieval, or semantic (embedding cosine) when an `EmbeddingProvider` is set |
 | **EmbeddingProvider** | optional vector backend for semantic memory recall (OpenAI-compatible endpoint, or an offline hashing fallback) |
 | **Provider** | injects live context into the prompt (time, chain state, …) |
@@ -27,14 +28,23 @@ and repeat-protected.
 
 ### Model providers
 
-LainOS speaks to three backends through one `ModelProvider` interface, selected
+LainOS speaks to four backends through one `ModelProvider` interface, selected
 from the environment:
 
-1. `LAINOS_MODEL_PROVIDER` if set (`openrouter` | `anthropic` | `mock`)
+1. `LAINOS_MODEL_PROVIDER` if set (`codex` | `openrouter` | `anthropic` | `mock`)
 2. else `OPENROUTER_API_KEY` present → **OpenRouter**
 3. else `ANTHROPIC_API_KEY` present → **Anthropic** (direct)
 4. else → **offline mock** (deterministic; the whole pipeline still runs — this
    is what the smoke test exercises)
+
+**Codex CLI** (`codex`) relays each completion through one non-interactive
+`codex exec` run, billed to the machine's ChatGPT subscription (`codex login`)
+— no API key. Tool calling works via a JSON reply protocol; replies arrive
+whole (no streaming). A failed run is retried once in-house
+(`LAINOS_CODEX_RETRIES`); it never falls back to another provider unless
+`LAINOS_MODEL_FALLBACK` explicitly names one — so the agent can't silently
+land on a model the operator didn't choose. On top of any base provider,
+`LAINOS_MODEL_TIER_SMALL/MEDIUM/LARGE` can route a single tier elsewhere.
 
 Model tiers map to the latest Claude family:
 
@@ -172,6 +182,13 @@ startup during boot without an interactive login (`loginctl show-user "$USER"
   persist in `data/channels.json`; tune with `LAINOS_CHANNEL_REMIND_HOUR`
   (default 18), `LAINOS_CHANNEL_INTERVAL_MS` and `LAINOS_CHANNEL_PROXY`
   (falls back to `TELEGRAM_PROXY`).
+- **telegram** — the outbound hand to the operator: `send_telegram` delivers a
+  message via the Bot API from any surface (TUI, HTTP, daemon) and returns
+  delivery status. The token stays on the host; the model never sees it. The
+  target chat is `TELEGRAM_OPERATOR_CHAT_ID`, else the first
+  `TELEGRAM_ALLOWED_CHATS` entry, else the single known private chat in
+  `data/telegram.json`. Available whenever `TELEGRAM_BOT_TOKEN` is set — the
+  long-polling client need not be running (sending never conflicts with it).
 - **system** — a terminal and filesystem, confined to a workspace
   (`LAINOS_WORKSPACE`, default `./workspace`):
   - `run_shell` — run a shell command (cwd = workspace, hard timeout, clipped output)

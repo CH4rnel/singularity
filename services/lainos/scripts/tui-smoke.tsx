@@ -71,6 +71,20 @@ async function main() {
     model: model as never,
     settings: {},
   });
+  // A fat skill list (the real daemon registers 30+ actions) once made the
+  // boot card wider than the terminal and shredded the <Static> frame.
+  runtime.use({
+    name: "smoke-skills",
+    description: "boot-card overflow probe",
+    actions: Array.from({ length: 24 }, (_, i) => ({
+      name: `padded_out_probe_skill_${i}`,
+      similes: [],
+      description: "probe",
+      examples: [],
+      validate: async () => true,
+      handler: async () => ({ ok: true }),
+    })),
+  });
 
   const stdout = new FakeStdout();
   const stdin = new FakeStdin();
@@ -100,6 +114,8 @@ async function main() {
   await type("hi\r");
   await sleep(700);
   results.push(["reply shows in feed  ", anyWrite(REPLY)]);
+  // …with the provenance marker (which model answered) in the turn header.
+  results.push(["reply names model    ", anyWrite("· stub")]);
 
   // The transcript is printed once into scrollback (<Static>): later repaints
   // (cursor blink etc.) must never rewrite it — that is what lets the user
@@ -133,7 +149,41 @@ async function main() {
   results.push(["/clear shows boot    ", anyWrite("welcome to the wired", beforeClear)]);
   results.push(["/clear drops history ", !anyWrite(REPLY, beforeClear)]);
 
-  // 4) blink repaints happen right after typing…
+  // 4) picking a new /skin wipes and reprints the transcript in the new theme
+  await type("/skin");
+  await sleep(30);
+  await type("\r"); // menu narrowed to /skin; enter opens the picker
+  await sleep(200);
+  stdin.write("\x1b[B"); // ↓ highlights "matrix" (preview recolors the bottom)
+  await sleep(150);
+  const beforePick = stdout.writes.length;
+  stdin.write("\r"); // pick it
+  await sleep(300);
+  const matrixPrimary = "38;2;57;255;20"; // THEMES.matrix.primary #39ff14
+  const skinReprint = stdout.writes.slice(beforePick).find((w) => w.includes("welcome to the wired"));
+  results.push(["/skin wipes screen   ", anyWrite("\x1b[3J", beforePick)]);
+  results.push(["/skin reprints theme ", !!skinReprint && skinReprint.includes(matrixPrimary)]);
+
+  // 4.5) nothing ever draws wider than the terminal — an overflowing line is
+  // hard-wrapped by the terminal itself and shreds the static frames.
+  const stripAnsi = (s: string) =>
+    s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+  const wideLine = stdout.writes
+    .flatMap((w) => stripAnsi(w).split("\n"))
+    .find((l) => [...l].length > stdout.columns);
+  results.push(["fits terminal width  ", wideLine === undefined]);
+
+  // 5) a width change repaints the transcript once the resize settles
+  const beforeResize = stdout.writes.length;
+  stdout.columns = 80;
+  stdout.emit("resize");
+  await sleep(600); // repaint debounce is 200ms
+  results.push([
+    "resize repaints      ",
+    anyWrite("\x1b[3J", beforeResize) && anyWrite("welcome to the wired", beforeResize),
+  ]);
+
+  // 6) blink repaints happen right after typing…
   const n1 = stdout.writes.length;
   await sleep(2500);
   const blinkFrames = stdout.writes.length - n1;

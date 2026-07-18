@@ -7,7 +7,6 @@ import {
   CHAIN_ID,
   DEFAULT_THEME,
   GLYPH,
-  LAIN_ART,
   lerpColor,
   VERSION,
   loadCursor,
@@ -44,7 +43,7 @@ type ToolBlock = {
 };
 type Part = { kind: "text"; text: string } | { kind: "tool"; tool: ToolBlock };
 type Role = "you" | "lain" | "sys" | "banner" | "pulse";
-type Turn = { id: string; role: Role; parts: Part[] };
+type Turn = { id: string; role: Role; parts: Part[]; model?: string };
 
 type PickerOption = { value: string; label: string; hint?: string };
 type PickerState = {
@@ -158,8 +157,9 @@ function useChainHeight(rpc: string): number | null {
 }
 
 /** Terminal size that tracks window resizes (Ink re-lays out, but React
- *  needs a state change to re-render width-bound rules). Never wipes the
- *  screen: the transcript lives in real scrollback and must survive. */
+ *  needs a state change to re-render width-bound rules). The App also
+ *  repaints the static transcript when the width settles — the terminal
+ *  rewraps scrollback on its own and mangles the old frames. */
 function useStdoutDimensions(): { width: number; rows: number } {
   const { stdout } = useStdout();
   const [size, setSize] = useState(() => ({
@@ -192,18 +192,25 @@ function GradientText({ text, from, to }: { text: string; from: string; to: stri
   );
 }
 
-function Banner({ tagline }: { tagline: string }) {
+function Banner({ tagline, width }: { tagline: string; width: number }) {
   const c = useTheme();
+  // The figure-font logo is 49 columns; on narrower terminals fall back to
+  // plain text so nothing wraps into a broken frame.
+  const wide = width > BANNER[0].length;
   return (
     <Box flexDirection="column" marginBottom={1} flexShrink={0}>
-      {BANNER.map((row, i) => (
-        <Text key={i} color={lerpColor(c.gradFrom, c.gradTo, BANNER.length <= 1 ? 0 : i / (BANNER.length - 1))}>
-          {row}
-        </Text>
-      ))}
+      {wide ? (
+        BANNER.map((row, i) => (
+          <Text key={i} color={lerpColor(c.gradFrom, c.gradTo, BANNER.length <= 1 ? 0 : i / (BANNER.length - 1))}>
+            {row}
+          </Text>
+        ))
+      ) : (
+        <GradientText text="LAIN OS" from={c.gradFrom} to={c.gradTo} />
+      )}
       <Box marginTop={1}>
         <Text color={c.mutedDim}>{GLYPH.spark} </Text>
-        <GradientText text={tagline} from={c.gradFrom} to={c.gradTo} />
+        <GradientText text={truncate(tagline, Math.max(10, width - 4))} from={c.gradFrom} to={c.gradTo} />
       </Box>
     </Box>
   );
@@ -213,15 +220,23 @@ function BootCard({
   runtime,
   block,
   session,
+  width,
 }: {
   runtime: IAgentRuntime;
   block: number | null;
   session: string;
+  width: number;
 }) {
   const c = useTheme();
   const provider = runtime.model.name;
   const model = runtime.model.modelFor(runtime.character.modelTier ?? ModelTier.LARGE);
   const cwd = process.cwd();
+
+  // Never wider than the terminal: a line that overflows gets hard-wrapped by
+  // the terminal itself and shreds the whole <Static> frame.
+  const cardWidth = Math.min(width, 100);
+  // Info column + skills side by side only when both genuinely fit.
+  const narrow = cardWidth < 72;
 
   // Bucket the registered skills into stylish categories.
   const groups: Record<string, string[]> = {};
@@ -232,32 +247,35 @@ function BootCard({
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Box flexDirection="column" borderStyle="round" borderColor={c.primary} paddingX={2}>
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={c.primary}
+        paddingX={2}
+        width={cardWidth}
+      >
         <Box justifyContent="center">
           <Text color={c.primary} bold>
             Lain OS
           </Text>
-          <Text color={c.mutedDim}>
+          <Text color={c.mutedDim} wrap="truncate">
             {"  ·  "}v{VERSION}
             {"  ·  "}Cyberia {CHAIN_ID}
             {"  ·  "}the Wired
           </Text>
         </Box>
 
-        <Box flexDirection="column" alignItems="center" marginTop={1}>
-          {LAIN_ART.map((line, i) => (
-            <Text key={i} color={lerpColor(c.gradFrom, c.gradTo, LAIN_ART.length <= 1 ? 0 : i / (LAIN_ART.length - 1))}>
-              {line}
-            </Text>
-          ))}
-        </Box>
-
-        <Box marginTop={1}>
-          <Box flexDirection="column" width={26} marginRight={2}>
+        <Box marginTop={1} flexDirection={narrow ? "column" : "row"}>
+          <Box
+            flexDirection="column"
+            width={narrow ? undefined : 26}
+            marginRight={narrow ? 0 : 2}
+            flexShrink={0}
+          >
             <Box>
-              <Text color={c.secondary}>{model}</Text>
+              <Text color={c.secondary}>{truncate(model, 24)}</Text>
             </Box>
-            <Text color={c.mutedDim}>{provider}</Text>
+            <Text color={c.mutedDim}>{truncate(provider, 24)}</Text>
             <Text color={c.mutedDim}>{truncate(cwd, 24)}</Text>
             <Text color={c.mutedDim}>
               {GLYPH.chain} {block === null ? "—" : block.toLocaleString("en-US")}
@@ -265,14 +283,16 @@ function BootCard({
             <Text color={c.mutedDim}>session {session}</Text>
           </Box>
 
-          <Box flexDirection="column" flexGrow={1}>
+          <Box flexDirection="column" flexGrow={1} marginTop={narrow ? 1 : 0}>
             <Text color={c.fg} bold>
               SKILLS
             </Text>
             {order.map((cat) => (
               <Box key={cat}>
                 <Text color={c.secondary}>{cat.padEnd(8)}</Text>
-                <Text color={c.fg}>{groups[cat].join(" · ")}</Text>
+                <Box flexGrow={1}>
+                  <Text color={c.fg}>{groups[cat].join(" · ")}</Text>
+                </Box>
               </Box>
             ))}
             <Box marginTop={1}>
@@ -331,9 +351,14 @@ function TurnView({ turn }: { turn: Turn }) {
           : { label: `${GLYPH.dot} sys`, color: c.mutedDim };
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color={meta.color} bold>
-        {meta.label}
-      </Text>
+      <Box>
+        <Text color={meta.color} bold>
+          {meta.label}
+        </Text>
+        {turn.role === "lain" && turn.model ? (
+          <Text color={c.mutedDim}> · {turn.model}</Text>
+        ) : null}
+      </Box>
       {turn.parts.map((part, i) =>
         part.kind === "tool" ? (
           <ToolCard key={i} tool={part.tool} />
@@ -554,6 +579,25 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     stdout?.write(`\x1b]0;${busy ? "Lain OS ✦ thinking…" : "Lain OS · the wired"}\x07`);
   }, [busy, stdout]);
 
+  // <Static> frames are printed once and never touched again, so anything
+  // that invalidates them (skin change, terminal rewrap on resize) needs a
+  // full repaint: wipe the screen and remount <Static> so the banner, boot
+  // card and every stored turn are reprinted with the current theme/width.
+  const repaint = useCallback(() => {
+    stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+    setGen((g) => g + 1);
+  }, [stdout]);
+
+  // Repaint once the width settles (resize events fire in bursts while the
+  // window is being dragged). Height changes don't rewrap, so they're free.
+  const prevWidthRef = useRef(width);
+  useEffect(() => {
+    if (prevWidthRef.current === width) return;
+    prevWidthRef.current = width;
+    const t = setTimeout(repaint, 200);
+    return () => clearTimeout(t);
+  }, [width, repaint]);
+
   // input line + ui
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -645,12 +689,15 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       index: Math.max(0, THEME_ORDER.indexOf(skin)),
       onHighlight: (v) => setPreviewSkin(v),
       onPick: (v) => {
-        setSkin(v);
         setPreviewSkin(null);
+        if (v !== skin) {
+          setSkin(v);
+          repaint();
+        }
       },
       onCancel: () => setPreviewSkin(null),
     });
-  }, [skin]);
+  }, [repaint, skin]);
 
   const openEffortPicker = useCallback(() => {
     setPicker({
@@ -681,10 +728,9 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           break;
         case "clear":
           // Wipe the scrollback too, so what was cleared is really gone.
-          stdout?.write("\x1b[2J\x1b[3J\x1b[H");
           setLive(null);
           setHistory([]);
-          setGen((g) => g + 1);
+          repaint();
           break;
         case "copy": {
           const lastLain = [...history].reverse().find((t) => t.role === "lain");
@@ -808,7 +854,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           pushHistory(sysTurn(`unknown command: /${cmd}  (try /help)`));
       }
     },
-    [exit, history, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pulseOn, pushHistory, runtime, stdout],
+    [exit, history, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pulseOn, pushHistory, repaint, runtime, stdout],
   );
 
   const send = useCallback(
@@ -827,7 +873,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       setStatus("thinking");
       flush();
       try {
-        await runtime.handleMessageStream({ roomId: room, userId: "user", text }, (ev: AgentEvent) => {
+        const result = await runtime.handleMessageStream({ roomId: room, userId: "user", text }, (ev: AgentEvent) => {
           if (ev.type === "thinking") {
             setStatus("thinking");
           } else if (ev.type === "text") {
@@ -849,6 +895,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
             flush();
           }
         });
+        acc.model = result.model;
       } catch (err) {
         acc.parts.push({ kind: "text", text: `⚠ ${(err as Error).message}` });
       } finally {
@@ -987,9 +1034,9 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       <Static key={`gen-${gen}`} items={feed}>
         {(item) =>
           item.kind === "banner" ? (
-            <Banner key={item.key} tagline={tagline} />
+            <Banner key={item.key} tagline={tagline} width={width} />
           ) : item.kind === "boot" ? (
-            <BootCard key={item.key} runtime={runtime} block={block} session={session} />
+            <BootCard key={item.key} runtime={runtime} block={block} session={session} width={width} />
           ) : (
             <TurnView key={item.key} turn={item.turn} />
           )
@@ -1056,7 +1103,10 @@ function StatusBar(props: {
   return (
     <Box flexDirection="column" marginTop={1} flexShrink={0}>
       <Text color={c.mutedDim}>{"─".repeat(Math.max(8, props.width))}</Text>
-      <Box>
+      {/* One outer Text so the whole bar truncates at the terminal edge —
+          sibling Texts in a row refuse to shrink below their content and
+          overflow narrow terminals. */}
+      <Text wrap="truncate">
         <Text color={dot}>● </Text>
         <Text color={c.primary}>{props.provider}</Text>
         <Text color={c.mutedDim}> {GLYPH.dot} </Text>
@@ -1071,7 +1121,7 @@ function StatusBar(props: {
         <Text color={c.primary}>{c.name}</Text>
         <Text color={c.mutedDim}>{"   room:"}</Text>
         <Text color={c.fg}>{props.room}</Text>
-      </Box>
+      </Text>
     </Box>
   );
 }

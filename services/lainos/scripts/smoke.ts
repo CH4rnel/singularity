@@ -3,7 +3,7 @@
  * End-to-end smoke test: drives the runtime through several turns with the
  * offline mock model and a real Cyberia chain read. Run: npm run smoke
  */
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgent } from "../src/index.js";
@@ -24,6 +24,7 @@ import {
 } from "../src/plugins/github/index.js";
 import { looksLikeNothing, parseRss, type ScoutService } from "../src/plugins/scout/index.js";
 import type { SentinelService } from "../src/plugins/sentinel/index.js";
+import { resolveOperatorChatId, telegramPlugin } from "../src/plugins/telegram/index.js";
 
 async function main() {
   // Forge: deterministic stub agent, no auto mode, no real repo edits.
@@ -209,6 +210,25 @@ async function main() {
     channelOk = Boolean(watch) && rejected === null && listed && removed && channelParseOk;
   }
 
+  // --- telegram hand: operator chat resolution + token gating (no network) ---
+  const tgDir = mkdtempSync(join(tmpdir(), "lainos-tg-"));
+  const tgEmptyDir = mkdtempSync(join(tmpdir(), "lainos-tg-empty-"));
+  writeFileSync(join(tgDir, "telegram.json"), JSON.stringify({ chats: [777, -100123] }));
+  const settings =
+    (over: Record<string, string | undefined>) =>
+    (k: string): string | undefined =>
+      over[k];
+  const sendAction = telegramPlugin.actions![0]!;
+  const tgRuntime = (over: Record<string, string | undefined>) =>
+    ({ getSetting: settings(over) }) as never;
+  const telegramOk =
+    (await resolveOperatorChatId(settings({ TELEGRAM_OPERATOR_CHAT_ID: "42" }))) === "42" &&
+    (await resolveOperatorChatId(settings({ TELEGRAM_ALLOWED_CHATS: " 123 ,456" }))) === "123" &&
+    (await resolveOperatorChatId(settings({ LAINOS_DATA_DIR: tgDir }))) === "777" &&
+    (await resolveOperatorChatId(settings({ LAINOS_DATA_DIR: tgEmptyDir }))) === null &&
+    !(await sendAction.validate(tgRuntime({}), {} as never)) &&
+    (await sendAction.validate(tgRuntime({ TELEGRAM_BOT_TOKEN: "x" }), {} as never));
+
   // --- scout: "nothing found" replies must read as silence, digests must not ---
   const nothingOk =
     looksLikeNothing("NOTHING") &&
@@ -243,12 +263,13 @@ async function main() {
   console.log(`reasoning never leaks    : ${reasoningOk ? "PASS" : "FAIL"}`);
   console.log(`github streak watch      : ${githubOk ? "PASS" : "FAIL"}`);
   console.log(`channel post watch       : ${channelOk ? "PASS" : "FAIL"}`);
+  console.log(`telegram send hand       : ${telegramOk ? "PASS" : "FAIL"}`);
 
   await agent.stop();
   const ok =
     learnedName && ranBalance && nullIsZero && sentinelFired && alertDelivered && splitOk &&
     walletOk && wishLogged && wishForged && rssOk && scoutOk && nothingOk && reasoningOk &&
-    githubOk && channelOk;
+    githubOk && channelOk && telegramOk;
   console.log(`\n${ok ? "✅ smoke OK" : "❌ smoke FAILED"}`);
   process.exit(ok ? 0 : 1);
 }

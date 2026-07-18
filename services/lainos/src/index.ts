@@ -20,17 +20,24 @@ import { githubPlugin } from "./plugins/github/index.js";
 import { scoutPlugin } from "./plugins/scout/index.js";
 import { sentinelPlugin } from "./plugins/sentinel/index.js";
 import { systemPlugin } from "./plugins/system/index.js";
+import { telegramPlugin } from "./plugins/telegram/index.js";
 import { AgentRuntime } from "./runtime.js";
+import { loadSoul } from "./soul.js";
 import type { Character, Plugin } from "./types.js";
 
 export * from "./types.js";
 export { AgentRuntime } from "./runtime.js";
+export { loadSoul } from "./soul.js";
 export { FileMemoryStore } from "./memory/store.js";
 export {
   createModelProvider,
   AnthropicModelProvider,
+  CodexModelProvider,
+  FallbackModelProvider,
   MockModelProvider,
   OpenRouterModelProvider,
+  TieredModelProvider,
+  resolveCodexBin,
 } from "./models/index.js";
 export { bootstrapPlugin } from "./plugins/bootstrap/index.js";
 export {
@@ -57,6 +64,7 @@ export {
 } from "./plugins/channel/index.js";
 export type { ChannelActivity, ChannelEvent, ChannelWatch } from "./plugins/channel/index.js";
 export { TelegramClient } from "./clients/telegram.js";
+export { telegramPlugin, resolveOperatorChatId } from "./plugins/telegram/index.js";
 export { lain } from "./characters/lain.js";
 
 const log = createLogger("boot");
@@ -71,6 +79,7 @@ const BUILTIN_PLUGINS: Record<string, Plugin> = {
   scout: scoutPlugin,
   github: githubPlugin,
   channel: channelPlugin,
+  telegram: telegramPlugin,
 };
 
 export interface CreateAgentOptions {
@@ -94,6 +103,7 @@ export async function createAgent(opts: CreateAgentOptions): Promise<AgentRuntim
     character: opts.character,
     memory,
     model,
+    soul: loadSoul(getSetting),
     settings: { ...process.env, LAINOS_DATA_DIR: dataDir },
   });
 

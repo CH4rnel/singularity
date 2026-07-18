@@ -9,5 +9,6 @@
   "gasReserveCyber": "0.05",
   "slippageBps": 100,
   "deadlineSeconds": 300,
+  "allowStableTargets": false,
   "tokens": []
 }

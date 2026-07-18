@@ -20,13 +20,15 @@
       "symbol": "USDC",
       "address": "0xdc25597B19799010047F17e9591EFE08EFd40077",
       "spendCyber": "0.01",
-      "enabled": true
+      "enabled": false,
+      "note": "Disabled: buying stables with native CYBER sells CYBER and suppresses CYBER price."
     },
     {
       "symbol": "USDT",
       "address": "0x94845aF24a3E431593A2b941b2b31836dE45185D",
       "spendCyber": "0.01",
-      "enabled": true
+      "enabled": false,
+      "note": "Disabled: buying stables with native CYBER sells CYBER and suppresses CYBER price."
     },
     {
       "symbol": "BTC",

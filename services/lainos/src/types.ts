@@ -224,6 +224,8 @@ export interface ModelProvider {
 export interface TurnResult {
   text: string;
   actions: { name: string; result: ActionResult }[];
+  /** Model id that produced the final reply (provenance, e.g. "codex/gpt-5.5"). */
+  model?: string;
 }
 
 /**

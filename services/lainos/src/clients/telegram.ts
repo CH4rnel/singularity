@@ -295,7 +295,13 @@ export class TelegramClient {
         userId: `tg:${msg.from.username ?? msg.from.id}`,
         text: content,
       });
-      await this.sendChunked(chatId, result.text || "…");
+      // Provenance receipt: which model actually answered (the operator must
+      // be able to see it's the subscription, not some fallback). Off: =0.
+      const sig =
+        result.model && this.runtime.getSetting("LAINOS_REPLY_SIGNATURE") !== "0"
+          ? `\n\n⌁ ${result.model}`
+          : "";
+      await this.sendChunked(chatId, (result.text || "…") + sig);
     } catch (err) {
       log.error("agent turn failed", err);
       await this.sendChunked(chatId, "…the wired flickered. try again.").catch(() => {});

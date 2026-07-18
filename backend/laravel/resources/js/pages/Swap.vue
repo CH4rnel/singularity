@@ -43,6 +43,7 @@ import { useWallet } from '@/composables/useWallet';
 import {
     CYBER_SOL_ADDRESS,
     KNOWN_TOKENS,
+    USDC_ADDRESS,
     WCYBER_ADDRESS,
     filterJunkPools,
 } from '@/lib/cyberiaTokens';
@@ -184,14 +185,8 @@ const deadline = (): bigint => BigInt(Math.floor(Date.now() / 1000) + 1200);
 const resolveAddr = (a: string): string => (a === NATIVE ? WCYBER : a);
 
 const cleanPools = computed(() => filterJunkPools(props.pools ?? []));
-const liveSelectedPool = ref<{
-    pairAddress: string;
-    token0: string;
-    token1: string;
-    reserve0: number;
-    reserve1: number;
-    updatedAt: number;
-} | null>(null);
+// Direct-pair address resolved on-chain when dex_pools lags (display only).
+const livePairAddress = ref<string | null>(null);
 const livePriceHistory = ref<PricePoint[]>([]);
 const chartContainer = ref<HTMLDivElement | null>(null);
 let marketChart: IChartApi | null = null;
@@ -237,6 +232,47 @@ const symbolAliases = (addr: string): Set<string> => {
     return aliases;
 };
 
+// The chart always plots how much of the quote token one base token buys,
+// no matter which direction the swap form points. Stables make the best
+// quote side, then WCYBER; ties keep the user's in→out arrangement.
+const QUOTE_PRIORITY = [
+    'USDC',
+    'USDT',
+    'JUPUSD',
+    'RUB',
+    'TRUR',
+    'GOLD',
+    'SILVER',
+    'WCYBER',
+    'CYBER',
+];
+const quoteRank = (addr: string): number => {
+    const i = QUOTE_PRIORITY.indexOf(symbolOf(addr).toUpperCase());
+
+    return i === -1 ? QUOTE_PRIORITY.length : i;
+};
+
+const chartOrientation = computed(() => {
+    const a = tokenIn.value;
+    const b = tokenOut.value;
+
+    if (!a || !b || a === b) {
+        return null;
+    }
+
+    return quoteRank(a) < quoteRank(b)
+        ? { base: b, quote: a }
+        : { base: a, quote: b };
+});
+const chartBase = computed(() => chartOrientation.value?.base ?? '');
+const chartQuote = computed(() => chartOrientation.value?.quote ?? '');
+// Identity of the charted market; flipping the swap direction keeps it.
+const chartPairKey = computed(() =>
+    chartOrientation.value
+        ? `${resolveAddr(chartBase.value).toLowerCase()}>${resolveAddr(chartQuote.value).toLowerCase()}`
+        : '',
+);
+
 const parseEventTime = (value: string): number => {
     const normalized = value.includes('T')
         ? value
@@ -276,12 +312,14 @@ const matchesHistoryLeg = (
 };
 
 const historicalPricePoints = computed<PricePoint[]>(() => {
-    if (!tokenIn.value || !tokenOut.value || tokenIn.value === tokenOut.value) {
+    const orientation = chartOrientation.value;
+
+    if (!orientation) {
         return [];
     }
 
-    const inSymbols = symbolAliases(tokenIn.value);
-    const outSymbols = symbolAliases(tokenOut.value);
+    const baseSymbols = symbolAliases(orientation.base);
+    const quoteSymbols = symbolAliases(orientation.quote);
 
     return props.priceHistory
         .flatMap((row) => {
@@ -304,16 +342,17 @@ const historicalPricePoints = computed<PricePoint[]>(() => {
                 return [];
             }
 
+            // Sold base for quote: the trade paid amtOut quote per amtIn base.
             if (
                 matchesHistoryLeg(
-                    tokenIn.value,
-                    inSymbols,
+                    orientation.base,
+                    baseSymbols,
                     meta?.in_addr,
                     symIn,
                 ) &&
                 matchesHistoryLeg(
-                    tokenOut.value,
-                    outSymbols,
+                    orientation.quote,
+                    quoteSymbols,
                     meta?.out_addr,
                     symOut,
                 )
@@ -321,16 +360,17 @@ const historicalPricePoints = computed<PricePoint[]>(() => {
                 return [{ at, price: amtOut / amtIn }];
             }
 
+            // Bought base with quote: same price, inverted legs.
             if (
                 matchesHistoryLeg(
-                    tokenIn.value,
-                    inSymbols,
+                    orientation.base,
+                    baseSymbols,
                     meta?.out_addr,
                     symOut,
                 ) &&
                 matchesHistoryLeg(
-                    tokenOut.value,
-                    outSymbols,
+                    orientation.quote,
+                    quoteSymbols,
                     meta?.in_addr,
                     symIn,
                 )
@@ -355,44 +395,11 @@ const selectedPoolChart = computed(() => {
         }));
 });
 
-const selectedPoolReserves = computed(() => {
-    const pool = selectedPool.value;
-
-    if (!pool && !liveSelectedPool.value) {
-        return null;
-    }
-
-    return {
-        token0: liveSelectedPool.value?.token0 ?? pool!.token0,
-        token1: liveSelectedPool.value?.token1 ?? pool!.token1,
-        reserve0: liveSelectedPool.value?.reserve0 ?? Number(pool!.reserve0),
-        reserve1: liveSelectedPool.value?.reserve1 ?? Number(pool!.reserve1),
-    };
-});
-
-const spotFromReserves = (reserves: {
-    token0: string;
-    token1: string;
-    reserve0: number;
-    reserve1: number;
-}): number | null => {
-    const inputIsToken0 =
-        resolveAddr(tokenIn.value).toLowerCase() ===
-        reserves.token0.toLowerCase();
-    const reserveIn = inputIsToken0 ? reserves.reserve0 : reserves.reserve1;
-    const reserveOut = inputIsToken0 ? reserves.reserve1 : reserves.reserve0;
-
-    if (reserveIn <= 0 || reserveOut <= 0) {
-        return null;
-    }
-
-    return reserveOut / reserveIn;
-};
-
-const liveSpotPrice = computed(() =>
-    selectedPoolReserves.value
-        ? spotFromReserves(selectedPoolReserves.value)
-        : null,
+// Latest router-quoted price (same instrument as the historical points, so
+// the live edge of the chart lines up with real trade rates instead of a
+// possibly off-market direct pool's reserve ratio).
+const liveSpotPrice = computed(
+    () => livePriceHistory.value.at(-1)?.price ?? null,
 );
 
 const spotChangePct = computed(() => {
@@ -495,8 +502,6 @@ const createMarketChart = (): void => {
         topColor: 'rgba(16, 185, 129, 0.28)',
         bottomColor: 'rgba(16, 185, 129, 0.02)',
         lineWidth: 2,
-        pointMarkersVisible: true,
-        pointMarkersRadius: 3,
         priceLineVisible: true,
         lastValueVisible: true,
     });
@@ -520,26 +525,101 @@ const formatUsd = (value: number | null | undefined): string => {
 };
 
 const selectedPoolPairAddress = computed(
-    () =>
-        liveSelectedPool.value?.pairAddress ?? selectedPool.value?.pair_address,
+    () => livePairAddress.value ?? selectedPool.value?.pair_address,
 );
 
 const resetLivePriceHistory = (): void => {
-    liveSelectedPool.value = null;
     livePriceHistory.value = [];
 };
 
-const recordLiveSpotPrice = (): void => {
-    const price = liveSpotPrice.value;
+// Quote a small base amount over the best route and append the marginal
+// rate. This is the same price the indexed trades executed at (per-hop LP
+// fee included), so live points continue the historical series smoothly —
+// unlike the direct pool's reserve ratio, which can sit far off-market.
+let probeSeq = 0;
+// Smallest probe size that produced a quantization-safe quote, per market.
+const probeSizeCache = new Map<string, bigint>();
+const probeLivePrice = async (): Promise<void> => {
+    const orientation = chartOrientation.value;
 
-    if (price === null || !Number.isFinite(price)) {
+    if (!orientation) {
         return;
     }
 
-    livePriceHistory.value = [
-        ...livePriceHistory.value,
-        { at: Date.now(), price },
-    ];
+    const from = resolveAddr(orientation.base);
+    const to = resolveAddr(orientation.quote);
+
+    if (from.toLowerCase() === to.toLowerCase()) {
+        return;
+    }
+
+    const seq = ++probeSeq;
+    const marketKey = chartPairKey.value;
+
+    try {
+        const [baseMeta, quoteMeta] = await Promise.all([
+            tokenMeta(from),
+            tokenMeta(to),
+        ]);
+        const paths = candidatePaths(from, to);
+        // Escalate the probe ×10 until the quoted output is large enough in
+        // integer units that truncation noise stays under ~0.05% (a
+        // 6-decimals quote leg quantizes hard for cheap base tokens), while
+        // keeping the probe small against Cyberia's tiny pools. The passing
+        // size is cached per market so steady-state polls sweep once.
+        const startProbe =
+            probeSizeCache.get(marketKey) ??
+            10n ** BigInt(Math.max(baseMeta.decimals - 2, 0));
+        let probeIn = startProbe;
+        let bestOut = 0n;
+
+        for (let attempt = 0; attempt < 5; attempt++) {
+            probeIn = startProbe * 10n ** BigInt(attempt);
+            // One tick so ethers batches the calls (≤20 per RPC batch).
+            const outs = await Promise.all(
+                paths.map(async (path) => {
+                    try {
+                        const amounts = (await readRouter.getAmountsOut(
+                            probeIn,
+                            path,
+                        )) as bigint[];
+
+                        return amounts[amounts.length - 1];
+                    } catch {
+                        return 0n;
+                    }
+                }),
+            );
+            bestOut = outs.reduce((a, b) => (b > a ? b : a), 0n);
+
+            if (seq !== probeSeq || bestOut >= 2000n) {
+                break;
+            }
+        }
+
+        if (seq !== probeSeq || bestOut === 0n) {
+            return;
+        }
+
+        if (bestOut >= 2000n) {
+            probeSizeCache.set(marketKey, probeIn);
+        }
+
+        const price =
+            Number(formatUnits(bestOut, quoteMeta.decimals)) /
+            Number(formatUnits(probeIn, baseMeta.decimals));
+
+        if (!Number.isFinite(price) || price <= 0) {
+            return;
+        }
+
+        livePriceHistory.value = [
+            ...livePriceHistory.value,
+            { at: Date.now(), price },
+        ];
+    } catch {
+        // Keep the last known point; the next poll retries.
+    }
 };
 
 const customTokens = ref<Token[]>([]);
@@ -602,10 +682,10 @@ const tokenMeta = async (
     return meta;
 };
 
-const loadSelectedPoolReserves = async (): Promise<void> => {
-    if (!tokenIn.value || !tokenOut.value || tokenIn.value === tokenOut.value) {
-        liveSelectedPool.value = null;
+const resolveLivePairAddress = async (): Promise<void> => {
+    livePairAddress.value = null;
 
+    if (!tokenIn.value || !tokenOut.value || tokenIn.value === tokenOut.value) {
         return;
     }
 
@@ -613,70 +693,45 @@ const loadSelectedPoolReserves = async (): Promise<void> => {
     const to = resolveAddr(tokenOut.value);
 
     if (from.toLowerCase() === to.toLowerCase()) {
-        liveSelectedPool.value = null;
+        return;
+    }
+
+    if (selectedPool.value?.pair_address) {
+        livePairAddress.value = selectedPool.value.pair_address;
 
         return;
     }
 
     try {
-        let pairAddress = selectedPool.value?.pair_address;
+        const factory = new Contract(
+            FACTORY,
+            [
+                'function getPair(address tokenA, address tokenB) view returns (address)',
+            ],
+            readProvider,
+        );
+        const pairAddress = (await factory.getPair(from, to)) as string;
 
-        if (!pairAddress) {
-            const factory = new Contract(
-                FACTORY,
-                [
-                    'function getPair(address tokenA, address tokenB) view returns (address)',
-                ],
-                readProvider,
-            );
-            pairAddress = (await factory.getPair(from, to)) as string;
-
-            if (/^0x0{40}$/i.test(pairAddress)) {
-                liveSelectedPool.value = null;
-
-                return;
-            }
+        // The selection may have moved on while the RPC round-tripped.
+        if (
+            resolveAddr(tokenIn.value).toLowerCase() !== from.toLowerCase() ||
+            resolveAddr(tokenOut.value).toLowerCase() !== to.toLowerCase()
+        ) {
+            return;
         }
 
-        const pair = new Contract(pairAddress, PAIR_ABI, readProvider);
-        const [token0, token1, reserves, meta0, meta1] = await Promise.all([
-            pair.token0() as Promise<string>,
-            pair.token1() as Promise<string>,
-            pair.getReserves() as Promise<[bigint, bigint, number]>,
-            tokenMeta(from),
-            tokenMeta(to),
-        ]);
-        const token0IsFrom = token0.toLowerCase() === from.toLowerCase();
-        const reserve0 = Number(
-            formatUnits(
-                reserves[0],
-                token0IsFrom ? meta0.decimals : meta1.decimals,
-            ),
-        );
-        const reserve1 = Number(
-            formatUnits(
-                reserves[1],
-                token0IsFrom ? meta1.decimals : meta0.decimals,
-            ),
-        );
-
-        liveSelectedPool.value = {
-            pairAddress,
-            token0,
-            token1,
-            reserve0,
-            reserve1,
-            updatedAt: Date.now(),
-        };
-        recordLiveSpotPrice();
+        livePairAddress.value = /^0x0{40}$/i.test(pairAddress)
+            ? null
+            : pairAddress;
     } catch {
-        liveSelectedPool.value = null;
+        livePairAddress.value = null;
     }
 };
 
 // --- swap form state ------------------------------------------------------
 const tokenIn = ref<string>(NATIVE);
-const tokenOut = ref<string>('');
+// CYBER → USDC by default so the page opens on the main market with a chart.
+const tokenOut = ref<string>(USDC_ADDRESS);
 const amountIn = ref('');
 const amountOut = ref('');
 // Which side the user last edited: 'in' quotes exact-input (getAmountsOut),
@@ -779,7 +834,7 @@ const impactClass = computed(() => {
 const HUBS = [
     WCYBER,
     CYBER_SOL_ADDRESS,
-    '0xdc25597B19799010047F17e9591EFE08EFd40077', // USDC
+    USDC_ADDRESS,
     '0x94845aF24a3E431593A2b941b2b31836dE45185D', // USDT
 ];
 
@@ -1071,16 +1126,24 @@ const onAmountEdited = (side: 'in' | 'out'): void => {
 };
 
 watch([tokenIn, tokenOut], scheduleQuote);
+watch([tokenIn, tokenOut], () => void resolveLivePairAddress(), {
+    immediate: true,
+});
+// Keyed on the oriented market so flipping the swap direction keeps the
+// accumulated live points instead of restarting the chart.
 watch(
-    [tokenIn, tokenOut],
+    chartPairKey,
     () => {
         resetLivePriceHistory();
-        void loadSelectedPoolReserves();
+        void probeLivePrice();
     },
     { immediate: true },
 );
 // A late-loading pair list can unlock better routes for an existing quote.
-watch(chainEdges, scheduleQuote);
+watch(chainEdges, () => {
+    scheduleQuote();
+    void probeLivePrice();
+});
 watch(
     tradingViewData,
     async (points) => {
@@ -1168,7 +1231,7 @@ const refreshBalances = (): void => {
 const onTabVisible = (): void => {
     if (!document.hidden) {
         refreshBalances();
-        void loadSelectedPoolReserves();
+        void probeLivePrice();
     }
 };
 
@@ -1374,7 +1437,7 @@ const doSwap = async (): Promise<void> => {
         await Promise.all([
             loadSide('in'),
             loadSide('out'),
-            loadSelectedPoolReserves(),
+            probeLivePrice(),
         ]);
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
@@ -1419,7 +1482,7 @@ onMounted(async () => {
     }, BALANCE_POLL_MS);
     chartTimer = setInterval(() => {
         if (!document.hidden) {
-            void loadSelectedPoolReserves();
+            void probeLivePrice();
         }
     }, CHART_POLL_MS);
     window.addEventListener('focus', onTabVisible);
@@ -1480,12 +1543,8 @@ onBeforeUnmount(() => {
                             <div>
                                 <p class="text-muted-foreground">Pair</p>
                                 <p class="font-mono">
-                                    {{
-                                        selectedPool?.symbol0 ??
-                                        symbolOf(tokenIn)
-                                    }}/{{
-                                        selectedPool?.symbol1 ??
-                                        symbolOf(tokenOut)
+                                    {{ symbolOf(chartBase) }}/{{
+                                        symbolOf(chartQuote)
                                     }}
                                 </p>
                             </div>
@@ -1517,7 +1576,7 @@ onBeforeUnmount(() => {
                                 <p class="text-muted-foreground">
                                     Spot
                                     <span
-                                        v-if="liveSelectedPool"
+                                        v-if="liveSpotPrice !== null"
                                         class="text-emerald-500"
                                         >live</span
                                     >
@@ -1555,7 +1614,7 @@ onBeforeUnmount(() => {
                         v-else
                         class="flex h-40 items-center justify-center text-center text-sm text-muted-foreground"
                     >
-                        Select a direct pool pair to view its TradingView chart.
+                        Select two tokens to view their market chart.
                     </div>
                 </div>
 
