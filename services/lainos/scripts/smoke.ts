@@ -3,7 +3,7 @@
  * End-to-end smoke test: drives the runtime through several turns with the
  * offline mock model and a real Cyberia chain read. Run: npm run smoke
  */
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentRuntime, createAgent, FileMemoryStore, type ModelProvider, type ModelRequest } from "../src/index.js";
@@ -171,6 +171,76 @@ async function main() {
       ev.job.status === "ok" &&
       forge.getWish(wish.id)?.status === "done";
   }
+
+  // --- forge provider selection: runtime switch persists and affects new jobs ---
+  let forgeProviderSwitchOk = false;
+  const switchDataDir = mkdtempSync(join(tmpdir(), "lainos-forge-provider-"));
+  const fakeBinDir = mkdtempSync(join(tmpdir(), "lainos-forge-bin-"));
+  for (const bin of ["claude", "codex"]) {
+    const path = join(fakeBinDir, bin);
+    writeFileSync(path, "#!/bin/sh\nexit 0\n");
+    chmodSync(path, 0o755);
+  }
+  const prevPath = process.env.PATH;
+  process.env.PATH = `${fakeBinDir}:${prevPath ?? ""}`;
+  const forgeProviderSettings = {
+    ...process.env,
+    LAINOS_DATA_DIR: switchDataDir,
+    LAINOS_FORGE_REPO: switchDataDir,
+    LAINOS_FORGE_AUTO: "0",
+    LAINOS_FORGE_CMD: "",
+    LAINOS_FORGE_AGENT: "claude",
+  };
+  const switchRuntime = new AgentRuntime({
+    character: lain,
+    memory: new FileMemoryStore(switchDataDir),
+    model: refusalModel,
+    settings: forgeProviderSettings,
+  });
+  switchRuntime.use({
+    ...forgePlugin,
+    services: [new ForgeService()],
+  });
+  await switchRuntime.start();
+  const switchForge = switchRuntime.getService<ForgeService>("forge")!;
+  const initialProvider = switchForge.forgeProvider().selected;
+  const switched = await switchForge.setProvider("codex");
+  const switchWish = await switchForge.addWish({ title: "provider switch smoke", reporter: "tester" });
+  const switchFinished = new Promise<ForgeEvent>((res) =>
+    switchForge.onEvent((ev) => ev.kind === "job_finished" && res(ev)),
+  );
+  const switchJob = await switchForge.buildWish(switchWish.id);
+  const switchEv = await Promise.race([
+    switchFinished,
+    new Promise<null>((res) => setTimeout(() => res(null), 15_000)),
+  ]);
+  await switchRuntime.stop();
+
+  const restartRuntime = new AgentRuntime({
+    character: lain,
+    memory: new FileMemoryStore(switchDataDir),
+    model: refusalModel,
+    settings: forgeProviderSettings,
+  });
+  restartRuntime.use({
+    ...forgePlugin,
+    services: [new ForgeService()],
+  });
+  await restartRuntime.start();
+  const restartedProvider = restartRuntime.getService<ForgeService>("forge")?.forgeProvider().selected;
+  await restartRuntime.stop();
+  process.env.PATH = prevPath;
+
+  const storedForge = JSON.parse(readFileSync(join(switchDataDir, "forge.json"), "utf8")) as { selectedAgent?: string };
+  forgeProviderSwitchOk =
+    initialProvider === "claude" &&
+    typeof switched !== "string" &&
+    switched.provider === "codex" &&
+    typeof switchJob !== "string" &&
+    switchJob.agent === "codex" &&
+    switchEv?.job.status === "ok" &&
+    storedForge.selectedAgent === "codex" &&
+    restartedProvider === "codex";
 
   // --- skills: she can write herself a tool and use it seconds later ---
   const skillsSvc = agent.getService<SkillsService>("skills");
@@ -403,6 +473,7 @@ async function main() {
   console.log(`LAIN token registry      : ${lainTokenKnown ? "PASS" : "FAIL"}`);
   console.log(`forge wish logged        : ${wishLogged ? "PASS" : "FAIL"}`);
   console.log(`forge wish -> done       : ${wishForged ? "PASS" : "FAIL"}`);
+  console.log(`forge provider switch    : ${forgeProviderSwitchOk ? "PASS" : "FAIL"}`);
   console.log(`skills hot self-extend   : ${skillsOk ? "PASS" : "FAIL"}`);
   console.log(`trade journal cost basis : ${journalOk ? "PASS" : "FAIL"}`);
   console.log(`initiative quiet hours   : ${quietOk ? "PASS" : "FAIL"}`);
@@ -418,7 +489,7 @@ async function main() {
   await agent.stop();
   const ok =
     learnedName && ranBalance && nullIsZero && forcedPnl && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
-    walletOk && lainTokenKnown && wishLogged && wishForged && skillsOk && journalOk && quietOk &&
+    walletOk && lainTokenKnown && wishLogged && wishForged && forgeProviderSwitchOk && skillsOk && journalOk && quietOk &&
     rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
     githubOk && channelOk && telegramOk;
   console.log(`\n${ok ? "✅ smoke OK" : "❌ smoke FAILED"}`);

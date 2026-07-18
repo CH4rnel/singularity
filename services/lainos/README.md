@@ -169,7 +169,9 @@ Forge coding-agent jobs have their own longer transcripts in `data/forge/*.log`.
     current branch and commits it** — her learning lands in place, no
     `lain/<wish-id>` side branches. Commits are **never pushed**; publishing
     stays with the operator.
-    Force an agent with `LAINOS_FORGE_AGENT=claude|codex`. Choose the coding
+    Seed the initial agent with `LAINOS_FORGE_AGENT=claude|codex`, then switch
+    the live daemon with `set_forge_provider` (persisted in `data/forge.json`;
+    running and already queued jobs keep their recorded worker). Choose the coding
     model with `LAINOS_FORGE_MODEL` (or `LAINOS_FORGE_CLAUDE_MODEL` /
     `LAINOS_FORGE_CODEX_MODEL` for per-agent overrides). For unattended
     self-upgrades on a trusted host, set `LAINOS_FORGE_YOLO=1`: Codex is
@@ -183,8 +185,9 @@ Forge coding-agent jobs have their own longer transcripts in `data/forge/*.log`.
   - **auto mode** (default on): when the forge is idle it picks the oldest
     open wish and builds it unprompted — set `LAINOS_FORGE_AUTO=0` to require
     an explicit `build_wish`;
-  - `forge_status` / `list_wishes` / `update_wish` — progress, backlog,
-    close/reject/retry. Job transcripts live in `data/forge/*.log`.
+  - `forge_status` / `set_forge_provider` / `list_wishes` / `update_wish` —
+    current provider, live switching, progress, backlog, close/reject/retry.
+    Job transcripts live in `data/forge/*.log`.
 
   One job runs at a time; when it finishes, the wish's reporter is notified in
   their Telegram chat (`done` = committed, `failed` = transcript kept). When

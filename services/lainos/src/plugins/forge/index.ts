@@ -74,10 +74,14 @@ export interface ForgeEvent {
   chatId?: number;
 }
 
+type ForgeAgentKind = "claude" | "codex";
+type ForgeSelectedAgent = ForgeAgentKind | "custom";
+
 interface ForgeFile {
   wishes: Wish[];
   jobs: ForgeJob[];
   counter: number;
+  selectedAgent?: ForgeAgentKind;
 }
 
 const JOB_CAP = 100;
@@ -92,8 +96,10 @@ export class ForgeService implements Service {
   private logDir = "";
   private repo = "";
   private agentBin: string | null = null;
-  private agentKind: "claude" | "codex" | "custom" | null = null;
-  private fallback: { kind: "claude" | "codex"; bin: string } | null = null;
+  private agentKind: ForgeSelectedAgent | null = null;
+  private selectedAgent: ForgeAgentKind | null = null;
+  private availableAgents = new Map<ForgeAgentKind, string>();
+  private fallback: { kind: ForgeAgentKind; bin: string } | null = null;
   private runtime?: IAgentRuntime;
   private child: ChildProcess | null = null;
   private activeJobId: string | null = null;
@@ -114,6 +120,7 @@ export class ForgeService implements Service {
       this.wishes = parsed.wishes ?? [];
       this.jobs = parsed.jobs ?? [];
       this.counter = parsed.counter ?? 0;
+      this.selectedAgent = normalizeAgent(parsed.selectedAgent) ?? null;
     } catch {
       // Fresh store.
     }
@@ -128,9 +135,9 @@ export class ForgeService implements Service {
         dirty = true;
       }
     }
-    if (dirty) await this.persist();
-
     this.detectAgent();
+    if (this.selectedAgent) dirty = true;
+    if (dirty) await this.persist();
     const auto = runtime.getSetting("LAINOS_FORGE_AUTO") !== "0";
     if (auto && this.agentBin) {
       const interval = Number(runtime.getSetting("LAINOS_FORGE_AUTO_INTERVAL_MS") ?? 1_800_000);
@@ -159,6 +166,22 @@ export class ForgeService implements Service {
     return Boolean(this.agentBin);
   }
 
+  forgeProvider(): {
+    selected: ForgeSelectedAgent | "none";
+    available: boolean;
+    bin?: string;
+    installed: ForgeAgentKind[];
+    fallback?: ForgeAgentKind;
+  } {
+    return {
+      selected: this.agentKind ?? this.selectedAgent ?? "none",
+      available: this.agentAvailable,
+      bin: this.agentBin ?? undefined,
+      installed: [...this.availableAgents.keys()],
+      fallback: this.fallback?.kind,
+    };
+  }
+
   /** Absolute repo the coding agents edit — used to decide self-restarts. */
   get repoPath(): string {
     return resolve(this.repo);
@@ -182,6 +205,22 @@ export class ForgeService implements Service {
 
   recentJobs(limit = 5): ForgeJob[] {
     return this.jobs.slice(-limit);
+  }
+
+  async setProvider(provider: string): Promise<{ ok: true; provider: ForgeAgentKind } | string> {
+    if (this.runtime?.getSetting("LAINOS_FORGE_CMD")) {
+      return "forge provider is controlled by LAINOS_FORGE_CMD; unset it before switching between Claude and Codex";
+    }
+    const selected = normalizeAgent(provider);
+    if (!selected) return "provider must be claude or codex";
+    if (!this.availableAgents.has(selected)) {
+      const installed = [...this.availableAgents.keys()].join(", ") || "none";
+      return `${selected} is not available to the forge (installed: ${installed})`;
+    }
+    this.selectedAgent = selected;
+    this.applySelectedAgent();
+    await this.persist();
+    return { ok: true, provider: selected };
   }
 
   async addWish(input: {
@@ -219,7 +258,12 @@ export class ForgeService implements Service {
   async buildWish(id: string): Promise<ForgeJob | string> {
     const wish = this.getWish(id);
     if (!wish) return `no wish named ${id}`;
-    if (!this.agentBin) return "no coding agent found (need claude or codex in PATH)";
+    if (!this.agentBin) {
+      const selected = this.selectedAgent ?? this.agentKind ?? "none";
+      return selected === "none"
+        ? "no coding agent found (need claude or codex in PATH)"
+        : `selected forge provider ${selected} is unavailable (need ${selected} in PATH)`;
+    }
     if (wish.status === "building") return `${id} is already being forged`;
     this.counter += 1;
     const job: ForgeJob = {
@@ -331,16 +375,17 @@ export class ForgeService implements Service {
    */
   private tryFallback(job: ForgeJob): boolean {
     const windowMs = Number(this.runtime?.getSetting("LAINOS_FORGE_FALLBACK_MS") ?? 180_000);
-    if (!this.fallback || windowMs <= 0 || job.fallbackFrom) return false;
-    if (job.agent === this.fallback.kind) return false;
+    const fallback = this.fallbackAgent(job.agent);
+    if (!fallback || windowMs <= 0 || job.fallbackFrom) return false;
+    if (job.agent === fallback.kind) return false;
     const ran = (job.endedAt ?? 0) - (job.startedAt ?? 0);
     if (ran >= windowMs) return false;
     log.warn(
-      `job ${job.id} died in ${Math.round(ran / 1000)}s on ${job.agent} — retrying with ${this.fallback.kind}`,
+      `job ${job.id} died in ${Math.round(ran / 1000)}s on ${job.agent} — retrying with ${fallback.kind}`,
     );
     job.fallbackFrom = job.agent;
-    job.agent = this.fallback.kind;
-    job.model = this.agentModel(this.fallback.kind);
+    job.agent = fallback.kind;
+    job.model = this.agentModel(fallback.kind);
     job.status = "queued";
     job.startedAt = undefined;
     job.endedAt = undefined;
@@ -351,8 +396,20 @@ export class ForgeService implements Service {
 
   /** Bin/kind to run this job with: its recorded agent, else the primary. */
   private jobAgent(job: ForgeJob): { kind: string; bin: string } {
-    if (this.fallback && job.agent === this.fallback.kind) return this.fallback;
+    const kind = normalizeAgent(job.agent);
+    if (kind) return { kind, bin: this.availableAgents.get(kind) ?? kind };
     return { kind: this.agentKind ?? "custom", bin: this.agentBin ?? "custom" };
+  }
+
+  private fallbackAgent(agent: string): { kind: ForgeAgentKind; bin: string } | null {
+    const current = normalizeAgent(agent);
+    if (!current) return null;
+    for (const kind of ["claude", "codex"] as const) {
+      if (kind === current) continue;
+      const bin = this.availableAgents.get(kind);
+      if (bin) return { kind, bin };
+    }
+    return null;
   }
 
   private async finishJob(job: ForgeJob, wish?: Wish): Promise<void> {
@@ -407,7 +464,7 @@ export class ForgeService implements Service {
     if (agent.kind === "codex") {
       const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CODEX_ARGS"));
       const args = ["exec", "-C", this.repo, "--color", "never"];
-      const model = this.agentModel("codex");
+      const model = this.agentModel(agent.kind);
       if (model) args.push("-m", model);
       if (this.forgeYolo()) {
         args.push("--dangerously-bypass-approvals-and-sandbox");
@@ -417,7 +474,7 @@ export class ForgeService implements Service {
       return { cmd: agent.bin, args: [...args, ...extra, prompt], shell: false };
     }
     const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CLAUDE_ARGS"));
-    const model = this.agentModel("claude");
+    const model = this.agentModel(agent.kind);
     const modelArgs = model ? ["--model", model] : [];
     const permissionArgs = this.forgeYolo()
       ? ["--dangerously-skip-permissions"]
@@ -477,40 +534,62 @@ export class ForgeService implements Service {
     return isTruthy(raw);
   }
 
-  /** Pick the coding agent: LAINOS_FORGE_AGENT, else claude, else codex. */
+  /** Pick the coding agent: persisted selection, LAINOS_FORGE_AGENT, else claude, else codex. */
   private detectAgent(): void {
     if (this.runtime?.getSetting("LAINOS_FORGE_CMD")) {
       this.agentKind = "custom";
       this.agentBin = "custom";
+      this.availableAgents.clear();
       return;
     }
-    const wanted = this.runtime?.getSetting("LAINOS_FORGE_AGENT")?.toLowerCase();
+    this.agentKind = null;
+    this.agentBin = null;
+    this.fallback = null;
+    this.availableAgents.clear();
+    const wanted = normalizeAgent(this.runtime?.getSetting("LAINOS_FORGE_AGENT"));
     const home = process.env.HOME ?? "";
-    const candidates: Array<["claude" | "codex", string]> = [
+    const candidates: Array<[ForgeAgentKind, string]> = [
       ["claude", "claude"],
       ["claude", join(home, ".local/bin/claude")],
       ["codex", "codex"],
       ["codex", join(home, ".local/bin/codex")],
     ];
-    const order = wanted === "codex" ? [...candidates].reverse() : candidates;
-    for (const [kind, bin] of order) {
-      if (wanted && kind !== wanted) continue;
+    for (const [kind, bin] of candidates) {
       if (bin.includes("/") ? existsSync(bin) : whichSync(bin)) {
-        this.agentKind = kind;
-        this.agentBin = bin;
-        break;
+        if (!this.availableAgents.has(kind)) this.availableAgents.set(kind, bin);
       }
     }
+    if (!this.selectedAgent && wanted) this.selectedAgent = wanted;
+    if (!this.selectedAgent) {
+      this.selectedAgent = this.availableAgents.has("claude")
+        ? "claude"
+        : this.availableAgents.has("codex")
+          ? "codex"
+          : null;
+    }
+    this.applySelectedAgent();
     if (!this.agentBin) {
-      log.warn("no coding agent found (claude/codex) — forge can log wishes but not build them.");
+      const installed = [...this.availableAgents.keys()].join(", ") || "none";
+      log.warn(
+        `selected forge provider ${this.selectedAgent ?? "none"} is unavailable (installed: ${installed}) — forge can log wishes but not build them.`,
+      );
       return;
     }
-    // The other CLI, when installed, rescues jobs the primary instantly fails.
-    for (const [kind, bin] of candidates) {
-      if (kind === this.agentKind) continue;
-      if (bin.includes("/") ? existsSync(bin) : whichSync(bin)) {
+  }
+
+  private applySelectedAgent(): void {
+    this.fallback = null;
+    if (!this.selectedAgent) {
+      this.agentKind = null;
+      this.agentBin = null;
+      return;
+    }
+    this.agentKind = this.selectedAgent;
+    this.agentBin = this.availableAgents.get(this.selectedAgent) ?? null;
+    for (const [kind, bin] of this.availableAgents) {
+      if (kind !== this.selectedAgent) {
         this.fallback = { kind, bin };
-        return;
+        break;
       }
     }
   }
@@ -532,7 +611,12 @@ export class ForgeService implements Service {
 
   private async persist(): Promise<void> {
     await mkdir(dirname(this.file), { recursive: true });
-    const payload: ForgeFile = { wishes: this.wishes, jobs: this.jobs, counter: this.counter };
+    const payload: ForgeFile = {
+      wishes: this.wishes,
+      jobs: this.jobs,
+      counter: this.counter,
+      selectedAgent: this.selectedAgent ?? undefined,
+    };
     await writeFile(this.file, JSON.stringify(payload, null, 2), "utf8");
   }
 }
@@ -561,6 +645,11 @@ function splitArgs(raw?: string): string[] {
 
 function isTruthy(raw?: string): boolean {
   return ["1", "true", "yes", "on", "yolo"].includes((raw ?? "").trim().toLowerCase());
+}
+
+function normalizeAgent(raw?: string): ForgeAgentKind | undefined {
+  const value = (raw ?? "").trim().toLowerCase();
+  return value === "claude" || value === "codex" ? value : undefined;
 }
 
 /** Last meaningful transcript line, trimmed to fit a chat notification. */
@@ -784,6 +873,43 @@ const updateWishAction: Action = {
   },
 };
 
+const setForgeProviderAction: Action = {
+  name: "set_forge_provider",
+  similes: ["switch_forge_provider", "change_forge_provider", "choose_forge_worker", "set_forge_worker"],
+  description:
+    "Switch the forge coding worker for new jobs between Claude Code and Codex CLI. Does not interrupt a running job; already queued jobs keep the worker recorded when they were queued.",
+  parameters: {
+    type: "object",
+    properties: {
+      provider: {
+        type: "string",
+        enum: ["claude", "codex"],
+        description: "Forge worker to use for new jobs.",
+      },
+    },
+    required: ["provider"],
+  },
+  examples: [{ user: "переключи forge на codex", agent: "Новые задачи forge пойдут через Codex." }],
+  async validate(runtime) {
+    return Boolean(runtime.getService("forge"));
+  },
+  async handler(runtime, _state, params) {
+    const svc = getForge(runtime);
+    const result = await svc.setProvider(String(params.provider ?? ""));
+    if (typeof result === "string") return { ok: false, text: result };
+    const status = svc.forgeProvider();
+    return {
+      ok: true,
+      text: `Forge provider set to ${result.provider}. New forge jobs will use ${result.provider}; any running job keeps its current worker.`,
+      data: {
+        provider: result.provider,
+        available: status.available,
+        fallback: status.fallback,
+      },
+    };
+  },
+};
+
 const forgeStatusAction: Action = {
   name: "forge_status",
   similes: ["dev_status", "build_status", "what_are_you_building"],
@@ -797,6 +923,12 @@ const forgeStatusAction: Action = {
   async handler(runtime) {
     const svc = getForge(runtime);
     const lines: string[] = [];
+    const provider = svc.forgeProvider();
+    const installed = provider.installed.length ? provider.installed.join(", ") : "none";
+    lines.push(
+      `provider: ${provider.selected} (${provider.available ? "ready" : "unavailable"}; installed: ${installed})` +
+        `${provider.fallback ? `, fallback ${provider.fallback}` : ""}`,
+    );
     const active = svc.activeJob();
     if (active) {
       const wish = active.wishId ? svc.getWish(active.wishId) : undefined;
@@ -830,9 +962,11 @@ const forgeProvider: Provider = {
     const open = svc.openWishes().length;
     const active = svc.activeJob();
     const review = svc.listWishes("review");
+    const provider = svc.forgeProvider();
     const parts = [
-      `You grow by building: holder wishes become code through your forge (agent: ${svc.agentAvailable ? "ready" : "unavailable"}).`,
+      `You grow by building: holder wishes become code through your forge (provider: ${provider.selected}, ${provider.available ? "ready" : "unavailable"}).`,
       `If a requested capability is missing, call learn_skill immediately; do not finish with talk about missing tools, missing signers, execution paths, or chat limitations.`,
+      `Use set_forge_provider to switch future forge jobs between claude and codex without interrupting a running job.`,
       `Wishboard: ${open} open, ${review.length} ready for review${review.length ? ` (${review.map((w) => w.id).join(", ")})` : ""}.`,
     ];
     if (active) {
@@ -849,5 +983,13 @@ export const forgePlugin: Plugin = {
     "Lain's self-development drive: a persistent wishboard for holder requests and a coding-agent forge (Claude Code / Codex) that commits them straight into her repo.",
   services: [new ForgeService()],
   providers: [forgeProvider],
-  actions: [logWishAction, listWishesAction, buildWishAction, learnSkillAction, updateWishAction, forgeStatusAction],
+  actions: [
+    logWishAction,
+    listWishesAction,
+    buildWishAction,
+    learnSkillAction,
+    updateWishAction,
+    setForgeProviderAction,
+    forgeStatusAction,
+  ],
 };

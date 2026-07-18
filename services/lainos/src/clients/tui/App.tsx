@@ -790,13 +790,17 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         case "wishes": {
           const forge = runtime.getService<ForgeService>("forge");
           const wishes = forge?.listWishes() ?? [];
+          const provider = forge?.forgeProvider();
+          const providerLine = provider
+            ? `forge provider: ${provider.selected} (${provider.available ? "ready" : "unavailable"})\n`
+            : "";
           pushHistory(
             sysTurn(
               wishes.length
-                ? `wishboard (${wishes.length}):\n${wishes
+                ? `${providerLine}wishboard (${wishes.length}):\n${wishes
                     .map((w) => `  ${w.id} [${w.status}] ${w.title} — ${w.reporter}${w.branch ? `, ${w.branch}` : ""}`)
                     .join("\n")}`
-                : "the wishboard is empty — tell lain what you wish for.",
+                : `${providerLine}the wishboard is empty — tell lain what you wish for.`,
             ),
           );
           break;
