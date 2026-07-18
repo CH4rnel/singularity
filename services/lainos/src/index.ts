@@ -18,6 +18,7 @@ import { cyberiaPlugin } from "./plugins/cyberia/index.js";
 import { forgePlugin } from "./plugins/forge/index.js";
 import { githubPlugin } from "./plugins/github/index.js";
 import { initiativePlugin } from "./plugins/initiative/index.js";
+import { presencePlugin } from "./plugins/presence/index.js";
 import { scoutPlugin } from "./plugins/scout/index.js";
 import { sentinelPlugin } from "./plugins/sentinel/index.js";
 import { skillsPlugin } from "./plugins/skills/index.js";
@@ -71,6 +72,8 @@ export { telegramPlugin, resolveOperatorChatId, sendToOperator } from "./plugins
 export { skillsPlugin, SkillsService } from "./plugins/skills/index.js";
 export type { SkillModule } from "./plugins/skills/index.js";
 export { initiativePlugin, InitiativeService } from "./plugins/initiative/index.js";
+export { presencePlugin, PresenceService } from "./plugins/presence/index.js";
+export type { PresenceJournalEntry, PresenceState } from "./plugins/presence/index.js";
 export { traderPlugin, TraderService } from "./plugins/trader/index.js";
 export type { TraderEvent } from "./plugins/trader/index.js";
 export { TradeJournal, applyBuy, applySell } from "./plugins/cyberia/journal.js";
@@ -93,6 +96,7 @@ const BUILTIN_PLUGINS: Record<string, Plugin> = {
   skills: skillsPlugin,
   trader: traderPlugin,
   initiative: initiativePlugin,
+  presence: presencePlugin,
 };
 
 export interface CreateAgentOptions {
