@@ -49,7 +49,7 @@ import {
 } from '@/lib/cyberiaTokens';
 import type { AprSnapshot } from '@/lib/dexApr';
 import { aprByPair, formatApr } from '@/lib/dexApr';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import { track } from '@/lib/track';
 
 const CYBERIA_CHAIN_ID = 49406;
@@ -1264,10 +1264,10 @@ const pickToken = (side: 'in' | 'out', val: unknown): void => {
 
 // --- network / execution ------------------------------------------------
 const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getMetaMaskProvider();
+    const eth = getSelectedEvmProvider();
 
     if (!eth) {
-        throw new Error('MetaMask not found');
+        throw new Error('EVM wallet not found');
     }
 
     const provider = new BrowserProvider(eth);

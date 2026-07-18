@@ -1,6 +1,13 @@
 import { BrowserProvider, Contract, formatEther, formatUnits } from 'ethers';
 import { ref } from 'vue';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import {
+    getEvmWalletProvider,
+    getEvmWalletProviders,
+    getMetaMaskProvider,
+    getSelectedEvmProvider,
+    selectEvmWalletProvider,
+} from '@/lib/evmProvider';
+import type { EvmWalletProvider } from '@/lib/evmProvider';
 import { track } from '@/lib/track';
 import type { EthereumProvider } from '@/types/global';
 
@@ -35,22 +42,43 @@ const balance = ref<string | null>(null);
 const chainId = ref<number | null>(null);
 const error = ref<string | null>(null);
 const cyberBalance = ref<TokenBalance | null>(null);
+const walletProviders = ref<EvmWalletProvider[]>([]);
+const selectedWalletName = ref<string | null>(null);
 let listenersSetup = false;
+let listenerProvider: EthereumProvider | null = null;
+let accountChangedHandler: ((accounts: unknown) => void) | null = null;
+let chainChangedHandler: (() => void) | null = null;
+let disconnectHandler: (() => void) | null = null;
 let restored = false;
 
-// The MetaMask provider, resolved via EIP-6963 so we never fall through to
-// Phantom (or another wallet) when several are installed.
-const getProvider = (): EthereumProvider | null => getMetaMaskProvider();
+const refreshWalletProviders = (): EvmWalletProvider[] => {
+    walletProviders.value = getEvmWalletProviders();
+
+    return walletProviders.value;
+};
+
+const getDefaultWalletProvider = (): EvmWalletProvider | null => {
+    const providers = refreshWalletProviders();
+
+    return (
+        providers.find((wallet) => wallet.rdns === 'io.metamask') ??
+        providers[0] ??
+        null
+    );
+};
+
+const getProvider = (): EthereumProvider | null => getSelectedEvmProvider();
 
 export const useWallet = () => {
-    const isMetaMaskInstalled = (): boolean => getProvider() !== null;
+    const isMetaMaskInstalled = (): boolean => getMetaMaskProvider() !== null;
 
     // Kept for callers that only care that *some* EVM wallet exists.
-    const isEvmProviderInstalled = isMetaMaskInstalled;
+    const isEvmProviderInstalled = (): boolean =>
+        refreshWalletProviders().length > 0;
 
     /**
      * Restore wallet state from the authenticated user's saved wallet_address
-     * and try to silently reconnect via MetaMask (eth_accounts — no popup).
+     * and try to silently reconnect via an injected wallet (eth_accounts — no popup).
      * Should be called once on app mount.
      */
     const restore = async (savedAddress?: string | null): Promise<void> => {
@@ -61,42 +89,57 @@ export const useWallet = () => {
         restored = true;
 
         // If user has a wallet_address saved in DB, set it immediately
-        // so the UI shows the address even before MetaMask responds
+        // so the UI shows the address even before an injected wallet responds.
         if (savedAddress) {
             address.value = savedAddress;
             isConnected.value = true;
         }
 
-        // Try silent reconnect through MetaMask (no popup)
-        const provider = getProvider();
+        // Try silent reconnect through injected wallets (no popup).
+        const providers = refreshWalletProviders();
 
-        if (provider) {
+        for (const wallet of providers) {
             try {
-                const accounts = (await provider.request({
+                const accounts = (await wallet.provider.request({
                     method: 'eth_accounts',
                 })) as string[];
 
                 if (accounts.length > 0) {
-                    address.value = accounts[0];
+                    const account = accounts[0];
+
+                    if (
+                        savedAddress &&
+                        account.toLowerCase() !== savedAddress.toLowerCase()
+                    ) {
+                        continue;
+                    }
+
+                    selectEvmWalletProvider(wallet);
+                    selectedWalletName.value = wallet.name;
+                    address.value = account;
                     isConnected.value = true;
                     setupListeners();
                     // Fire-and-forget — don't block UI
                     fetchBalance();
                     fetchChainId();
                     fetchCyberBalance();
+
+                    break;
                 }
             } catch {
-                // MetaMask not available or rejected — keep savedAddress if any
+                // Wallet not available or not authorized — keep savedAddress if any.
             }
         }
     };
 
-    const connect = async (): Promise<string | null> => {
-        const provider = getProvider();
+    const connect = async (walletId?: string): Promise<string | null> => {
+        const wallet = walletId
+            ? getEvmWalletProvider(walletId)
+            : getDefaultWalletProvider();
 
-        if (!provider) {
+        if (!wallet) {
             error.value =
-                'MetaMask not detected. Install MetaMask, or disable other wallets that hijack the EVM provider.';
+                'No EVM wallet detected. Install MetaMask, Rabby, Coinbase Wallet, Trust Wallet, OKX, or another injected EVM wallet.';
 
             return null;
         }
@@ -105,7 +148,11 @@ export const useWallet = () => {
         isConnecting.value = true;
 
         try {
-            const accounts = (await provider.request({
+            removeListeners();
+            selectEvmWalletProvider(wallet);
+            selectedWalletName.value = wallet.name;
+
+            const accounts = (await wallet.provider.request({
                 method: 'eth_requestAccounts',
             })) as string[];
 
@@ -116,7 +163,13 @@ export const useWallet = () => {
             address.value = accounts[0];
             isConnected.value = true;
 
-            track('wallet_connected', { wallet_address: accounts[0] });
+            track('wallet_connected', {
+                wallet_address: accounts[0],
+                metadata: {
+                    wallet_provider: wallet.name,
+                    wallet_provider_source: wallet.source,
+                },
+            });
 
             await fetchBalance();
             await fetchChainId();
@@ -130,6 +183,8 @@ export const useWallet = () => {
                 err instanceof Error ? err.message : 'Failed to connect wallet';
             isConnected.value = false;
             address.value = null;
+            selectEvmWalletProvider(null);
+            selectedWalletName.value = null;
 
             return null;
         } finally {
@@ -144,6 +199,8 @@ export const useWallet = () => {
         chainId.value = null;
         error.value = null;
         cyberBalance.value = null;
+        selectedWalletName.value = null;
+        selectEvmWalletProvider(null);
         removeListeners();
     };
 
@@ -241,8 +298,9 @@ export const useWallet = () => {
         }
 
         listenersSetup = true;
+        listenerProvider = injected;
 
-        injected.on('accountsChanged', (accounts: unknown) => {
+        accountChangedHandler = (accounts: unknown) => {
             const accs = accounts as string[];
 
             if (accs.length === 0) {
@@ -252,21 +310,25 @@ export const useWallet = () => {
                 fetchBalance();
                 fetchCyberBalance();
             }
-        });
+        };
 
-        injected.on('chainChanged', () => {
+        chainChangedHandler = () => {
             fetchChainId();
             fetchBalance();
             fetchCyberBalance();
-        });
+        };
 
-        injected.on('disconnect', () => {
+        disconnectHandler = () => {
             disconnect();
-        });
+        };
+
+        injected.on('accountsChanged', accountChangedHandler);
+        injected.on('chainChanged', chainChangedHandler);
+        injected.on('disconnect', disconnectHandler);
     };
 
     const removeListeners = (): void => {
-        const injected = getProvider();
+        const injected = listenerProvider;
 
         if (!injected) {
             return;
@@ -274,9 +336,22 @@ export const useWallet = () => {
 
         listenersSetup = false;
 
-        injected.removeAllListeners?.('accountsChanged');
-        injected.removeAllListeners?.('chainChanged');
-        injected.removeAllListeners?.('disconnect');
+        if (accountChangedHandler) {
+            injected.removeListener('accountsChanged', accountChangedHandler);
+        }
+
+        if (chainChangedHandler) {
+            injected.removeListener('chainChanged', chainChangedHandler);
+        }
+
+        if (disconnectHandler) {
+            injected.removeListener('disconnect', disconnectHandler);
+        }
+
+        listenerProvider = null;
+        accountChangedHandler = null;
+        chainChangedHandler = null;
+        disconnectHandler = null;
     };
 
     const formatAddress = (addr: string, chars = 4): string => {
@@ -291,8 +366,11 @@ export const useWallet = () => {
         chainId,
         error,
         cyberBalance,
+        walletProviders,
+        selectedWalletName,
         isMetaMaskInstalled,
         isEvmProviderInstalled,
+        refreshWalletProviders,
         connect,
         disconnect,
         restore,

@@ -81,7 +81,7 @@ const handleConnect = async () => {
 };
 
 onMounted(() => {
-    if (wallet.isMetaMaskInstalled() && !wallet.isConnected.value) {
+    if (wallet.isEvmProviderInstalled() && !wallet.isConnected.value) {
         wallet.connect().then((address) => {
             if (address) {
                 authenticate(address);

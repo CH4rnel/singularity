@@ -16,7 +16,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import TokenCandlesChart from '@/components/launchpad/TokenCandlesChart.vue';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import { formatNum, formatPrice } from '@/lib/launchpadChart';
 import type { TokenCandle } from '@/lib/launchpadChart';
 
@@ -281,10 +281,10 @@ const sortedRecent = computed<LaunchedToken[]>(() => {
 });
 
 const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getMetaMaskProvider();
+    const eth = getSelectedEvmProvider();
 
     if (!eth) {
-        throw new Error('MetaMask not found');
+        throw new Error('EVM wallet not found');
     }
 
     const provider = new BrowserProvider(eth);
@@ -1400,7 +1400,7 @@ onMounted(async () => {
                             v-if="wallet.isConnecting.value"
                             class="spin"
                         />
-                        Connect MetaMask
+                        Connect wallet
                     </button>
                     <button
                         v-else

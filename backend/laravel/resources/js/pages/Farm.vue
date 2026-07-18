@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWallet } from '@/composables/useWallet';
 import { CYBER_SOL_ADDRESS, WCYBER_ADDRESS } from '@/lib/cyberiaTokens';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import { formatUsd } from '@/lib/tokenFormat';
 
 const CYBERIA_CHAIN_ID = 49406;
@@ -695,10 +695,10 @@ async function refreshLive(): Promise<void> {
 }
 
 const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getMetaMaskProvider();
+    const eth = getSelectedEvmProvider();
 
     if (!eth) {
-        throw new Error('MetaMask not found');
+        throw new Error('EVM wallet not found');
     }
 
     const provider = new BrowserProvider(eth);

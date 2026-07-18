@@ -52,7 +52,7 @@ export type SpinResult = {
     nonce: number;
 };
 
-interface PhantomLike {
+interface SolanaTransactionWallet {
     publicKey: { toBase58(): string } | null;
     signAndSendTransaction(
         tx: Transaction,
@@ -90,7 +90,7 @@ export const useSlotMachine = (rpcUrlOverride?: string) => {
         name === 'token-2022' ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
 
     const spin = async (
-        phantom: PhantomLike,
+        wallet: SolanaTransactionWallet,
         betMint: string,
         betAmountRaw: string,
         clientSeed: string,
@@ -99,7 +99,7 @@ export const useSlotMachine = (rpcUrlOverride?: string) => {
             throw new Error('Pool not loaded');
         }
 
-        if (!phantom.publicKey) {
+        if (!wallet.publicKey) {
             throw new Error('Wallet not connected');
         }
 
@@ -114,7 +114,7 @@ export const useSlotMachine = (rpcUrlOverride?: string) => {
         lastResult.value = null;
 
         try {
-            const userAddress = phantom.publicKey.toBase58();
+            const userAddress = wallet.publicKey.toBase58();
 
             const prepareRes = await fetch('/api/slots/spin/prepare', {
                 method: 'POST',
@@ -196,7 +196,7 @@ export const useSlotMachine = (rpcUrlOverride?: string) => {
             tx.recentBlockhash = blockhash;
             tx.feePayer = userPubkey;
 
-            const { signature } = await phantom.signAndSendTransaction(tx);
+            const { signature } = await wallet.signAndSendTransaction(tx);
             await connection.confirmTransaction(
                 { signature, blockhash, lastValidBlockHeight },
                 'confirmed',

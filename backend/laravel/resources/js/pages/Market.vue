@@ -13,7 +13,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 
 const CYBERIA_CHAIN_ID = 49406;
 const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
@@ -135,10 +135,10 @@ const ipfsToHttp = (uri: string): string => {
 };
 
 const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getMetaMaskProvider();
+    const eth = getSelectedEvmProvider();
 
     if (!eth) {
-        throw new Error('MetaMask not found');
+        throw new Error('EVM wallet not found');
     }
 
     const provider = new BrowserProvider(eth);
@@ -765,7 +765,7 @@ const formatPrice = (p: bigint, decimals: number): string => {
                         v-if="!wallet.isConnected.value"
                         @click="wallet.connect()"
                     >
-                        Connect MetaMask
+                        Connect wallet
                     </Button>
                     <Button
                         v-else

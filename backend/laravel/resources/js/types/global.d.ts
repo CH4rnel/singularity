@@ -5,6 +5,14 @@ import type { Team } from '@/types/teams';
 export type EthereumProvider = {
     isMetaMask?: boolean;
     isPhantom?: boolean;
+    isCoinbaseWallet?: boolean;
+    isTrust?: boolean;
+    isTrustWallet?: boolean;
+    isRabby?: boolean;
+    isOkxWallet?: boolean;
+    isOKExWallet?: boolean;
+    isBraveWallet?: boolean;
+    isBinance?: boolean;
     // Legacy multi-wallet array some extensions expose on window.ethereum.
     providers?: EthereumProvider[];
     request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;

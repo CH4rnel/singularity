@@ -25,7 +25,8 @@ import type { BridgeChain } from '@/lib/addressValidation';
 import { bridgeChainInfo, tokenOnChain } from '@/lib/bridgeConfig';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenInfo, BridgeTokenSymbol } from '@/lib/bridgeTokens';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
+import { getSelectedSolanaTransactionProvider } from '@/lib/solanaWalletProvider';
 import {
     fetchTonJettonBalance,
     fetchTonNativeBalance,
@@ -250,12 +251,12 @@ export const useBridge = () => {
     // ---------------------------------------------------------------
 
     /**
-     * Switch (or add + switch) MetaMask to an arbitrary EVM chain described by
+     * Switch (or add + switch) the selected EVM wallet to an arbitrary EVM chain described by
      * the server bridge config. Chain params all come from config/bridge.php,
      * so new EVM chains need no frontend changes.
      */
     const ensureNetwork = async (chainKey: BridgeChain): Promise<boolean> => {
-        const injected = getMetaMaskProvider();
+        const injected = getSelectedEvmProvider();
         const chain = bridgeChainInfo(chainKey);
 
         if (!injected || !chain?.evmChainId) {
@@ -331,7 +332,7 @@ export const useBridge = () => {
         amount: string,
         solanaRecipientBase58: string,
     ): Promise<{ txHash: string; nonce: number } | null> => {
-        const injected = getMetaMaskProvider();
+        const injected = getSelectedEvmProvider();
 
         if (!injected) {
             return null;
@@ -362,14 +363,14 @@ export const useBridge = () => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         _evmRecipientHex: string,
     ): Promise<{ txHash: string; nonce: number } | null> => {
-        const phantom = getPhantom();
+        const solana = getSelectedSolanaTransactionProvider('mainnet');
 
-        if (!phantom?.publicKey) {
-            throw new Error('Phantom wallet not connected');
+        if (!solana?.publicKey) {
+            throw new Error('Solana wallet not connected');
         }
 
         const connection = new Connection(SOLANA_RPC, 'confirmed');
-        const userPubkey = new PublicKey(phantom.publicKey.toBase58());
+        const userPubkey = new PublicKey(solana.publicKey.toBase58());
         const TOKEN_EXT_PROGRAM = new PublicKey(TOKEN_EXTENSIONS_PROGRAM_ID);
 
         const amountRaw = BigInt(
@@ -428,7 +429,7 @@ export const useBridge = () => {
         tx.recentBlockhash = blockhash;
         tx.feePayer = userPubkey;
 
-        const { signature } = await phantom.signAndSendTransaction(
+        const { signature } = await solana.signAndSendTransaction(
             tx,
             SOLANA_TX_SEND_OPTIONS,
         );
@@ -622,7 +623,7 @@ export const useBridge = () => {
         relayerEvmAddress: string,
         chainKey: BridgeChain = 'cyberia',
     ): Promise<{ txHash: string; nonce: number } | null> => {
-        const injected = getMetaMaskProvider();
+        const injected = getSelectedEvmProvider();
 
         if (!injected) {
             return null;
@@ -653,14 +654,14 @@ export const useBridge = () => {
 
     /**
      * Native-coin deposit to the relayer EOA on an EVM chain (e.g. BNB on
-     * BSC): plain value transfer signed with MetaMask.
+     * BSC): plain value transfer signed with the selected EVM wallet.
      */
     const nativeTransferToRelayer = async (
         chainKey: BridgeChain,
         amount: string,
         relayerEvmAddress: string,
     ): Promise<{ txHash: string; nonce: number } | null> => {
-        const injected = getMetaMaskProvider();
+        const injected = getSelectedEvmProvider();
 
         if (!injected) {
             return null;
@@ -714,9 +715,9 @@ export const useBridge = () => {
         symbol: BridgeTokenSymbol,
         amount: string,
     ): Promise<{ txHash: string; nonce: number } | null> => {
-        const phantom = getPhantom();
+        const solana = getSelectedSolanaTransactionProvider('mainnet');
 
-        if (!phantom?.publicKey) {
+        if (!solana?.publicKey) {
             throw new Error('Solana wallet not connected');
         }
 
@@ -725,7 +726,7 @@ export const useBridge = () => {
         const programId = tokenProgramId(token);
 
         const connection = new Connection(SOLANA_RPC, 'confirmed');
-        const userPubkey = new PublicKey(phantom.publicKey.toBase58());
+        const userPubkey = new PublicKey(solana.publicKey.toBase58());
 
         const amountRaw = BigInt(
             Math.round(parseFloat(amount) * 10 ** token.solanaDecimals),
@@ -776,7 +777,7 @@ export const useBridge = () => {
         tx.recentBlockhash = blockhash;
         tx.feePayer = userPubkey;
 
-        const { signature } = await phantom.signAndSendTransaction(
+        const { signature } = await solana.signAndSendTransaction(
             tx,
             SOLANA_TX_SEND_OPTIONS,
         );
@@ -820,14 +821,14 @@ export const useBridge = () => {
     const nativeSolTransferToHotWallet = async (
         amount: string,
     ): Promise<{ txHash: string; nonce: number } | null> => {
-        const phantom = getPhantom();
+        const solana = getSelectedSolanaTransactionProvider('mainnet');
 
-        if (!phantom?.publicKey) {
+        if (!solana?.publicKey) {
             throw new Error('Solana wallet not connected');
         }
 
         const connection = new Connection(SOLANA_RPC, 'confirmed');
-        const userPubkey = new PublicKey(phantom.publicKey.toBase58());
+        const userPubkey = new PublicKey(solana.publicKey.toBase58());
         const lamports = BigInt(Math.round(parseFloat(amount) * 1e9));
 
         const tx = new Transaction().add(
@@ -843,7 +844,7 @@ export const useBridge = () => {
         tx.recentBlockhash = blockhash;
         tx.feePayer = userPubkey;
 
-        const { signature } = await phantom.signAndSendTransaction(
+        const { signature } = await solana.signAndSendTransaction(
             tx,
             SOLANA_TX_SEND_OPTIONS,
         );
@@ -979,20 +980,4 @@ function parseEvmNonce(receipt: {
     }
 
     return 0;
-}
-
-function getPhantom() {
-    type Phantom = {
-        isPhantom: boolean;
-        publicKey: { toBase58(): string; toBytes(): Uint8Array } | null;
-        signAndSendTransaction(
-            tx: Transaction,
-            options?: typeof SOLANA_TX_SEND_OPTIONS,
-        ): Promise<{ signature: string }>;
-    };
-
-    return (
-        (window as unknown as { phantom?: { solana?: Phantom } }).phantom
-            ?.solana ?? null
-    );
 }

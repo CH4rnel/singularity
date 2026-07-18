@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
 import { ChevronDown, LogOut, User, Wallet } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -37,6 +37,13 @@ const authUser = computed(
 
 const isAuthenticating = ref(false);
 const authError = ref<string | null>(null);
+const evmProviders = computed(() => evmWallet.walletProviders.value);
+const solanaProviders = computed(() => solanaWallet.walletProviders.value);
+
+function refreshWalletChoices() {
+    evmWallet.refreshWalletProviders();
+    solanaWallet.refreshWalletProviders();
+}
 
 const displayAddress = computed(() => {
     const addr =
@@ -52,19 +59,13 @@ const displayAddress = computed(() => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 });
 
-async function connectMetaMask() {
+async function connectEvm(providerId: string) {
     authError.value = null;
-
-    if (!evmWallet.isMetaMaskInstalled()) {
-        authError.value = 'MetaMask is not installed';
-
-        return;
-    }
 
     isAuthenticating.value = true;
 
     try {
-        const address = await evmWallet.connect();
+        const address = await evmWallet.connect(providerId);
 
         if (!address) {
             authError.value = evmWallet.error.value || 'Failed to connect';
@@ -105,19 +106,13 @@ async function connectMetaMask() {
     }
 }
 
-async function connectPhantom() {
+async function connectSolana(providerId: string) {
     authError.value = null;
-
-    if (!solanaWallet.isPhantomInstalled()) {
-        authError.value = 'Phantom is not installed';
-
-        return;
-    }
 
     isAuthenticating.value = true;
 
     try {
-        const address = await solanaWallet.connect();
+        const address = await solanaWallet.connect(providerId);
 
         if (!address) {
             authError.value = solanaWallet.error.value || 'Failed to connect';
@@ -166,6 +161,8 @@ function signOut() {
     solanaWallet.disconnect();
     router.post(logoutRoute().url);
 }
+
+onMounted(refreshWalletChoices);
 </script>
 
 <template>
@@ -177,6 +174,7 @@ function signOut() {
                     size="sm"
                     class="gap-2"
                     :disabled="isAuthenticating"
+                    @click="refreshWalletChoices"
                 >
                     <Spinner v-if="isAuthenticating" class="h-4 w-4" />
                     <Wallet v-else class="h-4 w-4" />
@@ -207,13 +205,51 @@ function signOut() {
                     </DropdownMenuItem>
                 </template>
                 <template v-else>
-                    <DropdownMenuItem @select="connectMetaMask">
-                        <Wallet class="mr-2 h-4 w-4" />
-                        MetaMask
+                    <DropdownMenuItem disabled class="text-xs font-semibold">
+                        EVM wallets
                     </DropdownMenuItem>
-                    <DropdownMenuItem @select="connectPhantom">
+                    <DropdownMenuItem
+                        v-for="provider in evmProviders"
+                        :key="provider.id"
+                        @select="connectEvm(provider.id)"
+                    >
+                        <img
+                            v-if="provider.icon"
+                            :src="provider.icon"
+                            :alt="`${provider.name} icon`"
+                            class="mr-2 h-4 w-4 rounded-sm"
+                        />
+                        <Wallet v-else class="mr-2 h-4 w-4" />
+                        {{ provider.name }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem v-if="evmProviders.length === 0" disabled>
                         <Wallet class="mr-2 h-4 w-4" />
-                        Phantom
+                        No EVM wallet found
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled class="text-xs font-semibold">
+                        Solana wallets
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        v-for="provider in solanaProviders"
+                        :key="provider.id"
+                        @select="connectSolana(provider.id)"
+                    >
+                        <img
+                            v-if="provider.icon"
+                            :src="provider.icon"
+                            :alt="`${provider.name} icon`"
+                            class="mr-2 h-4 w-4 rounded-sm"
+                        />
+                        <Wallet v-else class="mr-2 h-4 w-4" />
+                        {{ provider.name }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        v-if="solanaProviders.length === 0"
+                        disabled
+                    >
+                        <Wallet class="mr-2 h-4 w-4" />
+                        No Solana wallet found
                     </DropdownMenuItem>
                 </template>
             </DropdownMenuContent>

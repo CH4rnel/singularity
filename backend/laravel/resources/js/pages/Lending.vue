@@ -31,7 +31,7 @@ import {
     useLending,
 } from '@/composables/useLending';
 import type { MarketAction, MarketView } from '@/composables/useLending';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 
 const {
     wallet,
@@ -141,7 +141,7 @@ function setMax() {
 }
 
 async function submitAction() {
-    const injected = getMetaMaskProvider();
+    const injected = getSelectedEvmProvider();
 
     if (!action.value || !injected) {
         return;
@@ -289,7 +289,7 @@ async function submitAction() {
 }
 
 async function toggleMembership(market: MarketView) {
-    const injected = getMetaMaskProvider();
+    const injected = getSelectedEvmProvider();
 
     if (!injected) {
         return;
@@ -497,7 +497,7 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(async () => {
     window.addEventListener('keydown', onKeydown);
 
-    // Trigger silent reconnect via MetaMask in case the user landed on /lending
+    // Trigger silent reconnect via the selected EVM wallet in case the user landed on /lending
     // directly (AppSidebar/Welcome would normally do this).
     await wallet.restore(authUser.value?.wallet_address ?? null);
 

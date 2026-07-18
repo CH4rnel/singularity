@@ -57,18 +57,18 @@ const handleSpin = async () => {
         return;
     }
 
-    const phantom =
-        (window as unknown as { solana?: any }).solana ??
-        (window as unknown as { phantom?: { solana?: any } }).phantom?.solana;
+    const solana = wallet.getTransactionProvider(
+        machine.pool.value?.cluster ?? 'mainnet',
+    );
 
-    if (!phantom) {
+    if (!solana) {
         return;
     }
 
     clientSeed.value = Math.random().toString(36).slice(2);
 
     await machine
-        .spin(phantom, selectedMint.value, betRaw.value, clientSeed.value)
+        .spin(solana, selectedMint.value, betRaw.value, clientSeed.value)
         .catch(() => {
             // Error surfaced via machine.error.
         });
@@ -97,7 +97,7 @@ const handleSpin = async () => {
 
                 <div v-if="!wallet.isConnected.value" class="connect">
                     <button @click="wallet.connect()">
-                        Подключить Phantom
+                        Подключить Solana wallet
                     </button>
                 </div>
 

@@ -25,7 +25,7 @@ import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 
 const CYBERIA_CHAIN_ID = 49406;
 const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
@@ -184,11 +184,11 @@ async function loadState(): Promise<void> {
 }
 
 const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getMetaMaskProvider();
+    const eth = getSelectedEvmProvider();
 
     if (!eth) {
-throw new Error('MetaMask not found');
-}
+        throw new Error('EVM wallet not found');
+    }
 
     const provider = new BrowserProvider(eth);
     const net = await provider.getNetwork();

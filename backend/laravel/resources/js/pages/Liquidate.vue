@@ -29,7 +29,7 @@ import {
     useLending,
 } from '@/composables/useLending';
 import type { Call, MarketView } from '@/composables/useLending';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 
 const {
     wallet,
@@ -511,7 +511,7 @@ watch([repayInput, selectedRepayMarket, selectedCollateralMarket], () => {
 });
 
 async function liquidate() {
-    const injected = getMetaMaskProvider();
+    const injected = getSelectedEvmProvider();
 
     if (!borrowerData.value || !repayMarket.value || !collateralMarket.value || !injected) {
         return;
@@ -596,7 +596,7 @@ watch(queryAddress, async (addr) => {
 });
 
 onMounted(async () => {
-    // Trigger silent reconnect via MetaMask in case the user landed on
+    // Trigger silent reconnect via the selected EVM wallet in case the user landed on
     // /lending/liquidate directly.
     await wallet.restore(authUser.value?.wallet_address ?? null);
 

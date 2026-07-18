@@ -1,4 +1,18 @@
 import { ref } from 'vue';
+import {
+    connectSolanaWalletProvider,
+    disconnectSolanaWalletProvider,
+    getSelectedSolanaAddress,
+    getSelectedSolanaTransactionProvider,
+    getSolanaWalletProvider,
+    getSolanaWalletProviders,
+    onSelectedSolanaAccountChange,
+    signSolanaMessage,
+} from '@/lib/solanaWalletProvider';
+import type {
+    SolanaTransactionProvider,
+    SolanaWalletProvider,
+} from '@/lib/solanaWalletProvider';
 
 export type SolanaWalletState = {
     isConnected: boolean;
@@ -7,107 +21,57 @@ export type SolanaWalletState = {
     error: string | null;
 };
 
-interface PhantomProvider {
-    isPhantom: boolean;
-    publicKey: { toBase58(): string; toBytes(): Uint8Array } | null;
-    isConnected: boolean;
-    connect(opts?: {
-        onlyIfTrusted?: boolean;
-    }): Promise<{ publicKey: { toBase58(): string } }>;
-    disconnect(): Promise<void>;
-    signMessage(
-        message: Uint8Array,
-        encoding?: string,
-    ): Promise<{ signature: Uint8Array; publicKey: { toBase58(): string } }>;
-    on(event: string, handler: (...args: unknown[]) => void): void;
-    off(event: string, handler: (...args: unknown[]) => void): void;
-}
-
 // Global singleton state
 const isConnected = ref(false);
 const isConnecting = ref(false);
 const address = ref<string | null>(null);
 const error = ref<string | null>(null);
-let listenersSetup = false;
+const walletProviders = ref<SolanaWalletProvider[]>([]);
+const selectedWalletName = ref<string | null>(null);
+let removeAccountListener: (() => void) | null = null;
 let restored = false;
 
-const getPhantom = (): PhantomProvider | null => {
-    if (typeof window === 'undefined') {
-        return null;
-    }
+const refreshWalletProviders = (): SolanaWalletProvider[] => {
+    walletProviders.value = getSolanaWalletProviders();
 
-    // Phantom injects at window.phantom.solana or window.solana
-    const provider =
-        (window as unknown as { phantom?: { solana?: PhantomProvider } })
-            .phantom?.solana ??
-        (window as unknown as { solana?: PhantomProvider }).solana;
-
-    if (provider?.isPhantom) {
-        return provider;
-    }
-
-    return null;
+    return walletProviders.value;
 };
 
-/**
- * Wait for Phantom to be injected (it may load after page scripts).
- * Returns the provider or null after timeout.
- */
-const waitForPhantom = (timeoutMs = 3000): Promise<PhantomProvider | null> => {
-    return new Promise((resolve) => {
-        const existing = getPhantom();
+const getDefaultWalletProvider = (): SolanaWalletProvider | null => {
+    const providers = refreshWalletProviders();
 
-        if (existing) {
-            resolve(existing);
+    return (
+        providers.find((wallet) => wallet.name.toLowerCase() === 'phantom') ??
+        providers[0] ??
+        null
+    );
+};
 
-            return;
+const setupListeners = (): void => {
+    removeAccountListener?.();
+    removeAccountListener = onSelectedSolanaAccountChange((nextAddress) => {
+        if (nextAddress) {
+            address.value = nextAddress;
+        } else {
+            address.value = null;
+            isConnected.value = false;
+            selectedWalletName.value = null;
         }
-
-        let resolved = false;
-        const handler = () => {
-            if (resolved) {
-                return;
-            }
-
-            const p = getPhantom();
-
-            if (p) {
-                resolved = true;
-                resolve(p);
-            }
-        };
-
-        window.addEventListener('phanton#initialized', handler);
-
-        // Also poll in case the event was missed
-        const interval = setInterval(() => {
-            const p = getPhantom();
-
-            if (p) {
-                resolved = true;
-                clearInterval(interval);
-                resolve(p);
-            }
-        }, 100);
-
-        setTimeout(() => {
-            if (!resolved) {
-                resolved = true;
-                clearInterval(interval);
-                resolve(null);
-            }
-        }, timeoutMs);
     });
 };
 
 export const useSolanaWallet = () => {
-    const isPhantomInstalled = (): boolean => {
-        return getPhantom() !== null;
-    };
+    const isPhantomInstalled = (): boolean =>
+        refreshWalletProviders().some(
+            (wallet) => wallet.name.toLowerCase() === 'phantom',
+        );
+
+    const isSolanaWalletInstalled = (): boolean =>
+        refreshWalletProviders().length > 0;
 
     /**
      * Restore wallet state from the authenticated user's saved solana_wallet_address
-     * and try to silently reconnect via Phantom (onlyIfTrusted — no popup).
+     * and try to silently reconnect via any available Solana wallet.
      */
     const restore = async (savedAddress?: string | null): Promise<void> => {
         if (restored || isConnected.value) {
@@ -121,26 +85,42 @@ export const useSolanaWallet = () => {
             isConnected.value = true;
         }
 
-        const phantom = await waitForPhantom();
-
-        if (phantom) {
+        for (const wallet of refreshWalletProviders()) {
             try {
-                const resp = await phantom.connect({ onlyIfTrusted: true });
-                address.value = resp.publicKey.toBase58();
+                const connectedAddress = await connectSolanaWalletProvider(
+                    wallet,
+                    true,
+                );
+
+                if (!connectedAddress) {
+                    continue;
+                }
+
+                if (savedAddress && connectedAddress !== savedAddress) {
+                    await disconnectSolanaWalletProvider();
+                    continue;
+                }
+
+                address.value = connectedAddress;
+                selectedWalletName.value = wallet.name;
                 isConnected.value = true;
                 setupListeners();
+
+                break;
             } catch {
-                // Phantom not trusted yet or not available
+                // Wallet not trusted yet or not available.
             }
         }
     };
 
-    const connect = async (): Promise<string | null> => {
-        const phantom = await waitForPhantom();
+    const connect = async (walletId?: string): Promise<string | null> => {
+        const wallet = walletId
+            ? getSolanaWalletProvider(walletId)
+            : getDefaultWalletProvider();
 
-        if (!phantom) {
+        if (!wallet) {
             error.value =
-                'Phantom wallet is not installed. Please install it from phantom.app';
+                'No Solana wallet detected. Install Phantom, Solflare, Backpack, or another Wallet Standard wallet.';
 
             return null;
         }
@@ -149,10 +129,15 @@ export const useSolanaWallet = () => {
         isConnecting.value = true;
 
         try {
-            const resp = await phantom.connect();
-            address.value = resp.publicKey.toBase58();
-            isConnected.value = true;
+            const connectedAddress = await connectSolanaWalletProvider(wallet);
 
+            if (!connectedAddress) {
+                throw new Error('No Solana accounts found');
+            }
+
+            address.value = connectedAddress;
+            selectedWalletName.value = wallet.name;
+            isConnected.value = true;
             setupListeners();
 
             return address.value;
@@ -160,9 +145,10 @@ export const useSolanaWallet = () => {
             error.value =
                 err instanceof Error
                     ? err.message
-                    : 'Failed to connect Phantom wallet';
+                    : 'Failed to connect Solana wallet';
             isConnected.value = false;
             address.value = null;
+            selectedWalletName.value = null;
 
             return null;
         } finally {
@@ -170,37 +156,27 @@ export const useSolanaWallet = () => {
         }
     };
 
-    const disconnect = (): void => {
-        const phantom = getPhantom();
+    function disconnect(): void {
+        removeAccountListener?.();
+        removeAccountListener = null;
 
-        if (phantom) {
-            phantom.disconnect().catch(() => {});
-        }
+        disconnectSolanaWalletProvider().catch(() => {});
 
         address.value = null;
         isConnected.value = false;
         error.value = null;
-        removeListeners();
-    };
+        selectedWalletName.value = null;
+    }
 
     const signMessage = async (message: string): Promise<string | null> => {
-        const phantom = getPhantom();
-
-        if (!phantom || !address.value) {
-            error.value = 'Phantom wallet not connected';
+        if (!address.value) {
+            error.value = 'Solana wallet not connected';
 
             return null;
         }
 
         try {
-            const encodedMessage = new TextEncoder().encode(message);
-            const { signature } = await phantom.signMessage(
-                encodedMessage,
-                'utf8',
-            );
-
-            // Convert Uint8Array to base64 for transport
-            return btoa(String.fromCharCode(...signature));
+            return await signSolanaMessage(message);
         } catch (err) {
             error.value =
                 err instanceof Error ? err.message : 'Failed to sign message';
@@ -209,40 +185,15 @@ export const useSolanaWallet = () => {
         }
     };
 
-    const setupListeners = (): void => {
-        const phantom = getPhantom();
-
-        if (!phantom || listenersSetup) {
-            return;
+    const getTransactionProvider = (
+        cluster: 'mainnet' | 'devnet' = 'mainnet',
+    ): SolanaTransactionProvider | null => {
+        if (!address.value && getSelectedSolanaAddress()) {
+            address.value = getSelectedSolanaAddress();
+            isConnected.value = true;
         }
 
-        listenersSetup = true;
-
-        phantom.on('accountChanged', (publicKey: unknown) => {
-            if (publicKey) {
-                const pk = publicKey as { toBase58(): string };
-                address.value = pk.toBase58();
-            } else {
-                disconnect();
-            }
-        });
-
-        phantom.on('disconnect', () => {
-            disconnect();
-        });
-    };
-
-    const removeListeners = (): void => {
-        const phantom = getPhantom();
-
-        if (!phantom) {
-            return;
-        }
-
-        listenersSetup = false;
-
-        phantom.off('accountChanged', () => {});
-        phantom.off('disconnect', () => {});
+        return getSelectedSolanaTransactionProvider(cluster);
     };
 
     const formatAddress = (addr: string, chars = 4): string => {
@@ -254,11 +205,16 @@ export const useSolanaWallet = () => {
         isConnecting,
         address,
         error,
+        walletProviders,
+        selectedWalletName,
         isPhantomInstalled,
+        isSolanaWalletInstalled,
+        refreshWalletProviders,
         connect,
         disconnect,
         restore,
         signMessage,
+        getTransactionProvider,
         formatAddress,
     };
 };

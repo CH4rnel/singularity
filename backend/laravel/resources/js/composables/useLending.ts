@@ -2,7 +2,7 @@ import { usePage } from '@inertiajs/vue3';
 import { Interface, formatUnits, getAddress } from 'ethers';
 import { computed, ref } from 'vue';
 import { useWallet } from '@/composables/useWallet';
-import { getMetaMaskProvider } from '@/lib/evmProvider';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 
 export type MarketAction = 'supply' | 'withdraw' | 'borrow' | 'repay';
 
@@ -221,10 +221,10 @@ export function formatUsd(raw: bigint, priceMantissa: bigint): string {
 }
 
 export async function ensureCyberia(): Promise<void> {
-    const injected = getMetaMaskProvider();
+    const injected = getSelectedEvmProvider();
 
     if (!injected) {
-        throw new Error('MetaMask not detected');
+        throw new Error('EVM wallet not detected');
     }
 
     const current = (await injected.request({
