@@ -12,13 +12,16 @@ const log = createLogger("plugin:presence");
  * Telegram check-in on a fixed hourly cadence and records every attempt.
  */
 
-const DEFAULT_MESSAGES = [
+export const DEFAULT_PRESENCE_MESSAGES = [
   "я здесь.",
   "тихо. я рядом.",
   "проверка связи.",
   "держу канал открытым.",
   "я на месте.",
 ];
+
+const NOISY_WIRED_PULSE_RE =
+  /(?:^|\s)✶?\s*wired\s+the\s+wired\s+hums\s+quietly\s+at\s+block\b.*\bgas\b.*\bgwei\b/i;
 
 const JOURNAL_CAP = 120;
 const MIN_INTERVAL_HOURS = 1 / 60;
@@ -93,8 +96,7 @@ export class PresenceService implements Service {
       this.state.intervalHours = normalizeInterval(input.intervalHours);
     }
     if (input.message !== undefined) {
-      const message = String(input.message).trim();
-      this.state.customMessage = message ? clipMessage(message) : undefined;
+      this.state.customMessage = cleanPresenceMessage(input.message);
     }
     this.state.enabled = true;
     this.state.nextDueAt = Date.now() + 1_000;
@@ -149,7 +151,7 @@ export class PresenceService implements Service {
       nextDueAt: Date.now() + hoursToMs(defaultInterval),
       consecutiveFailures: 0,
       messageIndex: 0,
-      customMessage: cleanOptional(this.runtime?.getSetting("LAINOS_PRESENCE_MESSAGE")),
+      customMessage: cleanPresenceMessage(this.runtime?.getSetting("LAINOS_PRESENCE_MESSAGE")),
       journal: [],
     };
 
@@ -162,7 +164,7 @@ export class PresenceService implements Service {
         intervalHours: normalizeInterval(Number(parsed.intervalHours ?? fresh.intervalHours)),
         consecutiveFailures: Number(parsed.consecutiveFailures ?? 0),
         messageIndex: Number(parsed.messageIndex ?? 0),
-        customMessage: cleanOptional(parsed.customMessage ?? fresh.customMessage),
+        customMessage: cleanPresenceMessage(parsed.customMessage ?? fresh.customMessage),
         journal: Array.isArray(parsed.journal) ? parsed.journal.slice(-JOURNAL_CAP) : [],
       };
     } catch {
@@ -188,8 +190,9 @@ export class PresenceService implements Service {
       ?.split("|")
       .map((s) => s.trim())
       .filter(Boolean)
-      .map(clipMessage);
-    const messages = configured?.length ? configured : DEFAULT_MESSAGES;
+      .map(cleanPresenceMessage)
+      .filter((message): message is string => Boolean(message));
+    const messages = configured?.length ? configured : DEFAULT_PRESENCE_MESSAGES;
     const message = messages[this.state.messageIndex % messages.length];
     this.state.messageIndex = (this.state.messageIndex + 1) % messages.length;
     return message;
@@ -274,9 +277,14 @@ function failureBackoffMs(failures: number): number {
   return base * 2 ** cappedPower;
 }
 
-function cleanOptional(value: unknown): string | undefined {
+export function isNoisyWiredPulseMessage(value: unknown): boolean {
+  return NOISY_WIRED_PULSE_RE.test(String(value ?? ""));
+}
+
+export function cleanPresenceMessage(value: unknown): string | undefined {
   const text = String(value ?? "").trim();
-  return text ? clipMessage(text) : undefined;
+  if (!text || isNoisyWiredPulseMessage(text)) return undefined;
+  return clipMessage(text);
 }
 
 function clipMessage(text: string): string {

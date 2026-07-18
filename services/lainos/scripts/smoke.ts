@@ -25,6 +25,11 @@ import {
   parseContributionDay,
   type GithubStreakService,
 } from "../src/plugins/github/index.js";
+import {
+  cleanPresenceMessage,
+  DEFAULT_PRESENCE_MESSAGES,
+  isNoisyWiredPulseMessage,
+} from "../src/plugins/presence/index.js";
 import { looksLikeNothing, parseRss, type ScoutService } from "../src/plugins/scout/index.js";
 import type { SentinelService } from "../src/plugins/sentinel/index.js";
 import { resolveOperatorChatId, telegramPlugin } from "../src/plugins/telegram/index.js";
@@ -363,6 +368,15 @@ async function main() {
     !looksLikeNothing("Solana выкатила Firedancer в мейннет — детали: https://example.com/a") &&
     !looksLikeNothing("Главное за день: релиз zkVM 2.0.\n- подробности — https://example.com/b");
 
+  // --- presence: hourly check-ins must never use the old decorative block/gas hum ---
+  const noisyPulse = "✶ wired the wired hums quietly at block 12345, gas 1.23 gwei.";
+  const presenceQuietOk =
+    isNoisyWiredPulseMessage(noisyPulse) &&
+    cleanPresenceMessage(noisyPulse) === undefined &&
+    cleanPresenceMessage("тихо. я рядом.") === "тихо. я рядом." &&
+    DEFAULT_PRESENCE_MESSAGES.length > 0 &&
+    DEFAULT_PRESENCE_MESSAGES.every((message) => !isNoisyWiredPulseMessage(message));
+
   // --- assertions ---
   const facts = await agent.memory.facts(50);
   const learnedName = facts.some((f) => /operator/i.test(f));
@@ -395,6 +409,7 @@ async function main() {
   console.log(`scout rss parser         : ${rssOk ? "PASS" : "FAIL"}`);
   console.log(`scout topic add/remove   : ${scoutOk ? "PASS" : "FAIL"}`);
   console.log(`scout NOTHING = silence  : ${nothingOk ? "PASS" : "FAIL"}`);
+  console.log(`presence quiet format    : ${presenceQuietOk ? "PASS" : "FAIL"}`);
   console.log(`reasoning never leaks    : ${reasoningOk ? "PASS" : "FAIL"}`);
   console.log(`github streak watch      : ${githubOk ? "PASS" : "FAIL"}`);
   console.log(`channel post watch       : ${channelOk ? "PASS" : "FAIL"}`);
@@ -404,7 +419,7 @@ async function main() {
   const ok =
     learnedName && ranBalance && nullIsZero && forcedPnl && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
     walletOk && lainTokenKnown && wishLogged && wishForged && skillsOk && journalOk && quietOk &&
-    rssOk && scoutOk && nothingOk && reasoningOk &&
+    rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
     githubOk && channelOk && telegramOk;
   console.log(`\n${ok ? "✅ smoke OK" : "❌ smoke FAILED"}`);
   process.exit(ok ? 0 : 1);

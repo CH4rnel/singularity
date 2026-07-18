@@ -63,7 +63,7 @@ const COMMANDS = [
   { name: "/watches", desc: "active background watches" },
   { name: "/wishes", desc: "the forge wishboard" },
   { name: "/research", desc: "scout research topics" },
-  { name: "/pulse", desc: "toggle ambient chain murmurs" },
+  { name: "/pulse", desc: "toggle whale transfer notices" },
   { name: "/skin", desc: "pick a colour skin (arrows)" },
   { name: "/effort", desc: "set reply depth (arrows)" },
   { name: "/cursor", desc: "cursor style + blink (arrows)" },
@@ -492,7 +492,7 @@ const HELP = [
   "  /watches       active background balance watches",
   "  /wishes        the forge wishboard (holder requests → branches)",
   "  /research      topics the scout researches (digests on schedule)",
-  "  /pulse         toggle ambient chain murmurs (whales, quiet spells)",
+  "  /pulse         toggle whale transfer notices",
   "  /skin          pick a colour skin with the arrow keys",
   "  /effort        set reply depth (low … max) with the arrow keys",
   "  /cursor        cursor style — block/line, blink/steady",
@@ -644,7 +644,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     };
   }, []);
 
-  // Ambient chain watcher — Lain notices whale transfers and quiet spells.
+  // Chain watcher — Lain notices whale transfers and otherwise stays silent.
   useEffect(() => {
     if (!pulseOn) return;
     const pulse = new ChainPulse(rpc, (ev) => {

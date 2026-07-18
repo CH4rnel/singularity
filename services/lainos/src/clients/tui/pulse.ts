@@ -2,14 +2,13 @@
 import { formatEther, parseEther } from "viem";
 
 export interface PulseEvent {
-  kind: "transfer" | "ambient";
+  kind: "transfer";
   text: string;
 }
 
 export interface PulseOptions {
   intervalMs?: number; // poll cadence
   thresholdCyber?: number; // "whale" transfer size
-  ambientMs?: number; // how long quiet before an ambient murmur
   minGapMs?: number; // min spacing between utterances
 }
 
@@ -53,7 +52,6 @@ export class ChainPulse {
   private timer: ReturnType<typeof setInterval> | null = null;
   private seen = new Set<string>();
   private lastUtter = 0;
-  private lastActivity = Date.now();
   private readonly threshold: bigint;
 
   constructor(
@@ -95,7 +93,6 @@ export class ChainPulse {
       const tx = pickLargeTransfer(block.transactions ?? [], this.threshold, this.seen);
       if (tx) {
         this.lastUtter = now;
-        this.lastActivity = now;
         const cyber = trimNum(formatEther(BigInt(tx.value ?? "0x0")));
         this.onEvent({
           kind: "transfer",
@@ -104,20 +101,7 @@ export class ChainPulse {
         return;
       }
 
-      // nothing notable for a while → a quiet ambient murmur
-      if (now - this.lastActivity > (this.opts.ambientMs ?? 130000)) {
-        this.lastUtter = now;
-        this.lastActivity = now;
-        const blk = block.number ? BigInt(block.number).toString() : "?";
-        let gwei = "?";
-        try {
-          const g = await this.call<string>("eth_gasPrice", []);
-          gwei = trimNum((Number(BigInt(g)) / 1e9).toFixed(3));
-        } catch {
-          /* ignore */
-        }
-        this.onEvent({ kind: "ambient", text: `the wired hums quietly at block ${blk}, gas ${gwei} gwei.` });
-      }
+      // Nothing notable: stay silent.
     } catch {
       /* RPC unreachable — stay silent */
     }
