@@ -17,6 +17,15 @@ export const DEFAULT_MODELS: Record<ModelTier, string> = {
   [ModelTier.LARGE]: "claude-opus-4-8",
 };
 
+/**
+ * Opus 4.7+, Sonnet 5, and the Fable/Mythos family reject sampling params
+ * with a 400 — include temperature only for models that still accept it.
+ */
+function sampling(model: string, temperature?: number): { temperature?: number } {
+  if (/opus-4-[789]|sonnet-5|fable|mythos/i.test(model)) return {};
+  return { temperature: temperature ?? 0.8 };
+}
+
 export interface AnthropicProviderOptions {
   apiKey: string;
   models?: Partial<Record<ModelTier, string>>;
@@ -56,7 +65,7 @@ export class AnthropicModelProvider implements ModelProvider {
     const res = await this.client.messages.create({
       model,
       max_tokens: request.maxTokens ?? 1024,
-      temperature: request.temperature ?? 0.8,
+      ...sampling(model, request.temperature),
       system: request.system,
       messages: request.messages.map((m) => ({
         role: m.role,
@@ -95,7 +104,7 @@ export class AnthropicModelProvider implements ModelProvider {
     const stream = this.client.messages.stream({
       model,
       max_tokens: request.maxTokens ?? 1024,
-      temperature: request.temperature ?? 0.8,
+      ...sampling(model, request.temperature),
       system: request.system,
       messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
       tools: request.tools?.map((t) => ({

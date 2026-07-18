@@ -88,6 +88,99 @@ export class TieredModelProvider implements ModelProvider {
   }
 }
 
+export interface ChatProviderState {
+  /** Active base kind, e.g. "codex" or "anthropic". */
+  kind: string;
+  /** Name of the active ensemble (may include a fallback suffix). */
+  name: string;
+  /** Model id that answers LARGE-tier (live chat) requests. */
+  model: string;
+  /** Base kind the environment would pick with no runtime override. */
+  envKind: string;
+  /** True when a runtime override (set_chat_provider) diverges from the env. */
+  overridden: boolean;
+}
+
+/**
+ * Mutable front for the live chat ensemble so the operator can re-route
+ * replies between providers ("отвечай с помощью Claude") without a restart.
+ * The runtime keeps one reference to this object; switchTo swaps what it
+ * delegates to and persists the choice so self-upgrade restarts keep it.
+ */
+export class SwitchableModelProvider implements ModelProvider {
+  private active: ModelProvider;
+  private kind: string;
+  private readonly envKind: string;
+  private readonly assemble: (kind: string) => ModelProvider | undefined;
+  private readonly persist: (kind: string | null) => void;
+
+  constructor(opts: {
+    initial: ModelProvider;
+    kind: string;
+    envKind: string;
+    /** Rebuild the full ensemble (base + fallback + tiers) for a base kind. */
+    assemble: (kind: string) => ModelProvider | undefined;
+    /** Store the override; null clears it (choice matches the env default). */
+    persist: (kind: string | null) => void;
+  }) {
+    this.active = opts.initial;
+    this.kind = opts.kind;
+    this.envKind = opts.envKind;
+    this.assemble = opts.assemble;
+    this.persist = opts.persist;
+  }
+
+  get name(): string {
+    return this.active.name;
+  }
+
+  modelFor(tier: ModelTier): string {
+    return this.active.modelFor(tier);
+  }
+
+  generate(request: ModelRequest): Promise<ModelResponse> {
+    return this.active.generate(request);
+  }
+
+  stream(
+    request: ModelRequest,
+    onText: (delta: string) => void,
+  ): Promise<ModelResponse> {
+    return callProvider(this.active, request, onText);
+  }
+
+  /**
+   * Re-route live replies to another base kind. Fails loudly (returns an
+   * error string) when the kind cannot be built — a missing key or CLI must
+   * never silently land the chat on the mock model.
+   */
+  switchTo(kind: string): ChatProviderState | string {
+    const next = this.assemble(kind);
+    if (!next) {
+      return `provider "${kind}" is unavailable (missing API key or CLI?) — staying on ${this.kind}`;
+    }
+    this.active = next;
+    this.kind = kind;
+    try {
+      this.persist(kind === this.envKind ? null : kind);
+    } catch (err) {
+      log.warn("could not persist chat provider override", err);
+    }
+    log.info(`live chat provider switched to ${kind} (${next.name})`);
+    return this.state();
+  }
+
+  state(): ChatProviderState {
+    return {
+      kind: this.kind,
+      name: this.active.name,
+      model: this.active.modelFor(ModelTier.LARGE),
+      envKind: this.envKind,
+      overridden: this.kind !== this.envKind,
+    };
+  }
+}
+
 /** Stream when the provider can, otherwise generate and emit the text whole. */
 async function callProvider(
   provider: ModelProvider,

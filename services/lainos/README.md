@@ -46,6 +46,12 @@ whole (no streaming). A failed run is retried once in-house
 land on a model the operator didn't choose. On top of any base provider,
 `LAINOS_MODEL_TIER_SMALL/MEDIUM/LARGE` can route a single tier elsewhere.
 
+The live chat routing is also switchable at runtime: `set_chat_provider`
+(claude | codex) re-routes the replies without a restart and persists the
+choice in `data/chat-provider.json`, which wins over the env selection on the
+next boot; `chat_provider_status` reports which provider is answering right
+now. Forge coding jobs have their own switch (`set_forge_provider`).
+
 Model tiers map to the latest Claude family:
 
 | Tier | OpenRouter slug | Anthropic snapshot |
@@ -116,6 +122,8 @@ Forge coding-agent jobs have their own longer transcripts in `data/forge/*.log`.
   memory skills:
   - `remember` — persist a durable fact (survives restarts, across rooms)
   - `recall` — search durable facts + this room's history
+  - `set_chat_provider` / `chat_provider_status` — switch which model writes
+    the live replies (claude | codex; persisted) and report the active one
 - **cyberia** — reads/writes the Cyberia chain (id `49406`):
   - `check_balance` — native CYBER balance of an address
   - `token_balance` — ERC20 balance (symbol like `USDC`/`BTC` or a `0x` address)

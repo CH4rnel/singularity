@@ -40,9 +40,11 @@ export {
   FallbackModelProvider,
   MockModelProvider,
   OpenRouterModelProvider,
+  SwitchableModelProvider,
   TieredModelProvider,
   resolveCodexBin,
 } from "./models/index.js";
+export type { ChatProviderState } from "./models/index.js";
 export { bootstrapPlugin } from "./plugins/bootstrap/index.js";
 export {
   createEmbeddingProvider,
