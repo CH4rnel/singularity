@@ -663,7 +663,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     });
   }, [pushHistory, runtime]);
 
-  // Forge progress (wishes being built) surfaces live too.
+  // Forge progress (wishes being built) appears live too.
   useEffect(() => {
     const forge = runtime.getService<ForgeService>("forge");
     if (!forge?.onEvent) return;

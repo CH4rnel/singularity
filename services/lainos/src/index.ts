@@ -17,10 +17,13 @@ import { channelPlugin } from "./plugins/channel/index.js";
 import { cyberiaPlugin } from "./plugins/cyberia/index.js";
 import { forgePlugin } from "./plugins/forge/index.js";
 import { githubPlugin } from "./plugins/github/index.js";
+import { initiativePlugin } from "./plugins/initiative/index.js";
 import { scoutPlugin } from "./plugins/scout/index.js";
 import { sentinelPlugin } from "./plugins/sentinel/index.js";
+import { skillsPlugin } from "./plugins/skills/index.js";
 import { systemPlugin } from "./plugins/system/index.js";
 import { telegramPlugin } from "./plugins/telegram/index.js";
+import { traderPlugin } from "./plugins/trader/index.js";
 import { AgentRuntime } from "./runtime.js";
 import { loadSoul } from "./soul.js";
 import type { Character, Plugin } from "./types.js";
@@ -64,7 +67,14 @@ export {
 } from "./plugins/channel/index.js";
 export type { ChannelActivity, ChannelEvent, ChannelWatch } from "./plugins/channel/index.js";
 export { TelegramClient } from "./clients/telegram.js";
-export { telegramPlugin, resolveOperatorChatId } from "./plugins/telegram/index.js";
+export { telegramPlugin, resolveOperatorChatId, sendToOperator } from "./plugins/telegram/index.js";
+export { skillsPlugin, SkillsService } from "./plugins/skills/index.js";
+export type { SkillModule } from "./plugins/skills/index.js";
+export { initiativePlugin, InitiativeService } from "./plugins/initiative/index.js";
+export { traderPlugin, TraderService } from "./plugins/trader/index.js";
+export type { TraderEvent } from "./plugins/trader/index.js";
+export { TradeJournal, applyBuy, applySell } from "./plugins/cyberia/journal.js";
+export type { Position, TradeRecord } from "./plugins/cyberia/journal.js";
 export { lain } from "./characters/lain.js";
 
 const log = createLogger("boot");
@@ -80,6 +90,9 @@ const BUILTIN_PLUGINS: Record<string, Plugin> = {
   github: githubPlugin,
   channel: channelPlugin,
   telegram: telegramPlugin,
+  skills: skillsPlugin,
+  trader: traderPlugin,
+  initiative: initiativePlugin,
 };
 
 export interface CreateAgentOptions {

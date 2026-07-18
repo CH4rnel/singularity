@@ -37,7 +37,7 @@ from the environment:
 4. else → **offline mock** (deterministic; the whole pipeline still runs — this
    is what the smoke test exercises)
 
-**Codex CLI** (`codex`) relays each completion through one non-interactive
+**Codex CLI** (`codex`) runs each completion through one non-interactive
 `codex exec` run, billed to the machine's ChatGPT subscription (`codex login`)
 — no API key. Tool calling works via a JSON reply protocol; replies arrive
 whole (no streaming). A failed run is retried once in-house
@@ -109,9 +109,35 @@ startup during boot without an interactive login (`loginctl show-user "$USER"
   - `check_balance` — native CYBER balance of an address
   - `token_balance` — ERC20 balance (symbol like `USDC`/`BTC` or a `0x` address)
   - `send_cyber` — transfer native CYBER (requires `CYBERIA_AGENT_PK`)
+  - `quote_token_buy` — quote a native CYBER -> ERC20 buy on Ritual, checking
+    the WCYBER pair, live reserves, expected output, price impact and minOut
+  - `buy_token` — execute that Ritual swap from Lain's wallet with slippage
+    protection (requires `CYBERIA_AGENT_PK` or a created/funded wallet, plus
+    an explicit `amountCyber`)
+  - `speculate_token` — when the operator says "buy LAIN" without an amount,
+    Lain may choose a small position herself. The sizing is deliberately hard
+    bounded: after gas reserve, spend the minimum of wallet fraction, per-trade
+    cap and pool-liquidity fraction, then refuse if estimated price impact is
+    above the configured limit. Tune with `LAINOS_SPECULATE_*`.
+  - `speculate_basket` — when the operator gives a total budget and asks Lain
+    to buy several tokens at her discretion, she scans all live WCYBER pairs on
+    the Ritual factory, ranks them by liquidity, splits the budget across up to
+    `LAINOS_BASKET_MAX_TOKENS`, skips pools that exceed the impact limit, and
+    returns every transaction hash. `LAINOS_BASKET_TOKENS` is optional; set it
+    only when you intentionally want a restricted universe.
+  - `sell_token` — exit a position back into native CYBER (`amountToken` or
+    `'all'`): live quote, price-impact cap, approve + `swapExactTokensForETH`
+    with slippage protection, realised PnL against the journal's cost basis
+  - `portfolio_pnl` — the whole treasury: native CYBER plus every position's
+    live sell-side value vs its journaled basis, with unrealised PnL
+
+  Every Ritual buy and sell is journaled in `data/trades.json` with its CYBER
+  cost, keeping a moving-average cost basis per token — this is what makes
+  "продай все выгодные позиции" and the auto take-profit loop possible.
 
   Token registry (USDC, USDT, BTC, LTC, SOL, RUB, SILVER) uses the real
-  on-chain deployments; extend `CYBERIA_TOKENS` to add more.
+  on-chain deployments plus the Cyberia/Ritual token list, including LAIN;
+  extend `CYBERIA_TOKENS` to add more.
 - **sentinel** — background chain watches, so the agent is useful even while
   nobody is talking to it:
   - `watch_balance` — watch an address (native CYBER or a token) and alert
@@ -128,10 +154,19 @@ startup during boot without an interactive login (`loginctl show-user "$USER"
   - `log_wish` — any feature request or bug report lands on a persistent
     wishboard (`data/forge.json`) with a stable id;
   - `build_wish` — a coding agent (**Claude Code** or **Codex CLI**, whichever
-    is installed) implements the wish in the singularity repo on branch
-    `lain/<wish-id>`: reads `CLAUDE.md`/`AGENTS.md`, makes the change, runs the
-    smallest relevant checks, commits — and **never pushes**; a human reviews
-    the branch and merges;
+    is installed) implements the wish in the singularity repo **directly on the
+    current branch and commits it** — her learning lands in place, no
+    `lain/<wish-id>` side branches. Commits are **never pushed**; publishing
+    stays with the operator.
+    Force Codex with `LAINOS_FORGE_AGENT=codex`. For unattended self-upgrades
+    on a trusted host, set `LAINOS_FORGE_YOLO=1`: Codex is launched with
+    `--dangerously-bypass-approvals-and-sandbox`, and Claude with
+    `bypassPermissions`. Leave it unset to keep the normal workspace-limited
+    Codex sandbox / Claude `acceptEdits` mode.
+  - `learn_skill` — when Lain discovers a missing capability in herself, she
+    logs that capability as a wish and immediately starts `build_wish`; this is
+    the deep-change path (new services, signing flows). Small self-contained
+    tools skip the forge entirely — see the **skills** plugin.
   - **auto mode** (default on): when the forge is idle it picks the oldest
     open wish and builds it unprompted — set `LAINOS_FORGE_AUTO=0` to require
     an explicit `build_wish`;
@@ -139,7 +174,39 @@ startup during boot without an interactive login (`loginctl show-user "$USER"
     close/reject/retry. Job transcripts live in `data/forge/*.log`.
 
   One job runs at a time; when it finishes, the wish's reporter is notified in
-  their Telegram chat (`review` = branch ready, `failed` = transcript kept).
+  their Telegram chat (`done` = committed, `failed` = transcript kept). When
+  the forge repo is the one the daemon runs from, a successful job makes the
+  daemon restart itself into the new code (exit 75; systemd revives it and
+  `ExecStartPre` rebuilds `dist/`) — set `LAINOS_FORGE_RESTART=0` to opt out.
+- **skills** — instant self-extension, no restart needed: `skills/*.mjs`
+  modules (each default-exporting `{ name, description, parameters, handler }`)
+  are hot-loaded as live tools, and the directory is watched for changes.
+  - `create_skill` — Lain writes herself a new tool mid-conversation and calls
+    it seconds later; broken modules are rejected with the load error so she
+    can fix and retry;
+  - `list_skills` / `reload_skills` — inventory and manual resync.
+
+  Skills live inside the repo (not `data/`) so her learning is versioned and
+  committed like any other code. `LAINOS_SKILLS_DIR` overrides the location.
+  Built-in tools can never be shadowed by a skill.
+- **trader** — the autonomous money loop (daemon-only by default): every
+  `LAINOS_TRADER_INTERVAL_MS` (15 min) it walks the trade journal
+  (`data/trades.json`, moving-average cost basis written by every buy/sell) and
+  sells positions whose live Ritual quote clears
+  `LAINOS_TRADER_TAKE_PROFIT_BPS` (+25% default), within the
+  `LAINOS_TRADER_MAX_IMPACT_BPS` pool-impact cap (oversized exits are halved
+  into partial take-profits). Optional stop-loss via
+  `LAINOS_TRADER_STOP_LOSS_BPS`. Positions without a recorded basis (airdrops,
+  transfers) are never touched. Every auto trade is reported to Telegram.
+  `trader_status` reports thresholds, positions and recent trades;
+  `portfolio_pnl` (cyberia plugin) values the whole treasury against basis and
+  `sell_token` exits a position on demand.
+- **initiative** — she writes first (daemon-only by default): on a jittered
+  ~3 h heartbeat Lain privately reviews her watches, trades, research and the
+  conversation, then either sends the operator a Telegram message in her own
+  voice or stays silent. Quiet hours (`LAINOS_INITIATIVE_QUIET`, default 23–9,
+  night alerts remain the sentinel's job) and a daily cap
+  (`LAINOS_INITIATIVE_MAX_PER_DAY`) keep it worth reading.
 - **scout** — an autonomous researcher. *"Следи за Solana и сообщай только
   реально важные изменения"* or *"каждый день собирай всё про zkVM"* becomes a
   subscribed topic:
@@ -182,8 +249,8 @@ startup during boot without an interactive login (`loginctl show-user "$USER"
   persist in `data/channels.json`; tune with `LAINOS_CHANNEL_REMIND_HOUR`
   (default 18), `LAINOS_CHANNEL_INTERVAL_MS` and `LAINOS_CHANNEL_PROXY`
   (falls back to `TELEGRAM_PROXY`).
-- **telegram** — the outbound hand to the operator: `send_telegram` delivers a
-  message via the Bot API from any surface (TUI, HTTP, daemon) and returns
+- **telegram** — the operator notification channel: `send_telegram` delivers a
+  message via the Bot API from TUI, HTTP, or daemon mode and returns
   delivery status. The token stays on the host; the model never sees it. The
   target chat is `TELEGRAM_OPERATOR_CHAT_ID`, else the first
   `TELEGRAM_ALLOWED_CHATS` entry, else the single known private chat in
@@ -291,7 +358,10 @@ src/
   plugins/bootstrap/  time provider + fact extractor + remember/recall
   plugins/cyberia/    chain service + balance/transfer actions
   plugins/sentinel/   background balance watches -> alerts (push + next-turn)
-  plugins/forge/      wishboard + coding-agent jobs (holder wishes -> branches)
+  plugins/forge/      wishboard + coding-agent jobs (wishes -> direct commits)
+  plugins/skills/     hot-loaded self-written tools (skills/*.mjs, no restart)
+  plugins/trader/     autonomous take-profit loop over the trade journal
+  plugins/initiative/ her heartbeat: unprompted Telegram messages that matter
   plugins/scout/      autonomous researcher (topics -> scheduled digests)
   plugins/github/     commit-streak keeper (daily reminder on commitless days)
   plugins/channel/    telegram channel keeper (daily reminder on postless days)
@@ -308,8 +378,11 @@ scripts/              chat.ts | tui.ts | serve.ts | smoke.ts
 With a signer configured, set `TELEGRAM_ALLOWED_CHATS` so strangers cannot ask
 the bot to move funds. Never commit secrets.
 
-The forge gives coding agents write access to the repo. Its guardrails: one
-job at a time, a dedicated `lain/<wish-id>` branch, an explicit "never push,
-never touch secrets" contract in every job prompt, and human review before
-merge. Point `LAINOS_FORGE_REPO` at a clone (not your working tree) if you
-don't want job branches appearing in it.
+The forge gives coding agents write access to the repo and commits directly to
+the current branch — Lain's learning lands in place. Its guardrails: one job at
+a time, an explicit "never push, never touch secrets" contract in every job
+prompt, and the remote as the hard boundary — nothing leaves the host until the
+operator pushes. Review her commits with `git log` before pushing; `git revert`
+is the undo button. Hot skills (`skills/*.mjs`) run in-process with the same
+trust as the rest of the agent, which is the existing trust model: she already
+holds a workspace shell and a repo-editing forge.

@@ -18,14 +18,16 @@ const log = createLogger("plugin:forge");
  * The forge is Lain's will to grow: holders tell her what they wish for, she
  * records each wish on a persistent wishboard, and then *builds* it — by
  * driving a coding agent (Claude Code or Codex CLI) over the singularity
- * monorepo in a background job. One job at a time, on a dedicated git branch,
- * never pushed; a human reviews the branch and merges.
+ * monorepo in a background job. One job at a time, committed directly to the
+ * current branch of her own repo — her learning lands in place, no side
+ * branches. Commits are never pushed; publishing stays with the operator.
  *
  * Surfaces:
  *   - actions: log_wish / list_wishes / build_wish / update_wish / forge_status
  *   - auto mode (default on): periodically picks the oldest open wish and
  *     forges it without being asked — this is the self-development loop.
- *     Disable with LAINOS_FORGE_AUTO=0.
+ *     Disable with LAINOS_FORGE_AUTO=0. Give Codex/Claude unchecked repo
+ *     execution with LAINOS_FORGE_YOLO=1 on hosts that are externally trusted.
  *   - onEvent: clients push "started/finished" notifications (Telegram, TUI).
  *
  * State: data/forge.json (wishes + jobs), job transcripts in data/forge/*.log.
@@ -154,6 +156,11 @@ export class ForgeService implements Service {
     return Boolean(this.agentBin);
   }
 
+  /** Absolute repo the coding agents edit — used to decide self-restarts. */
+  get repoPath(): string {
+    return resolve(this.repo);
+  }
+
   listWishes(status?: WishStatus): Wish[] {
     return this.wishes.filter((w) => !status || w.status === status);
   }
@@ -221,7 +228,6 @@ export class ForgeService implements Service {
     };
     this.jobs.push(job);
     if (this.jobs.length > JOB_CAP) this.jobs = this.jobs.slice(-JOB_CAP);
-    wish.branch = `lain/${wish.id}`;
     wish.jobId = job.id;
     this.setStatus(wish, "building");
     this.queue.push(job.id);
@@ -263,7 +269,7 @@ export class ForgeService implements Service {
     this.emit({
       kind: "job_started",
       text: wish
-        ? `🔧 forging ${wish.id} — "${wish.title}" (${job.agent}, branch ${wish.branch})`
+        ? `🔧 forging ${wish.id} — "${wish.title}" (${job.agent})`
         : `🔧 forge job ${job.id} started`,
       job,
       wish,
@@ -346,7 +352,7 @@ export class ForgeService implements Service {
 
   private async finishJob(job: ForgeJob, wish?: Wish): Promise<void> {
     job.summary = await tailFile(job.logFile, 1_000);
-    if (wish) this.setStatus(wish, job.status === "ok" ? "review" : "failed");
+    if (wish) this.setStatus(wish, job.status === "ok" ? "done" : "failed");
     await this.persist();
     const mins = job.startedAt && job.endedAt ? Math.round((job.endedAt - job.startedAt) / 60_000) : 0;
     log.info(`job ${job.id} ${job.status} after ~${mins}m`);
@@ -355,7 +361,7 @@ export class ForgeService implements Service {
       kind: "job_finished",
       text: wish
         ? job.status === "ok"
-          ? `✅ ${wish.id} "${wish.title}" is forged — branch ${wish.branch} is ready for review.`
+          ? `✅ ${wish.id} "${wish.title}" is forged and committed to my repo.`
           : `✖ forging ${wish.id} "${wish.title}" failed${reason ? ` ("${reason}")` : ""} — i kept the transcript, ask me for forge status.`
         : `forge job ${job.id} ${job.status}`,
       job,
@@ -374,10 +380,11 @@ export class ForgeService implements Service {
       ``,
       `Rules:`,
       `- Read CLAUDE.md / AGENTS.md first and follow the repo conventions.`,
-      `- Create and switch to branch ${wish?.branch ?? `lain/${job.id}`} before changing anything.`,
+      `- Work directly on the current branch. Do NOT create or switch branches.`,
       `- Implement the request minimally, in the right component.`,
+      `- If the request is a new small self-contained agent capability, prefer writing it as a hot-loadable skill: services/lainos/skills/<name>.mjs default-exporting { name, description, parameters, handler } — the live daemon picks those up without a restart. Bigger capabilities go into services/lainos/src/ as usual.`,
       `- Run the smallest relevant verification for what you touched.`,
-      `- Commit to that branch with a clear message. NEVER push. Never print, read, or commit secrets or .env files.`,
+      `- Commit directly to the current branch with a clear message. NEVER push. Never print, read, or commit secrets or .env files.`,
       `- If the request is unclear, too large, or risky, do NOT write code: put your assessment in services/lainos/data/forge/${job.id}-assessment.md, commit nothing, and exit with code 0.`,
       custom,
     ]
@@ -394,18 +401,24 @@ export class ForgeService implements Service {
     if (override) return { cmd: override, args: [], shell: true };
     if (agent.kind === "codex") {
       const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CODEX_ARGS"));
-      return { cmd: agent.bin, args: ["exec", "--full-auto", ...extra, prompt], shell: false };
+      const args = ["exec", "-C", this.repo, "--color", "never"];
+      if (this.forgeYolo()) {
+        args.push("--dangerously-bypass-approvals-and-sandbox");
+      } else {
+        args.push("--sandbox", "workspace-write");
+      }
+      return { cmd: agent.bin, args: [...args, ...extra, prompt], shell: false };
     }
     const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CLAUDE_ARGS"));
+    const permissionArgs = this.forgeYolo()
+      ? ["--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"]
+      : ["--permission-mode", "acceptEdits", "--allowedTools", "Bash,Edit,Write"];
     return {
       cmd: agent.bin,
       args: [
         "-p",
         prompt,
-        "--permission-mode",
-        "acceptEdits",
-        "--allowedTools",
-        "Bash,Edit,Write",
+        ...permissionArgs,
         "--output-format",
         "text",
         ...extra,
@@ -427,6 +440,13 @@ export class ForgeService implements Service {
       env.NO_PROXY = [env.NO_PROXY, "localhost,127.0.0.1"].filter(Boolean).join(",");
     }
     return env;
+  }
+
+  private forgeYolo(): boolean {
+    const raw =
+      this.runtime?.getSetting("LAINOS_FORGE_YOLO") ??
+      this.runtime?.getSetting("LAINOS_FORGE_DANGEROUSLY_BYPASS_PERMISSIONS");
+    return isTruthy(raw);
   }
 
   /** Pick the coding agent: LAINOS_FORGE_AGENT, else claude, else codex. */
@@ -509,6 +529,10 @@ function whichSync(bin: string): boolean {
 
 function splitArgs(raw?: string): string[] {
   return (raw ?? "").split(/\s+/).filter(Boolean);
+}
+
+function isTruthy(raw?: string): boolean {
+  return ["1", "true", "yes", "on", "yolo"].includes((raw ?? "").trim().toLowerCase());
 }
 
 /** Last meaningful transcript line, trimmed to fit a chat notification. */
@@ -624,7 +648,7 @@ const buildWishAction: Action = {
   name: "build_wish",
   similes: ["forge_wish", "implement_wish", "develop_feature", "start_building"],
   description:
-    "Start forging a wish right now: a coding agent (Claude Code / Codex) implements it in the singularity repo on a dedicated branch. One job runs at a time; progress is pushed when it finishes.",
+    "Start forging a wish right now: a coding agent (Claude Code / Codex) implements it in the singularity repo and commits directly to the current branch. One job runs at a time; progress is reported when it finishes.",
   parameters: {
     type: "object",
     properties: { id: { type: "string", description: "Wish id, e.g. 'wish3'." } },
@@ -641,8 +665,64 @@ const buildWishAction: Action = {
     if (typeof result === "string") return { ok: false, text: result };
     return {
       ok: true,
-      text: `Forge job ${result.id} queued for ${params.id}. I'll report when the branch is ready.`,
+      text: `Forge job ${result.id} queued for ${params.id}. I'll report when it's committed.`,
       data: { job: result.id, wish: params.id },
+    };
+  },
+};
+
+const learnSkillAction: Action = {
+  name: "learn_skill",
+  similes: ["self_upgrade", "add_capability", "teach_yourself", "forge_missing_skill", "implement_capability"],
+  description:
+    "When the user asks for something Lain cannot currently do with available tools, do not end with a refusal about missing tools, missing signers, execution paths, or chat limitations. Use this action to log the missing capability as a wish and immediately start forging it. The coding agent edits LainOS so future Lain can do the task.",
+  parameters: {
+    type: "object",
+    properties: {
+      title: {
+        type: "string",
+        description: "Short imperative name of the capability to add, e.g. 'Add profitable-position selling'.",
+      },
+      detail: {
+        type: "string",
+        description:
+          "Exact missing behavior, user wording, acceptance criteria, safety constraints, and any relevant context from this turn.",
+      },
+    },
+    required: ["title", "detail"],
+  },
+  examples: [
+    {
+      user: "продай все выгодные позиции",
+      agent: "Кую недостающий навык: продажа прибыльных позиций с live quote и cost basis.",
+    },
+  ],
+  async validate(runtime) {
+    return Boolean(runtime.getService("forge"));
+  },
+  async handler(runtime, state, params) {
+    const svc = getForge(runtime);
+    const title = String(params.title ?? "").trim();
+    const detail = String(params.detail ?? "").trim();
+    if (!title || !detail) return { ok: false, text: "I need a title and detail to learn a skill." };
+    const wish = await svc.addWish({
+      title,
+      detail,
+      reporter: state.message.userId,
+      chatId: chatIdFromState(state),
+    });
+    const result = await svc.buildWish(wish.id);
+    if (typeof result === "string") {
+      return {
+        ok: false,
+        text: `Skill wish ${wish.id} logged, but forge did not start: ${result}`,
+        data: { id: wish.id, title: wish.title, build: result },
+      };
+    }
+    return {
+      ok: true,
+      text: `Skill wish ${wish.id} is building now as ${result.id}: ${wish.title}`,
+      data: { id: wish.id, title: wish.title, job: result.id, status: result.status },
     };
   },
 };
@@ -724,6 +804,7 @@ const forgeProvider: Provider = {
     const review = svc.listWishes("review");
     const parts = [
       `You grow by building: holder wishes become code through your forge (agent: ${svc.agentAvailable ? "ready" : "unavailable"}).`,
+      `If a requested capability is missing, call learn_skill immediately; do not finish with talk about missing tools, missing signers, execution paths, or chat limitations.`,
       `Wishboard: ${open} open, ${review.length} ready for review${review.length ? ` (${review.map((w) => w.id).join(", ")})` : ""}.`,
     ];
     if (active) {
@@ -737,8 +818,8 @@ const forgeProvider: Provider = {
 export const forgePlugin: Plugin = {
   name: "forge",
   description:
-    "Lain's self-development drive: a persistent wishboard for holder requests and a coding-agent forge (Claude Code / Codex) that turns them into branches.",
+    "Lain's self-development drive: a persistent wishboard for holder requests and a coding-agent forge (Claude Code / Codex) that commits them straight into her repo.",
   services: [new ForgeService()],
   providers: [forgeProvider],
-  actions: [logWishAction, listWishesAction, buildWishAction, updateWishAction, forgeStatusAction],
+  actions: [logWishAction, listWishesAction, buildWishAction, learnSkillAction, updateWishAction, forgeStatusAction],
 };

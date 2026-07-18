@@ -17,7 +17,10 @@ import {
   type ChannelWatchService,
 } from "../src/plugins/channel/index.js";
 import type { CyberiaChainService } from "../src/plugins/cyberia/index.js";
+import { applyBuy, applySell, TradeJournal, type Position } from "../src/plugins/cyberia/journal.js";
 import type { ForgeEvent, ForgeService } from "../src/plugins/forge/index.js";
+import { InitiativeService } from "../src/plugins/initiative/index.js";
+import type { SkillsService } from "../src/plugins/skills/index.js";
 import {
   parseContributionDay,
   type GithubStreakService,
@@ -30,6 +33,8 @@ async function main() {
   // Forge: deterministic stub agent, no auto mode, no real repo edits.
   process.env.LAINOS_FORGE_CMD = 'echo "forge stub saw: $LAINOS_FORGE_PROMPT" | head -c 200';
   process.env.LAINOS_FORGE_AUTO = "0";
+  // Skills: hot-load from a scratch dir, not the repo's skills/.
+  process.env.LAINOS_SKILLS_DIR = mkdtempSync(join(tmpdir(), "lainos-skills-"));
 
   const dataDir = mkdtempSync(join(tmpdir(), "lainos-smoke-"));
   const agent = await createAgent({ character: lain, dataDir });
@@ -64,15 +69,19 @@ async function main() {
     });
     await sentinel.tick();
     sentinelFired = sentinel.recentAlerts(5).some((a) => a.text.includes("below"));
-    // The alerts provider should hand the alert to the next turn and mark it delivered.
+    // The alerts provider should pass the alert to the next turn and mark it delivered.
     await say("anything happen while I was away?");
     alertDelivered = sentinel.recentAlerts(5).every((a) => a.delivered);
   }
 
-  // --- cyberia: the agent can mint its own wallet; the key never surfaces ---
+  // --- cyberia: the agent can mint its own wallet; the key is never exposed ---
   const chain = agent.getService<CyberiaChainService>("cyberia-chain");
   let walletOk = false;
+  let lainTokenKnown = false;
   if (chain) {
+    lainTokenKnown =
+      chain.resolveToken("LAIN")?.toLowerCase() ===
+      "0x05cd1afd5b2df3cca6ceab80cbc21168ec981e8b";
     if (chain.agentAddress) {
       // A signer is preconfigured (CYBERIA_AGENT_PK) — create_wallet must be a no-op.
       const res = await chain.createWallet();
@@ -114,8 +123,82 @@ async function main() {
       typeof job !== "string" &&
       ev !== null &&
       ev.job.status === "ok" &&
-      forge.getWish(wish.id)?.status === "review";
+      forge.getWish(wish.id)?.status === "done";
   }
+
+  // --- skills: she can write herself a tool and use it seconds later ---
+  const skillsSvc = agent.getService<SkillsService>("skills");
+  let skillsOk = false;
+  if (skillsSvc) {
+    const module = (marker: string) =>
+      `export default { name: "smoke_echo", description: "echo for smoke",\n` +
+      `  parameters: { type: "object", properties: { text: { type: "string" } } },\n` +
+      `  async handler(_rt, _st, params) { return { ok: true, text: "${marker}:" + params.text }; } };\n`;
+    await skillsSvc.createSkill("smoke_echo", module("echo"));
+    const live = agent.actions.find((a) => a.name === "smoke_echo");
+    const first = live ? await live.handler(agent, {} as never, { text: "wired" }) : null;
+    // Hot overwrite must replace the live action, not duplicate it.
+    await skillsSvc.createSkill("smoke_echo", module("echo2"));
+    const second = await agent.actions
+      .find((a) => a.name === "smoke_echo")!
+      .handler(agent, {} as never, { text: "wired" });
+    const copies = agent.actions.filter((a) => a.name === "smoke_echo").length;
+    let brokenRejected = false;
+    try {
+      await skillsSvc.createSkill("smoke_broken", "export default {};");
+    } catch {
+      brokenRejected = true;
+    }
+    let shadowRejected = false;
+    try {
+      await skillsSvc.createSkill("check_balance", module("shadow"));
+    } catch {
+      shadowRejected = true;
+    }
+    skillsOk =
+      first?.text === "echo:wired" &&
+      second.text === "echo2:wired" &&
+      copies === 1 &&
+      brokenRejected &&
+      shadowRejected &&
+      !agent.actions.some((a) => a.name === "smoke_broken");
+  }
+
+  // --- trade journal: moving-average cost basis + realised PnL, persisted ---
+  const posBase: Position = { token: "0xabc", symbol: "T", qtyWei: "0", costWei: "0" };
+  const afterBuy1 = applyBuy(undefined, posBase, 100n, 10n);
+  const afterBuy2 = applyBuy(afterBuy1, posBase, 100n, 30n);
+  const afterSell = applySell(afterBuy2, 100n, 40n);
+  const mathOk =
+    afterBuy2.qtyWei === "200" &&
+    afterBuy2.costWei === "40" &&
+    afterSell.realizedWei === 20n &&
+    afterSell.position.qtyWei === "100" &&
+    afterSell.position.costWei === "20";
+  const tj = new TradeJournal(join(dataDir, "tj-test.json"));
+  await tj.load();
+  await tj.recordBuy({ token: "0xabc", symbol: "T", qtyWei: 100n, cyberWei: 10n, txHash: "0x1" });
+  const realized = await tj.recordSell({
+    token: "0xABC", // case-insensitive position key
+    symbol: "T",
+    qtyWei: 50n,
+    cyberWei: 20n,
+    txHash: "0x2",
+  });
+  const tj2 = new TradeJournal(join(dataDir, "tj-test.json"));
+  await tj2.load();
+  const reloaded = tj2.positionOf("0xabc");
+  const journalOk =
+    mathOk && realized === 15n && reloaded?.qtyWei === "50" && reloaded?.costWei === "5" &&
+    tj2.recentTrades(5).length === 2;
+
+  // --- initiative: quiet hours wrap midnight and can be disabled ---
+  const initiative = new InitiativeService();
+  const quietOk =
+    initiative.isQuietHour(23) &&
+    initiative.isQuietHour(3) &&
+    !initiative.isQuietHour(9) &&
+    !initiative.isQuietHour(12);
 
   // --- scout: RSS parser is sane, topics can be added and removed ---
   const rss = parseRss(
@@ -210,7 +293,7 @@ async function main() {
     channelOk = Boolean(watch) && rejected === null && listed && removed && channelParseOk;
   }
 
-  // --- telegram hand: operator chat resolution + token gating (no network) ---
+  // --- telegram: operator chat resolution + token gating (no network) ---
   const tgDir = mkdtempSync(join(tmpdir(), "lainos-tg-"));
   const tgEmptyDir = mkdtempSync(join(tmpdir(), "lainos-tg-empty-"));
   writeFileSync(join(tgDir, "telegram.json"), JSON.stringify({ chats: [777, -100123] }));
@@ -255,20 +338,25 @@ async function main() {
   console.log(`alert delivered in turn  : ${alertDelivered ? "PASS" : "FAIL"}`);
   console.log(`telegram splitMessage    : ${splitOk ? "PASS" : "FAIL"}`);
   console.log(`agent wallet lifecycle   : ${walletOk ? "PASS" : "FAIL"}`);
+  console.log(`LAIN token registry      : ${lainTokenKnown ? "PASS" : "FAIL"}`);
   console.log(`forge wish logged        : ${wishLogged ? "PASS" : "FAIL"}`);
-  console.log(`forge wish -> review     : ${wishForged ? "PASS" : "FAIL"}`);
+  console.log(`forge wish -> done       : ${wishForged ? "PASS" : "FAIL"}`);
+  console.log(`skills hot self-extend   : ${skillsOk ? "PASS" : "FAIL"}`);
+  console.log(`trade journal cost basis : ${journalOk ? "PASS" : "FAIL"}`);
+  console.log(`initiative quiet hours   : ${quietOk ? "PASS" : "FAIL"}`);
   console.log(`scout rss parser         : ${rssOk ? "PASS" : "FAIL"}`);
   console.log(`scout topic add/remove   : ${scoutOk ? "PASS" : "FAIL"}`);
   console.log(`scout NOTHING = silence  : ${nothingOk ? "PASS" : "FAIL"}`);
   console.log(`reasoning never leaks    : ${reasoningOk ? "PASS" : "FAIL"}`);
   console.log(`github streak watch      : ${githubOk ? "PASS" : "FAIL"}`);
   console.log(`channel post watch       : ${channelOk ? "PASS" : "FAIL"}`);
-  console.log(`telegram send hand       : ${telegramOk ? "PASS" : "FAIL"}`);
+  console.log(`telegram send action     : ${telegramOk ? "PASS" : "FAIL"}`);
 
   await agent.stop();
   const ok =
     learnedName && ranBalance && nullIsZero && sentinelFired && alertDelivered && splitOk &&
-    walletOk && wishLogged && wishForged && rssOk && scoutOk && nothingOk && reasoningOk &&
+    walletOk && lainTokenKnown && wishLogged && wishForged && skillsOk && journalOk && quietOk &&
+    rssOk && scoutOk && nothingOk && reasoningOk &&
     githubOk && channelOk && telegramOk;
   console.log(`\n${ok ? "✅ smoke OK" : "❌ smoke FAILED"}`);
   process.exit(ok ? 0 : 1);

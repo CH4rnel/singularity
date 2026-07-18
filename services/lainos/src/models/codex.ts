@@ -211,7 +211,7 @@ function onPath(bin: string): boolean {
 /** Serialise a ModelRequest into the single prompt one codex run receives. */
 export function renderPrompt(request: ModelRequest): string {
   const lines: string[] = [
-    "This is a pure chat completion relayed through the Codex CLI — you are not " +
+    "This response is generated through the Codex CLI model provider — you are not " +
       "a coding agent here. Do not run shell commands, do not read or write " +
       "files, do not explore the workspace: compose the reply from this prompt " +
       "alone and finish in one message.",

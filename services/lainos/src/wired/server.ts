@@ -8,7 +8,7 @@ import type { Ticket } from "./types.js";
 const log = createLogger("wired");
 
 /** Minimal ABI to pre-encode startRun calldata server-side (tuple+bytes is
- * painful to hand-encode in GDScript, so we hand the client ready calldata). */
+ * painful to encode in GDScript, so we return ready calldata to the client). */
 const WIRED_FORGE_ABI = [
   {
     type: "function",

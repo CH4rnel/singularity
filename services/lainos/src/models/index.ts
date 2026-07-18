@@ -43,7 +43,7 @@ function splitArgs(raw?: string): string[] {
  *   3. ANTHROPIC_API_KEY present   -> anthropic
  *   4. otherwise                   -> offline mock
  *
- * `codex` relays completions through the Codex CLI (ChatGPT subscription, no
+ * `codex` runs completions through the Codex CLI (ChatGPT subscription, no
  * API key) and retries a failed call once on its own (LAINOS_CODEX_RETRIES).
  *
  * Cross-provider fallback is opt-in: LAINOS_MODEL_FALLBACK=<provider> retries

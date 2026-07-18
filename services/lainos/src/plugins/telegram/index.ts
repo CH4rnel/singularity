@@ -8,12 +8,12 @@ import type { Action, Plugin } from "../../types.js";
 const log = createLogger("plugin:telegram");
 
 /**
- * The telegram plugin is the agent's outbound hand to its operator: a single
- * `send_telegram` action that delivers a message via the Bot API from whatever
- * surface the agent runs in (TUI, HTTP, daemon). The bot token never leaves
- * this module — the model sees only delivery status. This is deliberate: the
- * agent's shell is scoped away from .env, so messaging goes through this hand
- * instead of `curl` with a leaked secret.
+ * The telegram plugin is the agent's operator notification channel: a single
+ * `send_telegram` action that delivers a message via the Bot API from TUI,
+ * HTTP, or daemon mode. The bot token never leaves this module — the model
+ * sees only delivery status. This is deliberate: the agent's shell is scoped
+ * away from .env, so messaging goes through this action instead of `curl` with
+ * a leaked secret.
  */
 
 const MAX_MESSAGE = 4000; // Telegram hard limit is 4096; leave headroom.
@@ -51,6 +51,18 @@ export async function resolveOperatorChatId(getSetting: GetSetting): Promise<str
   return null;
 }
 
+/**
+ * Resolve the operator chat and deliver a message to it. Shared by the
+ * send_telegram action and background services (initiative, trader) that speak
+ * to the operator on their own. Throws when no chat is known or delivery fails.
+ */
+export async function sendToOperator(getSetting: GetSetting, text: string): Promise<string> {
+  const chatId = await resolveOperatorChatId(getSetting);
+  if (!chatId) throw new Error("operator chat unknown (set TELEGRAM_OPERATOR_CHAT_ID)");
+  await deliver(getSetting, chatId, text);
+  return chatId;
+}
+
 /** POST sendMessage chunk-by-chunk; throws with the API description on failure. */
 async function deliver(getSetting: GetSetting, chatId: string, text: string): Promise<void> {
   const token = getSetting("TELEGRAM_BOT_TOKEN") ?? "";
@@ -81,7 +93,7 @@ const sendTelegramAction: Action = {
   similes: ["telegram", "message_operator", "notify_operator", "write_telegram", "tg_send"],
   description:
     "Send a Telegram message to the operator right now and return delivery status. " +
-    "The bot token stays on the host — this hand is the only way to reach Telegram; never try to read the token or curl the API yourself.",
+    "The bot token stays on the host — use this action to reach Telegram; never try to read the token or curl the API yourself.",
   parameters: {
     type: "object",
     properties: {
@@ -125,6 +137,6 @@ const sendTelegramAction: Action = {
 
 export const telegramPlugin: Plugin = {
   name: "telegram",
-  description: "Outbound Telegram hand: send_telegram delivers a message to the operator.",
+  description: "Operator Telegram notifications: send_telegram delivers a message to the operator.",
   actions: [sendTelegramAction],
 };

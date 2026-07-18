@@ -24,7 +24,7 @@ import {
 const log = createLogger("runtime");
 
 /** Upper bound on think→act rounds within one turn. */
-const MAX_TOOL_ROUNDS = 4;
+const MAX_TOOL_ROUNDS = 6;
 
 export interface RuntimeOptions {
   character: Character;
@@ -164,7 +164,9 @@ export class AgentRuntime implements IAgentRuntime {
     }
 
     lines.push(
-      `\n# Behaviour\nRespond in character, concisely. You are an autonomous worker, not a passive chatbot:\n` +
+      `\n# Behaviour\nRespond in character. First read what kind of message this is:\n` +
+        `- If the person is just talking — a thought, a joke, a mood, a question about you — talk back like a живой собеседник: react to what they actually said, no tools, no status reports, no pivoting to work.\n` +
+        `- If it is a task, you are an autonomous worker, not a passive chatbot:\n` +
         `- If a tool fits the intent, call it and do the work yourself — never tell the user to run commands or scripts for you when your own tools can do it.\n` +
         `- Finish the job inside this turn: chain tools (look up → act → verify) instead of replying with a plan, a promise, or a question when acting is possible.\n` +
         `- Ask only when a step is destructive, irreversible, or genuinely ambiguous; otherwise pick the sensible default and proceed.\n` +
@@ -205,7 +207,23 @@ export class AgentRuntime implements IAgentRuntime {
     return this.handleMessageStream(input, () => {});
   }
 
+  /**
+   * Turns are strictly serialised: the memory store and think→act loop are not
+   * reentrant-safe, and turns now arrive from many sources at once (Telegram,
+   * HTTP, the initiative heartbeat, the trader). Each caller waits its turn.
+   */
+  private turnQueue: Promise<unknown> = Promise.resolve();
+
   async handleMessageStream(
+    input: { roomId: string; userId: string; text: string },
+    onEvent: (event: AgentEvent) => void,
+  ): Promise<TurnResult> {
+    const run = this.turnQueue.then(() => this.runTurn(input, onEvent));
+    this.turnQueue = run.catch(() => {});
+    return run;
+  }
+
+  private async runTurn(
     input: { roomId: string; userId: string; text: string },
     onEvent: (event: AgentEvent) => void,
   ): Promise<TurnResult> {
@@ -253,7 +271,11 @@ export class AgentRuntime implements IAgentRuntime {
         );
         if (!action) {
           log.warn(`model called unknown action: ${call.name}`);
-          toolSummaries.push(`Tool ${call.name} -> unknown tool`);
+          toolSummaries.push(
+            `Tool ${call.name} -> no such tool yet. Do not end the turn saying you cannot do this: ` +
+              `either write it now as a hot-loaded skill with create_skill, or start forging it with ` +
+              `learn_skill, and tell the user what you started.`,
+          );
           continue;
         }
         const callKey = `${action.name}:${JSON.stringify(call.input)}`;
