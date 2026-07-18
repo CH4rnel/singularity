@@ -21,6 +21,7 @@ from bot.config import (
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_VERIFY_URL, WHALE_LINK_TTL_MINUTES,
     SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL,
     CYBER_SOL_DECIMALS,
+    AI_ENABLED,
 )
 from bot.db import engine
 from bot.utils import (
@@ -121,9 +122,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/set_rewards_interval <interval> - (admins) change payout interval",
         "/reward_now - (admins) trigger an extra payout right now",
         "Reply \"thank you\" or \"thanks\" to someone's message to reward them with this chat's token",
-        "/ask <question> - ask the Cyberia AI assistant",
-        "/website - project website",
     ]
+    if AI_ENABLED:
+        lines.append("/ask <question> - ask the Cyberia AI assistant")
+    lines.append("/website - project website")
 
     # Only nudge wallet-less users to register, and keep it at the very end.
     if not has_wallet:
@@ -138,6 +140,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ai_lines = (
+        "/ask <question> - ask the Cyberia AI assistant\n" if AI_ENABLED else ""
+    )
+    ai_hint = (
+        "In private chat you can also send the AI assistant a question as plain "
+        "text. In groups, mention the bot or reply to its message.\n\n"
+        if AI_ENABLED
+        else ""
+    )
     await update.message.reply_text(
         "Commands:\n"
         "/start - start receiving TG\n"
@@ -158,11 +169,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/x - X (Twitter) and Telegram links (also replies to \"x\")\n"
         "/ca - CYBER contract address (also replies to \"ca\")\n"
         "/stats [window] - on-chain activity digest (default 24h, e.g. /stats 6h)\n"
-        "/ask <question> - ask the Cyberia AI assistant\n"
+        + ai_lines +
         "/set_channel_wallet <@channel> <0x..> - (channel admins) wallet that receives post NFTs\n"
         "/website - project website\n\n"
-        "In private chat you can also send the AI assistant a question as plain text. "
-        "In groups, mention the bot or reply to its message.\n\n"
+        + ai_hint +
         "You can chat in groups without a wallet -- rewards will be saved as "
         "pending and minted in one go when you /set_wallet.",
         reply_markup=_main_menu_kb(),

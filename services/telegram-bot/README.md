@@ -59,7 +59,11 @@ snapshot so the chat can see which on-chain token prices are being used.
 
 ### AI assistant
 
-Set `AI_API_KEY` to enable the assistant. `AI_API_URL` defaults to OpenAI's chat
+The assistant is **off by default**: with `AI_ENABLED` unset (or falsy) the bot
+registers no AI handlers at all — no `/ask`, no DM/mention answers, and no
+"not configured" replies. Set `AI_ENABLED=1` to turn the feature on.
+
+Then set `AI_API_KEY` to enable the assistant. `AI_API_URL` defaults to OpenAI's chat
 completions endpoint and `AI_MODEL` defaults to `gpt-4.1-mini`; both can be
 changed for another OpenAI-compatible provider. When no direct AI/OpenAI key is
 set, a monorepo checkout automatically reuses `services/lainos/.env`'s

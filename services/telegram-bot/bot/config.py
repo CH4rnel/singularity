@@ -246,6 +246,12 @@ NFT_MARKET_URL = os.environ.get("NFT_MARKET_URL", PROJECT_WEBSITE_URL.rstrip("/"
 PIXEL_BATTLE_URL = os.environ.get("PIXEL_BATTLE_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/pixels")
 
 # --- AI assistant ------------------------------------------------------------
+# Master switch. The assistant stays fully off (no /ask, no DM/mention answers,
+# no "not configured" replies) unless AI_ENABLED is set to a truthy value.
+AI_ENABLED = (
+    os.environ.get("AI_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+)
+
 # Any provider exposing the OpenAI-compatible /chat/completions API can be
 # used. The feature stays disabled until a key is supplied, so existing bot
 # deployments continue to work without an additional dependency or secret.

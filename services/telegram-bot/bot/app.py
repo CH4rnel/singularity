@@ -23,7 +23,7 @@ from bot.config import (
     MARKET_SNAPSHOT_SECONDS,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS,
     NFT_FROM_POSTS, NFT_FROM_POSTS_DRYRUN, CYBERIA_NFT_ADDRESS, IPFS_API_URL,
-    AI_API_KEY, AI_MODEL,
+    AI_ENABLED, AI_API_KEY, AI_MODEL,
 )
 from bot.db import ensure_schema
 from bot.nft import (
@@ -153,7 +153,9 @@ async def post_init(application: Application):
     else:
         logger.info("NFT-from-posts disabled: NFT_FROM_POSTS off or no collection")
 
-    if AI_API_KEY:
+    if not AI_ENABLED:
+        logger.info("AI assistant disabled: AI_ENABLED off")
+    elif AI_API_KEY:
         logger.info("AI assistant enabled: model=%s", AI_MODEL)
     else:
         logger.info("AI assistant disabled: AI_API_KEY not set")
@@ -200,7 +202,8 @@ def run_dispatcher():
     application.add_handler(CommandHandler("x", x_command))
     application.add_handler(CommandHandler("ca", ca_command))
     application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("ask", ask_command))
+    if AI_ENABLED:
+        application.add_handler(CommandHandler("ask", ask_command))
     application.add_handler(CommandHandler("set_channel_wallet", set_channel_wallet_command))
     application.add_handler(CommandHandler("channel_wallet", channel_wallet_command))
 
@@ -258,14 +261,17 @@ def run_dispatcher():
     # AI answers all ordinary text in DMs, but only explicit mentions/replies
     # in groups. A separate handler group lets interactive wallet/token flows
     # inspect the same update first; the AI handler checks those states itself.
-    application.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL
-            & ~filters.Regex(_QUICK_REPLY_RE),
-            ai_message_handler,
-        ),
-        group=4,
-    )
+    # With AI_ENABLED off the handler is not registered at all, so the bot
+    # stays silent instead of replying that the assistant is not configured.
+    if AI_ENABLED:
+        application.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND & ~filters.ChatType.CHANNEL
+                & ~filters.Regex(_QUICK_REPLY_RE),
+                ai_message_handler,
+            ),
+            group=4,
+        )
 
     # Mint each new post in public channels the bot administers into CyberiaNFT.
     # A bot only receives channel_post updates for channels it is an admin of.
