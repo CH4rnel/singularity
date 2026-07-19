@@ -10,9 +10,31 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.4.0'),
+    'current_version' => env('APP_VERSION', 'v0.5.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.5.0',
+            'date' => '2026-07-19',
+            'title' => 'Multi-wallet, multichain',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'One wallet picker for MetaMask, Phantom, Rabby, Trust Wallet, Coinbase Wallet, OKX Wallet, Solflare, and Backpack, with exact-provider discovery when several browser wallets are installed.',
+                        'Optional WalletConnect support for QR codes and mobile deep links, opening Cyberia to wallets such as MetaMask Mobile, Trust, Rainbow, Ledger Live, OKX, and SafePal.',
+                        'A network selector covering Cyberia, Robinhood Chain, Ethereum, BNB Smart Chain, Polygon, Base, Arbitrum One, and OP Mainnet. Cyberia is live; Robinhood integration is in progress; the remaining networks are marked as coming soon.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'Wallet login and on-chain actions now consistently use the provider selected by the user across Cyberia EVM and Solana flows.',
+                        'Multi-network wallets are merged into a single choice with explicit EVM or Solana routing instead of appearing as duplicate entries.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.4.0',
             'date' => '2026-07-19',
