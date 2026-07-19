@@ -150,6 +150,23 @@ it('retries once when the model ships an empty reply', function () {
     Http::assertSentCount(2);
 });
 
+it('falls back to the free router when the pinned model is rate-limited', function () {
+    config()->set('services.lain.model', 'qwen/qwen3-next-80b-a3b-instruct:free');
+    config()->set('services.lain.fallback_model', 'openrouter/free');
+    Http::fakeSequence(OPENROUTER_URL)
+        ->push(['error' => ['message' => 'rate-limited upstream']], 429)
+        ->push(['model' => 'openai/gpt-oss-20b:free', 'choices' => [['message' => ['content' => 'still here.']]]]);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->postJson('/api/lain/chat', ['text' => 'hello?'])
+        ->assertOk()
+        ->assertJsonPath('text', 'still here.');
+
+    Http::assertSentCount(2);
+    Http::assertSent(fn (Request $request) => $request['model'] === 'openrouter/free');
+});
+
 it('does not persist the user turn when the model fails', function () {
     Http::fake([OPENROUTER_URL => Http::response(['error' => ['message' => 'rate limited']], 429)]);
     $user = User::factory()->create();

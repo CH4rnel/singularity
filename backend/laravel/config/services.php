@@ -46,6 +46,8 @@ return [
         'openrouter_api_key' => env('OPENROUTER_API_KEY'),
         // openrouter/free is OpenRouter's $0 router over available free models.
         'model' => env('LAIN_CHAT_MODEL', 'openrouter/free'),
+        // Tried when the pinned model errors (free tiers rate-limit upstream).
+        'fallback_model' => env('LAIN_CHAT_FALLBACK_MODEL', 'openrouter/free'),
         'timeout_seconds' => (int) env('LAIN_CHAT_TIMEOUT_SECONDS', 90),
     ],
 

@@ -49,30 +49,49 @@ class LainChatService
         $messages[] = ['role' => 'user', 'content' => $text];
 
         $system = $this->systemPrompt($user);
-        $reply = $this->complete($system, $messages);
 
-        if ($reply['text'] === '') {
-            // Free-router reasoning models can burn the whole budget "thinking"
-            // and ship nothing visible. One plain retry instead of a bare error.
-            $messages[] = ['role' => 'user', 'content' => 'Your previous reply came through empty. Answer now, in character, plain text only.'];
-            $reply = $this->complete($system, $messages);
+        // Free models get upstream-rate-limited without warning; when the
+        // pinned one fails, fall through to OpenRouter's free-model router,
+        // which picks whatever is currently available.
+        $models = array_values(array_unique(array_filter([
+            (string) config('services.lain.model', 'openrouter/free'),
+            (string) config('services.lain.fallback_model', 'openrouter/free'),
+        ])));
+
+        $lastError = null;
+
+        foreach ($models as $model) {
+            try {
+                $reply = $this->complete($model, $system, $messages);
+
+                if ($reply['text'] === '') {
+                    // Free reasoning models can burn the whole budget
+                    // "thinking" and ship nothing visible. One plain retry.
+                    $reply = $this->complete($model, $system, [
+                        ...$messages,
+                        ['role' => 'user', 'content' => 'Your previous reply came through empty. Answer now, in character, plain text only.'],
+                    ]);
+                }
+
+                if ($reply['text'] !== '') {
+                    return $reply;
+                }
+
+                $lastError = new RuntimeException("OpenRouter returned an empty reply twice from {$model}.");
+            } catch (RuntimeException $e) {
+                $lastError = $e;
+            }
         }
 
-        if ($reply['text'] === '') {
-            throw new RuntimeException('OpenRouter returned an empty reply twice.');
-        }
-
-        return $reply;
+        throw $lastError ?? new RuntimeException('No Lain chat model is configured.');
     }
 
     /**
      * @param  list<array{role: string, content: string}>  $messages
      * @return array{text: string, model: string}
      */
-    private function complete(string $system, array $messages): array
+    private function complete(string $model, string $system, array $messages): array
     {
-        $model = (string) config('services.lain.model', 'openrouter/free');
-
         $response = Http::withToken((string) config('services.lain.openrouter_api_key'))
             ->withHeaders([
                 'HTTP-Referer' => (string) config('app.url'),
