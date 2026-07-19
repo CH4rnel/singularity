@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
-import { Wallet, Shield, Zap } from 'lucide-vue-next';
-import { onMounted, ref } from 'vue';
+import { Head } from '@inertiajs/vue3';
+import { Download, Wallet, Shield, Zap } from 'lucide-vue-next';
+import { computed, onMounted } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -11,8 +11,10 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
+import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
-import { useWalletAuth } from '@/composables/useWalletAuth';
+import { useWeb3Login } from '@/composables/useWeb3Login';
+import { mergeWalletChoices } from '@/lib/walletChoices';
 import { register } from '@/routes';
 
 defineOptions({
@@ -22,73 +24,35 @@ defineOptions({
     },
 });
 
-const isLoading = ref(false);
-const error = ref<string | null>(null);
+const evmWallet = useWallet();
+const solanaWallet = useSolanaWallet();
+const web3Login = useWeb3Login();
 
-const wallet = useWallet();
-const walletAuth = useWalletAuth();
+const walletChoices = computed(() =>
+    mergeWalletChoices(
+        evmWallet.walletProviders.value,
+        solanaWallet.walletProviders.value,
+    ),
+);
+const installedChoices = computed(() =>
+    walletChoices.value.filter((choice) => choice.installed),
+);
+const suggestedChoices = computed(() =>
+    walletChoices.value.filter((choice) => !choice.installed),
+);
+const isBusy = computed(
+    () =>
+        web3Login.isAuthenticating.value ||
+        evmWallet.isConnecting.value ||
+        solanaWallet.isConnecting.value,
+);
 
-const authenticate = async (address: string) => {
-    isLoading.value = true;
-    error.value = null;
+function refreshWalletChoices() {
+    evmWallet.refreshWalletProviders();
+    solanaWallet.refreshWalletProviders();
+}
 
-    try {
-        const { nonce } = await walletAuth.generateNonce(address);
-
-        const message = `Sign this message to authenticate with your wallet. Nonce: ${nonce}`;
-        const signature = await wallet.signMessage(message);
-
-        if (!signature) {
-            error.value = 'Failed to sign message. Please try again.';
-            isLoading.value = false;
-
-            return;
-        }
-
-        const response = await walletAuth.verifySignature(address, signature);
-
-        router.post(
-            '/login/web3',
-            {
-                token: response.token,
-            },
-            {
-                onFinish: () => {
-                    isLoading.value = false;
-                },
-                onError: (err: Record<string, string>) => {
-                    error.value = err.message || 'Authentication failed';
-                },
-            },
-        );
-    } catch (err) {
-        error.value =
-            err instanceof Error
-                ? err.message
-                : 'Authentication failed. Please try again.';
-        isLoading.value = false;
-    }
-};
-
-const handleConnect = async () => {
-    const address = await wallet.connect();
-
-    if (address) {
-        await authenticate(address);
-    } else if (wallet.error.value) {
-        error.value = wallet.error.value;
-    }
-};
-
-onMounted(() => {
-    if (wallet.isEvmProviderInstalled() && !wallet.isConnected.value) {
-        wallet.connect().then((address) => {
-            if (address) {
-                authenticate(address);
-            }
-        });
-    }
-});
+onMounted(refreshWalletChoices);
 </script>
 
 <template>
@@ -104,7 +68,8 @@ onMounted(() => {
             <div>
                 <h1 class="text-3xl font-bold">Sign in with your wallet</h1>
                 <p class="mt-2 text-muted-foreground">
-                    Connect your Web3 wallet to access your account
+                    Choose any EVM or Solana wallet — browser extension or
+                    mobile via WalletConnect
                 </p>
             </div>
         </div>
@@ -147,49 +112,100 @@ onMounted(() => {
                     </div>
                 </div>
 
-                <div class="relative">
-                    <div class="absolute inset-0 flex items-center">
-                        <span class="w-full border-t"></span>
-                    </div>
-                    <div class="relative flex justify-center text-xs uppercase">
-                        <span class="bg-background px-2 text-muted-foreground"
-                            >Connect below</span
-                        >
-                    </div>
-                </div>
-
-                <div class="flex flex-col items-center">
-                    <Button
-                        variant="default"
-                        size="lg"
-                        class="w-full gap-2"
-                        :disabled="isLoading || wallet.isConnecting.value"
-                        @click="handleConnect"
-                    >
-                        <Spinner
-                            v-if="wallet.isConnecting.value"
-                            class="h-4 w-4"
-                        />
-                        <Wallet v-else class="h-4 w-4" />
-                        {{
-                            wallet.isConnecting.value
-                                ? 'Connecting...'
-                                : 'Connect Wallet'
-                        }}
-                    </Button>
-
+                <div class="flex flex-col gap-2">
                     <p
-                        v-if="isLoading"
-                        class="mt-4 flex items-center gap-2 text-sm text-muted-foreground"
+                        class="text-xs font-semibold text-muted-foreground uppercase"
                     >
-                        <Spinner class="h-4 w-4" />
-                        Authenticating...
+                        Your wallets
                     </p>
-
-                    <p v-if="error" class="mt-4 text-sm text-destructive">
-                        {{ error }}
+                    <div
+                        v-for="choice in installedChoices"
+                        :key="choice.key"
+                        class="flex items-center gap-3 rounded-lg border p-3"
+                    >
+                        <img
+                            v-if="choice.icon"
+                            :src="choice.icon"
+                            :alt="`${choice.name} icon`"
+                            class="h-6 w-6 rounded-sm"
+                        />
+                        <Wallet v-else class="h-6 w-6" />
+                        <span class="font-medium">{{ choice.name }}</span>
+                        <div class="ml-auto flex gap-2">
+                            <Button
+                                v-if="choice.evmId"
+                                variant="outline"
+                                size="sm"
+                                :disabled="isBusy"
+                                @click="web3Login.loginWithEvm(choice.evmId)"
+                            >
+                                EVM
+                            </Button>
+                            <Button
+                                v-if="choice.solanaId"
+                                variant="outline"
+                                size="sm"
+                                :disabled="isBusy"
+                                @click="
+                                    web3Login.loginWithSolana(choice.solanaId)
+                                "
+                            >
+                                Solana
+                            </Button>
+                        </div>
+                    </div>
+                    <p
+                        v-if="installedChoices.length === 0"
+                        class="text-sm text-muted-foreground"
+                    >
+                        No wallet detected in this browser — install one below
+                        or connect a mobile wallet via WalletConnect.
                     </p>
                 </div>
+
+                <div
+                    v-if="suggestedChoices.length > 0"
+                    class="flex flex-col gap-2"
+                >
+                    <p
+                        class="text-xs font-semibold text-muted-foreground uppercase"
+                    >
+                        Get a wallet
+                    </p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <a
+                            v-for="choice in suggestedChoices"
+                            :key="choice.key"
+                            :href="choice.installUrl"
+                            target="_blank"
+                            rel="noopener"
+                            class="flex items-center gap-2 rounded-lg border p-2 text-sm text-muted-foreground hover:text-foreground"
+                        >
+                            <Wallet class="h-4 w-4" />
+                            {{ choice.name }}
+                            <Download class="ml-auto h-3 w-3 opacity-60" />
+                        </a>
+                    </div>
+                </div>
+
+                <p
+                    v-if="isBusy"
+                    class="flex items-center gap-2 text-sm text-muted-foreground"
+                >
+                    <Spinner class="h-4 w-4" />
+                    {{
+                        web3Login.isAuthenticating.value
+                            ? 'Authenticating…'
+                            : 'Connecting…'
+                    }}
+                </p>
+
+                <p
+                    v-if="web3Login.error.value"
+                    class="text-sm text-destructive"
+                >
+                    {{ web3Login.error.value }}
+                </p>
 
                 <div class="text-center text-sm text-muted-foreground">
                     Don't have an account?

@@ -22,6 +22,8 @@ export type EthereumProvider = {
         listener: (...args: unknown[]) => void,
     ) => void;
     removeAllListeners?: (event: string) => void;
+    // WalletConnect-style providers expose a session teardown.
+    disconnect?: () => Promise<void>;
 };
 
 declare global {

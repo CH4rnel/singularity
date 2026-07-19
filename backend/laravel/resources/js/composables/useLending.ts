@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/vue3';
 import { Interface, formatUnits, getAddress } from 'ethers';
 import { computed, ref } from 'vue';
 import { useWallet } from '@/composables/useWallet';
+import { CYBERIA_CHAIN, CYBERIA_RPC, ensureEvmChain } from '@/lib/evmChains';
 import { getSelectedEvmProvider } from '@/lib/evmProvider';
 
 export type MarketAction = 'supply' | 'withdraw' | 'borrow' | 'repay';
@@ -95,11 +96,9 @@ const MULTICALL_ABI = [
 // Configure once deployed. Empty string => UI prompts for address.
 export const DEFAULT_COMPTROLLER = ((import.meta as any).env
     ?.VITE_LENDING_COMPTROLLER ?? '') as string;
-// Use the same-origin proxy at /api/rpc/cyberia — the public Cyberia RPC blocks
-// browser CORS and the app may be served over HTTPS (mixed-content guard).
-export const CYBERIA_RPC = '/api/rpc/cyberia';
-export const CYBERIA_CHAIN_ID = 49406;
-export const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
+// Reads go through the same-origin proxy at /api/rpc/cyberia — the public
+// Cyberia RPC blocks browser CORS and the app may be served over HTTPS
+// (mixed-content guard). Chain params come from the shared registry.
 // Pre-deployed Multicall3 on Cyberia (from crypto/hardhat/deployments/cyberia-quickswap.json).
 export const MULTICALL3 = '0x176C70dD7CF17056596D8c4C7E2b1f2537df978F';
 
@@ -227,44 +226,7 @@ export async function ensureCyberia(): Promise<void> {
         throw new Error('EVM wallet not detected');
     }
 
-    const current = (await injected.request({
-        method: 'eth_chainId',
-    })) as string;
-
-    if (parseInt(current, 16) === CYBERIA_CHAIN_ID) {
-        return;
-    }
-
-    const hex = '0x' + CYBERIA_CHAIN_ID.toString(16);
-
-    try {
-        await injected.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: hex }],
-        });
-    } catch (err) {
-        const code = (err as { code?: number })?.code;
-
-        if (code === 4902) {
-            await injected.request({
-                method: 'wallet_addEthereumChain',
-                params: [
-                    {
-                        chainId: hex,
-                        chainName: 'Cyberia',
-                        rpcUrls: [CYBERIA_PUBLIC_RPC],
-                        nativeCurrency: {
-                            name: 'Cyber',
-                            symbol: 'CYBER',
-                            decimals: 18,
-                        },
-                    },
-                ],
-            });
-        } else {
-            throw err;
-        }
-    }
+    await ensureEvmChain(injected, CYBERIA_CHAIN);
 }
 
 /// Shared lending state + market loader. Both the Lending dashboard and the

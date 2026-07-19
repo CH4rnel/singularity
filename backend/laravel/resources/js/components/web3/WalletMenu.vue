@@ -1,19 +1,33 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { ChevronDown, LogOut, User, Wallet } from 'lucide-vue-next';
-import { computed, onMounted, ref } from 'vue';
+import {
+    Check,
+    ChevronDown,
+    Download,
+    Globe,
+    LogOut,
+    User,
+    Wallet,
+} from 'lucide-vue-next';
+import { computed, onMounted } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
-import { useWalletAuth } from '@/composables/useWalletAuth';
+import { useWeb3Login } from '@/composables/useWeb3Login';
+import { EVM_CHAINS } from '@/lib/evmChains';
+import type { EvmChain } from '@/lib/evmChains';
+import { mergeWalletChoices } from '@/lib/walletChoices';
 import { logout as logoutRoute } from '@/routes';
 import { show as profileRoute } from '@/routes/profile';
 
@@ -21,7 +35,7 @@ const page = usePage();
 
 const evmWallet = useWallet();
 const solanaWallet = useSolanaWallet();
-const walletAuth = useWalletAuth();
+const web3Login = useWeb3Login();
 
 const isAuthenticated = computed(() => !!page.props.auth?.user);
 const authUser = computed(
@@ -35,10 +49,63 @@ const authUser = computed(
             | undefined,
 );
 
-const isAuthenticating = ref(false);
-const authError = ref<string | null>(null);
-const evmProviders = computed(() => evmWallet.walletProviders.value);
-const solanaProviders = computed(() => solanaWallet.walletProviders.value);
+const isAuthenticating = web3Login.isAuthenticating;
+const authError = web3Login.error;
+const walletChoices = computed(() =>
+    mergeWalletChoices(
+        evmWallet.walletProviders.value,
+        solanaWallet.walletProviders.value,
+    ),
+);
+const installedChoices = computed(() =>
+    walletChoices.value.filter((choice) => choice.installed),
+);
+const suggestedChoices = computed(() =>
+    walletChoices.value.filter((choice) => !choice.installed),
+);
+
+function openInstall(url?: string) {
+    if (url) {
+        window.open(url, '_blank', 'noopener');
+    }
+}
+
+const showNetworkPicker = computed(() => evmWallet.isConnected.value);
+const currentChainName = computed(() => {
+    const id = evmWallet.chainId.value;
+
+    if (id === null) {
+        return 'Network';
+    }
+
+    return (
+        EVM_CHAINS.find((chain) => chain.chainId === id)?.name ?? `Chain ${id}`
+    );
+});
+
+// Bound to both @select and @click: reka-ui's select event can get lost for
+// items inside a nested SubContent, while a plain DOM click always fires.
+// The flag collapses the pair into one switch when both do arrive.
+let networkSwitchInFlight = false;
+
+async function switchNetwork(chain: EvmChain) {
+    if (networkSwitchInFlight) {
+        return;
+    }
+
+    networkSwitchInFlight = true;
+    authError.value = null;
+
+    try {
+        const switched = await evmWallet.switchChain(chain);
+
+        if (!switched && evmWallet.error.value) {
+            authError.value = evmWallet.error.value;
+        }
+    } finally {
+        networkSwitchInFlight = false;
+    }
+}
 
 function refreshWalletChoices() {
     evmWallet.refreshWalletProviders();
@@ -59,102 +126,9 @@ const displayAddress = computed(() => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 });
 
-async function connectEvm(providerId: string) {
-    authError.value = null;
-
-    isAuthenticating.value = true;
-
-    try {
-        const address = await evmWallet.connect(providerId);
-
-        if (!address) {
-            authError.value = evmWallet.error.value || 'Failed to connect';
-            isAuthenticating.value = false;
-
-            return;
-        }
-
-        const { nonce } = await walletAuth.generateNonce(address);
-        const message = `Sign this message to authenticate with your wallet. Nonce: ${nonce}`;
-        const signature = await evmWallet.signMessage(message);
-
-        if (!signature) {
-            authError.value = 'Failed to sign message';
-            isAuthenticating.value = false;
-
-            return;
-        }
-
-        const { token } = await walletAuth.verifySignature(address, signature);
-
-        router.post(
-            '/login/web3',
-            { token },
-            {
-                onError: (err: Record<string, string>) => {
-                    authError.value = err.message || 'Authentication failed';
-                },
-                onFinish: () => {
-                    isAuthenticating.value = false;
-                },
-            },
-        );
-    } catch (err) {
-        authError.value =
-            err instanceof Error ? err.message : 'Authentication failed';
-        isAuthenticating.value = false;
-    }
-}
-
-async function connectSolana(providerId: string) {
-    authError.value = null;
-
-    isAuthenticating.value = true;
-
-    try {
-        const address = await solanaWallet.connect(providerId);
-
-        if (!address) {
-            authError.value = solanaWallet.error.value || 'Failed to connect';
-            isAuthenticating.value = false;
-
-            return;
-        }
-
-        const { nonce } = await walletAuth.generateSolanaNonce(address);
-        const message = `Sign this message to authenticate with your wallet. Nonce: ${nonce}`;
-        const signature = await solanaWallet.signMessage(message);
-
-        if (!signature) {
-            authError.value = 'Failed to sign message';
-            isAuthenticating.value = false;
-
-            return;
-        }
-
-        const { token } = await walletAuth.verifySolanaSignature(
-            address,
-            signature,
-        );
-
-        router.post(
-            '/login/web3',
-            { token },
-            {
-                onError: (err: Record<string, string>) => {
-                    authError.value = err.message || 'Authentication failed';
-                },
-                onFinish: () => {
-                    isAuthenticating.value = false;
-                },
-            },
-        );
-    } catch (err) {
-        authError.value =
-            err instanceof Error ? err.message : 'Authentication failed';
-        isAuthenticating.value = false;
-    }
-}
+const connectEvm = (providerId: string) => web3Login.loginWithEvm(providerId);
+const connectSolana = (providerId: string) =>
+    web3Login.loginWithSolana(providerId);
 
 function signOut() {
     evmWallet.disconnect();
@@ -188,6 +162,45 @@ onMounted(refreshWalletChoices);
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" class="w-56">
+                <template v-if="showNetworkPicker">
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <Globe class="mr-2 h-4 w-4" />
+                            {{ currentChainName }}
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuItem
+                                v-for="chain in EVM_CHAINS"
+                                :key="chain.chainId"
+                                @select="switchNetwork(chain)"
+                                @click="switchNetwork(chain)"
+                            >
+                                <Check
+                                    v-if="
+                                        evmWallet.chainId.value ===
+                                        chain.chainId
+                                    "
+                                    class="mr-2 h-4 w-4"
+                                />
+                                <span v-else class="mr-2 h-4 w-4" />
+                                {{ chain.name }}
+                                <span
+                                    v-if="chain.status === 'wip'"
+                                    class="ml-auto text-xs text-muted-foreground"
+                                >
+                                    WIP
+                                </span>
+                                <span
+                                    v-else-if="chain.status === 'coming_soon'"
+                                    class="ml-auto text-xs text-muted-foreground"
+                                >
+                                    Soon
+                                </span>
+                            </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSeparator />
+                </template>
                 <template v-if="isAuthenticated">
                     <DropdownMenuItem disabled class="font-mono text-xs">
                         {{ displayAddress }}
@@ -205,52 +218,92 @@ onMounted(refreshWalletChoices);
                     </DropdownMenuItem>
                 </template>
                 <template v-else>
-                    <DropdownMenuItem disabled class="text-xs font-semibold">
-                        EVM wallets
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        v-for="provider in evmProviders"
-                        :key="provider.id"
-                        @select="connectEvm(provider.id)"
+                    <template
+                        v-for="choice in installedChoices"
+                        :key="choice.key"
                     >
-                        <img
-                            v-if="provider.icon"
-                            :src="provider.icon"
-                            :alt="`${provider.name} icon`"
-                            class="mr-2 h-4 w-4 rounded-sm"
-                        />
-                        <Wallet v-else class="mr-2 h-4 w-4" />
-                        {{ provider.name }}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem v-if="evmProviders.length === 0" disabled>
-                        <Wallet class="mr-2 h-4 w-4" />
-                        No EVM wallet found
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem disabled class="text-xs font-semibold">
-                        Solana wallets
-                    </DropdownMenuItem>
+                        <DropdownMenuSub v-if="choice.evmId && choice.solanaId">
+                            <DropdownMenuSubTrigger>
+                                <img
+                                    v-if="choice.icon"
+                                    :src="choice.icon"
+                                    :alt="`${choice.name} icon`"
+                                    class="mr-2 h-4 w-4 rounded-sm"
+                                />
+                                <Wallet v-else class="mr-2 h-4 w-4" />
+                                {{ choice.name }}
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                                <DropdownMenuItem
+                                    @select="connectEvm(choice.evmId)"
+                                    @click="connectEvm(choice.evmId)"
+                                >
+                                    EVM · Cyberia
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    @select="connectSolana(choice.solanaId)"
+                                    @click="connectSolana(choice.solanaId)"
+                                >
+                                    Solana
+                                </DropdownMenuItem>
+                            </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                        <DropdownMenuItem
+                            v-else-if="choice.evmId"
+                            @select="connectEvm(choice.evmId)"
+                        >
+                            <img
+                                v-if="choice.icon"
+                                :src="choice.icon"
+                                :alt="`${choice.name} icon`"
+                                class="mr-2 h-4 w-4 rounded-sm"
+                            />
+                            <Wallet v-else class="mr-2 h-4 w-4" />
+                            {{ choice.name }}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            v-else-if="choice.solanaId"
+                            @select="connectSolana(choice.solanaId)"
+                        >
+                            <img
+                                v-if="choice.icon"
+                                :src="choice.icon"
+                                :alt="`${choice.name} icon`"
+                                class="mr-2 h-4 w-4 rounded-sm"
+                            />
+                            <Wallet v-else class="mr-2 h-4 w-4" />
+                            {{ choice.name }}
+                            <span class="ml-auto text-xs text-muted-foreground">
+                                Solana
+                            </span>
+                        </DropdownMenuItem>
+                    </template>
                     <DropdownMenuItem
-                        v-for="provider in solanaProviders"
-                        :key="provider.id"
-                        @select="connectSolana(provider.id)"
-                    >
-                        <img
-                            v-if="provider.icon"
-                            :src="provider.icon"
-                            :alt="`${provider.name} icon`"
-                            class="mr-2 h-4 w-4 rounded-sm"
-                        />
-                        <Wallet v-else class="mr-2 h-4 w-4" />
-                        {{ provider.name }}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        v-if="solanaProviders.length === 0"
+                        v-if="installedChoices.length === 0"
                         disabled
                     >
                         <Wallet class="mr-2 h-4 w-4" />
-                        No Solana wallet found
+                        No wallet detected
                     </DropdownMenuItem>
+                    <template v-if="suggestedChoices.length > 0">
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            disabled
+                            class="text-xs font-semibold"
+                        >
+                            Get a wallet
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            v-for="choice in suggestedChoices"
+                            :key="choice.key"
+                            class="text-muted-foreground"
+                            @select="openInstall(choice.installUrl)"
+                        >
+                            <Wallet class="mr-2 h-4 w-4" />
+                            {{ choice.name }}
+                            <Download class="ml-auto h-3 w-3 opacity-60" />
+                        </DropdownMenuItem>
+                    </template>
                 </template>
             </DropdownMenuContent>
         </DropdownMenu>

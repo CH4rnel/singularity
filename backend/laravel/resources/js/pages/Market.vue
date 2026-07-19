@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import {
-    BrowserProvider,
     Contract,
     JsonRpcProvider,
     MaxUint256,
@@ -13,12 +12,11 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
-import { getSelectedEvmProvider } from '@/lib/evmProvider';
-
-const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
-const CYBERIA_RPC = '/api/rpc/cyberia';
-const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
+import {
+    CYBERIA_CHAIN_ID,
+    cyberiaReadRpcUrl,
+    ensureCyberiaNetwork,
+} from '@/lib/evmChains';
 
 const env =
     (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
@@ -117,11 +115,7 @@ const payBalances = ref<Record<string, bigint>>({});
 
 const isConfigured = computed(() => !!NFT_CONTRACT && !!NFT_MARKET);
 
-const readRpcUrl =
-    typeof window !== 'undefined'
-        ? window.location.origin + CYBERIA_RPC
-        : CYBERIA_PUBLIC_RPC;
-const readProvider = new JsonRpcProvider(readRpcUrl, {
+const readProvider = new JsonRpcProvider(cyberiaReadRpcUrl(), {
     chainId: CYBERIA_CHAIN_ID,
     name: 'cyberia',
 });
@@ -132,50 +126,6 @@ const ipfsToHttp = (uri: string): string => {
     }
 
     return uri;
-};
-
-const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getSelectedEvmProvider();
-
-    if (!eth) {
-        throw new Error('EVM wallet not found');
-    }
-
-    const provider = new BrowserProvider(eth);
-    const net = await provider.getNetwork();
-
-    if (Number(net.chainId) !== CYBERIA_CHAIN_ID) {
-        try {
-            await eth.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: CYBERIA_CHAIN_ID_HEX }],
-            });
-        } catch (e) {
-            if ((e as { code?: number }).code === 4902) {
-                await eth.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [
-                        {
-                            chainId: CYBERIA_CHAIN_ID_HEX,
-                            chainName: 'Cyberia',
-                            nativeCurrency: {
-                                name: 'Cyber',
-                                symbol: 'CYBER',
-                                decimals: 18,
-                            },
-                            rpcUrls: [CYBERIA_PUBLIC_RPC, CYBERIA_RPC],
-                        },
-                    ],
-                });
-            } else {
-                throw e;
-            }
-        }
-
-        return new BrowserProvider(eth);
-    }
-
-    return provider;
 };
 
 const fetchJson = async (url: string): Promise<NFTMetadata | undefined> => {

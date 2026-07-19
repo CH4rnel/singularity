@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
+import type { BrowserProvider } from 'ethers';
 import {
-    BrowserProvider,
     Contract,
     JsonRpcProvider,
     MaxUint256,
@@ -17,20 +17,26 @@ import {
     Sprout,
     Wallet,
 } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import {
+    computed,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+    watch,
+} from 'vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWallet } from '@/composables/useWallet';
 import { CYBER_SOL_ADDRESS, WCYBER_ADDRESS } from '@/lib/cyberiaTokens';
-import { getSelectedEvmProvider } from '@/lib/evmProvider';
+import {
+    CYBERIA_CHAIN_ID,
+    cyberiaReadRpcUrl,
+    ensureCyberiaNetwork,
+} from '@/lib/evmChains';
 import { formatUsd } from '@/lib/tokenFormat';
-
-const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
-const CYBERIA_RPC = '/api/rpc/cyberia';
-const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
 // Ritual MasterChef — Uniswap-V2-style farm minting ASH rewards. Pools are
 // enumerated on-chain (poolLength/poolInfo), so new pools the owner adds show
@@ -116,12 +122,8 @@ const authUser = computed(
         page.props.auth?.user as { wallet_address?: string | null } | undefined,
 );
 
-const readRpcUrl =
-    typeof window !== 'undefined'
-        ? window.location.origin + CYBERIA_RPC
-        : CYBERIA_PUBLIC_RPC;
 const readProvider = new JsonRpcProvider(
-    readRpcUrl,
+    cyberiaReadRpcUrl(),
     {
         chainId: CYBERIA_CHAIN_ID,
         name: 'cyberia',
@@ -287,7 +289,11 @@ const symbolOf = (addr: string): Promise<string> => {
 
     if (!p) {
         p = (
-            new Contract(addr, ERC20_ABI, readProvider).symbol() as Promise<string>
+            new Contract(
+                addr,
+                ERC20_ABI,
+                readProvider,
+            ).symbol() as Promise<string>
         )
             .then(displaySymbol)
             .catch(() => shortAddr(addr));
@@ -302,7 +308,13 @@ const decimalsOf = (addr: string): Promise<number> => {
     let p = decimalsCache.get(key);
 
     if (!p) {
-        p = (new Contract(addr, ERC20_ABI, readProvider).decimals() as Promise<bigint>)
+        p = (
+            new Contract(
+                addr,
+                ERC20_ABI,
+                readProvider,
+            ).decimals() as Promise<bigint>
+        )
             .then((d) => Number(d))
             .catch(() => 18);
         decimalsCache.set(key, p);
@@ -336,7 +348,9 @@ const pairReserves = async (
         const tWhole = Number(formatUnits(rT, decT));
         const qWhole = Number(formatUnits(rQ, decQ));
 
-        return tWhole > 0 && qWhole > 0 ? { token: tWhole, quote: qWhole } : null;
+        return tWhole > 0 && qWhole > 0
+            ? { token: tWhole, quote: qWhole }
+            : null;
     } catch {
         return null;
     }
@@ -394,7 +408,10 @@ const loadCyberUsdPrice = async (): Promise<number | null> => {
         return null;
     }
 
-    const cyberLiquidity = priced.reduce((sum, market) => sum + market.token, 0);
+    const cyberLiquidity = priced.reduce(
+        (sum, market) => sum + market.token,
+        0,
+    );
     const usdLiquidity = priced.reduce((sum, market) => sum + market.quote, 0);
 
     return cyberLiquidity > 0 ? usdLiquidity / cyberLiquidity : null;
@@ -694,50 +711,6 @@ async function refreshLive(): Promise<void> {
     }
 }
 
-const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getSelectedEvmProvider();
-
-    if (!eth) {
-        throw new Error('EVM wallet not found');
-    }
-
-    const provider = new BrowserProvider(eth);
-    const net = await provider.getNetwork();
-
-    if (Number(net.chainId) !== CYBERIA_CHAIN_ID) {
-        try {
-            await eth.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: CYBERIA_CHAIN_ID_HEX }],
-            });
-        } catch (e) {
-            if ((e as { code?: number }).code === 4902) {
-                await eth.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [
-                        {
-                            chainId: CYBERIA_CHAIN_ID_HEX,
-                            chainName: 'Cyberia',
-                            nativeCurrency: {
-                                name: 'Cyber',
-                                symbol: 'CYBER',
-                                decimals: 18,
-                            },
-                            rpcUrls: [CYBERIA_PUBLIC_RPC, CYBERIA_RPC],
-                        },
-                    ],
-                });
-            } else {
-                throw e;
-            }
-        }
-
-        return new BrowserProvider(eth);
-    }
-
-    return provider;
-};
-
 async function connectWallet(): Promise<void> {
     error.value = null;
     connecting.value = true;
@@ -935,14 +908,11 @@ const setUnstakeMax = (pool: Pool): void => {
 const explorerUrl = (addr: string): string => `${EXPLORER}/address/${addr}`;
 
 const fmtApy = (v: number): string =>
-    v >= 1000
-        ? Math.round(v).toLocaleString()
-        : v.toFixed(v >= 100 ? 0 : 1);
+    v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(v >= 100 ? 0 : 1);
 
 const fmtCyber = (v: number): string =>
     v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2);
-const fmtUsdValue = (v: number): string =>
-    v === 0 ? '$0.00' : formatUsd(v);
+const fmtUsdValue = (v: number): string => (v === 0 ? '$0.00' : formatUsd(v));
 
 let watchWalletChanges = false;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
@@ -1179,7 +1149,9 @@ watch(
                 aria-label="Loading farms"
                 class="space-y-4"
             >
-                <div class="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <div
+                    class="flex items-center justify-center gap-2 text-sm text-muted-foreground"
+                >
                     <Loader2 class="h-4 w-4 animate-spin" />
                     Loading farms…
                 </div>
@@ -1289,7 +1261,12 @@ watch(
                                 Total staked
                             </p>
                             <p class="font-mono">
-                                {{ fmtTokenAmount(pool.totalStaked, pool.decimals) }}
+                                {{
+                                    fmtTokenAmount(
+                                        pool.totalStaked,
+                                        pool.decimals,
+                                    )
+                                }}
                             </p>
                             <p
                                 v-if="pool.tvlCyber !== null"

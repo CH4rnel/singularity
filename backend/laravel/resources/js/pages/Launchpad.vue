@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import {
-    BrowserProvider,
     Contract,
     Interface,
     JsonRpcProvider,
@@ -16,14 +15,13 @@ import { computed, onMounted, ref, watch } from 'vue';
 import TokenCandlesChart from '@/components/launchpad/TokenCandlesChart.vue';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
-import { getSelectedEvmProvider } from '@/lib/evmProvider';
+import {
+    CYBERIA_CHAIN_ID,
+    cyberiaReadRpcUrl,
+    ensureCyberiaNetwork,
+} from '@/lib/evmChains';
 import { formatNum, formatPrice } from '@/lib/launchpadChart';
 import type { TokenCandle } from '@/lib/launchpadChart';
-
-const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
-const CYBERIA_RPC = '/api/rpc/cyberia';
-const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 
 // LaunchpadNative — fair launches paid in native CYBER (min 10), burned into
 // permanently locked liquidity. deployments/cyberia-launchpad-native.json.
@@ -190,14 +188,7 @@ const status = ref<string | null>(null);
 const error = ref<string | null>(null);
 const txHash = ref<string | null>(null);
 
-// Use the same-origin proxy at /api/rpc/cyberia — the public Cyberia RPC
-// blocks browser CORS and the app may be served over HTTPS (mixed-content guard).
-// ethers v6's FetchRequest needs an absolute URL, so prepend window.location.origin.
-const readRpcUrl =
-    typeof window !== 'undefined'
-        ? window.location.origin + CYBERIA_RPC
-        : CYBERIA_PUBLIC_RPC;
-const readProvider = new JsonRpcProvider(readRpcUrl, {
+const readProvider = new JsonRpcProvider(cyberiaReadRpcUrl(), {
     chainId: CYBERIA_CHAIN_ID,
     name: 'cyberia',
 });
@@ -264,9 +255,7 @@ const sortedRecent = computed<LaunchedToken[]>(() => {
     const list = [...recent.value];
 
     if (sortBy.value === 'mcap') {
-        list.sort(
-            (a, b) => (b.marketCapCyber ?? 0) - (a.marketCapCyber ?? 0),
-        );
+        list.sort((a, b) => (b.marketCapCyber ?? 0) - (a.marketCapCyber ?? 0));
     } else {
         list.sort((a, b) =>
             b.cyberLiquidity > a.cyberLiquidity
@@ -279,52 +268,6 @@ const sortedRecent = computed<LaunchedToken[]>(() => {
 
     return list;
 });
-
-const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getSelectedEvmProvider();
-
-    if (!eth) {
-        throw new Error('EVM wallet not found');
-    }
-
-    const provider = new BrowserProvider(eth);
-    const net = await provider.getNetwork();
-
-    if (Number(net.chainId) !== CYBERIA_CHAIN_ID) {
-        try {
-            await eth.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: CYBERIA_CHAIN_ID_HEX }],
-            });
-        } catch (e) {
-            const code = (e as { code?: number }).code;
-
-            if (code === 4902) {
-                await eth.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [
-                        {
-                            chainId: CYBERIA_CHAIN_ID_HEX,
-                            chainName: 'Cyberia',
-                            nativeCurrency: {
-                                name: 'Cyber',
-                                symbol: 'CYBER',
-                                decimals: 18,
-                            },
-                            rpcUrls: [CYBERIA_PUBLIC_RPC, CYBERIA_RPC],
-                        },
-                    ],
-                });
-            } else {
-                throw e;
-            }
-        }
-
-        return new BrowserProvider(eth);
-    }
-
-    return provider;
-};
 
 const loadOnchain = async (): Promise<void> => {
     const launchpad = new Contract(

@@ -1,14 +1,21 @@
 import { BrowserProvider, Contract, formatEther, formatUnits } from 'ethers';
 import { ref } from 'vue';
+import { ensureEvmChain, evmProviderSupportsChain } from '@/lib/evmChains';
+import type { EvmChain } from '@/lib/evmChains';
 import {
     getEvmWalletProvider,
     getEvmWalletProviders,
     getMetaMaskProvider,
     getSelectedEvmProvider,
+    getSelectedEvmWalletProvider,
+    hasWalletConnectSession,
+    initWalletConnectProvider,
+    resolveEvmWalletProvider,
     selectEvmWalletProvider,
 } from '@/lib/evmProvider';
 import type { EvmWalletProvider } from '@/lib/evmProvider';
 import { track } from '@/lib/track';
+import { evmWalletSupportsCyberia } from '@/lib/walletChoices';
 import type { EthereumProvider } from '@/types/global';
 
 export type WalletState = {
@@ -60,8 +67,11 @@ const refreshWalletProviders = (): EvmWalletProvider[] => {
 const getDefaultWalletProvider = (): EvmWalletProvider | null => {
     const providers = refreshWalletProviders();
 
+    // Wallets that cannot switch to Cyberia (Phantom EVM) are a last resort:
+    // they can still sign a login message but no on-chain action will work.
     return (
         providers.find((wallet) => wallet.rdns === 'io.metamask') ??
+        providers.find((wallet) => evmWalletSupportsCyberia(wallet)) ??
         providers[0] ??
         null
     );
@@ -95,12 +105,30 @@ export const useWallet = () => {
             isConnected.value = true;
         }
 
-        // Try silent reconnect through injected wallets (no popup).
-        const providers = refreshWalletProviders();
+        // Try silent reconnect through injected wallets (no popup). A saved
+        // WalletConnect pairing joins the list via a no-modal SDK init.
+        // Cyberia-capable wallets go first so a fixed-chain wallet (Phantom
+        // EVM) only becomes the selected provider when nothing else matches.
+        const providers = [...refreshWalletProviders()].sort(
+            (a, b) =>
+                Number(evmWalletSupportsCyberia(b)) -
+                Number(evmWalletSupportsCyberia(a)),
+        );
 
         for (const wallet of providers) {
             try {
-                const accounts = (await wallet.provider.request({
+                const provider =
+                    wallet.provider ??
+                    (wallet.source === 'walletconnect' &&
+                    hasWalletConnectSession()
+                        ? await initWalletConnectProvider()
+                        : null);
+
+                if (!provider) {
+                    continue;
+                }
+
+                const accounts = (await provider.request({
                     method: 'eth_accounts',
                 })) as string[];
 
@@ -114,7 +142,7 @@ export const useWallet = () => {
                         continue;
                     }
 
-                    selectEvmWalletProvider(wallet);
+                    selectEvmWalletProvider({ ...wallet, provider });
                     selectedWalletName.value = wallet.name;
                     address.value = account;
                     isConnected.value = true;
@@ -132,23 +160,19 @@ export const useWallet = () => {
         }
     };
 
-    const connect = async (walletId?: string): Promise<string | null> => {
-        const wallet = walletId
-            ? getEvmWalletProvider(walletId)
-            : getDefaultWalletProvider();
-
-        if (!wallet) {
-            error.value =
-                'No EVM wallet detected. Install MetaMask, Rabby, Coinbase Wallet, Trust Wallet, OKX, or another injected EVM wallet.';
-
-            return null;
-        }
-
+    const connectTo = async (
+        picked: EvmWalletProvider,
+    ): Promise<string | null> => {
         error.value = null;
         isConnecting.value = true;
 
         try {
             removeListeners();
+
+            // WalletConnect initialises its SDK here; the QR / deep-link
+            // modal opens on the eth_requestAccounts call below.
+            const wallet = await resolveEvmWalletProvider(picked);
+
             selectEvmWalletProvider(wallet);
             selectedWalletName.value = wallet.name;
 
@@ -192,7 +216,30 @@ export const useWallet = () => {
         }
     };
 
+    const connect = async (walletId?: string): Promise<string | null> => {
+        const picked = walletId
+            ? getEvmWalletProvider(walletId)
+            : getDefaultWalletProvider();
+
+        if (!picked) {
+            error.value =
+                'No EVM wallet detected. Install MetaMask, Rabby, Coinbase Wallet, Trust Wallet, OKX, or another injected EVM wallet — or connect a mobile wallet via WalletConnect.';
+
+            return null;
+        }
+
+        return connectTo(picked);
+    };
+
     const disconnect = (): void => {
+        const selected = getSelectedEvmWalletProvider();
+
+        // Injected wallets have no programmatic disconnect; WalletConnect
+        // sessions must be killed or the pairing silently restores next visit.
+        if (selected?.source === 'walletconnect') {
+            selected.provider?.disconnect?.().catch(() => {});
+        }
+
         address.value = null;
         isConnected.value = false;
         balance.value = null;
@@ -246,6 +293,76 @@ export const useWallet = () => {
             };
         } catch {
             cyberBalance.value = null;
+        }
+    };
+
+    /**
+     * Switch the connected wallet to `chain` (adding it when unknown). The
+     * wallet's chainChanged event refreshes balances; chainId is re-fetched
+     * here too in case the wallet does not emit it.
+     *
+     * A chain-locked wallet (Phantom EVM) is never asked about foreign
+     * chains: the switch is handed to another installed wallet that can do
+     * it — MetaMask first — and that wallet becomes the active provider.
+     */
+    const switchChain = async (chain: EvmChain): Promise<boolean> => {
+        // The picker can be visible with only a saved DB address (no live
+        // wallet session) — establish a real connection first so the switch
+        // has a wallet to talk to and the site gets an account.
+        if (!getSelectedEvmWalletProvider() && !(await connect())) {
+            return false;
+        }
+
+        let injected = getProvider();
+
+        if (!injected) {
+            error.value = 'Wallet not connected';
+
+            return false;
+        }
+
+        if (!evmProviderSupportsChain(injected, chain.chainId)) {
+            const current = injected;
+            const candidates = refreshWalletProviders().filter(
+                (wallet) =>
+                    wallet.provider &&
+                    wallet.provider !== current &&
+                    wallet.source !== 'walletconnect' &&
+                    evmProviderSupportsChain(wallet.provider, chain.chainId),
+            );
+            const fallback =
+                candidates.find((wallet) => wallet.rdns === 'io.metamask') ??
+                candidates[0];
+
+            if (!fallback) {
+                error.value = `${selectedWalletName.value ?? 'This wallet'} cannot switch to ${chain.name} and no other EVM wallet is installed.`;
+
+                return false;
+            }
+
+            if (!(await connectTo(fallback))) {
+                return false;
+            }
+
+            injected = getProvider();
+
+            if (!injected) {
+                return false;
+            }
+        }
+
+        try {
+            await ensureEvmChain(injected, chain);
+            await fetchChainId();
+
+            return true;
+        } catch (err) {
+            error.value =
+                err instanceof Error
+                    ? err.message
+                    : `Failed to switch to ${chain.name}`;
+
+            return false;
         }
     };
 
@@ -375,6 +492,7 @@ export const useWallet = () => {
         disconnect,
         restore,
         signMessage,
+        switchChain,
         fetchBalance,
         fetchCyberBalance,
         fetchChainId,

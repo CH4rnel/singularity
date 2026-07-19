@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import {
-    BrowserProvider,
-    Contract,
-    JsonRpcProvider,
-    formatEther,
-    parseEther,
-} from 'ethers';
+import { Contract, JsonRpcProvider, formatEther, parseEther } from 'ethers';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,12 +8,11 @@ import { Input } from '@/components/ui/input';
 import ConfigWarning from '@/components/web3/ConfigWarning.vue';
 import PageHero from '@/components/web3/PageHero.vue';
 import { useWallet } from '@/composables/useWallet';
-import { getSelectedEvmProvider } from '@/lib/evmProvider';
-
-const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
-const CYBERIA_RPC = '/api/rpc/cyberia';
-const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
+import {
+    CYBERIA_CHAIN_ID,
+    cyberiaReadRpcUrl,
+    ensureCyberiaNetwork,
+} from '@/lib/evmChains';
 
 const env =
     (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
@@ -89,58 +82,10 @@ const userAddress = computed(
     () => wallet.address.value || authUser.value?.wallet_address || null,
 );
 
-const readRpcUrl =
-    typeof window !== 'undefined'
-        ? window.location.origin + CYBERIA_RPC
-        : CYBERIA_PUBLIC_RPC;
-const readProvider = new JsonRpcProvider(readRpcUrl, {
+const readProvider = new JsonRpcProvider(cyberiaReadRpcUrl(), {
     chainId: CYBERIA_CHAIN_ID,
     name: 'cyberia',
 });
-
-const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getSelectedEvmProvider();
-
-    if (!eth) {
-        throw new Error('EVM wallet not found');
-    }
-
-    const provider = new BrowserProvider(eth);
-    const net = await provider.getNetwork();
-
-    if (Number(net.chainId) !== CYBERIA_CHAIN_ID) {
-        try {
-            await eth.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: CYBERIA_CHAIN_ID_HEX }],
-            });
-        } catch (e) {
-            if ((e as { code?: number }).code === 4902) {
-                await eth.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [
-                        {
-                            chainId: CYBERIA_CHAIN_ID_HEX,
-                            chainName: 'Cyberia',
-                            nativeCurrency: {
-                                name: 'Cyber',
-                                symbol: 'CYBER',
-                                decimals: 18,
-                            },
-                            rpcUrls: [CYBERIA_PUBLIC_RPC, CYBERIA_RPC],
-                        },
-                    ],
-                });
-            } else {
-                throw e;
-            }
-        }
-
-        return new BrowserProvider(eth);
-    }
-
-    return provider;
-};
 
 const loadMarkets = async (): Promise<void> => {
     if (!isConfigured.value) {
@@ -353,7 +298,8 @@ const createMarket = async (): Promise<void> => {
         oracle.value = liveOwner.toLowerCase();
         // The oracle creates for free; everyone else pays exactly createFee.
         const value =
-            (await signer.getAddress()).toLowerCase() === liveOwner.toLowerCase()
+            (await signer.getAddress()).toLowerCase() ===
+            liveOwner.toLowerCase()
                 ? 0n
                 : liveFee;
         const tx = await c.createMarket(question, closeSec, { value });

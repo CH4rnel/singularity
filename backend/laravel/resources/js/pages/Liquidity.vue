@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
+import type { BrowserProvider } from 'ethers';
 import {
-    BrowserProvider,
     Contract,
     JsonRpcProvider,
     MaxUint256,
@@ -24,13 +24,13 @@ import { useWallet } from '@/composables/useWallet';
 import { KNOWN_TOKENS, filterJunkPools } from '@/lib/cyberiaTokens';
 import type { AprSnapshot } from '@/lib/dexApr';
 import { aprByPair, formatApr } from '@/lib/dexApr';
-import { getSelectedEvmProvider } from '@/lib/evmProvider';
+import {
+    CYBERIA_CHAIN_ID,
+    cyberiaReadRpcUrl,
+    ensureCyberiaNetwork,
+} from '@/lib/evmChains';
 import { track } from '@/lib/track';
 
-const CYBERIA_CHAIN_ID = 49406;
-const CYBERIA_CHAIN_ID_HEX = '0xc0fe';
-const CYBERIA_RPC = '/api/rpc/cyberia';
-const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
 const EXPLORER = 'https://explorer.cyberia.church';
 
 // Ritual DEX (QuickSwap V2 fork). deployments/cyberia-quickswap.json.
@@ -104,11 +104,7 @@ const status = ref<string | null>(null);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
-const readRpcUrl =
-    typeof window !== 'undefined'
-        ? window.location.origin + CYBERIA_RPC
-        : CYBERIA_PUBLIC_RPC;
-const readProvider = new JsonRpcProvider(readRpcUrl, {
+const readProvider = new JsonRpcProvider(cyberiaReadRpcUrl(), {
     chainId: CYBERIA_CHAIN_ID,
     name: 'cyberia',
 });
@@ -343,50 +339,6 @@ watch([tokenA, () => wallet.address.value], () => void loadSide('A'), {
 watch([tokenB, () => wallet.address.value], () => void loadSide('B'), {
     immediate: true,
 });
-
-const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
-    const eth = getSelectedEvmProvider();
-
-    if (!eth) {
-        throw new Error('EVM wallet not found');
-    }
-
-    const provider = new BrowserProvider(eth);
-    const net = await provider.getNetwork();
-
-    if (Number(net.chainId) !== CYBERIA_CHAIN_ID) {
-        try {
-            await eth.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: CYBERIA_CHAIN_ID_HEX }],
-            });
-        } catch (e) {
-            if ((e as { code?: number }).code === 4902) {
-                await eth.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [
-                        {
-                            chainId: CYBERIA_CHAIN_ID_HEX,
-                            chainName: 'Cyberia',
-                            nativeCurrency: {
-                                name: 'Cyber',
-                                symbol: 'CYBER',
-                                decimals: 18,
-                            },
-                            rpcUrls: [CYBERIA_PUBLIC_RPC, CYBERIA_RPC],
-                        },
-                    ],
-                });
-            } else {
-                throw e;
-            }
-        }
-
-        return new BrowserProvider(eth);
-    }
-
-    return provider;
-};
 
 const approveIfNeeded = async (
     signer: Awaited<ReturnType<BrowserProvider['getSigner']>>,
