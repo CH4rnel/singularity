@@ -579,7 +579,7 @@ export class AgentRuntime implements IAgentRuntime {
       });
       await this.persistTranscript(transcript);
     }
-    return `Tool ${action.name} -> ${JSON.stringify(result.data ?? result.text ?? { ok: result.ok })}`;
+    return `Tool ${action.name} -> ${serializeActionResult(result)}`;
   }
 
   private async maybeStartSelfUpgrade(
@@ -749,11 +749,23 @@ export class AgentRuntime implements IAgentRuntime {
 
 /** Compact, human-readable summary of an action result for the tool card. */
 function summariseResult(result: ActionResult): string {
-  if (result.data && Object.keys(result.data).length > 0) {
-    return JSON.stringify(result.data);
-  }
-  if (result.text) return result.text;
+  const text = result.text?.trim();
+  const data = result.data && Object.keys(result.data).length > 0
+    ? JSON.stringify(result.data)
+    : "";
+  if (text && data) return `${text}\n${data}`;
+  if (text) return text;
+  if (data) return data;
   return result.ok ? "ok" : "failed";
+}
+
+/** Preserve both the human-readable output and structured fields for the model. */
+function serializeActionResult(result: ActionResult): string {
+  return JSON.stringify({
+    ok: result.ok,
+    ...(result.text ? { text: result.text } : {}),
+    ...(result.data ? { data: result.data } : {}),
+  });
 }
 
 function safeSegment(raw: string): string {

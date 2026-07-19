@@ -116,6 +116,20 @@ keys, and bot-token-shaped strings are redacted before the file is written.
 
 Forge coding-agent jobs have their own longer transcripts in `data/forge/*.log`.
 
+Summarise retained conversations and execution traces without dumping full
+prompts or raw secrets:
+
+```bash
+npm run analyze:transcripts
+npm run --silent analyze:transcripts -- --json > analysis.json
+npm run analyze:transcripts -- --since-hours 24 --output data/insights/latest.md
+```
+
+The report flags model/tool failures, incomplete or empty replies, repeated
+tool calls, slow multi-round turns, and explicit user corrections. Evidence is
+clipped and scrubbed for private keys, bot/API tokens, secret-like assignments,
+and secret values loaded from the environment.
+
 ## Built-in plugins
 
 - **bootstrap** — a `time` provider, a heuristic fact extractor, and long-term
@@ -193,8 +207,11 @@ Forge coding-agent jobs have their own longer transcripts in `data/forge/*.log`.
   - **auto mode** (default on): when the forge is idle it picks the oldest
     open wish and builds it unprompted — set `LAINOS_FORGE_AUTO=0` to require
     an explicit `build_wish`;
-  - `forge_status` / `set_forge_provider` / `list_wishes` / `update_wish` —
-    current provider, live switching, progress, backlog, close/reject/retry.
+  - `forge_status` / `set_forge_provider` / `list_wishes` / `edit_wish` /
+    `update_wish` — current provider, live switching, progress, backlog,
+    title/detail corrections, close/reject/retry. Edits reach queued jobs; for
+    an already-running job they are retained for review/follow-up because its
+    coding-agent prompt has already been launched.
     Job transcripts live in `data/forge/*.log`.
 
   One job runs at a time; when it finishes, the wish's reporter is notified in

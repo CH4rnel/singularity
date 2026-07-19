@@ -41,6 +41,58 @@ async function main() {
   // Skills: hot-load from a scratch dir, not the repo's skills/.
   process.env.LAINOS_SKILLS_DIR = mkdtempSync(join(tmpdir(), "lainos-skills-"));
 
+  // --- runtime contract: tool follow-ups must receive both text and data ---
+  const toolResultDir = mkdtempSync(join(tmpdir(), "lainos-tool-result-"));
+  let toolModelCalls = 0;
+  let toolResultContractOk = false;
+  const toolResultModel: ModelProvider = {
+    name: "tool-result-stub",
+    modelFor: () => "tool-result-stub",
+    async generate(request: ModelRequest) {
+      toolModelCalls += 1;
+      if (toolModelCalls === 1) {
+        return {
+          text: "",
+          toolCalls: [{ name: "result_probe", input: {} }],
+          model: "tool-result-stub",
+        };
+      }
+      const followup = request.messages.at(-1)?.content ?? "";
+      toolResultContractOk =
+        followup.includes('"ok":true') &&
+        followup.includes('"text":"human-readable"') &&
+        followup.includes('"data":{"detail":"structured"}');
+      return { text: "done", toolCalls: [], model: "tool-result-stub" };
+    },
+  };
+  const toolResultRuntime = new AgentRuntime({
+    character: lain,
+    memory: new FileMemoryStore(toolResultDir),
+    model: toolResultModel,
+    settings: { LAINOS_DATA_DIR: toolResultDir, LAINOS_MODEL_TRANSCRIPTS: "0" },
+  });
+  toolResultRuntime.use({
+    name: "tool-result-smoke",
+    description: "tool result contract smoke",
+    actions: [
+      {
+        name: "result_probe",
+        similes: [],
+        description: "Return text and data.",
+        examples: [],
+        async validate() {
+          return true;
+        },
+        async handler() {
+          return { ok: true, text: "human-readable", data: { detail: "structured" } };
+        },
+      },
+    ],
+  });
+  await toolResultRuntime.start();
+  await toolResultRuntime.handleMessage({ roomId: "tool-result", userId: "tester", text: "probe" });
+  await toolResultRuntime.stop();
+
   // --- runtime guard: a missing-capability refusal must become a forge job ---
   const refusalDataDir = mkdtempSync(join(tmpdir(), "lainos-refusal-"));
   const refusalModel: ModelProvider = {
@@ -96,6 +148,7 @@ async function main() {
   };
 
   await say("my name is operator");
+  await say("меня зовут Алиса");
   await say("who are you?");
   const bal = await say(
     "what is the balance of 0x0000000000000000000000000000000000000000?",
@@ -153,12 +206,23 @@ async function main() {
   // --- forge: log a wish, build it with the stub agent, expect "review" ---
   const forge = agent.getService<ForgeService>("forge");
   let wishLogged = false;
+  let wishEdited = false;
   let wishForged = false;
   let forgeJobsListed = false;
   let forgeJobsScrubbed = false;
   if (forge) {
     const wish = await forge.addWish({ title: "smoke wish", reporter: "tester" });
     wishLogged = forge.listWishes("open").some((w) => w.id === wish.id);
+    const editWish = agent.actions.find((action) => action.name === "edit_wish");
+    const editResult = editWish
+      ? await editWish.handler(agent, {} as never, {
+          id: wish.id,
+          appendDetail: "Implement this specifically in the Laravel application.",
+        })
+      : null;
+    wishEdited =
+      editResult?.ok === true &&
+      forge.getWish(wish.id)?.detail === "Implement this specifically in the Laravel application.";
     const finished = new Promise<ForgeEvent>((res) =>
       forge.onEvent((ev) => ev.kind === "job_finished" && res(ev)),
     );
@@ -465,6 +529,7 @@ async function main() {
   // --- assertions ---
   const facts = await agent.memory.facts(50);
   const learnedName = facts.some((f) => /operator/i.test(f));
+  const learnedRussianName = facts.some((f) => /Алиса/i.test(f));
   const ranBalance = bal.actions.some((a) => a.name === "check_balance" && a.result.ok);
   const nullIsZero = bal.actions.some(
     (a) => a.name === "check_balance" && a.result.data?.balance === "0",
@@ -476,9 +541,11 @@ async function main() {
 
   console.log("\n=== assertions ===");
   console.log(`fact 'operator' learned : ${learnedName ? "PASS" : "FAIL"}`);
+  console.log(`russian name learned     : ${learnedRussianName ? "PASS" : "FAIL"}`);
   console.log(`check_balance ran ok     : ${ranBalance ? "PASS" : "FAIL"}`);
   console.log(`null address == 0 CYBER  : ${nullIsZero ? "PASS" : "FAIL"}`);
   console.log(`forced portfolio_pnl     : ${forcedPnl ? "PASS" : "FAIL"}`);
+  console.log(`tool result text + data  : ${toolResultContractOk ? "PASS" : "FAIL"}`);
   console.log(`refusal -> learn_skill   : ${autoLearnOk ? "PASS" : "FAIL"}`);
   console.log(`model transcript saved   : ${transcriptOk ? "PASS" : "FAIL"}`);
   console.log(`sentinel watch fired     : ${sentinelFired ? "PASS" : "FAIL"}`);
@@ -487,6 +554,7 @@ async function main() {
   console.log(`agent wallet lifecycle   : ${walletOk ? "PASS" : "FAIL"}`);
   console.log(`LAIN token registry      : ${lainTokenKnown ? "PASS" : "FAIL"}`);
   console.log(`forge wish logged        : ${wishLogged ? "PASS" : "FAIL"}`);
+  console.log(`forge wish edited        : ${wishEdited ? "PASS" : "FAIL"}`);
   console.log(`forge wish -> done       : ${wishForged ? "PASS" : "FAIL"}`);
   console.log(`forge jobs listed        : ${forgeJobsListed ? "PASS" : "FAIL"}`);
   console.log(`forge jobs scrub secrets : ${forgeJobsScrubbed ? "PASS" : "FAIL"}`);
@@ -505,8 +573,8 @@ async function main() {
 
   await agent.stop();
   const ok =
-    learnedName && ranBalance && nullIsZero && forcedPnl && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
-    walletOk && lainTokenKnown && wishLogged && wishForged && forgeProviderSwitchOk && skillsOk && journalOk && quietOk &&
+    learnedName && learnedRussianName && ranBalance && nullIsZero && forcedPnl && toolResultContractOk && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
+    walletOk && lainTokenKnown && wishLogged && wishEdited && wishForged && forgeProviderSwitchOk && skillsOk && journalOk && quietOk &&
     forgeJobsListed && forgeJobsScrubbed &&
     rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
     githubOk && channelOk && telegramOk;

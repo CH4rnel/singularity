@@ -23,16 +23,16 @@ const factEvaluator: Evaluator = {
   },
   async handler(runtime, state) {
     const text = state.message.content.trim();
-    const patterns: RegExp[] = [
-      /\bmy name is\s+([^.!?\n]{1,40})/i,
-      /\bменя зовут\s+([^.!?\n]{1,40})/i,
-      /\bremember that\s+([^.!?\n]{1,120})/i,
-      /\bзапомни,?\s+что\s+([^.!?\n]{1,120})/i,
+    const patterns: Array<{ re: RegExp; userName?: boolean }> = [
+      { re: /\bmy name is\s+([^.!?\n]{1,40})/i, userName: true },
+      { re: /(?:^|\s)меня зовут\s+([^.!?\n]{1,40})/i, userName: true },
+      { re: /\bremember that\s+([^.!?\n]{1,120})/i },
+      { re: /(?:^|\s)запомни,?\s+что\s+([^.!?\n]{1,120})/i },
     ];
-    for (const re of patterns) {
+    for (const { re, userName } of patterns) {
       const m = text.match(re);
       if (m?.[1]) {
-        const fact = re.source.includes("name")
+        const fact = userName
           ? `The user (${state.message.userId}) is named ${m[1].trim()}.`
           : m[1].trim();
         await runtime.memory.remember(fact, {

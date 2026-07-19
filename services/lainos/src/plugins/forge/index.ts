@@ -23,7 +23,7 @@ const log = createLogger("plugin:forge");
  * branches. Commits are never pushed; publishing stays with the operator.
  *
  * Surfaces:
- *   - actions: log_wish / list_wishes / build_wish / update_wish / forge_status
+ *   - actions: log_wish / list_wishes / build_wish / edit_wish / update_wish / forge_status
  *   - auto mode (default on): periodically picks the oldest open wish and
  *     forges it without being asked — this is the self-development loop.
  *     Disable with LAINOS_FORGE_AUTO=0. Give Codex/Claude unchecked repo
@@ -257,6 +257,39 @@ export class ForgeService implements Service {
     this.setStatus(wish, status);
     await this.persist();
     return wish;
+  }
+
+  async editWish(
+    id: string,
+    changes: { title?: string; detail?: string; appendDetail?: string },
+  ): Promise<{ wish: Wish; jobStatus?: ForgeJobStatus } | string> {
+    const wish = this.getWish(id);
+    if (!wish) return `no wish named ${id}`;
+
+    const hasTitle = Object.prototype.hasOwnProperty.call(changes, "title");
+    const hasDetail = Object.prototype.hasOwnProperty.call(changes, "detail");
+    const appendDetail = changes.appendDetail?.trim();
+    if (!hasTitle && !hasDetail && !appendDetail) {
+      return "provide title, detail, or appendDetail";
+    }
+    if (hasDetail && appendDetail) {
+      return "detail and appendDetail are mutually exclusive";
+    }
+
+    if (hasTitle) {
+      const title = changes.title?.trim();
+      if (!title) return "title cannot be empty";
+      wish.title = title;
+    }
+    if (hasDetail) wish.detail = changes.detail?.trim() || undefined;
+    if (appendDetail) {
+      wish.detail = [wish.detail?.trim(), appendDetail].filter(Boolean).join("\n\n");
+    }
+    wish.updatedAt = Date.now();
+    await this.persist();
+
+    const job = wish.jobId ? this.jobs.find((item) => item.id === wish.jobId) : undefined;
+    return { wish, jobStatus: job?.status };
   }
 
   /** Queue a forge job for a wish. Returns the job, or an error string. */
@@ -697,7 +730,7 @@ function describeWish(w: Wish): string {
 function describeJob(job: ForgeJob, svc: ForgeService): string {
   const wish = job.wishId ? svc.getWish(job.wishId) : undefined;
   const wishText = wish
-    ? `${wish.id} "${sanitizeInline(wish.title, 96)}"`
+    ? `${wish.id} - ${sanitizeInline(wish.title, 120)}`
     : job.wishId
       ? `${job.wishId} (missing wish)`
       : "ad-hoc";
@@ -707,7 +740,15 @@ function describeJob(job: ForgeJob, svc: ForgeService): string {
   const summary = job.status === "queued" || job.status === "running"
     ? job.status
     : summarizeJob(job.summary);
-  return `${job.id} [${job.status}] wish: ${wishText}; worker: ${svc.agentLabel(job)}; started: ${started}; ended: ${ended}; ${label}: ${summary}`;
+  const duration = formatDuration(job.startedAt, job.endedAt);
+  return [
+    `${job.id} [${job.status}]`,
+    `  wish:    ${wishText}`,
+    `  worker:  ${svc.agentLabel(job)}`,
+    `  started: ${started}`,
+    `  ended:   ${ended}${duration ? ` (${duration})` : ""}`,
+    `  ${label}:  ${summary}`,
+  ].join("\n");
 }
 
 export function formatForgeJobs(svc: ForgeService, opts: { limit?: number; status?: ForgeJobStatus } = {}): string {
@@ -723,11 +764,19 @@ export function formatForgeJobs(svc: ForgeService, opts: { limit?: number; statu
   }
   const total = svc.listJobs(opts.status).length;
   const suffix = total > jobs.length ? ` (newest ${jobs.length} of ${total})` : ` (${total})`;
-  return `Forge jobs${suffix}:\n${jobs.map((job) => describeJob(job, svc)).join("\n")}`;
+  return `Forge jobs${suffix}:\n\n${jobs.map((job) => describeJob(job, svc)).join("\n\n")}`;
 }
 
 function formatTime(ts?: number): string {
   return ts ? new Date(ts).toISOString() : "-";
+}
+
+function formatDuration(startedAt?: number, endedAt?: number): string {
+  if (!startedAt || !endedAt || endedAt < startedAt) return "";
+  const total = Math.round((endedAt - startedAt) / 1000);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return mins ? `${mins}m ${secs}s` : `${secs}s`;
 }
 
 function summarizeJob(summary?: string): string {
@@ -972,6 +1021,72 @@ const updateWishAction: Action = {
   },
 };
 
+const editWishAction: Action = {
+  name: "edit_wish",
+  similes: ["revise_wish", "append_wish", "update_wish_details", "clarify_wish"],
+  description:
+    "Edit a wish's title or implementation detail. Use appendDetail to add a clarification without replacing existing detail. A queued forge job will use the updated wish; a running job already has its prompt, so the edit is saved for review/follow-up but cannot change that live process.",
+  parameters: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Wish id, e.g. 'wish17'." },
+      title: { type: "string", description: "Replacement title. Omit to keep the title." },
+      detail: {
+        type: "string",
+        description: "Replacement implementation detail. Omit to keep the existing detail.",
+      },
+      appendDetail: {
+        type: "string",
+        description: "Clarification to append to the existing detail instead of replacing it.",
+      },
+    },
+    required: ["id"],
+  },
+  examples: [
+    {
+      user: "дополни wish17 тем, что речь о Laravel-приложении",
+      agent: "Добавляю уточнение к wish17 и проверяю, успеет ли его получить forge job.",
+    },
+  ],
+  async validate(runtime) {
+    return Boolean(runtime.getService("forge"));
+  },
+  async handler(runtime, _state, params) {
+    const svc = getForge(runtime);
+    const result = await svc.editWish(String(params.id ?? "").trim(), {
+      ...(Object.prototype.hasOwnProperty.call(params, "title")
+        ? { title: String(params.title ?? "") }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(params, "detail")
+        ? { detail: String(params.detail ?? "") }
+        : {}),
+      ...(params.appendDetail ? { appendDetail: String(params.appendDetail) } : {}),
+    });
+    if (typeof result === "string") return { ok: false, text: result };
+
+    const { wish, jobStatus } = result;
+    const jobNote =
+      jobStatus === "running"
+        ? ` ${wish.jobId} is already running with the previous prompt; this edit is saved for review/follow-up and did not change the live job.`
+        : jobStatus === "queued"
+          ? ` Queued ${wish.jobId} will use this updated wish when it starts.`
+          : "";
+    return {
+      ok: true,
+      text: `Edited ${wish.id}: ${wish.title}.${jobNote}`,
+      data: {
+        id: wish.id,
+        title: wish.title,
+        detail: wish.detail,
+        status: wish.status,
+        jobId: wish.jobId,
+        jobStatus,
+        appliedToLiveJob: jobStatus !== "running",
+      },
+    };
+  },
+};
+
 const setForgeProviderAction: Action = {
   name: "set_forge_provider",
   similes: ["switch_forge_provider", "change_forge_provider", "choose_forge_worker", "set_forge_worker"],
@@ -1088,6 +1203,7 @@ export const forgePlugin: Plugin = {
     buildWishAction,
     listForgeJobsAction,
     learnSkillAction,
+    editWishAction,
     updateWishAction,
     setForgeProviderAction,
     forgeStatusAction,
