@@ -88,7 +88,7 @@ export const EVM_CHAINS: readonly EvmChain[] = [
         nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
         rpcUrls: ['https://mainnet.base.org'],
         blockExplorerUrls: ['https://basescan.org'],
-        status: 'coming_soon',
+        status: 'wip',
     },
     {
         chainId: 42161,
