@@ -55,4 +55,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(ProposalComment::class);
     }
+
+    public function lainChatMessages(): HasMany
+    {
+        return $this->hasMany(LainChatMessage::class);
+    }
 }

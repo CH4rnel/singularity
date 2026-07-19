@@ -12,6 +12,7 @@ import {
     swap,
 } from '@/routes';
 import { index as daoIndex } from '@/routes/dao';
+import { index as lainIndex } from '@/routes/lain';
 import { index as tokensIndex } from '@/routes/tokens';
 
 export type Web3NavItem = {
@@ -51,6 +52,7 @@ export const navGroups: Web3NavGroup[] = [
             { title: 'NFT Market', href: market().url },
             { title: 'Pixels', href: pixels().url },
             { title: 'Predictions', href: predictions().url },
+            { title: 'Talk to Lain', href: lainIndex().url },
         ],
     },
     {

@@ -18,6 +18,7 @@ use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmNoteController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\FediverseController;
+use App\Http\Controllers\LainChatController;
 use App\Http\Controllers\LinkController;
 use App\Http\Controllers\LiquidityController;
 use App\Http\Controllers\NotificationController;
@@ -77,6 +78,13 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 Route::get('/tokens', [TokenController::class, 'index'])->name('tokens.index');
 Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.show');
 Route::get('/changelog', ChangelogController::class)->name('changelog');
+Route::get('/lain', [LainChatController::class, 'index'])->name('lain.index');
+Route::middleware('auth')->prefix('api/lain')->name('lain.')->group(function () {
+    Route::post('chat', [LainChatController::class, 'chat'])
+        ->middleware('throttle:10,1')->name('chat');
+    Route::post('reset', [LainChatController::class, 'reset'])
+        ->middleware('throttle:6,1')->name('reset');
+});
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/pixels', 'PixelBattle')->name('pixels');
 Route::get('/liquidity', [LiquidityController::class, 'index'])->name('liquidity');

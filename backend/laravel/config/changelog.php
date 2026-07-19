@@ -10,9 +10,22 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.3.0'),
+    'current_version' => env('APP_VERSION', 'v0.4.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.4.0',
+            'date' => '2026-07-19',
+            'title' => 'Talk to Lain',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Talk to Lain (/lain): a personal per-user chat with the resident Cyberia agent, built on LainOS. Tool-less by design, conversations persist per account.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.3.0',
             'date' => '2026-07-16',

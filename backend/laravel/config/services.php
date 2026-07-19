@@ -39,6 +39,16 @@ return [
         'rpc_url' => env('CYBERIA_RPC_URL'),
     ],
 
+    // "Talk to Lain" web chat (LainChatService): a tool-less Lain persona
+    // answered straight by OpenRouter — the LainOS daemon is not involved.
+    // Without an API key the /lain page renders but chat reports itself off.
+    'lain' => [
+        'openrouter_api_key' => env('OPENROUTER_API_KEY'),
+        // openrouter/free is OpenRouter's $0 router over available free models.
+        'model' => env('LAIN_CHAT_MODEL', 'openrouter/free'),
+        'timeout_seconds' => (int) env('LAIN_CHAT_TIMEOUT_SECONDS', 90),
+    ],
+
     'cyberia' => [
         'explorer_url' => env('CYBERIA_EXPLORER_URL', 'https://explorer.cyberia.church'),
         // Analytics token-price walker (AnalyticsController). $1-pegged anchor
