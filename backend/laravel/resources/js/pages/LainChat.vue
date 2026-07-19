@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import PageHero from '@/components/web3/PageHero.vue';
 import PageShell from '@/components/web3/PageShell.vue';
-import { useLocale } from '@/composables/useLocale';
 import { chat, reset } from '@/routes/lain';
 import { login as walletLogin } from '@/routes/wallet';
 
@@ -31,47 +30,6 @@ const props = defineProps<{
     enabled: boolean;
     messages: ChatMessage[];
 }>();
-
-const { t, locale, toggleLocale } = useLocale({
-    en: {
-        title: 'Talk to Lain',
-        eyebrow: 'LainOS / personal agent',
-        description:
-            'Your personal line to the resident mind of Cyberia — an agent built on LainOS. No tools, no transactions: just a conversation.',
-        aboutTitle: 'About this line',
-        aboutBody:
-            'Each user gets their own thread with Lain. She knows the Cyberia ecosystem but holds no keys and runs no transactions from here.',
-        savedNote: 'Conversations are stored with your account.',
-        newSession: 'New session',
-        signalLocked: 'signal locked',
-        signInHint: 'Sign in with your wallet to open your personal line.',
-        signIn: 'Sign in',
-        offline: 'Lain is not wired up on this server yet.',
-        placeholder: 'say something to lain…',
-        sendLabel: 'Send message',
-        genericError: 'Lain did not answer.',
-        you: 'you',
-    },
-    ru: {
-        title: 'Поговорить с Лейн',
-        eyebrow: 'LainOS / персональный агент',
-        description:
-            'Твоя личная линия к резидентному разуму Сайберии — агенту на базе LainOS. Без инструментов и транзакций: просто разговор.',
-        aboutTitle: 'Об этой линии',
-        aboutBody:
-            'У каждого пользователя — свой тред с Лейн. Она знает экосистему Сайберии, но не держит ключей и не проводит транзакции отсюда.',
-        savedNote: 'Переписка сохраняется в твоём аккаунте.',
-        newSession: 'Новая сессия',
-        signalLocked: 'сигнал закрыт',
-        signInHint: 'Войди через кошелёк, чтобы открыть свою личную линию.',
-        signIn: 'Войти',
-        offline: 'Лейн ещё не подключена на этом сервере.',
-        placeholder: 'скажи что-нибудь лейн…',
-        sendLabel: 'Отправить сообщение',
-        genericError: 'Лейн не ответила.',
-        you: 'ты',
-    },
-});
 
 const page = usePage();
 const isAuthenticated = computed(() => !!page.props.auth?.user);
@@ -160,7 +118,7 @@ async function sendMessage(): Promise<void> {
         messages.value = messages.value.filter((m) => m !== pending);
         input.value = text;
         error.value =
-            cause instanceof Error ? cause.message : t('genericError');
+            cause instanceof Error ? cause.message : 'Lain did not answer.';
     } finally {
         sending.value = false;
         await scrollToBottom();
@@ -180,7 +138,7 @@ async function startNewSession(): Promise<void> {
         messages.value = [];
     } catch (cause) {
         error.value =
-            cause instanceof Error ? cause.message : t('genericError');
+            cause instanceof Error ? cause.message : 'Lain did not answer.';
     } finally {
         resetting.value = false;
     }
@@ -190,14 +148,14 @@ onMounted(() => scrollToBottom(false));
 </script>
 
 <template>
-    <Head :title="t('title')" />
+    <Head title="Talk to Lain" />
 
     <PageShell size="wide">
         <template #hero>
             <PageHero
-                :eyebrow="t('eyebrow')"
-                :title="t('title')"
-                :description="t('description')"
+                eyebrow="LainOS / personal agent"
+                title="Talk to Lain"
+                description="Your personal line to the resident mind of Cyberia — an agent built on LainOS. No tools, no transactions: just a conversation."
             >
                 <template #actions>
                     <Badge
@@ -207,9 +165,6 @@ onMounted(() => scrollToBottom(false));
                         <Radio class="h-3 w-3" />
                         LainOS
                     </Badge>
-                    <Button variant="ghost" size="sm" @click="toggleLocale">
-                        {{ locale === 'ru' ? 'EN' : 'RU' }}
-                    </Button>
                 </template>
             </PageHero>
         </template>
@@ -231,15 +186,17 @@ onMounted(() => scrollToBottom(false));
                             <p
                                 class="text-xs tracking-widest text-muted-foreground uppercase"
                             >
-                                {{ t('aboutTitle') }}
+                                About this line
                             </p>
                             <p
                                 class="mt-2 text-sm leading-6 text-muted-foreground"
                             >
-                                {{ t('aboutBody') }}
+                                Each user gets their own thread with Lain. She
+                                knows the Cyberia ecosystem but holds no keys
+                                and runs no transactions from here.
                             </p>
                             <p class="mt-2 text-xs text-muted-foreground/70">
-                                {{ t('savedNote') }}
+                                Conversations are stored with your account.
                             </p>
                         </div>
 
@@ -253,7 +210,7 @@ onMounted(() => scrollToBottom(false));
                             @click="startNewSession"
                         >
                             <RotateCcw class="mr-2 h-4 w-4" />
-                            {{ t('newSession') }}
+                            New session
                         </Button>
                     </div>
                 </section>
@@ -294,14 +251,15 @@ onMounted(() => scrollToBottom(false));
                     >
                         <LockKeyhole class="mx-auto h-9 w-9 text-neutral-600" />
                         <p class="mt-4 font-mono text-sm text-neutral-300">
-                            {{ t('signalLocked') }}
+                            signal locked
                         </p>
                         <p class="mt-2 text-sm leading-6 text-neutral-500">
-                            {{ t('signInHint') }}
+                            Sign in with your wallet to open your personal
+                            line.
                         </p>
                         <Button as-child class="mt-5">
                             <InertiaLink :href="walletLogin().url">
-                                {{ t('signIn') }}
+                                Sign in
                             </InertiaLink>
                         </Button>
                     </div>
@@ -312,7 +270,7 @@ onMounted(() => scrollToBottom(false));
                     >
                         <LockKeyhole class="mx-auto h-9 w-9 text-neutral-600" />
                         <p class="mt-4 text-sm leading-6 text-neutral-500">
-                            {{ t('offline') }}
+                            Lain is not wired up on this server yet.
                         </p>
                     </div>
 
@@ -335,7 +293,7 @@ onMounted(() => scrollToBottom(false));
                                         : 'text-neutral-500'
                                 "
                             >
-                                {{ message.role === 'lain' ? 'lain' : t('you') }}
+                                {{ message.role === 'lain' ? 'lain' : 'you' }}
                             </p>
                             <p
                                 class="rounded-xl px-4 py-3 text-left text-sm leading-6 whitespace-pre-wrap"
@@ -374,7 +332,7 @@ onMounted(() => scrollToBottom(false));
                         rows="2"
                         maxlength="2000"
                         :disabled="!isAuthenticated || !enabled || sending"
-                        :placeholder="t('placeholder')"
+                        placeholder="say something to lain…"
                         class="min-h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-brand-cyan/50 disabled:cursor-not-allowed disabled:opacity-50"
                         @keydown.enter.exact.prevent="sendMessage"
                     ></textarea>
@@ -388,7 +346,7 @@ onMounted(() => scrollToBottom(false));
                             sending ||
                             !input.trim()
                         "
-                        :aria-label="t('sendLabel')"
+                        aria-label="Send message"
                     >
                         <Send class="h-4 w-4" />
                     </Button>
