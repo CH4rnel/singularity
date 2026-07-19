@@ -60,4 +60,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(LainChatMessage::class);
     }
+
+    public function lainChatSessions(): HasMany
+    {
+        return $this->hasMany(LainChatSession::class);
+    }
 }

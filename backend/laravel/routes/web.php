@@ -80,10 +80,10 @@ Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.sho
 Route::get('/changelog', ChangelogController::class)->name('changelog');
 Route::get('/lain', [LainChatController::class, 'index'])->name('lain.index');
 Route::middleware('auth')->prefix('api/lain')->name('lain.')->group(function () {
+    Route::get('sessions/{session}', [LainChatController::class, 'session'])
+        ->middleware('throttle:60,1')->name('sessions.show');
     Route::post('chat', [LainChatController::class, 'chat'])
         ->middleware('throttle:10,1')->name('chat');
-    Route::post('reset', [LainChatController::class, 'reset'])
-        ->middleware('throttle:6,1')->name('reset');
 });
 Route::inertia('/market', 'Market')->name('market');
 Route::inertia('/pixels', 'PixelBattle')->name('pixels');

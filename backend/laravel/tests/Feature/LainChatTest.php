@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\LainChatMessage;
+use App\Models\LainChatSession;
 use App\Models\User;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -63,6 +64,11 @@ function qualifyingUser(): User
     return User::factory()->create(['wallet_address' => LAIN_TEST_WALLET]);
 }
 
+function sessionFor(User $user, string $title = 'Conversation'): LainChatSession
+{
+    return $user->lainChatSessions()->create(['title' => $title]);
+}
+
 beforeEach(function () {
     config()->set('services.lain.openrouter_api_key', 'test-key');
     config()->set('services.lain.model', 'openrouter/free');
@@ -79,6 +85,8 @@ it('serves the page to guests with a locked gate', function () {
             ->where('enabled', true)
             ->where('gate.state', 'guest')
             ->where('gate.qualifies', false)
+            ->where('sessions', [])
+            ->where('activeSessionId', null)
             ->where('messages', []));
 });
 
@@ -94,37 +102,61 @@ it('opens the gate for a wallet holding ten percent of LAIN', function () {
             ->where('gate.shareBps', 1000));
 });
 
-it('locks the gate for a wallet below the threshold and hides history', function () {
-    fakeLainRpc('99999999999999999999');
-    $user = User::factory()->create(['wallet_address' => LAIN_TEST_WALLET]);
-    $user->lainChatMessages()->create(['role' => 'lain', 'content' => 'old reply']);
+it('lists sessions newest-first and preloads the latest transcript', function () {
+    $user = qualifyingUser();
+    $old = sessionFor($user, 'old thread');
+    $old->messages()->create(['user_id' => $user->id, 'role' => 'user', 'content' => 'old question']);
+    $recent = sessionFor($user, 'recent thread');
+    $recent->messages()->create(['user_id' => $user->id, 'role' => 'lain', 'content' => 'recent reply']);
 
     $this->actingAs($user)
         ->get('/lain')
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('gate.state', 'checked')
-            ->where('gate.qualifies', false)
-            ->where('messages', []));
+            ->has('sessions', 2)
+            ->where('sessions.0.title', 'recent thread')
+            ->where('sessions.1.title', 'old thread')
+            ->where('activeSessionId', $recent->id)
+            ->has('messages', 1)
+            ->where('messages.0.text', 'recent reply'));
 });
 
-it('locks the gate for accounts without an EVM wallet', function () {
-    $user = User::factory()->create(['wallet_address' => null]);
+it('still shows transcripts to holders who dropped below the threshold', function () {
+    fakeLainRpc('99999999999999999999');
+    $user = User::factory()->create(['wallet_address' => LAIN_TEST_WALLET]);
+    $session = sessionFor($user);
+    $session->messages()->create(['user_id' => $user->id, 'role' => 'lain', 'content' => 'old reply']);
 
     $this->actingAs($user)
         ->get('/lain')
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->where('gate.state', 'no_wallet'));
-
-    $this->actingAs($user)
-        ->postJson('/api/lain/chat', ['text' => 'hi'])
-        ->assertForbidden()
-        ->assertJsonPath('gate.state', 'no_wallet');
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('gate.qualifies', false)
+            ->has('sessions', 1)
+            ->has('messages', 1));
 });
 
-it('rejects chat from guests', function () {
+it('returns a session transcript and hides foreign sessions', function () {
+    $user = qualifyingUser();
+    $session = sessionFor($user, 'mine');
+    $session->messages()->create(['user_id' => $user->id, 'role' => 'user', 'content' => 'hello']);
+    $stranger = User::factory()->create();
+    $foreign = sessionFor($stranger, 'not yours');
+
+    $this->actingAs($user)
+        ->getJson("/api/lain/sessions/{$session->id}")
+        ->assertOk()
+        ->assertJsonPath('session.title', 'mine')
+        ->assertJsonPath('messages.0.text', 'hello');
+
+    $this->actingAs($user)
+        ->getJson("/api/lain/sessions/{$foreign->id}")
+        ->assertNotFound();
+});
+
+it('rejects chat and session reads from guests', function () {
     $this->postJson('/api/lain/chat', ['text' => 'hi'])->assertUnauthorized();
-    $this->postJson('/api/lain/reset')->assertUnauthorized();
+    $this->getJson('/api/lain/sessions/1')->assertUnauthorized();
 });
 
 it('refuses chat when the wallet holds less than ten percent of LAIN', function () {
@@ -140,6 +172,15 @@ it('refuses chat when the wallet holds less than ten percent of LAIN', function 
     expect(LainChatMessage::where('user_id', $user->id)->count())->toBe(0);
 });
 
+it('locks the gate for accounts without an EVM wallet', function () {
+    $user = User::factory()->create(['wallet_address' => null]);
+
+    $this->actingAs($user)
+        ->postJson('/api/lain/chat', ['text' => 'hi'])
+        ->assertForbidden()
+        ->assertJsonPath('gate.state', 'no_wallet');
+});
+
 it('reports a holder-check RPC failure as temporary', function () {
     Http::fake([LAIN_RPC_URL => Http::response([], 500)]);
     $user = User::factory()->create(['wallet_address' => LAIN_TEST_WALLET]);
@@ -152,16 +193,18 @@ it('reports a holder-check RPC failure as temporary', function () {
     Http::assertNotSent(fn (Request $request) => $request->url() === OPENROUTER_URL);
 });
 
-it('answers a qualifying holder and persists both turns', function () {
+it('creates a session lazily on the first answered message', function () {
     $user = qualifyingUser();
     fakeOpenRouter('<think>secret chain of thought</think>present day, present time.');
 
     $this->actingAs($user)
         ->postJson('/api/lain/chat', ['text' => 'hello, lain'])
         ->assertOk()
-        ->assertJsonPath('text', 'present day, present time.');
+        ->assertJsonPath('text', 'present day, present time.')
+        ->assertJsonPath('session.title', 'hello, lain');
 
-    $rows = LainChatMessage::where('user_id', $user->id)->orderBy('id')->get();
+    $session = LainChatSession::where('user_id', $user->id)->sole();
+    $rows = $session->messages()->orderBy('id')->get();
     expect($rows)->toHaveCount(2)
         ->and($rows[0]->role)->toBe('user')
         ->and($rows[0]->content)->toBe('hello, lain')
@@ -183,20 +226,21 @@ it('answers a qualifying holder and persists both turns', function () {
     });
 });
 
-it('replays prior conversation as context but not across a reset', function () {
+it('keeps model context scoped to the addressed session', function () {
     $user = qualifyingUser();
-    $user->lainChatMessages()->createMany([
-        ['role' => 'user', 'content' => 'before reset'],
-        ['role' => 'lain', 'content' => 'old reply'],
-        ['role' => 'reset', 'content' => ''],
-        ['role' => 'user', 'content' => 'after reset'],
-        ['role' => 'lain', 'content' => 'fresh reply'],
+    $other = sessionFor($user, 'other thread');
+    $other->messages()->create(['user_id' => $user->id, 'role' => 'user', 'content' => 'other-session secret']);
+    $session = sessionFor($user, 'this thread');
+    $session->messages()->createMany([
+        ['user_id' => $user->id, 'role' => 'user', 'content' => 'earlier question'],
+        ['user_id' => $user->id, 'role' => 'lain', 'content' => 'earlier reply'],
     ]);
     fakeOpenRouter('listening.');
 
     $this->actingAs($user)
-        ->postJson('/api/lain/chat', ['text' => 'still there?'])
-        ->assertOk();
+        ->postJson('/api/lain/chat', ['text' => 'still there?', 'session_id' => $session->id])
+        ->assertOk()
+        ->assertJsonPath('session.id', $session->id);
 
     Http::assertSent(function (Request $request) {
         if ($request->url() !== OPENROUTER_URL) {
@@ -204,28 +248,26 @@ it('replays prior conversation as context but not across a reset', function () {
         }
         $contents = array_column($request['messages'], 'content');
 
-        return in_array('after reset', $contents, true)
-            && in_array('fresh reply', $contents, true)
-            && ! in_array('before reset', $contents, true)
-            && ! in_array('old reply', $contents, true);
+        return in_array('earlier question', $contents, true)
+            && in_array('earlier reply', $contents, true)
+            && ! in_array('other-session secret', $contents, true);
     });
+
+    expect($session->messages()->count())->toBe(4)
+        ->and($other->messages()->count())->toBe(1);
 });
 
-it('marks a reset boundary without deleting the transcript', function () {
+it('rejects chatting into a foreign session', function () {
     $user = qualifyingUser();
-    $user->lainChatMessages()->createMany([
-        ['role' => 'user', 'content' => 'hello'],
-        ['role' => 'lain', 'content' => 'hi'],
-    ]);
+    $stranger = User::factory()->create();
+    $foreign = sessionFor($stranger);
 
-    $this->actingAs($user)->postJson('/api/lain/reset')->assertOk();
+    $this->actingAs($user)
+        ->postJson('/api/lain/chat', ['text' => 'hi', 'session_id' => $foreign->id])
+        ->assertNotFound();
 
-    expect(LainChatMessage::where('user_id', $user->id)->count())->toBe(3)
-        ->and(LainChatMessage::where('user_id', $user->id)->where('role', 'reset')->count())->toBe(1);
-
-    // A second reset on an already-empty conversation adds nothing.
-    $this->actingAs($user)->postJson('/api/lain/reset')->assertOk();
-    expect(LainChatMessage::where('user_id', $user->id)->count())->toBe(3);
+    Http::assertNotSent(fn (Request $request) => $request->url() === OPENROUTER_URL);
+    expect($foreign->messages()->count())->toBe(0);
 });
 
 it('retries once when the model ships an empty reply', function () {
@@ -257,7 +299,7 @@ it('falls back to the free router when the pinned model is rate-limited', functi
         && $request['model'] === 'openrouter/free');
 });
 
-it('does not persist the user turn when the model fails', function () {
+it('persists neither the turn nor a session when the model fails', function () {
     $user = qualifyingUser();
     Http::fake([OPENROUTER_URL => Http::response(['error' => ['message' => 'rate limited']], 429)]);
 
@@ -265,5 +307,6 @@ it('does not persist the user turn when the model fails', function () {
         ->postJson('/api/lain/chat', ['text' => 'hello?'])
         ->assertServiceUnavailable();
 
-    expect(LainChatMessage::where('user_id', $user->id)->count())->toBe(0);
+    expect(LainChatMessage::where('user_id', $user->id)->count())->toBe(0)
+        ->and(LainChatSession::where('user_id', $user->id)->count())->toBe(0);
 });

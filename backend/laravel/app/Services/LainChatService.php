@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\LainChatMessage;
+use App\Models\LainChatSession;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -26,18 +27,20 @@ class LainChatService
     }
 
     /**
-     * Answer $text for $user, using their current conversation as context.
+     * Answer $text for $user, using $session's conversation as context
+     * (null session = a brand-new conversation, no prior context).
      *
      * @return array{text: string, model: string}
      */
-    public function reply(User $user, string $text): array
+    public function reply(User $user, ?LainChatSession $session, string $text): array
     {
-        $history = LainChatMessage::currentConversation($user->id)
-            ->where('role', '!=', LainChatMessage::ROLE_RESET)
-            ->reorder('id', 'desc')
-            ->limit(self::CONTEXT_MESSAGES)
-            ->get()
-            ->reverse();
+        $history = $session === null
+            ? collect()
+            : $session->messages()
+                ->latest('id')
+                ->limit(self::CONTEXT_MESSAGES)
+                ->get()
+                ->reverse();
 
         $messages = $history
             ->map(fn (LainChatMessage $m) => [

@@ -3,8 +3,8 @@ import { Head, Link as InertiaLink, usePage } from '@inertiajs/vue3';
 import { formatUnits } from 'ethers';
 import {
     LockKeyhole,
+    MessageSquarePlus,
     Radio,
-    RotateCcw,
     Send,
     ShieldCheck,
 } from 'lucide-vue-next';
@@ -13,13 +13,20 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import PageHero from '@/components/web3/PageHero.vue';
 import PageShell from '@/components/web3/PageShell.vue';
-import { chat, reset } from '@/routes/lain';
+import { chat } from '@/routes/lain';
+import { show as sessionShow } from '@/routes/lain/sessions';
 import { login as walletLogin } from '@/routes/wallet';
 
 type ChatMessage = {
     id: number;
     role: 'user' | 'lain';
     text: string;
+};
+
+type ChatSession = {
+    id: number;
+    title: string;
+    updatedAt: string;
 };
 
 type Gate = {
@@ -47,6 +54,8 @@ class ApiError extends Error {
 const props = defineProps<{
     enabled: boolean;
     gate: Gate;
+    sessions: ChatSession[];
+    activeSessionId: number | null;
     messages: ChatMessage[];
 }>();
 
@@ -62,6 +71,10 @@ const authWallet = computed(
 );
 
 const gate = ref<Gate>({ ...props.gate });
+const sessions = ref<ChatSession[]>([...props.sessions]);
+const activeSessionId = ref<number | null>(props.activeSessionId);
+const messages = ref<ChatMessage[]>([...props.messages]);
+
 const canChat = computed(() => isAuthenticated.value && gate.value.qualifies);
 const requiredPercent = computed(() => gate.value.minimumShareBps / 100);
 const shortWallet = computed(() =>
@@ -82,14 +95,35 @@ const shareLabel = computed(() =>
         ? '—'
         : `${(gate.value.shareBps / 100).toFixed(2)}%`,
 );
+const lockNotice = computed(() => {
+    if (!isAuthenticated.value || canChat.value) {
+        return null;
+    }
+
+    if (gate.value.state === 'no_wallet') {
+        return 'Your account has no EVM wallet. Sign in with the wallet that holds your $LAIN.';
+    }
+
+    if (gate.value.state === 'error') {
+        return 'Could not verify your LAIN balance on Cyberia. Reload the page to try again.';
+    }
+
+    return `Sending is open to wallets holding ${requiredPercent.value}% or more of the live $LAIN supply. Your wallet holds ${balanceLabel.value} LAIN (${shareLabel.value}).`;
+});
 
 const sending = ref(false);
-const resetting = ref(false);
+const switching = ref(false);
 const error = ref<string | null>(null);
 const input = ref('');
-const messages = ref<ChatMessage[]>([...props.messages]);
 const transcript = ref<HTMLElement | null>(null);
 let localMessageId = -1;
+
+function sessionDateLabel(iso: string): string {
+    return new Date(iso).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+    });
+}
 
 function csrfToken(): string | null {
     const match = document.cookie
@@ -139,10 +173,51 @@ async function scrollToBottom(smooth = true): Promise<void> {
     });
 }
 
+function startNewSession(): void {
+    if (sending.value || switching.value) {
+        return;
+    }
+
+    // The session row is created lazily on the first answered message, so an
+    // abandoned empty session leaves nothing behind.
+    activeSessionId.value = null;
+    messages.value = [];
+    error.value = null;
+}
+
+async function openSession(id: number): Promise<void> {
+    if (
+        id === activeSessionId.value ||
+        sending.value ||
+        switching.value ||
+        !isAuthenticated.value
+    ) {
+        return;
+    }
+
+    switching.value = true;
+    error.value = null;
+
+    try {
+        const data = await requestJson<{
+            session: ChatSession;
+            messages: ChatMessage[];
+        }>(sessionShow(id).url);
+        activeSessionId.value = data.session.id;
+        messages.value = data.messages;
+        await scrollToBottom(false);
+    } catch (cause) {
+        error.value =
+            cause instanceof Error ? cause.message : 'Could not open session.';
+    } finally {
+        switching.value = false;
+    }
+}
+
 async function sendMessage(): Promise<void> {
     const text = input.value.trim();
 
-    if (!text || sending.value || !canChat.value || !props.enabled) {
+    if (!text || sending.value || switching.value || !canChat.value || !props.enabled) {
         return;
     }
 
@@ -154,14 +229,23 @@ async function sendMessage(): Promise<void> {
     await scrollToBottom();
 
     try {
-        const reply = await requestJson<{ id: number; text: string }>(
-            chat().url,
-            {
-                method: chat().method,
-                body: JSON.stringify({ text }),
-            },
-        );
+        const reply = await requestJson<{
+            id: number;
+            text: string;
+            session: ChatSession;
+        }>(chat().url, {
+            method: chat().method,
+            body: JSON.stringify({
+                text,
+                session_id: activeSessionId.value,
+            }),
+        });
         messages.value.push({ id: reply.id, role: 'lain', text: reply.text });
+        activeSessionId.value = reply.session.id;
+        sessions.value = [
+            reply.session,
+            ...sessions.value.filter((s) => s.id !== reply.session.id),
+        ];
     } catch (cause) {
         // The failed turn is not persisted server-side; put the text back so
         // the user can retry it.
@@ -183,25 +267,6 @@ async function sendMessage(): Promise<void> {
     } finally {
         sending.value = false;
         await scrollToBottom();
-    }
-}
-
-async function startNewSession(): Promise<void> {
-    if (resetting.value || sending.value || messages.value.length === 0) {
-        return;
-    }
-
-    resetting.value = true;
-    error.value = null;
-
-    try {
-        await requestJson(reset().url, { method: reset().method });
-        messages.value = [];
-    } catch (cause) {
-        error.value =
-            cause instanceof Error ? cause.message : 'Lain did not answer.';
-    } finally {
-        resetting.value = false;
     }
 }
 
@@ -287,20 +352,68 @@ onMounted(() => scrollToBottom(false));
                             Conversations are stored with your account. Lain
                             holds no keys and runs no transactions from here.
                         </p>
+                    </div>
+                </section>
 
+                <section
+                    v-if="isAuthenticated"
+                    class="rounded-xl border border-border bg-card p-4"
+                >
+                    <div class="flex items-center justify-between gap-2">
+                        <p
+                            class="text-xs tracking-widest text-muted-foreground uppercase"
+                        >
+                            Sessions
+                        </p>
                         <Button
-                            v-if="canChat"
-                            variant="outline"
-                            class="w-full"
+                            variant="ghost"
+                            size="sm"
+                            class="h-7 gap-1.5 px-2 text-xs"
                             :disabled="
-                                resetting || sending || messages.length === 0
+                                sending ||
+                                switching ||
+                                (activeSessionId === null &&
+                                    messages.length === 0)
                             "
                             @click="startNewSession"
                         >
-                            <RotateCcw class="mr-2 h-4 w-4" />
-                            New session
+                            <MessageSquarePlus class="h-3.5 w-3.5" />
+                            New
                         </Button>
                     </div>
+
+                    <p
+                        v-if="sessions.length === 0"
+                        class="mt-3 text-xs text-muted-foreground/70"
+                    >
+                        No sessions yet — say something to Lain.
+                    </p>
+
+                    <ul v-else class="mt-3 space-y-1">
+                        <li v-for="session in sessions" :key="session.id">
+                            <button
+                                type="button"
+                                class="flex w-full items-baseline justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                                :class="
+                                    session.id === activeSessionId
+                                        ? 'bg-accent font-medium text-accent-foreground'
+                                        : 'text-muted-foreground'
+                                "
+                                :disabled="sending || switching"
+                                @click="openSession(session.id)"
+                            >
+                                <span class="truncate">{{
+                                    session.title
+                                }}</span>
+                                <span
+                                    class="shrink-0 font-mono text-[10px] opacity-60"
+                                    >{{
+                                        sessionDateLabel(session.updatedAt)
+                                    }}</span
+                                >
+                            </button>
+                        </li>
+                    </ul>
                 </section>
 
                 <a
@@ -367,32 +480,6 @@ onMounted(() => scrollToBottom(false));
                     </div>
 
                     <div
-                        v-else-if="!canChat"
-                        class="m-auto max-w-md text-center"
-                    >
-                        <LockKeyhole class="mx-auto h-9 w-9 text-neutral-600" />
-                        <p class="mt-4 font-mono text-sm text-neutral-300">
-                            signal locked
-                        </p>
-                        <p class="mt-2 text-sm leading-6 text-neutral-500">
-                            <template v-if="gate.state === 'no_wallet'">
-                                Your account has no EVM wallet. Sign in with
-                                the wallet that holds your $LAIN.
-                            </template>
-                            <template v-else-if="gate.state === 'error'">
-                                Could not verify your LAIN balance on Cyberia.
-                                Reload the page to try again.
-                            </template>
-                            <template v-else>
-                                This line is open to wallets holding
-                                {{ requiredPercent }}% or more of the live
-                                $LAIN supply. Your wallet holds
-                                {{ balanceLabel }} LAIN ({{ shareLabel }}).
-                            </template>
-                        </p>
-                    </div>
-
-                    <div
                         v-else-if="!enabled"
                         class="m-auto max-w-md text-center"
                     >
@@ -403,6 +490,13 @@ onMounted(() => scrollToBottom(false));
                     </div>
 
                     <template v-else>
+                        <p
+                            v-if="messages.length === 0 && canChat"
+                            class="m-auto font-mono text-xs text-neutral-600"
+                        >
+                            new session — say something.
+                        </p>
+
                         <article
                             v-for="message in messages"
                             :key="message.id"
@@ -445,6 +539,14 @@ onMounted(() => scrollToBottom(false));
                 </div>
 
                 <div
+                    v-if="lockNotice && enabled"
+                    class="flex items-center gap-2 border-t border-white/10 bg-white/5 px-5 py-2 text-xs text-neutral-400"
+                >
+                    <LockKeyhole class="h-3.5 w-3.5 shrink-0" />
+                    {{ lockNotice }}
+                </div>
+
+                <div
                     v-if="error"
                     class="border-t border-red-500/20 bg-red-500/5 px-5 py-2 text-xs text-red-300"
                 >
@@ -459,7 +561,7 @@ onMounted(() => scrollToBottom(false));
                         v-model="input"
                         rows="2"
                         maxlength="2000"
-                        :disabled="!canChat || !enabled || sending"
+                        :disabled="!canChat || !enabled || sending || switching"
                         placeholder="say something to lain…"
                         class="min-h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-brand-cyan/50 disabled:cursor-not-allowed disabled:opacity-50"
                         @keydown.enter.exact.prevent="sendMessage"
@@ -469,7 +571,11 @@ onMounted(() => scrollToBottom(false));
                         size="icon"
                         class="h-12 w-12 shrink-0"
                         :disabled="
-                            !canChat || !enabled || sending || !input.trim()
+                            !canChat ||
+                            !enabled ||
+                            sending ||
+                            switching ||
+                            !input.trim()
                         "
                         aria-label="Send message"
                     >
