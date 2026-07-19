@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Head, Link as InertiaLink, usePage } from '@inertiajs/vue3';
-import { LockKeyhole, Radio, RotateCcw, Send } from 'lucide-vue-next';
+import { formatUnits } from 'ethers';
+import {
+    LockKeyhole,
+    Radio,
+    RotateCcw,
+    Send,
+    ShieldCheck,
+} from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,12 +22,23 @@ type ChatMessage = {
     text: string;
 };
 
+type Gate = {
+    state: 'guest' | 'no_wallet' | 'error' | 'checked';
+    qualifies: boolean;
+    tokenAddress: string;
+    minimumShareBps: number;
+    balance?: string;
+    minimumBalance?: string;
+    shareBps?: number;
+};
+
 type JsonObject = Record<string, unknown>;
 
 class ApiError extends Error {
     constructor(
         message: string,
         public status: number,
+        public data: JsonObject,
     ) {
         super(message);
     }
@@ -28,11 +46,42 @@ class ApiError extends Error {
 
 const props = defineProps<{
     enabled: boolean;
+    gate: Gate;
     messages: ChatMessage[];
 }>();
 
 const page = usePage();
 const isAuthenticated = computed(() => !!page.props.auth?.user);
+const authWallet = computed(
+    () =>
+        (
+            page.props.auth?.user as
+                | { wallet_address?: string | null }
+                | undefined
+        )?.wallet_address ?? null,
+);
+
+const gate = ref<Gate>({ ...props.gate });
+const canChat = computed(() => isAuthenticated.value && gate.value.qualifies);
+const requiredPercent = computed(() => gate.value.minimumShareBps / 100);
+const shortWallet = computed(() =>
+    authWallet.value
+        ? `${authWallet.value.slice(0, 6)}…${authWallet.value.slice(-4)}`
+        : null,
+);
+const balanceLabel = computed(() =>
+    gate.value.balance !== undefined
+        ? Number(formatUnits(gate.value.balance, 18)).toLocaleString(
+              undefined,
+              { maximumFractionDigits: 4 },
+          )
+        : '—',
+);
+const shareLabel = computed(() =>
+    gate.value.shareBps === undefined
+        ? '—'
+        : `${(gate.value.shareBps / 100).toFixed(2)}%`,
+);
 
 const sending = ref(false);
 const resetting = ref(false);
@@ -75,6 +124,7 @@ async function requestJson<T>(
                 ? data.message
                 : `Request failed (${response.status})`,
             response.status,
+            data,
         );
     }
 
@@ -92,7 +142,7 @@ async function scrollToBottom(smooth = true): Promise<void> {
 async function sendMessage(): Promise<void> {
     const text = input.value.trim();
 
-    if (!text || sending.value || !isAuthenticated.value || !props.enabled) {
+    if (!text || sending.value || !canChat.value || !props.enabled) {
         return;
     }
 
@@ -117,6 +167,17 @@ async function sendMessage(): Promise<void> {
         // the user can retry it.
         messages.value = messages.value.filter((m) => m !== pending);
         input.value = text;
+
+        // The wallet may have dropped below the threshold mid-conversation;
+        // the server sends the fresh gate state along with the refusal.
+        if (
+            cause instanceof ApiError &&
+            cause.data.gate &&
+            typeof cause.data.gate === 'object'
+        ) {
+            gate.value = cause.data.gate as Gate;
+        }
+
         error.value =
             cause instanceof Error ? cause.message : 'Lain did not answer.';
     } finally {
@@ -182,26 +243,53 @@ onMounted(() => scrollToBottom(false));
                         />
                     </div>
                     <div class="space-y-4 p-5">
-                        <div>
-                            <p
-                                class="text-xs tracking-widest text-muted-foreground uppercase"
-                            >
-                                About this line
-                            </p>
-                            <p
-                                class="mt-2 text-sm leading-6 text-muted-foreground"
-                            >
-                                Each user gets their own thread with Lain. She
-                                knows the Cyberia ecosystem but holds no keys
-                                and runs no transactions from here.
-                            </p>
-                            <p class="mt-2 text-xs text-muted-foreground/70">
-                                Conversations are stored with your account.
-                            </p>
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p
+                                    class="text-xs tracking-widest text-muted-foreground uppercase"
+                                >
+                                    Access gate
+                                </p>
+                                <p class="mt-1 font-semibold">
+                                    {{ requiredPercent }}%+ $LAIN
+                                </p>
+                            </div>
+                            <ShieldCheck
+                                v-if="canChat"
+                                class="h-6 w-6 text-brand-cyan"
+                            />
+                            <LockKeyhole
+                                v-else
+                                class="h-6 w-6 text-muted-foreground"
+                            />
                         </div>
 
+                        <dl class="space-y-2 text-sm">
+                            <div class="flex justify-between gap-3">
+                                <dt class="text-muted-foreground">Wallet</dt>
+                                <dd class="font-mono">
+                                    {{ shortWallet ?? 'not connected' }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between gap-3">
+                                <dt class="text-muted-foreground">LAIN held</dt>
+                                <dd class="font-mono">{{ balanceLabel }}</dd>
+                            </div>
+                            <div class="flex justify-between gap-3">
+                                <dt class="text-muted-foreground">
+                                    Supply share
+                                </dt>
+                                <dd class="font-mono">{{ shareLabel }}</dd>
+                            </div>
+                        </dl>
+
+                        <p class="text-xs text-muted-foreground/70">
+                            Conversations are stored with your account. Lain
+                            holds no keys and runs no transactions from here.
+                        </p>
+
                         <Button
-                            v-if="isAuthenticated"
+                            v-if="canChat"
                             variant="outline"
                             class="w-full"
                             :disabled="
@@ -214,6 +302,20 @@ onMounted(() => scrollToBottom(false));
                         </Button>
                     </div>
                 </section>
+
+                <a
+                    :href="`https://explorer.cyberia.church/address/${gate.tokenAddress}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="block rounded-xl border border-border p-4 text-xs text-muted-foreground transition-colors hover:border-brand-cyan/40 hover:text-foreground"
+                >
+                    <span class="block font-semibold text-foreground"
+                        >$LAIN contract</span
+                    >
+                    <span class="mt-1 block font-mono break-all">{{
+                        gate.tokenAddress
+                    }}</span>
+                </a>
             </aside>
 
             <section
@@ -228,7 +330,7 @@ onMounted(() => scrollToBottom(false));
                         <span
                             class="h-2 w-2 rounded-full"
                             :class="
-                                isAuthenticated && enabled
+                                canChat && enabled
                                     ? 'bg-brand-cyan'
                                     : 'bg-neutral-600'
                             "
@@ -262,6 +364,32 @@ onMounted(() => scrollToBottom(false));
                                 Sign in
                             </InertiaLink>
                         </Button>
+                    </div>
+
+                    <div
+                        v-else-if="!canChat"
+                        class="m-auto max-w-md text-center"
+                    >
+                        <LockKeyhole class="mx-auto h-9 w-9 text-neutral-600" />
+                        <p class="mt-4 font-mono text-sm text-neutral-300">
+                            signal locked
+                        </p>
+                        <p class="mt-2 text-sm leading-6 text-neutral-500">
+                            <template v-if="gate.state === 'no_wallet'">
+                                Your account has no EVM wallet. Sign in with
+                                the wallet that holds your $LAIN.
+                            </template>
+                            <template v-else-if="gate.state === 'error'">
+                                Could not verify your LAIN balance on Cyberia.
+                                Reload the page to try again.
+                            </template>
+                            <template v-else>
+                                This line is open to wallets holding
+                                {{ requiredPercent }}% or more of the live
+                                $LAIN supply. Your wallet holds
+                                {{ balanceLabel }} LAIN ({{ shareLabel }}).
+                            </template>
+                        </p>
                     </div>
 
                     <div
@@ -331,7 +459,7 @@ onMounted(() => scrollToBottom(false));
                         v-model="input"
                         rows="2"
                         maxlength="2000"
-                        :disabled="!isAuthenticated || !enabled || sending"
+                        :disabled="!canChat || !enabled || sending"
                         placeholder="say something to lain…"
                         class="min-h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-brand-cyan/50 disabled:cursor-not-allowed disabled:opacity-50"
                         @keydown.enter.exact.prevent="sendMessage"
@@ -341,10 +469,7 @@ onMounted(() => scrollToBottom(false));
                         size="icon"
                         class="h-12 w-12 shrink-0"
                         :disabled="
-                            !isAuthenticated ||
-                            !enabled ||
-                            sending ||
-                            !input.trim()
+                            !canChat || !enabled || sending || !input.trim()
                         "
                         aria-label="Send message"
                     >

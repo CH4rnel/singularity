@@ -49,6 +49,10 @@ return [
         // Tried when the pinned model errors (free tiers rate-limit upstream).
         'fallback_model' => env('LAIN_CHAT_FALLBACK_MODEL', 'openrouter/free'),
         'timeout_seconds' => (int) env('LAIN_CHAT_TIMEOUT_SECONDS', 90),
+        // Holder gate (LainHolderAccessService): the signed-in wallet must
+        // hold this share of the live $LAIN supply. 1000 bps = 10%.
+        'token_address' => env('LAIN_TOKEN_ADDRESS', '0x05cd1afd5b2df3cca6ceab80cbc21168ec981e8b'),
+        'minimum_share_bps' => (int) env('LAIN_MINIMUM_SHARE_BPS', 1000),
     ],
 
     'cyberia' => [

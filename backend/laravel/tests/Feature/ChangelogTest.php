@@ -12,10 +12,10 @@ it('renders the changelog page', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Changelog')
-            ->where('currentVersion', 'v0.3.0')
-            ->has('releases', 3)
-            ->where('releases.0.version', 'v0.3.0')
-            ->where('release.current.version', 'v0.3.0')
+            ->where('currentVersion', 'v0.4.0')
+            ->has('releases', 4)
+            ->where('releases.0.version', 'v0.4.0')
+            ->where('release.current.version', 'v0.4.0')
             ->where('release.changelogUrl', route('changelog')));
 });
 

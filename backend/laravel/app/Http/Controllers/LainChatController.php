@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\LainChatMessage;
+use App\Models\User;
 use App\Services\LainChatService;
+use App\Services\LainHolderAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -13,23 +15,30 @@ use Throwable;
 
 class LainChatController extends Controller
 {
-    public function __construct(private LainChatService $lain) {}
+    public function __construct(
+        private LainChatService $lain,
+        private LainHolderAccessService $holderAccess,
+    ) {}
 
     public function index(Request $request): Response
     {
         $user = $request->user();
+        $gate = $this->gateFor($user);
 
         return Inertia::render('LainChat', [
             'enabled' => $this->lain->enabled(),
-            'messages' => $user === null ? [] : LainChatMessage::currentConversation($user->id)
-                ->where('role', '!=', LainChatMessage::ROLE_RESET)
-                ->get()
-                ->map(fn (LainChatMessage $m) => [
-                    'id' => $m->id,
-                    'role' => $m->role,
-                    'text' => $m->content,
-                ])
-                ->values(),
+            'gate' => $gate,
+            'messages' => $user === null || ! $gate['qualifies']
+                ? []
+                : LainChatMessage::currentConversation($user->id)
+                    ->where('role', '!=', LainChatMessage::ROLE_RESET)
+                    ->get()
+                    ->map(fn (LainChatMessage $m) => [
+                        'id' => $m->id,
+                        'role' => $m->role,
+                        'text' => $m->content,
+                    ])
+                    ->values(),
         ]);
     }
 
@@ -44,6 +53,22 @@ class LainChatController extends Controller
         }
 
         $user = $request->user();
+        $gate = $this->gateFor($user);
+
+        if (! $gate['qualifies']) {
+            if ($gate['state'] === 'error') {
+                return response()->json([
+                    'message' => 'Could not verify the LAIN balance on Cyberia. Try again shortly.',
+                    'gate' => $gate,
+                ], 503);
+            }
+
+            return response()->json([
+                'message' => 'This wallet holds less than the required share of the LAIN supply.',
+                'gate' => $gate,
+            ], 403);
+        }
+
         $text = trim($data['text']);
 
         try {
@@ -88,5 +113,44 @@ class LainChatController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Holder-gate status for the page and the chat endpoint. States: guest
+     * (not signed in), no_wallet (no EVM wallet on the account), error (RPC
+     * unreachable), checked (balance read; see qualifies).
+     *
+     * @return array{state: string, qualifies: bool, tokenAddress: string, minimumShareBps: int, balance?: string, minimumBalance?: string, shareBps?: int}
+     */
+    private function gateFor(?User $user): array
+    {
+        $base = [
+            'qualifies' => false,
+            'tokenAddress' => (string) config('services.lain.token_address'),
+            'minimumShareBps' => (int) config('services.lain.minimum_share_bps', 1000),
+        ];
+
+        if ($user === null) {
+            return ['state' => 'guest'] + $base;
+        }
+
+        if (! $user->wallet_address) {
+            return ['state' => 'no_wallet'] + $base;
+        }
+
+        try {
+            $status = $this->holderAccess->status($user->wallet_address);
+        } catch (Throwable $e) {
+            Log::warning('LAIN holder check failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+
+            return ['state' => 'error'] + $base;
+        }
+
+        return [
+            'state' => 'checked',
+            'balance' => $status['balance'],
+            'minimumBalance' => $status['minimum_balance'],
+            'shareBps' => $status['share_bps'],
+        ] + ['qualifies' => $status['qualifies']] + $base;
     }
 }
