@@ -36,6 +36,14 @@ use App\Services\DexAprService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/{path?}', [LaunchpadController::class, 'showSubdomain'])
+    ->domain('{subdomain}.'.config('launchpad.sites_domain'))
+    ->where([
+        'subdomain' => '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?',
+        'path' => '.*',
+    ])
+    ->name('launchpad.subdomain-site');
+
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
 Route::get('/thesis', fn () => response()->file(resource_path('views/landing/index1.html')))->name('thesis');
 // Cached per-pool LP APR (written by the scheduled dex:apr command). Public:

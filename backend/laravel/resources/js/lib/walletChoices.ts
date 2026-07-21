@@ -48,6 +48,7 @@ const POPULAR_WALLETS: {
     { key: 'okx', name: 'OKX Wallet', installUrl: 'https://web3.okx.com' },
     { key: 'solflare', name: 'Solflare', installUrl: 'https://solflare.com' },
     { key: 'backpack', name: 'Backpack', installUrl: 'https://backpack.app' },
+    { key: 'jupiter', name: 'Jupiter Wallet', installUrl: 'https://jup.ag/wallet' },
 ];
 
 // "Trust Wallet" (EVM) vs "Trust" (Solana), "Phantom EVM" (legacy flag

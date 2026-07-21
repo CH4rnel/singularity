@@ -125,6 +125,7 @@ export const useWalletAuth = () => {
         return response.json() as Promise<{
             message: string;
             wallet_address: string;
+            merged: boolean;
         }>;
     };
 
@@ -155,6 +156,7 @@ export const useWalletAuth = () => {
         return response.json() as Promise<{
             message: string;
             solana_wallet_address: string;
+            merged: boolean;
         }>;
     };
 

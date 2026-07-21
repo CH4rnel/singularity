@@ -4,8 +4,9 @@ Distribute per-chat Telegram reward tokens.
 For each row in `chat_tokens`:
   * skip if `token_address` is NULL (deployment in-flight)
   * skip if `last_payout_at + rewards_interval` is still in the future
-  * otherwise mint `reward_amount` to every registered wallet in `tg_wallets`
-    for members of that chat, then bump `last_payout_at`.
+  * otherwise bump `last_payout_at` (the tick is consumed even if minting
+    fails) and mint `reward_amount` to every registered wallet in
+    `tg_wallets` for members of that chat.
 
 Intended to be run by cron / systemd timer as frequently as the shortest
 desired rewards interval (e.g. every minute).
@@ -108,6 +109,18 @@ def distribute():
             )
             continue
 
+        # The tick is due: consume it NOW, before any crediting or minting.
+        # Bumping only after a successful mint let a minter outage (e.g. the
+        # EOA out of gas) leave last_payout_at stale, so every cron run
+        # (each minute) re-credited pending_rewards -- wallet-less members
+        # accrued 1440x/day instead of 24x/day. A failed mint loses its tick,
+        # exactly as the partial-failure path always did.
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE chat_tokens SET last_payout_at = :t WHERE chat_id = :c"),
+                {"t": now.strftime("%Y-%m-%d %H:%M:%S"), "c": chat_id},
+            )
+
         # Two cohorts:
         #   wallets  -- chat members with a linked wallet (mint on-chain now)
         #   pending  -- chat members without a wallet (credit pending_rewards
@@ -166,13 +179,6 @@ def distribute():
             )
 
         if not wallets:
-            # Bump timestamp so we do not re-evaluate every second; pending was
-            # already credited above (if any).
-            with engine.begin() as conn:
-                conn.execute(
-                    text("UPDATE chat_tokens SET last_payout_at = :t WHERE chat_id = :c"),
-                    {"t": now.strftime("%Y-%m-%d %H:%M:%S"), "c": chat_id},
-                )
             continue
 
         if not started:
@@ -236,13 +242,6 @@ def distribute():
                 failed_count += 1
                 logger.error("chat %s: mint to %s failed: %s", chat_id, address, e)
                 nonce += 1
-
-        if success_count > 0:
-            with engine.begin() as conn:
-                conn.execute(
-                    text("UPDATE chat_tokens SET last_payout_at = :t WHERE chat_id = :c"),
-                    {"t": now.strftime("%Y-%m-%d %H:%M:%S"), "c": chat_id},
-                )
 
         logger.info(
             "chat %s (%s): distribution complete, %d succeeded, %d failed",

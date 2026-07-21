@@ -44,7 +44,7 @@ Route::prefix('slots')->group(function () {
 // NFT metadata pin (image + ERC-721 JSON) → tokenURI
 Route::post('nft/upload', [NFTController::class, 'upload'])->middleware('throttle:30,1');
 
-// Launchpad off-chain metadata (description + image)
+// Launchpad off-chain metadata and sandboxed token sites.
 Route::prefix('launchpad')->group(function () {
     Route::get('tokens', [LaunchpadController::class, 'index']);
     Route::post('tokens', [LaunchpadController::class, 'store'])->middleware('throttle:30,1');

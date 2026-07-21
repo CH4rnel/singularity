@@ -34,6 +34,7 @@ class ProfileController extends Controller
             'depositChains' => $this->depositChains(
                 $bridgeConfig,
                 $depositAddresses->addressesFor($user),
+                $depositAddresses->mergedHistoryFor($user),
             ),
             'profileContract' => $onchain->contractAddress(),
             'nickname' => $user->wallet_address && $onchain->enabled()
@@ -109,11 +110,12 @@ class ProfileController extends Controller
      * addresses on the Bridge page).
      *
      * @param  array<string, string>  $personal  chain key => personal address
+     * @param  array<string, array<int, string>>  $history  chain key => addresses from merged-in accounts
      * @return array<int, array<string, mixed>>
      */
-    private function depositChains(BridgeConfigService $bridgeConfig, array $personal): array
+    private function depositChains(BridgeConfigService $bridgeConfig, array $personal, array $history = []): array
     {
-        return array_map(function (array $chain) use ($personal) {
+        return array_map(function (array $chain) use ($personal, $history) {
             $personalAddress = $personal[$chain['key']] ?? null;
 
             return [
@@ -124,6 +126,7 @@ class ProfileController extends Controller
                 'address' => $personalAddress,
                 'personal' => $personalAddress !== null,
                 'oneTime' => $personalAddress === null && $chain['type'] === 'yenten',
+                'history' => $history[$chain['key']] ?? [],
             ];
         }, $bridgeConfig->publicChains());
     }

@@ -26,11 +26,18 @@ class ProposalVoteController extends Controller
         $support = $request->validated('support');
         $fallbackPower = $request->validated('voting_power', 1);
 
+        // EVM addresses are case-insensitive hex and are looked up/stored
+        // lowercased; Solana (e.g. Phantom) addresses are case-sensitive
+        // base58 — lowercasing would corrupt them, and their balance can't
+        // be read from the EVM RPC, so they always fall back to $fallbackPower.
+        $isEvmAddress = (bool) preg_match('/^0x[a-fA-F0-9]{40}$/', $walletAddress);
+        $snapshotKey = $isEvmAddress ? strtolower($walletAddress) : $walletAddress;
+
         $snapshot = ProposalSnapshot::where('proposal_id', $proposal->id)
-            ->where('wallet_address', strtolower($walletAddress))
+            ->where('wallet_address', $snapshotKey)
             ->first();
 
-        if (! $snapshot && $proposal->dao?->address) {
+        if (! $snapshot && $isEvmAddress && $proposal->dao?->address) {
             $daoAddress = $proposal->dao->address;
             $isNative = $this->snapshotService->isNativeToken($daoAddress);
 
@@ -40,7 +47,7 @@ class ProposalVoteController extends Controller
 
             $snapshot = ProposalSnapshot::create([
                 'proposal_id' => $proposal->id,
-                'wallet_address' => strtolower($walletAddress),
+                'wallet_address' => $snapshotKey,
                 'balance' => $balance,
                 'snapshot_at' => now(),
             ]);

@@ -77,6 +77,7 @@ type LaunchedToken = {
     // Enriched off-chain.
     description?: string | null;
     imageUrl?: string | null;
+    siteSubdomain?: string | null;
     siteUrl?: string | null;
     // Enriched from pair reserves (price quoted in the pair's quote asset).
     priceCyber?: number | null;
@@ -91,6 +92,7 @@ type LaunchpadMetadata = {
     symbol: string | null;
     description: string | null;
     image_url: string | null;
+    site_subdomain: string | null;
     site_url: string | null;
 };
 
@@ -127,6 +129,7 @@ const totalSupply = ref('1000000');
 // Native CYBER committed as liquidity (all of it ends up burned in the LP).
 const cyberLiquidity = ref('10');
 const description = ref('');
+const siteSubdomain = ref('');
 const imageFile = ref<File | null>(null);
 const imagePreview = ref<string | null>(null);
 const htmlFile = ref<File | null>(null);
@@ -134,6 +137,16 @@ const htmlFileName = ref<string | null>(null);
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
+const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+const normalizedSubdomain = (value: string): string =>
+    value.trim().toLowerCase();
+
+const siteSubdomainInvalid = computed(() => {
+    const value = normalizedSubdomain(siteSubdomain.value);
+
+    return value.length > 0 && !SUBDOMAIN_PATTERN.test(value);
+});
 
 const onHtmlChange = (event: Event): void => {
     const target = event.target as HTMLInputElement;
@@ -231,7 +244,9 @@ const canLaunch = computed(
         supplyBn.value > 0n &&
         liquidityBn.value > 0n &&
         !insufficientBalance.value &&
-        !belowMin.value,
+        !belowMin.value &&
+        !siteSubdomainInvalid.value &&
+        (!siteSubdomain.value.trim() || htmlFile.value !== null),
 );
 
 const totalCyberLocked = computed(() =>
@@ -785,6 +800,7 @@ const loadRecent = async (): Promise<void> => {
                 quoteSymbol: d.quoteSymbol,
                 description: md?.description ?? null,
                 imageUrl: md?.image_url ?? null,
+                siteSubdomain: md?.site_subdomain ?? null,
                 siteUrl: md?.site_url ?? null,
                 priceCyber: d.priceCyber,
                 marketCapCyber:
@@ -846,7 +862,12 @@ const signMetadataMessage = async (
 };
 
 const submitMetadata = async (tokenAddress: string): Promise<void> => {
-    if (!description.value.trim() && !imageFile.value && !htmlFile.value) {
+    if (
+        !description.value.trim() &&
+        !imageFile.value &&
+        !htmlFile.value &&
+        !siteSubdomain.value.trim()
+    ) {
         return;
     }
 
@@ -874,6 +895,13 @@ const submitMetadata = async (tokenAddress: string): Promise<void> => {
 
     if (htmlFile.value) {
         form.append('html', htmlFile.value);
+    }
+
+    if (siteSubdomain.value.trim()) {
+        form.append(
+            'site_subdomain',
+            normalizedSubdomain(siteSubdomain.value),
+        );
     }
 
     const res = await fetch('/api/launchpad/tokens', {
@@ -915,6 +943,7 @@ const canEdit = (t: LaunchedToken): boolean => {
 // Per-row inline editor state for attaching metadata to already-launched tokens.
 const editingToken = ref<string | null>(null);
 const editDescription = ref('');
+const editSiteSubdomain = ref('');
 const editImageFile = ref<File | null>(null);
 const editImagePreview = ref<string | null>(null);
 const editHtmlFile = ref<File | null>(null);
@@ -922,9 +951,16 @@ const editHtmlFileName = ref<string | null>(null);
 const editBusy = ref(false);
 const editError = ref<string | null>(null);
 
+const editSiteSubdomainInvalid = computed(() => {
+    const value = normalizedSubdomain(editSiteSubdomain.value);
+
+    return value.length > 0 && !SUBDOMAIN_PATTERN.test(value);
+});
+
 const openEditor = (t: LaunchedToken): void => {
     editingToken.value = t.token;
     editDescription.value = t.description ?? '';
+    editSiteSubdomain.value = t.siteSubdomain ?? '';
     editImageFile.value = null;
     editHtmlFile.value = null;
     editHtmlFileName.value = null;
@@ -940,6 +976,7 @@ const openEditor = (t: LaunchedToken): void => {
 const closeEditor = (): void => {
     editingToken.value = null;
     editDescription.value = '';
+    editSiteSubdomain.value = '';
     editImageFile.value = null;
     editHtmlFile.value = null;
     editHtmlFileName.value = null;
@@ -1006,6 +1043,12 @@ const saveEditor = async (t: LaunchedToken): Promise<void> => {
             );
         }
 
+        if (editSiteSubdomainInvalid.value) {
+            throw new Error(
+                'Subdomain may contain only lowercase letters, digits, and internal hyphens.',
+            );
+        }
+
         const { message, signature } = await signMetadataMessage(t.token);
         const form = new FormData();
         form.append('address', t.token);
@@ -1028,6 +1071,13 @@ const saveEditor = async (t: LaunchedToken): Promise<void> => {
 
         if (editHtmlFile.value) {
             form.append('html', editHtmlFile.value);
+        }
+
+        if (editSiteSubdomain.value.trim()) {
+            form.append(
+                'site_subdomain',
+                normalizedSubdomain(editSiteSubdomain.value),
+            );
         }
 
         const res = await fetch('/api/launchpad/tokens', {
@@ -1108,6 +1158,7 @@ const handleLaunch = async (): Promise<void> => {
         name.value = '';
         symbol.value = '';
         description.value = '';
+        siteSubdomain.value = '';
         imageFile.value = null;
         htmlFile.value = null;
         htmlFileName.value = null;
@@ -1313,6 +1364,30 @@ onMounted(async () => {
                         <span v-if="htmlFileName" class="small muted">{{
                             htmlFileName
                         }}</span>
+                    </label>
+                    <label class="full">
+                        <span>Token subdomain (requires an HTML page)</span>
+                        <div class="siteAddress">
+                            <Input
+                                v-model="siteSubdomain"
+                                maxlength="63"
+                                placeholder="lain"
+                                autocomplete="off"
+                            />
+                            <span>.cyberia.church</span>
+                        </div>
+                        <span
+                            v-if="siteSubdomainInvalid"
+                            class="small hint--err"
+                        >
+                            Use letters, digits, and internal hyphens only.
+                        </span>
+                        <span
+                            v-else-if="siteSubdomain.trim() && !htmlFile"
+                            class="small hint--err"
+                        >
+                            Select the HTML page that this subdomain will host.
+                        </span>
                     </label>
                 </div>
 
@@ -1578,6 +1653,25 @@ onMounted(async () => {
                                         >{{ editHtmlFileName }}</span
                                     >
                                 </label>
+                                <label>
+                                    <span>Token subdomain</span>
+                                    <div class="siteAddress">
+                                        <Input
+                                            v-model="editSiteSubdomain"
+                                            maxlength="63"
+                                            placeholder="lain"
+                                            autocomplete="off"
+                                        />
+                                        <span>.cyberia.church</span>
+                                    </div>
+                                    <span
+                                        v-if="editSiteSubdomainInvalid"
+                                        class="small hint--err"
+                                    >
+                                        Use letters, digits, and internal
+                                        hyphens only.
+                                    </span>
+                                </label>
                                 <div v-if="editError" class="hint hint--err">
                                     {{ editError }}
                                 </div>
@@ -1585,7 +1679,9 @@ onMounted(async () => {
                                     <button
                                         class="ctaBtn ctaBtn--sm"
                                         type="button"
-                                        :disabled="editBusy"
+                                        :disabled="
+                                            editBusy || editSiteSubdomainInvalid
+                                        "
                                         @click="saveEditor(t)"
                                     >
                                         <Loader2 v-if="editBusy" class="spin" />
@@ -1797,6 +1893,19 @@ onMounted(async () => {
 .file {
     color: var(--muted-foreground, #94a3b8);
     font-size: 13px;
+}
+.siteAddress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.siteAddress > :first-child {
+    min-width: 0;
+    flex: 1;
+}
+.siteAddress > span {
+    flex-shrink: 0;
+    color: var(--foreground, #e5e7eb);
 }
 .preview {
     margin-top: 8px;

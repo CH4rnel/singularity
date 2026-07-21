@@ -8,6 +8,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -64,5 +65,23 @@ class User extends Authenticatable
     public function lainChatSessions(): HasMany
     {
         return $this->hasMany(LainChatSession::class);
+    }
+
+    /**
+     * The surviving account this user was merged into, if any. A non-null
+     * value means this account is absorbed: it can no longer authenticate
+     * and its identity columns have been cleared.
+     */
+    public function mergedInto(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'merged_into_id');
+    }
+
+    /**
+     * Accounts previously merged into this one.
+     */
+    public function mergedAccounts(): HasMany
+    {
+        return $this->hasMany(User::class, 'merged_into_id');
     }
 }

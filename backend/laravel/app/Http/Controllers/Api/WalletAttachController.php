@@ -3,15 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Wallet\VerifyWalletSignature;
+use App\Exceptions\AccountMergeConflictException;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\WalletNonce;
+use App\Services\AccountMergeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class WalletAttachController extends Controller
 {
+    public function __construct(
+        private readonly VerifyWalletSignature $verifyWalletSignature,
+        private readonly AccountMergeService $accountMerge,
+    ) {}
+
     /**
      * Attach an EVM wallet to the authenticated user's profile.
      */
@@ -25,17 +32,6 @@ class WalletAttachController extends Controller
         $walletAddress = Str::lower($request->string('wallet_address')->value());
         $signature = $request->string('signature')->value();
 
-        // Check if another user already has this wallet
-        $existing = User::where('wallet_address', $walletAddress)
-            ->where('id', '!=', $request->user()->id)
-            ->exists();
-
-        if ($existing) {
-            return response()->json([
-                'message' => 'This EVM wallet is already linked to another account.',
-            ], 409);
-        }
-
         // Verify the signature against the nonce
         $nonce = WalletNonce::where('wallet_address', $walletAddress)->first();
 
@@ -45,13 +41,14 @@ class WalletAttachController extends Controller
             ], 422);
         }
 
-        // Verify the signature recovers to the claimed address before binding
-        // it — otherwise anyone could attach a wallet they do not control
-        // (the nonce alone is not a secret: it is minted on request for any
-        // address). The message prefix differs from login, so we recover the
-        // signer directly rather than going through handle().
+        // Verify the signature recovers to the claimed address before doing
+        // anything with it — otherwise anyone could attach (and, below,
+        // merge in) a wallet they do not control (the nonce alone is not a
+        // secret: it is minted on request for any address). The message
+        // prefix differs from login, so we recover the signer directly
+        // rather than going through handle().
         $message = "Sign this message to link your wallet. Nonce: {$nonce->nonce}";
-        $recovered = app(VerifyWalletSignature::class)->recover($message, $signature);
+        $recovered = $this->verifyWalletSignature->recover($message, $signature);
 
         if (Str::lower($recovered) !== $walletAddress) {
             $nonce->delete();
@@ -63,6 +60,27 @@ class WalletAttachController extends Controller
 
         $nonce->delete();
 
+        // Ownership of the wallet is now proven, so it's safe to check
+        // whether another account already holds it and, if so, merge that
+        // account's data into this one instead of blocking the user.
+        $owner = User::where('wallet_address', $walletAddress)
+            ->where('id', '!=', $request->user()->id)
+            ->first();
+
+        if ($owner) {
+            try {
+                $this->accountMerge->merge($request->user(), $owner);
+            } catch (AccountMergeConflictException $e) {
+                return response()->json(['message' => $e->getMessage()], 409);
+            }
+
+            return response()->json([
+                'message' => 'Your accounts have been merged and this EVM wallet is now attached.',
+                'wallet_address' => $walletAddress,
+                'merged' => true,
+            ]);
+        }
+
         $request->user()->update([
             'wallet_address' => $walletAddress,
         ]);
@@ -70,6 +88,7 @@ class WalletAttachController extends Controller
         return response()->json([
             'message' => 'EVM wallet attached successfully.',
             'wallet_address' => $walletAddress,
+            'merged' => false,
         ]);
     }
 
@@ -85,17 +104,6 @@ class WalletAttachController extends Controller
 
         $walletAddress = $request->string('wallet_address')->value();
         $signature = $request->string('signature')->value();
-
-        // Check if another user already has this wallet
-        $existing = User::where('solana_wallet_address', $walletAddress)
-            ->where('id', '!=', $request->user()->id)
-            ->exists();
-
-        if ($existing) {
-            return response()->json([
-                'message' => 'This Solana wallet is already linked to another account.',
-            ], 409);
-        }
 
         // Verify the signature against the nonce
         $nonce = WalletNonce::where('wallet_address', $walletAddress)->first();
@@ -118,6 +126,27 @@ class WalletAttachController extends Controller
 
         $nonce->delete();
 
+        // Ownership of the wallet is now proven, so it's safe to check
+        // whether another account already holds it and, if so, merge that
+        // account's data into this one instead of blocking the user.
+        $owner = User::where('solana_wallet_address', $walletAddress)
+            ->where('id', '!=', $request->user()->id)
+            ->first();
+
+        if ($owner) {
+            try {
+                $this->accountMerge->merge($request->user(), $owner);
+            } catch (AccountMergeConflictException $e) {
+                return response()->json(['message' => $e->getMessage()], 409);
+            }
+
+            return response()->json([
+                'message' => 'Your accounts have been merged and this Solana wallet is now attached.',
+                'solana_wallet_address' => $walletAddress,
+                'merged' => true,
+            ]);
+        }
+
         $request->user()->update([
             'solana_wallet_address' => $walletAddress,
         ]);
@@ -125,6 +154,7 @@ class WalletAttachController extends Controller
         return response()->json([
             'message' => 'Solana wallet attached successfully.',
             'solana_wallet_address' => $walletAddress,
+            'merged' => false,
         ]);
     }
 

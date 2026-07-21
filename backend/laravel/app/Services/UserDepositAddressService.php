@@ -63,6 +63,32 @@ class UserDepositAddressService
     }
 
     /**
+     * Deposit addresses from accounts merged into $user, keyed by chain,
+     * most recently issued first. Rows are never mutated or reassigned on
+     * merge — this only reads user_deposit_addresses rows still owned by
+     * the absorbed account(s), so the WIF-by-user-id derivation invariant
+     * (see class docblock) is never broken.
+     *
+     * @return array<string, array<int, string>>
+     */
+    public function mergedHistoryFor(User $user): array
+    {
+        $absorbedIds = $user->mergedAccounts()->pluck('id');
+
+        if ($absorbedIds->isEmpty()) {
+            return [];
+        }
+
+        return UserDepositAddress::query()
+            ->whereIn('user_id', $absorbedIds)
+            ->orderByDesc('created_at')
+            ->get(['chain', 'address'])
+            ->groupBy('chain')
+            ->map(fn ($rows) => $rows->pluck('address')->all())
+            ->all();
+    }
+
+    /**
      * Derive the user's address on a chain from current config (no storage).
      */
     public function derive(string $chain, int $userId): ?string

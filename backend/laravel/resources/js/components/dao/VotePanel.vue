@@ -14,6 +14,7 @@ import { computed, ref } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
+import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { store as voteStore } from '@/routes/proposals/votes';
 import { show as userShow } from '@/routes/users';
@@ -26,15 +27,42 @@ const props = defineProps<{
 
 const page = usePage();
 const wallet = useWallet();
+const solanaWallet = useSolanaWallet();
+
+// Vote with the Solana (e.g. Phantom) wallet instead of the default EVM one.
+// Starts pre-selected when the user has no EVM address to fall back to.
+const useSolanaForVote = ref(false);
 
 const authUser = computed(() => page.props.auth?.user as User | undefined);
 const isAuthenticated = computed(() => !!authUser.value);
-const walletAddress = computed(
+const evmAddress = computed(
     () => wallet.address.value || authUser.value?.wallet_address || null,
+);
+const solanaAddress = computed(
+    () =>
+        solanaWallet.address.value ||
+        authUser.value?.solana_wallet_address ||
+        null,
+);
+const canVoteWithSolana = computed(
+    () => !!solanaAddress.value || solanaWallet.isSolanaWalletInstalled(),
+);
+const canVoteWithEvm = computed(
+    () => !!evmAddress.value || wallet.isEvmProviderInstalled(),
+);
+const walletAddress = computed(() =>
+    useSolanaForVote.value
+        ? solanaAddress.value
+        : (evmAddress.value ?? solanaAddress.value),
 );
 const hasWallet = computed(() => !!walletAddress.value);
 const isVoting = ref(false);
 const voteError = ref<string | null>(null);
+
+function toggleVoteWallet(): void {
+    useSolanaForVote.value = !useSolanaForVote.value;
+    voteError.value = null;
+}
 
 const isOpen = computed(() => props.proposal.status === 'open');
 const deadlineAgo = useTimeAgo(computed(() => props.proposal.ends_at ?? ''));
@@ -58,11 +86,16 @@ async function castVote(support: boolean) {
 
     try {
         if (!walletAddress.value) {
-            const connected = await wallet.connect();
+            const connected = useSolanaForVote.value
+                ? await solanaWallet.connect()
+                : await wallet.connect();
 
             if (!connected) {
-                voteError.value =
-                    'No wallet connected. Please connect your wallet first.';
+                voteError.value = useSolanaForVote.value
+                    ? (solanaWallet.error.value ??
+                      'No Phantom (Solana) wallet connected.')
+                    : (wallet.error.value ??
+                      'No wallet connected. Please connect your wallet first.');
 
                 return;
             }
@@ -210,6 +243,31 @@ function formatAddress(address: string): string {
                 </Button>
             </div>
 
+            <p
+                v-if="!props.userVote && !useSolanaForVote && canVoteWithSolana"
+                class="text-xs text-muted-foreground"
+            >
+                <button
+                    type="button"
+                    class="underline hover:text-foreground"
+                    @click="toggleVoteWallet"
+                >
+                    Vote with Phantom (Solana) instead
+                </button>
+            </p>
+            <p
+                v-else-if="!props.userVote && useSolanaForVote && canVoteWithEvm"
+                class="text-xs text-muted-foreground"
+            >
+                <button
+                    type="button"
+                    class="underline hover:text-foreground"
+                    @click="toggleVoteWallet"
+                >
+                    Vote with EVM wallet instead
+                </button>
+            </p>
+
             <p v-if="voteError" class="text-sm text-destructive">
                 {{ voteError }}
             </p>
@@ -232,8 +290,8 @@ function formatAddress(address: string): string {
                 class="flex items-center gap-1 text-sm text-muted-foreground"
             >
                 <Wallet class="h-3.5 w-3.5" />
-                Connect your wallet to vote. Your token balance at the DAO
-                contract = your voting power.
+                Connect your wallet (EVM or Phantom/Solana) to vote. Your
+                token balance at the DAO contract = your voting power.
             </p>
         </div>
 

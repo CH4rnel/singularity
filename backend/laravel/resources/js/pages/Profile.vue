@@ -37,6 +37,8 @@ type DepositChain = {
     /** CEX-style address issued to this user alone (BTC/LTC/YTN/XMR). */
     personal: boolean;
     oneTime: boolean;
+    /** Addresses issued to accounts merged into this one, most recent first. */
+    history: string[];
 };
 
 type Achievement = {
@@ -132,6 +134,7 @@ const walletAuth = useWalletAuth();
 
 const linking = ref<'evm' | 'solana' | null>(null);
 const linkError = ref<string | null>(null);
+const linkNotice = ref<string | null>(null);
 
 async function connectEvm() {
     if (linking.value) {
@@ -140,6 +143,7 @@ async function connectEvm() {
 
     linking.value = 'evm';
     linkError.value = null;
+    linkNotice.value = null;
 
     try {
         const address = await evmWallet.connect();
@@ -157,7 +161,13 @@ async function connectEvm() {
             return;
         }
 
-        await walletAuth.attachEvmWallet(address, signature);
+        const result = await walletAuth.attachEvmWallet(address, signature);
+
+        if (result.merged) {
+            linkNotice.value =
+                'This wallet belonged to another account — we merged its history into this one.';
+        }
+
         router.reload();
     } catch (e) {
         linkError.value =
@@ -174,6 +184,7 @@ async function connectSolana() {
 
     linking.value = 'solana';
     linkError.value = null;
+    linkNotice.value = null;
 
     try {
         const address = await solanaWallet.connect();
@@ -191,7 +202,13 @@ async function connectSolana() {
             return;
         }
 
-        await walletAuth.attachSolanaWallet(address, signature);
+        const result = await walletAuth.attachSolanaWallet(address, signature);
+
+        if (result.merged) {
+            linkNotice.value =
+                'This wallet belonged to another account — we merged its history into this one.';
+        }
+
         router.reload();
     } catch (e) {
         linkError.value =
@@ -303,6 +320,12 @@ async function copy(key: string, value: string | null | undefined) {
                     class="mt-2 text-xs text-destructive"
                 >
                     {{ linkError }}
+                </p>
+                <p
+                    v-if="linkNotice"
+                    class="mt-2 text-xs text-muted-foreground"
+                >
+                    {{ linkNotice }}
                 </p>
             </div>
             <div class="flex shrink-0 gap-2">
@@ -569,6 +592,18 @@ async function copy(key: string, value: string | null | undefined) {
                         page.
                     </p>
                 </div>
+                <p
+                    v-if="chain.history.length"
+                    class="w-full text-xs text-muted-foreground sm:pl-44"
+                >
+                    Also used previously (merged account):
+                    <code
+                        v-for="address in chain.history"
+                        :key="address"
+                        class="mr-1 break-all font-mono"
+                        >{{ address }}</code
+                    >
+                </p>
             </div>
         </section>
     </div>

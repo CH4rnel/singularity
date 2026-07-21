@@ -11,12 +11,12 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class LaunchpadController extends Controller
 {
-    public function __construct(private readonly RecoverEvmAddress $recoverEvmAddress)
-    {
-    }
+    public function __construct(private readonly RecoverEvmAddress $recoverEvmAddress) {}
 
     /** Return metadata for every token registered with the Launchpad. */
     public function index(): JsonResponse
@@ -35,6 +35,15 @@ class LaunchpadController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $addressInput = $request->input('address');
+        $subdomainInput = $request->input('site_subdomain');
+        $request->merge([
+            'address' => is_string($addressInput) ? Str::lower($addressInput) : $addressInput,
+            'site_subdomain' => is_string($subdomainInput) && trim($subdomainInput) !== ''
+                ? Str::lower(trim($subdomainInput))
+                : null,
+        ]);
+
         $data = $request->validate([
             'address' => ['required', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
             'message' => ['required', 'string', 'max:500'],
@@ -44,6 +53,13 @@ class LaunchpadController extends Controller
             'description' => ['nullable', 'string', 'max:2000'],
             'image' => ['nullable', 'image', 'max:2048'],
             'html' => ['nullable', 'file', 'mimes:html,htm,txt', 'max:2048'],
+            'site_subdomain' => [
+                'nullable',
+                'string',
+                'max:63',
+                'regex:/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/',
+                Rule::notIn(config('launchpad.reserved_subdomains')),
+            ],
         ]);
 
         $address = Str::lower($data['address']);
@@ -78,6 +94,21 @@ class LaunchpadController extends Controller
             ], 403);
         }
 
+        $siteSubdomain = $data['site_subdomain'] ?? ($existing->site_subdomain ?? null);
+        if ($siteSubdomain && LaunchpadToken::where('site_subdomain', $siteSubdomain)
+            ->where('address', '!=', $address)
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'site_subdomain' => 'This token subdomain is already in use.',
+            ]);
+        }
+
+        if ($siteSubdomain && ! $request->hasFile('html') && ! $existing?->html_path) {
+            return response()->json([
+                'message' => 'Upload an HTML page before assigning a token subdomain.',
+            ], 422);
+        }
+
         $payload = [
             'address' => $address,
             'creator' => $signer, // First signer claims; later edits must match.
@@ -86,6 +117,7 @@ class LaunchpadController extends Controller
             'description' => $data['description'] ?? ($existing->description ?? null),
             'image_path' => $existing->image_path ?? null,
             'html_path' => $existing->html_path ?? null,
+            'site_subdomain' => $siteSubdomain,
         ];
 
         if ($request->hasFile('image')) {
@@ -124,6 +156,19 @@ class LaunchpadController extends Controller
         $address = Str::lower($address);
         $token = LaunchpadToken::find($address);
 
+        return $this->staticSiteResponse($token);
+    }
+
+    /** Serve a token page for every path on its dedicated subdomain. */
+    public function showSubdomain(string $subdomain, ?string $path = null): Response
+    {
+        $token = LaunchpadToken::where('site_subdomain', Str::lower($subdomain))->first();
+
+        return $this->staticSiteResponse($token);
+    }
+
+    private function staticSiteResponse(?LaunchpadToken $token): Response
+    {
         abort_if(! $token || ! $token->html_path, 404);
         abort_unless(Storage::disk('public')->exists($token->html_path), 404);
 
@@ -132,8 +177,9 @@ class LaunchpadController extends Controller
         return response($html, 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
             'Content-Security-Policy' => 'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox',
+            'Referrer-Policy' => 'no-referrer',
             'X-Content-Type-Options' => 'nosniff',
-            'X-Frame-Options' => 'SAMEORIGIN',
+            'X-Frame-Options' => 'DENY',
         ]);
     }
 
@@ -164,7 +210,21 @@ class LaunchpadController extends Controller
             'symbol' => $t->symbol,
             'description' => $t->description,
             'image_url' => $t->image_path ? Storage::disk('public')->url($t->image_path) : null,
-            'site_url' => $t->html_path ? URL::to('/launchpad/sites/'.Str::lower($t->address)) : null,
+            'site_subdomain' => $t->site_subdomain,
+            'site_url' => $this->siteUrl($t),
         ];
+    }
+
+    private function siteUrl(LaunchpadToken $token): ?string
+    {
+        if (! $token->html_path) {
+            return null;
+        }
+
+        if ($token->site_subdomain) {
+            return 'https://'.$token->site_subdomain.'.'.config('launchpad.sites_domain').'/';
+        }
+
+        return URL::to('/launchpad/sites/'.Str::lower($token->address));
     }
 }

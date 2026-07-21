@@ -53,6 +53,29 @@ test('vote requires wallet_address', function () {
     $response->assertSessionHasErrors('wallet_address');
 });
 
+test('solana wallet address keeps its case and gets fallback voting power', function () {
+    $user = User::factory()->create();
+    $proposal = Proposal::factory()->create();
+    $solanaAddress = '7EqQdEULxWcraVx3mXKFjc84LhCkMGZCkRuDpvcMwJeK';
+
+    $response = $this->actingAs($user)->post("/proposals/{$proposal->id}/votes", [
+        'wallet_address' => $solanaAddress,
+        'support' => true,
+    ]);
+
+    $response->assertRedirect();
+    $this->assertDatabaseHas('proposal_votes', [
+        'proposal_id' => $proposal->id,
+        'user_id' => $user->id,
+        'wallet_address' => $solanaAddress,
+        'support' => true,
+        'voting_power' => 1,
+    ]);
+    $this->assertDatabaseMissing('proposal_snapshots', [
+        'proposal_id' => $proposal->id,
+    ]);
+});
+
 test('guests cannot vote', function () {
     $proposal = Proposal::factory()->create();
 
