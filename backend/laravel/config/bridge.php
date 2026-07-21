@@ -606,7 +606,7 @@ return [
             'symbol' => 'SPY',
             'model' => 'mint',
             'chains' => [
-                'cyberia' => ['address' => '0xc9961a657A726f620107B7435937aE5A3893d1Ea', 'decimals' => 18],
+                'cyberia' => ['address' => '0x1241FC4F06DB7268243D9439ef56B7a2708DC096', 'decimals' => 18],
                 'robinhood' => ['address' => '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', 'decimals' => 18],
             ],
         ],

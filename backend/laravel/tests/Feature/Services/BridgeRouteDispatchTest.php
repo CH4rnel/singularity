@@ -298,7 +298,7 @@ test('a deposit a few wei short of the claimed amount settles for the verified a
         $command = implode(' ', $process->command);
 
         return str_contains($command, 'relay-mint')
-            && str_contains($command, '0xc9961a657A726f620107B7435937aE5A3893d1Ea')
+            && str_contains($command, '0x1241FC4F06DB7268243D9439ef56B7a2708DC096')
             && str_contains($command, '24891167519864557');
     });
 });

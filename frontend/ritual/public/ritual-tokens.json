@@ -3,7 +3,7 @@
   "timestamp": "2026-07-01T00:00:00.000Z",
   "version": {
     "major": 1,
-    "minor": 3,
+    "minor": 4,
     "patch": 0
   },
   "tags": {},
@@ -229,6 +229,14 @@
       "decimals": 6,
       "chainId": 49406,
       "logoURI": "/2CHcoin.png"
+    },
+    {
+      "name": "SPDR SP 500 ETF Trust",
+      "address": "0x1241FC4F06DB7268243D9439ef56B7a2708DC096",
+      "symbol": "SPY",
+      "decimals": 18,
+      "chainId": 49406,
+      "logoURI": "/spy.svg"
     }
   ]
 }

@@ -17,11 +17,13 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///             Robinhood Chain.
 /// @dev    Standard Cyberia bridged-asset convention (OZ ERC20 + Burnable +
 ///         Permit + Ownable), same pattern as BNB/ETH/BTC/SOL. The Robinhood
-///         token uses 18 decimals, matching the ERC20 default.
+///         token uses 18 decimals, matching the ERC20 default. The ERC20 name
+///         deliberately avoids "&" and parentheses — wallets/DEX UIs choked on
+///         them in the first deployment.
 contract SPY is ERC20, ERC20Burnable, ERC20Permit, Ownable {
     constructor(address initialOwner)
-        ERC20("SPDR S&P 500 ETF Trust (Robinhood)", "SPY")
-        ERC20Permit("SPDR S&P 500 ETF Trust (Robinhood)")
+        ERC20("SPDR SP 500 ETF Trust", "SPY")
+        ERC20Permit("SPDR SP 500 ETF Trust")
         Ownable()
     {
         if (initialOwner != address(0) && initialOwner != msg.sender) {
