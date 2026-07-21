@@ -268,5 +268,13 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       isSolo: false,
       icons: ['/bnb-bnb-logo.svg', '/cyberia.png'],
     },
+    {
+      pid: 25,
+      lpToken: '0x50d60d11cd42c250901d1bD12351A20E3c781b27', // SPY/CYBER LP
+      label: 'SPY / CYBER LP',
+      description: 'Stake LP from the SPY/CYBER pair',
+      isSolo: false,
+      icons: ['/spy.svg', '/cyberia.png'],
+    },
   ],
 };

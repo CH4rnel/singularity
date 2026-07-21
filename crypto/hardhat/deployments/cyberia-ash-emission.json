@@ -59,5 +59,14 @@
     "transactionHash": "0x7dc8942380af237162fcb0c7cc36c6d303f9a639399b9988e81adc12671684f6",
     "blockNumber": 12342276,
     "timestamp": "2026-07-06T12:30:35Z"
+  },
+  "spyCyberFarm": {
+    "pid": 25,
+    "label": "SPY/CYBER LP",
+    "lpToken": "0x50d60d11cd42c250901d1bD12351A20E3c781b27",
+    "allocPoint": 100,
+    "transactionHash": "0x86bf8e6bda65857744fbf0b9ff344b6e490210edc61533386cce0fab4da13975",
+    "blockNumber": 13678632,
+    "timestamp": "2026-07-21T23:42:39Z"
   }
 }
