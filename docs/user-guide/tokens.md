@@ -26,6 +26,7 @@ Import these addresses into MetaMask to see your balances. Verify any address on
 | TON | `0x92aBF73698383176Aa2894F1f7263807C3a4e6e6` | 18 | TON (native Toncoin) |
 | SPY | `0x1241FC4F06DB7268243D9439ef56B7a2708DC096` | 18 | Robinhood Chain (tokenized SPDR S&P 500 ETF) |
 | HATCHER | `0x621021F18b6404123f98b1395c418868418ACF36` | 9 | Solana (Token-2022) |
+| ORBV | `0x19E92D8475522FF6c8f3660372B9dc6674d85cC8` | 6 | Solana (Token-2022, Orbserv) |
 | KRSQ | `0x4945419ccEEF0Dc70B054700DE2750A056B03eE3` | 18 | TON jetton (KARASIQUE) |
 | GOAL | `0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe` | 18 | TON jetton (Goal Bear Coin) |
 | YTN | `0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6` | 18 | Yenten (corridor coming soon) |

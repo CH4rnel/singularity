@@ -448,8 +448,8 @@ const filteredMarkets = computed(() => {
 // headline assets first, then the community "partner" projects — so they land
 // on the first two rows (at lg's 3 columns). WCYBER is surfaced under its
 // friendlier "CYBER" name.
-const FEATURED_ORDER = ['WCYBER', 'BTC', 'ETH', 'HATCHER', 'KRSQ', 'YTN'];
-const PARTNER_SYMBOLS = new Set(['HATCHER', 'KRSQ', 'YTN']);
+const FEATURED_ORDER = ['WCYBER', 'BTC', 'ETH', 'HATCHER', 'ORBV', 'KRSQ', 'YTN'];
+const PARTNER_SYMBOLS = new Set(['HATCHER', 'ORBV', 'KRSQ', 'YTN']);
 
 const featuredRank = (symbol: string): number => {
     const i = FEATURED_ORDER.indexOf(symbol.toUpperCase());

@@ -236,6 +236,23 @@ return [
             ],
         ],
 
+        '0x19e92d8475522ff6c8f3660372b9dc6674d85cc8' => [
+            'symbol' => 'ORBV',
+            'name' => 'Orbserv',
+            'decimals' => 6,
+            'logo' => '/orbserv.jpg',
+            'category' => 'partner',
+            'tagline' => 'Partner project — bridged to Cyberia from Solana.',
+            'what' => 'Orbserv is the financial layer for the agent economy, enabling autonomous agents to earn, spend, transact, and create value independently. The canonical ORBV supply lives on Solana; this token is its bridged form on Cyberia.',
+            'why' => 'As a partner token it trades on the Ritual DEX and is a listed lending market, bringing its community and Solana liquidity onto the Cyberia chain.',
+            'links' => [
+                ['label' => 'Website', 'url' => 'https://orbserv.co'],
+                ['label' => 'X (Twitter)', 'url' => 'https://x.com/orbserv'],
+                ['label' => 'Telegram', 'url' => 'https://t.me/orbservco'],
+                ['label' => 'pump.fun', 'url' => 'https://pump.fun/coin/HQJwmK24WN3e87aQzNHnUVK4SaNgYfrR3tDkGgWTpump'],
+            ],
+        ],
+
         '0x4945419cceef0dc70b054700de2750a056b03ee3' => [
             'symbol' => 'KRSQ',
             'name' => 'KARASIQUE',

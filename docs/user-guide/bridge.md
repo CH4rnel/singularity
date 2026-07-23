@@ -8,7 +8,7 @@ Availability is operator-configured and changes over time; the bridge UI always 
 
 | Route | Direction | Status | Assets |
 | --- | --- | --- | --- |
-| Solana ↔ Cyberia | both | **Live** | CYBER.sol, USDC, USDT, SOL, HATCHER |
+| Solana ↔ Cyberia | both | **Live** | CYBER.sol, USDC, USDT, SOL, HATCHER, ORBV |
 | TON ↔ Cyberia | both | **Live** | TON, KRSQ, GOAL |
 | Robinhood Chain → Cyberia | inbound | **Live** | ETH, SPY |
 | Cyberia → Robinhood Chain | outbound | Coming soon | ETH, SPY |

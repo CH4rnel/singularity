@@ -67,6 +67,10 @@ export const KNOWN_TOKENS: KnownToken[] = [
         address: '0x03EB2fb8473C0370c8F6463efEE5f5Cf4EC011c7',
         symbol: 'JupUSD',
     },
+    {
+        address: '0x19E92D8475522FF6c8f3660372B9dc6674d85cC8',
+        symbol: 'ORBV',
+    },
 ];
 
 const KNOWN_ADDRESSES = new Set(

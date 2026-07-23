@@ -46,6 +46,7 @@ const ORACLE = "0x8fEA279fb70D3D1B20a0E50cbC649c83C41Dc4D1" as const;
 const FACTORY = "0xB0aC30907c04b61F1482e62eA66eF4562a690917" as const;
 const WCYBER = "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9" as const;
 const RUB = "0x3cE7d8E486E16baD2Fb1487Fe1da4dC33237d923" as const;
+const USDC = "0xdc25597B19799010047F17e9591EFE08EFd40077" as const;
 
 const RESERVE_FACTOR = 10n ** 17n; // 10%
 const COLLATERAL_FACTOR = 5n * 10n ** 17n; // 50%, uniform
@@ -85,7 +86,20 @@ const TOKENS: { symbol: string; address: `0x${string}` }[] = [
   { symbol: "MINE", address: "0xD8c1f812ADd03ccdE8D3c7F86FeAD181980CD7Ec" },
   { symbol: "TG", address: "0x3d32FE83ad0C1157fdDCA0a3280764c495cdAD6D" },
   { symbol: "GOAL", address: "0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe" },
+  // ORBV has no Cyberia pool yet — fallback priced via its canonical Solana
+  // market (see SOLANA_MINTS below).
+  { symbol: "ORBV", address: "0x19E92D8475522FF6c8f3660372B9dc6674d85cC8" },
 ];
+
+// Solana-native tokens with no (token, WCYBER) and no (token, RUB) pool on
+// Cyberia at listing time: the fallback is the token's live USD price on its
+// canonical Solana market (DexScreener, keyed by mint) divided by the on-chain
+// WCYBER/USDC price, so the new market's valuation stays consistent with the
+// USDC market. Once someone seeds a (token, WCYBER) pool the oracle switches
+// to it automatically and the fallback goes stale/unused.
+const SOLANA_MINTS: Record<string, string> = {
+  ORBV: "HQJwmK24WN3e87aQzNHnUVK4SaNgYfrR3tDkGgWTpump",
+};
 
 const ARTIFACTS = {
   Comptroller: "./artifacts/contracts/lending/LendingComptroller.sol/LendingComptroller.json",
@@ -158,6 +172,33 @@ async function fallbackViaRub(token: `0x${string}`, tokenDecimals: number): Prom
   return BigInt(Math.round(priceInRub * Number(rubFallback)));
 }
 
+// Fallback price for a Solana-native token with no Cyberia pools: live USD
+// price from DexScreener (deepest pair for the canonical mint) ÷ the on-chain
+// WCYBER/USDC price. Returns mantissa 1e18 (WCYBER per whole token, the
+// oracle's USD convention).
+async function fallbackViaSolanaMarket(symbol: string, mint: string): Promise<bigint> {
+  const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+  if (!res.ok) throw new Error(`${symbol}: DexScreener HTTP ${res.status}`);
+  const body = (await res.json()) as { pairs?: { priceUsd?: string; liquidity?: { usd?: number } }[] };
+  const pairs = (body.pairs ?? []).filter((p) => Number(p.priceUsd) > 0);
+  if (!pairs.length) throw new Error(`${symbol}: no priced DexScreener pair for ${mint}`);
+  pairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
+  const usd = Number(pairs[0].priceUsd);
+
+  const pair = (await pub.readContract({ address: FACTORY, abi: FACTORY_ABI, functionName: "getPair", args: [WCYBER, USDC] })) as string;
+  if (eq(pair, ZERO)) throw new Error("no (WCYBER, USDC) pool to anchor USD");
+  const [t0, reserves] = await Promise.all([
+    pub.readContract({ address: pair as `0x${string}`, abi: PAIR_ABI, functionName: "token0" }) as Promise<string>,
+    pub.readContract({ address: pair as `0x${string}`, abi: PAIR_ABI, functionName: "getReserves" }) as Promise<[bigint, bigint, number]>,
+  ]);
+  const [rCyber, rUsdc] = eq(t0, WCYBER) ? [reserves[0], reserves[1]] : [reserves[1], reserves[0]];
+  if (rCyber <= 0n || rUsdc <= 0n) throw new Error("empty (WCYBER, USDC) pool");
+  const cyberUsd = Number(formatUnits(rUsdc, await dec(USDC))) / Number(formatUnits(rCyber, 18));
+
+  console.log(`  ${symbol}: ${usd} USD (DexScreener) / ${cyberUsd} USD per CYBER`);
+  return BigInt(Math.round((usd / cyberUsd) * 1e18));
+}
+
 async function main() {
   console.log("Deployer:", account.address);
   console.log("RPC:", RPC_URL);
@@ -189,9 +230,12 @@ async function main() {
     console.log(`\n=== ${symbol} (${address}) ===`);
     const decimals = await dec(address);
 
-    // Price source: live WCYBER pool, else a derived fallback.
+    // Price source: live WCYBER pool, else a derived fallback (canonical
+    // Solana market for bridged Solana-native tokens, RUB-family otherwise).
     if (!(await hasWcyberPool(address))) {
-      const fb = await fallbackViaRub(address, decimals);
+      const fb = SOLANA_MINTS[symbol]
+        ? await fallbackViaSolanaMarket(symbol, SOLANA_MINTS[symbol])
+        : await fallbackViaRub(address, decimals);
       console.log(`  no WCYBER pool → fallback ${formatUnits(fb, 18)} (USD-mantissa/token)`);
       if (!DRY_RUN) await send(ORACLE, oracle.abi, "setFallbackPrice", [address, fb]);
     } else {

@@ -503,6 +503,17 @@ return [
                 'solana' => ['mint' => 'Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump', 'decimals' => 6, 'token_program' => 'token-2022'],
             ],
         ],
+        // ORBV (Orbserv) — Solana-native pump.fun token bridged to Cyberia.
+        // Mint model like HATCHER: relayer EOA owns the EVM wrapper and mint()s
+        // on bridge-IN / burnFrom()s on bridge-OUT. Both sides are 6 decimals.
+        'ORBV' => [
+            'symbol' => 'ORBV',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => '0x19E92D8475522FF6c8f3660372B9dc6674d85cC8', 'decimals' => 6],
+                'solana' => ['mint' => 'HQJwmK24WN3e87aQzNHnUVK4SaNgYfrR3tDkGgWTpump', 'decimals' => 6, 'token_program' => 'token-2022'],
+            ],
+        ],
         // Native SOL bridged into the Cyberia SOL wrapper (9-dec, matching
         // lamports; relayer-owned Ownable mint/burn). Deposits are plain
         // system transfers to the Solana hot wallet; payouts are native SOL
