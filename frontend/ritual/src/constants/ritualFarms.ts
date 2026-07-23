@@ -276,5 +276,13 @@ export const RITUAL_FARM_POOLS: { [chainId: number]: RitualFarmPool[] } = {
       isSolo: false,
       icons: ['/spy.svg', '/cyberia.png'],
     },
+    {
+      pid: 26,
+      lpToken: '0x2c3F33c0a91D5eaf7f01d52338A6eA72c95120D2', // ORBV/CYBER LP
+      label: 'ORBV / CYBER LP',
+      description: 'Stake LP from the ORBV/CYBER pair',
+      isSolo: false,
+      icons: ['/orbserv.jpg', '/cyberia.png'],
+    },
   ],
 };
