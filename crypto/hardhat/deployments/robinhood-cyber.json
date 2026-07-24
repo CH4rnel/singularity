@@ -1,0 +1,10 @@
+{
+  "chainId": 4663,
+  "chainName": "Robinhood Chain",
+  "rpc": "https://rpc.mainnet.chain.robinhood.com",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "WrappedCyber": "0x4a769e45654eceec46cf2764c7a47ebcfb1cf23c",
+  "symbol": "CYBER",
+  "inventory": "1000000000000000000000000",
+  "timestamp": "2026-07-24T17:19:12.200Z"
+}

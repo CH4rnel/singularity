@@ -54,8 +54,11 @@ class BridgeInventoryService
         // 'mint' — the relayer mints the wrapper on demand; 'native' — the
         // CyberBridge contract mints on release (releaseCyberSol), so the
         // relayer's own wallet balance (mostly accrued fees) is irrelevant.
+        // Exception: a native-entry payout (bridged CYBER coming home) spends
+        // the relayer's own coin balance, so it IS inventory-capped below.
         if ($chainKey === config('bridge.home_chain', 'cyberia')
-            && in_array($tokenConfig['model'] ?? 'direct', ['mint', 'native'], true)) {
+            && in_array($tokenConfig['model'] ?? 'direct', ['mint', 'native'], true)
+            && ! ($entry['native'] ?? false)) {
             return null;
         }
 

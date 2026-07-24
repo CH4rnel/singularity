@@ -621,6 +621,20 @@ return [
                 'robinhood' => ['address' => '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', 'decimals' => 18],
             ],
         ],
+        // CYBER — the Cyberia native gas coin bridged into a Robinhood Chain
+        // wrapper (deploy-cyber-robinhood.ts, relayer-owned WrappedCyber with
+        // a preminted payout inventory). Outbound: users deposit native CYBER
+        // to the relayer EOA on Cyberia, the relayer transfers wrapper from
+        // inventory. Inbound deposits flow back into that inventory and pay
+        // native CYBER from the relayer on Cyberia.
+        'CYBER' => [
+            'symbol' => 'CYBER',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['native' => true, 'decimals' => 18],
+                'robinhood' => ['address' => env('BRIDGE_CYBER_ROBINHOOD_ADDRESS', '0x4A769e45654ECeEc46CF2764C7a47EbCfb1CF23c'), 'decimals' => 18],
+            ],
+        ],
         // Native BNB bridged into a Cyberia wrapper (deployed via
         // crypto/hardhat/scripts/deploy-bnb.ts). BNB is its own asset (not a
         // per-chain copy of a shared token), so no unification applies.

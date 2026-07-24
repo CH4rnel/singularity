@@ -143,8 +143,15 @@ class BridgeFeeService
     {
         $fees = [];
 
-        foreach (array_keys(config('bridge.routes', [])) as $direction) {
-            foreach (array_keys(config('bridge.tokens', [])) as $token) {
+        foreach (config('bridge.routes', []) as $direction => $route) {
+            foreach (config('bridge.tokens', []) as $token => $tokenConfig) {
+                // Only tokens that actually ride this route: a token with no
+                // entry on the source chain (e.g. CYBER on Yenten) must not
+                // leak a fee for a corridor it can never use.
+                if (! isset($tokenConfig['chains'][$route['source_chain'] ?? ''])) {
+                    continue;
+                }
+
                 $fee = $this->nativePayoutFee((string) $direction, (string) $token, false);
 
                 if (bccomp($fee, '0', 18) > 0) {
