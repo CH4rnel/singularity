@@ -1,11 +1,12 @@
 /**
- * Deploy the WrappedCyber (bridged native CYBER) wrapper on Robinhood Chain
- * (4663) and premint the pooled bridge-payout inventory to the relayer.
+ * Deploy the Cyber (bridged native CYBER) token on Robinhood Chain (4663).
  *
- * The wrapper is what evm_to_robinhood pays out (plain ERC20 transfer from
- * relayer inventory) and what robinhood_to_evm accepts as a deposit back to
- * the relayer EOA. Owner = relayer, so inventory can be restocked with
- * mint() at any time.
+ * No premint: the bridge relayer (contract owner) mint()s on every verified
+ * Cyberia-side deposit and burnFrom()s deposits coming back, so the supply
+ * here always equals the native CYBER locked on the relayer EOA on Cyberia.
+ *
+ * If OLD_WRAPPER is set (a previous relayer-owned deployment), its relayer
+ * balance is burned so no abandoned CYBER supply floats on the explorer.
  *
  * Usage:
  *   npx hardhat compile
@@ -13,7 +14,7 @@
  */
 
 import "dotenv/config";
-import { createWalletClient, createPublicClient, http, parseEther, type Abi, type Hex } from "viem";
+import { createWalletClient, createPublicClient, http, type Abi, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
 import * as fs from "fs";
@@ -26,9 +27,7 @@ const account = privateKeyToAccount(pk);
 
 const RPC_URL = process.env.ROBINHOOD_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com";
 const DEPLOYMENT_FILE = "./deployments/robinhood-cyber.json";
-// Pooled payout inventory preminted to the relayer. Only leaves the EOA when
-// a user has deposited the same amount of native CYBER on Cyberia.
-const INVENTORY = parseEther(process.env.CYBER_RH_INVENTORY ?? "1000000");
+const OLD_WRAPPER = process.env.OLD_WRAPPER as `0x${string}` | undefined;
 
 const chain = {
   ...mainnet,
@@ -40,17 +39,20 @@ const chain = {
 const walletClient = createWalletClient({ chain, transport: http(RPC_URL), account });
 const publicClient = createPublicClient({ chain, transport: http(RPC_URL) });
 
-if (fs.existsSync(DEPLOYMENT_FILE) && process.env.FORCE !== "true") {
-  throw new Error(`${DEPLOYMENT_FILE} already exists — set FORCE=true to redeploy`);
-}
+const ERC20_BURN_ABI = [
+  { type: "function", name: "balanceOf", stateMutability: "view",
+    inputs: [{ name: "", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "burn", stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }], outputs: [] },
+] as const satisfies Abi;
 
 async function main() {
   const artifact = JSON.parse(
-    fs.readFileSync("./artifacts/contracts/WrappedCyber.sol/WrappedCyber.json", "utf8"),
+    fs.readFileSync("./artifacts/contracts/Cyber.sol/Cyber.json", "utf8"),
   );
 
-  console.log("Deploying WrappedCyber on Robinhood Chain (4663)...");
-  console.log("  Deployer / owner / inventory holder:", account.address);
+  console.log("Deploying Cyber (bridged CYBER) on Robinhood Chain (4663)...");
+  console.log("  Deployer / owner:", account.address);
 
   const hash = await walletClient.deployContract({
     abi: artifact.abi as Abi,
@@ -62,23 +64,29 @@ async function main() {
     throw new Error(`Deployment reverted (${hash})`);
   }
   const address = receipt.contractAddress;
-  console.log("  WrappedCyber:", address, `(tx ${hash})`);
+  console.log("  Cyber:", address, `(tx ${hash})`);
 
-  const mintHash = await walletClient.writeContract({
-    address,
-    abi: artifact.abi as Abi,
-    functionName: "mint",
-    args: [account.address, INVENTORY],
-  });
-  const mintReceipt = await publicClient.waitForTransactionReceipt({ hash: mintHash });
-  if (mintReceipt.status !== "success") {
-    throw new Error(`Inventory mint reverted (${mintHash})`);
+  if (OLD_WRAPPER) {
+    const stale = (await publicClient.readContract({
+      address: OLD_WRAPPER, abi: ERC20_BURN_ABI, functionName: "balanceOf",
+      args: [account.address],
+    })) as bigint;
+
+    if (stale > 0n) {
+      const burnHash = await walletClient.writeContract({
+        address: OLD_WRAPPER, abi: ERC20_BURN_ABI, functionName: "burn", args: [stale],
+      });
+      const burnReceipt = await publicClient.waitForTransactionReceipt({ hash: burnHash });
+      if (burnReceipt.status !== "success") {
+        throw new Error(`Old wrapper burn reverted (${burnHash})`);
+      }
+      console.log(`  Old wrapper ${OLD_WRAPPER}: burned ${stale} (tx ${burnHash})`);
+    }
   }
-  console.log(`  Inventory minted to relayer (tx ${mintHash})`);
 
-  const [symbol, supply] = await Promise.all([
+  const [symbol, name] = await Promise.all([
     publicClient.readContract({ address, abi: artifact.abi as Abi, functionName: "symbol" }),
-    publicClient.readContract({ address, abi: artifact.abi as Abi, functionName: "totalSupply" }),
+    publicClient.readContract({ address, abi: artifact.abi as Abi, functionName: "name" }),
   ]);
 
   const record = {
@@ -86,9 +94,9 @@ async function main() {
     chainName: "Robinhood Chain",
     rpc: RPC_URL,
     deployer: account.address,
-    WrappedCyber: address,
+    Cyber: address,
+    name,
     symbol,
-    inventory: (supply as bigint).toString(),
     timestamp: new Date().toISOString(),
   };
   fs.writeFileSync(DEPLOYMENT_FILE, JSON.stringify(record, null, 2) + "\n");

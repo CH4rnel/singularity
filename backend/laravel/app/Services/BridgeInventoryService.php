@@ -50,15 +50,19 @@ class BridgeInventoryService
             return null;
         }
 
-        // Into the home chain with a minting token there is no inventory cap:
-        // 'mint' — the relayer mints the wrapper on demand; 'native' — the
-        // CyberBridge contract mints on release (releaseCyberSol), so the
-        // relayer's own wallet balance (mostly accrued fees) is irrelevant.
-        // Exception: a native-entry payout (bridged CYBER coming home) spends
-        // the relayer's own coin balance, so it IS inventory-capped below.
-        if ($chainKey === config('bridge.home_chain', 'cyberia')
-            && in_array($tokenConfig['model'] ?? 'direct', ['mint', 'native'], true)
-            && ! ($entry['native'] ?? false)) {
+        // A minting destination has no inventory cap: on the home chain the
+        // relayer mints the wrapper on demand ('mint') or the CyberBridge
+        // contract mints on release ('native'); an 'owned' entry (bridged
+        // CYBER on Robinhood) is the same relayer-owned mint-on-demand
+        // wrapper on a non-home chain. Exception: a native-entry payout
+        // (bridged CYBER coming home) spends the relayer's own coin balance,
+        // so it IS inventory-capped below.
+        $mintingHome = $chainKey === config('bridge.home_chain', 'cyberia')
+            && in_array($tokenConfig['model'] ?? 'direct', ['mint', 'native'], true);
+        $ownedWrapper = ($tokenConfig['model'] ?? 'direct') === 'mint'
+            && ($entry['owned'] ?? false);
+
+        if (($mintingHome || $ownedWrapper) && ! ($entry['native'] ?? false)) {
             return null;
         }
 

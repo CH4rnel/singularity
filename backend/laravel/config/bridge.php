@@ -621,18 +621,19 @@ return [
                 'robinhood' => ['address' => '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', 'decimals' => 18],
             ],
         ],
-        // CYBER — the Cyberia native gas coin bridged into a Robinhood Chain
-        // wrapper (deploy-cyber-robinhood.ts, relayer-owned WrappedCyber with
-        // a preminted payout inventory). Outbound: users deposit native CYBER
-        // to the relayer EOA on Cyberia, the relayer transfers wrapper from
-        // inventory. Inbound deposits flow back into that inventory and pay
-        // native CYBER from the relayer on Cyberia.
+        // CYBER — the Cyberia native gas coin bridged to Robinhood Chain
+        // (deploy-cyber-robinhood.ts; the "Cyber" ERC20 there is relayer-owned,
+        // no premint). 'owned' marks the entry as a relayer-owned wrapper on a
+        // non-home chain: outbound MINTS it to the recipient against the
+        // native CYBER the user deposited on the relayer EOA on Cyberia, and
+        // inbound deposits are BURNED before the native CYBER payout — supply
+        // stays 1:1 with the Cyberia-side reserve.
         'CYBER' => [
             'symbol' => 'CYBER',
             'model' => 'mint',
             'chains' => [
                 'cyberia' => ['native' => true, 'decimals' => 18],
-                'robinhood' => ['address' => env('BRIDGE_CYBER_ROBINHOOD_ADDRESS', '0x4A769e45654ECeEc46CF2764C7a47EbCfb1CF23c'), 'decimals' => 18],
+                'robinhood' => ['address' => env('BRIDGE_CYBER_ROBINHOOD_ADDRESS', '0x753979e6585CCa139fbB1918966D563a25eEB3B2'), 'decimals' => 18, 'owned' => true],
             ],
         ],
         // Native BNB bridged into a Cyberia wrapper (deployed via

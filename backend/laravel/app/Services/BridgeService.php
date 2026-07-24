@@ -631,14 +631,16 @@ class BridgeService
                 }
             }
 
-            // Leaving the wrapper's home chain with a mint-model token:
-            // destroy the wrapper the user deposited so supply stays backed
-            // by the destination-side reserve. Deposits on external EVM
-            // chains (e.g. canonical USDT on BSC) are reserves — never burn.
-            // Idempotent: a retry after a failed payout must not burn again —
-            // the wrapper is already gone.
+            // Leaving a chain where the deposit is a relayer-owned wrapper
+            // (the home chain, or an 'owned' entry like bridged CYBER on
+            // Robinhood) with a mint-model token: destroy the wrapper the
+            // user deposited so supply stays backed by the destination-side
+            // reserve. Deposits on external EVM chains (e.g. canonical USDT
+            // on BSC) are reserves — never burn. Idempotent: a retry after a
+            // failed payout must not burn again — the wrapper is already gone.
             if (($sourceChain['type'] ?? '') === 'evm'
-                && $sourceChain['key'] === config('bridge.home_chain', 'cyberia')
+                && ($sourceChain['key'] === config('bridge.home_chain', 'cyberia')
+                    || ($sourceToken['owned'] ?? false))
                 && ($tokenConfig['model'] ?? 'direct') === 'mint'
                 && ! ($sourceToken['native'] ?? false)
                 && ! $request->wrapper_burned) {
@@ -838,8 +840,10 @@ class BridgeService
         if ($tokenEntry['native'] ?? false) {
             // Native-coin payout from the relayer balance (e.g. BNB on BSC).
             $args = ['scripts/relay-native-transfer.ts', $request->recipient_address, $amountRaw];
-        } elseif (($tokenConfig['model'] ?? 'direct') === 'mint' && $isHomeChain) {
-            // Relayer owns the wrapper on its home chain: mint to recipient.
+        } elseif (($tokenConfig['model'] ?? 'direct') === 'mint'
+            && ($isHomeChain || ($tokenEntry['owned'] ?? false))) {
+            // Relayer owns the wrapper (home chain, or an 'owned' entry such
+            // as bridged CYBER on Robinhood): mint to recipient on demand.
             $args = ['scripts/relay-mint.ts', (string) $tokenEntry['address'], $request->recipient_address, $amountRaw, $gasDropWei];
         } else {
             // External chain or direct model: pay out of relayer inventory
