@@ -561,8 +561,13 @@ async function loadState(): Promise<void> {
                 info: await chef.poolInfo(pid),
             })),
         );
+        const hidden = new Set(
+            (cfg.hiddenPools ?? []).map((a) => a.toLowerCase()),
+        );
         const activePoolHeaders = poolHeaders.filter(
-            ({ info }) => (info.allocPoint as bigint) > 0n,
+            ({ info }) =>
+                (info.allocPoint as bigint) > 0n &&
+                !hidden.has((info.lpToken as string).toLowerCase()),
         );
         chainPoolCounts[cfg.chainId] = activePoolHeaders.length;
 
@@ -1006,16 +1011,24 @@ async function fetchPoolCount(cfg: FarmChainConfig): Promise<void> {
     try {
         const provider = makeReadProvider(cfg);
         const chef = new Contract(cfg.masterchef, MASTERCHEF_ABI, provider);
+        const hidden = new Set(
+            (cfg.hiddenPools ?? []).map((a) => a.toLowerCase()),
+        );
         const len = Number((await chef.poolLength()) as bigint);
-        const allocs = await Promise.all(
+        const infos = await Promise.all(
             Array.from(
                 { length: len },
                 (_, pid) =>
-                    chef.poolInfo(pid) as Promise<{ allocPoint: bigint }>,
+                    chef.poolInfo(pid) as Promise<{
+                        lpToken: string;
+                        allocPoint: bigint;
+                    }>,
             ),
         );
-        chainPoolCounts[cfg.chainId] = allocs.filter(
-            (info) => (info.allocPoint as bigint) > 0n,
+        chainPoolCounts[cfg.chainId] = infos.filter(
+            (info) =>
+                (info.allocPoint as bigint) > 0n &&
+                !hidden.has((info.lpToken as string).toLowerCase()),
         ).length;
     } catch {
         chainPoolCounts[cfg.chainId] = null;

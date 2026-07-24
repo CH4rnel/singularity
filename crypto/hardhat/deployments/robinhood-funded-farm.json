@@ -1,0 +1,28 @@
+{
+  "chainId": 4663,
+  "chainName": "Robinhood Chain",
+  "rpc": "https://rpc.mainnet.chain.robinhood.com",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "AshBridged": "0xa284bf7d1d941ed8ded25f8e592003e9e5373284",
+  "FundedFarm": "0x4798f67d8d741dc09ae4409da2d180524e72a99c",
+  "retired": {
+    "standaloneMasterChef": "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9",
+    "junkAsh": "0x176C70dD7CF17056596D8c4C7E2b1f2537df978F"
+  },
+  "timestamp": "2026-07-24T23:18:23.101Z",
+  "pools": [
+    {
+      "pid": 0,
+      "label": "CYBER/WETH LP",
+      "lpToken": "0x4E93763183A3eC492f01C06AE28805f0C1d0e6E7",
+      "allocPoint": 100
+    },
+    {
+      "pid": 1,
+      "label": "ASH/WETH LP",
+      "lpToken": "0xd34e47cFDd037Cb691012C3a6356d2694176bb54",
+      "allocPoint": 100
+    }
+  ],
+  "ashWethPair": "0xd34e47cFDd037Cb691012C3a6356d2694176bb54"
+}

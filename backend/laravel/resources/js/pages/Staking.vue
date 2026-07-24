@@ -90,6 +90,13 @@ const EXPLORER = 'https://explorer.cyberia.church';
 const SOLSCAN = 'https://solscan.io/tx/';
 const DEX_URL = 'https://swap.cyberia.church';
 
+// MasterChef pools that are not real staking pools and must never surface
+// here: EmissionChannel placeholders (they carve a satellite chain's ASH
+// emission share; see lib/farmChains.ts) look like solo pools but aren't.
+const HIDDEN_POOL_TOKENS = new Set(
+    ['0x7De888cEf3CF3c24c20845E61A2964937Be6b199'].map((a) => a.toLowerCase()),
+);
+
 // Ritual factory — prices tokens in CYBER via their WCYBER pools so each solo
 // pool can quote TVL and APY without an off-chain indexer (mirrors Farm.vue).
 const FACTORY = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
@@ -457,7 +464,9 @@ async function loadState(): Promise<void> {
             })),
         );
         const activeHeaders = poolHeaders.filter(
-            ({ info }) => (info.allocPoint as bigint) > 0n,
+            ({ info }) =>
+                (info.allocPoint as bigint) > 0n &&
+                !HIDDEN_POOL_TOKENS.has((info.lpToken as string).toLowerCase()),
         );
         const soloHeaders = (
             await Promise.all(
