@@ -304,6 +304,25 @@
     font-size:30px;line-height:1.35;font-weight:400;letter-spacing:-.005em;
     max-width:720px;
   }
+  /* Partner projects strip directly under the hero logo */
+  .hero-partners{
+    display:flex;align-items:center;justify-content:center;gap:14px;
+    margin-top:26px;flex-wrap:wrap;
+  }
+  .hero-partners .pk{
+    font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.18em;
+  }
+  .hero-partners a.partner{
+    display:inline-flex;align-items:center;gap:9px;
+    padding:7px 14px;border:1px solid var(--rule);border-radius:999px;
+    color:var(--ink);text-decoration:none;
+    font-size:13px;font-weight:600;letter-spacing:.02em;
+    transition:border-color .2s ease,color .2s ease;
+  }
+  .hero-partners a.partner img{
+    width:20px;height:20px;border-radius:50%;object-fit:cover;display:block;
+  }
+  .hero-partners a.partner:hover{border-color:var(--cyan-strong);color:var(--cyan-strong)}
   .hero-ctas{
     display:flex;gap:14px;margin-top:36px;flex-wrap:wrap;justify-content:center;
   }
@@ -1179,6 +1198,17 @@ function Hero(){
   return (
     <main className="hero" data-screen-label="01 Hero">
       <div className="cube-wrap"><Cube/></div>
+      <div className="hero-partners" aria-label="Partner projects">
+        <span className="pk">Partners</span>
+        <a className="partner" href="https://hatcher.host/" target="_blank" rel="noopener">
+          <img src="/token-icons/hatcher.jpg" alt="Hatcher logo"/>
+          Hatcher
+        </a>
+        <a className="partner" href="https://orbserv.co" target="_blank" rel="noopener">
+          <img src="/token-icons/orbserv.jpg" alt="Orbserv logo"/>
+          Orbserv
+        </a>
+      </div>
       <p className="tagline">
         Change the perception,<br/>and the whole world will change
       </p>
