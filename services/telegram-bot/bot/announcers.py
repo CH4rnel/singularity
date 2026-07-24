@@ -50,22 +50,44 @@ from bot.utils import (
 logger = logging.getLogger(__name__)
 
 
+# Bridge direction keys are '{source}_to_{dest}' over these per-chain
+# shorthands (mirrors config/bridge.php routes on the Laravel side). Each side
+# maps to (human label, explorer tx-link prefix). Unknown sides render the raw
+# direction with no link — never a link to the wrong chain's explorer.
+_BRIDGE_CHAINS = {
+    "evm": ("Cyberia", f"{EXPLORER_URL}/tx/"),
+    "sol": ("Solana", f"{SOLSCAN_URL}/tx/"),
+    "ton": ("TON", "https://tonviewer.com/transaction/"),
+    "bnb": ("BNB Chain", "https://bscscan.com/tx/"),
+    "base": ("Base", "https://basescan.org/tx/"),
+    "robinhood": ("Robinhood Chain", "https://robinhoodchain.blockscout.com/tx/"),
+    "yenten": ("Yenten", "https://explorer.yentencoin.info/tx/"),
+    "btc": ("Bitcoin", "https://mempool.space/tx/"),
+    "ltc": ("Litecoin", "https://litecoinspace.org/tx/"),
+    "xmr": ("Monero", "https://xmrchain.net/tx/"),
+}
+
+
+def _bridge_sides(direction: str) -> tuple[str, str]:
+    source, sep, dest = (direction or "").partition("_to_")
+    return (source, dest) if sep else ("", "")
+
+
 def _bridge_tx_links(direction: str, source_tx: str, dest_tx: str | None) -> tuple[str, str | None]:
-    """Return (source_link, dest_link). Direction tells us which chain each tx is on."""
-    if direction == "sol_to_evm":
-        src = f"{SOLSCAN_URL}/tx/{source_tx}" if source_tx else ""
-        dst = f"{EXPLORER_URL}/tx/{dest_tx}" if dest_tx else None
-    else:  # evm_to_sol (and anything else falls back to this layout)
-        src = f"{EXPLORER_URL}/tx/{source_tx}" if source_tx else ""
-        dst = f"{SOLSCAN_URL}/tx/{dest_tx}" if dest_tx else None
+    """Return (source_link, dest_link), each on its own side's explorer."""
+    source, dest = _bridge_sides(direction)
+    src_prefix = _BRIDGE_CHAINS.get(source, ("", None))[1]
+    dst_prefix = _BRIDGE_CHAINS.get(dest, ("", None))[1]
+    src = f"{src_prefix}{source_tx}" if src_prefix and source_tx else ""
+    dst = f"{dst_prefix}{dest_tx}" if dst_prefix and dest_tx else None
     return src, dst
 
 
 def _direction_label(direction: str) -> str:
-    return {
-        "sol_to_evm": "Solana → Cyberia",
-        "evm_to_sol": "Cyberia → Solana",
-    }.get(direction, direction)
+    source, dest = _bridge_sides(direction)
+    if source in _BRIDGE_CHAINS and dest in _BRIDGE_CHAINS:
+        return f"{_BRIDGE_CHAINS[source][0]} → {_BRIDGE_CHAINS[dest][0]}"
+    return direction
 
 
 def _bridge_token_usd_price(symbol: str) -> float | None:
