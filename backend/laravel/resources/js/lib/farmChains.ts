@@ -72,7 +72,7 @@ export const FARM_CHAINS: readonly FarmChainConfig[] = [
         readRpcUrl: 'https://rpc.mainnet.chain.robinhood.com',
         // FundedFarm (pays bridged ASH from balance, no local mint) — replaces
         // the retired standalone MasterChef 0x78272… .
-        masterchef: '0x4798f67d8D741dC09Ae4409dA2d180524E72A99c',
+        masterchef: '0x4798F67D8D741DC09ae4409Da2D180524E72A99C',
         factory: '0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86',
         quoteToken: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73', // canonical aeWETH
         quoteSymbol: 'ETH',
