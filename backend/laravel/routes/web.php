@@ -4,6 +4,7 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\SiteEventController;
+use App\Http\Controllers\Api\SolanaStakingController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\ApiController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReactionController;
+use App\Http\Controllers\StakingController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\UserProfileController;
@@ -104,6 +106,7 @@ Route::inertia('/convert', 'CyberSolSwap')->name('convert');
 Route::permanentRedirect('/cyber-sol-swap', '/convert');
 Route::inertia('/lending', 'Lending')->name('lending');
 Route::inertia('/farm', 'Farm')->name('farm');
+Route::get('/staking', StakingController::class)->name('staking');
 Route::inertia('/lending/liquidate', 'Liquidate')->name('lending.liquidate');
 Route::inertia('/launchpad', 'Launchpad')->name('launchpad');
 Route::get('/launchpad/sites/{address}', [LaunchpadController::class, 'showSite'])
@@ -133,6 +136,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::middleware(['auth'])->group(function () {
+    Route::prefix('api/staking/solana')->name('staking.solana.')->group(function () {
+        Route::get('state', [SolanaStakingController::class, 'state'])->name('state');
+        Route::post('deposits/prepare', [SolanaStakingController::class, 'prepareDeposit'])
+            ->middleware('throttle:12,1')->name('deposits.prepare');
+        Route::post('deposits/confirm', [SolanaStakingController::class, 'confirmDeposit'])
+            ->middleware('throttle:30,1')->name('deposits.confirm');
+        Route::post('withdrawals', [SolanaStakingController::class, 'withdraw'])
+            ->middleware('throttle:6,1')->name('withdrawals.store');
+        Route::post('claims', [SolanaStakingController::class, 'claim'])
+            ->middleware('throttle:6,1')->name('claims.store');
+    });
+
     // Own profile: account info + bridge deposit addresses for every chain.
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
     // On-chain identity: nickname (relayer-submitted) and achievement checks.

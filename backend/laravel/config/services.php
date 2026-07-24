@@ -108,6 +108,26 @@ return [
         'whale_threshold' => env('WHALE_MIN_CYBER_SOL', 10000000),
     ],
 
+    // Custodial CYBER.sol staking. This intentionally uses a dedicated
+    // treasury instead of mixing user stakes with the bridge reserve.
+    'staking' => [
+        'enabled' => filter_var(env('STAKING_SOLANA_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        'cluster' => env('STAKING_SOLANA_CLUSTER', 'mainnet'),
+        'rpc_url' => env('STAKING_SOLANA_RPC_URL') ?: env('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
+        'public_rpc_url' => env('STAKING_SOLANA_PUBLIC_RPC_URL', 'https://api.mainnet-beta.solana.com'),
+        'treasury_address' => env('STAKING_SOLANA_TREASURY_ADDRESS'),
+        'keypair_path' => env('STAKING_SOLANA_KEYPAIR_PATH'),
+        'cyber_sol_mint' => env('CYBER_SOL_MINT', 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump'),
+        'cyber_sol_decimals' => (int) env('CYBER_SOL_DECIMALS', 6),
+        'token_program' => 'token-2022',
+        'ash_address' => env('STAKING_ASH_ADDRESS', '0x992Fca0a89DD95afb17751f6CC233Adb9B089df5'),
+        'ash_decimals' => 18,
+        'ash_per_cyber_per_day' => env('STAKING_ASH_PER_CYBER_PER_DAY', '0'),
+        'evm_rpc_url' => env('STAKING_EVM_RPC_URL') ?: env('CYBERIA_RPC_URL', 'https://rpc.cyberia.church'),
+        'evm_chain_id' => 49406,
+        'evm_private_key' => env('STAKING_EVM_PRIVATE_KEY'),
+    ],
+
     'slots' => [
         'hot_wallet_address' => env('SLOT_HOT_WALLET_ADDRESS'),
         'hot_wallet_keypair_path' => env('SLOT_HOT_WALLET_KEYPAIR_PATH'),

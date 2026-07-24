@@ -15,6 +15,7 @@ import {
     HandCoins,
     LayoutGrid,
     Link as LinkIcon,
+    LockKeyhole,
     Repeat2,
     Rocket,
     Sprout,
@@ -43,7 +44,7 @@ import {
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
-import { dashboard } from '@/routes';
+import { dashboard, staking } from '@/routes';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -105,6 +106,11 @@ const defiNavItems: NavItem[] = [
         title: 'Farm',
         href: '/farm',
         icon: Sprout,
+    },
+    {
+        title: 'Staking',
+        href: staking().url,
+        icon: LockKeyhole,
     },
     {
         title: 'Lending',

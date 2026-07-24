@@ -9,6 +9,7 @@ import {
     market,
     pixels,
     predictions,
+    staking,
     swap,
 } from '@/routes';
 import { index as daoIndex } from '@/routes/dao';
@@ -36,6 +37,7 @@ export const navGroups: Web3NavGroup[] = [
             { title: 'Lending', href: lending().url },
             { title: 'Liquidity', href: liquidity().url },
             { title: 'Farm', href: farm().url },
+            { title: 'Staking', href: staking().url },
             { title: 'Launchpad', href: launchpad().url },
             { title: 'Tokens', href: tokensIndex().url },
             {

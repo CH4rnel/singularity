@@ -29,6 +29,7 @@ import {
     cyberiaReadRpcUrl,
     ensureCyberiaNetwork,
 } from '@/lib/evmChains';
+import { scanLiquidityBalances } from '@/lib/liquidityPositions';
 import { track } from '@/lib/track';
 
 const EXPLORER = 'https://explorer.cyberia.church';
@@ -49,6 +50,8 @@ const ROUTER_ABI = [
 ];
 const FACTORY_ABI = [
     'function getPair(address,address) view returns (address)',
+    'function allPairsLength() view returns (uint256)',
+    'function allPairs(uint256) view returns (address)',
 ];
 const ERC20_ABI = [
     'function balanceOf(address) view returns (uint256)',
@@ -483,6 +486,7 @@ type Position = {
 };
 const positions = ref<Position[]>([]);
 const positionsLoading = ref(false);
+const positionsError = ref<string | null>(null);
 const selected = ref<string | null>(null);
 const removePct = ref(50);
 const receiveNative = ref(true);
@@ -490,6 +494,7 @@ const receiveNative = ref(true);
 const loadPositions = async (): Promise<void> => {
     const me = wallet.address.value;
     positions.value = [];
+    positionsError.value = null;
 
     if (!me) {
         return;
@@ -498,46 +503,71 @@ const loadPositions = async (): Promise<void> => {
     positionsLoading.value = true;
 
     try {
-        const found = await Promise.all(
-            cleanPools.value.map(async (row) => {
-                try {
-                    const p = new Contract(
-                        row.pair_address,
-                        PAIR_ABI,
-                        readProvider,
-                    );
-                    const lp = (await p.balanceOf(me)) as bigint;
-
-                    if (lp <= 0n) {
-                        return null;
-                    }
-
-                    const [ts, reserves, m0, m1] = await Promise.all([
-                        p.totalSupply() as Promise<bigint>,
-                        p.getReserves(),
-                        tokenMeta(row.token0),
-                        tokenMeta(row.token1),
+        const factory = new Contract(FACTORY, FACTORY_ABI, readProvider);
+        const pairCount = Number(await factory.allPairsLength());
+        const pairAddresses = (await Promise.all(
+            Array.from({ length: pairCount }, (_, index) =>
+                factory.allPairs(index),
+            ),
+        )) as string[];
+        const balanceScan = await scanLiquidityBalances(
+            pairAddresses,
+            async (pairAddress) =>
+                (await new Contract(
+                    pairAddress,
+                    PAIR_ABI,
+                    readProvider,
+                ).balanceOf(me)) as bigint,
+        );
+        const found = await Promise.allSettled(
+            balanceScan.ownedPairs.map(async ({ pairAddress, lpBalance }) => {
+                const pairContract = new Contract(
+                    pairAddress,
+                    PAIR_ABI,
+                    readProvider,
+                );
+                const [totalSupply, reserves, token0, token1] =
+                    await Promise.all([
+                        pairContract.totalSupply() as Promise<bigint>,
+                        pairContract.getReserves(),
+                        pairContract.token0() as Promise<string>,
+                        pairContract.token1() as Promise<string>,
                     ]);
+                const [meta0, meta1] = await Promise.all([
+                    tokenMeta(token0),
+                    tokenMeta(token1),
+                ]);
 
-                    return {
-                        pairAddress: row.pair_address,
-                        token0: row.token0,
-                        token1: row.token1,
-                        symbol0: m0.symbol,
-                        symbol1: m1.symbol,
-                        lp,
-                        totalSupply: ts,
-                        reserve0: reserves[0],
-                        reserve1: reserves[1],
-                        dec0: m0.decimals,
-                        dec1: m1.decimals,
-                    } as Position;
-                } catch {
-                    return null;
-                }
+                return {
+                    pairAddress,
+                    token0,
+                    token1,
+                    symbol0: meta0.symbol,
+                    symbol1: meta1.symbol,
+                    lp: lpBalance,
+                    totalSupply,
+                    reserve0: reserves[0],
+                    reserve1: reserves[1],
+                    dec0: meta0.decimals,
+                    dec1: meta1.decimals,
+                } as Position;
             }),
         );
-        positions.value = found.filter((p): p is Position => p !== null);
+        positions.value = found.flatMap((result) =>
+            result.status === 'fulfilled' ? [result.value] : [],
+        );
+
+        const failedPositionReads = found.filter(
+            (result) => result.status === 'rejected',
+        ).length;
+        const failedReads = balanceScan.failedReads + failedPositionReads;
+
+        if (failedReads > 0) {
+            positionsError.value = `Could not read ${failedReads} of ${pairCount} pools. Results may be incomplete.`;
+        }
+    } catch {
+        positionsError.value =
+            'Could not scan LP positions from the Ritual factory. Please retry.';
     } finally {
         positionsLoading.value = false;
     }
@@ -694,7 +724,7 @@ onMounted(async () => {
                 </Button>
                 <Button
                     :variant="tab === 'remove' ? 'default' : 'outline'"
-                    @click="((tab = 'remove'), loadPositions())"
+                    @click="tab = 'remove'"
                 >
                     Remove
                 </Button>
@@ -836,11 +866,25 @@ onMounted(async () => {
                         Scanning your positions…
                     </p>
                     <p
-                        v-else-if="positions.length === 0"
+                        v-else-if="positions.length === 0 && !positionsError"
                         class="text-sm text-muted-foreground"
                     >
                         No LP positions found for this wallet.
                     </p>
+                    <div
+                        v-if="positionsError"
+                        class="flex items-center justify-between gap-3 rounded-md border border-amber-500/40 p-3 text-sm text-amber-500"
+                    >
+                        <span>{{ positionsError }}</span>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="positionsLoading"
+                            @click="loadPositions"
+                        >
+                            Retry
+                        </Button>
+                    </div>
 
                     <button
                         v-for="p in positions"

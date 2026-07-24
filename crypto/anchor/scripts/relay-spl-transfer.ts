@@ -17,13 +17,7 @@
  * stdout (last line):
  *   {"txHash":"<solana_signature>","status":"success"}
  */
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  Transaction,
-  sendAndConfirmTransaction,
-} from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import {
   getAssociatedTokenAddress,
   createTransferInstruction,
@@ -45,21 +39,30 @@ async function main() {
 
   if (!mintStr || !recipientBase58 || !amountStr || !programName) {
     console.error(
-      "Usage: relay-spl-transfer.ts <mint> <recipient_base58> <amount_raw> <token_program>",
+      "Usage: relay-spl-transfer.ts <mint> <recipient_base58> <amount_raw> <token_program>"
     );
     process.exit(1);
   }
 
   const rpcUrl =
     process.env.ANCHOR_PROVIDER_URL || "https://api.mainnet-beta.solana.com";
-  const walletPath = (process.env.ANCHOR_WALLET || "~/.config/solana/id.json").replace(
-    "~",
-    process.env.HOME || "/root",
-  );
+  const walletPath = (
+    process.env.ANCHOR_WALLET || "~/.config/solana/id.json"
+  ).replace("~", process.env.HOME || "/root");
 
   const relayer = Keypair.fromSecretKey(
-    Uint8Array.from(JSON.parse(fs.readFileSync(walletPath, "utf8"))),
+    Uint8Array.from(JSON.parse(fs.readFileSync(walletPath, "utf8")))
   );
+
+  const expectedSender = process.env.EXPECTED_SENDER;
+  if (
+    expectedSender &&
+    relayer.publicKey.toBase58() !== new PublicKey(expectedSender).toBase58()
+  ) {
+    throw new Error(
+      `Configured keypair ${relayer.publicKey.toBase58()} does not match expected sender ${expectedSender}`
+    );
+  }
 
   const connection = new Connection(rpcUrl, "confirmed");
   const mint = new PublicKey(mintStr);
@@ -67,8 +70,18 @@ async function main() {
   const amount = BigInt(amountStr);
   const program = resolveProgram(programName);
 
-  const relayerAta = await getAssociatedTokenAddress(mint, relayer.publicKey, false, program);
-  const recipientAta = await getAssociatedTokenAddress(mint, recipient, false, program);
+  const relayerAta = await getAssociatedTokenAddress(
+    mint,
+    relayer.publicKey,
+    false,
+    program
+  );
+  const recipientAta = await getAssociatedTokenAddress(
+    mint,
+    recipient,
+    false,
+    program
+  );
 
   console.log("Relayer:  ", relayer.publicKey.toBase58());
   console.log("Mint:     ", mint.toBase58());
@@ -88,8 +101,8 @@ async function main() {
         recipientAta,
         recipient,
         mint,
-        program,
-      ),
+        program
+      )
     );
   }
 
@@ -100,13 +113,32 @@ async function main() {
       relayer.publicKey,
       amount,
       [],
-      program,
-    ),
+      program
+    )
   );
 
-  const sig = await sendAndConfirmTransaction(connection, tx, [relayer], {
-    commitment: "confirmed",
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = relayer.publicKey;
+  tx.sign(relayer);
+
+  const sig = await connection.sendRawTransaction(tx.serialize(), {
+    maxRetries: 5,
   });
+  console.log(JSON.stringify({ broadcastTxHash: sig }));
+  const confirmation = await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed"
+  );
+
+  if (confirmation.value.err) {
+    throw new Error(
+      `Solana transfer failed (${sig}): ${JSON.stringify(
+        confirmation.value.err
+      )}`
+    );
+  }
 
   console.log("TX:", sig);
   console.log(JSON.stringify({ txHash: sig, status: "success" }));
