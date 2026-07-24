@@ -48,6 +48,9 @@ fi
 
 if changed backend/laravel/resources backend/laravel/package.json backend/laravel/vite.config.ts backend/laravel/routes; then
     echo "==> npm run build"
+    # A stale route cache makes wayfinder generate @/routes from the OLD route
+    # table, so new pages fail the vite build with UNLOADABLE_DEPENDENCY.
+    in_container php artisan route:clear
     in_container npm run build
 fi
 
@@ -57,10 +60,12 @@ if changed backend/laravel/database/migrations; then
 fi
 
 # Config is cached on prod: a stale bootstrap/cache/config.php makes Laravel
-# ignore config/*.php AND .env entirely. Always refresh it.
+# ignore config/*.php AND .env entirely. Always refresh it. Routes are cached
+# too, so rebuild that cache as well or new routes 404.
 echo "==> config cache"
 in_container php artisan config:clear
 in_container php artisan config:cache
+in_container php artisan route:cache
 
 echo "==> queue restart"
 in_container php artisan queue:restart
