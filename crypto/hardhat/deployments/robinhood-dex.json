@@ -13,5 +13,19 @@
   "ashWethPair": "0x631fba154Ae40aAcCaa1659Aa6031190105FF38f",
   "timestamp": "2026-07-24T17:12:30.220Z",
   "ethCyberPair": "0x4E93763183A3eC492f01C06AE28805f0C1d0e6E7",
-  "Cyber": "0x753979e6585CCa139fbB1918966D563a25eEB3B2"
+  "Cyber": "0x753979e6585CCa139fbB1918966D563a25eEB3B2",
+  "farms": [
+    {
+      "pid": 0,
+      "label": "ASH/WETH LP",
+      "lpToken": "0x631fba154Ae40aAcCaa1659Aa6031190105FF38f",
+      "allocPoint": 100
+    },
+    {
+      "pid": 1,
+      "label": "CYBER/WETH LP",
+      "lpToken": "0x4E93763183A3eC492f01C06AE28805f0C1d0e6E7",
+      "allocPoint": 100
+    }
+  ]
 }

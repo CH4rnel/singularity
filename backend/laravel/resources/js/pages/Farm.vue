@@ -8,6 +8,7 @@ import {
     formatUnits,
     parseUnits,
 } from 'ethers';
+import { BrowserProvider as EthersBrowserProvider } from 'ethers';
 import {
     ExternalLink,
     Loader2,
@@ -30,33 +31,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWallet } from '@/composables/useWallet';
-import { CYBER_SOL_ADDRESS, WCYBER_ADDRESS } from '@/lib/cyberiaTokens';
+import { ensureEvmChain } from '@/lib/evmChains';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import {
-    CYBERIA_CHAIN_ID,
-    cyberiaReadRpcUrl,
-    ensureCyberiaNetwork,
-} from '@/lib/evmChains';
+    DEFAULT_FARM_CHAIN_ID,
+    displayFarmSymbol,
+    FARM_CHAINS,
+    farmChainById,
+} from '@/lib/farmChains';
+import type { FarmChainConfig } from '@/lib/farmChains';
 import { formatUsd } from '@/lib/tokenFormat';
 
 // Ritual MasterChef — Uniswap-V2-style farm minting ASH rewards. Pools are
 // enumerated on-chain (poolLength/poolInfo), so new pools the owner adds show
 // up here without a code change. Deployment: deployments/cyberia-ash-emission.json.
-const MASTERCHEF = '0xd540DEa828567160FFDe5e792ca359aDD1f6B03D';
-// Cyberia targets ~1s blocks, so daily emission ≈ rewardPerBlock × 86 400.
-const BLOCKS_PER_DAY = 86400n;
+// MasterChef, factory and pricing routes are per-chain (FARM_CHAINS); the
+// page reads pools from whichever farm chain the wallet is on.
+// Cyberia targets ~1s blocks; Robinhood (Orbit) tracks its parent at ~12s.
+// Emission per day ≈ rewardPerBlock × blocksPerDay for the active chain.
+const CYBERIA_BLOCKS_PER_DAY = 86400n;
+const ROBINHOOD_BLOCKS_PER_DAY = 7200n;
 // Live pending ticker: extrapolate accrual every second, re-anchor to the
 // on-chain pendingReward every 15 s so drift never accumulates.
 const PENDING_TICK_MS = 1000;
 const PENDING_REFRESH_MS = 15000;
 const DAYS_PER_YEAR = 365;
-const EXPLORER = 'https://explorer.cyberia.church';
-const DEX_URL = 'https://swap.cyberia.church';
 
-// Ritual factory — used to price tokens in CYBER via their WCYBER pools so we
-// can quote each pool's TVL and APR without an off-chain indexer.
-const FACTORY = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
-const USDC_ADDRESS = '0xdc25597B19799010047F17e9591EFE08EFd40077';
-const USDT_ADDRESS = '0x94845aF24a3E431593A2b941b2b31836dE45185D';
 const FACTORY_ABI = [
     'function getPair(address,address) view returns (address)',
 ];
@@ -107,7 +107,8 @@ type Pool = {
     walletBalance: bigint;
     allowance: bigint;
     totalStaked: bigint;
-    // Priced via WCYBER pools; null when a token has no CYBER route yet.
+    // TVL in the active chain's quote token (CYBER / ETH); null when a token
+    // has no pricing route on that chain yet.
     tvlCyber: number | null;
     tvlUsd: number | null;
     userValueUsd: number | null;
@@ -122,18 +123,34 @@ const authUser = computed(
         page.props.auth?.user as { wallet_address?: string | null } | undefined,
 );
 
-const readProvider = new JsonRpcProvider(
-    cyberiaReadRpcUrl(),
-    {
-        chainId: CYBERIA_CHAIN_ID,
-        name: 'cyberia',
-    },
-    {
-        // Cyberia RPC accepts at most 20 requests per JSON-RPC batch. Farm state
-        // fans out across every pool, so let ethers split larger reads for us.
-        batchMaxCount: 20,
-    },
+// The active farm chain follows the wallet's network when it is a known farm
+// chain; otherwise it stays on the default (Cyberia). Users can also click a
+// chain tab to browse another chain's farms read-only (staking prompts a
+// network switch).
+const activeChainId = ref<number>(DEFAULT_FARM_CHAIN_ID);
+const activeChain = computed<FarmChainConfig>(() =>
+    farmChainById(activeChainId.value),
 );
+const blocksPerDay = computed(() =>
+    activeChain.value.chainId === DEFAULT_FARM_CHAIN_ID
+        ? CYBERIA_BLOCKS_PER_DAY
+        : ROBINHOOD_BLOCKS_PER_DAY,
+);
+// Live active-pool count per chain, shown on the chain tabs.
+const chainPoolCounts = reactive<Record<number, number | null>>({});
+
+// Read-only provider + factory for the active chain, rebuilt on every switch
+// so the pricing helpers below always read the right chain.
+const makeReadProvider = (cfg: FarmChainConfig): JsonRpcProvider =>
+    new JsonRpcProvider(
+        cfg.readRpcUrl,
+        { chainId: cfg.chainId, name: cfg.evmChain.name },
+        // Cyberia's RPC accepts at most 20 calls per JSON-RPC batch; keep the
+        // same cap everywhere so ethers splits large fan-outs safely.
+        { batchMaxCount: 20 },
+    );
+
+let readProvider = makeReadProvider(farmChainById(DEFAULT_FARM_CHAIN_ID));
 
 const pools = ref<Pool[]>([]);
 const totalAllocPoint = ref<bigint>(0n);
@@ -259,7 +276,7 @@ const dailyEmission = (pool: Pool): bigint => {
     }
 
     return (
-        (rewardPerBlock.value * BLOCKS_PER_DAY * pool.allocPoint) /
+        (rewardPerBlock.value * blocksPerDay.value * pool.allocPoint) /
         totalAllocPoint.value
     );
 };
@@ -278,10 +295,11 @@ const symbolCache = new Map<string, Promise<string>>();
 const decimalsCache = new Map<string, Promise<number>>();
 const priceCache = new Map<string, Promise<number | null>>();
 
-const factory = new Contract(FACTORY, FACTORY_ABI, readProvider);
-
-const displaySymbol = (symbol: string): string =>
-    symbol.toUpperCase() === 'WCYBER' ? 'CYBER' : symbol;
+let factory = new Contract(
+    farmChainById(DEFAULT_FARM_CHAIN_ID).factory,
+    FACTORY_ABI,
+    readProvider,
+);
 
 const symbolOf = (addr: string): Promise<string> => {
     const key = addr.toLowerCase();
@@ -295,7 +313,7 @@ const symbolOf = (addr: string): Promise<string> => {
                 readProvider,
             ).symbol() as Promise<string>
         )
-            .then(displaySymbol)
+            .then(displayFarmSymbol)
             .catch(() => shortAddr(addr));
         symbolCache.set(key, p);
     }
@@ -356,12 +374,14 @@ const pairReserves = async (
     }
 };
 
-// Spot price of `addr` in native CYBER: direct WCYBER pool first, then one hop
-// through CYBER.sol. Dust pools (< 0.001 CYBER a side) are ignored as noise.
-const priceInCyber = (addr: string): Promise<number | null> => {
+// Spot price of `addr` in the active chain's quote token (CYBER via WCYBER, or
+// ETH via WETH): direct quote pool first, then one hop through the optional
+// bridge token (CYBER.sol on Cyberia). Dust pools (< 0.001 a side) are noise.
+const priceInQuote = (addr: string): Promise<number | null> => {
+    const { quoteToken, bridgeToken } = activeChain.value;
     const key = addr.toLowerCase();
 
-    if (key === WCYBER_ADDRESS.toLowerCase()) {
+    if (key === quoteToken.toLowerCase()) {
         return Promise.resolve(1);
     }
 
@@ -369,20 +389,24 @@ const priceInCyber = (addr: string): Promise<number | null> => {
 
     if (!p) {
         p = (async () => {
-            const direct = await pairReserves(addr, WCYBER_ADDRESS);
+            const direct = await pairReserves(addr, quoteToken);
 
             if (direct && direct.quote >= 0.001) {
                 return direct.quote / direct.token;
             }
 
-            if (key !== CYBER_SOL_ADDRESS.toLowerCase()) {
-                const [viaSol, solPrice] = await Promise.all([
-                    pairReserves(addr, CYBER_SOL_ADDRESS),
-                    priceInCyber(CYBER_SOL_ADDRESS),
+            if (bridgeToken && key !== bridgeToken.toLowerCase()) {
+                const [viaBridge, bridgePrice] = await Promise.all([
+                    pairReserves(addr, bridgeToken),
+                    priceInQuote(bridgeToken),
                 ]);
 
-                if (viaSol && solPrice !== null && viaSol.quote >= 0.001) {
-                    return (viaSol.quote / viaSol.token) * solPrice;
+                if (
+                    viaBridge &&
+                    bridgePrice !== null &&
+                    viaBridge.quote >= 0.001
+                ) {
+                    return (viaBridge.quote / viaBridge.token) * bridgePrice;
                 }
             }
 
@@ -394,11 +418,18 @@ const priceInCyber = (addr: string): Promise<number | null> => {
     return p;
 };
 
-const loadCyberUsdPrice = async (): Promise<number | null> => {
+// USD price of the quote token, averaged over the chain's stablecoin pools.
+// Returns null when the chain has no stable pool (Robinhood): TVL is then
+// shown in the quote token only, and APY still works (it is quote-denominated).
+const loadQuoteUsdPrice = async (): Promise<number | null> => {
+    const { quoteToken, stableTokens } = activeChain.value;
+
+    if (stableTokens.length === 0) {
+        return null;
+    }
+
     const markets = await Promise.all(
-        [USDC_ADDRESS, USDT_ADDRESS].map((stable) =>
-            pairReserves(WCYBER_ADDRESS, stable),
-        ),
+        stableTokens.map((stable) => pairReserves(quoteToken, stable)),
     );
     const priced = markets.filter(
         (market): market is { token: number; quote: number } => market !== null,
@@ -408,13 +439,13 @@ const loadCyberUsdPrice = async (): Promise<number | null> => {
         return null;
     }
 
-    const cyberLiquidity = priced.reduce(
+    const quoteLiquidity = priced.reduce(
         (sum, market) => sum + market.token,
         0,
     );
     const usdLiquidity = priced.reduce((sum, market) => sum + market.quote, 0);
 
-    return cyberLiquidity > 0 ? usdLiquidity / cyberLiquidity : null;
+    return quoteLiquidity > 0 ? usdLiquidity / quoteLiquidity : null;
 };
 
 // TVL of a pool's staked amount, in whole CYBER (null if unpriceable).
@@ -431,7 +462,7 @@ const poolTvlCyber = async (
     const stakedWhole = Number(formatUnits(totalStaked, decimals));
 
     if (!isPair) {
-        const price = await priceInCyber(lpToken);
+        const price = await priceInQuote(lpToken);
 
         return price === null ? null : stakedWhole * price;
     }
@@ -452,8 +483,8 @@ const poolTvlCyber = async (
         const [d0, d1, p0, p1] = await Promise.all([
             decimalsOf(t0),
             decimalsOf(t1),
-            priceInCyber(t0),
-            priceInCyber(t1),
+            priceInQuote(t0),
+            priceInQuote(t1),
         ]);
         const r0 = Number(formatUnits(reserves[0] as bigint, d0));
         const r1 = Number(formatUnits(reserves[1] as bigint, d1));
@@ -484,11 +515,21 @@ const poolTvlCyber = async (
 async function loadState(): Promise<void> {
     loading.value = true;
     error.value = null;
-    // Symbols/decimals are immutable; prices are not — refetch them per load.
+    pools.value = [];
+    // Caches key on bare token addresses, which mean different tokens on
+    // different chains — clear them all when (re)loading a chain.
     priceCache.clear();
+    symbolCache.clear();
+    decimalsCache.clear();
+
+    const cfg = activeChain.value;
+    // Rebuild the read provider + factory for the active chain so every helper
+    // below reads the right chain.
+    readProvider = makeReadProvider(cfg);
+    factory = new Contract(cfg.factory, FACTORY_ABI, readProvider);
 
     try {
-        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, readProvider);
+        const chef = new Contract(cfg.masterchef, MASTERCHEF_ABI, readProvider);
         const me = wallet.address.value;
 
         const [len, totAlloc, rpb, rewardAddr] = await Promise.all([
@@ -503,14 +544,14 @@ async function loadState(): Promise<void> {
         const [rSym, rDec, rewardPrice, cyberUsd] = await Promise.all([
             symbolOf(rewardAddr),
             decimalsOf(rewardAddr),
-            priceInCyber(rewardAddr),
-            loadCyberUsdPrice(),
+            priceInQuote(rewardAddr),
+            loadQuoteUsdPrice(),
         ]);
         rewardSymbol.value = rSym;
         rewardDecimals.value = rDec;
 
         const rewardPerYearWhole =
-            Number(formatUnits(rpb * BLOCKS_PER_DAY, rDec)) * DAYS_PER_YEAR;
+            Number(formatUnits(rpb * blocksPerDay.value, rDec)) * DAYS_PER_YEAR;
 
         // Read the small pool headers first so retired pools (allocPoint 0) can
         // be excluded before their token metadata and pricing are requested.
@@ -523,9 +564,10 @@ async function loadState(): Promise<void> {
         const activePoolHeaders = poolHeaders.filter(
             ({ info }) => (info.allocPoint as bigint) > 0n,
         );
+        chainPoolCounts[cfg.chainId] = activePoolHeaders.length;
 
         // Active pools load in parallel; ethers splits same-tick calls into
-        // batches of at most 20 for the Cyberia RPC.
+        // batches of at most 20 for the RPC.
         const loadPool = async (
             pid: number,
             info: (typeof activePoolHeaders)[number]['info'],
@@ -541,7 +583,7 @@ async function loadState(): Promise<void> {
                     pair.token0() as Promise<string>,
                     pair.token1() as Promise<string>,
                 ]).catch(() => null),
-                lp.balanceOf(MASTERCHEF) as Promise<bigint>,
+                lp.balanceOf(cfg.masterchef) as Promise<bigint>,
             ]);
 
             // Pair → "TOKEN0/TOKEN1 LP"; otherwise the token's own symbol.
@@ -571,7 +613,7 @@ async function loadState(): Promise<void> {
                     chef.userInfo(pid, me),
                     chef.pendingReward(pid, me) as Promise<bigint>,
                     lp.balanceOf(me) as Promise<bigint>,
-                    lp.allowance(me, MASTERCHEF) as Promise<bigint>,
+                    lp.allowance(me, cfg.masterchef) as Promise<bigint>,
                 ]);
                 staked = u.amount as bigint;
                 pending = p;
@@ -579,11 +621,13 @@ async function loadState(): Promise<void> {
                 allowance = allow;
             }
 
-            // User accrual per second (~1 block/s): the user's stake share of
-            // this pool's slice of the per-block emission.
+            // User accrual per second: the user's stake share of this pool's
+            // per-block emission, scaled to seconds by the chain's block rate
+            // (Cyberia ~1 block/s ⇒ ×1; Robinhood ~1 block/12s ⇒ ×1/12).
             const pendingPerSec =
                 staked > 0n && totAlloc > 0n && totalStaked > 0n
-                    ? (rpb * allocPoint * staked) / (totAlloc * totalStaked)
+                    ? (rpb * allocPoint * staked * blocksPerDay.value) /
+                      (totAlloc * totalStaked * 86400n)
                     : 0n;
 
             const tvlCyber = await poolTvlCyber(
@@ -666,7 +710,8 @@ async function refreshLive(): Promise<void> {
     }
 
     try {
-        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, readProvider);
+        const masterchef = activeChain.value.masterchef;
+        const chef = new Contract(masterchef, MASTERCHEF_ABI, readProvider);
         const updates = await Promise.all(
             pools.value.map(async (pool) => {
                 const lp = new Contract(pool.lpToken, ERC20_ABI, readProvider);
@@ -675,8 +720,8 @@ async function refreshLive(): Promise<void> {
                         chef.pendingReward(pool.pid, me) as Promise<bigint>,
                         chef.userInfo(pool.pid, me),
                         lp.balanceOf(me) as Promise<bigint>,
-                        lp.allowance(me, MASTERCHEF) as Promise<bigint>,
-                        lp.balanceOf(MASTERCHEF) as Promise<bigint>,
+                        lp.allowance(me, masterchef) as Promise<bigint>,
+                        lp.balanceOf(masterchef) as Promise<bigint>,
                     ]);
 
                 return {
@@ -702,8 +747,11 @@ async function refreshLive(): Promise<void> {
                 u.staked > 0n &&
                 totalAllocPoint.value > 0n &&
                 u.totalStaked > 0n
-                    ? (rewardPerBlock.value * u.pool.allocPoint * u.staked) /
-                      (totalAllocPoint.value * u.totalStaked)
+                    ? (rewardPerBlock.value *
+                          u.pool.allocPoint *
+                          u.staked *
+                          blocksPerDay.value) /
+                      (totalAllocPoint.value * u.totalStaked * 86400n)
                     : 0n;
         }
     } catch {
@@ -724,6 +772,21 @@ async function connectWallet(): Promise<void> {
     }
 }
 
+// Switch the wallet to the active farm chain (adding it when unknown) and hand
+// back a fresh signer-capable provider. Staking a farm on another chain first
+// prompts a network switch.
+async function ensureActiveNetwork(): Promise<EthersBrowserProvider> {
+    const eth = getSelectedEvmProvider();
+
+    if (!eth) {
+        throw new Error('EVM wallet not found');
+    }
+
+    await ensureEvmChain(eth, activeChain.value.evmChain);
+
+    return new EthersBrowserProvider(eth);
+}
+
 // Run an on-chain action with shared busy/status/error handling, then refresh.
 async function run(
     pid: number,
@@ -737,7 +800,7 @@ async function run(
     busy[key] = true;
 
     try {
-        const provider = await ensureCyberiaNetwork();
+        const provider = await ensureActiveNetwork();
         const signer = await provider.getSigner();
         await fn(signer);
         await loadState();
@@ -772,15 +835,17 @@ async function stake(pool: Pool): Promise<void> {
     }
 
     await run(pool.pid, 'stake', async (signer) => {
+        const masterchef = activeChain.value.masterchef;
+
         if (pool.allowance < amount) {
             status.value = `Approving ${pool.label}…`;
             const lp = new Contract(pool.lpToken, ERC20_ABI, signer);
-            const atx = await lp.approve(MASTERCHEF, MaxUint256);
+            const atx = await lp.approve(masterchef, MaxUint256);
             await atx.wait();
         }
 
         status.value = 'Confirm the stake in your wallet…';
-        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, signer);
+        const chef = new Contract(masterchef, MASTERCHEF_ABI, signer);
         const tx = await chef.deposit(pool.pid, amount);
         status.value = 'Waiting for block…';
         await tx.wait();
@@ -814,7 +879,11 @@ async function unstake(pool: Pool): Promise<void> {
 
     await run(pool.pid, 'unstake', async (signer) => {
         status.value = 'Confirm the unstake in your wallet…';
-        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, signer);
+        const chef = new Contract(
+            activeChain.value.masterchef,
+            MASTERCHEF_ABI,
+            signer,
+        );
         const tx = await chef.withdraw(pool.pid, amount);
         status.value = 'Waiting for block…';
         await tx.wait();
@@ -829,7 +898,11 @@ async function harvest(pool: Pool): Promise<void> {
 
     await run(pool.pid, 'harvest', async (signer) => {
         status.value = 'Confirm the harvest in your wallet…';
-        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, signer);
+        const chef = new Contract(
+            activeChain.value.masterchef,
+            MASTERCHEF_ABI,
+            signer,
+        );
         const tx = await chef.deposit(pool.pid, 0n);
         status.value = 'Waiting for block…';
         await tx.wait();
@@ -853,9 +926,13 @@ async function harvestAll(): Promise<void> {
     harvestAllBusy.value = true;
 
     try {
-        const provider = await ensureCyberiaNetwork();
+        const provider = await ensureActiveNetwork();
         const signer = await provider.getSigner();
-        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, signer);
+        const chef = new Contract(
+            activeChain.value.masterchef,
+            MASTERCHEF_ABI,
+            signer,
+        );
 
         for (const [index, pool] of targets.entries()) {
             status.value = `Harvesting ${index + 1}/${targets.length}: ${pool.label}…`;
@@ -885,7 +962,11 @@ async function emergencyUnstake(pool: Pool): Promise<void> {
 
     await run(pool.pid, 'emergency', async (signer) => {
         status.value = 'Confirm the emergency unstake…';
-        const chef = new Contract(MASTERCHEF, MASTERCHEF_ABI, signer);
+        const chef = new Contract(
+            activeChain.value.masterchef,
+            MASTERCHEF_ABI,
+            signer,
+        );
         const tx = await chef.emergencyWithdraw(pool.pid);
         status.value = 'Waiting for block…';
         await tx.wait();
@@ -905,7 +986,8 @@ const setUnstakeMax = (pool: Pool): void => {
         pool.staked > 0n ? formatUnits(pool.staked, pool.decimals) : '';
 };
 
-const explorerUrl = (addr: string): string => `${EXPLORER}/address/${addr}`;
+const explorerUrl = (addr: string): string =>
+    `${activeChain.value.explorer}/address/${addr}`;
 
 const fmtApy = (v: number): string =>
     v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(v >= 100 ? 0 : 1);
@@ -913,6 +995,43 @@ const fmtApy = (v: number): string =>
 const fmtCyber = (v: number): string =>
     v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2);
 const fmtUsdValue = (v: number): string => (v === 0 ? '$0.00' : formatUsd(v));
+
+// Lightweight active-pool count for a chain the page isn't currently showing,
+// so every chain tab can display a live farm count without a full load.
+async function fetchPoolCount(cfg: FarmChainConfig): Promise<void> {
+    if (cfg.chainId === activeChainId.value) {
+        return; // loadState fills this chain's count.
+    }
+
+    try {
+        const provider = makeReadProvider(cfg);
+        const chef = new Contract(cfg.masterchef, MASTERCHEF_ABI, provider);
+        const len = Number((await chef.poolLength()) as bigint);
+        const allocs = await Promise.all(
+            Array.from(
+                { length: len },
+                (_, pid) =>
+                    chef.poolInfo(pid) as Promise<{ allocPoint: bigint }>,
+            ),
+        );
+        chainPoolCounts[cfg.chainId] = allocs.filter(
+            (info) => (info.allocPoint as bigint) > 0n,
+        ).length;
+    } catch {
+        chainPoolCounts[cfg.chainId] = null;
+    }
+}
+
+// Switch which chain's farms are shown. Read-only — no wallet prompt; staking
+// later triggers the network switch.
+const selectChain = (chainId: number): void => {
+    if (chainId === activeChainId.value) {
+        return;
+    }
+
+    activeChainId.value = chainId;
+    void loadState();
+};
 
 let watchWalletChanges = false;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
@@ -937,7 +1056,15 @@ onMounted(async () => {
     // No shared layout here, so reconnect the saved wallet ourselves (mirrors
     // Bridge/Lending/CyberSolSwap) before the first read.
     await wallet.restore(authUser.value?.wallet_address ?? null);
+
+    // Start on the wallet's chain when it is a farm chain, else the default.
+    if (FARM_CHAINS.some((c) => c.chainId === wallet.chainId.value)) {
+        activeChainId.value = wallet.chainId.value as number;
+    }
+
     await loadState();
+    // Fill the other chains' tab counts in the background.
+    void Promise.all(FARM_CHAINS.map((c) => fetchPoolCount(c)));
     watchWalletChanges = true;
 });
 
@@ -952,6 +1079,21 @@ watch(
     () => {
         if (watchWalletChanges) {
             void loadState();
+        }
+    },
+);
+// Follow the wallet's network: switching it in the wallet re-points the page to
+// that chain's farms (when it is a farm chain).
+watch(
+    () => wallet.chainId.value,
+    (chainId) => {
+        if (
+            watchWalletChanges &&
+            chainId !== null &&
+            chainId !== activeChainId.value &&
+            FARM_CHAINS.some((c) => c.chainId === chainId)
+        ) {
+            selectChain(chainId);
         }
     },
 );
@@ -993,6 +1135,35 @@ watch(
                 </p>
             </section>
 
+            <!-- CHAIN SWITCHER: farms are per-chain; each tab shows a live count -->
+            <section class="flex flex-wrap items-center justify-center gap-2">
+                <button
+                    v-for="chain in FARM_CHAINS"
+                    :key="chain.chainId"
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium transition"
+                    :class="
+                        chain.chainId === activeChainId
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-card hover:border-foreground/30'
+                    "
+                    @click="selectChain(chain.chainId)"
+                >
+                    {{ chain.evmChain.name }}
+                    <span
+                        class="rounded-full px-1.5 py-0.5 font-mono text-[11px]"
+                        :class="
+                            chain.chainId === activeChainId
+                                ? 'bg-primary-foreground/20'
+                                : 'bg-muted text-muted-foreground'
+                        "
+                    >
+                        {{ chainPoolCounts[chain.chainId] ?? '…' }}
+                        farms
+                    </span>
+                </button>
+            </section>
+
             <!-- GLOBAL STATS -->
             <section
                 class="grid gap-4 rounded-2xl border border-border bg-card/50 p-5 sm:grid-cols-4"
@@ -1002,7 +1173,7 @@ watch(
                     <p class="font-mono text-lg">
                         {{
                             fmt(
-                                rewardPerBlock * BLOCKS_PER_DAY,
+                                rewardPerBlock * blocksPerDay,
                                 rewardDecimals,
                                 0,
                             )
@@ -1024,12 +1195,12 @@ watch(
                     class="flex items-center justify-between gap-2 sm:justify-end"
                 >
                     <a
-                        :href="explorerUrl(MASTERCHEF)"
+                        :href="explorerUrl(activeChain.masterchef)"
                         target="_blank"
                         rel="noopener noreferrer"
                         class="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground"
                     >
-                        {{ shortAddr(MASTERCHEF) }}
+                        {{ shortAddr(activeChain.masterchef) }}
                         <ExternalLink class="h-3 w-3" />
                     </a>
                     <button
@@ -1231,7 +1402,7 @@ watch(
                             <p
                                 v-else
                                 class="text-xs text-muted-foreground"
-                                title="No CYBER price route for this pool's tokens yet"
+                                :title="`No ${activeChain.quoteSymbol} price route for this pool's tokens yet`"
                             >
                                 APY —
                             </p>
@@ -1272,7 +1443,8 @@ watch(
                                 v-if="pool.tvlCyber !== null"
                                 class="font-mono text-[11px] text-muted-foreground"
                             >
-                                ≈ {{ fmtCyber(pool.tvlCyber) }} CYBER
+                                ≈ {{ fmtCyber(pool.tvlCyber) }}
+                                {{ activeChain.quoteSymbol }}
                             </p>
                             <p
                                 v-if="pool.tvlUsd !== null"
@@ -1445,13 +1617,22 @@ watch(
                             class="flex items-center justify-between pt-1 text-[11px]"
                         >
                             <a
-                                v-if="pool.isPair"
-                                :href="DEX_URL"
+                                v-if="pool.isPair && activeChain.dexUrl"
+                                :href="activeChain.dexUrl"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
                             >
                                 Get LP <ExternalLink class="h-3 w-3" />
+                            </a>
+                            <a
+                                v-else-if="pool.isPair"
+                                :href="explorerUrl(pool.lpToken)"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                            >
+                                LP token <ExternalLink class="h-3 w-3" />
                             </a>
                             <span v-else />
                             <button
