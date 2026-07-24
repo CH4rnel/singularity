@@ -289,6 +289,20 @@ const poolWeight = (pool: Pool): number => {
     return Number((pool.allocPoint * 10000n) / totalAllocPoint.value) / 100;
 };
 
+// Emission shown for THIS chain = the ASH/day going to its visible farms only.
+// On Cyberia the chef also mints the hidden EmissionChannel's share (exported
+// to satellite FundedFarms), so the raw chef rate would double-count against
+// what those satellites display. Summing dailyEmission over the visible pools
+// excludes the channel, so the per-chain figures add up to the 436/day budget.
+const visibleEmissionPerDay = computed(() =>
+    pools.value.reduce((sum, pool) => sum + dailyEmission(pool), 0n),
+);
+const visibleEmissionPerBlock = computed(() =>
+    blocksPerDay.value > 0n
+        ? visibleEmissionPerDay.value / blocksPerDay.value
+        : 0n,
+);
+
 // Metadata + price caches: pools share tokens (WCYBER, ASH, …), so each
 // address is fetched once per page load no matter how many pools use it.
 const symbolCache = new Map<string, Promise<string>>();
@@ -1184,20 +1198,14 @@ watch(
                 <div>
                     <p class="text-xs text-muted-foreground">Emission</p>
                     <p class="font-mono text-lg">
-                        {{
-                            fmt(
-                                rewardPerBlock * blocksPerDay,
-                                rewardDecimals,
-                                0,
-                            )
-                        }}
+                        {{ fmt(visibleEmissionPerDay, rewardDecimals, 0) }}
                         {{ rewardSymbol }}/day
                     </p>
                 </div>
                 <div>
                     <p class="text-xs text-muted-foreground">Per block</p>
                     <p class="font-mono text-lg">
-                        {{ fmt(rewardPerBlock, rewardDecimals, 6) }}
+                        {{ fmt(visibleEmissionPerBlock, rewardDecimals, 6) }}
                     </p>
                 </div>
                 <div>
