@@ -3,7 +3,7 @@
 The community Telegram bot for Cyberia: wallet linking and hourly TG/chat-token
 rewards, per-chat reward tokens, the CYBER.sol "whales" gate, and on-chain
 announcers (bridge, Ritual DEX swaps/liquidity, lending, CYBER.sol→CYBER
-conversions) plus a periodic activity digest and the market snapshot that backs
+conversions, solo-pool staking) plus a periodic activity digest and the market snapshot that backs
 the Laravel `/analytics` page. It also includes an optional Cyberia-scoped AI
 assistant backed by any OpenAI-compatible chat completions API.
 
@@ -23,7 +23,7 @@ bot/
   ai.py          Cyberia AI prompt, provider client, and message handlers
   cyberia_knowledge.md  operator-approved facts supplied to the model
   announcers.py  background loops (bridge/swap/liquidity/lending/convert/
-                 digest/snapshot/whale) + run_snapshot_once
+                 staking/digest/snapshot/whale) + run_snapshot_once
   app.py         build app, register handlers, schedule loops, main()
   __main__.py    `python -m bot`
 ```

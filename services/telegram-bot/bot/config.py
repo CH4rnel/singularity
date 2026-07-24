@@ -207,6 +207,17 @@ CYBERSOL_SWAP_ANNOUNCE_CHAT = os.environ.get("CYBERSOL_SWAP_ANNOUNCE_CHAT", BRID
 CYBERSOL_SWAP_POLL_SECONDS = int(os.environ.get("CYBERSOL_SWAP_POLL_SECONDS", str(SWAP_POLL_SECONDS)))
 CYBERSOL_SWAP_MAX_BLOCK_RANGE = int(os.environ.get("CYBERSOL_SWAP_MAX_BLOCK_RANGE", str(SWAP_MAX_BLOCK_RANGE)))
 
+# MasterChef solo-staking (/staking page) announcer. Deposit/Withdraw events on
+# LP-farm pids are skipped — the liquidity announcer covers those flows — so only
+# single-asset stake/unstake gets posted. Default is the live ASH MasterChef;
+# blank disables the loop.
+STAKING_MASTERCHEF = (os.environ.get(
+    "STAKING_MASTERCHEF", "0xd540DEa828567160FFDe5e792ca359aDD1f6B03D"
+) or "").strip()
+STAKING_ANNOUNCE_CHAT = os.environ.get("STAKING_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+STAKING_POLL_SECONDS = int(os.environ.get("STAKING_POLL_SECONDS", str(SWAP_POLL_SECONDS)))
+STAKING_MAX_BLOCK_RANGE = int(os.environ.get("STAKING_MAX_BLOCK_RANGE", str(SWAP_MAX_BLOCK_RANGE)))
+
 # --- Whales chat gate (CYBER.sol holders) -------------------------------------
 # Users prove ownership of a Solana wallet with a Phantom signature on the
 # Laravel-served page (/tg/cyber-sol); the backend writes the verified balance

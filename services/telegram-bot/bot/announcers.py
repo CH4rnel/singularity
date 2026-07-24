@@ -21,6 +21,8 @@ from bot.config import (
     LENDING_COMPTROLLER,
     CYBERSOL_SWAP_ADDRESS, CYBERSOL_SWAP_ANNOUNCE_CHAT,
     CYBERSOL_SWAP_POLL_SECONDS, CYBERSOL_SWAP_MAX_BLOCK_RANGE,
+    STAKING_MASTERCHEF, STAKING_ANNOUNCE_CHAT,
+    STAKING_POLL_SECONDS, STAKING_MAX_BLOCK_RANGE,
     MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD, RITUAL_V2_FACTORY,
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, DIGEST_RETENTION_DAYS,
     DIGEST_PRICE_CHANGE_MIN_BPS, DIGEST_PRICE_TOKEN_LIMIT,
@@ -747,6 +749,187 @@ async def cybersol_swap_announcer_loop(application: Application) -> None:
         except Exception as e:
             logger.error(f"cybersol_swap_announcer_loop: {e}")
         await asyncio.sleep(CYBERSOL_SWAP_POLL_SECONDS)
+# MasterChef staking events: Deposit/Withdraw/EmergencyWithdraw all carry
+# (address indexed user, uint256 indexed pid) with the amount as the only
+# data word.
+STAKING_DEPOSIT_TOPIC = _event_topic("Deposit(address,uint256,uint256)")
+STAKING_WITHDRAW_TOPIC = _event_topic("Withdraw(address,uint256,uint256)")
+STAKING_EMERGENCY_TOPIC = _event_topic("EmergencyWithdraw(address,uint256,uint256)")
+
+# topic0 → (verb, emoji, activity kind). Emergency exits forfeit pending
+# rewards, so they get their own verb but count as unstakes in the digest.
+_STAKING_ACTION = {
+    STAKING_DEPOSIT_TOPIC.lower():   ("staked", "🔒", "stake"),
+    STAKING_WITHDRAW_TOPIC.lower():  ("unstaked", "🔓", "unstake"),
+    STAKING_EMERGENCY_TOPIC.lower(): ("emergency-unstaked", "🚨", "unstake"),
+}
+
+MASTERCHEF_POOL_ABI = [
+    {"inputs": [{"name": "", "type": "uint256"}], "name": "poolInfo",
+     "outputs": [
+         {"name": "lpToken", "type": "address"},
+         {"name": "allocPoint", "type": "uint256"},
+         {"name": "lastRewardBlock", "type": "uint256"},
+         {"name": "accRewardPerShare", "type": "uint256"},
+     ],
+     "stateMutability": "view", "type": "function"},
+]
+_TOKEN0_PROBE_ABI = [
+    {"inputs": [], "name": "token0",
+     "outputs": [{"name": "", "type": "address"}],
+     "stateMutability": "view", "type": "function"},
+]
+
+# pid → staked token address for solo pools, None for LP-farm pids. A pid's
+# lpToken never changes in MasterChef, so entries live for the process.
+_staking_pool_cache: dict[int, str | None] = {}
+
+
+def _get_solo_pool_token(w3: Web3, pid: int) -> str | None:
+    """The staked ERC-20 of a solo pool, or None when `pid` is an LP farm.
+    Mirrors the /staking page: a single-asset stake token has no token0()."""
+    if pid in _staking_pool_cache:
+        return _staking_pool_cache[pid]
+    chef = w3.eth.contract(
+        address=Web3.to_checksum_address(STAKING_MASTERCHEF), abi=MASTERCHEF_POOL_ABI
+    )
+    lp_token = chef.functions.poolInfo(pid).call()[0]
+    probe = w3.eth.contract(
+        address=Web3.to_checksum_address(lp_token), abi=_TOKEN0_PROBE_ABI
+    )
+    try:
+        probe.functions.token0().call()
+        result = None  # a V2 pair → LP farm, announced by the liquidity loop
+    except Exception:
+        result = lp_token
+    _staking_pool_cache[pid] = result
+    return result
+async def _announce_staking_tick(bot) -> None:
+    """Scan MasterChef Deposit/Withdraw/EmergencyWithdraw events on solo
+    (single-asset) pools and announce each stake/unstake. LP-farm pids and
+    zero-amount deposits/withdrawals (the harvest idiom) are skipped. Cursor
+    handling mirrors the lending announcer."""
+    if not STAKING_MASTERCHEF:
+        return
+
+    w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    try:
+        latest = w3.eth.block_number
+    except Exception as e:
+        logger.error(f"staking_announcer: block_number failed: {e}")
+        return
+
+    cursor = _get_block_cursor("last_announced_staking_cursor")
+    if cursor is None:
+        _set_block_cursor("last_announced_staking_cursor", latest, 10**9)
+        logger.info(f"staking_announcer: bootstrapped cursor to head block={latest}")
+        return
+    cur_block, cur_idx = cursor
+    if cur_block > latest:
+        return
+    end = min(cur_block + STAKING_MAX_BLOCK_RANGE - 1, latest)
+
+    try:
+        logs = w3.eth.get_logs({
+            "fromBlock": cur_block,
+            "toBlock": end,
+            "address": Web3.to_checksum_address(STAKING_MASTERCHEF),
+            "topics": [[STAKING_DEPOSIT_TOPIC, STAKING_WITHDRAW_TOPIC, STAKING_EMERGENCY_TOPIC]],
+        })
+    except Exception as e:
+        logger.error(f"staking_announcer: get_logs {cur_block}..{end}: {e}")
+        return
+
+    for log in sorted(logs, key=lambda l: (int(l["blockNumber"]), int(l["logIndex"]))):
+        blk = int(log["blockNumber"])
+        idx = int(log["logIndex"])
+        if (blk, idx) <= (cur_block, cur_idx):
+            continue
+
+        try:
+            topic0 = "0x" + _hex_no_prefix(log["topics"][0]).lower()
+            action = _STAKING_ACTION.get(topic0)
+            if action is None:
+                _set_block_cursor("last_announced_staking_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+            verb, emoji, kind = action
+
+            pid = int(_hex_no_prefix(log["topics"][2]), 16)
+            token = _get_solo_pool_token(w3, pid)
+            amount = _decode_data_words(log["data"], 1)[0]
+            # deposit(pid, 0) / withdraw(pid, 0) is how harvests are made —
+            # nobody entered or left the pool.
+            if token is None or amount == 0:
+                _set_block_cursor("last_announced_staking_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+
+            sym, dec = _get_token_meta(w3, token)
+            user = _decode_topic_address(log["topics"][1])
+
+            price = _get_token_usd_price(w3, token)
+            usd = (amount / 10**dec) * price if price is not None else None
+
+            tx_hash = "0x" + _hex_no_prefix(log["transactionHash"]).lower()
+            event_kwargs = dict(
+                kind=kind, usd=usd,
+                sym_in=sym, amt_in=amount / 10**dec,
+                user_addr=user, tx_hash=tx_hash, block=blk,
+            )
+
+            threshold = max(MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD)
+            if usd is not None and usd < threshold:
+                _record_activity(**event_kwargs)
+                logger.info(
+                    f"staking_announcer: digest-only block={blk} idx={idx} "
+                    f"usd={usd:.4f} < {threshold}"
+                )
+                _set_block_cursor("last_announced_staking_cursor", blk, idx)
+                cur_block, cur_idx = blk, idx
+                continue
+
+            text_lines = [
+                f"{emoji} Staking: {verb} {_format_token_amount(amount, dec)} {sym}",
+            ]
+            if usd is not None:
+                text_lines.append(f"Value: {_fmt_usd(usd)}")
+            text_lines += [
+                f"User: {_short_addr(user)}",
+                f"Tx: {EXPLORER_URL}/tx/{tx_hash}",
+            ]
+        except Exception as e:
+            logger.error(f"staking_announcer: decode failed block={blk} idx={idx}: {e}")
+            _set_block_cursor("last_announced_staking_cursor", blk, idx)
+            cur_block, cur_idx = blk, idx
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=STAKING_ANNOUNCE_CHAT,
+                text="\n".join(text_lines),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"staking_announcer: send failed block={blk} idx={idx}: {e}")
+            return
+
+        _record_activity(**event_kwargs)
+        _set_block_cursor("last_announced_staking_cursor", blk, idx)
+        cur_block, cur_idx = blk, idx
+        logger.info(f"staking_announcer: posted {verb} block={blk} idx={idx} tx={tx_hash}")
+
+    if end > cur_block:
+        _set_block_cursor("last_announced_staking_cursor", end, 10**9)
+
+
+async def staking_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_staking_tick(application.bot)
+        except Exception as e:
+            logger.error(f"staking_announcer_loop: {e}")
+        await asyncio.sleep(STAKING_POLL_SECONDS)
 _KV_LAST_DIGEST_AT = "last_digest_at"
 _KV_PREV_CYBER_PRICE = "digest_prev_cyber_price"
 _SQLITE_TS = "%Y-%m-%d %H:%M:%S"
@@ -894,6 +1077,18 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
             """),
             {"s": since},
         ).fetchall()
+        staking = {
+            kind: (cnt, vol)
+            for kind, cnt, vol in conn.execute(
+                text("""
+                    SELECT kind, COUNT(*), COALESCE(SUM(usd), 0)
+                    FROM activity_events
+                    WHERE kind IN ('stake', 'unstake') AND created_at >= :s
+                    GROUP BY kind
+                """),
+                {"s": since},
+            ).fetchall()
+        }
         conversions = conn.execute(
             text("""
                 SELECT COUNT(*), COALESCE(SUM(usd), 0),
@@ -909,6 +1104,7 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
         + sum(c for c, _v in liq.values())
         + sum(row[2] for row in bridges)
         + sum(row[1] for row in lending)
+        + sum(c for c, _v in staking.values())
         + (conversions[0] if conversions else 0)
     )
     if total == 0:
@@ -955,6 +1151,14 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
             for kind, cnt, vol in lending
         ]
         lines.append("🏦 Lending: " + ", ".join(parts))
+
+    if staking:
+        stake_c, stake_v = staking.get("stake", (0, 0))
+        unstake_c, unstake_v = staking.get("unstake", (0, 0))
+        lines.append(
+            f"🔒 Staking: +{_fmt_usd(stake_v)} staked ({stake_c}) / "
+            f"-{_fmt_usd(unstake_v)} unstaked ({unstake_c})"
+        )
 
     if conversions and conversions[0]:
         c_cnt, c_usd, c_in, c_out = conversions
