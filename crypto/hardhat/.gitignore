@@ -22,3 +22,6 @@
 .env
 .dca.env
 .dca-wallet.json
+
+# Canonical UniswapV2 creation bytecodes (regenerate: npx tsx scripts/fetch-uniswap-bytecodes.ts)
+/bytecodes

@@ -1,0 +1,15 @@
+{
+  "chainId": 4663,
+  "chainName": "Robinhood Chain",
+  "rpc": "https://rpc.mainnet.chain.robinhood.com",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "WETH": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+  "UniswapV2Factory": "0xd199e6ae74b992f017f8940b26fa18a7dd30ee86",
+  "UniswapV2Router02": "0xb0ac30907c04b61f1482e62ea66ef4562a690917",
+  "INIT_CODE_HASH": "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f",
+  "ASH": "0x176c70dd7cf17056596d8c4c7e2b1f2537df978f",
+  "MasterChef": "0x78272aad03e4b9d7a9134e874ba6d419b534f6c9",
+  "rewardPerBlock": "1000000000000000000",
+  "ashWethPair": "0x631fba154Ae40aAcCaa1659Aa6031190105FF38f",
+  "timestamp": "2026-07-24T17:12:30.220Z"
+}
