@@ -8,6 +8,7 @@ import {
     formatUnits,
     parseUnits,
 } from 'ethers';
+import { BrowserProvider as EthersBrowserProvider } from 'ethers';
 import {
     AreaSeries,
     ColorType,
@@ -44,24 +45,25 @@ import {
     CYBER_SOL_ADDRESS,
     KNOWN_TOKENS,
     USDC_ADDRESS,
-    WCYBER_ADDRESS,
     filterJunkPools,
 } from '@/lib/cyberiaTokens';
 import type { AprSnapshot } from '@/lib/dexApr';
 import { aprByPair, formatApr } from '@/lib/dexApr';
+import { ensureEvmChain } from '@/lib/evmChains';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import {
-    CYBERIA_CHAIN_ID,
-    cyberiaReadRpcUrl,
-    ensureCyberiaNetwork,
-} from '@/lib/evmChains';
+    DEFAULT_LIQUIDITY_CHAIN_ID as DEFAULT_DEX_CHAIN_ID,
+    LIQUIDITY_CHAINS as DEX_CHAINS,
+    liquidityChainById as dexChainById,
+} from '@/lib/liquidityChains';
+import type { LiquidityChainConfig as DexChainConfig } from '@/lib/liquidityChains';
 import { track } from '@/lib/track';
 
-const EXPLORER = 'https://explorer.cyberia.church';
-
-// Ritual DEX (QuickSwap V2 fork). deployments/cyberia-quickswap.json.
-const ROUTER = '0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62';
-const WCYBER = WCYBER_ADDRESS;
-// Sentinel for native CYBER in the token pickers (maps to WCYBER on-chain).
+// Router/factory/wrapped-native/pools are per-chain (DEX_CHAINS); the page
+// reads, quotes and swaps entirely within the wallet's chain, so Robinhood
+// swaps never touch Cyberia liquidity.
+// Sentinel for the native coin in the token pickers (maps to the chain's
+// wrapped-native token on-chain).
 const NATIVE = 'NATIVE';
 const MARKET_HISTORY_DAYS = 7;
 const MARKET_HISTORY_MS = MARKET_HISTORY_DAYS * 24 * 60 * 60 * 1000;
@@ -77,8 +79,7 @@ const ROUTER_ABI = [
     'function swapTokensForExactETH(uint amountOut,uint amountInMax,address[] path,address to,uint deadline) returns (uint[])',
 ];
 
-// Ritual factory — the live pair list backs routing when the indexer table lags.
-const FACTORY = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
+// The live factory pair list backs routing when the indexer table lags.
 const FACTORY_ABI = [
     'function allPairsLength() view returns (uint256)',
     'function allPairs(uint256) view returns (address)',
@@ -156,19 +157,44 @@ const error = ref<string | null>(null);
 const busy = ref(false);
 const slippage = ref('0.5');
 
-const readProvider = new JsonRpcProvider(
-    cyberiaReadRpcUrl(),
-    {
-        chainId: CYBERIA_CHAIN_ID,
-        name: 'cyberia',
-    },
-    {
-        // Cyberia RPC accepts at most 20 requests per JSON-RPC batch; path
-        // quoting and pair enumeration fan out well past that.
-        batchMaxCount: 20,
-    },
+// The active DEX chain follows the wallet's network when it is a known DEX
+// chain, else the default (Cyberia). A chain tab lets users browse another
+// chain's markets read-only; swapping prompts a network switch.
+const activeChainId = ref<number>(DEFAULT_DEX_CHAIN_ID);
+const activeChain = computed<DexChainConfig>(() =>
+    dexChainById(activeChainId.value),
 );
-const readRouter = new Contract(ROUTER, ROUTER_ABI, readProvider);
+
+const makeReadProvider = (cfg: DexChainConfig): JsonRpcProvider =>
+    new JsonRpcProvider(
+        cfg.readRpcUrl,
+        { chainId: cfg.chainId, name: cfg.evmChain.name },
+        // Cyberia's RPC caps JSON-RPC batches at 20; path quoting and pair
+        // enumeration fan out well past that, so let ethers split reads.
+        { batchMaxCount: 20 },
+    );
+
+let readProvider = makeReadProvider(dexChainById(DEFAULT_DEX_CHAIN_ID));
+let readRouter = new Contract(
+    dexChainById(DEFAULT_DEX_CHAIN_ID).router,
+    ROUTER_ABI,
+    readProvider,
+);
+
+// Switch the wallet to the active DEX chain (adding it when unknown) and hand
+// back a signer-capable provider. Swapping on another chain first prompts a
+// network switch.
+async function ensureActiveNetwork(): Promise<EthersBrowserProvider> {
+    const eth = getSelectedEvmProvider();
+
+    if (!eth) {
+        throw new Error('EVM wallet not found');
+    }
+
+    await ensureEvmChain(eth, activeChain.value.evmChain);
+
+    return new EthersBrowserProvider(eth);
+}
 
 const shortAddr = (a: string): string =>
     a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '';
@@ -178,7 +204,8 @@ const slippageBps = computed(() => {
     return Number.isFinite(v) && v >= 0 && v < 5000 ? v : 50;
 });
 const deadline = (): bigint => BigInt(Math.floor(Date.now() / 1000) + 1200);
-const resolveAddr = (a: string): string => (a === NATIVE ? WCYBER : a);
+const resolveAddr = (a: string): string =>
+    a === NATIVE ? activeChain.value.wrappedNative : a;
 
 const cleanPools = computed(() => filterJunkPools(props.pools ?? []));
 // Direct-pair address resolved on-chain when dex_pools lags (display only).
@@ -621,24 +648,39 @@ const probeLivePrice = async (): Promise<void> => {
 const customTokens = ref<Token[]>([]);
 const tokens = computed<Token[]>(() => {
     const map = new Map<string, Token>();
-    map.set(NATIVE, { address: NATIVE, symbol: 'CYBER', native: true });
+    const cfg = activeChain.value;
+    map.set(NATIVE, {
+        address: NATIVE,
+        symbol: cfg.nativeSymbol,
+        native: true,
+    });
 
-    for (const t of KNOWN_TOKENS) {
-        map.set(t.address.toLowerCase(), {
-            address: t.address,
-            symbol: t.symbol,
-        });
-    }
+    if (cfg.serverPools) {
+        for (const t of KNOWN_TOKENS) {
+            map.set(t.address.toLowerCase(), {
+                address: t.address,
+                symbol: t.symbol,
+            });
+        }
 
-    for (const p of cleanPools.value) {
-        map.set(p.token0.toLowerCase(), {
-            address: p.token0,
-            symbol: p.symbol0,
-        });
-        map.set(p.token1.toLowerCase(), {
-            address: p.token1,
-            symbol: p.symbol1,
-        });
+        for (const p of cleanPools.value) {
+            map.set(p.token0.toLowerCase(), {
+                address: p.token0,
+                symbol: p.symbol0,
+            });
+            map.set(p.token1.toLowerCase(), {
+                address: p.token1,
+                symbol: p.symbol1,
+            });
+        }
+    } else {
+        // Satellite chains: curated bridged assets only (no server indexer).
+        for (const t of cfg.tokens) {
+            map.set(t.address.toLowerCase(), {
+                address: t.address,
+                symbol: t.symbol,
+            });
+        }
     }
 
     for (const t of customTokens.value) {
@@ -657,7 +699,7 @@ const tokenMeta = async (
     addr: string,
 ): Promise<{ symbol: string; decimals: number }> => {
     if (addr === NATIVE) {
-        return { symbol: 'CYBER', decimals: 18 };
+        return { symbol: activeChain.value.nativeSymbol, decimals: 18 };
     }
 
     const key = addr.toLowerCase();
@@ -700,7 +742,7 @@ const resolveLivePairAddress = async (): Promise<void> => {
 
     try {
         const factory = new Contract(
-            FACTORY,
+            activeChain.value.factory,
             [
                 'function getPair(address tokenA, address tokenB) view returns (address)',
             ],
@@ -826,13 +868,19 @@ const impactClass = computed(() => {
 });
 
 // --- routing: candidate paths over the known pool graph --------------------
-// Fallback hubs when the pool table has no route (or is empty).
-const HUBS = [
-    WCYBER,
-    CYBER_SOL_ADDRESS,
-    USDC_ADDRESS,
-    '0x94845aF24a3E431593A2b941b2b31836dE45185D', // USDT
-];
+// Fallback routing hubs when the pool graph has no direct route. Per-chain:
+// Cyberia routes through WCYBER/CYBER.sol/stables; satellites through their
+// wrapped native only (the shared hub of their curated pools).
+const HUBS = computed<string[]>(() =>
+    activeChain.value.serverPools
+        ? [
+              activeChain.value.wrappedNative,
+              CYBER_SOL_ADDRESS,
+              USDC_ADDRESS,
+              '0x94845aF24a3E431593A2b941b2b31836dE45185D', // USDT
+          ]
+        : [activeChain.value.wrappedNative],
+);
 
 // The dex_pools table is fed by an off-chain indexer and can lag the chain by
 // weeks (freshly launched pools missing → routes silently ignored). Merge in
@@ -841,7 +889,11 @@ const chainEdges = ref<[string, string][]>([]);
 
 const loadChainEdges = async (): Promise<void> => {
     try {
-        const factory = new Contract(FACTORY, FACTORY_ABI, readProvider);
+        const factory = new Contract(
+            activeChain.value.factory,
+            FACTORY_ABI,
+            readProvider,
+        );
         const len = Number(await factory.allPairsLength());
         const addrs = (await Promise.all(
             Array.from({ length: len }, (_, i) => factory.allPairs(i)),
@@ -875,9 +927,13 @@ const adjacency = computed(() => {
         adj.get(ka)!.add(kb);
     };
 
-    for (const p of cleanPools.value) {
-        link(p.token0, p.token1);
-        link(p.token1, p.token0);
+    // Cyberia's server pool snapshot seeds the graph; satellites rely on the
+    // live factory edges below (their pools aren't in the Cyberia indexer).
+    if (activeChain.value.serverPools) {
+        for (const p of cleanPools.value) {
+            link(p.token0, p.token1);
+            link(p.token1, p.token0);
+        }
     }
 
     for (const [t0, t1] of chainEdges.value) {
@@ -926,7 +982,7 @@ const candidatePaths = (from: string, to: string): string[][] => {
     }
 
     // Hub fallbacks (dedup below) cover an empty/stale pool table.
-    for (const hub of HUBS) {
+    for (const hub of HUBS.value) {
         const h = hub.toLowerCase();
 
         if (h !== a && h !== b) {
@@ -1267,14 +1323,17 @@ const approveIfNeeded = async (
 ): Promise<void> => {
     const me = await signer.getAddress();
     const c = new Contract(token, ERC20_ABI, signer);
-    const allowance = (await c.allowance(me, ROUTER)) as bigint;
+    const allowance = (await c.allowance(
+        me,
+        activeChain.value.router,
+    )) as bigint;
 
     if (allowance >= amount) {
         return;
     }
 
     status.value = `Approving ${symbolOf(token)}…`;
-    const tx = await c.approve(ROUTER, MaxUint256);
+    const tx = await c.approve(activeChain.value.router, MaxUint256);
     await tx.wait();
 };
 
@@ -1299,10 +1358,14 @@ const doSwap = async (): Promise<void> => {
     busy.value = true;
 
     try {
-        const provider = await ensureCyberiaNetwork();
+        const provider = await ensureActiveNetwork();
         const signer = await provider.getSigner();
         const to = await signer.getAddress();
-        const router = new Contract(ROUTER, ROUTER_ABI, signer);
+        const router = new Contract(
+            activeChain.value.router,
+            ROUTER_ABI,
+            signer,
+        );
         const exactIn = mode.value === 'in';
         const minOut = minReceived.value;
         const maxIn = maxSpent.value;
@@ -1419,9 +1482,83 @@ const addCustomToken = async (): Promise<void> => {
     }
 };
 
+// Default output token for a chain: Cyberia opens on USDC; satellites open on
+// their first curated bridged asset (their chart is off, so any pair is fine).
+const defaultTokenOut = (cfg: DexChainConfig): string =>
+    cfg.serverPools ? USDC_ADDRESS : (cfg.tokens[0]?.address ?? '');
+
+// Switch which chain's DEX the page shows. Read-only — no wallet prompt;
+// swapping later triggers the network switch. Rebuilds providers and resets
+// all chain-specific state (addresses, markets and the chart differ per chain).
+const switchChain = (chainId: number): void => {
+    if (chainId === activeChainId.value) {
+        return;
+    }
+
+    activeChainId.value = chainId;
+    readProvider = makeReadProvider(activeChain.value);
+    readRouter = new Contract(
+        activeChain.value.router,
+        ROUTER_ABI,
+        readProvider,
+    );
+    metaCache.clear();
+    customTokens.value = [];
+    chainEdges.value = [];
+    livePriceHistory.value = [];
+    livePairAddress.value = null;
+    tokenIn.value = NATIVE;
+    tokenOut.value = defaultTokenOut(activeChain.value);
+    amountIn.value = '';
+    quote.value = null;
+
+    // The price chart is Cyberia-only (server history); satellites hide it.
+    if (activeChain.value.serverPools) {
+        void nextTick().then(() => createMarketChart());
+    } else {
+        destroyMarketChart();
+    }
+
+    void loadChainEdges();
+    refreshBalances();
+    void refreshQuote();
+};
+
+// Follow the wallet's network: switching it re-points the page to that chain's
+// DEX (when it is a known DEX chain).
+watch(
+    () => wallet.chainId.value,
+    (chainId) => {
+        if (
+            chainId !== null &&
+            chainId !== activeChainId.value &&
+            DEX_CHAINS.some((c) => c.chainId === chainId)
+        ) {
+            switchChain(chainId);
+        }
+    },
+);
+
 onMounted(async () => {
+    // Start on the wallet's chain when it is a DEX chain, else the default.
+    if (DEX_CHAINS.some((c) => c.chainId === wallet.chainId.value)) {
+        activeChainId.value = wallet.chainId.value as number;
+        readProvider = makeReadProvider(activeChain.value);
+        readRouter = new Contract(
+            activeChain.value.router,
+            ROUTER_ABI,
+            readProvider,
+        );
+        tokenOut.value = defaultTokenOut(activeChain.value);
+    }
+
     await nextTick();
-    createMarketChart();
+
+    // The market chart runs on Cyberia only (server price history).
+    if (activeChain.value.serverPools) {
+        createMarketChart();
+    }
+
     void loadChainEdges();
 
     balanceTimer = setInterval(() => {
@@ -1430,7 +1567,7 @@ onMounted(async () => {
         }
     }, BALANCE_POLL_MS);
     chartTimer = setInterval(() => {
-        if (!document.hidden) {
+        if (!document.hidden && activeChain.value.serverPools) {
             void probeLivePrice();
         }
     }, CHART_POLL_MS);
@@ -1452,24 +1589,52 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <Head title="Cyberia Swap" />
+    <Head :title="`Swap · ${activeChain.evmChain.name}`" />
 
     <div class="mx-auto max-w-5xl px-4 py-6">
         <header class="mb-4">
             <h1 class="text-2xl font-bold">Swap</h1>
             <p class="text-sm text-muted-foreground">
-                Trade tokens on Ritual (QuickSwap V2 on Cyberia). Native CYBER
-                is supported directly.
+                Trade tokens on Ritual (Uniswap V2) on
+                {{ activeChain.evmChain.name }}. Native
+                {{ activeChain.nativeSymbol }} is supported directly.
             </p>
         </header>
 
-        <div class="mb-4 flex items-center justify-end gap-2 text-sm">
-            <span class="text-muted-foreground">Slippage %</span>
-            <Input v-model="slippage" class="w-16" />
+        <!-- CHAIN SWITCHER: markets/balances are per-chain and never mix -->
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+            <button
+                v-for="chain in DEX_CHAINS"
+                :key="chain.chainId"
+                type="button"
+                class="rounded-full border px-4 py-1.5 text-sm font-medium transition"
+                :class="
+                    chain.chainId === activeChainId
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card hover:border-foreground/30'
+                "
+                @click="switchChain(chain.chainId)"
+            >
+                {{ chain.evmChain.name }}
+            </button>
+            <div class="ml-auto flex items-center gap-2 text-sm">
+                <span class="text-muted-foreground">Slippage %</span>
+                <Input v-model="slippage" class="w-16" />
+            </div>
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-[1fr_28rem] lg:items-start">
-            <section class="space-y-4 rounded-lg border p-4">
+        <div
+            class="grid gap-4 lg:items-start"
+            :class="
+                activeChain.serverPools
+                    ? 'lg:grid-cols-[1fr_28rem]'
+                    : 'max-w-md'
+            "
+        >
+            <section
+                v-if="activeChain.serverPools"
+                class="space-y-4 rounded-lg border p-4"
+            >
                 <div class="flex items-start justify-between gap-3">
                     <div>
                         <h2 class="font-semibold">Ritual market</h2>
@@ -1845,18 +2010,12 @@ onBeforeUnmount(() => {
         <p class="mt-4 text-xs text-muted-foreground">
             Router
             <a
-                :href="`${EXPLORER}/address/${ROUTER}`"
+                :href="`${activeChain.explorer}/address/${activeChain.router}`"
                 target="_blank"
                 class="underline"
-                >{{ shortAddr(ROUTER) }}</a
+                >{{ shortAddr(activeChain.router) }}</a
             >
-            · advanced routing on
-            <a
-                href="https://swap.cyberia.church/"
-                target="_blank"
-                class="underline"
-                >Ritual DEX</a
-            >
+            on {{ activeChain.evmChain.name }}
         </p>
     </div>
 </template>

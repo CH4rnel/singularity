@@ -10,9 +10,32 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.5.0'),
+    'current_version' => env('APP_VERSION', 'v0.6.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.6.0',
+            'date' => '2026-07-25',
+            'title' => 'Robinhood Chain & multichain DEX',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Ritual DEX on Robinhood Chain: swap and provide liquidity in ETH, CYBER and ASH, with an ETH/CYBER market.',
+                        'Farming, liquidity and swaps are now multichain — the page follows your wallet\'s network, and Robinhood markets, balances and pools stay entirely separate from Cyberia\'s.',
+                        'Bridge native CYBER between Cyberia and Robinhood Chain.',
+                        'Single-token staking page (/staking) for CYBER, Hatcher and Orbserv solo pools.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'ASH farm rewards are unified across chains from one emission source on Cyberia (capped at 436/day); Robinhood farms are paid in bridged ASH, so the token supply never fragments.',
+                        'The Telegram bot announces solo-pool stakes and links each on-chain event to its own chain\'s explorer.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.5.0',
             'date' => '2026-07-19',
