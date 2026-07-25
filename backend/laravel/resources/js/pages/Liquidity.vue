@@ -8,6 +8,7 @@ import {
     formatUnits,
     parseUnits,
 } from 'ethers';
+import { BrowserProvider as EthersBrowserProvider } from 'ethers';
 import { Loader2 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
 import TokenIcon from '@/components/TokenIcon.vue';
@@ -24,21 +25,22 @@ import { useWallet } from '@/composables/useWallet';
 import { KNOWN_TOKENS, filterJunkPools } from '@/lib/cyberiaTokens';
 import type { AprSnapshot } from '@/lib/dexApr';
 import { aprByPair, formatApr } from '@/lib/dexApr';
+import { ensureEvmChain } from '@/lib/evmChains';
+import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import {
-    CYBERIA_CHAIN_ID,
-    cyberiaReadRpcUrl,
-    ensureCyberiaNetwork,
-} from '@/lib/evmChains';
+    DEFAULT_LIQUIDITY_CHAIN_ID,
+    LIQUIDITY_CHAINS,
+    liquidityChainById,
+} from '@/lib/liquidityChains';
+import type { LiquidityChainConfig } from '@/lib/liquidityChains';
 import { scanLiquidityBalances } from '@/lib/liquidityPositions';
 import { track } from '@/lib/track';
 
-const EXPLORER = 'https://explorer.cyberia.church';
-
-// Ritual DEX (QuickSwap V2 fork). deployments/cyberia-quickswap.json.
-const ROUTER = '0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62';
-const FACTORY = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
-const WCYBER = '0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9';
-// Sentinel for native CYBER in the token pickers (maps to WCYBER on-chain).
+// Router/factory/wrapped-native/pools are per-chain (LIQUIDITY_CHAINS); the
+// page reads and trades entirely within the wallet's chain, so Robinhood
+// liquidity never mixes with Cyberia's.
+// Sentinel for the native coin in the token pickers (maps to the chain's
+// wrapped-native token on-chain).
 const NATIVE = 'NATIVE';
 
 const ROUTER_ABI = [
@@ -107,10 +109,23 @@ const status = ref<string | null>(null);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
-const readProvider = new JsonRpcProvider(cyberiaReadRpcUrl(), {
-    chainId: CYBERIA_CHAIN_ID,
-    name: 'cyberia',
-});
+// The active DEX chain follows the wallet's network when it is a known
+// liquidity chain, else the default (Cyberia). A chain tab lets users browse
+// another chain's pools read-only; adding/removing prompts a network switch.
+const activeChainId = ref<number>(DEFAULT_LIQUIDITY_CHAIN_ID);
+const activeChain = computed<LiquidityChainConfig>(() =>
+    liquidityChainById(activeChainId.value),
+);
+
+const makeReadProvider = (cfg: LiquidityChainConfig): JsonRpcProvider =>
+    new JsonRpcProvider(cfg.readRpcUrl, {
+        chainId: cfg.chainId,
+        name: cfg.evmChain.name,
+    });
+
+let readProvider = makeReadProvider(
+    liquidityChainById(DEFAULT_LIQUIDITY_CHAIN_ID),
+);
 
 const shortAddr = (a: string): string =>
     a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '';
@@ -122,33 +137,64 @@ const slippageBps = computed(() => {
 const minOut = (desired: bigint): bigint =>
     (desired * BigInt(10000 - slippageBps.value)) / 10000n;
 const deadline = (): bigint => BigInt(Math.floor(Date.now() / 1000) + 1200);
-const resolveAddr = (a: string): string => (a === NATIVE ? WCYBER : a);
+const resolveAddr = (a: string): string =>
+    a === NATIVE ? activeChain.value.wrappedNative : a;
+
+// Switch the wallet to the active DEX chain (adding it when unknown) and hand
+// back a signer-capable provider. Trading on another chain first prompts a
+// network switch.
+async function ensureActiveNetwork(): Promise<EthersBrowserProvider> {
+    const eth = getSelectedEvmProvider();
+
+    if (!eth) {
+        throw new Error('EVM wallet not found');
+    }
+
+    await ensureEvmChain(eth, activeChain.value.evmChain);
+
+    return new EthersBrowserProvider(eth);
+}
 
 const customTokens = ref<Token[]>([]);
 // TEST* deploys, dust pools and unknown-token chat pairs stay out of the UI.
 const cleanPools = computed(() => filterJunkPools(props.pools ?? []));
 const tokens = computed<Token[]>(() => {
+    const cfg = activeChain.value;
     const map = new Map<string, Token>();
-    map.set(NATIVE, { address: NATIVE, symbol: 'CYBER', native: true });
+    map.set(NATIVE, {
+        address: NATIVE,
+        symbol: cfg.nativeSymbol,
+        native: true,
+    });
 
-    // Curated registry first: real assets (BNB, …) are pickable even before
-    // their first pool exists.
-    for (const t of KNOWN_TOKENS) {
-        map.set(t.address.toLowerCase(), {
-            address: t.address,
-            symbol: t.symbol,
-        });
-    }
+    if (cfg.serverPools) {
+        // Cyberia: curated registry (real assets are pickable before their
+        // first pool exists) + everything in the server pool snapshot.
+        for (const t of KNOWN_TOKENS) {
+            map.set(t.address.toLowerCase(), {
+                address: t.address,
+                symbol: t.symbol,
+            });
+        }
 
-    for (const p of cleanPools.value) {
-        map.set(p.token0.toLowerCase(), {
-            address: p.token0,
-            symbol: p.symbol0,
-        });
-        map.set(p.token1.toLowerCase(), {
-            address: p.token1,
-            symbol: p.symbol1,
-        });
+        for (const p of cleanPools.value) {
+            map.set(p.token0.toLowerCase(), {
+                address: p.token0,
+                symbol: p.symbol0,
+            });
+            map.set(p.token1.toLowerCase(), {
+                address: p.token1,
+                symbol: p.symbol1,
+            });
+        }
+    } else {
+        // Satellite chains: curated bridged assets only (no server indexer).
+        for (const t of cfg.tokens) {
+            map.set(t.address.toLowerCase(), {
+                address: t.address,
+                symbol: t.symbol,
+            });
+        }
     }
 
     for (const t of customTokens.value) {
@@ -167,7 +213,7 @@ const tokenMeta = async (
     addr: string,
 ): Promise<{ symbol: string; decimals: number }> => {
     if (addr === NATIVE) {
-        return { symbol: 'CYBER', decimals: 18 };
+        return { symbol: activeChain.value.nativeSymbol, decimals: 18 };
     }
 
     const key = addr.toLowerCase();
@@ -247,7 +293,11 @@ const refreshPair = async (): Promise<void> => {
     const addrB = resolveAddr(tokenB.value);
 
     try {
-        const factory = new Contract(FACTORY, FACTORY_ABI, readProvider);
+        const factory = new Contract(
+            activeChain.value.factory,
+            FACTORY_ABI,
+            readProvider,
+        );
         const pairAddr: string = await factory.getPair(addrA, addrB);
 
         if (!pairAddr || /^0x0+$/.test(pairAddr)) {
@@ -389,10 +439,14 @@ const addLiquidity = async (): Promise<void> => {
             throw new Error('Enter amounts for both tokens');
         }
 
-        const provider = await ensureCyberiaNetwork();
+        const provider = await ensureActiveNetwork();
         const signer = await provider.getSigner();
         const to = await signer.getAddress();
-        const router = new Contract(ROUTER, ROUTER_ABI, signer);
+        const router = new Contract(
+            activeChain.value.router,
+            ROUTER_ABI,
+            signer,
+        );
 
         if (nativeSelected.value) {
             const nativeIsA = tokenA.value === NATIVE;
@@ -401,7 +455,12 @@ const addLiquidity = async (): Promise<void> => {
                 : resolveAddr(tokenA.value);
             const tokenDesired = nativeIsA ? desiredB : desiredA;
             const cyberDesired = nativeIsA ? desiredA : desiredB;
-            await approveIfNeeded(signer, token, ROUTER, tokenDesired);
+            await approveIfNeeded(
+                signer,
+                token,
+                activeChain.value.router,
+                tokenDesired,
+            );
             status.value = 'Confirm addLiquidityETH…';
             const tx = await router.addLiquidityETH(
                 token,
@@ -415,8 +474,18 @@ const addLiquidity = async (): Promise<void> => {
             status.value = 'Waiting for block…';
             await tx.wait();
         } else {
-            await approveIfNeeded(signer, tokenA.value, ROUTER, desiredA);
-            await approveIfNeeded(signer, tokenB.value, ROUTER, desiredB);
+            await approveIfNeeded(
+                signer,
+                tokenA.value,
+                activeChain.value.router,
+                desiredA,
+            );
+            await approveIfNeeded(
+                signer,
+                tokenB.value,
+                activeChain.value.router,
+                desiredB,
+            );
             status.value = 'Confirm addLiquidity…';
             const tx = await router.addLiquidity(
                 tokenA.value,
@@ -503,7 +572,11 @@ const loadPositions = async (): Promise<void> => {
     positionsLoading.value = true;
 
     try {
-        const factory = new Contract(FACTORY, FACTORY_ABI, readProvider);
+        const factory = new Contract(
+            activeChain.value.factory,
+            FACTORY_ABI,
+            readProvider,
+        );
         const pairCount = Number(await factory.allPairsLength());
         const pairAddresses = (await Promise.all(
             Array.from({ length: pairCount }, (_, index) =>
@@ -591,9 +664,13 @@ const pooledOut = computed(() => {
         amount1: (p.reserve1 * liq) / p.totalSupply,
     };
 });
-const positionHasWcyber = (p: Position): boolean =>
-    p.token0.toLowerCase() === WCYBER.toLowerCase() ||
-    p.token1.toLowerCase() === WCYBER.toLowerCase();
+// A position pairs the chain's wrapped-native token (WCYBER / WETH), so it can
+// be withdrawn to the native coin via removeLiquidityETH.
+const positionHasWrappedNative = (p: Position): boolean => {
+    const w = activeChain.value.wrappedNative.toLowerCase();
+
+    return p.token0.toLowerCase() === w || p.token1.toLowerCase() === w;
+};
 
 const removeLiquidity = async (): Promise<void> => {
     const p = selectedPosition.value;
@@ -607,17 +684,29 @@ const removeLiquidity = async (): Promise<void> => {
     busy.value = true;
 
     try {
-        const provider = await ensureCyberiaNetwork();
+        const provider = await ensureActiveNetwork();
         const signer = await provider.getSigner();
         const to = await signer.getAddress();
-        const router = new Contract(ROUTER, ROUTER_ABI, signer);
+        const router = new Contract(
+            activeChain.value.router,
+            ROUTER_ABI,
+            signer,
+        );
 
-        await approveIfNeeded(signer, p.pairAddress, ROUTER, out.liq, PAIR_ABI);
+        await approveIfNeeded(
+            signer,
+            p.pairAddress,
+            activeChain.value.router,
+            out.liq,
+            PAIR_ABI,
+        );
 
-        const asNative = receiveNative.value && positionHasWcyber(p);
+        const asNative = receiveNative.value && positionHasWrappedNative(p);
 
         if (asNative) {
-            const wIs0 = p.token0.toLowerCase() === WCYBER.toLowerCase();
+            const wIs0 =
+                p.token0.toLowerCase() ===
+                activeChain.value.wrappedNative.toLowerCase();
             const token = wIs0 ? p.token1 : p.token0;
             const tokenMin = minOut(wIs0 ? out.amount1 : out.amount0);
             const cyberMin = minOut(wIs0 ? out.amount0 : out.amount1);
@@ -693,27 +782,95 @@ const fmt = (v: bigint, dec: number): string => {
     return s.includes('.') ? s.replace(/\.?0+$/, '') : s;
 };
 
+// Switch which chain's liquidity the page shows. Read-only — no wallet prompt;
+// adding/removing later triggers the network switch. Rebuilds the read
+// provider and resets all chain-specific state (addresses differ per chain).
+const switchChain = (chainId: number): void => {
+    if (chainId === activeChainId.value) {
+        return;
+    }
+
+    activeChainId.value = chainId;
+    readProvider = makeReadProvider(activeChain.value);
+    metaCache.clear();
+    customTokens.value = [];
+    selected.value = null;
+    positions.value = [];
+    tokenA.value = NATIVE;
+    tokenB.value = '';
+    amountA.value = '';
+    amountB.value = '';
+    pair.value = null;
+    void loadSide('A');
+    void loadSide('B');
+
+    if (tab.value === 'remove') {
+        void loadPositions();
+    }
+};
+
 onMounted(async () => {
     // Silently restore the wallet (saved address + eth_accounts, no popup) so
     // balances/positions populate without the user re-clicking connect, same as
     // Farm/Lending/Bridge. The token-balance watchers refresh once address lands.
     await wallet.restore(authUser.value?.wallet_address ?? null);
+
+    // Start on the wallet's chain when it is a liquidity chain, else the default.
+    if (LIQUIDITY_CHAINS.some((c) => c.chainId === wallet.chainId.value)) {
+        activeChainId.value = wallet.chainId.value as number;
+        readProvider = makeReadProvider(activeChain.value);
+    }
+
     void refreshPair();
 });
+
+// Follow the wallet's network: switching it re-points the page to that chain's
+// liquidity (when it is a known liquidity chain).
+watch(
+    () => wallet.chainId.value,
+    (chainId) => {
+        if (
+            chainId !== null &&
+            chainId !== activeChainId.value &&
+            LIQUIDITY_CHAINS.some((c) => c.chainId === chainId)
+        ) {
+            switchChain(chainId);
+        }
+    },
+);
 </script>
 
 <template>
-    <Head title="Cyberia Liquidity" />
+    <Head :title="`Liquidity · ${activeChain.evmChain.name}`" />
 
     <div class="liq-page">
         <div class="mx-auto max-w-xl px-4 py-6">
             <header class="mb-4">
                 <h1 class="text-2xl font-bold">Liquidity</h1>
                 <p class="text-sm text-muted-foreground">
-                    Provide or withdraw liquidity on Ritual (QuickSwap V2 on
-                    Cyberia). Native CYBER is supported directly.
+                    Provide or withdraw liquidity on Ritual (Uniswap V2) on
+                    {{ activeChain.evmChain.name }}. Native
+                    {{ activeChain.nativeSymbol }} is supported directly.
                 </p>
             </header>
+
+            <!-- CHAIN SWITCHER: pools/balances are per-chain and never mix -->
+            <div class="mb-4 flex flex-wrap items-center gap-2">
+                <button
+                    v-for="chain in LIQUIDITY_CHAINS"
+                    :key="chain.chainId"
+                    type="button"
+                    class="rounded-full border px-4 py-1.5 text-sm font-medium transition"
+                    :class="
+                        chain.chainId === activeChainId
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-card hover:border-foreground/30'
+                    "
+                    @click="switchChain(chain.chainId)"
+                >
+                    {{ chain.evmChain.name }}
+                </button>
+            </div>
 
             <div class="mb-4 flex gap-2">
                 <Button
@@ -937,11 +1094,12 @@ onMounted(async () => {
                             {{ selectedPosition.symbol1 }}
                         </p>
                         <label
-                            v-if="positionHasWcyber(selectedPosition)"
+                            v-if="positionHasWrappedNative(selectedPosition)"
                             class="flex items-center gap-2 text-sm"
                         >
                             <input v-model="receiveNative" type="checkbox" />
-                            Receive WCYBER as native CYBER
+                            Receive wrapped {{ activeChain.nativeSymbol }} as
+                            native {{ activeChain.nativeSymbol }}
                         </label>
                         <Button
                             class="w-full"
@@ -964,10 +1122,10 @@ onMounted(async () => {
             <p class="mt-4 text-xs text-muted-foreground">
                 Router
                 <a
-                    :href="`${EXPLORER}/address/${ROUTER}`"
+                    :href="`${activeChain.explorer}/address/${activeChain.router}`"
                     target="_blank"
                     class="underline"
-                    >{{ shortAddr(ROUTER) }}</a
+                    >{{ shortAddr(activeChain.router) }}</a
                 >
             </p>
         </div>
