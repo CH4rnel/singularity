@@ -124,6 +124,25 @@ async function main() {
   await sleep(2000);
   results.push(["transcript is static ", !anyWrite(REPLY, afterReply)]);
 
+  // 1.5) the composer edits like a readline prompt: ink's own key parsing
+  // drops home/end/delete/ctrl+←→ entirely, so we parse the raw sequences.
+  const beforeEdit = stdout.writes.length;
+  await type("hello world");
+  const press = async (seq: string) => {
+    stdin.write(seq);
+    await sleep(40);
+  };
+  await press("\x1b[H"); // home → start of line
+  await type("X"); // "Xhello world"
+  await press("\x1b[1;5C"); // ctrl+→ → past "hello"
+  await press("\x1b[3~"); // delete → eats the space, "Xhelloworld"
+  await press("\x1b[F"); // end
+  await type("!");
+  results.push(["home/end/del/ctrl+→  ", anyWrite("Xhelloworld!", beforeEdit)]);
+  await press("\x15"); // ctrl+u from the end wipes the line again
+  await sleep(100);
+  results.push(["line cleared         ", anyWrite("ask lain…", beforeEdit)]);
+
   // 2) /copy emits OSC 52 with the reply, confirms in the feed
   const beforeCopy = stdout.writes.length;
   await type("/copy");

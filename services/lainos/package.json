@@ -24,7 +24,8 @@
     "smoke": "tsx scripts/smoke.ts",
     "wired:smoke": "tsx scripts/wired-smoke.ts",
     "dev": "tsx watch scripts/chat.ts",
-    "tui:smoke": "FORCE_COLOR=3 tsx scripts/tui-smoke.tsx"
+    "tui:smoke": "FORCE_COLOR=3 tsx scripts/tui-smoke.tsx",
+    "keys:smoke": "tsx scripts/keys-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

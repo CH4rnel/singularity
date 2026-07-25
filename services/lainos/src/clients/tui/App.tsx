@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Static, Text, useApp, useInput, useStdin, useStdout, type Key } from "ink";
+import { Box, Static, Text, useApp, useStdin, useStdout } from "ink";
 import Spinner from "ink-spinner";
 import { ModelTier, type AgentEvent, type IAgentRuntime } from "../../types.js";
 import {
@@ -22,6 +22,7 @@ import {
   type Theme,
 } from "./theme.js";
 import { editLine } from "./editor.js";
+import { ESC_TIMEOUT_MS, KeyReader, type KeyPress, type TuiKey } from "./keys.js";
 import { ChainPulse } from "./pulse.js";
 import type { ForgeService } from "../../plugins/forge/index.js";
 import type { ScoutService } from "../../plugins/scout/index.js";
@@ -476,9 +477,47 @@ function Composer(props: {
   );
 }
 
-/** Single keyboard sink, mounted only when raw mode is available (a real TTY). */
-function InputCapture({ onKey }: { onKey: (input: string, key: Key) => void }) {
-  useInput((input, key) => onKey(input, key));
+/**
+ * Single keyboard sink, mounted only when raw mode is available (a real TTY).
+ *
+ * ink's `useInput` is deliberately bypassed: it hands the handler a parsed
+ * `Key` with the escape sequence already gone, so Home, End, Delete and
+ * ctrl+←/→ are indistinguishable from nothing at all. We subscribe to the raw
+ * stdin chunks ink emits and parse them ourselves (see ./keys.ts).
+ */
+function InputCapture({ onKey }: { onKey: (input: string, key: TuiKey) => void }) {
+  const { setRawMode, internal_eventEmitter, internal_exitOnCtrlC } = useStdin();
+  const sink = useRef(onKey);
+  useEffect(() => {
+    sink.current = onKey;
+  });
+
+  useEffect(() => {
+    setRawMode(true);
+    const reader = new KeyReader();
+    let escTimer: ReturnType<typeof setTimeout> | undefined;
+    const emit = (presses: KeyPress[]) => {
+      for (const { input, key } of presses) {
+        // ink's own handler exits on ctrl+c; don't also type it into the line.
+        if (internal_exitOnCtrlC && key.ctrl && input === "c") continue;
+        sink.current(input, key);
+      }
+    };
+    const onData = (chunk: unknown) => {
+      if (escTimer) clearTimeout(escTimer);
+      emit(reader.feed(String(chunk)));
+      // A sequence split across chunks waits for its tail — but a bare ESC (the
+      // Escape key) looks exactly like such a head, so it fires on a timer.
+      if (reader.partial) escTimer = setTimeout(() => emit(reader.flush()), ESC_TIMEOUT_MS);
+    };
+    internal_eventEmitter.on("input", onData);
+    return () => {
+      if (escTimer) clearTimeout(escTimer);
+      internal_eventEmitter.removeListener("input", onData);
+      setRawMode(false);
+    };
+  }, [internal_eventEmitter, internal_exitOnCtrlC, setRawMode]);
+
   return null;
 }
 
@@ -502,7 +541,8 @@ const HELP = [
   "  /model         show the active provider + model",
   "  /exit /quit    leave the wired",
   "",
-  "editing: ← → move · ctrl+a/ctrl+e home/end · alt+b/alt+f word",
+  "editing: ← → move · home/end (or ctrl+a/ctrl+e) · ctrl+←/→ word",
+  "         ⌫ delete back · del delete forward · alt+b/alt+f word",
   "         ctrl+w / alt+⌫ del word · alt+d del word fwd · ctrl+u/ctrl+k kill line",
   "         ↑ ↓ recall history · type / for command autocomplete",
 ].join("\n");
@@ -912,7 +952,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   );
 
   const onKey = useCallback(
-    (input: string, key: Key) => {
+    (input: string, key: TuiKey) => {
       setBlink(true);
       setBlinkAlive(true);
       if (blinkIdleRef.current) clearTimeout(blinkIdleRef.current);
