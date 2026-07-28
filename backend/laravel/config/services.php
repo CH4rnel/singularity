@@ -100,7 +100,9 @@ return [
     // config/bridge.php (tokens.CYBER.sol). RPC prefers Helius (SOLANA_RPC_URL),
     // falling back to the bridge RPC, then the public mainnet endpoint.
     'cyber_sol' => [
-        'rpc_url' => env('SOLANA_RPC_URL') ?: env('BRIDGE_SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
+        'rpc_url' => env('SOLANA_RPC_URL')
+            ?: env('BRIDGE_SOLANA_RPC_URL')
+            ?: 'https://api.mainnet-beta.solana.com',
         'mint' => env('CYBER_SOL_MINT', 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump'),
         'decimals' => (int) env('CYBER_SOL_DECIMALS', 6),
         'price_usd' => env('CYBER_SOL_PRICE_USD', '0.00009235'),
