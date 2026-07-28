@@ -25,7 +25,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
           extensions: mbstring, dom, fileinfo, sqlite, pdo_sqlite
           coverage: none
 
@@ -64,7 +64,7 @@ jobs:
         working-directory: crypto/hardhat
 
     env:
-      DEPLOYER_PK: 0x0000000000000000000000000000000000000000000000000000000000000001
+      DEPLOYER_PK: '0x0000000000000000000000000000000000000000000000000000000000000001'
 
     steps:
       - name: Checkout

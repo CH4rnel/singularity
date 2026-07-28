@@ -17,8 +17,8 @@ class ReadCyberSolBalance
 {
     /**
      * @return array{raw: string, amount: string, decimals: int}
-     *   raw    — balance in base units (string; arbitrary precision)
-     *   amount — human balance with `decimals` places (string)
+     *                                                           raw    — balance in base units (string; arbitrary precision)
+     *                                                           amount — human balance with `decimals` places (string)
      */
     public function handle(string $solanaAddress): array
     {

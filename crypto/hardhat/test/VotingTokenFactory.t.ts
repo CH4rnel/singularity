@@ -8,9 +8,9 @@ describe("TokenFactory", async function () {
   const publicClient = await viem.getPublicClient();
 
   it("deploys a factory and creates a voting token", async function () {
-    const addresses = await viem.getAddresses();
-    const deployer = addresses[0];
-    const tokenOwner = addresses[1];
+    const [deployerClient, tokenOwnerClient] = await viem.getWalletClients();
+    const deployer = deployerClient.account.address;
+    const tokenOwner = tokenOwnerClient.account.address;
 
     const factory = await viem.deployContract("TokenFactory", [deployer]);
     const receipt = await factory.write.createToken(["Voting Token", "VOTE", tokenOwner]);
@@ -24,16 +24,10 @@ describe("TokenFactory", async function () {
     });
 
     assert.equal(events.length, 1);
-    assert.equal(events[0].args[1], tokenOwner);
+    assert.equal(events[0].args.owner.toLowerCase(), tokenOwner.toLowerCase());
 
-    const tokenAddress = events[0].args[0];
-    const token = await viem.getContract({
-      address: tokenAddress,
-      abi: [
-        { inputs: [], name: "name", outputs: [{ type: "string" }], stateMutability: "view", type: "function" },
-        { inputs: [], name: "symbol", outputs: [{ type: "string" }], stateMutability: "view", type: "function" },
-      ],
-    });
+    const tokenAddress = events[0].args.token;
+    const token = await viem.getContractAt("VotingToken", tokenAddress);
 
     assert.equal(await token.read.name(), "Voting Token");
     assert.equal(await token.read.symbol(), "VOTE");
