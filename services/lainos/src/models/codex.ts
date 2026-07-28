@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -10,9 +9,16 @@ import {
   type ModelProvider,
   type ModelRequest,
   type ModelResponse,
-  type ModelToolCall,
-  type ToolSchema,
 } from "../types.js";
+import {
+  parseToolReply,
+  renderClosing,
+  renderConversation,
+  renderToolProtocol,
+  resolveCliBin,
+} from "./cli-protocol.js";
+
+export { parseToolReply } from "./cli-protocol.js";
 
 const log = createLogger("model:codex");
 
@@ -23,7 +29,7 @@ const log = createLogger("model:codex");
  * The CLI is an agent, not a chat API, so the ModelProvider contract is
  * emulated: system + conversation are serialised into a single prompt, the
  * final agent message comes back via --output-last-message, and tool calling
- * uses a JSON-in-the-reply protocol ({"tool": ..., "input": ...}) that
+ * uses the JSON-in-the-reply protocol from cli-protocol.ts, which
  * {@link parseToolReply} decodes back into ModelResponse.toolCalls.
  *
  * The run is fenced in: read-only sandbox, an empty scratch cwd (never the
@@ -195,17 +201,7 @@ export class CodexModelProvider implements ModelProvider {
 
 /** Locate the codex binary: explicit override, PATH, then ~/.local/bin. */
 export function resolveCodexBin(explicit?: string): string | null {
-  if (explicit) return explicit;
-  const home = process.env.HOME ?? "";
-  for (const bin of ["codex", join(home, ".local/bin/codex")]) {
-    if (bin.includes("/") ? existsSync(bin) : onPath(bin)) return bin;
-  }
-  return null;
-}
-
-function onPath(bin: string): boolean {
-  const paths = (process.env.PATH ?? "").split(":");
-  return paths.some((p) => p && existsSync(join(p, bin)));
+  return resolveCliBin("codex", explicit);
 }
 
 /** Serialise a ModelRequest into the single prompt one codex run receives. */
@@ -221,70 +217,9 @@ export function renderPrompt(request: ModelRequest): string {
     request.system,
   ];
   if (request.tools?.length) {
-    lines.push("", "# Tools", renderTools(request.tools));
+    lines.push("", "# Tools", renderToolProtocol(request.tools));
   }
-  lines.push("", "# Conversation");
-  for (const m of request.messages) {
-    lines.push(`${m.role === "assistant" ? "assistant" : "user"}: ${m.content}`);
-  }
-  lines.push(
-    "",
-    `Reply to the last user message${request.tools?.length ? " (or emit exactly one tool-call JSON)" : ""}. ` +
-      "Output only the reply itself — no role prefix, no commentary about these instructions.",
-  );
+  lines.push("", "# Conversation", renderConversation(request.messages));
+  lines.push("", renderClosing(Boolean(request.tools?.length)));
   return lines.join("\n");
-}
-
-function renderTools(tools: ToolSchema[]): string {
-  const list = tools
-    .map((t) => `- ${t.name}: ${t.description}\n  input schema: ${JSON.stringify(t.input_schema)}`)
-    .join("\n");
-  return (
-    "These are LainOS tools, not Codex CLI shell access. They are available in this turn. " +
-    "Do not say tools are forbidden or unavailable when a listed tool fits the task.\n" +
-    "To use a tool, output ONLY this JSON as your entire reply (no prose around it, no code fences):\n" +
-    '{"tool":"<name>","input":{<arguments matching the schema>}}\n' +
-    "One tool call per reply; you will receive the result and can then answer or call another.\n" +
-    "If no tool is needed, reply with plain text.\n" +
-    `Available tools:\n${list}`
-  );
-}
-
-/**
- * Decode a codex reply: a bare {"tool": ...} object (possibly fenced, possibly
- * after some prose on its own line) becomes a tool call; anything else is the
- * reply text.
- */
-export function parseToolReply(raw: string): { text: string; toolCalls: ModelToolCall[] } {
-  let body = raw.trim();
-  const fenced = body.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  if (fenced) body = fenced[1].trim();
-
-  const whole = tryParseCall(body);
-  if (whole) return { text: "", toolCalls: [whole] };
-
-  const lines = body.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const call = tryParseCall(lines[i].trim());
-    if (call) {
-      const rest = [...lines.slice(0, i), ...lines.slice(i + 1)].join("\n").trim();
-      return { text: rest, toolCalls: [call] };
-    }
-  }
-  return { text: raw.trim(), toolCalls: [] };
-}
-
-function tryParseCall(candidate: string): ModelToolCall | null {
-  if (!candidate.startsWith("{") || !candidate.includes('"tool"')) return null;
-  try {
-    const parsed = JSON.parse(candidate) as { tool?: unknown; input?: unknown };
-    if (typeof parsed.tool !== "string" || !parsed.tool) return null;
-    const input =
-      typeof parsed.input === "object" && parsed.input !== null
-        ? (parsed.input as Record<string, unknown>)
-        : {};
-    return { name: parsed.tool, input };
-  } catch {
-    return null;
-  }
 }

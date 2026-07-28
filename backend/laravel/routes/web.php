@@ -34,9 +34,11 @@ use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Middleware\EnsureBridgeAdmin;
+use App\Services\BridgeConfigService;
 use App\Services\DexAprService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 Route::get('/{path?}', [LaunchpadController::class, 'showSubdomain'])
     ->domain('{subdomain}.'.config('launchpad.sites_domain'))
@@ -48,6 +50,59 @@ Route::get('/{path?}', [LaunchpadController::class, 'showSubdomain'])
 
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
 Route::get('/thesis', fn () => response()->file(resource_path('views/landing/index1.html')))->name('thesis');
+Route::get('/robinhood-chain', function (BridgeConfigService $bridgeConfig) {
+    $routes = array_values(array_filter(
+        $bridgeConfig->publicRoutes(),
+        fn (array $route) => in_array('robinhood', [$route['source'], $route['destination']], true),
+    ));
+    $faq = [
+        [
+            'question' => 'Is the Cyberia Robinhood Chain DEX live?',
+            'answer' => 'Yes. Ritual has live Robinhood Chain contracts and non-zero ETH/CYBER and ETH/ASH liquidity pools. Users can switch the existing swap and liquidity interfaces to chain ID 4663.',
+        ],
+        [
+            'question' => 'How can I bridge to Robinhood Chain through Cyberia?',
+            'answer' => 'Cyberia currently supports the live Robinhood Chain to Cyberia direction for ETH, SPY and CYBER. The Cyberia to Robinhood Chain direction is visible as Coming soon and is not presented as an executable action until relayer gas and inventory are enabled.',
+        ],
+        [
+            'question' => 'Which tokens can I trade on Robinhood Chain?',
+            'answer' => 'The curated Ritual interface currently exposes native ETH, bridged CYBER and bridged ASH on Robinhood Chain.',
+        ],
+        [
+            'question' => 'Does Robinhood Chain staking have a fixed APY?',
+            'answer' => 'No. The funded farms pay variable ASH rewards. Returns depend on reward funding, allocation, LP balances and market prices, and can change over time.',
+        ],
+    ];
+    $title = 'Robinhood Chain Bridge, DEX and Staking | Cyberia';
+    $description = 'Use Cyberia with Robinhood Chain: connect a wallet, switch to chain ID 4663, bridge supported assets, trade on Ritual DEX, add liquidity and use variable-reward farms.';
+
+    return Inertia::render('Growth/RobinhoodChain', [
+        'bridgeRoutes' => $routes,
+        'faq' => $faq,
+        'seo' => [
+            'title' => $title,
+            'description' => $description,
+            'canonical' => 'https://cyberia.church/robinhood-chain',
+            'image' => 'https://cyberia.church/cyberia_logo.png',
+            'structuredData' => [
+                '@context' => 'https://schema.org',
+                '@type' => 'FAQPage',
+                'mainEntity' => array_map(fn (array $item) => [
+                    '@type' => 'Question',
+                    'name' => $item['question'],
+                    'acceptedAnswer' => [
+                        '@type' => 'Answer',
+                        'text' => $item['answer'],
+                    ],
+                ], $faq),
+            ],
+        ],
+    ]);
+})->name('growth.robinhood');
+Route::get('/partners/{partner}', fn (string $partner) => Inertia::render('Growth/Partner', [
+    'partnerSlug' => $partner,
+]))->name('partners.show');
+Route::inertia('/pioneer-season', 'Growth/PioneerSeason')->name('growth.pioneer');
 // Cached per-pool LP APR (written by the scheduled dex:apr command). Public:
 // the landing hero and any external site can quote real yield numbers.
 Route::get('/api/dex/apr', fn () => response()->json(

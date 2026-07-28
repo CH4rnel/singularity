@@ -14,7 +14,12 @@ import { track } from '@/lib/track';
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 createInertiaApp({
-    title: (title) => (title ? `${title} - ${appName}` : appName),
+    title: (title) =>
+        title.endsWith('| Cyberia')
+            ? title
+            : title
+              ? `${title} - ${appName}`
+              : appName,
     layout: (name) => {
         switch (true) {
             case name === 'Analytics':
@@ -35,6 +40,7 @@ createInertiaApp({
             case name === 'Predictions':
             case name === 'PixelBattle':
             case name === 'Profile':
+            case name.startsWith('Growth/'):
             case name.startsWith('dao/'):
             case name.startsWith('proposals/'):
             case name.startsWith('users/'):

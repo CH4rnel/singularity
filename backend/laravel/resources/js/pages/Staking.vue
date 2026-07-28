@@ -54,6 +54,7 @@ import {
     ensureCyberiaNetwork,
 } from '@/lib/evmChains';
 import { formatUsd } from '@/lib/tokenFormat';
+import { track } from '@/lib/track';
 import { login as walletLogin } from '@/routes/wallet';
 
 const props = defineProps<{
@@ -731,6 +732,14 @@ async function stake(pool: SoloPool): Promise<void> {
         return;
     }
 
+    track('staking_started', {
+        metadata: {
+            action_type: 'solo_stake',
+            network: 'Cyberia',
+            token: pool.symbol,
+        },
+    });
+
     await run(pool.pid, 'stake', async (signer) => {
         const address = await signer.getAddress();
         const token = new Contract(
@@ -761,6 +770,13 @@ async function stake(pool: SoloPool): Promise<void> {
         status.value = 'Waiting for block…';
         await tx.wait();
         status.value = `Staked ${fmt(amount, pool.decimals)} ${pool.symbol}.`;
+        track('staking_completed', {
+            metadata: {
+                action_type: 'solo_stake',
+                network: 'Cyberia',
+                token: pool.symbol,
+            },
+        });
         stakeInput[pool.pid] = '';
     });
 }
@@ -938,11 +954,25 @@ const depositCyberSol = async (): Promise<void> => {
             throw new Error('Connect the Solana wallet linked to this account');
         }
 
+        track('staking_started', {
+            metadata: {
+                action_type: 'single_token_stake',
+                network: 'Solana',
+                token: 'CYBER.sol',
+            },
+        });
         solanaStatus.value =
             'Confirm the CYBER.sol transfer to the staking treasury…';
         await solanaStaking.deposit(provider, amountRaw);
         solanaStakeAmount.value = '';
         solanaStatus.value = 'CYBER.sol stake confirmed.';
+        track('staking_completed', {
+            metadata: {
+                action_type: 'single_token_stake',
+                network: 'Solana',
+                token: 'CYBER.sol',
+            },
+        });
         await loadSolanaBalance();
     } catch (cause) {
         solanaStatus.value = null;

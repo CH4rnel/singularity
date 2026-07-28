@@ -25,16 +25,16 @@ class CrmAnalyticsController extends Controller
         $days = max(1, min((int) $request->query('days', 30), 90));
         $since = now('UTC')->subDays($days);
 
-        $sessions = fn (string $event): int => SiteEvent::query()
-            ->where('event', $event)
+        $sessions = fn (string|array $events): int => SiteEvent::query()
+            ->whereIn('event', (array) $events)
             ->where('created_at', '>=', $since)
             ->distinct()
             ->count('session_id');
 
         $funnel = [
-            'visitors' => $sessions('page_view'),
+            'visitors' => $sessions(['landing_view', 'page_view']),
             'wallets' => $sessions('wallet_connected'),
-            'swaps' => $sessions('swap_executed'),
+            'swaps' => $sessions(['swap_completed', 'swap_executed']),
             'liquidity' => $sessions('liquidity_added'),
             'bridge' => BridgeEvent::query()
                 ->where('event_type', 'bridge_submitted')
@@ -65,7 +65,7 @@ class CrmAnalyticsController extends Controller
         ];
 
         $daily = SiteEvent::query()
-            ->where('event', 'page_view')
+            ->whereIn('event', ['landing_view', 'page_view'])
             ->where('created_at', '>=', now('UTC')->subDays(min($days, 30)))
             ->selectRaw('DATE(created_at) as day, COUNT(DISTINCT session_id) as visitors')
             ->groupBy('day')

@@ -17,6 +17,7 @@
     "chat": "tsx scripts/chat.ts",
     "tui": "tsx scripts/tui.ts",
     "serve": "tsx scripts/serve.ts",
+    "provider": "tsx scripts/provider.ts",
     "serve:wired": "tsx scripts/serve-wired.ts",
     "portfolio:pnl": "tsx scripts/portfolio-pnl.ts",
     "analyze:transcripts": "tsx scripts/analyze-transcripts.ts",

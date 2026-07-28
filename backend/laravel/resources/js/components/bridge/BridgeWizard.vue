@@ -19,6 +19,7 @@ import type { BridgeFeeConfig } from '@/lib/bridgeFee';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import { sendTonDeposit, TON_GAS_RESERVE } from '@/lib/tonBridge';
+import { track } from '@/lib/track';
 import StepConfigure from './StepConfigure.vue';
 import StepDirection from './StepDirection.vue';
 import StepReview from './StepReview.vue';
@@ -233,7 +234,10 @@ const sourceMaxAmount = computed(() => {
 // relayer mints on the home chain (uncapped) or the read failed.
 const destinationCapacity = computed(() =>
     flow.context.direction
-        ? bridge.getDestinationCapacity(flow.context.direction, flow.context.token)
+        ? bridge.getDestinationCapacity(
+              flow.context.direction,
+              flow.context.token,
+          )
         : null,
 );
 
@@ -246,7 +250,10 @@ const destinationLabel = computed(() =>
 
 const refreshDestinationCapacity = () => {
     if (flow.context.direction && flow.context.token) {
-        bridge.fetchDestinationCapacity(flow.context.direction, flow.context.token);
+        bridge.fetchDestinationCapacity(
+            flow.context.direction,
+            flow.context.token,
+        );
     }
 };
 
@@ -412,6 +419,16 @@ const handleConfirm = async () => {
     if (!flow.context.direction) {
         return;
     }
+
+    const selectedRoute = bridgeRoute(flow.context.direction);
+
+    track('bridge_started', {
+        metadata: {
+            action_type: flow.context.direction,
+            network: `${selectedRoute.sourceLabel} -> ${selectedRoute.destinationLabel}`,
+            token: flow.context.token,
+        },
+    });
 
     const manualSource = isManualBridgeRoute(flow.context.direction);
 
@@ -593,7 +610,7 @@ const handleConfirm = async () => {
         });
 
         if (br.status === 'completed') {
-            flow.markSucceeded(br.destination_tx_hash ?? null);
+            markBridgeSucceeded(br.destination_tx_hash ?? null);
         } else if (br.status === 'failed') {
             flow.markFailed(br.error_message ?? 'Bridge failed');
         }
@@ -644,7 +661,8 @@ const handlePrepare = async () => {
 
         if (!response.ok) {
             flow.markFailed(
-                data.message ?? `Could not reserve a deposit address (HTTP ${response.status})`,
+                data.message ??
+                    `Could not reserve a deposit address (HTTP ${response.status})`,
             );
 
             return;
@@ -698,7 +716,7 @@ const handleClaim = async () => {
         });
 
         if (br.status === 'completed') {
-            flow.markSucceeded(br.destination_tx_hash ?? null);
+            markBridgeSucceeded(br.destination_tx_hash ?? null);
         } else if (br.status === 'failed') {
             flow.markFailed(br.error_message ?? 'Bridge failed');
         }
@@ -708,6 +726,22 @@ const handleClaim = async () => {
 };
 
 const claimError = ref<string | null>(null);
+
+const markBridgeSucceeded = (destinationTxHash: string | null): void => {
+    if (flow.context.direction) {
+        const selectedRoute = bridgeRoute(flow.context.direction);
+
+        track('bridge_completed', {
+            metadata: {
+                action_type: flow.context.direction,
+                network: `${selectedRoute.sourceLabel} -> ${selectedRoute.destinationLabel}`,
+                token: flow.context.token,
+            },
+        });
+    }
+
+    flow.markSucceeded(destinationTxHash);
+};
 
 const handleReset = () => {
     flow.reset();
@@ -780,9 +814,7 @@ const resumeActiveRequest = (request: ActiveBridgeRequest): void => {
                     >
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
-                                <p
-                                    class="text-xs font-medium text-foreground"
-                                >
+                                <p class="text-xs font-medium text-foreground">
                                     {{ activeRequestRouteLabel(request) }}
                                     · {{ request.token ?? 'YTN' }}
                                 </p>
@@ -792,7 +824,9 @@ const resumeActiveRequest = (request: ActiveBridgeRequest): void => {
                                 >
                                     {{ request.deposit_address }}
                                 </p>
-                                <p class="mt-1 text-[10px] text-muted-foreground">
+                                <p
+                                    class="mt-1 text-[10px] text-muted-foreground"
+                                >
                                     {{ request.status
                                     }}<template v-if="request.expires_at">
                                         · active until
@@ -904,7 +938,7 @@ const resumeActiveRequest = (request: ActiveBridgeRequest): void => {
             :bridge-request-id="flow.context.bridgeRequestId"
             :source-tx-hash="flow.context.sourceTxHash"
             :destination-address="flow.context.destinationAddress"
-            @succeeded="flow.markSucceeded"
+            @succeeded="markBridgeSucceeded"
             @failed="flow.markFailed"
             @reset="handleReset"
         />

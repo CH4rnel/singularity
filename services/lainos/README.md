@@ -28,37 +28,60 @@ and repeat-protected.
 
 ### Model providers
 
-LainOS speaks to four backends through one `ModelProvider` interface, selected
+LainOS speaks to five backends through one `ModelProvider` interface, selected
 from the environment:
 
-1. `LAINOS_MODEL_PROVIDER` if set (`codex` | `openrouter` | `anthropic` | `mock`)
+1. `LAINOS_MODEL_PROVIDER` if set (`codex` | `claude` | `openrouter` |
+   `anthropic` | `mock`)
 2. else `OPENROUTER_API_KEY` present → **OpenRouter**
 3. else `ANTHROPIC_API_KEY` present → **Anthropic** (direct)
-4. else → **offline mock** (deterministic; the whole pipeline still runs — this
+4. else a `claude` CLI on the machine → **Claude CLI** (subscription)
+5. else → **offline mock** (deterministic; the whole pipeline still runs — this
    is what the smoke test exercises)
 
-**Codex CLI** (`codex`) runs each completion through one non-interactive
-`codex exec` run, billed to the machine's ChatGPT subscription (`codex login`)
-— no API key. Tool calling works via a JSON reply protocol; replies arrive
+**Codex CLI** (`codex`) and **Claude CLI** (`claude`) run each completion
+through one non-interactive CLI run — `codex exec` and `claude --print` —
+billed to the machine's ChatGPT / Claude subscription, no API key. Both are
+coding agents fenced down to a chat (codex: read-only sandbox, scratch cwd;
+claude: `--tools ""`, `--safe-mode`, scratch cwd), and both do tool calling via
+the shared JSON reply protocol in `models/cli-protocol.ts`; replies arrive
 whole (no streaming). A failed run is retried once in-house
-(`LAINOS_CODEX_RETRIES`); it never falls back to another provider unless
-`LAINOS_MODEL_FALLBACK` explicitly names one — so the agent can't silently
-land on a model the operator didn't choose. On top of any base provider,
-`LAINOS_MODEL_TIER_SMALL/MEDIUM/LARGE` can route a single tier elsewhere.
+(`LAINOS_CODEX_RETRIES` / `LAINOS_CLAUDE_RETRIES`); it never falls back to
+another provider unless `LAINOS_MODEL_FALLBACK` explicitly names one — so the
+agent can't silently land on a model the operator didn't choose. On top of any
+base provider, `LAINOS_MODEL_TIER_SMALL/MEDIUM/LARGE` can route a single tier
+elsewhere.
 
-The live chat routing is also switchable at runtime: `set_chat_provider`
-(claude | codex) re-routes the replies without a restart and persists the
-choice in `data/chat-provider.json`, which wins over the env selection on the
-next boot; `chat_provider_status` reports which provider is answering right
-now. Forge coding jobs have their own switch (`set_forge_provider`).
+`claude` and `anthropic` are the same models by two routes (subscription CLI
+vs. API key), so each falls back to the other when its own route is missing —
+asking Lain for Claude works with either one configured.
+
+The live chat routing is switchable at runtime — same switch behind three
+surfaces, all taking `claude` | `codex` | `claude-api`:
+
+```bash
+/model                      # in the TUI: pick with the arrows (/model codex switches straight away)
+npm run provider claude     # from a shell, against the running daemon
+curl -s localhost:7777/provider                                    # who answers now
+curl -sX POST localhost:7777/provider -d '{"provider":"codex"}'    # switch it
+```
+
+Lain can also do it herself when asked (`set_chat_provider`, and
+`chat_provider_status` to report who is answering). Every route re-points the
+replies without a restart and persists the choice in `data/chat-provider.json`,
+which wins over the env selection on the next boot; a route that cannot be
+built (no key, no CLI) fails loudly and the current one stays. The TUI runs its
+own process, so its `/model` switches that session and leaves the choice for
+the daemon's next restart — use `npm run provider` to move the daemon now.
+Forge coding jobs have their own switch (`set_forge_provider`).
 
 Model tiers map to the latest Claude family:
 
-| Tier | OpenRouter slug | Anthropic snapshot |
-|------|-----------------|--------------------|
-| `SMALL` | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5-20251001` |
-| `MEDIUM` | `anthropic/claude-sonnet-4.6` | `claude-sonnet-4-6` |
-| `LARGE` | `anthropic/claude-opus-4.8` | `claude-opus-4-8` |
+| Tier | OpenRouter slug | Anthropic snapshot | Claude CLI alias |
+|------|-----------------|--------------------|------------------|
+| `SMALL` | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5-20251001` | `haiku` |
+| `MEDIUM` | `anthropic/claude-sonnet-4.6` | `claude-sonnet-4-6` | `sonnet` |
+| `LARGE` | `anthropic/claude-opus-4.8` | `claude-opus-4-8` | `opus` |
 
 On hosts where a provider (or Telegram) is unreachable directly, route just
 that traffic through a proxy: `LAINOS_MODEL_PROXY` for model APIs,
@@ -84,6 +107,7 @@ npm run smoke               # end-to-end check (uses a real Cyberia chain read)
 npm run chat                # interactive REPL with Lain
 npm run tui                 # full-screen terminal UI (skins, live chain pulse)
 npm run serve               # daemon: HTTP bridge on :7777 + Telegram bot (if token set)
+npm run provider [claude|codex]  # who writes the daemon's replies (no arg = show)
 ```
 
 ## systemd daemon
@@ -381,6 +405,8 @@ GET  /alerts                          -> { alerts } (recent sentinel alerts)
 GET  /wishes                          -> { wishes } (the forge wishboard)
 GET  /research                        -> { topics } (the scout's subscriptions)
 POST /research/cyberia-study/run      -> { topic, digest, message }
+GET  /provider                        -> { provider, choices } (who answers)
+POST /provider { provider }           -> { provider } (switch claude/codex live)
 POST /chat { roomId, userId, text }   -> { text, actions }
 ```
 
@@ -395,7 +421,8 @@ src/
   runtime.ts          AgentRuntime — the think→act→evaluate loop
   memory/store.ts     file-backed long-term memory + retrieval
   memory/embeddings.ts  embedding providers (OpenAI-compatible | offline hash)
-  models/             anthropic.ts (Claude) | mock.ts | index.ts (factory)
+  models/             codex.ts | claude-cli.ts (subscription CLIs, cli-protocol.ts)
+                      anthropic.ts | openrouter.ts | mock.ts | index.ts (factory)
   plugins/bootstrap/  time provider + fact extractor + remember/recall
   plugins/cyberia/    chain service + balance/transfer actions
   plugins/sentinel/   background balance watches -> alerts (push + next-turn)

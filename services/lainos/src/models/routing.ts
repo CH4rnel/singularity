@@ -88,6 +88,32 @@ export class TieredModelProvider implements ModelProvider {
   }
 }
 
+/**
+ * The chat providers an operator switches between, in preference order —
+ * the single source of truth behind every switch surface (the TUI's /model,
+ * the HTTP /provider endpoint, and Lain's own set_chat_provider action).
+ */
+export const CHAT_PROVIDER_CHOICES: { name: string; kind: string; desc: string }[] = [
+  { name: "claude", kind: "claude", desc: "Claude CLI · subscription, no key" },
+  { name: "codex", kind: "codex", desc: "Codex CLI · ChatGPT subscription" },
+  { name: "claude-api", kind: "anthropic", desc: "Anthropic API key · per token" },
+];
+
+/** Operator-facing name (or a raw kind) → model-provider kind. */
+export function resolveChatProviderKind(raw: string): string | undefined {
+  const name = raw.trim().toLowerCase();
+  const choice = CHAT_PROVIDER_CHOICES.find((c) => c.name === name || c.kind === name);
+  if (choice) return choice.kind;
+  // Kinds without a switch entry are still addressable by their own name.
+  return ["openrouter", "mock"].includes(name) ? name : undefined;
+}
+
+/** Human label for a kind: "claude" and "anthropic" are the same models. */
+export function chatProviderLabel(kind: string): string {
+  if (kind === "claude") return "claude (cli)";
+  return kind === "anthropic" ? "claude (anthropic api)" : kind;
+}
+
 export interface ChatProviderState {
   /** Active base kind, e.g. "codex" or "anthropic". */
   kind: string;

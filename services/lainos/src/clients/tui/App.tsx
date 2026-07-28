@@ -3,6 +3,12 @@ import { Box, Static, Text, useApp, useStdin, useStdout } from "ink";
 import Spinner from "ink-spinner";
 import { ModelTier, type AgentEvent, type IAgentRuntime } from "../../types.js";
 import {
+  CHAT_PROVIDER_CHOICES,
+  chatProviderLabel,
+  resolveChatProviderKind,
+  SwitchableModelProvider,
+} from "../../models/routing.js";
+import {
   BANNER,
   CHAIN_ID,
   DEFAULT_THEME,
@@ -22,8 +28,10 @@ import {
   type Theme,
 } from "./theme.js";
 import { editLine } from "./editor.js";
+import { InputHistory, loadInputHistory, saveInputHistory } from "./history.js";
 import { ESC_TIMEOUT_MS, KeyReader, type KeyPress, type TuiKey } from "./keys.js";
 import { ChainPulse } from "./pulse.js";
+import { transcriptLines } from "./transcript.js";
 import type { ForgeService } from "../../plugins/forge/index.js";
 import type { ScoutService } from "../../plugins/scout/index.js";
 import type { SentinelService } from "../../plugins/sentinel/index.js";
@@ -71,7 +79,7 @@ const COMMANDS = [
   { name: "/clear", desc: "clear the screen (memory intact)" },
   { name: "/copy", desc: "copy lain's last reply to the clipboard" },
   { name: "/reset", desc: "fresh memory room" },
-  { name: "/model", desc: "show provider + model" },
+  { name: "/model", desc: "switch claude/codex (arrows)" },
   { name: "/exit", desc: "leave the wired" },
 ];
 
@@ -470,9 +478,56 @@ function Composer(props: {
       </Box>
       {value.length === 0 && !busy ? (
         <Box marginLeft={2}>
-          <Text color={c.mutedDim}>↑↓ history · / commands · Tab complete · ctrl+w·alt+d del word · ctrl+a/e home/end</Text>
+          <Text color={c.mutedDim}>↑↓ history · PgUp scrollback · / commands · Tab complete · ctrl+a/e home/end</Text>
         </Box>
       ) : null}
+    </Box>
+  );
+}
+
+/**
+ * Scrollback pager — a window over the transcript, opened with PageUp.
+ *
+ * Completed turns are printed straight into the terminal's own scrollback by
+ * <Static> and are never repainted, so the app cannot scroll them in place.
+ * While the pager is open the screen is wiped, <Static> is kept quiet, and the
+ * same turns are re-rendered here as flat lines (see ./transcript.ts).
+ */
+function Pager({
+  lines,
+  top,
+  height,
+  width,
+}: {
+  lines: string[];
+  top: number;
+  height: number;
+  width: number;
+}) {
+  const c = useTheme();
+  const shown = lines.slice(top, top + height);
+  return (
+    <Box flexDirection="column" flexShrink={0}>
+      <Text color={c.mutedDim}>{"─".repeat(Math.max(8, width))}</Text>
+      <Text wrap="truncate">
+        <Text color={c.primary} bold>
+          ⇡ scrollback
+        </Text>
+        <Text color={c.mutedDim}>{"   lines "}</Text>
+        <Text color={c.fg}>
+          {lines.length ? top + 1 : 0}–{top + shown.length}
+        </Text>
+        <Text color={c.mutedDim}> of {lines.length}</Text>
+        <Text color={c.warn}>{"   ⏸ not at the bottom"}</Text>
+      </Text>
+      {shown.map((line, i) => (
+        <Text key={i} color={c.fg} wrap="truncate">
+          {line.length ? line : " "}
+        </Text>
+      ))}
+      <Text color={c.mutedDim} wrap="truncate">
+        {"PgUp/PgDn page · ↑↓ line · home top · end/esc back to now · wheel scrolls the terminal itself"}
+      </Text>
     </Box>
   );
 }
@@ -538,13 +593,17 @@ const HELP = [
   "  /clear         clear the screen (conversation memory stays)",
   "  /copy          copy lain's last reply to the clipboard (OSC 52)",
   "  /reset         start a fresh memory room",
-  "  /model         show the active provider + model",
+  "  /model         switch the chat model (arrows) — or /model claude|codex",
   "  /exit /quit    leave the wired",
   "",
   "editing: ← → move · home/end (or ctrl+a/ctrl+e) · ctrl+←/→ word",
   "         ⌫ delete back · del delete forward · alt+b/alt+f word",
   "         ctrl+w / alt+⌫ del word · alt+d del word fwd · ctrl+u/ctrl+k kill line",
-  "         ↑ ↓ recall history · type / for command autocomplete",
+  "         ↑ ↓ recall history (kept between runs) · type / for autocomplete",
+  "",
+  "scrollback: PgUp/PgDn page the transcript · ctrl+↑/↓ one line",
+  "            ↑ ↓ line · home oldest · end/esc back to now",
+  "            the mouse wheel still scrolls the terminal's own scrollback",
 ].join("\n");
 
 /** Render the registered skills grouped by category, with descriptions. */
@@ -568,7 +627,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { stdout } = useStdout();
-  const { width } = useStdoutDimensions();
+  const { width, rows } = useStdoutDimensions();
 
   const character = runtime.character;
   const provider = runtime.model.name;
@@ -646,11 +705,13 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const [picker, setPicker] = useState<PickerState | null>(null);
   // true while walking history — suppresses the slash menu so ↑/↓ stay on history
   const [browsing, setBrowsing] = useState(false);
+  // scrollback pager: how many lines above the bottom we are, null = at "now"
+  const [scroll, setScroll] = useState<number | null>(null);
 
-  // input history (shell-style ↑/↓)
-  const histRef = useRef<string[]>([]);
-  const histIdxRef = useRef<number | null>(null);
-  const draftRef = useRef<string>("");
+  // input history (shell-style ↑/↓), remembered across runs
+  const histRef = useRef<InputHistory | null>(null);
+  histRef.current ??= new InputHistory(loadInputHistory());
+  const hist = histRef.current;
 
   const tokens = useMemo(() => estimateTokens(history, live), [history, live]);
   const [pulseOn, setPulseOn] = useState<boolean>(() => loadPulse());
@@ -663,6 +724,41 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const acIdx = menuItems.length ? Math.min(acIndex, menuItems.length - 1) : 0;
   const pushHistory = useCallback((t: Turn) => setHistory((h) => [...h, t]), []);
 
+  // --- scrollback pager ---------------------------------------------------
+  // The transcript window is sized to the terminal, minus the pager's own
+  // header/footer and a line of slack (a frame taller than the screen makes
+  // ink clear the terminal on every render).
+  const paging = scroll !== null;
+  const pageRows = Math.max(3, rows - 6);
+  const lines = useMemo(() => transcriptLines(history, width), [history, width]);
+  const maxScroll = Math.max(0, lines.length - pageRows);
+
+  // Entering/leaving the pager swaps the <Static> transcript for a rendered
+  // window, so the screen is wiped and <Static> remounted in both directions.
+  const goScroll = useCallback(
+    (next: number | null) => {
+      if ((scroll === null) !== (next === null)) repaint();
+      setScroll(next);
+    },
+    [repaint, scroll],
+  );
+  const scrollTo = useCallback(
+    (n: number) => {
+      const clamped = Math.min(maxScroll, Math.max(0, n));
+      goScroll(clamped === 0 ? null : clamped);
+    },
+    [goScroll, maxScroll],
+  );
+
+  // Anything new in the feed — her reply, a pulse, an alert — snaps back to now.
+  const feedLenRef = useRef(0);
+  useEffect(() => {
+    const n = history.length + (live ? 1 : 0);
+    if (feedLenRef.current === n) return;
+    feedLenRef.current = n;
+    if (scroll !== null) goScroll(null);
+  }, [goScroll, history.length, live, scroll]);
+
   // Blink only around actual typing. A permanent 530ms repaint wipes mouse
   // selection in the terminal, making copy/paste impossible; once the keyboard
   // has been idle for a spell the cursor goes solid and repaints stop — which
@@ -670,13 +766,14 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const [blinkAlive, setBlinkAlive] = useState(true);
   const blinkIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!blinkEnabled || !blinkAlive) {
+    // The pager owns the whole screen and has no cursor to blink.
+    if (!blinkEnabled || !blinkAlive || paging) {
       setBlink(true);
       return;
     }
     const id = setInterval(() => setBlink((b) => !b), 530);
     return () => clearInterval(id);
-  }, [blinkEnabled, blinkAlive]);
+  }, [blinkEnabled, blinkAlive, paging]);
   useEffect(() => {
     blinkIdleRef.current = setTimeout(() => setBlinkAlive(false), 10_000);
     return () => {
@@ -758,6 +855,63 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       onPick: (v) => setCursorPref(v),
     });
   }, [cursorPref]);
+
+  // The live chat model is a SwitchableModelProvider, so /model re-routes
+  // replies mid-session. The choice is persisted for the next boot — but the
+  // daemon (Telegram, sentinel) is another process: it adopts it on restart.
+  const switchable = useMemo(
+    () => (runtime.model instanceof SwitchableModelProvider ? runtime.model : undefined),
+    [runtime],
+  );
+
+  const switchProvider = useCallback(
+    (name: string): void => {
+      if (!switchable) {
+        pushHistory(sysTurn("this session's model provider is fixed — nothing to switch."));
+        return;
+      }
+      const kind = resolveChatProviderKind(name);
+      if (!kind) {
+        pushHistory(
+          sysTurn(
+            `unknown provider "${name}" — try: ${CHAT_PROVIDER_CHOICES.map((p) => p.name).join(" · ")}`,
+          ),
+        );
+        return;
+      }
+      // A missing key or CLI must fail visibly, not drop the chat on a mock.
+      const result = switchable.switchTo(kind);
+      if (typeof result === "string") {
+        pushHistory(sysTurn(result));
+        return;
+      }
+      pushHistory(
+        sysTurn(
+          `replies now go through ${chatProviderLabel(result.kind)} ${GLYPH.dot} ${result.model}` +
+            (result.overridden
+              ? `  (env default ${result.envKind}; saved — the daemon adopts it on restart)`
+              : "  (back to the env default)"),
+        ),
+      );
+    },
+    [pushHistory, switchable],
+  );
+
+  const openModelPicker = useCallback(() => {
+    const current = switchable?.state();
+    setPicker({
+      title: current
+        ? `chat model — now ${chatProviderLabel(current.kind)} ${GLYPH.dot} ${current.model}`
+        : "chat model",
+      kind: "plain",
+      options: CHAT_PROVIDER_CHOICES.map((p) => ({ value: p.name, label: p.name, hint: `  ${p.desc}` })),
+      index: Math.max(
+        0,
+        CHAT_PROVIDER_CHOICES.findIndex((p) => p.kind === current?.kind),
+      ),
+      onPick: (v) => switchProvider(v),
+    });
+  }, [switchable, switchProvider]);
 
   const command = useCallback(
     (text: string): void => {
@@ -887,9 +1041,14 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           pushHistory(sysTurn(`new room: ${r} — short-term memory is fresh here.`));
           break;
         }
-        case "model":
-          pushHistory(sysTurn(`provider ${provider} ${GLYPH.dot} model ${model}`));
+        case "model": {
+          // "/model" opens the picker; "/model codex" switches straight away.
+          const arg = text.trim().split(/\s+/)[1];
+          if (arg) switchProvider(arg);
+          else if (switchable) openModelPicker();
+          else pushHistory(sysTurn(`provider ${provider} ${GLYPH.dot} model ${model}`));
           break;
+        }
         case "exit":
         case "quit":
           exit();
@@ -898,7 +1057,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           pushHistory(sysTurn(`unknown command: /${cmd}  (try /help)`));
       }
     },
-    [exit, history, model, openCursorPicker, openEffortPicker, openSkinPicker, provider, pulseOn, pushHistory, repaint, runtime, stdout],
+    [exit, history, model, openCursorPicker, openEffortPicker, openModelPicker, openSkinPicker, provider, pulseOn, pushHistory, repaint, runtime, stdout, switchProvider, switchable],
   );
 
   const send = useCallback(
@@ -975,6 +1134,45 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         return;
       }
 
+      // 2) scrollback pager. ↑/↓ belong to the input history (bash rules), so
+      // paging is on PageUp/PageDown and ctrl+↑/↓; inside the pager, where
+      // there is no input line on screen, bare ↑/↓ move by one line.
+      const page = Math.max(1, pageRows - 1);
+      if (scroll !== null) {
+        if (key.pageUp) {
+          scrollTo(scroll + page);
+          return;
+        }
+        if (key.pageDown) {
+          scrollTo(scroll - page);
+          return;
+        }
+        if (key.upArrow) {
+          scrollTo(scroll + 1);
+          return;
+        }
+        if (key.downArrow) {
+          scrollTo(scroll - 1);
+          return;
+        }
+        if (key.home) {
+          scrollTo(maxScroll);
+          return;
+        }
+        if (key.end || key.escape || key.return) {
+          goScroll(null);
+          return;
+        }
+        // Anything else (typing) returns to the bottom and is handled below.
+        goScroll(null);
+      } else {
+        if (key.pageUp || (key.ctrl && key.upArrow)) {
+          scrollTo(key.pageUp ? page : 1);
+          return;
+        }
+        if (key.pageDown || (key.ctrl && key.downArrow)) return; // already at the bottom
+      }
+
       // The slash menu is "open" only while actively typing a command — not when
       // a command was just recalled from history (browsing).
       const items = browsing ? [] : suggestionsFor(value);
@@ -982,10 +1180,8 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       const idx = open ? Math.min(acIndex, items.length - 1) : 0;
 
       const commit = (text: string) => {
-        const h = histRef.current;
-        if (text && h[h.length - 1] !== text) h.push(text);
-        histIdxRef.current = null;
-        draftRef.current = "";
+        // Remembered for the next ↑ — and for the next run of the TUI.
+        if (hist.push(text)) saveInputHistory(hist.entries);
         setBrowsing(false);
         setValue("");
         setCursor(0);
@@ -994,7 +1190,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         else if (text) send(text);
       };
 
-      // 2a) menu open → arrows (and Tab) pick a command, Enter runs it
+      // 3a) menu open → arrows (and Tab) pick a command, Enter runs it
       if (open) {
         if (key.upArrow) {
           setAcIndex((idx - 1 + items.length) % items.length);
@@ -1010,28 +1206,18 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         }
         // other keys fall through to editing (narrows the menu)
       } else {
-        // 2b) menu closed → arrows walk input history, fully replacing the line
+        // 3b) menu closed → arrows walk input history, fully replacing the line
         if (key.upArrow) {
-          const h = histRef.current;
-          if (!h.length) return;
-          if (histIdxRef.current === null) {
-            draftRef.current = value;
-            histIdxRef.current = h.length - 1;
-          } else if (histIdxRef.current > 0) {
-            histIdxRef.current -= 1;
-          }
-          const v = h[histIdxRef.current];
+          const v = hist.prev(value);
+          if (v === null) return;
           setBrowsing(true);
           setValue(v);
           setCursor(v.length);
           return;
         }
         if (key.downArrow) {
-          if (histIdxRef.current === null) return;
-          const h = histRef.current;
-          if (histIdxRef.current < h.length - 1) histIdxRef.current += 1;
-          else histIdxRef.current = null;
-          const v = histIdxRef.current === null ? draftRef.current : h[histIdxRef.current];
+          const v = hist.next();
+          if (v === null) return;
           setBrowsing(true);
           setValue(v);
           setCursor(v.length);
@@ -1052,7 +1238,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         setAcIndex(0);
       }
     },
-    [acIndex, browsing, busy, command, cursor, picker, send, value],
+    [acIndex, browsing, busy, command, cursor, goScroll, hist, maxScroll, pageRows, picker, scroll, scrollTo, send, value],
   );
 
   // Completed turns are printed permanently into the terminal's own
@@ -1064,13 +1250,18 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     | { key: string; kind: "banner" }
     | { key: string; kind: "boot" }
     | { key: string; kind: "turn"; turn: Turn };
+  // While the pager is open the same turns are drawn as a scrollable window,
+  // so <Static> must print nothing at all.
   const feed = useMemo<FeedItem[]>(
-    () => [
-      { key: "banner", kind: "banner" },
-      { key: "boot", kind: "boot" },
-      ...history.map((t) => ({ key: t.id, kind: "turn" as const, turn: t })),
-    ],
-    [history],
+    () =>
+      paging
+        ? []
+        : [
+            { key: "banner", kind: "banner" },
+            { key: "boot", kind: "boot" },
+            ...history.map((t) => ({ key: t.id, kind: "turn" as const, turn: t })),
+          ],
+    [history, paging],
   );
 
   return (
@@ -1088,41 +1279,52 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       </Static>
 
       <Box flexDirection="column">
-        {live ? <TurnView turn={live} /> : null}
-
-        {status === "thinking" ? (
-          <Box marginLeft={2} flexShrink={0}>
-            <Text color={theme.warn}>
-              <Spinner type="dots" />
-            </Text>
-            <Text color={theme.mutedDim}>  reaching into the wired…</Text>
-          </Box>
-        ) : null}
-
-        <StatusBar
-          provider={provider}
-          model={model}
-          block={block}
-          tokens={tokens}
-          room={room}
-          effort={effort}
-          status={status}
-          width={width}
-        />
-
-        {picker ? (
-          <Picker state={picker} />
+        {paging ? (
+          <Pager
+            lines={lines}
+            top={Math.max(0, lines.length - pageRows - (scroll ?? 0))}
+            height={pageRows}
+            width={width}
+          />
         ) : (
           <>
-            {menuItems.length ? <Autocomplete items={menuItems} index={acIdx} /> : null}
-            <Composer
-              value={value}
-              cursor={cursor}
-              blinkOn={blink}
-              blinkEnabled={blinkEnabled}
-              cursorStyle={cursorStyle}
-              busy={busy}
+            {live ? <TurnView turn={live} /> : null}
+
+            {status === "thinking" ? (
+              <Box marginLeft={2} flexShrink={0}>
+                <Text color={theme.warn}>
+                  <Spinner type="dots" />
+                </Text>
+                <Text color={theme.mutedDim}>  reaching into the wired…</Text>
+              </Box>
+            ) : null}
+
+            <StatusBar
+              provider={provider}
+              model={model}
+              block={block}
+              tokens={tokens}
+              room={room}
+              effort={effort}
+              status={status}
+              width={width}
             />
+
+            {picker ? (
+              <Picker state={picker} />
+            ) : (
+              <>
+                {menuItems.length ? <Autocomplete items={menuItems} index={acIdx} /> : null}
+                <Composer
+                  value={value}
+                  cursor={cursor}
+                  blinkOn={blink}
+                  blinkEnabled={blinkEnabled}
+                  cursorStyle={cursorStyle}
+                  busy={busy}
+                />
+              </>
+            )}
           </>
         )}
 

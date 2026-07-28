@@ -189,7 +189,9 @@ function isGroupActive(items: { href: string; external?: boolean }[]): boolean {
                 class="flex flex-1 items-center justify-end gap-2 lg:flex-none"
             >
                 <slot name="right" />
-                <AppVersionMenu />
+                <div class="hidden sm:block">
+                    <AppVersionMenu />
+                </div>
                 <NotificationBell v-if="isAuthenticated" />
                 <WalletMenu />
             </div>

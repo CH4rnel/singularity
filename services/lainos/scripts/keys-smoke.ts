@@ -1,11 +1,26 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Key-parser smoke test: the escape sequences a terminal sends for home, end,
- * delete and ctrl+←/→ must reach the line editor as the right edits — and
- * nothing unknown may ever be typed into the input line. Run: npm run keys:smoke
+ * Composer plumbing smoke test, all headless: the escape sequences a terminal
+ * sends for home, end, delete and ctrl+←/→ must reach the line editor as the
+ * right edits, nothing unknown may ever be typed into the input line, ↑/↓ must
+ * walk the input history (which outlives the process), and the scrollback pager
+ * must flatten the transcript into lines that fit. Run: npm run keys:smoke
  */
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { KeyReader, parseKey, type TuiKey } from "../src/clients/tui/keys.js";
 import { editLine, type LineState } from "../src/clients/tui/editor.js";
+import {
+  HISTORY_LIMIT,
+  InputHistory,
+  loadInputHistory,
+  saveInputHistory,
+} from "../src/clients/tui/history.js";
+import { transcriptLines } from "../src/clients/tui/transcript.js";
+
+// A throwaway state dir: the history probe writes a real file.
+process.env.LAINOS_DATA_DIR = mkdtempSync(join(tmpdir(), "lainos-keys-"));
 
 const results: [string, boolean][] = [];
 const check = (name: string, pass: boolean) => results.push([name, pass]);
@@ -136,6 +151,71 @@ check(
   "unknown seq is inert ",
   drive("hello", ["\x1b[200~", "\x1bOP"]).value === "hello",
 );
+
+// ------------------------------------------------------- input history
+
+const hist = new InputHistory();
+hist.push("one");
+hist.push("two");
+hist.push("three");
+check(
+  "↑ walks back         ",
+  hist.prev("draft") === "three" && hist.prev("") === "two" && hist.prev("") === "one",
+);
+check("↑ stops at the oldest", hist.prev("") === "one");
+check(
+  "↓ ends on the draft  ",
+  hist.next() === "two" && hist.next() === "three" && hist.next() === "draft" && hist.next() === null,
+);
+check("↑ on empty history   ", new InputHistory().prev("") === null);
+check(
+  "no twins in a row    ",
+  (() => {
+    const h = new InputHistory(["a"]);
+    return !h.push("a") && h.push("b") && h.entries.join() === "a,b";
+  })(),
+);
+check(
+  "capped at the limit  ",
+  (() => {
+    const h = new InputHistory();
+    for (let i = 0; i < HISTORY_LIMIT + 20; i++) h.push(`m${i}`);
+    return h.entries.length === HISTORY_LIMIT && h.entries[0] === "m20";
+  })(),
+);
+check(
+  "survives a restart   ",
+  (() => {
+    saveInputHistory(hist.entries);
+    const reloaded = new InputHistory(loadInputHistory());
+    return reloaded.entries.join() === "one,two,three" && reloaded.prev("") === "three";
+  })(),
+);
+
+// --------------------------------------------------- transcript pager
+
+const turns = [
+  { role: "you", parts: [{ kind: "text" as const, text: "first question" }] },
+  {
+    role: "lain",
+    model: "stub",
+    parts: [
+      { kind: "text" as const, text: "word ".repeat(40).trim() },
+      {
+        kind: "tool" as const,
+        tool: { name: "get_balance", status: "ok", summary: "12 CYBER", input: { address: "0xbeef" } },
+      },
+    ],
+  },
+];
+const flat = transcriptLines(turns, 40);
+check(
+  "labels every speaker ",
+  flat[0] === "▸ you" && flat.some((l) => l.startsWith("◆ lain · stub")),
+);
+check("keeps the turn order ", flat.indexOf("  first question") < flat.findIndex((l) => l.startsWith("◆ lain")));
+check("wraps to the width   ", flat.every((l) => [...l].length <= 40) && flat.length > 8);
+check("renders tool calls   ", flat.some((l) => l.includes("get_balance") && l.includes("address=0xbeef")));
 
 let ok = true;
 for (const [name, pass] of results) {

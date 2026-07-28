@@ -1356,6 +1356,15 @@ const doSwap = async (): Promise<void> => {
 
     error.value = null;
     busy.value = true;
+    const tokenPair = `${symbolOf(tokenIn.value)}/${symbolOf(tokenOut.value)}`;
+
+    track('swap_started', {
+        metadata: {
+            action_type: 'swap',
+            network: activeChain.value.evmChain.name,
+            token: tokenPair,
+        },
+    });
 
     try {
         const provider = await ensureActiveNetwork();
@@ -1440,11 +1449,11 @@ const doSwap = async (): Promise<void> => {
         status.value = 'Waiting for block…';
         await tx.wait();
         status.value = `Swapped ${fmt(q.amountIn, decIn.value)} ${symbolOf(tokenIn.value)} → ${fmt(q.amountOut, decOut.value)} ${symbolOf(tokenOut.value)}.`;
-        track('swap_executed', {
-            wallet_address: wallet.address.value ?? undefined,
+        track('swap_completed', {
             metadata: {
-                in: symbolOf(tokenIn.value),
-                out: symbolOf(tokenOut.value),
+                action_type: 'swap',
+                network: activeChain.value.evmChain.name,
+                token: tokenPair,
             },
         });
         amountIn.value = '';

@@ -1,4 +1,9 @@
-import { SwitchableModelProvider } from "../../models/routing.js";
+import {
+  CHAT_PROVIDER_CHOICES,
+  chatProviderLabel,
+  resolveChatProviderKind,
+  SwitchableModelProvider,
+} from "../../models/routing.js";
 import type { Action, Evaluator, IAgentRuntime, Plugin, Provider } from "../../types.js";
 
 /** Injects the current wall-clock time so the agent is temporally grounded. */
@@ -117,17 +122,6 @@ const recallAction: Action = {
 
 // ------------------------------------------------------------- chat provider
 
-/** Operator-facing names → model-provider kinds ("claude" is the Anthropic API). */
-const CHAT_PROVIDER_KINDS: Record<string, string> = {
-  claude: "anthropic",
-  anthropic: "anthropic",
-  codex: "codex",
-};
-
-function chatProviderLabel(kind: string): string {
-  return kind === "anthropic" ? "claude (anthropic)" : kind;
-}
-
 function switchableModel(runtime: IAgentRuntime): SwitchableModelProvider | undefined {
   return runtime.model instanceof SwitchableModelProvider ? runtime.model : undefined;
 }
@@ -141,15 +135,15 @@ const setChatProviderAction: Action = {
   name: "set_chat_provider",
   similes: ["switch_chat_provider", "set_reply_provider", "reply_via_claude", "reply_via_codex"],
   description:
-    "Switch which model writes the live replies in this chat: claude (Anthropic API) or codex " +
-    "(Codex CLI). Takes effect immediately and survives restarts. Forge coding jobs are " +
-    "separate — use set_forge_provider for those.",
+    "Switch which model writes the live replies in this chat: claude (Claude CLI subscription), " +
+    "claude-api (Anthropic API key), or codex (Codex CLI). Takes effect immediately and survives " +
+    "restarts. Forge coding jobs are separate — use set_forge_provider for those.",
   parameters: {
     type: "object",
     properties: {
       provider: {
         type: "string",
-        enum: ["claude", "codex"],
+        enum: CHAT_PROVIDER_CHOICES.map((c) => c.name),
         description: "Model provider for live replies.",
       },
     },
@@ -167,9 +161,13 @@ const setChatProviderAction: Action = {
   async handler(runtime, _state, params) {
     const model = switchableModel(runtime);
     if (!model) return { ok: false, text: "The live model provider is fixed for this run." };
-    const raw = String(params.provider ?? "").trim().toLowerCase();
-    const kind = CHAT_PROVIDER_KINDS[raw];
-    if (!kind) return { ok: false, text: "provider must be claude or codex" };
+    const kind = resolveChatProviderKind(String(params.provider ?? ""));
+    if (!kind) {
+      return {
+        ok: false,
+        text: `provider must be one of: ${CHAT_PROVIDER_CHOICES.map((c) => c.name).join(", ")}`,
+      };
+    }
     const result = model.switchTo(kind);
     if (typeof result === "string") return { ok: false, text: result };
     return {

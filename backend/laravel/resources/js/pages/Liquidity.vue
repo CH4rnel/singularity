@@ -503,10 +503,10 @@ const addLiquidity = async (): Promise<void> => {
 
         status.value = 'Liquidity added.';
         track('liquidity_added', {
-            wallet_address: wallet.address.value ?? undefined,
             metadata: {
-                tokenA: symbolOf(tokenA.value),
-                tokenB: symbolOf(tokenB.value),
+                action_type: 'add_liquidity',
+                network: activeChain.value.evmChain.name,
+                token: `${symbolOf(tokenA.value)}/${symbolOf(tokenB.value)}`,
             },
         });
         amountA.value = '';

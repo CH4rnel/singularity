@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { createLogger } from "../logger.js";
 import { ModelTier, type ModelProvider } from "../types.js";
 import { AnthropicModelProvider } from "./anthropic.js";
+import { ClaudeCliModelProvider, resolveClaudeBin } from "./claude-cli.js";
 import { CodexModelProvider, resolveCodexBin } from "./codex.js";
 import { MockModelProvider } from "./mock.js";
 import { OpenRouterModelProvider } from "./openrouter.js";
@@ -15,9 +16,13 @@ import {
 const log = createLogger("model");
 
 export { AnthropicModelProvider, MockModelProvider, OpenRouterModelProvider };
+export { ClaudeCliModelProvider, resolveClaudeBin } from "./claude-cli.js";
 export { CodexModelProvider, resolveCodexBin } from "./codex.js";
 export {
+  CHAT_PROVIDER_CHOICES,
+  chatProviderLabel,
   FallbackModelProvider,
+  resolveChatProviderKind,
   SwitchableModelProvider,
   TieredModelProvider,
 } from "./routing.js";
@@ -48,13 +53,18 @@ function splitArgs(raw?: string): string[] {
  * Pick a model provider from the environment.
  *
  * Base selection order:
- *   1. LAINOS_MODEL_PROVIDER, if set (codex | openrouter | anthropic | mock)
+ *   1. LAINOS_MODEL_PROVIDER, if set (codex | claude | openrouter | anthropic | mock)
  *   2. OPENROUTER_API_KEY present  -> openrouter
  *   3. ANTHROPIC_API_KEY present   -> anthropic
- *   4. otherwise                   -> offline mock
+ *   4. claude CLI on the machine   -> claude
+ *   5. otherwise                   -> offline mock
  *
- * `codex` runs completions through the Codex CLI (ChatGPT subscription, no
- * API key) and retries a failed call once on its own (LAINOS_CODEX_RETRIES).
+ * `codex` and `claude` run completions through a coding-agent CLI on the
+ * machine (ChatGPT / Claude subscription, no API key) and retry a failed call
+ * once on their own (LAINOS_CODEX_RETRIES / LAINOS_CLAUDE_RETRIES). `claude`
+ * and `anthropic` are the same model family by two routes — subscription CLI
+ * vs. API key — and each falls back to the other when its own route is
+ * missing, so "switch to Claude" works with either one configured.
  *
  * Cross-provider fallback is opt-in: LAINOS_MODEL_FALLBACK=<provider> retries
  * failed calls on that provider. Off by default so the agent never silently
@@ -78,6 +88,16 @@ export function createModelProvider(
     getSetting("LAINOS_MODEL_PROXY") ??
     getSetting("HTTPS_PROXY") ??
     getSetting("https_proxy");
+
+  // Resolved once per factory call: both "claude" and a keyless "anthropic"
+  // ask for it, and a PATH walk per lookup is pointless.
+  let claudeBinCache: string | null | undefined;
+  const claudeBin = (): string | null => {
+    if (claudeBinCache === undefined) {
+      claudeBinCache = resolveClaudeBin(getSetting("LAINOS_CLAUDE_BIN"));
+    }
+    return claudeBinCache;
+  };
 
   const cache = new Map<string, ModelProvider>();
   const make = (kind: string): ModelProvider | undefined => {
@@ -108,12 +128,41 @@ export function createModelProvider(
       }
       case "anthropic": {
         if (!anthropicKey) {
+          // Same models, other route: the subscription CLI needs no key.
+          if (claudeBin()) {
+            log.info("ANTHROPIC_API_KEY is missing — using the Claude CLI subscription instead.");
+            return make("claude");
+          }
           log.warn("Anthropic selected but ANTHROPIC_API_KEY is missing.");
           return undefined;
         }
         return new AnthropicModelProvider({
           apiKey: anthropicKey,
           models: tierOverrides(getSetting, "LAINOS_MODEL"),
+          proxy,
+        });
+      }
+      case "claude": {
+        const bin = claudeBin();
+        if (!bin) {
+          if (anthropicKey) {
+            log.info("no claude CLI found — using the Anthropic API key instead.");
+            return make("anthropic");
+          }
+          log.warn("claude selected but no claude CLI found (PATH or ~/.local/bin).");
+          return undefined;
+        }
+        const timeoutRaw = Number(getSetting("LAINOS_CLAUDE_TIMEOUT_MS"));
+        const retriesRaw = Number(getSetting("LAINOS_CLAUDE_RETRIES"));
+        return new ClaudeCliModelProvider({
+          bin,
+          models: tierOverrides(getSetting, "LAINOS_CLAUDE_MODEL"),
+          timeoutMs: Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : undefined,
+          retries: Number.isFinite(retriesRaw) && retriesRaw >= 0 ? retriesRaw : undefined,
+          extraArgs: splitArgs(getSetting("LAINOS_CLAUDE_ARGS")),
+          cwd:
+            getSetting("LAINOS_CLAUDE_CWD") ??
+            join(getSetting("LAINOS_DATA_DIR") ?? "./data", "claude"),
           proxy,
         });
       }
@@ -182,7 +231,14 @@ export function createModelProvider(
   };
 
   const envKind =
-    explicit || (openrouterKey ? "openrouter" : anthropicKey ? "anthropic" : "mock");
+    explicit ||
+    (openrouterKey
+      ? "openrouter"
+      : anthropicKey
+        ? "anthropic"
+        : claudeBin()
+          ? "claude"
+          : "mock");
   const overrideFile = chatProviderFile(getSetting);
   const stored = loadStoredChatProvider(overrideFile);
   if (stored && stored !== envKind) {

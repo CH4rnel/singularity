@@ -13,6 +13,7 @@ import type {
     SolanaTransactionProvider,
     SolanaWalletProvider,
 } from '@/lib/solanaWalletProvider';
+import { track } from '@/lib/track';
 
 export type SolanaWalletState = {
     isConnected: boolean;
@@ -127,6 +128,12 @@ export const useSolanaWallet = () => {
 
         error.value = null;
         isConnecting.value = true;
+        track('wallet_connect_started', {
+            metadata: {
+                action_type: 'connect',
+                network: 'Solana',
+            },
+        });
 
         try {
             const connectedAddress = await connectSolanaWalletProvider(wallet);
@@ -139,6 +146,12 @@ export const useSolanaWallet = () => {
             selectedWalletName.value = wallet.name;
             isConnected.value = true;
             setupListeners();
+            track('wallet_connected', {
+                metadata: {
+                    action_type: 'connect',
+                    network: 'Solana',
+                },
+            });
 
             return address.value;
         } catch (err) {

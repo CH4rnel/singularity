@@ -165,6 +165,9 @@ export const useWallet = () => {
     ): Promise<string | null> => {
         error.value = null;
         isConnecting.value = true;
+        track('wallet_connect_started', {
+            metadata: { action_type: 'connect' },
+        });
 
         try {
             removeListeners();
@@ -187,17 +190,19 @@ export const useWallet = () => {
             address.value = accounts[0];
             isConnected.value = true;
 
-            track('wallet_connected', {
-                wallet_address: accounts[0],
-                metadata: {
-                    wallet_provider: wallet.name,
-                    wallet_provider_source: wallet.source,
-                },
-            });
-
             await fetchBalance();
             await fetchChainId();
             await fetchCyberBalance();
+
+            track('wallet_connected', {
+                metadata: {
+                    action_type: 'connect',
+                    network:
+                        chainId.value === null
+                            ? undefined
+                            : String(chainId.value),
+                },
+            });
 
             setupListeners();
 
@@ -354,6 +359,12 @@ export const useWallet = () => {
         try {
             await ensureEvmChain(injected, chain);
             await fetchChainId();
+            track('network_switch', {
+                metadata: {
+                    action_type: 'switch',
+                    network: chain.name,
+                },
+            });
 
             return true;
         } catch (err) {

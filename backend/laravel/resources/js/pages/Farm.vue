@@ -41,6 +41,7 @@ import {
 } from '@/lib/farmChains';
 import type { FarmChainConfig } from '@/lib/farmChains';
 import { formatUsd } from '@/lib/tokenFormat';
+import { track } from '@/lib/track';
 
 // Ritual MasterChef — Uniswap-V2-style farm minting ASH rewards. Pools are
 // enumerated on-chain (poolLength/poolInfo), so new pools the owner adds show
@@ -853,6 +854,14 @@ async function stake(pool: Pool): Promise<void> {
         return;
     }
 
+    track('staking_started', {
+        metadata: {
+            action_type: 'lp_stake',
+            network: activeChain.value.evmChain.name,
+            token: pool.label,
+        },
+    });
+
     await run(pool.pid, 'stake', async (signer) => {
         const masterchef = activeChain.value.masterchef;
 
@@ -869,6 +878,13 @@ async function stake(pool: Pool): Promise<void> {
         status.value = 'Waiting for block…';
         await tx.wait();
         status.value = `Staked ${fmt(amount, pool.decimals)} ${pool.label}.`;
+        track('staking_completed', {
+            metadata: {
+                action_type: 'lp_stake',
+                network: activeChain.value.evmChain.name,
+                token: pool.label,
+            },
+        });
         stakeInput[pool.pid] = '';
     });
 }

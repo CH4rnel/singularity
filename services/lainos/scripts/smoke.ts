@@ -10,6 +10,7 @@ import { AgentRuntime, createAgent, FileMemoryStore, type ModelProvider, type Mo
 import { lain } from "../src/characters/lain.js";
 import { splitMessage } from "../src/clients/telegram.js";
 import { stripReasoning, ThinkTagFilter } from "../src/models/openrouter.js";
+import { resolveChatProviderKind, SwitchableModelProvider } from "../src/models/routing.js";
 import {
   localDay,
   normalizeChannel,
@@ -539,6 +540,42 @@ async function main() {
     name.endsWith(".json"),
   );
 
+  // --- chat provider switch: claude/codex re-routing, no silent downgrade ---
+  const stub = (name: string): ModelProvider => ({
+    name,
+    modelFor: () => `${name}-model`,
+    async generate() {
+      return { text: "", toolCalls: [], model: `${name}-model` };
+    },
+  });
+  const persistedProviders: (string | null)[] = [];
+  const switchable = new SwitchableModelProvider({
+    initial: stub("codex"),
+    kind: "codex",
+    envKind: "codex",
+    // "anthropic" stands in for a route with no key and no CLI on the machine.
+    assemble: (kind) => (kind === "anthropic" ? undefined : stub(kind)),
+    persist: (kind) => persistedProviders.push(kind),
+  });
+  const toClaude = switchable.switchTo(resolveChatProviderKind("claude") ?? "?");
+  const failedSwitch = switchable.switchTo(resolveChatProviderKind("claude-api") ?? "?");
+  const stayedPut = typeof failedSwitch === "string" && switchable.state().kind === "claude";
+  const backToCodex = switchable.switchTo(resolveChatProviderKind("codex") ?? "?");
+  const chatProviderSwitchOk =
+    resolveChatProviderKind("claude") === "claude" &&
+    resolveChatProviderKind("claude-api") === "anthropic" &&
+    resolveChatProviderKind("gpt-5") === undefined &&
+    typeof toClaude !== "string" &&
+    toClaude.kind === "claude" &&
+    toClaude.overridden &&
+    stayedPut &&
+    typeof backToCodex !== "string" &&
+    !backToCodex.overridden &&
+    // the override is persisted, and cleared again when it matches the env
+    persistedProviders.length === 2 &&
+    persistedProviders[0] === "claude" &&
+    persistedProviders[1] === null;
+
   console.log("\n=== assertions ===");
   console.log(`fact 'operator' learned : ${learnedName ? "PASS" : "FAIL"}`);
   console.log(`russian name learned     : ${learnedRussianName ? "PASS" : "FAIL"}`);
@@ -559,6 +596,7 @@ async function main() {
   console.log(`forge jobs listed        : ${forgeJobsListed ? "PASS" : "FAIL"}`);
   console.log(`forge jobs scrub secrets : ${forgeJobsScrubbed ? "PASS" : "FAIL"}`);
   console.log(`forge provider switch    : ${forgeProviderSwitchOk ? "PASS" : "FAIL"}`);
+  console.log(`chat provider switch     : ${chatProviderSwitchOk ? "PASS" : "FAIL"}`);
   console.log(`skills hot self-extend   : ${skillsOk ? "PASS" : "FAIL"}`);
   console.log(`trade journal cost basis : ${journalOk ? "PASS" : "FAIL"}`);
   console.log(`initiative quiet hours   : ${quietOk ? "PASS" : "FAIL"}`);
@@ -574,7 +612,7 @@ async function main() {
   await agent.stop();
   const ok =
     learnedName && learnedRussianName && ranBalance && nullIsZero && forcedPnl && toolResultContractOk && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
-    walletOk && lainTokenKnown && wishLogged && wishEdited && wishForged && forgeProviderSwitchOk && skillsOk && journalOk && quietOk &&
+    walletOk && lainTokenKnown && wishLogged && wishEdited && wishForged && forgeProviderSwitchOk && chatProviderSwitchOk && skillsOk && journalOk && quietOk &&
     forgeJobsListed && forgeJobsScrubbed &&
     rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
     githubOk && channelOk && telegramOk;

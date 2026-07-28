@@ -1,6 +1,11 @@
 import { createServer, type Server } from "node:http";
 import { runCyberiaStudyNow } from "../cyberia-study.js";
 import { createLogger } from "../logger.js";
+import {
+  CHAT_PROVIDER_CHOICES,
+  resolveChatProviderKind,
+  SwitchableModelProvider,
+} from "../models/routing.js";
 import type { ForgeService } from "../plugins/forge/index.js";
 import type { ScoutService } from "../plugins/scout/index.js";
 import type { SentinelService } from "../plugins/sentinel/index.js";
@@ -22,6 +27,8 @@ export interface HttpOptions {
  *   GET  /wishes            -> { wishes } (the forge wishboard)
  *   GET  /research          -> { topics } (the scout's subscriptions)
  *   POST /research/cyberia-study/run -> { topic, digest }
+ *   GET  /provider          -> { provider, choices } (who writes the replies)
+ *   POST /provider {provider} -> { provider } (switch claude/codex live)
  *   POST /chat {roomId,userId,text} -> { text, actions }
  */
 export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {}): Server {
@@ -70,6 +77,35 @@ export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {})
       } catch (err) {
         log.error("cyberia study trigger failed", err);
         return json(res, 500, { error: "cyberia study failed" });
+      }
+    }
+
+    // Switching the live daemon (Telegram, sentinel, initiative) between
+    // claude and codex without a restart — the TUI runs its own process, so
+    // its /model only persists the choice for the daemon's next boot.
+    if (req.url?.startsWith("/provider") && (req.method === "GET" || req.method === "POST")) {
+      const model = runtime.model;
+      if (!(model instanceof SwitchableModelProvider)) {
+        return json(res, 409, { error: "model provider is fixed for this run" });
+      }
+      if (req.method === "GET") {
+        return json(res, 200, { provider: model.state(), choices: CHAT_PROVIDER_CHOICES });
+      }
+      try {
+        const body = await readBody(req);
+        const { provider } = JSON.parse(body || "{}");
+        const kind = resolveChatProviderKind(String(provider ?? ""));
+        if (!kind) {
+          return json(res, 400, {
+            error: `field 'provider' must be one of: ${CHAT_PROVIDER_CHOICES.map((c) => c.name).join(", ")}`,
+          });
+        }
+        const result = model.switchTo(kind);
+        if (typeof result === "string") return json(res, 409, { error: result });
+        return json(res, 200, { provider: result });
+      } catch (err) {
+        log.error("provider switch failed", err);
+        return json(res, 500, { error: "internal error" });
       }
     }
 

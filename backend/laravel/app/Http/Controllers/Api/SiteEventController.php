@@ -21,8 +21,14 @@ class SiteEventController extends Controller
             'session_id' => ['required', 'uuid'],
             'event' => ['required', 'string', Rule::in(SiteEvent::EVENTS)],
             'page' => ['nullable', 'string', 'max:255'],
-            'wallet_address' => ['nullable', 'string', 'max:255'],
-            'metadata' => ['nullable', 'array'],
+            'metadata' => ['nullable', 'array:source,medium,campaign,partner,network,token,action_type'],
+            'metadata.source' => ['nullable', 'string', 'max:100'],
+            'metadata.medium' => ['nullable', 'string', 'max:100'],
+            'metadata.campaign' => ['nullable', 'string', 'max:100'],
+            'metadata.partner' => ['nullable', 'string', 'max:100'],
+            'metadata.network' => ['nullable', 'string', 'max:100'],
+            'metadata.token' => ['nullable', 'string', 'max:100'],
+            'metadata.action_type' => ['nullable', 'string', 'max:100'],
         ]);
 
         SiteEvent::create([

@@ -12,7 +12,17 @@ class SiteEvent extends Model
     /** Whitelist enforced at ingest; extend alongside lib/track.ts. */
     public const EVENTS = [
         'page_view',
+        'landing_view',
+        'wallet_connect_started',
         'wallet_connected',
+        'network_switch',
+        'bridge_started',
+        'bridge_completed',
+        'swap_started',
+        'swap_completed',
+        'staking_started',
+        'staking_completed',
+        'partner_cta_clicked',
         'swap_executed',
         'liquidity_added',
     ];
@@ -20,7 +30,6 @@ class SiteEvent extends Model
     protected $fillable = [
         'session_id',
         'user_id',
-        'wallet_address',
         'event',
         'page',
         'metadata',

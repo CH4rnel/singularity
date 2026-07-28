@@ -18,6 +18,7 @@ process.env.LAINOS_DATA_DIR = mkdtempSync(join(tmpdir(), "lainos-tui-"));
 import { App } from "../src/clients/tui/App.js";
 import { AgentRuntime } from "../src/runtime.js";
 import { FileMemoryStore } from "../src/memory/store.js";
+import { SwitchableModelProvider } from "../src/models/routing.js";
 import { lain } from "../src/characters/lain.js";
 import type { ModelRequest, ModelResponse } from "../src/types.js";
 
@@ -65,10 +66,23 @@ async function main() {
       return { text: REPLY, toolCalls: [], model: "stub" };
     },
   };
+  // The daemon's chat model is switchable (/model claude|codex), so the probe
+  // wraps the stub the same way — "anthropic" stands in for a route that has
+  // neither a key nor a CLI on this machine.
+  const switchable = new SwitchableModelProvider({
+    initial: model as never,
+    kind: "codex",
+    envKind: "codex",
+    assemble: (kind) =>
+      kind === "anthropic"
+        ? undefined
+        : ({ ...model, name: kind, modelFor: () => `${kind}-model` } as never),
+    persist: () => {},
+  });
   const runtime = new AgentRuntime({
     character: lain,
     memory: new FileMemoryStore(mkdtempSync(join(tmpdir(), "lainos-tui-mem-"))),
-    model: model as never,
+    model: switchable as never,
     settings: {},
   });
   // A fat skill list (the real daemon registers 30+ actions) once made the
@@ -182,6 +196,17 @@ async function main() {
   const skinReprint = stdout.writes.slice(beforePick).find((w) => w.includes("welcome to the wired"));
   results.push(["/skin wipes screen   ", anyWrite("\x1b[3J", beforePick)]);
   results.push(["/skin reprints theme ", !!skinReprint && skinReprint.includes(matrixPrimary)]);
+
+  // 4.7) /model re-routes the replies in place, and a route that cannot be
+  // built says so instead of silently dropping the chat on another model.
+  const beforeModel = stdout.writes.length;
+  await type("/model claude\r");
+  await sleep(300);
+  results.push(["/model switches      ", anyWrite("replies now go through claude (cli)", beforeModel)]);
+  const beforeBadModel = stdout.writes.length;
+  await type("/model claude-api\r");
+  await sleep(300);
+  results.push(["/model failure loud  ", anyWrite("unavailable", beforeBadModel)]);
 
   // 4.5) nothing ever draws wider than the terminal — an overflowing line is
   // hard-wrapped by the terminal itself and shreds the static frames.
