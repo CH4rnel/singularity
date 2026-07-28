@@ -170,17 +170,23 @@ const gamesNavItems: NavItem[] = [
     },
 ];
 
-const workspaceNavItems: NavItem[] = [
+// CRM is operator-only (see config/crm.php); the routes 404 for everyone else,
+// so the link is dropped rather than shown broken.
+const workspaceNavItems = computed<NavItem[]>(() => [
     {
         title: 'DAO',
         href: '/dao',
         icon: Vote,
     },
-    {
-        title: 'CRM',
-        href: '/crm',
-        icon: Users,
-    },
+    ...(page.props.auth?.canAccessCrm
+        ? [
+              {
+                  title: 'CRM',
+                  href: '/crm',
+                  icon: Users,
+              },
+          ]
+        : []),
     {
         title: 'Links',
         href: '/links',
@@ -191,7 +197,7 @@ const workspaceNavItems: NavItem[] = [
         href: '/categories',
         icon: Folder,
     },
-];
+]);
 
 const footerNavItems: NavItem[] = [
     {

@@ -7,12 +7,14 @@ use App\Concerns\HasTeams;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use NotificationChannels\WebPush\HasPushSubscriptions;
@@ -89,5 +91,31 @@ class User extends Authenticatable
     public function mergedAccounts(): HasMany
     {
         return $this->hasMany(User::class, 'merged_into_id');
+    }
+
+    /**
+     * CRM tasks assigned to this user.
+     *
+     * @return HasMany<CrmTask, $this>
+     */
+    public function crmTasks(): HasMany
+    {
+        return $this->hasMany(CrmTask::class, 'assigned_to_user_id');
+    }
+
+    /**
+     * Operators whose EVM wallet is on the CRM allow list (config/crm.php).
+     * They are the only accounts that can open the CRM, and therefore the
+     * only ones a CRM task can be assigned to. Compared lowercased to match
+     * EnsureCrmAdmin, which tolerates legacy checksummed rows.
+     *
+     * @param  Builder<User>  $query
+     */
+    public function scopeCrmOperators(Builder $query): void
+    {
+        $query->whereIn(
+            DB::raw('lower(wallet_address)'),
+            config('crm.admin_wallets', []),
+        )->orderBy('id');
     }
 }

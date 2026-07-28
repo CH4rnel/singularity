@@ -15,6 +15,8 @@ export type User = {
 
 export type Auth = {
     user: User;
+    /** Whether this user's EVM wallet is on the CRM allow list. */
+    canAccessCrm?: boolean;
 };
 
 export type TwoFactorConfigContent = {

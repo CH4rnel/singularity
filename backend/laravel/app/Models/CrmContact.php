@@ -84,6 +84,14 @@ class CrmContact extends Model
         return $this->hasMany(CrmNote::class)->latest();
     }
 
+    /**
+     * @return HasMany<CrmTask, $this>
+     */
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(CrmTask::class)->byDueDate();
+    }
+
     public function isWhale(): bool
     {
         return $this->type === 'whale';

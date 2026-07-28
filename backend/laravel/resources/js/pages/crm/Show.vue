@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, Languages, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, CheckSquare, Languages, Trash2 } from 'lucide-vue-next';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/composables/useLocale';
 import { crmMessages } from '@/lib/crmMessages';
-import type { CrmBridgeActivity, CrmContact } from '@/types';
+import type {
+    CrmAssignee,
+    CrmBridgeActivity,
+    CrmContact,
+    CrmTask,
+    CrmTaskPriority,
+    CrmTaskStatus,
+} from '@/types';
 
 type Props = {
     contact: CrmContact;
@@ -16,6 +23,9 @@ type Props = {
     options: {
         types: string[];
         statuses: string[];
+        taskStatuses: CrmTaskStatus[];
+        taskPriorities: CrmTaskPriority[];
+        assignees: CrmAssignee[];
     };
 };
 
@@ -55,6 +65,49 @@ function addNote() {
 
 function deleteNote(id: number) {
     router.delete(`/crm/notes/${id}`, { preserveScroll: true });
+}
+
+const taskForm = useForm<{
+    title: string;
+    assigned_to_user_id: number | null;
+    priority: CrmTaskPriority;
+    due_at: string;
+}>({
+    title: '',
+    assigned_to_user_id: null,
+    priority: 'normal',
+    due_at: '',
+});
+
+function addTask() {
+    taskForm
+        .transform((data) => ({ ...data, due_at: data.due_at || null }))
+        .post(`/crm/${props.contact.id}/tasks`, {
+            preserveScroll: true,
+            onSuccess: () => taskForm.reset(),
+        });
+}
+
+/** Inline edits on an existing task: one field per request. */
+function patchTask(
+    task: CrmTask,
+    payload: Record<string, string | number | null>,
+) {
+    router.put(`/crm/tasks/${task.id}`, payload, { preserveScroll: true });
+}
+
+function deleteTask(task: CrmTask) {
+    if (confirm(`${t('confirmDeleteTask')} (${task.title})`)) {
+        router.delete(`/crm/tasks/${task.id}`, { preserveScroll: true });
+    }
+}
+
+function isOverdue(task: CrmTask): boolean {
+    return (
+        task.due_at !== null &&
+        (task.status === 'open' || task.status === 'in_progress') &&
+        new Date(task.due_at) < new Date()
+    );
 }
 
 function deleteContact() {
@@ -207,6 +260,171 @@ defineOptions({
                                 {{ t('save') }}
                             </Button>
                         </form>
+                    </CardContent>
+                </Card>
+
+                <!-- Tasks for this contact -->
+                <Card>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between"
+                    >
+                        <CardTitle>{{ t('tasks') }}</CardTitle>
+                        <Link href="/crm/tasks">
+                            <Button variant="ghost" size="sm">
+                                <CheckSquare class="h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </CardHeader>
+                    <CardContent class="space-y-4">
+                        <form @submit.prevent="addTask" class="space-y-2">
+                            <Input
+                                v-model="taskForm.title"
+                                :placeholder="t('taskTitlePlaceholder')"
+                            />
+                            <div class="flex flex-wrap gap-2">
+                                <select
+                                    v-model="taskForm.assigned_to_user_id"
+                                    class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                >
+                                    <option :value="null">
+                                        {{ t('unassigned') }}
+                                    </option>
+                                    <option
+                                        v-for="operator in options.assignees"
+                                        :key="operator.id"
+                                        :value="operator.id"
+                                    >
+                                        {{ operator.name }}
+                                    </option>
+                                </select>
+                                <select
+                                    v-model="taskForm.priority"
+                                    class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                >
+                                    <option
+                                        v-for="option in options.taskPriorities"
+                                        :key="option"
+                                        :value="option"
+                                    >
+                                        {{ t(`priority.${option}`) }}
+                                    </option>
+                                </select>
+                                <Input
+                                    v-model="taskForm.due_at"
+                                    type="date"
+                                    class="w-auto"
+                                />
+                                <Button
+                                    type="submit"
+                                    :disabled="
+                                        taskForm.processing || !taskForm.title
+                                    "
+                                >
+                                    {{ t('add') }}
+                                </Button>
+                            </div>
+                        </form>
+
+                        <div
+                            v-for="task in contact.tasks"
+                            :key="task.id"
+                            class="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
+                        >
+                            <div>
+                                <p
+                                    class="text-sm"
+                                    :class="
+                                        task.status === 'done' ||
+                                        task.status === 'cancelled'
+                                            ? 'text-muted-foreground line-through'
+                                            : ''
+                                    "
+                                >
+                                    {{ task.title }}
+                                </p>
+                                <p class="mt-1 text-xs text-muted-foreground">
+                                    {{ task.assignee?.name || t('unassigned') }}
+                                    ·
+                                    <span
+                                        :class="
+                                            isOverdue(task)
+                                                ? 'font-medium text-destructive'
+                                                : ''
+                                        "
+                                    >
+                                        {{
+                                            task.due_at
+                                                ? task.due_at.slice(0, 10)
+                                                : t('noDueDate')
+                                        }}
+                                    </span>
+                                    · {{ t(`priority.${task.priority}`) }}
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <select
+                                    :value="task.assigned_to_user_id ?? ''"
+                                    class="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                                    @change="
+                                        patchTask(task, {
+                                            assigned_to_user_id:
+                                                (
+                                                    $event.target as HTMLSelectElement
+                                                ).value === ''
+                                                    ? null
+                                                    : Number(
+                                                          (
+                                                              $event.target as HTMLSelectElement
+                                                          ).value,
+                                                      ),
+                                        })
+                                    "
+                                >
+                                    <option value="">
+                                        {{ t('unassigned') }}
+                                    </option>
+                                    <option
+                                        v-for="operator in options.assignees"
+                                        :key="operator.id"
+                                        :value="operator.id"
+                                    >
+                                        {{ operator.name }}
+                                    </option>
+                                </select>
+                                <select
+                                    :value="task.status"
+                                    class="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                                    @change="
+                                        patchTask(task, {
+                                            status: (
+                                                $event.target as HTMLSelectElement
+                                            ).value,
+                                        })
+                                    "
+                                >
+                                    <option
+                                        v-for="option in options.taskStatuses"
+                                        :key="option"
+                                        :value="option"
+                                    >
+                                        {{ t(`taskStatus.${option}`) }}
+                                    </option>
+                                </select>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="deleteTask(task)"
+                                >
+                                    <Trash2 class="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                        <p
+                            v-if="!contact.tasks || contact.tasks.length === 0"
+                            class="text-sm text-muted-foreground"
+                        >
+                            {{ t('noTasks') }}
+                        </p>
                     </CardContent>
                 </Card>
 

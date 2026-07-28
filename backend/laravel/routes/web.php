@@ -17,6 +17,7 @@ use App\Http\Controllers\CrmAnalyticsController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmNoteController;
+use App\Http\Controllers\CrmTaskController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\LainChatController;
@@ -34,6 +35,7 @@ use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Middleware\EnsureBridgeAdmin;
+use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
 use App\Services\DexAprService;
 use Illuminate\Http\Request;
@@ -251,12 +253,18 @@ Route::middleware(['auth'])->group(function () {
     Route::post('push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
 
-    // CRM — contacts, notes and data-source sync. Static routes (sync/export)
-    // are declared before the {contact} wildcard so they take precedence.
-    Route::prefix('crm')->name('crm.')->group(function () {
+    // CRM — contacts, notes and data-source sync. Restricted to the operator
+    // wallets in config/crm.php; everyone else gets a 404. Static routes
+    // (sync/export) are declared before the {contact} wildcard so they take
+    // precedence.
+    Route::prefix('crm')->name('crm.')->middleware(EnsureCrmAdmin::class)->group(function () {
         Route::post('sync', [CrmController::class, 'sync'])->name('sync');
         Route::get('export', [CrmController::class, 'export'])->name('export');
         Route::get('analytics', [CrmAnalyticsController::class, 'index'])->name('analytics');
+        Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
+        Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');
+        Route::put('tasks/{task}', [CrmTaskController::class, 'update'])->name('tasks.update');
+        Route::delete('tasks/{task}', [CrmTaskController::class, 'destroy'])->name('tasks.destroy');
         Route::get('/', [CrmContactController::class, 'index'])->name('index');
         Route::post('/', [CrmContactController::class, 'store'])->name('store');
         Route::get('{contact}', [CrmContactController::class, 'show'])->name('show');
@@ -264,6 +272,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('{contact}', [CrmContactController::class, 'destroy'])->name('destroy');
         Route::post('{contact}/notes', [CrmNoteController::class, 'store'])->name('notes.store');
         Route::delete('notes/{note}', [CrmNoteController::class, 'destroy'])->name('notes.destroy');
+        Route::post('{contact}/tasks', [CrmTaskController::class, 'store'])->name('tasks.storeForContact');
     });
 
     // Wallet attach/detach

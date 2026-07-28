@@ -20,6 +20,33 @@ export type CrmNote = {
     author?: User | null;
 };
 
+export type CrmTaskStatus = 'open' | 'in_progress' | 'done' | 'cancelled';
+export type CrmTaskPriority = 'low' | 'normal' | 'high';
+
+export type CrmTask = {
+    id: number;
+    crm_contact_id: number | null;
+    assigned_to_user_id: number | null;
+    created_by_user_id: number | null;
+    title: string;
+    description: string | null;
+    status: CrmTaskStatus;
+    priority: CrmTaskPriority;
+    due_at: string | null;
+    completed_at: string | null;
+    created_at: string;
+    updated_at: string;
+    assignee?: Pick<User, 'id' | 'name'> | null;
+    contact?: Pick<CrmContact, 'id' | 'name' | 'email'> | null;
+};
+
+/** Operator a task can be handed to — the CRM allow list, resolved to users. */
+export type CrmAssignee = {
+    id: number;
+    name: string;
+    wallet_address?: string | null;
+};
+
 export type CrmContact = {
     id: number;
     name: string | null;
@@ -40,6 +67,7 @@ export type CrmContact = {
     updated_at: string;
     notes_count?: number;
     notes?: CrmNote[];
+    tasks?: CrmTask[];
     user?: User | null;
 };
 

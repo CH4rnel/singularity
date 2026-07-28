@@ -2,6 +2,7 @@
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
     BarChart3,
+    CheckSquare,
     Download,
     Languages,
     Plus,
@@ -176,6 +177,11 @@ defineOptions({
                     <Languages class="h-4 w-4" />
                     {{ locale === 'ru' ? 'EN' : 'RU' }}
                 </Button>
+                <Link href="/crm/tasks">
+                    <Button variant="outline">
+                        <CheckSquare class="h-4 w-4" /> {{ t('tasks') }}
+                    </Button>
+                </Link>
                 <Link href="/crm/analytics">
                     <Button variant="outline">
                         <BarChart3 class="h-4 w-4" /> {{ t('analytics') }}

@@ -118,7 +118,7 @@ test('importing whales is a no-op when the bot table is absent', function () {
 
 test('the sync endpoint runs every importer', function () {
     fakeHolderRpc();
-    $user = User::factory()->create(['wallet_address' => '0x'.str_repeat('c', 40)]);
+    $user = User::factory()->crmAdmin()->create();
 
     $this->actingAs($user)
         ->post(route('crm.sync'))

@@ -44,6 +44,9 @@ class HandleInertiaRequests extends Middleware
             'release' => fn () => Changelog::shared(),
             'auth' => [
                 'user' => $user,
+                // Drives the CRM sidebar entry. The routes themselves are
+                // guarded by EnsureCrmAdmin — this only hides dead links.
+                'canAccessCrm' => EnsureCrmAdmin::allows($user),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'currentTeam' => fn () => $user?->currentTeam ? $user->toUserTeam($user->currentTeam) : null,

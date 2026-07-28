@@ -57,6 +57,18 @@ class UserFactory extends Factory
     }
 
     /**
+     * Attach an EVM wallet from the CRM allow list (config/crm.php), which is
+     * what EnsureCrmAdmin checks.
+     */
+    public function crmAdmin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'wallet_address' => config('crm.admin_wallets')[0]
+                ?? '0xaff26832db3557daf540b0b09dee06c24b8a38bb',
+        ]);
+    }
+
+    /**
      * Indicate that the model's email address should be unverified.
      */
     public function unverified(): static

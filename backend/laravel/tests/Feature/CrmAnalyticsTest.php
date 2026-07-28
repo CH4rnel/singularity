@@ -89,7 +89,7 @@ test('site events reject metadata outside the safe attribution vocabulary', func
 });
 
 test('the analytics page builds the funnel from unique sessions', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->crmAdmin()->create();
 
     $visitorA = (string) Str::uuid();
     $visitorB = (string) Str::uuid();

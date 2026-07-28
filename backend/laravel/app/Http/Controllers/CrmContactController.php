@@ -6,6 +6,8 @@ use App\Http\Requests\StoreCrmContactRequest;
 use App\Http\Requests\UpdateCrmContactRequest;
 use App\Models\BridgeRequest;
 use App\Models\CrmContact;
+use App\Models\CrmTask;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -49,7 +51,7 @@ class CrmContactController extends Controller
 
     public function show(CrmContact $contact): Response
     {
-        $contact->load(['notes.author', 'user']);
+        $contact->load(['notes.author', 'user', 'tasks.assignee:id,name']);
 
         $addresses = array_filter([$contact->evm_address, $contact->solana_address]);
 
@@ -68,6 +70,9 @@ class CrmContactController extends Controller
             'options' => [
                 'types' => CrmContact::TYPES,
                 'statuses' => CrmContact::STATUSES,
+                'taskStatuses' => CrmTask::STATUSES,
+                'taskPriorities' => CrmTask::PRIORITIES,
+                'assignees' => User::crmOperators()->get(['id', 'name'])->all(),
             ],
         ]);
     }
