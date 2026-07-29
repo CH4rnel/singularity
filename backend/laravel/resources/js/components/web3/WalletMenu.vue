@@ -3,6 +3,7 @@ import { router, usePage } from '@inertiajs/vue3';
 import {
     Check,
     ChevronDown,
+    Contact,
     Download,
     Globe,
     LogOut,
@@ -22,6 +23,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
+import WalletAvatar from '@/components/web3/WalletAvatar.vue';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { useWeb3Login } from '@/composables/useWeb3Login';
@@ -30,6 +32,7 @@ import type { EvmChain } from '@/lib/evmChains';
 import { mergeWalletChoices } from '@/lib/walletChoices';
 import { logout as logoutRoute } from '@/routes';
 import { show as profileRoute } from '@/routes/profile';
+import { show as userShow } from '@/routes/users';
 
 const page = usePage();
 
@@ -42,7 +45,9 @@ const authUser = computed(
     () =>
         page.props.auth?.user as
             | {
+                  id: number;
                   name?: string;
+                  avatar?: string | null;
                   wallet_address?: string | null;
                   solana_wallet_address?: string | null;
               }
@@ -126,6 +131,10 @@ const displayAddress = computed(() => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 });
 
+const displayName = computed(
+    () => authUser.value?.name || displayAddress.value || 'Profile',
+);
+
 const connectEvm = (providerId: string) => web3Login.loginWithEvm(providerId);
 const connectSolana = (providerId: string) =>
     web3Login.loginWithSolana(providerId);
@@ -151,11 +160,18 @@ onMounted(refreshWalletChoices);
                     @click="refreshWalletChoices"
                 >
                     <Spinner v-if="isAuthenticating" class="h-4 w-4" />
+                    <WalletAvatar
+                        v-else-if="isAuthenticated"
+                        :seed="displayAddress"
+                        :name="displayName"
+                        :src="authUser?.avatar"
+                        size="sm"
+                    />
                     <Wallet v-else class="h-4 w-4" />
                     <span
-                        v-if="isAuthenticated && displayAddress"
-                        class="font-mono"
-                        >{{ displayAddress }}</span
+                        v-if="isAuthenticated"
+                        class="max-w-28 truncate"
+                        >{{ displayName }}</span
                     >
                     <span v-else>Connect Wallet</span>
                     <ChevronDown class="h-3 w-3 opacity-60" />
@@ -202,15 +218,28 @@ onMounted(refreshWalletChoices);
                     <DropdownMenuSeparator />
                 </template>
                 <template v-if="isAuthenticated">
-                    <DropdownMenuItem disabled class="font-mono text-xs">
-                        {{ displayAddress }}
+                    <DropdownMenuItem disabled class="text-xs">
+                        <span class="truncate">{{ displayName }}</span>
+                        <span
+                            v-if="displayAddress"
+                            class="ml-auto font-mono text-[10px] text-muted-foreground"
+                        >
+                            {{ displayAddress }}
+                        </span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                         @select="router.visit(profileRoute().url)"
                     >
                         <User class="mr-2 h-4 w-4" />
-                        Profile
+                        Private profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        v-if="authUser?.id"
+                        @select="router.visit(userShow(authUser.id).url)"
+                    >
+                        <Contact class="mr-2 h-4 w-4" />
+                        Public profile
                     </DropdownMenuItem>
                     <DropdownMenuItem @select="signOut">
                         <LogOut class="mr-2 h-4 w-4" />

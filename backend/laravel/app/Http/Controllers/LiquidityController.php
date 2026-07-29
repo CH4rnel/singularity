@@ -49,18 +49,6 @@ class LiquidityController extends Controller
                     [$swapHistorySince],
                 ))
                 : collect(),
-            'priceHistory' => $hasEvents
-                ? DB::table('activity_events')
-                    ->where('kind', 'swap')
-                    ->where('created_at', '>=', $swapHistorySince)
-                    ->whereNotNull('sym_in')
-                    ->whereNotNull('sym_out')
-                    ->where('amt_in', '>', 0)
-                    ->where('amt_out', '>', 0)
-                    ->orderBy('created_at')
-                    ->orderBy('id')
-                    ->get(['id', 'sym_in', 'amt_in', 'sym_out', 'amt_out', 'meta', 'created_at'])
-                : collect(),
             'indexerReady' => $hasPools,
             // Cached per-pool LP APR snapshot (scheduled dex:apr command);
             // null until the first run completes.

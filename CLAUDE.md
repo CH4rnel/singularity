@@ -131,6 +131,7 @@ Be careful with production-host paths such as `/root/singularity/...`.
 - Laravel frontend wallet/bridge composables live under `backend/laravel/resources/js/composables/`.
 - EVM contracts include bridge (`CyberBridge.sol`, `WrappedCyberSol.sol`), tokens (`USDC.sol`, `USDT.sol`, `BTC.sol`, `LTC.sol`, `SOL.sol`, `RUB.sol`, `GOLD.sol`, etc.), DAO (`contracts/dao/`), lending (`contracts/lending/`), launchpad/NFT, and QuickSwap forks.
 - Anchor bridge instructions live in `crypto/anchor/programs/anchor/src/instructions/`.
+- Gamification/retention: `GamificationService` + `config/gamification.php` (XP ledger `xp_entries`, `user_stats`, `user_quests`; `/profile` panel, public `/leaderboard`, `gamification:sync` command). Client events never pay value XP — only visits/page views; swaps, liquidity, bridges and governance are credited from the indexer, `bridge_requests` and the DAO tables. `UserAnalyticsService` adds retention cohorts to `/crm/analytics`.
 - Profile page (`/profile`): per-user CEX-style deposit addresses (BTC/LTC/YTN P2PKH from per-chain HD seeds, XMR integrated address; `UserDepositAddressService`, operator command `bridge:user-deposit`) plus on-chain nicknames/achievements via the `CyberiaProfile` contract at `0xa9101ee859850c037b0867156b3535F78A387C0d` (`crypto/hardhat/contracts/CyberiaProfile.sol`, Laravel `ProfileOnchainService`/`AchievementService`, override via `CYBERIA_PROFILE_ADDRESS`).
 
 ## Verification

@@ -28,7 +28,7 @@ class AccountMergeService
      * Identity fields copied from the absorbed account to the survivor when
      * the survivor doesn't already hold a conflicting value.
      */
-    private const IDENTITY_FIELDS = ['wallet_address', 'solana_wallet_address', 'twitter_id', 'twitter_username'];
+    private const IDENTITY_FIELDS = ['wallet_address', 'onchain_nickname', 'solana_wallet_address', 'twitter_id', 'twitter_username'];
 
     /**
      * Tables with a plain user_id column and no unique constraint involving
@@ -37,7 +37,7 @@ class AccountMergeService
     private const SIMPLE_TABLES = [
         'activities', 'proposals', 'proposal_comments', 'lain_chat_messages',
         'lain_chat_sessions', 'bridge_requests', 'bridge_events', 'site_events',
-        'slot_spins', 'crm_contacts', 'crm_notes', 'daos',
+        'slot_spins', 'crm_contacts', 'crm_notes', 'daos', 'posts',
     ];
 
     /**
@@ -193,6 +193,7 @@ class AccountMergeService
     {
         $absorbed->forceFill([
             'wallet_address' => null,
+            'onchain_nickname' => null,
             'solana_wallet_address' => null,
             'twitter_id' => null,
             'twitter_username' => null,

@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateAvatarRequest;
 use App\Services\AchievementService;
 use App\Services\BridgeConfigService;
+use App\Services\GamificationService;
 use App\Services\ProfileOnchainService;
 use App\Services\UserDepositAddressService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use RuntimeException;
 
 /**
  * Signed-in user's own profile page (the public one is UserProfileController).
@@ -27,21 +32,52 @@ class ProfileController extends Controller
         UserDepositAddressService $depositAddresses,
         ProfileOnchainService $onchain,
         AchievementService $achievements,
+        GamificationService $gamification,
     ) {
         $user = $request->user();
+        $nickname = $user->wallet_address && $onchain->enabled()
+            ? $onchain->syncNickname($user)
+            : null;
 
         return Inertia::render('Profile', [
+            // Level, streak and the live quest board — the part of the page a
+            // returning user actually comes back for.
+            'progress' => $gamification->progressFor($user),
             'depositChains' => $this->depositChains(
                 $bridgeConfig,
                 $depositAddresses->addressesFor($user),
                 $depositAddresses->mergedHistoryFor($user),
             ),
             'profileContract' => $onchain->contractAddress(),
-            'nickname' => $user->wallet_address && $onchain->enabled()
-                ? $onchain->nicknameOf($user->wallet_address)
-                : null,
+            'nickname' => $nickname,
             'achievements' => $onchain->enabled() ? $achievements->forProfile($user) : [],
+            'posts' => $user->posts()
+                ->with(['user:id,name,onchain_nickname,avatar_path,wallet_address'])
+                ->latest('id')
+                ->paginate(10, pageName: 'posts'),
         ]);
+    }
+
+    public function updateAvatar(UpdateAvatarRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $oldPath = $user->avatar_path;
+        $path = $request->file('avatar')?->storePublicly(
+            "avatars/{$user->id}",
+            'public',
+        );
+
+        if (! is_string($path)) {
+            throw new RuntimeException('The avatar could not be stored.');
+        }
+
+        $user->forceFill(['avatar_path' => $path])->save();
+
+        if ($oldPath !== null && $oldPath !== $path) {
+            Storage::disk('public')->delete($oldPath);
+        }
+
+        return back()->with('status', 'avatar-updated');
     }
 
     /**
@@ -80,7 +116,10 @@ class ProfileController extends Controller
             return back()->withErrors(['nickname' => 'On-chain transaction failed — try again in a minute.']);
         }
 
-        $user->update(['name' => $nickname]);
+        $user->forceFill([
+            'name' => $nickname,
+            'onchain_nickname' => $nickname,
+        ])->save();
 
         // Claiming a nickname is itself an achievement (best-effort).
         $achievements->check($user);

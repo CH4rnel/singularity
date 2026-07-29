@@ -110,6 +110,8 @@ Notes:
 - Vue pages live in `backend/laravel/resources/js/pages`.
 - The bridge welcome page is intentionally layoutless in `resources/js/app.ts`.
 - `npm run types:check` may expose pre-existing TypeScript issues in old pages; do not hide new errors inside that noise.
+- Progression (XP, levels, daily streaks, quests) lives in `App\Services\GamificationService` with rules in `config/gamification.php`, surfaced on `/profile` and `/leaderboard`. XP is paid through the append-only `xp_entries` ledger keyed by `(source, reference)`; the browser may only report visits/page views, while swaps, liquidity, bridges and governance are credited from ground truth by `gamification:sync`. Do not pay value XP from client-reported events.
+- Retention analytics (DAU/WAU/MAU, new vs returning, weekly cohorts, progression health) live in `App\Services\UserAnalyticsService` and render on `/crm/analytics` alongside the existing funnel.
 
 ---
 

@@ -2,7 +2,8 @@ export type User = {
     id: number;
     name: string;
     email: string;
-    avatar?: string;
+    avatar?: string | null;
+    onchain_nickname?: string | null;
     wallet_address?: string | null;
     solana_wallet_address?: string | null;
     twitter_id?: string | null;

@@ -32,6 +32,7 @@ createInertiaApp({
             case name === 'Liquidate':
             case name === 'Liquidity':
             case name === 'Farm':
+            case name === 'Feed':
             case name === 'Launchpad':
             case name === 'LainChat':
             case name === 'CyberSolSwap':

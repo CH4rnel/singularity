@@ -5,9 +5,11 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Concerns\HasTeams;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Attributes\Appends;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,12 +17,14 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 
 #[Fillable(['name', 'email', 'password', 'current_team_id', 'wallet_address', 'solana_wallet_address', 'twitter_id', 'twitter_username'])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
+#[Hidden(['avatar_path', 'password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
+#[Appends(['avatar'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -40,9 +44,34 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * The chain is the canonical public identity. The editable account name
+     * remains available as a fallback for users without an on-chain nickname.
+     */
+    protected function name(): Attribute
+    {
+        return Attribute::make(
+            get: fn (string $value, array $attributes): string => $attributes['onchain_nickname'] ?? $value,
+        );
+    }
+
+    protected function avatar(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => $this->avatar_path
+                ? Storage::disk('public')->url($this->avatar_path)
+                : null,
+        );
+    }
+
     public function activities(): HasMany
     {
         return $this->hasMany(Activity::class);
+    }
+
+    public function posts(): HasMany
+    {
+        return $this->hasMany(Post::class);
     }
 
     public function proposals(): HasMany
@@ -73,6 +102,25 @@ class User extends Authenticatable
     public function solanaStakingPosition(): HasOne
     {
         return $this->hasOne(SolanaStakingPosition::class);
+    }
+
+    /**
+     * Progression row (xp, level, streak). Absent until the first tracked
+     * action — use GamificationService::statsFor() when a row is required.
+     */
+    public function stat(): HasOne
+    {
+        return $this->hasOne(UserStat::class);
+    }
+
+    public function xpEntries(): HasMany
+    {
+        return $this->hasMany(XpEntry::class);
+    }
+
+    public function quests(): HasMany
+    {
+        return $this->hasMany(UserQuest::class);
     }
 
     /**

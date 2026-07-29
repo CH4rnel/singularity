@@ -3,7 +3,9 @@ import {
     bridge,
     convert,
     farm,
+    feed,
     launchpad,
+    leaderboard,
     lending,
     liquidity,
     market,
@@ -50,7 +52,9 @@ export const navGroups: Web3NavGroup[] = [
     {
         label: 'Community',
         items: [
+            { title: 'Feed', href: feed().url },
             { title: 'DAO', href: daoIndex().url },
+            { title: 'Leaderboard', href: leaderboard().url },
             { title: 'NFT Market', href: market().url },
             { title: 'Pixels', href: pixels().url },
             { title: 'Predictions', href: predictions().url },

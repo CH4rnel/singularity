@@ -21,6 +21,32 @@ type OnchainRow = { count: number; actors: number; usd: number } | null;
 
 type DailyRow = { day: string; visitors: number };
 
+type Cohort = {
+    week: string;
+    size: number;
+    /** null until the cohort is old enough for that bucket to be honest. */
+    rates: { d1: number | null; d7: number | null; d30: number | null };
+};
+
+type Progression = {
+    tracked: number;
+    with_xp: number;
+    live_streaks: number;
+    streaks_over_week: number;
+    longest_streak: number;
+    levels: { level: number; accounts: number }[];
+};
+
+type TopMember = {
+    user_id: number;
+    name: string | null;
+    wallet_address: string | null;
+    xp: number;
+    level: number;
+    current_streak: number;
+    last_active_on: string | null;
+};
+
 type RecentEvent = {
     id: number;
     session_id: string;
@@ -41,6 +67,11 @@ const props = defineProps<{
     };
     daily: DailyRow[];
     recent: RecentEvent[];
+    activity: { dau: number; wau: number; mau: number; stickiness: number };
+    newVsReturning: { new: number; returning: number };
+    cohorts: Cohort[];
+    progression: Progression;
+    topMembers: TopMember[];
 }>();
 
 const { locale, toggleLocale, t } = useLocale(crmMessages);
@@ -53,9 +84,7 @@ const steps = computed(() => [
     { key: 'fLiquidity', value: props.funnel.liquidity },
 ]);
 
-const maxStep = computed(() =>
-    Math.max(1, ...steps.value.map((s) => s.value)),
-);
+const maxStep = computed(() => Math.max(1, ...steps.value.map((s) => s.value)));
 
 const pctOfVisitors = (value: number): string =>
     props.funnel.visitors > 0
@@ -78,6 +107,24 @@ const formatUsd = (value: number): string =>
     `$${Number(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 
 const shortSession = (id: string): string => id.slice(0, 8);
+
+const memberName = (member: TopMember): string =>
+    member.name ||
+    (member.wallet_address
+        ? `${member.wallet_address.slice(0, 6)}…${member.wallet_address.slice(-4)}`
+        : `User #${member.user_id}`);
+
+const returningPct = computed(() => {
+    const total = props.newVsReturning.new + props.newVsReturning.returning;
+
+    return total > 0
+        ? `${((props.newVsReturning.returning / total) * 100).toFixed(1)}%`
+        : '—';
+});
+
+const maxLevelAccounts = computed(() =>
+    Math.max(1, ...props.progression.levels.map((l) => l.accounts)),
+);
 
 defineOptions({
     layout: () => ({
@@ -150,6 +197,261 @@ defineOptions({
                         </span>
                     </span>
                 </div>
+            </CardContent>
+        </Card>
+
+        <!-- Retention: active devices, loyalty split -->
+        <Card>
+            <CardHeader>
+                <CardTitle>{{ t('retentionTitle') }}</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div
+                    class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
+                >
+                    <div
+                        v-for="tile in [
+                            { key: 'dau', value: activity.dau },
+                            { key: 'wau', value: activity.wau },
+                            { key: 'mau', value: activity.mau },
+                            {
+                                key: 'stickiness',
+                                value: `${activity.stickiness}%`,
+                                hint: t('stickinessHint'),
+                            },
+                            {
+                                key: 'newDevices',
+                                value: newVsReturning.new,
+                            },
+                            {
+                                key: 'returningDevices',
+                                value: newVsReturning.returning,
+                                hint: returningPct,
+                            },
+                        ]"
+                        :key="tile.key"
+                        class="rounded-lg border border-border/70 p-3"
+                    >
+                        <p
+                            class="text-xs tracking-widest text-muted-foreground uppercase"
+                        >
+                            {{ t(tile.key) }}
+                        </p>
+                        <p class="mt-1 font-mono text-xl font-bold">
+                            {{ tile.value }}
+                        </p>
+                        <p
+                            v-if="tile.hint"
+                            class="mt-1 text-xs text-muted-foreground"
+                        >
+                            {{ tile.hint }}
+                        </p>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+
+        <div class="grid gap-6 lg:grid-cols-2">
+            <!-- Acquisition cohorts -->
+            <Card>
+                <CardHeader>
+                    <CardTitle>{{ t('cohortsTitle') }}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p
+                        v-if="cohorts.length === 0"
+                        class="text-sm text-muted-foreground"
+                    >
+                        {{ t('noCohorts') }}
+                    </p>
+                    <table v-else class="w-full text-sm">
+                        <thead
+                            class="text-xs tracking-widest text-muted-foreground uppercase"
+                        >
+                            <tr>
+                                <th class="py-1 text-left">
+                                    {{ t('cohortWeek') }}
+                                </th>
+                                <th class="py-1 text-right">
+                                    {{ t('cohortSize') }}
+                                </th>
+                                <th class="py-1 text-right">D1</th>
+                                <th class="py-1 text-right">D7</th>
+                                <th class="py-1 text-right">D30</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="cohort in cohorts"
+                                :key="cohort.week"
+                                class="border-t border-border/60"
+                            >
+                                <td class="py-1.5 font-mono text-xs">
+                                    {{ cohort.week }}
+                                </td>
+                                <td class="py-1.5 text-right font-mono text-xs">
+                                    {{ cohort.size }}
+                                </td>
+                                <td
+                                    v-for="bucket in [
+                                        cohort.rates.d1,
+                                        cohort.rates.d7,
+                                        cohort.rates.d30,
+                                    ]"
+                                    :key="`${cohort.week}-${bucket}`"
+                                    class="py-1.5 text-right font-mono text-xs"
+                                    :class="
+                                        bucket === null
+                                            ? 'text-muted-foreground/60'
+                                            : ''
+                                    "
+                                >
+                                    {{
+                                        bucket === null
+                                            ? t('notMature')
+                                            : `${bucket}%`
+                                    }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="mt-3 text-xs text-muted-foreground">
+                        {{ t('cohortsHint') }}
+                    </p>
+                </CardContent>
+            </Card>
+
+            <!-- Progression health -->
+            <Card>
+                <CardHeader>
+                    <CardTitle>{{ t('progressionTitle') }}</CardTitle>
+                </CardHeader>
+                <CardContent class="space-y-4">
+                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        <div
+                            v-for="tile in [
+                                { key: 'tracked', value: progression.tracked },
+                                { key: 'withXp', value: progression.with_xp },
+                                {
+                                    key: 'liveStreaks',
+                                    value: progression.live_streaks,
+                                },
+                                {
+                                    key: 'streaksOverWeek',
+                                    value: progression.streaks_over_week,
+                                },
+                                {
+                                    key: 'longestStreak',
+                                    value: progression.longest_streak,
+                                },
+                            ]"
+                            :key="tile.key"
+                            class="rounded-lg border border-border/70 p-3"
+                        >
+                            <p
+                                class="text-xs tracking-widest text-muted-foreground uppercase"
+                            >
+                                {{ t(tile.key) }}
+                            </p>
+                            <p class="mt-1 font-mono text-xl font-bold">
+                                {{ tile.value }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div v-if="progression.levels.length > 0">
+                        <p
+                            class="mb-2 text-xs tracking-widest text-muted-foreground uppercase"
+                        >
+                            {{ t('levelSpread') }}
+                        </p>
+                        <div
+                            v-for="row in progression.levels"
+                            :key="row.level"
+                            class="grid grid-cols-[3rem_1fr_3rem] items-center gap-2 text-xs"
+                        >
+                            <span class="font-mono">L{{ row.level }}</span>
+                            <div
+                                class="h-3 overflow-hidden rounded bg-muted/40"
+                            >
+                                <div
+                                    class="h-full rounded bg-primary/70"
+                                    :style="{
+                                        width:
+                                            (row.accounts / maxLevelAccounts) *
+                                                100 +
+                                            '%',
+                                    }"
+                                />
+                            </div>
+                            <span class="text-right font-mono">{{
+                                row.accounts
+                            }}</span>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+
+        <!-- Most engaged members -->
+        <Card>
+            <CardHeader>
+                <CardTitle>{{ t('topMembersTitle') }}</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p
+                    v-if="topMembers.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    {{ t('noMembers') }}
+                </p>
+                <table v-else class="w-full text-sm">
+                    <thead
+                        class="text-xs tracking-widest text-muted-foreground uppercase"
+                    >
+                        <tr>
+                            <th class="py-1 text-left">{{ t('colUser') }}</th>
+                            <th class="py-1 text-right">{{ t('colLevel') }}</th>
+                            <th class="py-1 text-right">{{ t('colXp') }}</th>
+                            <th class="py-1 text-right">
+                                {{ t('colStreak') }}
+                            </th>
+                            <th class="py-1 text-right">
+                                {{ t('colLastSeen') }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="member in topMembers"
+                            :key="member.user_id"
+                            class="border-t border-border/60"
+                        >
+                            <td class="py-1.5">
+                                <Link
+                                    :href="`/u/${member.user_id}`"
+                                    class="hover:underline"
+                                >
+                                    {{ memberName(member) }}
+                                </Link>
+                            </td>
+                            <td class="py-1.5 text-right font-mono text-xs">
+                                {{ member.level }}
+                            </td>
+                            <td class="py-1.5 text-right font-mono text-xs">
+                                {{ member.xp.toLocaleString() }}
+                            </td>
+                            <td class="py-1.5 text-right font-mono text-xs">
+                                {{ member.current_streak }}
+                            </td>
+                            <td
+                                class="py-1.5 text-right font-mono text-xs text-muted-foreground"
+                            >
+                                {{ member.last_active_on ?? '—' }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </CardContent>
         </Card>
 
@@ -231,9 +533,7 @@ defineOptions({
             <CardContent>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
-                        <thead
-                            class="border-b text-left text-muted-foreground"
-                        >
+                        <thead class="border-b text-left text-muted-foreground">
                             <tr>
                                 <th class="px-2 py-1 font-medium">
                                     {{ t('colEvent') }}

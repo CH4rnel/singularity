@@ -62,6 +62,7 @@ const createdAgo = useTimeAgo(computed(() => props.proposal.created_at));
                     <WalletAvatar
                         :seed="props.proposal.user?.wallet_address"
                         :name="props.proposal.user?.name"
+                        :src="props.proposal.user?.avatar"
                         size="sm"
                     />
                     {{ props.proposal.user?.name || 'Unknown' }}

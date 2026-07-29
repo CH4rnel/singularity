@@ -6,16 +6,20 @@ beforeEach(function () {
     $this->withoutVite();
 });
 
-test('the landing leads with the robinhood acquisition funnel', function () {
+test('the landing centers Cyberia liquidity and links the whitepaper', function () {
     $this->get('/')->assertOk();
 
     $landing = file_get_contents(resource_path('views/landing/index.html'));
 
     expect($landing)
-        ->toContain('Bridge, trade and earn across Cyberia and Robinhood Chain')
-        ->toContain('Open Robinhood bridge')
+        ->toContain('<a href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">Whitepaper</a>')
+        ->toContain('The liquidity home of the Cyberia ecosystem')
+        ->toContain('About 90% of Ritual liquidity is concentrated on Cyberia')
+        ->toContain('Robinhood Chain is natively supported')
+        ->toContain('Open Cyberia bridge')
         ->toContain('Explore DEX')
-        ->toContain('View staking');
+        ->toContain('View staking')
+        ->toContain('Read the whitepaper');
 });
 
 test('the robinhood chain landing exposes only configured bridge routes', function () {

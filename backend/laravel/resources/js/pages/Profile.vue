@@ -4,6 +4,7 @@ import { useTimeAgo } from '@vueuse/core';
 import {
     ArrowRightLeft,
     AtSign,
+    Camera,
     Check,
     Copy,
     Droplets,
@@ -15,18 +16,29 @@ import {
     Waypoints,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import ProgressPanel from '@/components/progress/ProgressPanel.vue';
+import PostCard from '@/components/social/PostCard.vue';
+import PostComposer from '@/components/social/PostComposer.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import SimplePagination from '@/components/web3/SimplePagination.vue';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
 import { bridge } from '@/routes';
-import { edit as profileEdit, nickname as nicknameRoute } from '@/routes/profile';
+import {
+    avatar as avatarRoute,
+    edit as profileEdit,
+    nickname as nicknameRoute,
+} from '@/routes/profile';
 import { check as achievementsCheck } from '@/routes/profile/achievements';
 import { show as userShow } from '@/routes/users';
 import type { Auth } from '@/types/auth';
+import type { Paginated } from '@/types/pagination';
+import type { Progress } from '@/types/progress';
+import type { Post } from '@/types/social';
 
 type DepositChain = {
     key: string;
@@ -57,10 +69,30 @@ const props = defineProps<{
     /** Current on-chain nickname of the linked EVM wallet. */
     nickname: string | null;
     achievements: Achievement[];
+    posts: Paginated<Post>;
+    /** Level, streak and the live quest board (GamificationService). */
+    progress: Progress;
 }>();
 
 const page = usePage<{ auth: Auth }>();
 const user = computed(() => page.props.auth.user);
+const avatarInput = ref<HTMLInputElement | null>(null);
+const avatarForm = useForm<{ avatar: File | null }>({ avatar: null });
+
+function uploadAvatar(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+
+    if (!file) {
+        return;
+    }
+
+    avatarForm.avatar = file;
+    avatarForm.post(avatarRoute().url, {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => avatarForm.reset(),
+    });
+}
 
 const ACHIEVEMENT_ICONS: Record<string, unknown> = {
     swap: ArrowRightLeft,
@@ -243,11 +275,37 @@ async function copy(key: string, value: string | null | undefined) {
         <header
             class="mb-6 flex flex-col items-start gap-4 rounded-lg border border-border/70 bg-card p-6 sm:flex-row sm:items-center"
         >
-            <WalletAvatar
-                :seed="user.wallet_address"
-                :name="user.name"
-                size="lg"
-            />
+            <div class="flex shrink-0 flex-col items-center gap-2">
+                <WalletAvatar
+                    :seed="user.wallet_address"
+                    :name="user.name"
+                    :src="user.avatar"
+                    size="lg"
+                />
+                <input
+                    ref="avatarInput"
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    class="sr-only"
+                    @change="uploadAvatar"
+                />
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    :disabled="avatarForm.processing"
+                    @click="avatarInput?.click()"
+                >
+                    <Camera class="h-3.5 w-3.5" />
+                    {{ avatarForm.processing ? 'Uploading…' : 'Avatar' }}
+                </Button>
+                <p
+                    v-if="avatarForm.errors.avatar"
+                    class="max-w-36 text-center text-xs text-destructive"
+                >
+                    {{ avatarForm.errors.avatar }}
+                </p>
+            </div>
             <div class="min-w-0 flex-1">
                 <h1 class="text-2xl font-extrabold tracking-tight">
                     {{ displayName }}
@@ -340,6 +398,42 @@ async function copy(key: string, value: string | null | undefined) {
                 </Button>
             </div>
         </header>
+
+        <!-- Off-chain progression: level, streak, quest board. Sits above the
+             on-chain identity block because it changes every day, while badges
+             and nicknames are claimed once. -->
+        <div class="mb-6">
+            <ProgressPanel :progress="props.progress" />
+        </div>
+
+        <section class="mb-6 space-y-3">
+            <div class="flex items-center justify-between gap-3">
+                <h2
+                    class="text-sm font-semibold tracking-widest text-muted-foreground uppercase"
+                >
+                    Your wall
+                </h2>
+                <Link
+                    :href="userShow(user.id)"
+                    class="text-xs text-brand-cyan hover:underline"
+                >
+                    Open public profile
+                </Link>
+            </div>
+            <PostComposer />
+            <PostCard
+                v-for="post in props.posts.data"
+                :key="post.id"
+                :post="post"
+            />
+            <p
+                v-if="props.posts.data.length === 0"
+                class="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground"
+            >
+                Your wall is empty. Write the first post.
+            </p>
+            <SimplePagination :paginator="props.posts" />
+        </section>
 
         <!-- On-chain identity: nickname + achievements (CyberiaProfile) -->
         <section v-if="props.profileContract" class="mb-6 space-y-3">

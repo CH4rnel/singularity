@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BridgeEvent;
 use App\Models\BridgeRequest;
 use App\Models\SiteEvent;
+use App\Services\UserAnalyticsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -17,10 +18,14 @@ use Inertia\Response;
  * site) and bridge_events (bridge flow); on-chain ground truth comes from the
  * Telegram bot's activity_events / bridge_requests, so the two can disagree —
  * that gap (e.g. many visitors, zero swaps) is exactly the signal.
+ *
+ * UserAnalyticsService answers the other half of the question: of the people
+ * who did show up, how many came back, and is the progression system (levels,
+ * streaks) moving that number.
  */
 class CrmAnalyticsController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, UserAnalyticsService $users): Response
     {
         $days = max(1, min((int) $request->query('days', 30), 90));
         $since = now('UTC')->subDays($days);
@@ -84,6 +89,13 @@ class CrmAnalyticsController extends Controller
             'onchain' => $onchain,
             'daily' => $daily,
             'recent' => $recent,
+            // Retention: the funnel says whether a visit converted, this says
+            // whether the person came back.
+            'activity' => $users->activity(),
+            'newVsReturning' => $users->newVsReturning($days),
+            'cohorts' => $users->cohorts(),
+            'progression' => $users->progression(),
+            'topMembers' => $users->topMembers(),
         ]);
     }
 }

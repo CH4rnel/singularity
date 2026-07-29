@@ -216,6 +216,7 @@ function formatPower(power: string | undefined): string {
                         <WalletAvatar
                             :seed="proposal.user?.wallet_address"
                             :name="proposal.user?.name"
+                            :src="proposal.user?.avatar"
                         />
                     </InertiaLink>
                     <div class="min-w-0">

@@ -1,14 +1,24 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(
     defineProps<{
         /** Wallet address or any stable identity string. */
         seed: string | null | undefined;
         name?: string | null;
+        src?: string | null;
         size?: 'sm' | 'md' | 'lg';
     }>(),
-    { name: null, size: 'md' },
+    { name: null, src: null, size: 'md' },
+);
+
+const imageFailed = ref(false);
+
+watch(
+    () => props.src,
+    () => {
+        imageFailed.value = false;
+    },
 );
 
 // Deterministic identicon: hash the seed into two hues for a gradient.
@@ -59,10 +69,17 @@ const sizeClass = computed(
 
 <template>
     <span
-        class="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white select-none"
+        class="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold text-white select-none"
         :class="sizeClass"
         :style="{ background: gradient }"
     >
-        {{ initials }}
+        <img
+            v-if="props.src && !imageFailed"
+            :src="props.src"
+            :alt="props.name ? `${props.name}'s avatar` : 'User avatar'"
+            class="size-full object-cover"
+            @error="imageFailed = true"
+        />
+        <span v-else>{{ initials }}</span>
     </span>
 </template>

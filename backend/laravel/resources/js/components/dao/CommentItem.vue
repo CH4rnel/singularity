@@ -46,6 +46,7 @@ function deleteComment() {
             <WalletAvatar
                 :seed="comment.user?.wallet_address"
                 :name="comment.user?.name"
+                :src="comment.user?.avatar"
                 :size="isReply ? 'sm' : 'md'"
             />
         </InertiaLink>

@@ -81,9 +81,10 @@ class WalletAttachController extends Controller
             ]);
         }
 
-        $request->user()->update([
+        $request->user()->forceFill([
             'wallet_address' => $walletAddress,
-        ]);
+            'onchain_nickname' => null,
+        ])->save();
 
         return response()->json([
             'message' => 'EVM wallet attached successfully.',
@@ -163,9 +164,10 @@ class WalletAttachController extends Controller
      */
     public function detachEvm(Request $request): JsonResponse
     {
-        $request->user()->update([
+        $request->user()->forceFill([
             'wallet_address' => null,
-        ]);
+            'onchain_nickname' => null,
+        ])->save();
 
         return response()->json([
             'message' => 'EVM wallet detached successfully.',

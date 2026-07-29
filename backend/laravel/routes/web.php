@@ -21,9 +21,11 @@ use App\Http\Controllers\CrmTaskController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\LainChatController;
+use App\Http\Controllers\LeaderboardController;
 use App\Http\Controllers\LinkController;
 use App\Http\Controllers\LiquidityController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PostController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
@@ -175,6 +177,10 @@ Route::get('dao', [DaoController::class, 'index'])->name('dao.index');
 Route::get('dao/{dao}', [DaoController::class, 'show'])->name('dao.show');
 Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('proposals.show');
 Route::get('u/{user}', [UserProfileController::class, 'show'])->name('users.show');
+Route::get('feed', [PostController::class, 'index'])->name('feed');
+// Public XP ranking — social proof for the progression system and the
+// entry point into member profiles.
+Route::get('leaderboard', LeaderboardController::class)->name('leaderboard');
 
 Route::post('login/web3', Web3LoginController::class)->name('web3.login');
 
@@ -207,12 +213,16 @@ Route::middleware(['auth'])->group(function () {
 
     // Own profile: account info + bridge deposit addresses for every chain.
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
+    Route::post('profile/avatar', [ProfileController::class, 'updateAvatar'])
+        ->middleware('throttle:10,1')->name('profile.avatar');
     // On-chain identity: nickname (relayer-submitted) and achievement checks.
     // Throttled — each hit can cost a relayer transaction on Cyberia.
     Route::patch('profile/nickname', [ProfileController::class, 'updateNickname'])
         ->middleware('throttle:6,1')->name('profile.nickname');
     Route::post('profile/achievements/check', [ProfileController::class, 'checkAchievements'])
         ->middleware('throttle:6,1')->name('profile.achievements.check');
+    Route::post('posts', [PostController::class, 'store'])
+        ->middleware('throttle:10,1')->name('posts.store');
 
     Route::get('invitations/{invitation}/accept', [TeamInvitationController::class, 'accept'])->name('invitations.accept');
     Route::resource('links', LinkController::class)->names([

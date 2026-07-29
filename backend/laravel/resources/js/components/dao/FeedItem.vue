@@ -88,6 +88,7 @@ const actorName = computed(
             <WalletAvatar
                 :seed="activity.user?.wallet_address"
                 :name="activity.user?.name"
+                :src="activity.user?.avatar"
             />
         </InertiaLink>
 

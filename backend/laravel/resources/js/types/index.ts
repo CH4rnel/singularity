@@ -6,4 +6,5 @@ export * from './links';
 export * from './categories';
 export * from './dao';
 export * from './crm';
+export * from './social';
 export * from './ui';

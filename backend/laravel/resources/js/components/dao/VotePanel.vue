@@ -329,6 +329,7 @@ function formatAddress(address: string): string {
                         <WalletAvatar
                             :seed="vote.wallet_address"
                             :name="vote.user?.name"
+                            :src="vote.user?.avatar"
                             size="sm"
                         />
                         <InertiaLink

@@ -13,7 +13,7 @@ import type {
     MouseEventParams,
 } from 'lightweight-charts';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { formatNum, formatPrice } from '@/lib/launchpadChart';
+import { formatNum, formatPrice } from '@/lib/dexFormat';
 import type { TokenCandle } from '@/lib/launchpadChart';
 
 const props = defineProps<{

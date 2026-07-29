@@ -9,18 +9,6 @@ import {
     parseUnits,
 } from 'ethers';
 import { BrowserProvider as EthersBrowserProvider } from 'ethers';
-import {
-    AreaSeries,
-    ColorType,
-    CrosshairMode,
-    createChart,
-} from 'lightweight-charts';
-import type {
-    AreaData,
-    IChartApi,
-    ISeriesApi,
-    UTCTimestamp,
-} from 'lightweight-charts';
 import { ArrowDownUp, Loader2 } from 'lucide-vue-next';
 import {
     computed,
@@ -30,6 +18,7 @@ import {
     ref,
     watch,
 } from 'vue';
+import MarketCandlesChart from '@/components/dex/MarketCandlesChart.vue';
 import TokenIcon from '@/components/TokenIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +38,7 @@ import {
 } from '@/lib/cyberiaTokens';
 import type { AprSnapshot } from '@/lib/dexApr';
 import { aprByPair, formatApr } from '@/lib/dexApr';
+import { formatNum, formatPrice } from '@/lib/dexFormat';
 import { ensureEvmChain } from '@/lib/evmChains';
 import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import {
@@ -57,6 +47,20 @@ import {
     liquidityChainById as dexChainById,
 } from '@/lib/liquidityChains';
 import type { LiquidityChainConfig as DexChainConfig } from '@/lib/liquidityChains';
+import {
+    MARKET_RANGES,
+    autoRangeKey,
+    buildCandles,
+    loadMarketHistory,
+    marketRange,
+    routePrice,
+} from '@/lib/marketCandles';
+import type {
+    MarketCandle,
+    MarketHistory,
+    Reserves,
+    RouteHop,
+} from '@/lib/marketCandles';
 import { track } from '@/lib/track';
 
 // Router/factory/wrapped-native/pools are per-chain (DEX_CHAINS); the page
@@ -65,8 +69,7 @@ import { track } from '@/lib/track';
 // Sentinel for the native coin in the token pickers (maps to the chain's
 // wrapped-native token on-chain).
 const NATIVE = 'NATIVE';
-const MARKET_HISTORY_DAYS = 7;
-const MARKET_HISTORY_MS = MARKET_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+const DAY_SEC = 24 * 60 * 60;
 
 const ROUTER_ABI = [
     'function getAmountsOut(uint amountIn, address[] path) view returns (uint[] amounts)',
@@ -116,25 +119,9 @@ type DailyRow = {
     swaps: number;
 };
 
-type PriceHistoryRow = {
-    id: number;
-    sym_in: string | null;
-    amt_in: number | null;
-    sym_out: string | null;
-    amt_out: number | null;
-    meta: string | null;
-    created_at: string;
-};
-type PricePoint = { at: number; price: number };
-type SwapEventMeta = {
-    in_addr?: string;
-    out_addr?: string;
-};
-
 const props = defineProps<{
     pools: PoolRow[];
     daily: DailyRow[];
-    priceHistory: PriceHistoryRow[];
     indexerReady: boolean;
     apr?: AprSnapshot | null;
 }>();
@@ -210,11 +197,6 @@ const resolveAddr = (a: string): string =>
 const cleanPools = computed(() => filterJunkPools(props.pools ?? []));
 // Direct-pair address resolved on-chain when dex_pools lags (display only).
 const livePairAddress = ref<string | null>(null);
-const livePriceHistory = ref<PricePoint[]>([]);
-const chartContainer = ref<HTMLDivElement | null>(null);
-let marketChart: IChartApi | null = null;
-let marketSeries: ISeriesApi<'Area'> | null = null;
-let chartResizeObserver: ResizeObserver | null = null;
 const maxDailyUsd = computed(() =>
     Math.max(1, ...props.daily.map((d) => Number(d.swap_usd) || 0)),
 );
@@ -244,21 +226,12 @@ const selectedPool = computed(() => {
     );
 });
 
-const symbolAliases = (addr: string): Set<string> => {
-    const symbol = symbolOf(addr);
-    const aliases = new Set([symbol.toUpperCase()]);
-
-    if (addr === NATIVE || symbol.toUpperCase() === 'CYBER') {
-        aliases.add('WCYBER');
-    }
-
-    return aliases;
-};
-
 // The chart always plots how much of the quote token one base token buys,
-// no matter which direction the swap form points. Stables make the best
-// quote side, then WCYBER; ties keep the user's in→out arrangement.
-const QUOTE_PRIORITY = [
+// no matter which direction the swap form points. Stables make the best quote
+// side, then the chain's own coin (CYBER on Cyberia, ETH on satellites — so
+// bridged CYBER charts in ETH on Robinhood, not the other way round); ties
+// keep the user's in→out arrangement.
+const STABLE_QUOTES = [
     'USDC',
     'USDT',
     'JUPUSD',
@@ -266,13 +239,16 @@ const QUOTE_PRIORITY = [
     'TRUR',
     'GOLD',
     'SILVER',
-    'WCYBER',
-    'CYBER',
 ];
+const quotePriority = computed(() => [
+    ...STABLE_QUOTES,
+    `W${activeChain.value.nativeSymbol.toUpperCase()}`,
+    activeChain.value.nativeSymbol.toUpperCase(),
+]);
 const quoteRank = (addr: string): number => {
-    const i = QUOTE_PRIORITY.indexOf(symbolOf(addr).toUpperCase());
+    const i = quotePriority.value.indexOf(symbolOf(addr).toUpperCase());
 
-    return i === -1 ? QUOTE_PRIORITY.length : i;
+    return i === -1 ? quotePriority.value.length : i;
 };
 
 const chartOrientation = computed(() => {
@@ -289,250 +265,340 @@ const chartOrientation = computed(() => {
 });
 const chartBase = computed(() => chartOrientation.value?.base ?? '');
 const chartQuote = computed(() => chartOrientation.value?.quote ?? '');
-// Identity of the charted market; flipping the swap direction keeps it.
+// Identity of the charted market; flipping the swap direction keeps it, and
+// a chain switch always rebuilds it (pools/addresses differ per chain).
 const chartPairKey = computed(() =>
     chartOrientation.value
-        ? `${resolveAddr(chartBase.value).toLowerCase()}>${resolveAddr(chartQuote.value).toLowerCase()}`
+        ? `${activeChainId.value}:${resolveAddr(chartBase.value).toLowerCase()}>${resolveAddr(chartQuote.value).toLowerCase()}`
         : '',
 );
 
-const parseEventTime = (value: string): number => {
-    const normalized = value.includes('T')
-        ? value
-        : `${value.replace(' ', 'T')}Z`;
+// --- market chart ---------------------------------------------------------
+// The chart shows the price the router actually quotes, reconstructed from the
+// route pools' Sync events (see lib/marketCandles.ts). Charting the direct
+// pool instead would be a lie on this DEX: WCYBER/USDC holds ~$27 and trades
+// ~12% under the routed rate, so every swap goes around it.
+const marketRoute = ref<RouteHop[] | null>(null);
+const marketReserves = ref<Reserves[]>([]);
+const marketHistory = ref<MarketHistory | null>(null);
+const marketLoading = ref(false);
+const marketError = ref<string | null>(null);
+const rangeKey = ref<string>('7D');
+// The range is settled once per market — auto on the first load, or by the
+// user — and then left alone, so nothing reframes the chart under them.
+const rangePinned = ref(false);
+// Right edge of the chart. Advanced only when the pools actually moved, so a
+// quiet market re-renders nothing at all (no creeping axis, no reset zoom).
+const nowSec = ref(Math.floor(Date.now() / 1000));
 
-    return Date.parse(normalized);
-};
+// Route selection only needs the ranking of the candidate paths, so a probe
+// that quotes a non-dust amount is enough; the price itself comes from
+// reserves and carries no quantization error.
+const bestPath = async (from: string, to: string): Promise<string[] | null> => {
+    const paths = candidatePaths(from, to);
+    const { decimals } = await tokenMeta(from);
+    const start = 10n ** BigInt(Math.max(decimals - 2, 0));
+    let best: string[] | null = null;
 
-const parseSwapEventMeta = (value: string | null): SwapEventMeta | null => {
-    if (!value) {
-        return null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const probeIn = start * 10n ** BigInt(attempt);
+        // One tick so ethers batches the calls (≤20 per RPC batch).
+        const outs = await Promise.all(
+            paths.map(async (path) => {
+                try {
+                    const amounts = (await readRouter.getAmountsOut(
+                        probeIn,
+                        path,
+                    )) as bigint[];
+
+                    return amounts[amounts.length - 1];
+                } catch {
+                    return 0n;
+                }
+            }),
+        );
+        let bestOut = 0n;
+
+        outs.forEach((out, i) => {
+            if (out > bestOut) {
+                bestOut = out;
+                best = paths[i];
+            }
+        });
+
+        // Cheap base tokens quote into a 6-decimals leg with heavy truncation;
+        // escalate until the winner is clear of the rounding noise.
+        if (bestOut >= 2000n) {
+            break;
+        }
     }
 
-    try {
-        const parsed = JSON.parse(value) as SwapEventMeta;
+    return best;
+};
 
-        return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-        return null;
+const readHopReserves = async (hops: RouteHop[]): Promise<Reserves[]> =>
+    Promise.all(
+        hops.map(async (hop) => {
+            const reserves = (await new Contract(
+                hop.pair,
+                PAIR_ABI,
+                readProvider,
+            ).getReserves()) as [bigint, bigint, bigint];
+
+            return [reserves[0], reserves[1]] as Reserves;
+        }),
+    );
+
+const buildHops = async (path: string[]): Promise<RouteHop[]> => {
+    const factory = new Contract(
+        activeChain.value.factory,
+        ['function getPair(address,address) view returns (address)'],
+        readProvider,
+    );
+
+    return Promise.all(
+        path.slice(0, -1).map(async (tokenIn, i) => {
+            const tokenOut = path[i + 1];
+            const [pair, metaIn, metaOut] = await Promise.all([
+                factory.getPair(tokenIn, tokenOut) as Promise<string>,
+                tokenMeta(tokenIn),
+                tokenMeta(tokenOut),
+            ]);
+
+            if (/^0x0{40}$/i.test(pair)) {
+                throw new Error('Pool missing for route hop');
+            }
+
+            const token0 = (await new Contract(
+                pair,
+                PAIR_ABI,
+                readProvider,
+            ).token0()) as string;
+
+            return {
+                pair,
+                token0: token0.toLowerCase(),
+                tokenIn: tokenIn.toLowerCase(),
+                tokenOut: tokenOut.toLowerCase(),
+                decIn: metaIn.decimals,
+                decOut: metaOut.decimals,
+            };
+        }),
+    );
+};
+
+const routeKeyOf = (hops: RouteHop[] | null): string =>
+    (hops ?? []).map((hop) => hop.pair.toLowerCase()).join('>');
+
+// Bumped by every (re)resolution so a slow explorer answering for a market the
+// user already left can never overwrite the current one.
+let routeSeq = 0;
+
+const loadRouteHistory = async (
+    hops: RouteHop[],
+    seq: number,
+): Promise<void> => {
+    const history = await loadMarketHistory(activeChain.value.explorer, hops);
+
+    if (seq !== routeSeq) {
+        return;
+    }
+
+    marketHistory.value = history;
+
+    if (!rangePinned.value) {
+        rangeKey.value = autoRangeKey(history, nowSec.value);
+        rangePinned.value = true;
     }
 };
 
-const sameTokenAddress = (a: string, b: string): boolean =>
-    resolveAddr(a).toLowerCase() === resolveAddr(b).toLowerCase();
-
-const matchesHistoryLeg = (
-    selectedAddress: string,
-    selectedSymbols: Set<string>,
-    eventAddress: string | undefined,
-    eventSymbol: string | undefined,
-): boolean => {
-    if (eventAddress) {
-        return sameTokenAddress(selectedAddress, eventAddress);
-    }
-
-    return eventSymbol ? selectedSymbols.has(eventSymbol) : false;
-};
-
-const historicalPricePoints = computed<PricePoint[]>(() => {
+const resolveMarketRoute = async (): Promise<void> => {
     const orientation = chartOrientation.value;
+    const seq = ++routeSeq;
 
     if (!orientation) {
+        marketRoute.value = null;
+        marketHistory.value = null;
+
+        return;
+    }
+
+    const from = resolveAddr(orientation.base);
+    const to = resolveAddr(orientation.quote);
+
+    if (from.toLowerCase() === to.toLowerCase()) {
+        marketRoute.value = null;
+        marketHistory.value = null;
+
+        return;
+    }
+
+    marketLoading.value = true;
+    marketError.value = null;
+
+    try {
+        const path = await bestPath(from, to);
+
+        if (seq !== routeSeq) {
+            return;
+        }
+
+        if (!path) {
+            marketRoute.value = null;
+            marketHistory.value = null;
+
+            return;
+        }
+
+        const hops = await buildHops(path);
+
+        if (seq !== routeSeq) {
+            return;
+        }
+
+        const sameRoute =
+            routeKeyOf(hops) === routeKeyOf(marketRoute.value) &&
+            marketHistory.value !== null;
+        marketRoute.value = hops;
+        marketReserves.value = await readHopReserves(hops);
+
+        if (seq !== routeSeq) {
+            return;
+        }
+
+        nowSec.value = Math.floor(Date.now() / 1000);
+
+        // A re-resolution that lands on the same pools (new factory edges, a
+        // chain re-select) keeps the history it already has.
+        if (!sameRoute) {
+            marketHistory.value = null;
+            await loadRouteHistory(hops, seq);
+        }
+    } catch (e) {
+        if (seq === routeSeq) {
+            marketError.value = (e as Error).message ?? String(e);
+            marketHistory.value = null;
+        }
+    } finally {
+        if (seq === routeSeq) {
+            marketLoading.value = false;
+        }
+    }
+};
+
+// Reserves are the only thing that can move this market, so the poll reads
+// them (cheap, RPC-only) and re-reads the logs solely when they changed. That
+// keeps the chart still while nobody trades instead of drawing a new tick
+// every few seconds like the old router-probe series did.
+const syncMarketReserves = async (): Promise<void> => {
+    const hops = marketRoute.value;
+
+    if (!hops) {
+        return;
+    }
+
+    const seq = routeSeq;
+
+    try {
+        const next = await readHopReserves(hops);
+
+        if (seq !== routeSeq) {
+            return;
+        }
+
+        const changed = next.some((reserves, i) => {
+            const previous = marketReserves.value[i];
+
+            return (
+                !previous ||
+                previous[0] !== reserves[0] ||
+                previous[1] !== reserves[1]
+            );
+        });
+
+        if (!changed) {
+            return;
+        }
+
+        marketReserves.value = next;
+        nowSec.value = Math.floor(Date.now() / 1000);
+        await loadRouteHistory(hops, seq);
+    } catch {
+        // Keep the last known state; the next poll retries.
+    }
+};
+
+const spotPrice = computed(() =>
+    marketRoute.value
+        ? routePrice(marketRoute.value, marketReserves.value)
+        : null,
+);
+
+const activeRange = computed(() => marketRange(rangeKey.value));
+
+const selectRange = (key: string): void => {
+    rangePinned.value = true;
+    rangeKey.value = key;
+    nowSec.value = Math.floor(Date.now() / 1000);
+};
+
+const candles = computed<MarketCandle[]>(() => {
+    const history = marketHistory.value;
+
+    if (!history || history.observations.length === 0) {
         return [];
     }
 
-    const baseSymbols = symbolAliases(orientation.base);
-    const quoteSymbols = symbolAliases(orientation.quote);
+    const range = activeRange.value;
+    const toSec = nowSec.value;
 
-    return props.priceHistory
-        .flatMap((row) => {
-            const symIn = row.sym_in?.toUpperCase();
-            const symOut = row.sym_out?.toUpperCase();
-            const amtIn = Number(row.amt_in);
-            const amtOut = Number(row.amt_out);
-            const at = parseEventTime(row.created_at);
-            const meta = parseSwapEventMeta(row.meta);
-
-            if (
-                !symIn ||
-                !symOut ||
-                !Number.isFinite(amtIn) ||
-                !Number.isFinite(amtOut) ||
-                !Number.isFinite(at) ||
-                amtIn <= 0 ||
-                amtOut <= 0
-            ) {
-                return [];
-            }
-
-            // Sold base for quote: the trade paid amtOut quote per amtIn base.
-            if (
-                matchesHistoryLeg(
-                    orientation.base,
-                    baseSymbols,
-                    meta?.in_addr,
-                    symIn,
-                ) &&
-                matchesHistoryLeg(
-                    orientation.quote,
-                    quoteSymbols,
-                    meta?.out_addr,
-                    symOut,
-                )
-            ) {
-                return [{ at, price: amtOut / amtIn }];
-            }
-
-            // Bought base with quote: same price, inverted legs.
-            if (
-                matchesHistoryLeg(
-                    orientation.base,
-                    baseSymbols,
-                    meta?.out_addr,
-                    symOut,
-                ) &&
-                matchesHistoryLeg(
-                    orientation.quote,
-                    quoteSymbols,
-                    meta?.in_addr,
-                    symIn,
-                )
-            ) {
-                return [{ at, price: amtIn / amtOut }];
-            }
-
-            return [];
-        })
-        .sort((a, b) => a.at - b.at);
+    return buildCandles(history, {
+        fromSec:
+            range.windowSec === null
+                ? history.observations[0].ts
+                : toSec - range.windowSec,
+        toSec,
+        bucketSec: range.bucketSec,
+        spot: spotPrice.value,
+    });
 });
 
-const selectedPoolChart = computed(() => {
-    const points = [...historicalPricePoints.value, ...livePriceHistory.value];
-    const cutoff = Date.now() - MARKET_HISTORY_MS;
-
-    return points
-        .filter((point) => point.at >= cutoff)
-        .map((point) => ({
-            x: Math.floor(point.at / 1000),
-            y: point.price,
-        }));
-});
-
-// Latest router-quoted price (same instrument as the historical points, so
-// the live edge of the chart lines up with real trade rates instead of a
-// possibly off-market direct pool's reserve ratio).
-const liveSpotPrice = computed(
-    () => livePriceHistory.value.at(-1)?.price ?? null,
-);
-
-const spotChangePct = computed(() => {
-    const points = selectedPoolChart.value;
+const rangeChangePct = computed(() => {
+    const points = candles.value;
 
     if (points.length < 2) {
         return null;
     }
 
-    const first = points[0].y;
-    const last = points[points.length - 1].y;
+    const first = points[0].open;
+    const last = points[points.length - 1].close;
 
     return first > 0 ? ((last - first) / first) * 100 : null;
 });
 
-const tradingViewData = computed<AreaData<UTCTimestamp>[]>(() => {
-    let lastTime = 0;
+const volume24h = computed(() => {
+    const history = marketHistory.value;
 
-    return selectedPoolChart.value
-        .filter(
-            (point) =>
-                Number.isFinite(point.x) &&
-                Number.isFinite(point.y) &&
-                point.x > 0 &&
-                point.y > 0,
-        )
-        .sort((a, b) => a.x - b.x)
-        .map((point) => {
-            const time = Math.max(point.x, lastTime + 1);
-            lastTime = time;
+    if (!history) {
+        return null;
+    }
 
-            return {
-                time: time as UTCTimestamp,
-                value: point.y,
-            };
-        });
+    const from = nowSec.value - DAY_SEC;
+
+    return history.trades
+        .filter((trade) => trade.ts >= from)
+        .reduce((total, trade) => total + trade.volume, 0);
 });
 
-const updateMarketChartData = (): void => {
-    if (!marketSeries || !marketChart) {
-        return;
-    }
-
-    marketSeries.setData(tradingViewData.value);
-    marketChart.timeScale().fitContent();
-};
-
-const destroyMarketChart = (): void => {
-    chartResizeObserver?.disconnect();
-    chartResizeObserver = null;
-    marketChart?.remove();
-    marketChart = null;
-    marketSeries = null;
-};
-
-const createMarketChart = (): void => {
-    if (!chartContainer.value || marketChart) {
-        return;
-    }
-
-    const container = chartContainer.value;
-    const resizeChart = (): void => {
-        marketChart?.applyOptions({
-            width: container.clientWidth,
-            height: container.clientHeight || 260,
-        });
-    };
-
-    marketChart = createChart(container, {
-        width: container.clientWidth,
-        height: container.clientHeight || 260,
-        layout: {
-            background: { type: ColorType.Solid, color: 'transparent' },
-            textColor: '#94a3b8',
-            fontSize: 11,
-        },
-        grid: {
-            vertLines: { color: 'rgba(148, 163, 184, 0.12)' },
-            horzLines: { color: 'rgba(148, 163, 184, 0.12)' },
-        },
-        crosshair: { mode: CrosshairMode.Normal },
-        rightPriceScale: {
-            borderColor: 'rgba(148, 163, 184, 0.2)',
-        },
-        timeScale: {
-            borderColor: 'rgba(148, 163, 184, 0.2)',
-            timeVisible: true,
-            secondsVisible: false,
-        },
-        localization: {
-            priceFormatter: (price: number): string =>
-                price.toLocaleString(undefined, {
-                    maximumSignificantDigits: 6,
-                }),
-        },
-    });
-
-    marketSeries = marketChart.addSeries(AreaSeries, {
-        lineColor: '#10b981',
-        topColor: 'rgba(16, 185, 129, 0.28)',
-        bottomColor: 'rgba(16, 185, 129, 0.02)',
-        lineWidth: 2,
-        priceLineVisible: true,
-        lastValueVisible: true,
-    });
-
-    chartResizeObserver = new ResizeObserver(resizeChart);
-    chartResizeObserver.observe(container);
-    updateMarketChartData();
-};
+// "CYBER → USDT → USDC": makes it obvious the charted price is a routed one.
+const marketRouteSymbols = computed(() =>
+    marketRoute.value
+        ? [
+              symbolOf(marketRoute.value[0].tokenIn),
+              ...marketRoute.value.map((hop) => symbolOf(hop.tokenOut)),
+          ]
+        : [],
+);
 
 const formatUsd = (value: number | null | undefined): string => {
     if (value === null || value === undefined) {
@@ -550,100 +616,6 @@ const formatUsd = (value: number | null | undefined): string => {
 const selectedPoolPairAddress = computed(
     () => livePairAddress.value ?? selectedPool.value?.pair_address,
 );
-
-const resetLivePriceHistory = (): void => {
-    livePriceHistory.value = [];
-};
-
-// Quote a small base amount over the best route and append the marginal
-// rate. This is the same price the indexed trades executed at (per-hop LP
-// fee included), so live points continue the historical series smoothly —
-// unlike the direct pool's reserve ratio, which can sit far off-market.
-let probeSeq = 0;
-// Smallest probe size that produced a quantization-safe quote, per market.
-const probeSizeCache = new Map<string, bigint>();
-const probeLivePrice = async (): Promise<void> => {
-    const orientation = chartOrientation.value;
-
-    if (!orientation) {
-        return;
-    }
-
-    const from = resolveAddr(orientation.base);
-    const to = resolveAddr(orientation.quote);
-
-    if (from.toLowerCase() === to.toLowerCase()) {
-        return;
-    }
-
-    const seq = ++probeSeq;
-    const marketKey = chartPairKey.value;
-
-    try {
-        const [baseMeta, quoteMeta] = await Promise.all([
-            tokenMeta(from),
-            tokenMeta(to),
-        ]);
-        const paths = candidatePaths(from, to);
-        // Escalate the probe ×10 until the quoted output is large enough in
-        // integer units that truncation noise stays under ~0.05% (a
-        // 6-decimals quote leg quantizes hard for cheap base tokens), while
-        // keeping the probe small against Cyberia's tiny pools. The passing
-        // size is cached per market so steady-state polls sweep once.
-        const startProbe =
-            probeSizeCache.get(marketKey) ??
-            10n ** BigInt(Math.max(baseMeta.decimals - 2, 0));
-        let probeIn = startProbe;
-        let bestOut = 0n;
-
-        for (let attempt = 0; attempt < 5; attempt++) {
-            probeIn = startProbe * 10n ** BigInt(attempt);
-            // One tick so ethers batches the calls (≤20 per RPC batch).
-            const outs = await Promise.all(
-                paths.map(async (path) => {
-                    try {
-                        const amounts = (await readRouter.getAmountsOut(
-                            probeIn,
-                            path,
-                        )) as bigint[];
-
-                        return amounts[amounts.length - 1];
-                    } catch {
-                        return 0n;
-                    }
-                }),
-            );
-            bestOut = outs.reduce((a, b) => (b > a ? b : a), 0n);
-
-            if (seq !== probeSeq || bestOut >= 2000n) {
-                break;
-            }
-        }
-
-        if (seq !== probeSeq || bestOut === 0n) {
-            return;
-        }
-
-        if (bestOut >= 2000n) {
-            probeSizeCache.set(marketKey, probeIn);
-        }
-
-        const price =
-            Number(formatUnits(bestOut, quoteMeta.decimals)) /
-            Number(formatUnits(probeIn, baseMeta.decimals));
-
-        if (!Number.isFinite(price) || price <= 0) {
-            return;
-        }
-
-        livePriceHistory.value = [
-            ...livePriceHistory.value,
-            { at: Date.now(), price },
-        ];
-    } catch {
-        // Keep the last known point; the next poll retries.
-    }
-};
 
 const customTokens = ref<Token[]>([]);
 const tokens = computed<Token[]>(() => {
@@ -689,9 +661,22 @@ const tokens = computed<Token[]>(() => {
 
     return Array.from(map.values());
 });
-const symbolOf = (addr: string): string =>
-    tokens.value.find((t) => t.address.toLowerCase() === addr.toLowerCase())
-        ?.symbol ?? shortAddr(addr);
+const symbolOf = (addr: string): string => {
+    const known = tokens.value.find(
+        (t) => t.address.toLowerCase() === addr.toLowerCase(),
+    );
+
+    if (known) {
+        return known.symbol;
+    }
+
+    // Routes are built from resolved addresses, so the wrapped native shows up
+    // even where it is not a pickable token (aeWETH on Robinhood).
+    return addr.toLowerCase() ===
+        activeChain.value.wrappedNative.toLowerCase()
+        ? activeChain.value.nativeSymbol
+        : shortAddr(addr);
+};
 
 // --- token metadata cache -----------------------------------------------
 const metaCache = new Map<string, { symbol: string; decimals: number }>();
@@ -1181,37 +1166,23 @@ watch([tokenIn, tokenOut], scheduleQuote);
 watch([tokenIn, tokenOut], () => void resolveLivePairAddress(), {
     immediate: true,
 });
-// Keyed on the oriented market so flipping the swap direction keeps the
-// accumulated live points instead of restarting the chart.
+// Keyed on the oriented market so flipping the swap direction keeps the chart;
+// picking a different market re-resolves the route and reloads its history.
 watch(
     chartPairKey,
     () => {
-        resetLivePriceHistory();
-        void probeLivePrice();
+        rangePinned.value = false;
+        void resolveMarketRoute();
     },
     { immediate: true },
 );
-// A late-loading pair list can unlock better routes for an existing quote.
+// A late-loading pair list can unlock better routes for an existing quote —
+// and a better route for the chart (re-resolving keeps the history when the
+// winning pools do not change).
 watch(chainEdges, () => {
     scheduleQuote();
-    void probeLivePrice();
+    void resolveMarketRoute();
 });
-watch(
-    tradingViewData,
-    async (points) => {
-        await nextTick();
-
-        if (points.length === 0) {
-            destroyMarketChart();
-
-            return;
-        }
-
-        createMarketChart();
-        updateMarketChartData();
-    },
-    { flush: 'post' },
-);
 
 // --- balances ---------------------------------------------------------------
 const loadBalance = async (token: string): Promise<bigint> => {
@@ -1271,9 +1242,9 @@ watch([tokenOut, () => wallet.address.value], () => void loadSide('out'), {
 // so refresh them on a slow poll while visible and immediately on return to
 // the tab — no page reload needed.
 const BALANCE_POLL_MS = 10000;
-const CHART_POLL_MS = 8000;
+const MARKET_POLL_MS = 10000;
 let balanceTimer: ReturnType<typeof setInterval> | undefined;
-let chartTimer: ReturnType<typeof setInterval> | undefined;
+let marketTimer: ReturnType<typeof setInterval> | undefined;
 
 const refreshBalances = (): void => {
     void loadSide('in');
@@ -1283,7 +1254,7 @@ const refreshBalances = (): void => {
 const onTabVisible = (): void => {
     if (!document.hidden) {
         refreshBalances();
-        void probeLivePrice();
+        void syncMarketReserves();
     }
 };
 
@@ -1459,7 +1430,11 @@ const doSwap = async (): Promise<void> => {
         amountIn.value = '';
         amountOut.value = '';
         quote.value = null;
-        await Promise.all([loadSide('in'), loadSide('out'), probeLivePrice()]);
+        await Promise.all([
+            loadSide('in'),
+            loadSide('out'),
+            syncMarketReserves(),
+        ]);
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
         status.value = null;
@@ -1514,20 +1489,16 @@ const switchChain = (chainId: number): void => {
     metaCache.clear();
     customTokens.value = [];
     chainEdges.value = [];
-    livePriceHistory.value = [];
     livePairAddress.value = null;
+    marketRoute.value = null;
+    marketHistory.value = null;
+    marketReserves.value = [];
     tokenIn.value = NATIVE;
     tokenOut.value = defaultTokenOut(activeChain.value);
     amountIn.value = '';
     quote.value = null;
 
-    // The price chart is Cyberia-only (server history); satellites hide it.
-    if (activeChain.value.serverPools) {
-        void nextTick().then(() => createMarketChart());
-    } else {
-        destroyMarketChart();
-    }
-
+    // The chartPairKey watcher re-resolves the route on the new chain.
     void loadChainEdges();
     refreshBalances();
     void refreshQuote();
@@ -1563,11 +1534,6 @@ onMounted(async () => {
 
     await nextTick();
 
-    // The market chart runs on Cyberia only (server price history).
-    if (activeChain.value.serverPools) {
-        createMarketChart();
-    }
-
     void loadChainEdges();
 
     balanceTimer = setInterval(() => {
@@ -1575,11 +1541,11 @@ onMounted(async () => {
             refreshBalances();
         }
     }, BALANCE_POLL_MS);
-    chartTimer = setInterval(() => {
-        if (!document.hidden && activeChain.value.serverPools) {
-            void probeLivePrice();
+    marketTimer = setInterval(() => {
+        if (!document.hidden) {
+            void syncMarketReserves();
         }
-    }, CHART_POLL_MS);
+    }, MARKET_POLL_MS);
     window.addEventListener('focus', onTabVisible);
     document.addEventListener('visibilitychange', onTabVisible);
 
@@ -1590,8 +1556,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
     clearInterval(balanceTimer);
-    clearInterval(chartTimer);
-    destroyMarketChart();
+    clearInterval(marketTimer);
     window.removeEventListener('focus', onTabVisible);
     document.removeEventListener('visibilitychange', onTabVisible);
 });
@@ -1632,52 +1597,93 @@ onBeforeUnmount(() => {
             </div>
         </div>
 
-        <div
-            class="grid gap-4 lg:items-start"
-            :class="
-                activeChain.serverPools
-                    ? 'lg:grid-cols-[1fr_28rem]'
-                    : 'max-w-md'
-            "
-        >
-            <section
-                v-if="activeChain.serverPools"
-                class="space-y-4 rounded-lg border p-4"
-            >
-                <div class="flex items-start justify-between gap-3">
+        <div class="grid gap-4 lg:grid-cols-[1fr_28rem] lg:items-start">
+            <section class="space-y-4 rounded-lg border p-4">
+                <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h2 class="font-semibold">Ritual market</h2>
+                        <h2 class="font-semibold">
+                            Ritual market
+                            <span
+                                v-if="chartPairKey"
+                                class="font-mono text-sm text-muted-foreground"
+                            >
+                                {{ symbolOf(chartBase) }}/{{
+                                    symbolOf(chartQuote)
+                                }}
+                            </span>
+                        </h2>
                         <p class="text-xs text-muted-foreground">
-                            7-day chart and indexed swap volume.
+                            <template v-if="marketRouteSymbols.length > 2">
+                                Routed
+                                {{ marketRouteSymbols.join(' → ') }} — candles
+                                come from the pools' on-chain reserves, so the
+                                chart moves only when the chain does.
+                            </template>
+                            <template v-else>
+                                Candles come from the pool's on-chain reserves,
+                                so the chart moves only when the chain does.
+                            </template>
                         </p>
                     </div>
-                    <span class="rounded bg-muted px-2 py-1 font-mono text-xs">
-                        {{
-                            selectedPoolPairAddress
-                                ? shortAddr(selectedPoolPairAddress)
-                                : 'No pair'
-                        }}
+                    <span
+                        v-if="selectedPoolPairAddress"
+                        class="rounded bg-muted px-2 py-1 font-mono text-xs"
+                        title="Direct pool for this pair"
+                    >
+                        {{ shortAddr(selectedPoolPairAddress) }}
                     </span>
                 </div>
 
                 <div class="min-h-[190px] rounded-md bg-muted/30 p-3">
-                    <template v-if="tradingViewData.length > 0">
-                        <div class="mb-3 grid grid-cols-4 gap-2 text-xs">
+                    <template v-if="candles.length > 0">
+                        <div
+                            class="mb-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-2 text-xs"
+                        >
                             <div>
-                                <p class="text-muted-foreground">Pair</p>
-                                <p class="font-mono">
-                                    {{ symbolOf(chartBase) }}/{{
-                                        symbolOf(chartQuote)
+                                <p class="text-muted-foreground">
+                                    Price
+                                    <span class="font-mono">
+                                        {{ symbolOf(chartQuote) }}
+                                    </span>
+                                </p>
+                                <p class="font-mono text-sm">
+                                    {{
+                                        spotPrice === null
+                                            ? '—'
+                                            : formatPrice(spotPrice)
                                     }}
+                                </p>
+                                <p
+                                    v-if="rangeChangePct !== null"
+                                    class="font-mono text-[0.68rem]"
+                                    :class="
+                                        rangeChangePct >= 0
+                                            ? 'text-emerald-500'
+                                            : 'text-red-500'
+                                    "
+                                >
+                                    {{ rangeChangePct >= 0 ? '+' : ''
+                                    }}{{ rangeChangePct.toFixed(2) }}% ·
+                                    {{ activeRange.label }}
                                 </p>
                             </div>
                             <div>
-                                <p class="text-muted-foreground">TVL</p>
+                                <p class="text-muted-foreground">Volume 24h</p>
+                                <p class="font-mono">
+                                    {{
+                                        volume24h === null
+                                            ? '—'
+                                            : `${formatNum(volume24h)} ${symbolOf(chartBase)}`
+                                    }}
+                                </p>
+                            </div>
+                            <div v-if="activeChain.serverPools">
+                                <p class="text-muted-foreground">Pool TVL</p>
                                 <p class="font-mono">
                                     {{ formatUsd(selectedPool?.tvl_usd) }}
                                 </p>
                             </div>
-                            <div>
+                            <div v-if="activeChain.serverPools">
                                 <p class="text-muted-foreground">LP APR</p>
                                 <p
                                     class="font-mono"
@@ -1695,53 +1701,57 @@ onBeforeUnmount(() => {
                                     }}
                                 </p>
                             </div>
-                            <div>
-                                <p class="text-muted-foreground">
-                                    Spot
-                                    <span
-                                        v-if="liveSpotPrice !== null"
-                                        class="text-emerald-500"
-                                        >live</span
-                                    >
-                                </p>
-                                <p class="font-mono">
-                                    {{
-                                        liveSpotPrice?.toLocaleString(
-                                            undefined,
-                                            { maximumSignificantDigits: 6 },
-                                        )
-                                    }}
-                                </p>
-                                <p
-                                    v-if="spotChangePct !== null"
-                                    class="font-mono text-[0.68rem]"
+                            <div class="flex gap-1">
+                                <button
+                                    v-for="range in MARKET_RANGES"
+                                    :key="range.key"
+                                    type="button"
+                                    class="rounded border px-2 py-0.5 text-[0.7rem] font-medium transition"
                                     :class="
-                                        spotChangePct >= 0
-                                            ? 'text-emerald-500'
-                                            : 'text-red-500'
+                                        range.key === rangeKey
+                                            ? 'border-primary bg-primary text-primary-foreground'
+                                            : 'border-border text-muted-foreground hover:border-foreground/30'
                                     "
+                                    @click="selectRange(range.key)"
                                 >
-                                    {{ spotChangePct >= 0 ? '+' : ''
-                                    }}{{ spotChangePct.toFixed(2) }}%
-                                </p>
+                                    {{ range.label }}
+                                </button>
                             </div>
                         </div>
-                        <div
-                            ref="chartContainer"
-                            class="h-64 w-full overflow-hidden rounded border border-border/60"
-                            role="img"
-                            aria-label="Selected pool TradingView price chart"
+                        <MarketCandlesChart
+                            :candles="candles"
+                            :base-symbol="symbolOf(chartBase)"
+                            :quote-symbol="symbolOf(chartQuote)"
                         />
                     </template>
                     <div
                         v-else
-                        class="flex h-40 items-center justify-center text-center text-sm text-muted-foreground"
+                        class="flex h-40 items-center justify-center px-4 text-center text-sm text-muted-foreground"
                     >
-                        Select two tokens to view their market chart.
+                        <span v-if="marketLoading">
+                            Reading the market's on-chain history…
+                        </span>
+                        <span v-else-if="marketError">
+                            Market history unavailable: {{ marketError }}
+                        </span>
+                        <span v-else-if="!chartPairKey">
+                            Select two tokens to view their market chart.
+                        </span>
+                        <span v-else-if="!marketRoute">
+                            No route between these tokens yet — add liquidity
+                            to open this market.
+                        </span>
+                        <span v-else>
+                            No on-chain history for this market yet.
+                        </span>
                     </div>
                 </div>
 
-                <div v-if="daily.length > 0" class="space-y-2">
+                <!-- Server-indexed Cyberia figures; satellites have no indexer. -->
+                <div
+                    v-if="activeChain.serverPools && daily.length > 0"
+                    class="space-y-2"
+                >
                     <h3 class="text-sm font-medium">Daily volume 7d</h3>
                     <div
                         v-for="d in daily"
@@ -1768,7 +1778,10 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
 
-                <div v-else-if="topPools.length > 0" class="space-y-2">
+                <div
+                    v-else-if="activeChain.serverPools && topPools.length > 0"
+                    class="space-y-2"
+                >
                     <h3 class="text-sm font-medium">Top pools</h3>
                     <div
                         v-for="pool in topPools"

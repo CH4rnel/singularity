@@ -23,8 +23,8 @@ class ProposalController extends Controller
     {
         $proposal->load([
             'dao',
-            'user:id,name,wallet_address',
-            'votes.user:id,name,wallet_address',
+            'user:id,name,onchain_nickname,avatar_path,wallet_address',
+            'votes.user:id,name,onchain_nickname,avatar_path,wallet_address',
             'reactions:id,user_id,reactable_type,reactable_id,emoji',
         ]);
 
@@ -36,9 +36,9 @@ class ProposalController extends Controller
             'comments' => $proposal->comments()
                 ->whereNull('parent_id')
                 ->with([
-                    'user:id,name,wallet_address',
+                    'user:id,name,onchain_nickname,avatar_path,wallet_address',
                     'reactions:id,user_id,reactable_type,reactable_id,emoji',
-                    'replies.user:id,name,wallet_address',
+                    'replies.user:id,name,onchain_nickname,avatar_path,wallet_address',
                     'replies.reactions:id,user_id,reactable_type,reactable_id,emoji',
                 ])
                 ->latest()

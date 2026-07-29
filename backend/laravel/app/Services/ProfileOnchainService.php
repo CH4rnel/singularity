@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\User;
 use App\Support\Environment;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -36,6 +37,25 @@ class ProfileOnchainService
         $nickname = $result === null ? null : $this->decodeString($result);
 
         return $nickname === '' ? null : $nickname;
+    }
+
+    /**
+     * Refresh the cached canonical name without discarding a known value when
+     * the RPC is temporarily unavailable.
+     */
+    public function syncNickname(User $user): ?string
+    {
+        if (! $user->wallet_address || ! $this->enabled()) {
+            return $user->onchain_nickname;
+        }
+
+        $nickname = $this->nicknameOf($user->wallet_address);
+
+        if ($nickname !== null && $nickname !== $user->onchain_nickname) {
+            $user->forceFill(['onchain_nickname' => $nickname])->save();
+        }
+
+        return $nickname ?? $user->onchain_nickname;
     }
 
     /** Wallet currently owning a nickname, or null when free. */

@@ -15,12 +15,12 @@ import { computed, onMounted, ref, watch } from 'vue';
 import TokenCandlesChart from '@/components/launchpad/TokenCandlesChart.vue';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
+import { formatNum, formatPrice } from '@/lib/dexFormat';
 import {
     CYBERIA_CHAIN_ID,
     cyberiaReadRpcUrl,
     ensureCyberiaNetwork,
 } from '@/lib/evmChains';
-import { formatNum, formatPrice } from '@/lib/launchpadChart';
 import type { TokenCandle } from '@/lib/launchpadChart';
 
 // LaunchpadNative — fair launches paid in native CYBER (min 10), burned into

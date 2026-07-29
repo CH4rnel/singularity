@@ -18,9 +18,11 @@ import {
     LockKeyhole,
     Repeat2,
     Rocket,
+    Rss,
     Sprout,
     Store,
     TrendingUp,
+    Trophy,
     Users,
     Vote,
     Wallet,
@@ -44,7 +46,7 @@ import {
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
-import { dashboard, staking } from '@/routes';
+import { dashboard, feed, leaderboard, staking } from '@/routes';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -173,6 +175,16 @@ const gamesNavItems: NavItem[] = [
 // CRM is operator-only (see config/crm.php); the routes 404 for everyone else,
 // so the link is dropped rather than shown broken.
 const workspaceNavItems = computed<NavItem[]>(() => [
+    {
+        title: 'Feed',
+        href: feed().url,
+        icon: Rss,
+    },
+    {
+        title: 'Leaderboard',
+        href: leaderboard().url,
+        icon: Trophy,
+    },
     {
         title: 'DAO',
         href: '/dao',

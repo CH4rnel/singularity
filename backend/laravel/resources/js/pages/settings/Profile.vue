@@ -8,7 +8,7 @@ import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { edit } from '@/routes/profile';
+import { edit, show as profileShow } from '@/routes/profile';
 import { send } from '@/routes/verification';
 
 type Props = {
@@ -59,9 +59,25 @@ const user = computed(() => page.props.auth.user);
                     name="name"
                     :default-value="user.name"
                     required
+                    :readonly="!!user.onchain_nickname"
                     autocomplete="name"
                     placeholder="Full name"
                 />
+                <p
+                    v-if="user.onchain_nickname"
+                    class="text-xs text-muted-foreground"
+                >
+                    Your public name is the on-chain nickname
+                    <span class="font-mono text-foreground">
+                        @{{ user.onchain_nickname }}</span
+                    >.
+                    <Link
+                        :href="profileShow()"
+                        class="text-foreground underline underline-offset-4"
+                    >
+                        Change it on your profile.
+                    </Link>
+                </p>
                 <InputError class="mt-2" :message="errors.name" />
             </div>
 

@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Cyberia — Bridge, trade and earn across Cyberia and Robinhood Chain</title>
+<title>Cyberia — The liquidity home of Ritual DEX</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<meta name="description" content="Bridge supported assets, trade on Ritual DEX and access on-chain liquidity and staking across Cyberia and Robinhood Chain." />
+<meta name="description" content="Bridge, trade and earn where about 90% of Ritual liquidity is concentrated: Cyberia. Robinhood Chain is natively supported." />
 <link rel="canonical" href="https://cyberia.church/" />
-<meta property="og:title" content="Cyberia — Bridge, trade and earn" />
-<meta property="og:description" content="Bridge, DEX and yield infrastructure for Cyberia and the emerging Robinhood Chain ecosystem." />
+<meta property="og:title" content="Cyberia — The liquidity home of Ritual DEX" />
+<meta property="og:description" content="About 90% of Ritual liquidity is concentrated on Cyberia, with native support for Robinhood Chain." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://cyberia.church/" />
 <meta property="og:image" content="https://cyberia.church/cyberia_logo.png" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Cyberia — Bridge, trade and earn" />
-<meta name="twitter:description" content="Bridge, DEX and yield infrastructure for Cyberia and Robinhood Chain." />
+<meta name="twitter:title" content="Cyberia — The liquidity home of Ritual DEX" />
+<meta name="twitter:description" content="About 90% of Ritual liquidity is concentrated on Cyberia, with native support for Robinhood Chain." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -185,6 +185,10 @@
   .hero-note{
     max-width:620px;margin:18px 0 0;color:var(--muted);
     font-size:12.5px;line-height:1.55;
+  }
+  .hero-note a{
+    color:var(--ink-2);font-weight:600;text-decoration:underline;
+    text-decoration-color:var(--cyan-strong);text-underline-offset:3px;
   }
   .hero-visual{
     display:flex;min-width:0;flex-direction:column;align-items:center;
@@ -1160,7 +1164,7 @@ function Nav(){
       <div className="nav-inner">
         <CyberiaLogo />
         <nav className="nav-links">
-          <a href="/robinhood-chain">Robinhood</a>
+          <a href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">Whitepaper</a>
           <a href="/bridge">Bridge</a>
           <a href="/swap">DEX</a>
           <a href="/staking">Staking</a>
@@ -1306,23 +1310,25 @@ function Hero(){
   return (
     <main className="hero" data-screen-label="01 Hero">
       <div className="hero-copy">
-        <p className="hero-eyebrow">Bridge · DEX · Yield infrastructure</p>
-        <h1>Bridge, trade and earn across Cyberia and Robinhood Chain</h1>
+        <p className="hero-eyebrow">Cyberia-native bridge · DEX · Yield</p>
+        <h1>The liquidity home of the Cyberia ecosystem</h1>
         <p className="hero-description">
-          Move assets between networks, trade on Ritual DEX and access on-chain
-          staking opportunities through one multichain interface.
+          About 90% of Ritual liquidity is concentrated on Cyberia. Bridge
+          assets in, trade across its pools and put liquidity to work through
+          on-chain staking.
         </p>
         <div className="hero-ctas">
           <a className="btn" href="/bridge">
-            Open Robinhood bridge
+            Open Cyberia bridge
             <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
           </a>
           <a className="btn ghost" href="/swap">Explore DEX</a>
           <a className="btn ghost" href="/staking">View staking</a>
         </div>
         <p className="hero-note">
-          Live bridge direction: Robinhood Chain → Cyberia for ETH, SPY and CYBER.
-          The reverse direction remains Coming soon until relayer liquidity is enabled.
+          Robinhood Chain is natively supported for chain-local swaps,
+          liquidity and farms on chain ID 4663.{' '}
+          <a href="/robinhood-chain">Explore Robinhood support →</a>
         </p>
       </div>
 
@@ -1330,10 +1336,15 @@ function Hero(){
         <div className="cube-wrap"><Cube/></div>
         <div className="hero-proof" aria-label="Cyberia on-chain proof">
           <div className="proof-row">
-            <div className="proof-k">Live networks</div>
+            <div className="proof-k">Liquidity home</div>
             <div className="proof-v">
-              <span className="proof-live"><strong>Cyberia</strong> · 49406</span>
-              <span className="proof-live"><strong>Robinhood Chain</strong> · 4663</span>
+              <span className="proof-live"><strong>Cyberia</strong> · 49406 · ≈90% of Ritual liquidity</span>
+            </div>
+          </div>
+          <div className="proof-row">
+            <div className="proof-k">Native support</div>
+            <div className="proof-v">
+              <a href="/robinhood-chain"><strong>Robinhood Chain</strong> · 4663</a> · DEX, liquidity, farms and bridge corridor
             </div>
           </div>
           <div className="proof-row">
@@ -1744,8 +1755,8 @@ function Philosophy(){
       </div>
 
       <div className="rite-actions" style={{marginTop:40}} data-reveal="">
-        <a className="btn ghost" href="/thesis">
-          Read the founding thesis
+        <a className="btn ghost" href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">
+          Read the whitepaper
           <svg className="arr" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
         </a>
       </div>

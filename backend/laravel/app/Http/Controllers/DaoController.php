@@ -20,7 +20,7 @@ class DaoController extends Controller
     {
         return Inertia::render('dao/Index', [
             'activities' => Activity::with([
-                'user:id,name,wallet_address',
+                'user:id,name,onchain_nickname,avatar_path,wallet_address',
                 'dao:id,name',
                 'subject' => function (MorphTo $morphTo) {
                     $morphTo->morphWith([
@@ -43,7 +43,7 @@ class DaoController extends Controller
         return Inertia::render('dao/Show', [
             'dao' => $dao,
             'proposals' => $dao->proposals()
-                ->with(['user:id,name,wallet_address'])
+                ->with(['user:id,name,onchain_nickname,avatar_path,wallet_address'])
                 ->withCount(['comments', 'votes'])
                 ->withSum('votesFor as power_for', 'voting_power')
                 ->withSum('votesAgainst as power_against', 'voting_power')

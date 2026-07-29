@@ -10,11 +10,10 @@ it('renders swap without indexer tables', function () {
             ->component('Swap')
             ->where('indexerReady', false)
             ->has('pools', 0)
-            ->has('daily', 0)
-            ->has('priceHistory', 0));
+            ->has('daily', 0));
 });
 
-it('passes indexed pools and seven day swap history to swap', function () {
+it('passes indexed pools and seven day swap volume to swap', function () {
     DB::statement('CREATE TABLE activity_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, usd REAL,
         sym_in TEXT, amt_in REAL, sym_out TEXT, amt_out REAL,
@@ -77,8 +76,6 @@ it('passes indexed pools and seven day swap history to swap', function () {
             ->where('indexerReady', true)
             ->has('pools', 1)
             ->has('daily', 1)
-            ->has('priceHistory', 1)
             ->where('daily.0.swap_usd', 12.5)
-            ->where('daily.0.swaps', 1)
-            ->where('priceHistory.0.amt_in', 138));
+            ->where('daily.0.swaps', 1));
 });
