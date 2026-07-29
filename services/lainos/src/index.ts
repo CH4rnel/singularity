@@ -22,6 +22,7 @@ import { presencePlugin } from "./plugins/presence/index.js";
 import { scoutPlugin } from "./plugins/scout/index.js";
 import { sentinelPlugin } from "./plugins/sentinel/index.js";
 import { skillsPlugin } from "./plugins/skills/index.js";
+import { studyPlugin } from "./plugins/study/index.js";
 import { systemPlugin } from "./plugins/system/index.js";
 import { telegramPlugin } from "./plugins/telegram/index.js";
 import { traderPlugin } from "./plugins/trader/index.js";
@@ -74,6 +75,20 @@ export { telegramPlugin, resolveOperatorChatId, sendToOperator } from "./plugins
 export { skillsPlugin, SkillsService } from "./plugins/skills/index.js";
 export type { SkillModule } from "./plugins/skills/index.js";
 export { initiativePlugin, InitiativeService } from "./plugins/initiative/index.js";
+export {
+  studyPlugin,
+  StudyService,
+  DEFAULT_STUDY_AREAS,
+  fingerprintOf,
+  fingerprintSimilarity,
+  formatFinding,
+  isDuplicateFinding,
+  isQuietHour,
+  isSensitivePath,
+  parseFinding,
+  redactEvidence,
+} from "./plugins/study/index.js";
+export type { ParsedFinding, StudyArea, StudyFinding } from "./plugins/study/index.js";
 export { presencePlugin, PresenceService } from "./plugins/presence/index.js";
 export type { PresenceJournalEntry, PresenceState } from "./plugins/presence/index.js";
 export { traderPlugin, TraderService } from "./plugins/trader/index.js";
@@ -99,6 +114,7 @@ const BUILTIN_PLUGINS: Record<string, Plugin> = {
   trader: traderPlugin,
   initiative: initiativePlugin,
   presence: presencePlugin,
+  study: studyPlugin,
 };
 
 export interface CreateAgentOptions {

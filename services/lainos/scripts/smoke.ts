@@ -5,7 +5,8 @@
  */
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AgentRuntime, createAgent, FileMemoryStore, type ModelProvider, type ModelRequest } from "../src/index.js";
 import { lain } from "../src/characters/lain.js";
 import { splitMessage } from "../src/clients/telegram.js";
@@ -32,6 +33,15 @@ import {
   isNoisyWiredPulseMessage,
 } from "../src/plugins/presence/index.js";
 import { looksLikeNothing, parseRss, type ScoutService } from "../src/plugins/scout/index.js";
+import {
+  fingerprintOf,
+  isDuplicateFinding,
+  isQuietHour,
+  isSensitivePath,
+  parseFinding,
+  redactEvidence,
+  StudyService,
+} from "../src/plugins/study/index.js";
 import type { SentinelService } from "../src/plugins/sentinel/index.js";
 import { resolveOperatorChatId, telegramPlugin } from "../src/plugins/telegram/index.js";
 
@@ -527,6 +537,84 @@ async function main() {
     DEFAULT_PRESENCE_MESSAGES.length > 0 &&
     DEFAULT_PRESENCE_MESSAGES.every((message) => !isNoisyWiredPulseMessage(message));
 
+  // --- study: one grounded finding, then silence (duplicate, then NOTHING) ---
+  const lainosDir = resolve(fileURLToPath(import.meta.url), "../..");
+  const studyDir = mkdtempSync(join(tmpdir(), "lainos-study-"));
+  const studyAnswer = [
+    "TITLE: Автономный разбор репозитория не покрыт тестами",
+    "WHY: Цикл сам пишет оператору, а разбор ответа модели никем не проверяется.",
+    "WHAT: Добавить в смоук проверку разбора находки и дедупликации.",
+    "WHERE: src/plugins/study/index.ts, scripts/smoke.ts",
+    "RISK: low",
+  ].join("\n");
+  let studyCalls = 0;
+  const studyModel: ModelProvider = {
+    name: "study-stub",
+    modelFor: () => "study-stub",
+    async generate() {
+      studyCalls += 1;
+      // 1st: a finding. 2nd: the same thought again. 3rd: nothing to say.
+      const text = studyCalls >= 3 ? "NOTHING" : studyAnswer;
+      return { text, toolCalls: [], model: "study-stub" };
+    },
+  };
+  const studyService = new StudyService();
+  const studyRuntime = new AgentRuntime({
+    character: lain,
+    memory: new FileMemoryStore(studyDir),
+    model: studyModel,
+    settings: {
+      LAINOS_DATA_DIR: studyDir,
+      LAINOS_MODEL_TRANSCRIPTS: "0",
+      // No timers, no network, and a repo slice that exists in every checkout.
+      LAINOS_STUDY: "0",
+      LAINOS_STUDY_EXTERNAL: "0",
+      LAINOS_STUDY_REPO: lainosDir,
+      LAINOS_STUDY_AREAS: "src/plugins",
+    },
+  });
+  studyRuntime.use({
+    name: "study-smoke",
+    description: "self-study smoke",
+    services: [studyService],
+  });
+  await studyRuntime.start();
+  const firstFinding = await studyService.run({ deliver: false });
+  const repeatFinding = await studyService.run({ deliver: false });
+  const emptyFinding = await studyService.run({ deliver: false });
+  await studyRuntime.stop();
+  const studyFindingOk =
+    Boolean(firstFinding) &&
+    firstFinding!.where.includes("src/plugins/study/index.ts") &&
+    firstFinding!.risk === "low" &&
+    firstFinding!.area === "src/plugins" &&
+    // A finding whose paths don't exist in the repo is a hallucination, not news.
+    parseFinding(studyAnswer)!.where.length === 2 &&
+    parseFinding("просто болтовня без единого поля") === null;
+  const studySilenceOk =
+    repeatFinding === null &&
+    emptyFinding === null &&
+    studyService.getState().findings.length === 1 &&
+    isDuplicateFinding(fingerprintOf("мост теряет депозит при таймауте RPC"), [
+      fingerprintOf("мост теряет депозит при таймауте RPC"),
+    ]) &&
+    !isDuplicateFinding(fingerprintOf("мост теряет депозит при таймауте RPC"), [
+      fingerprintOf("лендинг грузит лишние шрифты на первом экране"),
+    ]);
+  const studySafetyOk =
+    isSensitivePath("backend/laravel/.env") &&
+    isSensitivePath("crypto/anchor/deployer-keypair.json") &&
+    !isSensitivePath("services/lainos/src/index.ts") &&
+    !redactEvidence(
+      "rotate DEPLOYER_PK=0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    ).includes("0123456789abcdef") &&
+    redactEvidence("marker: token: hunter2secretvalue").includes("[redacted]") &&
+    // ...but a public contract address is context, not a secret.
+    redactEvidence("pair 0xa9101ee859850c037b0867156b3535F78A387C0d is dust") ===
+      "pair 0xa9101ee859850c037b0867156b3535F78A387C0d is dust" &&
+    isQuietHour(3, [23, 9]) &&
+    !isQuietHour(12, [23, 9]);
+
   // --- assertions ---
   const facts = await agent.memory.facts(50);
   const learnedName = facts.some((f) => /operator/i.test(f));
@@ -604,6 +692,9 @@ async function main() {
   console.log(`scout topic add/remove   : ${scoutOk ? "PASS" : "FAIL"}`);
   console.log(`scout NOTHING = silence  : ${nothingOk ? "PASS" : "FAIL"}`);
   console.log(`presence quiet format    : ${presenceQuietOk ? "PASS" : "FAIL"}`);
+  console.log(`study finding grounded   : ${studyFindingOk ? "PASS" : "FAIL"}`);
+  console.log(`study repeats stay quiet : ${studySilenceOk ? "PASS" : "FAIL"}`);
+  console.log(`study evidence redacted  : ${studySafetyOk ? "PASS" : "FAIL"}`);
   console.log(`reasoning never leaks    : ${reasoningOk ? "PASS" : "FAIL"}`);
   console.log(`github streak watch      : ${githubOk ? "PASS" : "FAIL"}`);
   console.log(`channel post watch       : ${channelOk ? "PASS" : "FAIL"}`);
@@ -615,6 +706,7 @@ async function main() {
     walletOk && lainTokenKnown && wishLogged && wishEdited && wishForged && forgeProviderSwitchOk && chatProviderSwitchOk && skillsOk && journalOk && quietOk &&
     forgeJobsListed && forgeJobsScrubbed &&
     rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
+    studyFindingOk && studySilenceOk && studySafetyOk &&
     githubOk && channelOk && telegramOk;
   console.log(`\n${ok ? "✅ smoke OK" : "❌ smoke FAILED"}`);
   process.exit(ok ? 0 : 1);

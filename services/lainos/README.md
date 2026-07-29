@@ -298,6 +298,36 @@ and secret values loaded from the environment.
   Run it manually with `/study` in Telegram, or from the host with
   `npm run study:cyberia` while the daemon is up; manual runs always return
   either a digest or a short study note.
+- **study** — autonomous self-teaching, the content half of her initiative.
+  Every `LAINOS_STUDY_INTERVAL_HOURS` (6 h) she takes the next area of the
+  monorepo in rotation (`services/lainos`, `backend/laravel`,
+  `frontend/ritual`, `crypto/hardhat`, `crypto/anchor`,
+  `services/telegram-bot`, `game/nocarrier`, `scripts` — override with
+  `LAINOS_STUDY_AREAS`), reads it **read-only** through git (recent commits,
+  tracked source, biggest files, `TODO/FIXME/HACK` markers), borrows the
+  scout's sources for how the outside world solves the same problem, and asks
+  her model for exactly one concrete finding: a real problem or a real
+  opportunity with the files it lives in. Then she writes it to the operator on
+  Telegram in her own voice.
+
+  Four filters keep it from becoming noise: `NOTHING` is a valid and cheap
+  answer; a finding naming no existing repo path is discarded as hallucinated;
+  every finding leaves a fingerprint and anything close to an earlier one is
+  dropped instead of repeated; quiet hours (`LAINOS_STUDY_QUIET`, 23–9) and a
+  daily cap (`LAINOS_STUDY_MAX_PER_DAY`, 3) sit on top. Presence keeps the
+  hourly *"я здесь"* beat — study only speaks when it has content.
+
+  The loop never writes: it runs `git` queries, never edits, never forges,
+  never logs a wish, and evidence is scrubbed (`.env`, keypairs and cookies are
+  skipped, long opaque blobs masked) before it reaches a prompt. Risky or
+  irreversible work is proposed to the operator, who decides.
+  - `study_now` — analyse one area on demand ("посмотри код и скажи, что стоит
+    улучшить"), optionally a named `area`;
+  - `study_status` — cadence, next lesson, recent findings;
+  - `enable_study` / `disable_study` — turn the loop on/off (persisted).
+
+  State lives in `data/study.json`; it is daemon-only by default
+  (`LAINOS_STUDY=1` forces it elsewhere, `=0` disables it).
 - **github** — a streak keeper: `watch_github_commits <username>` watches the
   account's public contribution graph and sends one Telegram reminder in the
   evening of any day still without commits (silence on days with them);
@@ -431,6 +461,7 @@ src/
   plugins/trader/     autonomous take-profit loop over the trade journal
   plugins/initiative/ her heartbeat: unprompted Telegram messages that matter
   plugins/scout/      autonomous researcher (topics -> scheduled digests)
+  plugins/study/      self-teaching: read-only repo analysis -> real findings
   plugins/github/     commit-streak keeper (daily reminder on commitless days)
   plugins/channel/    telegram channel keeper (daily reminder on postless days)
   plugins/system/     terminal + filesystem skills (sandboxed workspace)
@@ -454,3 +485,9 @@ operator pushes. Review her commits with `git log` before pushing; `git revert`
 is the undo button. Hot skills (`skills/*.mjs`) run in-process with the same
 trust as the rest of the agent, which is the existing trust model: she already
 holds a workspace shell and a repo-editing forge.
+
+The study loop is the read-only counterpart: it only runs `git` queries, skips
+`.env` files, keypairs and cookies entirely, masks long opaque blobs before any
+evidence reaches a prompt, and can propose but never perform a risky or
+irreversible change. What it finds becomes a message to the operator, not a
+commit.

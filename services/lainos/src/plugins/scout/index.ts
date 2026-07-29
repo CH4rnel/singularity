@@ -292,7 +292,12 @@ export class ScoutService implements Service {
 
   // ------------------------------------------------------------- sources
 
-  private async gather(query: string): Promise<ScoutItem[]> {
+  /**
+   * Sweep every public source for one query. Public so the study loop can
+   * borrow the scout's sources (and its proxy) for the external half of a
+   * lesson instead of duplicating the fetch stack.
+   */
+  async gather(query: string): Promise<ScoutItem[]> {
     const nitter = this.runtime?.getSetting("LAINOS_SCOUT_NITTER");
     const results = await Promise.allSettled([
       this.hackerNews(query),
