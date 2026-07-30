@@ -28,7 +28,23 @@ class AccountMergeService
      * Identity fields copied from the absorbed account to the survivor when
      * the survivor doesn't already hold a conflicting value.
      */
-    private const IDENTITY_FIELDS = ['wallet_address', 'onchain_nickname', 'solana_wallet_address', 'twitter_id', 'twitter_username'];
+    private const IDENTITY_FIELDS = [
+        'wallet_address',
+        'onchain_nickname',
+        'solana_wallet_address',
+        'twitter_id',
+        'github_id',
+        'telegram_id',
+    ];
+
+    /**
+     * Mutable display metadata that follows its provider's immutable id.
+     */
+    private const IDENTITY_METADATA_FIELDS = [
+        'twitter_id' => 'twitter_username',
+        'github_id' => 'github_username',
+        'telegram_id' => 'telegram_username',
+    ];
 
     /**
      * Tables with a plain user_id column and no unique constraint involving
@@ -57,6 +73,10 @@ class AccountMergeService
 
             $survivor = $locked[$survivor->id];
             $absorbed = $locked[$absorbed->id];
+
+            if ($survivor->merged_into_id !== null) {
+                throw AccountMergeConflictException::alreadyMerged();
+            }
 
             if ($absorbed->merged_into_id !== null) {
                 return;
@@ -102,6 +122,12 @@ class AccountMergeService
         foreach (self::IDENTITY_FIELDS as $field) {
             if ($survivor->{$field} === null && $absorbed->{$field} !== null) {
                 $updates[$field] = $absorbed->{$field};
+
+                $metadataField = self::IDENTITY_METADATA_FIELDS[$field] ?? null;
+
+                if ($metadataField !== null && $absorbed->{$metadataField} !== null) {
+                    $updates[$metadataField] = $absorbed->{$metadataField};
+                }
             }
         }
 
@@ -197,6 +223,10 @@ class AccountMergeService
             'solana_wallet_address' => null,
             'twitter_id' => null,
             'twitter_username' => null,
+            'github_id' => null,
+            'github_username' => null,
+            'telegram_id' => null,
+            'telegram_username' => null,
             'merged_into_id' => $survivor->id,
         ])->save();
     }

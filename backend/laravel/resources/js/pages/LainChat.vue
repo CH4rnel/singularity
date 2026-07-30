@@ -217,7 +217,13 @@ async function openSession(id: number): Promise<void> {
 async function sendMessage(): Promise<void> {
     const text = input.value.trim();
 
-    if (!text || sending.value || switching.value || !canChat.value || !props.enabled) {
+    if (
+        !text ||
+        sending.value ||
+        switching.value ||
+        !canChat.value ||
+        !props.enabled
+    ) {
         return;
     }
 
@@ -432,10 +438,10 @@ onMounted(() => scrollToBottom(false));
             </aside>
 
             <section
-                class="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-[hsl(210_18%_3%)] text-neutral-100 shadow-2xl"
+                class="flex h-[clamp(32rem,70dvh,47.5rem)] min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-[hsl(210_18%_3%)] text-neutral-100 shadow-2xl"
             >
                 <header
-                    class="flex items-center justify-between border-b border-white/10 px-5 py-3"
+                    class="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3"
                 >
                     <div
                         class="flex items-center gap-2 font-mono text-xs tracking-widest uppercase"
@@ -457,7 +463,7 @@ onMounted(() => scrollToBottom(false));
 
                 <div
                     ref="transcript"
-                    class="flex flex-1 flex-col gap-5 overflow-y-auto p-5 sm:p-7"
+                    class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain p-5 sm:p-7"
                     aria-live="polite"
                 >
                     <div
@@ -469,8 +475,7 @@ onMounted(() => scrollToBottom(false));
                             signal locked
                         </p>
                         <p class="mt-2 text-sm leading-6 text-neutral-500">
-                            Sign in with your wallet to open your personal
-                            line.
+                            Sign in with your wallet to open your personal line.
                         </p>
                         <Button as-child class="mt-5">
                             <InertiaLink :href="walletLogin().url">
@@ -540,7 +545,7 @@ onMounted(() => scrollToBottom(false));
 
                 <div
                     v-if="lockNotice && enabled"
-                    class="flex items-center gap-2 border-t border-white/10 bg-white/5 px-5 py-2 text-xs text-neutral-400"
+                    class="flex shrink-0 items-center gap-2 border-t border-white/10 bg-white/5 px-5 py-2 text-xs text-neutral-400"
                 >
                     <LockKeyhole class="h-3.5 w-3.5 shrink-0" />
                     {{ lockNotice }}
@@ -548,13 +553,13 @@ onMounted(() => scrollToBottom(false));
 
                 <div
                     v-if="error"
-                    class="border-t border-red-500/20 bg-red-500/5 px-5 py-2 text-xs text-red-300"
+                    class="shrink-0 border-t border-red-500/20 bg-red-500/5 px-5 py-2 text-xs text-red-300"
                 >
                     {{ error }}
                 </div>
 
                 <form
-                    class="flex items-end gap-3 border-t border-white/10 p-4"
+                    class="flex shrink-0 items-end gap-3 border-t border-white/10 p-4"
                     @submit.prevent="sendMessage"
                 >
                     <textarea

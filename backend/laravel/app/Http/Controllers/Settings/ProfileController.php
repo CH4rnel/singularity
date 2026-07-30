@@ -22,8 +22,13 @@ class ProfileController extends Controller
         return Inertia::render('settings/Profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
-            // Flash from the X account linking callback (already-linked case).
             'error' => $request->session()->get('error'),
+            'canLinkTwitter' => (string) config('services.twitter-oauth-2.client_id') !== ''
+                && (string) config('services.twitter-oauth-2.client_secret') !== '',
+            'canLinkGitHub' => (string) config('services.github.client_id') !== ''
+                && (string) config('services.github.client_secret') !== '',
+            'canLinkTelegram' => (string) config('services.telegram.client_id') !== ''
+                && (string) config('services.telegram.client_secret') !== '',
         ]);
     }
 

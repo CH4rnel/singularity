@@ -10,9 +10,37 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.6.0'),
+    'current_version' => env('APP_VERSION', 'v0.7.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.7.0',
+            'date' => '2026-07-30',
+            'title' => 'Profiles, feed & progression',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Public profiles now support round avatars, personal posts and a shared community feed.',
+                        'XP, levels, daily streaks, quests and the leaderboard turn verified Cyberia activity into visible progression.',
+                        'GitHub and Telegram accounts can be linked to a profile alongside X without creating a second Cyberia account.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'On-chain nicknames are now the canonical public identity and profile URL, replacing numeric profile addresses where a nickname exists.',
+                        'Profile, retention and progression analytics give operators a clearer view of acquisition and ongoing activity.',
+                    ],
+                ],
+                [
+                    'label' => 'Fixed',
+                    'items' => [
+                        'The Talk to Lain transcript now scrolls inside its own bounded chat panel instead of growing and moving the whole page.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.6.0',
             'date' => '2026-07-25',

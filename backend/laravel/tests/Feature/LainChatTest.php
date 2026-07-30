@@ -77,6 +77,15 @@ beforeEach(function () {
     config()->set('services.lain.minimum_share_bps', 1000);
 });
 
+it('keeps the transcript in a bounded independent scroll region', function () {
+    $component = file_get_contents(resource_path('js/pages/LainChat.vue'));
+
+    expect($component)
+        ->toBeString()
+        ->toContain('h-[clamp(32rem,70dvh,47.5rem)]')
+        ->toMatch('/ref="transcript"\s+class="[^"]*min-h-0[^"]*overflow-y-auto[^"]*overscroll-contain[^"]*"/');
+});
+
 it('serves the page to guests with a locked gate', function () {
     $this->get('/lain')
         ->assertOk()
@@ -283,10 +292,12 @@ it('retries once when the model ships an empty reply', function () {
 });
 
 it('falls back to the free router when the pinned model is rate-limited', function () {
-    config()->set('services.lain.model', 'qwen/qwen3-next-80b-a3b-instruct:free');
+    config()->set('services.lain.model', 'openai/gpt-oss-20b:free');
     config()->set('services.lain.fallback_model', 'openrouter/free');
     $user = qualifyingUser();
     Http::fakeSequence(OPENROUTER_URL)
+        ->push(['error' => ['message' => 'rate-limited upstream']], 429)
+        ->push(['error' => ['message' => 'rate-limited upstream']], 429)
         ->push(['error' => ['message' => 'rate-limited upstream']], 429)
         ->push(['model' => 'openai/gpt-oss-20b:free', 'choices' => [['message' => ['content' => 'still here.']]]]);
 
@@ -297,6 +308,29 @@ it('falls back to the free router when the pinned model is rate-limited', functi
 
     Http::assertSent(fn (Request $request) => $request->url() === OPENROUTER_URL
         && $request['model'] === 'openrouter/free');
+});
+
+it('does not retry or fall back after an OpenRouter policy rejection', function () {
+    config()->set('services.lain.model', 'openai/gpt-oss-20b:free');
+    config()->set('services.lain.fallback_model', 'openrouter/free');
+    $user = qualifyingUser();
+    Http::fakeSequence(OPENROUTER_URL)
+        ->push(['success' => false, 'error' => 'Access denied by security policy: private request contents'], 403)
+        ->push([
+            'model' => 'openai/gpt-oss-20b:free',
+            'choices' => [['message' => ['content' => 'fallback must not run']]],
+        ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/lain/chat', ['text' => 'hello?'])
+        ->assertServiceUnavailable()
+        ->assertJsonPath('message', 'Lain’s model provider rejected this message. Try rephrasing it.');
+
+    expect(Http::recorded(
+        fn (Request $request) => $request->url() === OPENROUTER_URL,
+    ))->toHaveCount(1)
+        ->and(LainChatMessage::where('user_id', $user->id)->count())->toBe(0)
+        ->and(LainChatSession::where('user_id', $user->id)->count())->toBe(0);
 });
 
 it('persists neither the turn nor a session when the model fails', function () {

@@ -35,14 +35,36 @@ test('reassigns simple user_id tables to the survivor', function () {
 });
 
 test('copies identity fields from the absorbed account only where the survivor is null', function () {
-    $survivor = User::factory()->create(['wallet_address' => null, 'twitter_id' => 'keep-mine']);
-    $absorbed = User::factory()->create(['wallet_address' => '0xabsorbed', 'twitter_id' => null]);
+    $survivor = User::factory()->create([
+        'wallet_address' => null,
+        'twitter_id' => 'keep-mine',
+        'github_id' => null,
+        'telegram_id' => null,
+    ]);
+    $absorbed = User::factory()->create([
+        'wallet_address' => '0xabsorbed',
+        'twitter_id' => null,
+        'github_id' => 'github-absorbed',
+        'github_username' => 'absorbed-github',
+        'telegram_id' => 'telegram-absorbed',
+        'telegram_username' => 'absorbed-telegram',
+    ]);
 
     app(AccountMergeService::class)->merge($survivor, $absorbed);
 
-    expect($survivor->fresh()->wallet_address)->toBe('0xabsorbed');
-    expect($survivor->fresh()->twitter_id)->toBe('keep-mine');
-    expect($absorbed->fresh()->wallet_address)->toBeNull();
+    expect($survivor->fresh())
+        ->wallet_address->toBe('0xabsorbed')
+        ->twitter_id->toBe('keep-mine')
+        ->github_id->toBe('github-absorbed')
+        ->github_username->toBe('absorbed-github')
+        ->telegram_id->toBe('telegram-absorbed')
+        ->telegram_username->toBe('absorbed-telegram')
+        ->and($absorbed->fresh())
+        ->wallet_address->toBeNull()
+        ->github_id->toBeNull()
+        ->github_username->toBeNull()
+        ->telegram_id->toBeNull()
+        ->telegram_username->toBeNull();
 });
 
 test('throws and rolls back the whole merge on a conflicting identity field', function () {
@@ -58,6 +80,18 @@ test('throws and rolls back the whole merge on a conflicting identity field', fu
     expect($absorbed->fresh()->solana_wallet_address)->toBe('AbsorbedAddress1111111111111111111111111');
     expect($activity->fresh()->user_id)->toBe($absorbed->id);
 });
+
+test('throws when merged accounts have different linked social identities', function (string $field) {
+    $survivor = User::factory()->create([$field => 'survivor-social-id']);
+    $absorbed = User::factory()->create([$field => 'absorbed-social-id']);
+
+    expect(fn () => app(AccountMergeService::class)->merge($survivor, $absorbed))
+        ->toThrow(AccountMergeConflictException::class);
+
+    expect($absorbed->fresh()->merged_into_id)->toBeNull()
+        ->and($survivor->fresh()->{$field})->toBe('survivor-social-id')
+        ->and($absorbed->fresh()->{$field})->toBe('absorbed-social-id');
+})->with(['github_id', 'telegram_id']);
 
 test('drops the absorbed account\'s duplicate reaction on collision, keeping the survivor\'s', function () {
     $survivor = User::factory()->create();
@@ -192,6 +226,23 @@ test('is idempotent: merging the same pair twice only merges once', function () 
     app(AccountMergeService::class)->merge($survivor->fresh(), $absorbed->fresh());
 
     expect($absorbed->fresh()->merged_into_id)->toBe($survivor->id);
+});
+
+test('refuses to merge into an account that was already absorbed', function () {
+    $canonical = User::factory()->create();
+    $staleSurvivor = User::factory()->create();
+    $absorbed = User::factory()->create(['github_id' => 'github-absorbed']);
+    $activity = Activity::factory()->create(['user_id' => $absorbed->id]);
+
+    $staleSurvivor->forceFill(['merged_into_id' => $canonical->id])->save();
+
+    expect(fn () => app(AccountMergeService::class)->merge($staleSurvivor, $absorbed))
+        ->toThrow(AccountMergeConflictException::class);
+
+    expect($staleSurvivor->fresh()->merged_into_id)->toBe($canonical->id)
+        ->and($absorbed->fresh()->merged_into_id)->toBeNull()
+        ->and($absorbed->fresh()->github_id)->toBe('github-absorbed')
+        ->and($activity->fresh()->user_id)->toBe($absorbed->id);
 });
 
 test('merging a user into itself is a no-op', function () {

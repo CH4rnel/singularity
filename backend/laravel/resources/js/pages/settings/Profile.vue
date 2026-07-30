@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
+import { Github, Send } from 'lucide-vue-next';
 import { computed } from 'vue';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/DeleteUser.vue';
@@ -9,12 +10,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { edit, show as profileShow } from '@/routes/profile';
+import { redirect as githubRedirect } from '@/routes/settings/connections/github';
+import { redirect as telegramRedirect } from '@/routes/settings/connections/telegram';
+import { redirect as twitterRedirect } from '@/routes/twitter';
 import { send } from '@/routes/verification';
 
 type Props = {
     mustVerifyEmail: boolean;
     status?: string;
     error?: string;
+    canLinkTwitter: boolean;
+    canLinkGitHub: boolean;
+    canLinkTelegram: boolean;
 };
 
 defineProps<Props>();
@@ -141,34 +148,19 @@ const user = computed(() => page.props.auth.user);
     <div class="mt-10 flex flex-col space-y-6">
         <Heading
             variant="small"
-            title="X (Twitter) account"
-            description="Link your X account to sign in with one click"
+            title="Connected accounts"
+            description="Prove ownership of your social accounts and attach them to this profile"
         />
 
-        <p
-            v-if="status === 'X account linked.'"
-            class="text-sm font-medium text-green-600"
-        >
-            X account linked.
-        </p>
         <p v-if="error" class="text-sm font-medium text-red-600">
             {{ error }}
         </p>
 
-        <p
-            v-if="user.twitter_id"
-            class="text-sm text-muted-foreground"
-        >
-            Linked to
-            <span class="font-medium text-foreground">
-                @{{ user.twitter_username ?? user.twitter_id }}
-            </span>
-        </p>
-        <div v-else>
-            <!-- Plain navigation: the OAuth redirect must be a full page
-                 load, not an Inertia visit. -->
-            <Button variant="outline" as-child>
-                <a href="/auth/twitter">
+        <div class="grid gap-4 md:grid-cols-3">
+            <section
+                class="flex flex-col gap-4 rounded-lg border border-border p-4"
+            >
+                <div class="flex items-center gap-3">
                     <svg
                         viewBox="0 0 24 24"
                         aria-hidden="true"
@@ -178,9 +170,120 @@ const user = computed(() => page.props.auth.user);
                             d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
                         />
                     </svg>
-                    Link X account
-                </a>
-            </Button>
+                    <div>
+                        <h2 class="font-medium">X (Twitter)</h2>
+                        <p class="text-xs text-muted-foreground">
+                            Public identity
+                        </p>
+                    </div>
+                </div>
+
+                <p v-if="user.twitter_id" class="text-sm text-muted-foreground">
+                    Linked to
+                    <span class="font-medium text-foreground">
+                        @{{ user.twitter_username ?? user.twitter_id }}
+                    </span>
+                </p>
+                <Button
+                    v-else-if="canLinkTwitter"
+                    variant="outline"
+                    as-child
+                    class="mt-auto"
+                >
+                    <a :href="twitterRedirect().url">Link X account</a>
+                </Button>
+                <p v-else class="text-xs text-muted-foreground">
+                    Connection is not configured yet.
+                </p>
+
+                <p
+                    v-if="status === 'X account linked.'"
+                    class="text-xs font-medium text-green-600"
+                >
+                    X account linked.
+                </p>
+            </section>
+
+            <section
+                class="flex flex-col gap-4 rounded-lg border border-border p-4"
+            >
+                <div class="flex items-center gap-3">
+                    <Github class="h-4 w-4" />
+                    <div>
+                        <h2 class="font-medium">GitHub</h2>
+                        <p class="text-xs text-muted-foreground">
+                            Developer identity
+                        </p>
+                    </div>
+                </div>
+
+                <p v-if="user.github_id" class="text-sm text-muted-foreground">
+                    Linked to
+                    <span class="font-medium text-foreground">
+                        @{{ user.github_username ?? user.github_id }}
+                    </span>
+                </p>
+                <Button
+                    v-else-if="canLinkGitHub"
+                    variant="outline"
+                    as-child
+                    class="mt-auto"
+                >
+                    <a :href="githubRedirect().url">Link GitHub account</a>
+                </Button>
+                <p v-else class="text-xs text-muted-foreground">
+                    Connection is not configured yet.
+                </p>
+
+                <p
+                    v-if="status === 'GitHub account linked.'"
+                    class="text-xs font-medium text-green-600"
+                >
+                    GitHub account linked.
+                </p>
+            </section>
+
+            <section
+                class="flex flex-col gap-4 rounded-lg border border-border p-4"
+            >
+                <div class="flex items-center gap-3">
+                    <Send class="h-4 w-4" />
+                    <div>
+                        <h2 class="font-medium">Telegram</h2>
+                        <p class="text-xs text-muted-foreground">
+                            Telegram identity
+                        </p>
+                    </div>
+                </div>
+
+                <p
+                    v-if="user.telegram_id"
+                    class="text-sm text-muted-foreground"
+                >
+                    Linked to
+                    <span class="font-medium text-foreground">
+                        @{{ user.telegram_username ?? user.telegram_id }}
+                    </span>
+                </p>
+                <Button
+                    v-else-if="canLinkTelegram"
+                    variant="outline"
+                    as-child
+                    class="mt-auto"
+                >
+                    <a :href="telegramRedirect().url">Link Telegram account</a>
+                </Button>
+                <p v-else class="text-xs text-muted-foreground">
+                    Connection is not configured yet.
+                </p>
+
+                <p
+                    v-if="status === 'Telegram account linked.'"
+                    class="text-xs font-medium text-green-600"
+                >
+                    Telegram account linked.
+                </p>
+            </section>
         </div>
     </div>
 

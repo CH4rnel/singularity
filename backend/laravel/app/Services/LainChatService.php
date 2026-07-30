@@ -2,12 +2,17 @@
 
 namespace App\Services;
 
+use App\Exceptions\OpenRouterException;
 use App\Models\LainChatMessage;
 use App\Models\LainChatSession;
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 /**
  * The public "Talk to Lain" web chat: a deliberately tool-less Lain persona
@@ -20,6 +25,9 @@ class LainChatService
 {
     /** How many recent conversation rows are replayed as model context. */
     private const CONTEXT_MESSAGES = 30;
+
+    /** Short delays for transient OpenRouter/provider failures. */
+    private const RETRY_DELAYS_MS = [250, 750];
 
     public function enabled(): bool
     {
@@ -81,8 +89,19 @@ class LainChatService
                 }
 
                 $lastError = new RuntimeException("OpenRouter returned an empty reply twice from {$model}.");
-            } catch (RuntimeException $e) {
-                $lastError = $e;
+            } catch (OpenRouterException $exception) {
+                if (! $exception->allowsFallback) {
+                    throw $exception;
+                }
+
+                $lastError = $exception;
+            } catch (RuntimeException|ConnectionException $exception) {
+                $lastError = $exception instanceof RuntimeException
+                    ? $exception
+                    : new RuntimeException(
+                        'OpenRouter request failed: '.$exception->getMessage(),
+                        previous: $exception,
+                    );
             }
         }
 
@@ -100,7 +119,13 @@ class LainChatService
                 'HTTP-Referer' => (string) config('app.url'),
                 'X-Title' => 'Cyberia — Talk to Lain',
             ])
+            ->connectTimeout(5)
             ->timeout((int) config('services.lain.timeout_seconds', 90))
+            ->retry(
+                self::RETRY_DELAYS_MS,
+                when: fn (Throwable $exception): bool => $this->shouldRetry($exception),
+                throw: false,
+            )
             ->post('https://openrouter.ai/api/v1/chat/completions', [
                 'model' => $model,
                 'max_tokens' => 1024,
@@ -112,11 +137,16 @@ class LainChatService
             ]);
 
         if (! $response->successful()) {
-            throw new RuntimeException('OpenRouter HTTP '.$response->status().': '.Str::limit($response->body(), 300));
+            throw $this->providerException($response, $model);
         }
 
         if (is_string($response->json('error.message'))) {
-            throw new RuntimeException('OpenRouter error: '.$response->json('error.message'));
+            throw new OpenRouterException(
+                status: $response->status(),
+                model: $model,
+                category: 'provider_error',
+                allowsFallback: true,
+            );
         }
 
         // choices[0].message.reasoning / .reasoning_content (a reasoning
@@ -128,6 +158,40 @@ class LainChatService
             'text' => $this->stripReasoning(is_string($text) ? $text : ''),
             'model' => is_string($servedModel) && $servedModel !== '' ? $servedModel : $model,
         ];
+    }
+
+    private function shouldRetry(Throwable $exception): bool
+    {
+        if ($exception instanceof ConnectionException) {
+            return true;
+        }
+
+        if (! $exception instanceof RequestException) {
+            return false;
+        }
+
+        return in_array($exception->response->status(), [408, 429, 500, 502, 503, 504], true);
+    }
+
+    private function providerException(Response $response, string $model): OpenRouterException
+    {
+        $status = $response->status();
+        $category = match ($status) {
+            401 => 'unauthorized',
+            403 => 'policy_denied',
+            404 => 'model_unavailable',
+            408 => 'request_timeout',
+            429 => 'rate_limited',
+            500, 502, 503, 504 => 'upstream_error',
+            default => 'request_rejected',
+        };
+
+        return new OpenRouterException(
+            status: $status,
+            model: $model,
+            category: $category,
+            allowsFallback: in_array($status, [404, 408, 429, 500, 502, 503, 504], true),
+        );
     }
 
     /**

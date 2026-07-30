@@ -310,10 +310,7 @@ async function copy(key: string, value: string | null | undefined) {
                     {{ displayName }}
                 </h1>
                 <div class="mt-1 flex flex-wrap items-center gap-2">
-                    <template
-                        v-for="wallet in wallets"
-                        :key="wallet.key"
-                    >
+                    <template v-for="wallet in wallets" :key="wallet.key">
                         <Badge
                             variant="secondary"
                             class="max-w-full font-mono text-xs"
@@ -324,7 +321,9 @@ async function copy(key: string, value: string | null | undefined) {
                             variant="ghost"
                             size="icon-sm"
                             :aria-label="`Copy ${wallet.label} wallet address`"
-                            @click="copy(`wallet-${wallet.key}`, wallet.address)"
+                            @click="
+                                copy(`wallet-${wallet.key}`, wallet.address)
+                            "
                         >
                             <Check
                                 v-if="copiedKey === `wallet-${wallet.key}`"
@@ -341,9 +340,7 @@ async function copy(key: string, value: string | null | undefined) {
                         @click="connectEvm"
                     >
                         <Wallet class="h-3.5 w-3.5" />
-                        {{
-                            linking === 'evm' ? 'Connecting…' : 'Connect EVM'
-                        }}
+                        {{ linking === 'evm' ? 'Connecting…' : 'Connect EVM' }}
                     </Button>
                     <Button
                         v-if="!user.solana_wallet_address"
@@ -363,7 +360,21 @@ async function copy(key: string, value: string | null | undefined) {
                         v-if="user.twitter_username || user.twitter_id"
                         class="text-xs text-muted-foreground"
                     >
-                        @{{ user.twitter_username ?? user.twitter_id }}
+                        X: @{{ user.twitter_username ?? user.twitter_id }}
+                    </span>
+                    <span
+                        v-if="user.github_username || user.github_id"
+                        class="text-xs text-muted-foreground"
+                    >
+                        GitHub: @{{ user.github_username ?? user.github_id }}
+                    </span>
+                    <span
+                        v-if="user.telegram_username || user.telegram_id"
+                        class="text-xs text-muted-foreground"
+                    >
+                        Telegram: @{{
+                            user.telegram_username ?? user.telegram_id
+                        }}
                     </span>
                     <span
                         v-if="user.created_at"
@@ -372,16 +383,10 @@ async function copy(key: string, value: string | null | undefined) {
                         joined {{ joinedAgo }}
                     </span>
                 </div>
-                <p
-                    v-if="linkError"
-                    class="mt-2 text-xs text-destructive"
-                >
+                <p v-if="linkError" class="mt-2 text-xs text-destructive">
                     {{ linkError }}
                 </p>
-                <p
-                    v-if="linkNotice"
-                    class="mt-2 text-xs text-muted-foreground"
-                >
+                <p v-if="linkNotice" class="mt-2 text-xs text-muted-foreground">
                     {{ linkNotice }}
                 </p>
             </div>
@@ -609,9 +614,9 @@ async function copy(key: string, value: string | null | undefined) {
                     >personal</Badge
                 >
                 are issued to you alone, like on an exchange — anything sent
-                there is credited to your account. Networks without one yet
-                will get a unique per-user address soon; until then, deposit
-                through the
+                there is credited to your account. Networks without one yet will
+                get a unique per-user address soon; until then, deposit through
+                the
                 <Link
                     :href="bridge()"
                     class="text-foreground underline underline-offset-4"
@@ -643,7 +648,7 @@ async function copy(key: string, value: string | null | undefined) {
                 <div class="flex min-w-0 flex-1 items-center gap-2">
                     <template v-if="chain.address">
                         <code
-                            class="min-w-0 break-all font-mono text-xs text-foreground/90"
+                            class="min-w-0 font-mono text-xs break-all text-foreground/90"
                         >
                             {{ chain.address }}
                         </code>
@@ -693,7 +698,7 @@ async function copy(key: string, value: string | null | undefined) {
                     <code
                         v-for="address in chain.history"
                         :key="address"
-                        class="mr-1 break-all font-mono"
+                        class="mr-1 font-mono break-all"
                         >{{ address }}</code
                     >
                 </p>

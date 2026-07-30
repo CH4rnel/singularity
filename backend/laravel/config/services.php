@@ -77,6 +77,30 @@ return [
         'redirect' => env('TWITTER_REDIRECT_URI', '/auth/twitter/callback'),
     ],
 
+    // Link-only GitHub OAuth. No scopes are requested because the immutable
+    // account id and public username are all the profile needs.
+    'github' => [
+        'client_id' => env('GITHUB_OAUTH_CLIENT_ID'),
+        'client_secret' => env('GITHUB_OAUTH_CLIENT_SECRET'),
+        'redirect' => env(
+            'GITHUB_OAUTH_REDIRECT_URI',
+            rtrim((string) env('APP_URL', 'http://localhost'), '/').'/settings/connections/github/callback',
+        ),
+    ],
+
+    // Telegram's official OIDC Authorization Code flow with PKCE.
+    'telegram' => [
+        'client_id' => env('TELEGRAM_LOGIN_CLIENT_ID'),
+        'client_secret' => env('TELEGRAM_LOGIN_CLIENT_SECRET'),
+        'redirect' => env(
+            'TELEGRAM_LOGIN_REDIRECT_URI',
+            rtrim((string) env('APP_URL', 'http://localhost'), '/').'/settings/connections/telegram/callback',
+        ),
+        'authorization_url' => 'https://oauth.telegram.org/auth',
+        'token_url' => 'https://oauth.telegram.org/token',
+        'jwks_url' => 'https://oauth.telegram.org/.well-known/jwks.json',
+    ],
+
     'bridge' => [
         'evm_rpc_url' => env('BRIDGE_EVM_RPC_URL', env('CYBERIA_RPC_URL')),
         'evm_bridge_address' => env('BRIDGE_EVM_CONTRACT_ADDRESS'),

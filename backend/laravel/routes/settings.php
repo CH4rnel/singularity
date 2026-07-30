@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Settings\GithubConnectionController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
+use App\Http\Controllers\Settings\TelegramConnectionController;
 use App\Http\Controllers\Teams\TeamController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\Teams\TeamMemberController;
@@ -13,6 +15,20 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
+
+    Route::middleware('throttle:12,1')
+        ->prefix('settings/connections')
+        ->name('settings.connections.')
+        ->group(function () {
+            Route::get('github', [GithubConnectionController::class, 'redirect'])
+                ->name('github.redirect');
+            Route::get('github/callback', [GithubConnectionController::class, 'callback'])
+                ->name('github.callback');
+            Route::get('telegram', [TelegramConnectionController::class, 'redirect'])
+                ->name('telegram.redirect');
+            Route::get('telegram/callback', [TelegramConnectionController::class, 'callback'])
+                ->name('telegram.callback');
+        });
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

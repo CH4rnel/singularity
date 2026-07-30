@@ -9,6 +9,10 @@ export type User = {
     solana_wallet_address?: string | null;
     twitter_id?: string | null;
     twitter_username?: string | null;
+    github_id?: string | null;
+    github_username?: string | null;
+    telegram_id?: string | null;
+    telegram_username?: string | null;
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;

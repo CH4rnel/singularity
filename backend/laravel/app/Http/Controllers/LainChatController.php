@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\OpenRouterException;
 use App\Models\LainChatMessage;
 use App\Models\LainChatSession;
 use App\Models\User;
@@ -95,6 +96,17 @@ class LainChatController extends Controller
 
         try {
             $reply = $this->lain->reply($user, $session, $text);
+        } catch (OpenRouterException $exception) {
+            Log::warning('Lain chat request failed', [
+                'user_id' => $user->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => $exception->category === 'policy_denied'
+                    ? 'Lain’s model provider rejected this message. Try rephrasing it.'
+                    : 'Lain is unreachable right now. Try again in a moment.',
+            ], 503);
         } catch (Throwable $e) {
             Log::warning('Lain chat request failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
 
