@@ -1,0 +1,66 @@
+{
+    "id": "/",
+    "name": "Cyberia",
+    "short_name": "Cyberia",
+    "description": "Cyberia social, governance, bridge, and on-chain tools.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#0b0f10",
+    "theme_color": "#0b0f10",
+    "icons": [
+        {
+            "src": "/pwa/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/pwa/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/pwa/icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Feed",
+            "short_name": "Feed",
+            "url": "/feed",
+            "icons": [
+                {
+                    "src": "/pwa/icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        },
+        {
+            "name": "Lain",
+            "short_name": "Lain",
+            "url": "/lain",
+            "icons": [
+                {
+                    "src": "/pwa/icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        },
+        {
+            "name": "Profile",
+            "short_name": "Profile",
+            "url": "/profile",
+            "icons": [
+                {
+                    "src": "/pwa/icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        }
+    ]
+}

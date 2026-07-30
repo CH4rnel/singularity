@@ -1,14 +1,94 @@
 /**
- * Cyberia service worker — Web Push delivery only (no offline caching).
- * Payloads are JSON: { title, body, url } (see DaoActivityNotification).
+ * Cyberia PWA service worker.
+ *
+ * Authenticated HTML and API responses are deliberately never cached. Only
+ * versioned build assets and public PWA shell files use Cache Storage.
+ * Push payloads are JSON: { title, body, url } (see DaoActivityNotification).
  */
 
-self.addEventListener('install', () => {
-    self.skipWaiting();
+const CACHE_PREFIX = 'cyberia-pwa';
+const STATIC_CACHE = `${CACHE_PREFIX}-static-v1`;
+const OFFLINE_URL = '/offline.html';
+const SHELL_FILES = [
+    OFFLINE_URL,
+    '/manifest.webmanifest',
+    '/pwa/icon-192.png',
+    '/pwa/icon-512.png',
+    '/pwa/icon-maskable-512.png',
+];
+
+self.addEventListener('install', (event) => {
+    event.waitUntil(
+        caches
+            .open(STATIC_CACHE)
+            .then((cache) => cache.addAll(SHELL_FILES))
+            .then(() => self.skipWaiting()),
+    );
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(self.clients.claim());
+    event.waitUntil(
+        caches
+            .keys()
+            .then((keys) =>
+                Promise.all(
+                    keys
+                        .filter(
+                            (key) =>
+                                key.startsWith(CACHE_PREFIX) &&
+                                key !== STATIC_CACHE,
+                        )
+                        .map((key) => caches.delete(key)),
+                ),
+            )
+            .then(() => self.clients.claim()),
+    );
+});
+
+async function cacheFirst(request) {
+    const cache = await caches.open(STATIC_CACHE);
+    const cached = await cache.match(request);
+
+    if (cached) {
+        return cached;
+    }
+
+    const response = await fetch(request);
+
+    if (response.ok) {
+        await cache.put(request, response.clone());
+    }
+
+    return response;
+}
+
+self.addEventListener('fetch', (event) => {
+    const { request } = event;
+
+    if (request.method !== 'GET') {
+        return;
+    }
+
+    const url = new URL(request.url);
+
+    if (url.origin !== self.location.origin) {
+        return;
+    }
+
+    if (request.mode === 'navigate') {
+        event.respondWith(
+            fetch(request).catch(() => caches.match(OFFLINE_URL)),
+        );
+
+        return;
+    }
+
+    if (
+        url.pathname.startsWith('/build/') ||
+        url.pathname.startsWith('/pwa/')
+    ) {
+        event.respondWith(cacheFirst(request));
+    }
 });
 
 self.addEventListener('push', (event) => {

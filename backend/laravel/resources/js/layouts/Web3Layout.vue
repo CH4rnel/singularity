@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PwaInstallPrompt from '@/components/PwaInstallPrompt.vue';
 import SiteFooter from '@/components/web3/SiteFooter.vue';
 import SiteHeader from '@/components/web3/SiteHeader.vue';
 </script>
@@ -10,5 +11,6 @@ import SiteHeader from '@/components/web3/SiteHeader.vue';
             <slot />
         </main>
         <SiteFooter />
+        <PwaInstallPrompt />
     </div>
 </template>

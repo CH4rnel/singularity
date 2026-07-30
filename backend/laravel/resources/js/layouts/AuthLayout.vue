@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PwaInstallPrompt from '@/components/PwaInstallPrompt.vue';
 import AuthLayout from '@/layouts/auth/AuthSimpleLayout.vue';
 
 const { title = '', description = '' } = defineProps<{
@@ -10,5 +11,6 @@ const { title = '', description = '' } = defineProps<{
 <template>
     <AuthLayout :title="title" :description="description">
         <slot />
+        <PwaInstallPrompt />
     </AuthLayout>
 </template>

@@ -10,9 +10,23 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.7.0'),
+    'current_version' => env('APP_VERSION', 'v0.8.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.8.0',
+            'date' => '2026-07-30',
+            'title' => 'Cyberia, installed',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Cyberia can now be installed as an app from supported mobile and desktop browsers, with a standalone window and home-screen shortcuts.',
+                        'A branded offline fallback replaces the browser error page when an installed Cyberia app temporarily loses its connection.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.7.0',
             'date' => '2026-07-30',

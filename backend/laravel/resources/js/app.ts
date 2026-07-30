@@ -5,6 +5,7 @@ import './polyfills';
 
 import { createInertiaApp, router } from '@inertiajs/vue3';
 import { initializeTheme } from '@/composables/useAppearance';
+import { initializePwa } from '@/composables/usePwaInstall';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
@@ -12,6 +13,8 @@ import Web3Layout from '@/layouts/Web3Layout.vue';
 import { track } from '@/lib/track';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+initializePwa();
 
 createInertiaApp({
     title: (title) =>

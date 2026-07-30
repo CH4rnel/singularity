@@ -7,6 +7,13 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#0b0f10">
+        <meta name="application-name" content="{{ config('app.name', 'Cyberia') }}">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="{{ config('app.name', 'Cyberia') }}">
+        <link rel="manifest" href="/manifest.webmanifest">
 
         {{-- Inline script to detect system dark mode preference and apply it immediately --}}
         <script>
