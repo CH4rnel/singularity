@@ -123,7 +123,9 @@ it('sets a nickname on-chain through the relayer script', function () {
         ->assertRedirect('/profile')
         ->assertSessionHas('status', 'nickname-updated');
 
-    expect($user->fresh()->name)->toBe('neuromancer');
+    expect($user->fresh())
+        ->name->toBe('neuromancer')
+        ->profile_url->toBe('/neuromancer');
 
     Process::assertRan(fn ($p) => str_contains(
         is_array($p->command) ? implode(' ', $p->command) : $p->command,
@@ -158,6 +160,18 @@ it('rejects malformed nicknames without touching the chain', function () {
             ->patch('/profile/nickname', ['nickname' => $bad])
             ->assertSessionHasErrors('nickname');
     }
+
+    Process::assertNothingRan();
+});
+
+it('rejects nicknames reserved for application routes', function () {
+    Process::fake();
+
+    $this->actingAs(User::factory()->create(['wallet_address' => WALLET]))
+        ->from('/profile')
+        ->patch('/profile/nickname', ['nickname' => 'feed'])
+        ->assertRedirect('/profile')
+        ->assertSessionHasErrors('nickname');
 
     Process::assertNothingRan();
 });

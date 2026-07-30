@@ -40,6 +40,7 @@ use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
 use App\Services\DexAprService;
+use App\Support\ProfileHandle;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -176,7 +177,9 @@ Route::inertia('/predictions', 'Predictions')->name('predictions');
 Route::get('dao', [DaoController::class, 'index'])->name('dao.index');
 Route::get('dao/{dao}', [DaoController::class, 'show'])->name('dao.show');
 Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('proposals.show');
-Route::get('u/{user}', [UserProfileController::class, 'show'])->name('users.show');
+Route::get('u/{user}', [UserProfileController::class, 'legacy'])
+    ->whereNumber('user')
+    ->name('users.legacy');
 Route::get('feed', [PostController::class, 'index'])->name('feed');
 // Public XP ranking — social proof for the progression system and the
 // entry point into member profiles.
@@ -308,3 +311,9 @@ Route::middleware(['auth', EnsureBridgeAdmin::class])
     ->name('admin.bridge-analytics');
 
 require __DIR__.'/settings.php';
+
+// Public profile handles live at the root, so this constrained route must stay
+// after every application, settings and Fortify route.
+Route::get('{user:onchain_nickname}', [UserProfileController::class, 'show'])
+    ->where('user', ProfileHandle::PATTERN)
+    ->name('users.show');

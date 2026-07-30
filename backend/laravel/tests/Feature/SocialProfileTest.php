@@ -28,6 +28,7 @@ it('shows a public feed with newest posts first', function () {
             ->where('posts.data.0.id', $newer->id)
             ->where('posts.data.1.id', $older->id)
             ->where('posts.data.0.user.name', 'chain_name')
+            ->where('posts.data.0.user.profile_url', '/chain_name')
             ->has('posts.data.0.user.avatar'));
 });
 
@@ -60,7 +61,7 @@ it('renders a public wall without exposing private account fields', function () 
     $post = Post::factory()->for($user)->create();
     Post::factory()->create();
 
-    $this->get(route('users.show', $user))
+    $this->get(route('users.legacy', $user))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('users/Show')
@@ -94,7 +95,7 @@ it('stores a validated avatar and exposes its public URL', function () {
     Storage::disk('public')->assertExists($user->avatar_path);
     Storage::disk('public')->assertMissing($oldPath);
 
-    $this->get(route('users.show', $user))
+    $this->get(route('users.legacy', $user))
         ->assertInertia(fn (Assert $page) => $page
             ->where('profile.avatar', $user->avatar));
 });
@@ -171,7 +172,11 @@ it('refreshes the canonical nickname from chain for every public surface', funct
         'wallet_address' => $wallet,
     ]);
 
-    $this->get(route('users.show', $user))
+    $this->get(route('users.legacy', $user))
+        ->assertStatus(301)
+        ->assertRedirect(route('users.show', ['user' => $nickname]));
+
+    $this->get(route('users.show', ['user' => $nickname]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('profile.name', $nickname));

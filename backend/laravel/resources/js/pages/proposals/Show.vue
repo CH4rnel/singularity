@@ -8,8 +8,8 @@ import ReactionBar from '@/components/dao/ReactionBar.vue';
 import VotePanel from '@/components/dao/VotePanel.vue';
 import { Badge } from '@/components/ui/badge';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
+import { profileUrl } from '@/lib/profileUrl';
 import { show as daoShow } from '@/routes/dao';
-import { show as userShow } from '@/routes/users';
 import type { Proposal, ProposalComment, ProposalVote } from '@/types';
 import type { Paginated } from '@/types/pagination';
 
@@ -56,7 +56,7 @@ const createdAgo = useTimeAgo(computed(() => props.proposal.created_at));
 
             <div class="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <InertiaLink
-                    :href="userShow(props.proposal.user_id).url"
+                    :href="profileUrl(props.proposal.user, props.proposal.user_id)"
                     class="flex items-center gap-2 hover:underline"
                 >
                     <WalletAvatar

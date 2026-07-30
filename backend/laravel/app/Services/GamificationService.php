@@ -8,6 +8,7 @@ use App\Models\UserQuest;
 use App\Models\UserStat;
 use App\Models\XpEntry;
 use App\Notifications\ProgressNotification;
+use App\Support\ProfileHandle;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -296,6 +297,10 @@ class GamificationService
                 'avatar' => $row->avatar_path
                     ? Storage::disk('public')->url($row->avatar_path)
                     : null,
+                'profile_url' => ProfileHandle::url(
+                    (int) $row->user_id,
+                    $row->onchain_nickname,
+                ),
                 'wallet_address' => $row->wallet_address,
                 'xp' => (int) $row->xp,
                 'level' => (int) $row->level,

@@ -3,7 +3,6 @@ import { Link } from '@inertiajs/vue3';
 import { useTimeAgo } from '@vueuse/core';
 import { computed } from 'vue';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
-import { show as userShow } from '@/routes/users';
 import type { Post } from '@/types/social';
 
 const props = defineProps<{
@@ -15,7 +14,7 @@ const createdAgo = useTimeAgo(computed(() => props.post.created_at));
 
 <template>
     <article class="flex gap-3 rounded-lg border border-border/70 bg-card p-4">
-        <Link :href="userShow(post.user_id).url" class="shrink-0">
+        <Link :href="post.user.profile_url" class="shrink-0">
             <WalletAvatar
                 :seed="post.user.wallet_address"
                 :name="post.user.name"
@@ -25,7 +24,7 @@ const createdAgo = useTimeAgo(computed(() => props.post.created_at));
         <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <Link
-                    :href="userShow(post.user_id).url"
+                    :href="post.user.profile_url"
                     class="font-semibold hover:underline"
                 >
                     {{ post.user.name }}

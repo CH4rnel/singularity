@@ -10,7 +10,6 @@ import {
 import UserInfo from '@/components/UserInfo.vue';
 import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
-import { show as userShow } from '@/routes/users';
 import type { User } from '@/types';
 
 type Props = {
@@ -35,7 +34,7 @@ defineProps<Props>();
         <DropdownMenuItem :as-child="true">
             <Link
                 class="block w-full cursor-pointer"
-                :href="userShow(user.id)"
+                :href="user.profile_url"
                 prefetch
             >
                 <Contact class="mr-2 h-4 w-4" />

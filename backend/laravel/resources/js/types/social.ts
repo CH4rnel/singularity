@@ -2,6 +2,7 @@ export type SocialUser = {
     id: number;
     name: string;
     avatar: string | null;
+    profile_url: string;
     wallet_address: string | null;
 };
 

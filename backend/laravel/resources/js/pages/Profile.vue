@@ -34,7 +34,6 @@ import {
     nickname as nicknameRoute,
 } from '@/routes/profile';
 import { check as achievementsCheck } from '@/routes/profile/achievements';
-import { show as userShow } from '@/routes/users';
 import type { Auth } from '@/types/auth';
 import type { Paginated } from '@/types/pagination';
 import type { Progress } from '@/types/progress';
@@ -388,7 +387,7 @@ async function copy(key: string, value: string | null | undefined) {
             </div>
             <div class="flex shrink-0 gap-2">
                 <Button variant="outline" size="sm" as-child>
-                    <Link :href="userShow(user.id)">Public profile</Link>
+                    <Link :href="user.profile_url">Public profile</Link>
                 </Button>
                 <Button variant="outline" size="sm" as-child>
                     <Link :href="profileEdit()">
@@ -414,7 +413,7 @@ async function copy(key: string, value: string | null | undefined) {
                     Your wall
                 </h2>
                 <Link
-                    :href="userShow(user.id)"
+                    :href="user.profile_url"
                     class="text-xs text-brand-cyan hover:underline"
                 >
                     Open public profile

@@ -15,13 +15,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import SimplePagination from '@/components/web3/SimplePagination.vue';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
+import { profileUrl } from '@/lib/profileUrl';
 import { store as proposalStore } from '@/routes/dao/proposals';
 import {
     destroy as proposalDestroy,
     show as proposalShow,
     update as proposalUpdate,
 } from '@/routes/proposals';
-import { show as userShow } from '@/routes/users';
 import type { Dao, Proposal, User } from '@/types';
 import type { Paginated } from '@/types/pagination';
 
@@ -210,7 +210,7 @@ function formatPower(power: string | undefined): string {
             >
                 <div class="flex min-w-0 items-center gap-3">
                     <InertiaLink
-                        :href="userShow(proposal.user_id).url"
+                        :href="profileUrl(proposal.user, proposal.user_id)"
                         class="shrink-0"
                     >
                         <WalletAvatar
@@ -241,7 +241,7 @@ function formatPower(power: string | undefined): string {
                             class="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground"
                         >
                             <InertiaLink
-                                :href="userShow(proposal.user_id).url"
+                                :href="profileUrl(proposal.user, proposal.user_id)"
                                 class="hover:underline"
                             >
                                 {{ proposal.user?.name || 'Unknown' }}

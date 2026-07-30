@@ -32,7 +32,6 @@ import type { EvmChain } from '@/lib/evmChains';
 import { mergeWalletChoices } from '@/lib/walletChoices';
 import { logout as logoutRoute } from '@/routes';
 import { show as profileRoute } from '@/routes/profile';
-import { show as userShow } from '@/routes/users';
 
 const page = usePage();
 
@@ -48,6 +47,7 @@ const authUser = computed(
                   id: number;
                   name?: string;
                   avatar?: string | null;
+                  profile_url: string;
                   wallet_address?: string | null;
                   solana_wallet_address?: string | null;
               }
@@ -235,8 +235,8 @@ onMounted(refreshWalletChoices);
                         Private profile
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                        v-if="authUser?.id"
-                        @select="router.visit(userShow(authUser.id).url)"
+                        v-if="authUser?.profile_url"
+                        @select="router.visit(authUser.profile_url)"
                     >
                         <Contact class="mr-2 h-4 w-4" />
                         Public profile

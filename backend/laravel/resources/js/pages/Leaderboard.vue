@@ -7,7 +7,6 @@ import PageHero from '@/components/web3/PageHero.vue';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
 import { useLocale } from '@/composables/useLocale';
 import { progressMessages } from '@/lib/progressMessages';
-import { show as userShow } from '@/routes/users';
 import type { LeaderboardRow, PublicProgress } from '@/types/progress';
 
 const props = defineProps<{
@@ -86,7 +85,7 @@ const showOwnRow = computed(
                 />
 
                 <Link
-                    :href="userShow(row.user_id).url"
+                    :href="row.profile_url"
                     class="min-w-0 flex-1 hover:underline"
                 >
                     <span class="block truncate font-semibold">

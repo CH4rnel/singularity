@@ -16,8 +16,8 @@ import { Button } from '@/components/ui/button';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
+import { profileUrl } from '@/lib/profileUrl';
 import { store as voteStore } from '@/routes/proposals/votes';
-import { show as userShow } from '@/routes/users';
 import type { Proposal, ProposalVote, User } from '@/types';
 
 const props = defineProps<{
@@ -333,7 +333,7 @@ function formatAddress(address: string): string {
                             size="sm"
                         />
                         <InertiaLink
-                            :href="userShow(vote.user_id).url"
+                            :href="profileUrl(vote.user, vote.user_id)"
                             class="truncate hover:underline"
                         >
                             {{ vote.user?.name || 'Unknown' }}

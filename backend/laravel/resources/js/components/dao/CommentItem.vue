@@ -7,8 +7,8 @@ import MarkdownContent from '@/components/dao/MarkdownContent.vue';
 import ReactionBar from '@/components/dao/ReactionBar.vue';
 import { Button } from '@/components/ui/button';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
+import { profileUrl } from '@/lib/profileUrl';
 import { destroy as commentDestroy } from '@/routes/comments';
-import { show as userShow } from '@/routes/users';
 import type { ProposalComment, User } from '@/types';
 
 const props = withDefaults(
@@ -42,7 +42,10 @@ function deleteComment() {
 
 <template>
     <div class="flex gap-3" :class="isReply ? 'mt-3' : ''">
-        <InertiaLink :href="userShow(comment.user_id).url" class="shrink-0">
+        <InertiaLink
+            :href="profileUrl(comment.user, comment.user_id)"
+            class="shrink-0"
+        >
             <WalletAvatar
                 :seed="comment.user?.wallet_address"
                 :name="comment.user?.name"
@@ -54,7 +57,7 @@ function deleteComment() {
         <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2 text-sm">
                 <InertiaLink
-                    :href="userShow(comment.user_id).url"
+                    :href="profileUrl(comment.user, comment.user_id)"
                     class="font-semibold hover:underline"
                 >
                     {{ comment.user?.name || 'Unknown' }}

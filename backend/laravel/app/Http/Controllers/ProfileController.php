@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateAvatarRequest;
+use App\Http\Requests\UpdateNicknameRequest;
 use App\Services\AchievementService;
 use App\Services\BridgeConfigService;
 use App\Services\GamificationService;
@@ -85,16 +86,10 @@ class ProfileController extends Controller
      * (setNicknameFor), so web2-onboarded users without gas still get one.
      */
     public function updateNickname(
-        Request $request,
+        UpdateNicknameRequest $request,
         ProfileOnchainService $onchain,
         AchievementService $achievements,
-    ) {
-        $validated = $request->validate([
-            'nickname' => ['required', 'string', 'regex:/^[a-z0-9_]{3,20}$/'],
-        ], [
-            'nickname.regex' => 'Nicknames are 3-20 characters: lowercase letters, digits and underscores.',
-        ]);
-
+    ): RedirectResponse {
         $user = $request->user();
 
         if (! $user->wallet_address) {
@@ -105,7 +100,7 @@ class ProfileController extends Controller
             return back()->withErrors(['nickname' => 'The profile contract is not configured yet.']);
         }
 
-        $nickname = $validated['nickname'];
+        $nickname = (string) $request->validated('nickname');
         $owner = $onchain->nicknameOwner($nickname);
 
         if ($owner !== null && strtolower($owner) !== strtolower($user->wallet_address)) {

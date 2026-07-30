@@ -5,8 +5,8 @@ import { MessageSquare, ScrollText, Vote } from 'lucide-vue-next';
 import { computed } from 'vue';
 import MarkdownContent from '@/components/dao/MarkdownContent.vue';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
+import { profileUrl } from '@/lib/profileUrl';
 import { show as proposalShow } from '@/routes/proposals';
-import { show as userShow } from '@/routes/users';
 import type { Activity, Proposal, ProposalComment, ProposalVote } from '@/types';
 
 const props = defineProps<{
@@ -84,7 +84,10 @@ const actorName = computed(
 
 <template>
     <div class="flex gap-3 rounded-lg border border-border/70 bg-card p-4">
-        <InertiaLink :href="userShow(activity.user_id).url" class="shrink-0">
+        <InertiaLink
+            :href="profileUrl(activity.user, activity.user_id)"
+            class="shrink-0"
+        >
             <WalletAvatar
                 :seed="activity.user?.wallet_address"
                 :name="activity.user?.name"
@@ -95,7 +98,7 @@ const actorName = computed(
         <div class="min-w-0 flex-1">
             <p class="text-sm">
                 <InertiaLink
-                    :href="userShow(activity.user_id).url"
+                    :href="profileUrl(activity.user, activity.user_id)"
                     class="font-semibold hover:underline"
                 >
                     {{ actorName }}

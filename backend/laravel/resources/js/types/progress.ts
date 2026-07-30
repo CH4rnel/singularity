@@ -47,6 +47,7 @@ export type LeaderboardRow = {
     user_id: number;
     name: string | null;
     avatar: string | null;
+    profile_url: string;
     wallet_address: string | null;
     xp: number;
     level: number;

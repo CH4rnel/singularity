@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Concerns\HasTeams;
+use App\Support\ProfileHandle;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Appends;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -24,7 +25,7 @@ use NotificationChannels\WebPush\HasPushSubscriptions;
 
 #[Fillable(['name', 'email', 'password', 'current_team_id', 'wallet_address', 'solana_wallet_address', 'twitter_id', 'twitter_username'])]
 #[Hidden(['avatar_path', 'password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
-#[Appends(['avatar'])]
+#[Appends(['avatar', 'profile_url'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -61,6 +62,16 @@ class User extends Authenticatable
             get: fn (): ?string => $this->avatar_path
                 ? Storage::disk('public')->url($this->avatar_path)
                 : null,
+        );
+    }
+
+    protected function profileUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): string => ProfileHandle::url(
+                $this->getKey(),
+                $this->getRawOriginal('onchain_nickname'),
+            ),
         );
     }
 
