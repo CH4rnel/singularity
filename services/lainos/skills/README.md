@@ -22,6 +22,14 @@ export default {
 };
 ```
 
+Some skills reach outside the workspace on purpose, because the built-in tools
+cannot: `android_apk.mjs` builds `frontend/mobile` in the monorepo (only the
+project's own npm/gradle commands, in that one directory — it is not a shell
+escape) and delivers the APK to the operator as a Telegram document, falling
+back to the artifact from `.github/workflows/apps.yml` when the host has no
+Android SDK. Skills that use a secret must use it and never return it: read it
+with `runtime.getSetting`, and scrub it from every error string.
+
 Node builtins and installed dependencies (`viem`, `undici`) may be imported.
 Broken modules are rejected at load with the error message. Built-in tools can
 never be shadowed by a skill. These files are part of the repo on purpose:
