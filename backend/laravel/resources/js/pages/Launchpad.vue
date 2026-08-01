@@ -16,17 +16,31 @@ import TokenCandlesChart from '@/components/launchpad/TokenCandlesChart.vue';
 import { Input } from '@/components/ui/input';
 import { useWallet } from '@/composables/useWallet';
 import { formatNum, formatPrice } from '@/lib/dexFormat';
+import { ensureEvmNetwork } from '@/lib/evmChains';
 import {
-    CYBERIA_CHAIN_ID,
-    cyberiaReadRpcUrl,
-    ensureCyberiaNetwork,
-} from '@/lib/evmChains';
+    DEFAULT_LAUNCHPAD_CHAIN_ID,
+    LAUNCHPAD_CHAINS,
+    deployedLaunchpadChains,
+    launchpadChain,
+    launchpadExplorerAddressUrl,
+    launchpadExplorerTxUrl,
+    launchpadReadRpcUrl,
+    launchpadSwapUrl,
+} from '@/lib/launchpadChains';
+import type { LaunchpadChain } from '@/lib/launchpadChains';
 import type { TokenCandle } from '@/lib/launchpadChart';
 
-// LaunchpadNative — fair launches paid in native CYBER (min 10), burned into
-// permanently locked liquidity. deployments/cyberia-launchpad-native.json.
-const LAUNCHPAD_ADDRESS = '0x8034E6C09E0cEA00B5D692ADfD1A136fab339165';
-const WCYBER_ADDRESS = '0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9';
+// LaunchpadNative — fair launches paid in the chain's native coin, burned into
+// permanently locked liquidity. A launch may target several chains at once;
+// contract addresses per chain live in lib/launchpadChains.ts.
+//
+// The listing below ("Live launches", charts, prices) still reads Cyberia
+// only: it is the chain with the launch history, and every satellite launch
+// links out to its own explorer from the deployment panel.
+const LISTING_CHAIN: LaunchpadChain =
+    launchpadChain(DEFAULT_LAUNCHPAD_CHAIN_ID) ?? LAUNCHPAD_CHAINS[0];
+const LAUNCHPAD_ADDRESS = LISTING_CHAIN.launchpad ?? '';
+const WCYBER_ADDRESS = LISTING_CHAIN.wrappedNative;
 
 const LAUNCHPAD_ABI = [
     'function minLiquidity() view returns (uint256)',
@@ -48,7 +62,7 @@ const PAIR_ABI = [
 const FACTORY_ABI = [
     'function getPair(address tokenA, address tokenB) view returns (address)',
 ];
-const FACTORY_ADDRESS = '0xB0aC30907c04b61F1482e62eA66eF4562a690917';
+const FACTORY_ADDRESS = LISTING_CHAIN.factory;
 
 const ERC20_READ_ABI = [
     'function name() view returns (string)',
@@ -56,8 +70,8 @@ const ERC20_READ_ABI = [
     'function totalSupply() view returns (uint256)',
 ];
 
-const SWAP_BASE_URL = 'https://swap.cyberia.church/#/swap';
-const EXPLORER_BASE_URL = 'https://explorer.cyberia.church';
+const SWAP_BASE_URL = LISTING_CHAIN.swapUrl;
+const EXPLORER_BASE_URL = LISTING_CHAIN.explorerUrl;
 const SWAP_TOPIC = id('Swap(address,uint256,uint256,uint256,uint256,address)');
 const SYNC_TOPIC = id('Sync(uint112,uint112)');
 const TOKEN_LAUNCHED_TOPIC = id(
@@ -65,6 +79,7 @@ const TOKEN_LAUNCHED_TOPIC = id(
 );
 
 type LaunchedToken = {
+    chainId: number;
     token: string;
     pair: string;
     creator: string;
@@ -86,6 +101,7 @@ type LaunchedToken = {
 };
 
 type LaunchpadMetadata = {
+    chain_id: number;
     address: string;
     creator: string | null;
     name: string | null;
@@ -125,9 +141,6 @@ const historyLoaded = ref<Record<string, boolean>>({});
 
 const name = ref('');
 const symbol = ref('');
-const totalSupply = ref('1000000');
-// Native CYBER committed as liquidity (all of it ends up burned in the LP).
-const cyberLiquidity = ref('10');
 const description = ref('');
 const siteSubdomain = ref('');
 const imageFile = ref<File | null>(null);
@@ -191,48 +204,162 @@ const onImageChange = (event: Event): void => {
     }
 };
 
-const minLiquidity = ref<bigint>(0n);
-const cyberBalance = ref<bigint>(0n);
 const recent = ref<LaunchedToken[]>([]);
 const totalLaunches = ref(0);
 
 const busy = ref(false);
 const status = ref<string | null>(null);
 const error = ref<string | null>(null);
-const txHash = ref<string | null>(null);
 
-const readProvider = new JsonRpcProvider(cyberiaReadRpcUrl(), {
-    chainId: CYBERIA_CHAIN_ID,
-    name: 'cyberia',
+const readProviders = new Map<number, JsonRpcProvider>();
+
+const readProviderFor = (target: LaunchpadChain): JsonRpcProvider => {
+    const cached = readProviders.get(target.chain.chainId);
+
+    if (cached) {
+        return cached;
+    }
+
+    const provider = new JsonRpcProvider(launchpadReadRpcUrl(target), {
+        chainId: target.chain.chainId,
+        name: target.chain.name.toLowerCase(),
+    });
+    readProviders.set(target.chain.chainId, provider);
+
+    return provider;
+};
+
+const readProvider = readProviderFor(LISTING_CHAIN);
+
+/**
+ * One row per chain the token is launched on. `launched` flips as soon as a
+ * launch transaction is mined and is persisted, so retrying a partially
+ * failed multichain launch never deploys a second contract on a chain that
+ * already has one.
+ */
+type LaunchStage =
+    | 'idle'
+    | 'sending'
+    | 'mining'
+    | 'metadata'
+    | 'done'
+    | 'failed';
+
+type LaunchTarget = {
+    chainId: number;
+    label: string;
+    currency: string;
+    selected: boolean;
+    supply: string;
+    liquidity: string;
+    minLiquidity: bigint;
+    balance: bigint;
+    stage: LaunchStage;
+    launched: boolean;
+    metadataDone: boolean;
+    txHash: string | null;
+    token: string | null;
+    pair: string | null;
+    error: string | null;
+};
+
+const blankTarget = (target: LaunchpadChain): LaunchTarget => ({
+    chainId: target.chain.chainId,
+    label: target.chain.name,
+    currency: target.chain.nativeCurrency.symbol,
+    selected: target.chain.chainId === DEFAULT_LAUNCHPAD_CHAIN_ID,
+    supply: '1000000',
+    // All of it ends up burned inside the LP.
+    liquidity: target.defaultLiquidity,
+    minLiquidity: 0n,
+    balance: 0n,
+    stage: 'idle',
+    launched: false,
+    metadataDone: false,
+    txHash: null,
+    token: null,
+    pair: null,
+    error: null,
 });
 
-const liquidityBn = computed(() => {
+const launchTargets = ref<LaunchTarget[]>(
+    deployedLaunchpadChains().map(blankTarget),
+);
+
+/** Chains in the registry that have no LaunchpadNative deployed yet. */
+const unavailableChains = LAUNCHPAD_CHAINS.filter(
+    (target) => target.launchpad === null,
+);
+
+const parseAmount = (value: string): bigint => {
     try {
-        return parseUnits(cyberLiquidity.value || '0', 18);
+        return parseUnits(value || '0', 18);
     } catch {
         return 0n;
     }
-});
-
-const supplyBn = computed(() => {
-    try {
-        return parseUnits(totalSupply.value || '0', 18);
-    } catch {
-        return 0n;
-    }
-});
+};
 
 // Leave a little native headroom for gas on top of the liquidity itself.
 const GAS_HEADROOM = parseUnits('0.01', 18);
 
-const insufficientBalance = computed(
-    () =>
-        liquidityBn.value > 0n &&
-        cyberBalance.value < liquidityBn.value + GAS_HEADROOM,
+/**
+ * A transaction that was sent but whose receipt never came back has to be
+ * checked by hand — retrying it blind could deploy the token twice.
+ */
+const needsManualCheck = (target: LaunchTarget): boolean =>
+    target.txHash !== null && !target.launched;
+
+const targetIssue = (target: LaunchTarget): string | null => {
+    if (target.launched) {
+        return null;
+    }
+
+    const liquidity = parseAmount(target.liquidity);
+
+    if (parseAmount(target.supply) <= 0n) {
+        return 'Set a total supply.';
+    }
+
+    if (liquidity <= 0n) {
+        return 'Set the liquidity amount.';
+    }
+
+    if (target.minLiquidity > 0n && liquidity < target.minLiquidity) {
+        return `Minimum is ${fmt(target.minLiquidity)} ${target.currency}.`;
+    }
+
+    // A zero balance means the read failed (satellite RPCs are not always
+    // reachable from the browser), so the check is skipped rather than lying.
+    if (target.balance > 0n && target.balance < liquidity + GAS_HEADROOM) {
+        return `Not enough ${target.currency} for the liquidity plus gas.`;
+    }
+
+    return null;
+};
+
+/**
+ * What is still to be done on a chain: the launch itself, or the metadata
+ * upload for a token that is already deployed. A launched token whose address
+ * could not be read back is left alone — its metadata is attached by hand from
+ * the token list instead.
+ */
+const targetPending = (target: LaunchTarget): boolean =>
+    target.selected &&
+    !needsManualCheck(target) &&
+    (!target.launched || (target.token !== null && !target.metadataDone));
+
+const selectedTargets = computed(() =>
+    launchTargets.value.filter((target) => target.selected),
 );
 
-const belowMin = computed(
-    () => minLiquidity.value > 0n && liquidityBn.value < minLiquidity.value,
+const pendingTargets = computed(() =>
+    launchTargets.value.filter(targetPending),
+);
+
+const startedTargets = computed(() =>
+    launchTargets.value.filter(
+        (target) => target.launched || target.txHash !== null,
+    ),
 );
 
 const canLaunch = computed(
@@ -241,13 +368,138 @@ const canLaunch = computed(
         wallet.isConnected.value &&
         name.value.trim().length > 0 &&
         symbol.value.trim().length > 0 &&
-        supplyBn.value > 0n &&
-        liquidityBn.value > 0n &&
-        !insufficientBalance.value &&
-        !belowMin.value &&
+        pendingTargets.value.length > 0 &&
+        selectedTargets.value.every((target) => targetIssue(target) === null) &&
         !siteSubdomainInvalid.value &&
         (!siteSubdomain.value.trim() || htmlFile.value !== null),
 );
+
+/**
+ * Deployed contracts survive a reload: the results of every mined launch are
+ * kept in local storage until the whole multichain launch is finished, so a
+ * refresh in the middle of one cannot lose an address and cause a redeploy.
+ */
+const DRAFT_KEY = 'cyberia.launchpad.multichain.v1';
+
+type LaunchDraftRow = Pick<
+    LaunchTarget,
+    | 'chainId'
+    | 'supply'
+    | 'liquidity'
+    | 'launched'
+    | 'metadataDone'
+    | 'txHash'
+    | 'token'
+    | 'pair'
+>;
+
+type LaunchDraft = {
+    name: string;
+    symbol: string;
+    rows: LaunchDraftRow[];
+};
+
+const persistDraft = (): void => {
+    try {
+        const rows = startedTargets.value.map(
+            (target): LaunchDraftRow => ({
+                chainId: target.chainId,
+                supply: target.supply,
+                liquidity: target.liquidity,
+                launched: target.launched,
+                metadataDone: target.metadataDone,
+                txHash: target.txHash,
+                token: target.token,
+                pair: target.pair,
+            }),
+        );
+
+        if (rows.length === 0) {
+            localStorage.removeItem(DRAFT_KEY);
+
+            return;
+        }
+
+        localStorage.setItem(
+            DRAFT_KEY,
+            JSON.stringify({
+                name: name.value,
+                symbol: symbol.value,
+                rows,
+            } satisfies LaunchDraft),
+        );
+    } catch {
+        // Storage disabled (private mode) — the in-memory state still guards
+        // the current page session.
+    }
+};
+
+const restoreDraft = (): void => {
+    let draft: LaunchDraft | null = null;
+
+    try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        draft = raw ? (JSON.parse(raw) as LaunchDraft) : null;
+    } catch {
+        draft = null;
+    }
+
+    if (!draft || !Array.isArray(draft.rows) || draft.rows.length === 0) {
+        return;
+    }
+
+    name.value = draft.name ?? '';
+    symbol.value = draft.symbol ?? '';
+
+    for (const row of draft.rows) {
+        const target = launchTargets.value.find(
+            (candidate) => candidate.chainId === row.chainId,
+        );
+
+        if (!target) {
+            continue;
+        }
+
+        target.selected = true;
+        target.supply = row.supply ?? target.supply;
+        target.liquidity = row.liquidity ?? target.liquidity;
+        target.launched = Boolean(row.launched);
+        target.metadataDone = Boolean(row.metadataDone);
+        target.txHash = row.txHash ?? null;
+        target.token = row.token ?? null;
+        target.pair = row.pair ?? null;
+        target.stage =
+            target.launched && target.metadataDone ? 'done' : 'failed';
+        target.error = target.launched
+            ? target.metadataDone
+                ? null
+                : 'Launched, but the metadata upload did not finish.'
+            : 'Transaction was sent — check it before retrying.';
+    }
+};
+
+/** Forget a finished (or checked) launch so the form can be reused. */
+const startOver = (): void => {
+    launchTargets.value = deployedLaunchpadChains().map(blankTarget);
+    name.value = '';
+    symbol.value = '';
+    status.value = null;
+    error.value = null;
+    persistDraft();
+    void loadOnchain();
+};
+
+/** Drop one row's transaction record after the operator checked it manually. */
+const clearTarget = (target: LaunchTarget): void => {
+    target.stage = 'idle';
+    target.launched = false;
+    target.metadataDone = false;
+    target.txHash = null;
+    target.token = null;
+    target.pair = null;
+    target.error = null;
+    persistDraft();
+};
 
 const totalCyberLocked = computed(() =>
     recent.value.reduce((acc, t) => acc + t.cyberLiquidity, 0n),
@@ -284,29 +536,48 @@ const sortedRecent = computed<LaunchedToken[]>(() => {
     return list;
 });
 
-const loadOnchain = async (): Promise<void> => {
-    const launchpad = new Contract(
-        LAUNCHPAD_ADDRESS,
-        LAUNCHPAD_ABI,
-        readProvider,
-    );
+/** Per-chain minimum liquidity and wallet balance, best effort. */
+const loadChainState = async (target: LaunchTarget): Promise<void> => {
+    const registry = launchpadChain(target.chainId);
+
+    if (!registry?.launchpad) {
+        return;
+    }
+
+    const provider = readProviderFor(registry);
 
     try {
-        minLiquidity.value = await launchpad.minLiquidity();
+        const launchpad = new Contract(
+            registry.launchpad,
+            LAUNCHPAD_ABI,
+            provider,
+        );
+        target.minLiquidity = (await launchpad.minLiquidity()) as bigint;
     } catch {
-        minLiquidity.value = 0n;
+        target.minLiquidity = 0n;
     }
 
-    if (wallet.address.value) {
-        try {
-            cyberBalance.value = await readProvider.getBalance(
-                wallet.address.value,
-            );
-        } catch {
-            // ignore
-        }
+    if (!wallet.address.value) {
+        target.balance = 0n;
+
+        return;
+    }
+
+    try {
+        target.balance = await provider.getBalance(wallet.address.value);
+    } catch {
+        target.balance = 0n;
     }
 };
+
+const loadOnchain = async (): Promise<void> => {
+    await Promise.all(
+        launchTargets.value.map((target) => loadChainState(target)),
+    );
+};
+
+const metadataKey = (chainId: number, address: string): string =>
+    `${chainId}:${address.toLowerCase()}`;
 
 const fetchMetadata = async (): Promise<Map<string, LaunchpadMetadata>> => {
     try {
@@ -321,8 +592,10 @@ const fetchMetadata = async (): Promise<Map<string, LaunchpadMetadata>> => {
         const data = (await res.json()) as { tokens: LaunchpadMetadata[] };
         const map = new Map<string, LaunchpadMetadata>();
 
+        // Metadata is keyed per chain: the same address on another chain is
+        // another token. The listing only asks for the listing chain.
         for (const t of data.tokens) {
-            map.set(t.address.toLowerCase(), t);
+            map.set(metadataKey(t.chain_id, t.address), t);
         }
 
         return map;
@@ -786,10 +1059,13 @@ const loadRecent = async (): Promise<void> => {
 
         recent.value = addresses.map((tokenAddr, i) => {
             const d = perTokenData[i];
-            const md = metadata.get(tokenAddr.toLowerCase());
+            const md = metadata.get(
+                metadataKey(LISTING_CHAIN.chain.chainId, tokenAddr),
+            );
             const supplyWhole = Number(formatUnits(d.totalSupply_, 18));
 
             return {
+                chainId: LISTING_CHAIN.chain.chainId,
                 token: tokenAddr,
                 pair: d.pairAddr,
                 creator: md?.creator ?? d.eventCreator,
@@ -847,33 +1123,48 @@ const loadPriceHistories = async (
     }
 };
 
-const buildMetadataMessage = (tokenAddress: string): string =>
-    `Edit Cyberia Launchpad metadata for ${tokenAddress.toLowerCase()} at ${new Date().toISOString()}`;
+// The chain id is part of the signed message so a signature for one chain's
+// metadata row cannot be replayed onto another chain's row.
+const buildMetadataMessage = (tokenAddress: string, chainId: number): string =>
+    `Edit Cyberia Launchpad metadata for ${tokenAddress.toLowerCase()} on chain ${chainId} at ${new Date().toISOString()}`;
 
 const signMetadataMessage = async (
     tokenAddress: string,
+    chainId: number,
 ): Promise<{ message: string; signature: string }> => {
-    const provider = await ensureCyberiaNetwork();
+    const registry = launchpadChain(chainId) ?? LISTING_CHAIN;
+    const provider = await ensureEvmNetwork(registry.chain);
     const signer = await provider.getSigner();
-    const message = buildMetadataMessage(tokenAddress);
+    const message = buildMetadataMessage(tokenAddress, chainId);
     const signature = await signer.signMessage(message);
 
     return { message, signature };
 };
 
-const submitMetadata = async (tokenAddress: string): Promise<void> => {
-    if (
-        !description.value.trim() &&
-        !imageFile.value &&
-        !htmlFile.value &&
-        !siteSubdomain.value.trim()
-    ) {
+/**
+ * Upload the form's metadata for one deployment. The static site (HTML page
+ * and subdomain) belongs to a single chain — `withSite` marks the first
+ * launched chain, the rest get name/symbol/description/image only.
+ */
+const submitMetadata = async (
+    tokenAddress: string,
+    chainId: number,
+    withSite: boolean,
+): Promise<void> => {
+    const wantsSite =
+        withSite && (htmlFile.value !== null || siteSubdomain.value.trim());
+
+    if (!description.value.trim() && !imageFile.value && !wantsSite) {
         return;
     }
 
-    const { message, signature } = await signMetadataMessage(tokenAddress);
+    const { message, signature } = await signMetadataMessage(
+        tokenAddress,
+        chainId,
+    );
     const form = new FormData();
     form.append('address', tokenAddress);
+    form.append('chain_id', String(chainId));
     form.append('message', message);
     form.append('signature', signature);
 
@@ -893,15 +1184,12 @@ const submitMetadata = async (tokenAddress: string): Promise<void> => {
         form.append('image', imageFile.value);
     }
 
-    if (htmlFile.value) {
+    if (wantsSite && htmlFile.value) {
         form.append('html', htmlFile.value);
     }
 
-    if (siteSubdomain.value.trim()) {
-        form.append(
-            'site_subdomain',
-            normalizedSubdomain(siteSubdomain.value),
-        );
+    if (wantsSite && siteSubdomain.value.trim()) {
+        form.append('site_subdomain', normalizedSubdomain(siteSubdomain.value));
     }
 
     const res = await fetch('/api/launchpad/tokens', {
@@ -924,6 +1212,40 @@ const swapUrlFor = (tokenAddress: string): string =>
 
 const explorerAddressUrl = (address: string): string =>
     `${EXPLORER_BASE_URL}/address/${address}`;
+
+// Per-network deployment status shown next to each selected chain.
+const STAGE_LABELS: Record<LaunchStage, string> = {
+    idle: '',
+    sending: 'waiting for signature',
+    mining: 'mining',
+    metadata: 'uploading metadata',
+    done: 'launched',
+    failed: 'failed',
+};
+
+const stageLabel = (target: LaunchTarget): string => {
+    if (needsManualCheck(target)) {
+        return 'sent, unconfirmed';
+    }
+
+    if (target.launched && target.stage === 'failed') {
+        return 'launched, metadata pending';
+    }
+
+    return STAGE_LABELS[target.stage];
+};
+
+const targetRegistry = (target: LaunchTarget): LaunchpadChain =>
+    launchpadChain(target.chainId) ?? LISTING_CHAIN;
+
+const targetTokenUrl = (target: LaunchTarget): string =>
+    launchpadExplorerAddressUrl(targetRegistry(target), target.token ?? '');
+
+const targetTxUrl = (target: LaunchTarget): string =>
+    launchpadExplorerTxUrl(targetRegistry(target), target.txHash ?? '');
+
+const targetSwapUrl = (target: LaunchTarget): string =>
+    launchpadSwapUrl(targetRegistry(target), target.token ?? '');
 
 // Only the creator can edit. If no creator is set yet (unclaimed metadata),
 // any connected wallet is allowed to take the first turn — the backend records
@@ -1049,9 +1371,13 @@ const saveEditor = async (t: LaunchedToken): Promise<void> => {
             );
         }
 
-        const { message, signature } = await signMetadataMessage(t.token);
+        const { message, signature } = await signMetadataMessage(
+            t.token,
+            t.chainId,
+        );
         const form = new FormData();
         form.append('address', t.token);
+        form.append('chain_id', String(t.chainId));
         form.append('message', message);
         form.append('signature', signature);
 
@@ -1101,71 +1427,147 @@ const saveEditor = async (t: LaunchedToken): Promise<void> => {
     }
 };
 
+/** Deploy the token on one chain and record everything the retry path needs. */
+const launchOnChain = async (target: LaunchTarget): Promise<void> => {
+    const registry = launchpadChain(target.chainId);
+
+    if (!registry?.launchpad) {
+        throw new Error(`No launchpad is deployed on ${target.label}.`);
+    }
+
+    const provider = await ensureEvmNetwork(registry.chain);
+    const signer = await provider.getSigner();
+    const launchpad = new Contract(registry.launchpad, LAUNCHPAD_ABI, signer);
+    const iface = new Interface(LAUNCHPAD_ABI);
+
+    target.stage = 'sending';
+    status.value = `${target.label}: confirm launch() in your wallet…`;
+    const tx = await launchpad.launch(
+        name.value.trim(),
+        symbol.value.trim(),
+        parseAmount(target.supply),
+        { value: parseAmount(target.liquidity) },
+    );
+
+    // From here on a contract may exist on this chain, so the transaction is
+    // recorded before we wait for it.
+    target.txHash = tx.hash;
+    target.stage = 'mining';
+    persistDraft();
+    status.value = `${target.label}: transaction sent, waiting for block…`;
+
+    let receipt;
+
+    try {
+        receipt = await tx.wait();
+    } catch (e) {
+        // A reverted transaction deployed nothing, so the hash is dropped and
+        // the row stays plainly retryable. Anything else (timeout, RPC drop)
+        // keeps the hash for a manual check before any retry.
+        if ((e as { receipt?: { status?: number } })?.receipt?.status === 0) {
+            target.txHash = null;
+            persistDraft();
+        }
+
+        throw e;
+    }
+
+    target.launched = true;
+    persistDraft();
+
+    // Pull the deployed token address out of TokenLaunched (first indexed arg).
+    for (const log of receipt?.logs ?? []) {
+        try {
+            const parsed = iface.parseLog(log);
+
+            if (parsed?.name === 'TokenLaunched') {
+                target.token = parsed.args.token as string;
+                target.pair = parsed.args.pair as string;
+                break;
+            }
+        } catch {
+            // not our event
+        }
+    }
+
+    persistDraft();
+
+    if (!target.token) {
+        throw new Error(
+            `Launch on ${target.label} was mined but the TokenLaunched event was missing from the receipt — attach the metadata from the token list.`,
+        );
+    }
+};
+
+/**
+ * Walk the selected chains one at a time (a wallet can only sit on one chain
+ * at a time). A failure on one chain never rolls back or re-runs the chains
+ * that already succeeded: their results stay on the row and the button turns
+ * into a retry for what is left.
+ */
 const handleLaunch = async (): Promise<void> => {
     error.value = null;
     status.value = null;
-    txHash.value = null;
     busy.value = true;
 
+    const queue = launchTargets.value.filter(targetPending);
+    // The static site is one page on one domain, so it is attached to the
+    // first selected chain and stays there across retries.
+    const siteChainId = selectedTargets.value[0]?.chainId ?? null;
+
     try {
-        const provider = await ensureCyberiaNetwork();
-        const signer = await provider.getSigner();
-        const launchpad = new Contract(
-            LAUNCHPAD_ADDRESS,
-            LAUNCHPAD_ABI,
-            signer,
-        );
-        const iface = new Interface(LAUNCHPAD_ABI);
-        status.value = 'Confirm launch() in your wallet…';
-        const tx = await launchpad.launch(
-            name.value.trim(),
-            symbol.value.trim(),
-            supplyBn.value,
-            { value: liquidityBn.value },
-        );
-        txHash.value = tx.hash;
-        status.value = 'Transaction sent, waiting for block…';
-        const receipt = await tx.wait();
+        for (const target of queue) {
+            const withSite = target.chainId === siteChainId;
 
-        // Pull the deployed token address out of TokenLaunched (first indexed arg).
-        let newTokenAddress: string | null = null;
-
-        for (const log of receipt?.logs ?? []) {
             try {
-                const parsed = iface.parseLog(log);
-
-                if (parsed?.name === 'TokenLaunched') {
-                    newTokenAddress = parsed.args.token as string;
-                    break;
+                if (!target.launched) {
+                    await launchOnChain(target);
                 }
-            } catch {
-                // not our event
+
+                if (target.token && !target.metadataDone) {
+                    target.stage = 'metadata';
+                    status.value = `${target.label}: uploading metadata…`;
+                    await submitMetadata(
+                        target.token,
+                        target.chainId,
+                        withSite,
+                    );
+                    target.metadataDone = true;
+                }
+
+                target.stage = 'done';
+                target.error = null;
+            } catch (e) {
+                target.stage = 'failed';
+                target.error = (e as Error).message ?? String(e);
             }
+
+            persistDraft();
         }
 
-        if (description.value.trim() || imageFile.value || htmlFile.value) {
-            if (!newTokenAddress) {
-                throw new Error(
-                    'Launch succeeded but the TokenLaunched event was not found in the receipt — metadata not uploaded.',
-                );
+        const failed = queue.filter((target) => target.stage === 'failed');
+        const launched = queue.filter((target) => target.stage === 'done');
+
+        if (failed.length > 0) {
+            status.value =
+                launched.length > 0
+                    ? `Launched on ${launched.length} of ${queue.length} networks — the rest can be retried without redeploying.`
+                    : null;
+            error.value = failed
+                .map((target) => `${target.label}: ${target.error}`)
+                .join(' · ');
+        } else {
+            status.value = `Done! Launched on ${launched.length} network${launched.length === 1 ? '' : 's'}, LP burned.`;
+            description.value = '';
+            siteSubdomain.value = '';
+            imageFile.value = null;
+            htmlFile.value = null;
+            htmlFileName.value = null;
+
+            if (imagePreview.value) {
+                URL.revokeObjectURL(imagePreview.value);
+                imagePreview.value = null;
             }
-
-            status.value = 'Uploading metadata…';
-            await submitMetadata(newTokenAddress);
-        }
-
-        status.value = 'Done! Token launched, LP burned.';
-        name.value = '';
-        symbol.value = '';
-        description.value = '';
-        siteSubdomain.value = '';
-        imageFile.value = null;
-        htmlFile.value = null;
-        htmlFileName.value = null;
-
-        if (imagePreview.value) {
-            URL.revokeObjectURL(imagePreview.value);
-            imagePreview.value = null;
         }
 
         await loadOnchain();
@@ -1228,12 +1630,14 @@ const changeBadgeFor = (
     };
 };
 
-// Reload the native balance whenever the connected address changes.
+// Reload the native balances whenever the connected address changes.
 watch(
     () => wallet.address.value,
     () => {
-        cyberBalance.value = 0n;
-        loadOnchain();
+        launchTargets.value.forEach((target) => {
+            target.balance = 0n;
+        });
+        void loadOnchain();
     },
 );
 
@@ -1257,6 +1661,7 @@ const handleConnect = async (): Promise<void> => {
 };
 
 onMounted(async () => {
+    restoreDraft();
     await loadOnchain();
     await loadRecent();
 });
@@ -1310,22 +1715,140 @@ onMounted(async () => {
                             maxlength="11"
                         />
                     </label>
-                    <label>
-                        <span>Total supply</span>
-                        <Input
-                            v-model="totalSupply"
-                            type="text"
-                            inputmode="decimal"
-                        />
-                    </label>
-                    <label>
-                        <span>CYBER liquidity (burned)</span>
-                        <Input
-                            v-model="cyberLiquidity"
-                            type="text"
-                            inputmode="decimal"
-                        />
-                    </label>
+                    <div class="full networks">
+                        <span class="netTitle">Networks</span>
+                        <p class="small muted">
+                            Pick one or several — each network gets its own
+                            supply, liquidity and contract.
+                        </p>
+                        <div
+                            v-for="target in launchTargets"
+                            :key="target.chainId"
+                            class="netRow"
+                            :class="{ 'netRow--on': target.selected }"
+                        >
+                            <label class="netPick">
+                                <input
+                                    v-model="target.selected"
+                                    type="checkbox"
+                                    :disabled="busy || target.launched"
+                                />
+                                <span class="netName">{{ target.label }}</span>
+                                <span class="small muted"
+                                    >chain {{ target.chainId }}</span
+                                >
+                            </label>
+
+                            <template v-if="target.selected">
+                                <div class="netFields">
+                                    <label>
+                                        <span>Total supply</span>
+                                        <Input
+                                            v-model="target.supply"
+                                            type="text"
+                                            inputmode="decimal"
+                                            :disabled="busy || target.launched"
+                                        />
+                                    </label>
+                                    <label>
+                                        <span
+                                            >{{ target.currency }} liquidity
+                                            (burned)</span
+                                        >
+                                        <Input
+                                            v-model="target.liquidity"
+                                            type="text"
+                                            inputmode="decimal"
+                                            :disabled="busy || target.launched"
+                                        />
+                                    </label>
+                                </div>
+                                <div class="netMeta small muted">
+                                    <span>
+                                        Balance:
+                                        <strong>{{
+                                            fmt(target.balance)
+                                        }}</strong>
+                                        {{ target.currency }}
+                                    </span>
+                                    <span v-if="target.minLiquidity > 0n">
+                                        Minimum:
+                                        <strong>{{
+                                            fmt(target.minLiquidity)
+                                        }}</strong>
+                                        {{ target.currency }}
+                                    </span>
+                                </div>
+                                <div
+                                    v-if="targetIssue(target)"
+                                    class="small hint--err"
+                                >
+                                    {{ targetIssue(target) }}
+                                </div>
+                            </template>
+
+                            <div
+                                v-if="target.stage !== 'idle'"
+                                class="netStatus small"
+                            >
+                                <span
+                                    class="netPill"
+                                    :class="`netPill--${target.stage}`"
+                                >
+                                    {{ stageLabel(target) }}
+                                </span>
+                                <a
+                                    v-if="target.token"
+                                    class="addrLink"
+                                    :href="targetTokenUrl(target)"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    <code>{{ short(target.token) }}</code>
+                                </a>
+                                <a
+                                    v-if="target.txHash"
+                                    class="addrLink"
+                                    :href="targetTxUrl(target)"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    tx
+                                </a>
+                                <a
+                                    v-if="target.token"
+                                    class="addrLink"
+                                    :href="targetSwapUrl(target)"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    swap
+                                </a>
+                                <button
+                                    v-if="needsManualCheck(target)"
+                                    type="button"
+                                    class="editBtn"
+                                    :disabled="busy"
+                                    @click="clearTarget(target)"
+                                >
+                                    Clear &amp; retry
+                                </button>
+                            </div>
+                            <div v-if="target.error" class="small hint--err">
+                                {{ target.error }}
+                            </div>
+                        </div>
+
+                        <p v-if="unavailableChains.length" class="small muted">
+                            Coming soon:
+                            {{
+                                unavailableChains
+                                    .map((c) => c.chain.name)
+                                    .join(', ')
+                            }}
+                            — no launchpad contract deployed there yet.
+                        </p>
+                    </div>
                     <label class="full">
                         <span>Description (optional)</span>
                         <textarea
@@ -1393,16 +1916,12 @@ onMounted(async () => {
 
                 <div class="meta">
                     <div>
-                        Your CYBER balance:
-                        <strong>{{ fmt(cyberBalance) }}</strong>
-                    </div>
-                    <div v-if="minLiquidity > 0n">
-                        Minimum:
-                        <strong>{{ fmt(minLiquidity) }}</strong> CYBER
+                        Each selected network is deployed in its own
+                        transaction, one after the other.
                     </div>
                     <div>
-                        The CYBER is paired with the full supply and the LP is
-                        burned — it cannot be withdrawn.
+                        The native coin is paired with the full supply and the
+                        LP is burned — it cannot be withdrawn.
                     </div>
                 </div>
 
@@ -1428,22 +1947,24 @@ onMounted(async () => {
                         @click="handleLaunch"
                     >
                         <Loader2 v-if="busy" class="spin" />
-                        Launch token
+                        {{
+                            startedTargets.length > 0
+                                ? `Retry ${pendingTargets.length} network${pendingTargets.length === 1 ? '' : 's'}`
+                                : `Launch on ${selectedTargets.length} network${selectedTargets.length === 1 ? '' : 's'}`
+                        }}
+                    </button>
+                    <button
+                        v-if="startedTargets.length > 0 && !busy"
+                        class="editBtn"
+                        type="button"
+                        @click="startOver"
+                    >
+                        Start a new launch
                     </button>
                 </div>
 
-                <div v-if="insufficientBalance" class="hint hint--err">
-                    Not enough CYBER for the chosen liquidity (plus gas).
-                </div>
-                <div v-else-if="belowMin" class="hint hint--err">
-                    Liquidity below the minimum ({{ fmt(minLiquidity) }}
-                    CYBER).
-                </div>
                 <div v-if="status" class="hint">{{ status }}</div>
                 <div v-if="error" class="hint hint--err">{{ error }}</div>
-                <div v-if="txHash" class="hint">
-                    tx: <code>{{ short(txHash) }}</code>
-                </div>
             </section>
 
             <section v-if="recent.length" class="launches">
@@ -1880,6 +2401,78 @@ onMounted(async () => {
 }
 .grid label.full {
     grid-column: 1 / -1;
+}
+.networks {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted-foreground, #94a3b8);
+}
+.netTitle {
+    font-weight: 600;
+    color: var(--foreground, #e5e7eb);
+}
+.netRow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+.netRow--on {
+    border-color: rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.04);
+}
+.netPick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+.netName {
+    color: var(--foreground, #e5e7eb);
+    font-weight: 600;
+}
+.netFields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+.netFields label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.netMeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+}
+.netMeta strong {
+    color: var(--foreground, #e5e7eb);
+}
+.netStatus {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+.netPill {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.15);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.netPill--done {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+}
+.netPill--failed {
+    background: rgba(248, 113, 113, 0.16);
+    color: #f87171;
 }
 .textarea {
     background: var(--card);

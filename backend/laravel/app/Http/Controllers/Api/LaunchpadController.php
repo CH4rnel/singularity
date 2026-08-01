@@ -46,6 +46,7 @@ class LaunchpadController extends Controller
 
         $data = $request->validate([
             'address' => ['required', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
+            'chain_id' => ['nullable', 'integer', Rule::in(array_keys(config('launchpad.chains')))],
             'message' => ['required', 'string', 'max:500'],
             'signature' => ['required', 'string', 'regex:/^0x[a-fA-F0-9]{130}$/'],
             'name' => ['nullable', 'string', 'max:100'],
@@ -65,11 +66,20 @@ class LaunchpadController extends Controller
         $address = Str::lower($data['address']);
         $message = $data['message'];
         $signature = $data['signature'];
+        // Older single-chain clients omit chain_id; their rows are Cyberia.
+        $chainId = (int) ($data['chain_id'] ?? config('launchpad.default_chain_id'));
 
         // 1. Message must reference this token and be recent (replay guard).
         if (! str_contains(Str::lower($message), $address)) {
             return response()->json([
                 'message' => 'Signed message must include the token address.',
+            ], 422);
+        }
+        // Multichain clients bind the signature to one chain, so a signature
+        // for a Cyberia row cannot be replayed onto a satellite chain row.
+        if ($request->filled('chain_id') && ! str_contains(Str::lower($message), 'chain '.$chainId)) {
+            return response()->json([
+                'message' => 'Signed message must include the chain id.',
             ], 422);
         }
         if (! $this->messageIsFresh($message)) {
@@ -86,17 +96,21 @@ class LaunchpadController extends Controller
         $signer = Str::lower($signer);
 
         // 3. Authorize: signer must equal the stored creator. First touch claims
-        //    ownership; subsequent edits require a match.
-        $existing = LaunchpadToken::find($address);
+        //    ownership; subsequent edits require a match. Ownership is per
+        //    chain — the same address on another chain is another contract.
+        $existing = LaunchpadToken::where('chain_id', $chainId)->where('address', $address)->first();
         if ($existing && $existing->creator && Str::lower($existing->creator) !== $signer) {
             return response()->json([
                 'message' => 'Only the token creator can edit this metadata.',
             ], 403);
         }
 
+        // Subdomains stay globally unique: they are DNS names, not per-chain.
         $siteSubdomain = $data['site_subdomain'] ?? ($existing->site_subdomain ?? null);
         if ($siteSubdomain && LaunchpadToken::where('site_subdomain', $siteSubdomain)
-            ->where('address', '!=', $address)
+            ->where(fn ($query) => $query
+                ->where('chain_id', '!=', $chainId)
+                ->orWhere('address', '!=', $address))
             ->exists()) {
             throw ValidationException::withMessages([
                 'site_subdomain' => 'This token subdomain is already in use.',
@@ -110,6 +124,7 @@ class LaunchpadController extends Controller
         }
 
         $payload = [
+            'chain_id' => $chainId,
             'address' => $address,
             'creator' => $signer, // First signer claims; later edits must match.
             'name' => $data['name'] ?? ($existing->name ?? null),
@@ -131,16 +146,15 @@ class LaunchpadController extends Controller
             if (! empty($payload['html_path'])) {
                 Storage::disk('public')->delete($payload['html_path']);
             }
-            $relative = 'launchpad-sites/'.$address.'.html';
-            Storage::disk('public')->putFileAs(
-                'launchpad-sites',
-                $request->file('html'),
-                $address.'.html',
-            );
-            $payload['html_path'] = $relative;
+            $file = $chainId.'-'.$address.'.html';
+            Storage::disk('public')->putFileAs('launchpad-sites', $request->file('html'), $file);
+            $payload['html_path'] = 'launchpad-sites/'.$file;
         }
 
-        $token = LaunchpadToken::updateOrCreate(['address' => $address], $payload);
+        $token = LaunchpadToken::updateOrCreate(
+            ['chain_id' => $chainId, 'address' => $address],
+            $payload,
+        );
 
         return response()->json(['token' => $this->serialize($token)]);
     }
@@ -153,8 +167,9 @@ class LaunchpadController extends Controller
      */
     public function showSite(string $address): Response
     {
-        $address = Str::lower($address);
-        $token = LaunchpadToken::find($address);
+        $token = LaunchpadToken::where('address', Str::lower($address))
+            ->whereNotNull('html_path')
+            ->first();
 
         return $this->staticSiteResponse($token);
     }
@@ -204,6 +219,7 @@ class LaunchpadController extends Controller
     private function serialize(LaunchpadToken $t): array
     {
         return [
+            'chain_id' => (int) $t->chain_id,
             'address' => Str::lower($t->address),
             'creator' => $t->creator ? Str::lower($t->creator) : null,
             'name' => $t->name,

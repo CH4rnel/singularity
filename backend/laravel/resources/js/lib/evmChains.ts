@@ -188,17 +188,27 @@ export const ensureEvmChain = async (
 };
 
 /**
- * Drop-in helper for pages that transact on Cyberia: switch the selected
- * wallet to the Cyberia chain and hand back a fresh ethers provider on it.
+ * Switch the selected wallet to `chain` and hand back a fresh ethers provider
+ * on it. Used by pages that transact on more than one chain (the launchpad
+ * walks its selected networks one by one).
  */
-export const ensureCyberiaNetwork = async (): Promise<BrowserProvider> => {
+export const ensureEvmNetwork = async (
+    chain: EvmChain,
+): Promise<BrowserProvider> => {
     const eth = getSelectedEvmProvider();
 
     if (!eth) {
         throw new Error('EVM wallet not found');
     }
 
-    await ensureEvmChain(eth, CYBERIA_CHAIN);
+    await ensureEvmChain(eth, chain);
 
     return new BrowserProvider(eth);
 };
+
+/**
+ * Drop-in helper for pages that transact on Cyberia: switch the selected
+ * wallet to the Cyberia chain and hand back a fresh ethers provider on it.
+ */
+export const ensureCyberiaNetwork = (): Promise<BrowserProvider> =>
+    ensureEvmNetwork(CYBERIA_CHAIN);
