@@ -7,6 +7,8 @@ export type User = {
     onchain_nickname?: string | null;
     wallet_address?: string | null;
     solana_wallet_address?: string | null;
+    /** Native Monero payout address (unproven by design — XMR cannot sign in a browser). */
+    monero_wallet_address?: string | null;
     twitter_id?: string | null;
     twitter_username?: string | null;
     github_id?: string | null;

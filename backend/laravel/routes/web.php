@@ -3,6 +3,7 @@
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\LaunchpadController;
+use App\Http\Controllers\Api\MoneroWalletController;
 use App\Http\Controllers\Api\SiteEventController;
 use App\Http\Controllers\Api\SolanaStakingController;
 use App\Http\Controllers\Api\TgWhaleController;
@@ -291,8 +292,12 @@ Route::middleware(['auth'])->group(function () {
     // Wallet attach/detach
     Route::post('wallets/evm/attach', [WalletAttachController::class, 'attachEvm'])->name('wallets.evm.attach');
     Route::post('wallets/solana/attach', [WalletAttachController::class, 'attachSolana'])->name('wallets.solana.attach');
+    // Monero is not an attachable signing wallet — it is a saved payout
+    // address, so it lives in its own controller with no signature flow.
+    Route::post('wallets/monero/attach', [MoneroWalletController::class, 'attach'])->name('wallets.monero.attach');
     Route::delete('wallets/evm/detach', [WalletAttachController::class, 'detachEvm'])->name('wallets.evm.detach');
     Route::delete('wallets/solana/detach', [WalletAttachController::class, 'detachSolana'])->name('wallets.solana.detach');
+    Route::delete('wallets/monero/detach', [MoneroWalletController::class, 'detach'])->name('wallets.monero.detach');
 
 });
 

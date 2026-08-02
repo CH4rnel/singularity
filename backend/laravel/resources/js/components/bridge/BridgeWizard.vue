@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 
 import { useBridge } from '@/composables/useBridge';
@@ -324,6 +325,15 @@ watch(
         refreshSourceBalance();
         refreshDestinationCapacity();
     },
+);
+
+// The bridge is public, so there may be no user at all here.
+const page = usePage<{
+    auth?: { user?: { monero_wallet_address?: string | null } | null };
+}>();
+
+const savedMoneroAddress = computed(
+    () => page.props.auth?.user?.monero_wallet_address ?? null,
 );
 
 const sourceDepositAddress = computed(() => {
@@ -881,6 +891,7 @@ const resumeActiveRequest = (request: ActiveBridgeRequest): void => {
             :deposit-expires-at="flow.context.depositExpiresAt"
             :preparing="preparing"
             :recent="flow.recentForDirection.value"
+            :saved-monero-address="savedMoneroAddress"
             @connect-source="handleConnectSource"
             @prepare="handlePrepare"
             @claim="handleClaim"

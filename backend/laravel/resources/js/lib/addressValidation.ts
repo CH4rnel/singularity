@@ -1,5 +1,6 @@
 import { PublicKey } from '@solana/web3.js';
 import { getAddress, isAddress } from 'ethers';
+import { moneroAddressKind } from '@/lib/monero';
 
 export type BridgeChain =
     | 'solana'
@@ -70,6 +71,9 @@ const B58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const HEX_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 const TON_RAW_RE = /^-?\d+:[0-9a-fA-F]{64}$/;
 const TON_FRIENDLY_RE = /^[A-Za-z0-9_-]{48}$/;
+/** Monero shape only — the checksum decides validity (lib/monero.ts). */
+const MONERO_SHAPE_RE =
+    /^[48][123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{94}([123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{11})?$/;
 
 export const BRIDGE_ROUTES: Record<string, BridgeRoute> = {
     sol_to_evm: {
@@ -448,13 +452,26 @@ export const isLitecoinAddress = (s: string): ValidationResult => {
 export const isMoneroAddress = (s: string): ValidationResult => {
     const trimmed = s.trim();
 
-    if (
-        /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{95}([123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{11})?$/.test(
-            trimmed,
-        ) &&
-        (trimmed.startsWith('4') || trimmed.startsWith('8'))
-    ) {
+    if (HEX_ADDR_RE.test(trimmed)) {
+        return {
+            valid: false,
+            error: 'This is an EVM address. Paste a native Monero address (4… or 8…).',
+        };
+    }
+
+    const kind = moneroAddressKind(trimmed);
+
+    if (kind) {
         return { valid: true, normalized: trimmed };
+    }
+
+    // Right shape, failed checksum: say so, because "invalid address" reads
+    // like a format problem while this is almost always one wrong character.
+    if (MONERO_SHAPE_RE.test(trimmed)) {
+        return {
+            valid: false,
+            error: 'Monero address checksum is invalid — check for a typo',
+        };
     }
 
     return { valid: false, error: 'Not a valid Monero address' };

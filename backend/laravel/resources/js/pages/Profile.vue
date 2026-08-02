@@ -27,6 +27,7 @@ import WalletAvatar from '@/components/web3/WalletAvatar.vue';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
+import { moneroAddressKind, moneroKindLabel } from '@/lib/monero';
 import { bridge } from '@/routes';
 import {
     avatar as avatarRoute,
@@ -246,6 +247,65 @@ async function connectSolana() {
             e instanceof Error ? e.message : 'Failed to link Solana wallet.';
     } finally {
         linking.value = null;
+    }
+}
+
+// Monero wallet. Not a connect flow: Monero has no browser extension and no
+// in-browser message signing, so the user types a native address and we keep
+// it as a payout destination only — it never authenticates and is never
+// treated as the EVM XMR wrapper, which is a different asset on Cyberia.
+const moneroInput = ref(user.value.monero_wallet_address ?? '');
+const moneroSaving = ref(false);
+const moneroError = ref<string | null>(null);
+
+const moneroKind = computed(() =>
+    moneroInput.value.trim() ? moneroAddressKind(moneroInput.value) : null,
+);
+
+const moneroInputInvalid = computed(
+    () => moneroInput.value.trim().length > 0 && moneroKind.value === null,
+);
+
+const moneroUnchanged = computed(
+    () => moneroInput.value.trim() === (user.value.monero_wallet_address ?? ''),
+);
+
+async function saveMonero() {
+    if (moneroSaving.value || !moneroKind.value) {
+        return;
+    }
+
+    moneroSaving.value = true;
+    moneroError.value = null;
+
+    try {
+        await walletAuth.attachMoneroWallet(moneroInput.value.trim());
+        router.reload();
+    } catch (e) {
+        moneroError.value =
+            e instanceof Error ? e.message : 'Failed to save Monero wallet.';
+    } finally {
+        moneroSaving.value = false;
+    }
+}
+
+async function removeMonero() {
+    if (moneroSaving.value) {
+        return;
+    }
+
+    moneroSaving.value = true;
+    moneroError.value = null;
+
+    try {
+        await walletAuth.detachMoneroWallet();
+        moneroInput.value = '';
+        router.reload();
+    } catch (e) {
+        moneroError.value =
+            e instanceof Error ? e.message : 'Failed to remove Monero wallet.';
+    } finally {
+        moneroSaving.value = false;
     }
 }
 
@@ -599,6 +659,82 @@ async function copy(key: string, value: string | null | undefined) {
             </div>
         </section>
 
+        <!-- Monero wallet: a native XMR address, kept apart from the EVM and
+             Solana wallets above because it cannot sign and never logs in. -->
+        <section class="mb-6 space-y-3">
+            <h2
+                class="text-sm font-semibold tracking-widest text-muted-foreground uppercase"
+            >
+                Monero wallet
+            </h2>
+            <div
+                class="flex flex-col gap-3 rounded-lg border border-border/70 bg-card p-4"
+            >
+                <div class="flex flex-wrap items-center gap-2">
+                    <Wallet class="h-4 w-4 text-brand-cyan" />
+                    <span class="text-sm font-semibold"
+                        >Native XMR address</span
+                    >
+                    <Badge
+                        v-if="moneroKind"
+                        variant="outline"
+                        class="text-[10px] tracking-widest uppercase"
+                    >
+                        {{ moneroKindLabel(moneroKind) }}
+                    </Badge>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    Monero is its own chain, not a token on Cyberia: paste a
+                    native address (4… standard or integrated, 8… subaddress).
+                    It is used to pre-fill your bridge payouts. There is no
+                    “connect” step — Monero wallets cannot sign a message in a
+                    browser, so this address is stored for payouts only and
+                    never signs you in.
+                </p>
+                <form
+                    class="flex flex-col gap-2 sm:flex-row sm:items-center"
+                    @submit.prevent="saveMonero"
+                >
+                    <Input
+                        v-model="moneroInput"
+                        type="text"
+                        spellcheck="false"
+                        autocomplete="off"
+                        placeholder="4… or 8…"
+                        maxlength="106"
+                        class="font-mono text-xs sm:flex-1"
+                        :aria-invalid="moneroInputInvalid"
+                    />
+                    <Button
+                        type="submit"
+                        size="sm"
+                        :disabled="
+                            moneroSaving || !moneroKind || moneroUnchanged
+                        "
+                    >
+                        {{ moneroSaving ? 'Saving…' : 'Save' }}
+                    </Button>
+                    <Button
+                        v-if="user.monero_wallet_address"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        :disabled="moneroSaving"
+                        @click="removeMonero"
+                    >
+                        Remove
+                    </Button>
+                </form>
+                <p v-if="moneroInputInvalid" class="text-xs text-destructive">
+                    Not a valid Monero address — the built-in checksum does not
+                    match, so check for a typo.
+                </p>
+                <p v-else-if="moneroError" class="text-xs text-destructive">
+                    {{ moneroError }}
+                </p>
+            </div>
+        </section>
+
         <!-- Deposit addresses -->
         <section class="space-y-3">
             <h2
@@ -690,6 +826,15 @@ async function copy(key: string, value: string | null | undefined) {
                         page.
                     </p>
                 </div>
+                <p
+                    v-if="chain.key === 'monero' && chain.address"
+                    class="w-full text-xs text-muted-foreground sm:pl-44"
+                >
+                    Integrated address: it is the bridge wallet plus a payment
+                    id that belongs to you, so a deposit from any Monero wallet
+                    is credited to your account. Paste it whole — the payment id
+                    lives inside it, there is nothing extra to fill in.
+                </p>
                 <p
                     v-if="chain.history.length"
                     class="w-full text-xs text-muted-foreground sm:pl-44"

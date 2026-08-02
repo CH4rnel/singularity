@@ -1,7 +1,12 @@
 <?php
 
 use App\Rules\ValidDestinationAddress;
+use App\Services\Monero\MoneroAddressCodec;
 use Illuminate\Support\Facades\Validator;
+
+// Public Monero project donation address (standard) and CCS subaddress.
+const XMR_DEST_STANDARD = '44AFFq5kSiGBoZ4NMDwYtN18obc8AemS33DBLWs3H7otXft3XjrpDtQGv7SqSsaBYBb98uNbr2VBBEt7f2wfn3RVGQBEP3A';
+const XMR_DEST_SUBADDRESS = '888tNkZrPN6JsEgekjMnABU4TBzc2Dt29EPAvkRxbANsAnjyPbb3iQ1YBRk1UXcdRsiKc9dhwMVgN5S9cQUiyoogDavup3H';
 
 function validateAddr(string $direction, string $value): array
 {
@@ -85,13 +90,35 @@ test('accepts Litecoin addresses for evm_to_ltc', function () {
         ->toBeEmpty();
 });
 
-test('accepts Monero addresses for evm_to_xmr', function () {
+test('accepts native Monero addresses of every mainnet kind for evm_to_xmr', function () {
     config()->set('bridge.routes.evm_to_xmr.enabled', true);
 
-    expect(validateAddr('evm_to_xmr', '4'.str_repeat('A', 94)))
-        ->toBeEmpty()
-        ->and(validateAddr('evm_to_xmr', '8'.str_repeat('A', 94)))
-        ->toBeEmpty();
+    $integrated = MoneroAddressCodec::integratedAddress(XMR_DEST_STANDARD, hex2bin('0011223344556677'));
+
+    expect(validateAddr('evm_to_xmr', XMR_DEST_STANDARD))->toBeEmpty()
+        ->and(validateAddr('evm_to_xmr', XMR_DEST_SUBADDRESS))->toBeEmpty()
+        ->and(validateAddr('evm_to_xmr', $integrated))->toBeEmpty();
+});
+
+test('rejects a Monero address with a broken checksum for evm_to_xmr', function () {
+    config()->set('bridge.routes.evm_to_xmr.enabled', true);
+
+    // Correct length and alphabet, one character off. Only the checksum
+    // catches this, and it has to: the payout cannot be undone.
+    $typo = substr_replace(XMR_DEST_STANDARD, XMR_DEST_STANDARD[40] === 'A' ? 'B' : 'A', 40, 1);
+
+    expect(validateAddr('evm_to_xmr', $typo))->not->toBeEmpty()
+        ->and(validateAddr('evm_to_xmr', '4'.str_repeat('A', 94)))->not->toBeEmpty()
+        ->and(validateAddr('evm_to_xmr', '8'.str_repeat('A', 94)))->not->toBeEmpty();
+});
+
+test('tells the user an EVM address is not a Monero address', function () {
+    config()->set('bridge.routes.evm_to_xmr.enabled', true);
+
+    // The XMR wrapper on Cyberia is a different asset on a different chain;
+    // pasting its 0x address here would burn the payout.
+    expect(validateAddr('evm_to_xmr', '0x2170Ed0880ac9A755fd29B2688956BD959F933F8')[0] ?? '')
+        ->toContain('native Monero address');
 });
 
 test('rejects wrong native address type for external chain routes', function () {

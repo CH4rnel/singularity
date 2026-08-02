@@ -160,17 +160,11 @@ class ValidDestinationAddress implements ValidationRule
 
     private function validateMonero(string $address, Closure $fail): void
     {
-        // Monero uses its own base58 chunking and checksum. Keep this as a
-        // conservative format guard; native-chain verification remains manual.
-        if (! preg_match('/^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{95}([123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{11})?$/', $address)) {
-            $fail('Not a valid Monero address.');
-
-            return;
-        }
-
-        if (! str_starts_with($address, '4') && ! str_starts_with($address, '8')) {
-            $fail('Not a valid Monero address.');
-        }
+        // A Monero payout is irreversible and unaddressable to a human, so the
+        // full Keccak checksum is verified here (MoneroAddressCodec) rather
+        // than a shape-only guard: a single mistyped character is caught
+        // before the relayer sends.
+        (new ValidMoneroAddress)->validate('destination_address', $address, $fail);
     }
 
     private function validateBech32Like(string $address, string $hrp): bool

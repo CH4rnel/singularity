@@ -35,6 +35,8 @@ const props = defineProps<{
     depositExpiresAt: string | null;
     preparing: boolean;
     recent: RecentDestination[];
+    /** The signed-in user's saved native Monero payout address, if any. */
+    savedMoneroAddress: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -262,6 +264,16 @@ const canPrepare = computed(
 const useRecent = (entry: RecentDestination) => {
     localDestination.value = entry.address;
 };
+
+// XMR payouts go to a native Monero address, which nobody retypes correctly —
+// offer the one saved on the profile instead.
+const savedMoneroOffer = computed(() =>
+    route.value.destinationAddressType === 'monero' &&
+    props.savedMoneroAddress &&
+    props.savedMoneroAddress !== localDestination.value
+        ? props.savedMoneroAddress
+        : null,
+);
 
 const formatRelative = (ts: number): string => {
     const diff = Date.now() - ts;
@@ -620,6 +632,26 @@ const formatRelative = (ts: number): string => {
             >
                 {{ validation.warning }}
             </p>
+
+            <!-- Saved Monero wallet (profile) -->
+            <button
+                v-if="savedMoneroOffer"
+                type="button"
+                class="mt-2 flex w-full items-center justify-between rounded border border-[#19140020] px-2 py-1.5 text-xs hover:border-[#1915014a] dark:border-[#3E3E3A] dark:hover:border-[#62605b]"
+                :disabled="inputsLocked"
+                @click="localDestination = savedMoneroOffer"
+            >
+                <span
+                    class="truncate font-mono text-[#1b1b18] dark:text-[#EDEDEC]"
+                >
+                    {{ savedMoneroOffer.slice(0, 8) }}…{{
+                        savedMoneroOffer.slice(-8)
+                    }}
+                </span>
+                <span class="shrink-0 text-[#706f6c] dark:text-[#A1A09A]">
+                    my Monero wallet
+                </span>
+            </button>
 
             <!-- Recent addresses -->
             <div v-if="recent.length > 0" class="mt-3">
