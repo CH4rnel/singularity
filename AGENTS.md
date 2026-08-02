@@ -112,6 +112,7 @@ Notes:
 - `npm run types:check` may expose pre-existing TypeScript issues in old pages; do not hide new errors inside that noise.
 - Progression (XP, levels, daily streaks, quests) lives in `App\Services\GamificationService` with rules in `config/gamification.php`, surfaced on `/profile` and `/leaderboard`. XP is paid through the append-only `xp_entries` ledger keyed by `(source, reference)`; the browser may only report visits/page views, while swaps, liquidity, bridges and governance are credited from ground truth by `gamification:sync`. Do not pay value XP from client-reported events.
 - Retention analytics (DAU/WAU/MAU, new vs returning, weekly cohorts, progression health) live in `App\Services\UserAnalyticsService` and render on `/crm/analytics` alongside the existing funnel.
+- The unified multichain wallet (`/wallet`, `resources/js/lib/wallet/`) is non-custodial and lives entirely in the browser: one BIP-39 seed phrase, one chain adapter per network in `chains.ts` (Cyberia/EVM on BIP-44, Solana and Monero on SLIP-0010), the phrase AES-GCM encrypted in localStorage. Never route a seed, phrase or private key through Laravel, an Inertia prop or a log line. Derivation vectors and vault behaviour are covered by `npm run test:frontend` (`tests/Frontend/*Test.mjs`, run with the `@/` alias hook).
 
 ---
 

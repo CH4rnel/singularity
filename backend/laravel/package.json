@@ -10,6 +10,7 @@
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",
         "lint:check": "eslint .",
+        "test:frontend": "node --import ./tests/Frontend/alias-hook.mjs --test tests/Frontend/*Test.mjs",
         "types:check": "vue-tsc --noEmit"
     },
     "devDependencies": {

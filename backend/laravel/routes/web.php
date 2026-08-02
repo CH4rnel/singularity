@@ -215,6 +215,14 @@ Route::middleware(['auth'])->group(function () {
             ->middleware('throttle:6,1')->name('claims.store');
     });
 
+    // Unified multichain wallet. Non-custodial: the seed phrase is generated,
+    // encrypted and kept in the browser, so the server hands over nothing but
+    // a public RPC endpoint and the XMR payout address already on the profile.
+    Route::get('wallet', fn (Request $request) => Inertia::render('Wallet', [
+        'solanaRpcUrl' => (string) config('services.staking.solana.public_rpc_url'),
+        'moneroPayoutAddress' => $request->user()->monero_wallet_address,
+    ]))->name('wallet');
+
     // Own profile: account info + bridge deposit addresses for every chain.
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
     Route::post('profile/avatar', [ProfileController::class, 'updateAvatar'])

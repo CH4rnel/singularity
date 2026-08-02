@@ -44,6 +44,7 @@ createInertiaApp({
             case name === 'Predictions':
             case name === 'PixelBattle':
             case name === 'Profile':
+            case name === 'Wallet':
             case name.startsWith('Growth/'):
             case name.startsWith('dao/'):
             case name.startsWith('proposals/'):

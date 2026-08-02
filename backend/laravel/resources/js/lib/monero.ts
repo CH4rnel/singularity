@@ -11,7 +11,9 @@ import { keccak256 } from 'ethers';
  * detectable in the browser instead of on-chain, which matters: an XMR payout
  * cannot be recalled and cannot be traced to ask for it back.
  *
- * Only decoding lives here — the client never has to build an address.
+ * Decoding covers pasted addresses (bridge payouts, profile). Encoding exists
+ * for the one address the client builds itself: the Monero account of the
+ * unified HD wallet, whose keys are derived in the browser and never leave it.
  */
 
 const B58_ALPHABET =
@@ -123,6 +125,71 @@ export const moneroAddressKind = (
 
 export const isValidMoneroAddress = (address: string): boolean =>
     moneroAddressKind(address) !== null;
+
+/** Encoded length of a partial trailing block, indexed by its byte count. */
+const ENCODED_BLOCK_SIZES = [0, 2, 3, 5, 6, 7, 9, 10, 11];
+
+const FULL_BLOCK_SIZE = 8;
+
+const encodeBlock = (block: Uint8Array): string => {
+    const bytes = Array.from(block);
+    let encoded = '';
+
+    while (bytes.some((byte) => byte > 0)) {
+        let remainder = 0;
+
+        for (let i = 0; i < bytes.length; i++) {
+            const value = remainder * 256 + bytes[i];
+
+            bytes[i] = Math.floor(value / 58);
+            remainder = value % 58;
+        }
+
+        encoded = B58_ALPHABET[remainder] + encoded;
+    }
+
+    return encoded.padStart(ENCODED_BLOCK_SIZES[block.length], '1');
+};
+
+/**
+ * Monero base58: fixed-width groups of 8-byte blocks, not the Bitcoin/Solana
+ * stream encoding. Mirrors MoneroAddressCodec::encode().
+ */
+export const encodeMoneroBase58 = (bytes: Uint8Array): string => {
+    let encoded = '';
+
+    for (let i = 0; i < bytes.length; i += FULL_BLOCK_SIZE) {
+        encoded += encodeBlock(bytes.subarray(i, i + FULL_BLOCK_SIZE));
+    }
+
+    return encoded;
+};
+
+/**
+ * Standard mainnet address for a spend/view public key pair: network byte,
+ * the two keys, and the four leading bytes of the payload's Keccak-256.
+ */
+export const moneroStandardAddress = (
+    spendPublicKey: Uint8Array,
+    viewPublicKey: Uint8Array,
+): string => {
+    const payload = new Uint8Array(65);
+
+    payload[0] = 0x12;
+    payload.set(spendPublicKey, 1);
+    payload.set(viewPublicKey, 33);
+
+    const checksum = keccak256(payload).slice(2, 10);
+    const address = new Uint8Array(69);
+
+    address.set(payload);
+
+    for (let i = 0; i < 4; i++) {
+        address[65 + i] = parseInt(checksum.slice(i * 2, i * 2 + 2), 16);
+    }
+
+    return encodeMoneroBase58(address);
+};
 
 /** Human label for the address kind, for UI badges. */
 export const moneroKindLabel = (kind: MoneroAddressKind): string =>
