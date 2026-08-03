@@ -6,7 +6,7 @@
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { AgentRuntime, createAgent, FileMemoryStore, type ModelProvider, type ModelRequest } from "../src/index.js";
 import { lain } from "../src/characters/lain.js";
 import { splitMessage } from "../src/clients/telegram.js";
@@ -370,6 +370,127 @@ async function main() {
       !agent.actions.some((a) => a.name === "smoke_broken");
   }
 
+  // --- launch_token: an irreversible spend never happens without confirmation ---
+  const launchSkill = (
+    await import(
+      pathToFileURL(resolve(fileURLToPath(import.meta.url), "../../skills/launch_token.mjs")).href
+    )
+  ).default;
+  const RITUAL_ROUTER = "0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62";
+  const launchDir = mkdtempSync(join(tmpdir(), "lainos-launch-"));
+  const launchWrites: Record<string, unknown>[] = [];
+  let launchBalance = 98_446_075_175_076_974n; // her actual balance when the wish was filed
+  const launchRuntime = (router = RITUAL_ROUTER) => ({
+    getSetting: (key: string) => (key === "LAINOS_DATA_DIR" ? launchDir : undefined),
+    getService: (name: string) =>
+      name === "cyberia-chain"
+        ? {
+            agentAddress: "0x1111111111111111111111111111111111111111",
+            walletClient: {
+              account: { address: "0x1111111111111111111111111111111111111111" },
+              chain: { id: 49406 },
+              async writeContract(args: Record<string, unknown>) {
+                launchWrites.push(args);
+                return "0xfeed";
+              },
+            },
+            publicClient: {
+              async getCode() {
+                return "0x60006000";
+              },
+              async getGasPrice() {
+                return 1_000_000_000n; // below the node's floor; the skill must lift it
+              },
+              async getBalance() {
+                return launchBalance;
+              },
+              async readContract({ functionName }: { functionName: string }) {
+                switch (functionName) {
+                  case "minLiquidity":
+                    return 10n * 10n ** 18n;
+                  case "router":
+                    return router;
+                  case "factory":
+                    return "0xB0aC30907c04b61F1482e62eA66eF4562a690917";
+                  case "wcyber":
+                    return "0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9";
+                  case "allTokensLength":
+                    return 0n;
+                  case "pairOf":
+                    return "0x3333333333333333333333333333333333333333";
+                  default:
+                    return null;
+                }
+              },
+              async estimateContractGas() {
+                throw new Error("estimateGas fails for the inner deploy, as on the real node");
+              },
+              async simulateContract() {
+                return {
+                  result: [
+                    "0x2222222222222222222222222222222222222222",
+                    "0x3333333333333333333333333333333333333333",
+                    5n,
+                  ],
+                };
+              },
+              async waitForTransactionReceipt() {
+                return { status: "success", logs: [], gasUsed: 4_000_000n };
+              },
+            },
+          }
+        : undefined,
+  });
+  const launchArgs = { name: "Lain Coin", symbol: "LAINX", totalSupply: "1000000" };
+  const launchPhrase = "LAUNCH LAINX 1000000 FOR 10 CYBER";
+  const call = (params: Record<string, unknown>, router = RITUAL_ROUTER) =>
+    launchSkill.handler(launchRuntime(router), {}, params);
+  const poorPlan = await call({ ...launchArgs });
+  const poorExec = await call({ ...launchArgs, execute: true, confirmation: launchPhrase });
+  launchBalance = 20n * 10n ** 18n;
+  const richPlan = await call({ ...launchArgs });
+  const noConfirm = await call({ ...launchArgs, execute: true });
+  const tamperedConfirm = await call({
+    ...launchArgs,
+    totalSupply: "2000000",
+    execute: true,
+    confirmation: launchPhrase,
+  });
+  const foreignRouter = await call(
+    { ...launchArgs, execute: true, confirmation: launchPhrase },
+    "0x0000000000000000000000000000000000000042",
+  );
+  const writesBeforeConfirm = launchWrites.length;
+  const launched = await call({
+    ...launchArgs,
+    execute: true,
+    confirmation: `  launch lainx 1000000 for 10 cyber `, // case/space tolerant, value-bound
+    reason: "smoke",
+  });
+  const launchJournal = JSON.parse(readFileSync(join(launchDir, "launches.json"), "utf8"));
+  const launchOk =
+    poorPlan.ok === false &&
+    String(poorPlan.text).includes("short by") &&
+    poorPlan.data.confirmation === launchPhrase &&
+    poorExec.ok === false &&
+    richPlan.ok === true &&
+    richPlan.data.dryRun === true &&
+    richPlan.data.creatorTokenShare === "0" &&
+    noConfirm.ok === false &&
+    String(noConfirm.text).includes(launchPhrase) &&
+    tamperedConfirm.ok === false &&
+    foreignRouter.ok === false &&
+    String(foreignRouter.text).includes("Ritual V2") &&
+    writesBeforeConfirm === 0 &&
+    launched.ok === true &&
+    launchWrites.length === 1 &&
+    (launchWrites[0].value as bigint) === 10n * 10n ** 18n &&
+    (launchWrites[0].gasPrice as bigint) === 1_500_000_000n &&
+    launchJournal.launches.length === 1 &&
+    launchJournal.launches[0].symbol === "LAINX" &&
+    launchJournal.launches[0].reason === "smoke" &&
+    launchJournal.launches[0].cyberWei === (10n * 10n ** 18n).toString();
+
   // --- trade journal: moving-average cost basis + realised PnL, persisted ---
   const posBase: Position = { token: "0xabc", symbol: "T", qtyWei: "0", costWei: "0" };
   const afterBuy1 = applyBuy(undefined, posBase, 100n, 10n);
@@ -686,6 +807,7 @@ async function main() {
   console.log(`forge provider switch    : ${forgeProviderSwitchOk ? "PASS" : "FAIL"}`);
   console.log(`chat provider switch     : ${chatProviderSwitchOk ? "PASS" : "FAIL"}`);
   console.log(`skills hot self-extend   : ${skillsOk ? "PASS" : "FAIL"}`);
+  console.log(`launch needs confirmation: ${launchOk ? "PASS" : "FAIL"}`);
   console.log(`trade journal cost basis : ${journalOk ? "PASS" : "FAIL"}`);
   console.log(`initiative quiet hours   : ${quietOk ? "PASS" : "FAIL"}`);
   console.log(`scout rss parser         : ${rssOk ? "PASS" : "FAIL"}`);
@@ -703,7 +825,7 @@ async function main() {
   await agent.stop();
   const ok =
     learnedName && learnedRussianName && ranBalance && nullIsZero && forcedPnl && toolResultContractOk && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
-    walletOk && lainTokenKnown && wishLogged && wishEdited && wishForged && forgeProviderSwitchOk && chatProviderSwitchOk && skillsOk && journalOk && quietOk &&
+    walletOk && lainTokenKnown && wishLogged && wishEdited && wishForged && forgeProviderSwitchOk && chatProviderSwitchOk && skillsOk && launchOk && journalOk && quietOk &&
     forgeJobsListed && forgeJobsScrubbed &&
     rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
     studyFindingOk && studySilenceOk && studySafetyOk &&
