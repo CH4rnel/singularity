@@ -39,7 +39,7 @@ function isGroupActive(items: { href: string; external?: boolean }[]): boolean {
 
 <template>
     <header
-        class="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur"
+        class="sticky top-0 z-40 border-b border-border/70 bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur"
     >
         <nav
             class="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4"

@@ -1,0 +1,33 @@
+{
+    "name": "cyberia-mobile",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Cyberia mobile application shell (Android + iOS)",
+    "license": "MIT",
+    "type": "commonjs",
+    "scripts": {
+        "www": "node scripts/build-www.js",
+        "sync": "npm run www && cap sync",
+        "sync:android": "npm run www && cap sync android",
+        "sync:ios": "npm run www && cap sync ios",
+        "assets": "capacitor-assets generate --iconBackgroundColor '#0b0f10' --iconBackgroundColorDark '#0b0f10' --splashBackgroundColor '#0b0f10' --splashBackgroundColorDark '#0b0f10'",
+        "open:android": "cap open android",
+        "open:ios": "cap open ios",
+        "android:apk": "npm run sync:android && cd android && ./gradlew assembleDebug",
+        "android:release": "npm run sync:android && cd android && ./gradlew bundleRelease",
+        "doctor": "cap doctor",
+        "test": "node --test test/*.test.js"
+    },
+    "dependencies": {
+        "@capacitor/android": "^8.5.0",
+        "@capacitor/app": "^8.1.1",
+        "@capacitor/core": "^8.5.0",
+        "@capacitor/ios": "^8.5.0",
+        "@capacitor/splash-screen": "^8.0.2",
+        "@capacitor/status-bar": "^8.0.3"
+    },
+    "devDependencies": {
+        "@capacitor/assets": "^3.0.5",
+        "@capacitor/cli": "^8.5.0"
+    }
+}

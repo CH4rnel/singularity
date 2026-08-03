@@ -1,0 +1,91 @@
+# Cyberia Mobile
+
+Capacitor shell that ships the Cyberia site (`backend/laravel`) as an Android and
+iOS application.
+
+Like the desktop shell it renders the live site rather than bundling it: the
+native app is a WebView pointed at `https://cyberia.church`, so a production
+deploy updates the app without a store release. The only local payload is
+`www/`, the page shown when the site cannot be reached.
+
+## Requirements
+
+- Node 20+ (Capacitor 8) — always installed.
+- **Android:** JDK 21 and the Android SDK (`platform-tools`, `platforms;android-36`,
+  `build-tools;36.0.0`). Point `ANDROID_HOME` at the SDK before building.
+- **iOS:** macOS with Xcode 16+. Dependencies are Swift Package Manager, so no
+  CocoaPods install is needed.
+
+## Commands
+
+```bash
+npm install
+npm run www             # regenerate the local fallback pages
+npm run sync            # www + copy config/plugins into android/ and ios/
+npm run assets          # regenerate icons and splash screens from resources/
+npm run open:android    # open the project in Android Studio
+npm run open:ios        # open the workspace in Xcode
+npm run android:apk     # sync + assembleDebug -> android/app/build/outputs/apk/debug/
+npm run android:release # sync + bundleRelease -> .aab for Play
+npm test                # URL/navigation rules, no SDK needed
+```
+
+`android/` and `ios/` are committed: they carry the deep-link intent filters,
+the URL scheme, and the generated icons, none of which Capacitor can regenerate
+from config alone.
+
+## Configuration
+
+`CYBERIA_APP_URL` (default `https://cyberia.church`) decides what the app renders
+and which hosts stay inside the WebView. It is baked into the native project at
+sync time, so re-sync after changing it:
+
+```bash
+CYBERIA_APP_URL=http://192.168.1.10:8000 npm run sync:android
+```
+
+An `http://` URL automatically enables cleartext traffic for that build; anything
+that is not `http`/`https` falls back to production.
+
+## Behaviour
+
+- **Navigation** — `cyberia.church`, its subdomains, and the OAuth providers open
+  in the app. Every other URL, including `wc:`, `metamask:`, `phantom:`, and
+  `tg:`, is handed to Android/iOS, which is exactly what WalletConnect needs to
+  hop into a wallet app and back.
+- **Offline** — a failed load shows `www/error.html` (`server.errorPath`), which
+  returns to the site as soon as the device is online.
+- **Deep links** — `cyberia://feed` works on both platforms. `https://cyberia.church`
+  links open the app once the site publishes the association files: set
+  `APP_ANDROID_SHA256_FINGERPRINT` (and `APP_IOS_APP_ID`) in the Laravel `.env`,
+  which turns on `/.well-known/assetlinks.json` and
+  `/.well-known/apple-app-site-association`. On iOS also add the
+  `applinks:cyberia.church` associated domain in Xcode — it needs a provisioning
+  profile, so it is deliberately not committed.
+- **Safe areas** — the WebView draws edge to edge (`ios.contentInset: 'never'`);
+  the site pads itself with `env(safe-area-inset-*)`, which is why
+  `app.blade.php` sets `viewport-fit=cover`.
+- **User agent** — `CyberiaMobile/<version>` is appended so the site can tell it
+  is running inside the app (`resources/js/lib/native.ts`).
+- **Local vault** — Android backup is disabled, so the encrypted wallet vault
+  and WebView storage stay on the device instead of entering a cloud backup.
+
+## Signing and release
+
+`android:release` produces an unsigned bundle. Add a keystore in
+`android/keystore.properties` (git-ignored) and the matching `signingConfigs`
+block in `android/app/build.gradle` before uploading to Play, then publish the
+key's SHA-256 through `APP_ANDROID_SHA256_FINGERPRINT`.
+
+## Known limits
+
+- **Web push does not reach the app.** Android WebView has no Push API, and iOS
+  WKWebView only supports it for home-screen PWAs. The site's push subscriptions
+  keep working in browsers; native notifications need
+  `@capacitor/push-notifications` with FCM/APNs.
+- **Store review is not guaranteed.** Apple's guideline 4.2 treats thin web
+  wrappers poorly and 3.1.5(b) restricts crypto exchange functionality to the
+  exchange's own developer account; Google Play has its own crypto policy. Direct
+  APK distribution from cyberia.church has no such constraint.
+- No in-app wallet is injected — the WalletConnect path is what mobile users get,
+  same as mobile browsers.

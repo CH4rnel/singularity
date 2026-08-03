@@ -6,7 +6,9 @@
 <html lang="{{ $isGrowthPage ? 'en' : str_replace('_', '-', app()->getLocale()) }}"  @class(['dark' => ($appearance ?? 'dark') == 'dark'])>
     <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        {{-- viewport-fit=cover makes env(safe-area-inset-*) meaningful inside the
+             native mobile shell (frontend/mobile) and installed PWAs. --}}
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <meta name="theme-color" content="#0b0f10">
         <meta name="application-name" content="{{ config('app.name', 'Cyberia') }}">
         <meta name="mobile-web-app-capable" content="yes">

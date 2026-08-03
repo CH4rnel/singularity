@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\SolanaStakingController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\ApiController;
+use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\Auth\TwitterAuthController;
 use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
@@ -142,6 +143,12 @@ Route::get('/tonconnect-manifest.json', fn () => response()->json([
     'termsOfUseUrl' => 'https://cyberia.church',
     'privacyPolicyUrl' => 'https://cyberia.church',
 ], 200, [], JSON_UNESCAPED_SLASHES))->name('tonconnect.manifest');
+// Lets https://cyberia.church links open in the installed native shells
+// (frontend/mobile, frontend/desktop). 404 until the app identity is set.
+Route::get('/.well-known/assetlinks.json', [AppLinksController::class, 'assetlinks'])
+    ->name('applinks.android');
+Route::get('/.well-known/apple-app-site-association', [AppLinksController::class, 'appleAppSiteAssociation'])
+    ->name('applinks.ios');
 Route::get('/bridge', [ApiController::class, 'index'])->name('bridge');
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 // Public token directory + per-token pages the analytics list links into.

@@ -1,0 +1,25 @@
+{
+    "name": "cyberia-desktop",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Cyberia desktop application shell",
+    "homepage": "https://cyberia.church",
+    "author": "Cyberia <noreply@cyberia.church>",
+    "desktopName": "Cyberia.desktop",
+    "license": "MIT",
+    "type": "commonjs",
+    "main": "src/main.js",
+    "scripts": {
+        "start": "electron .",
+        "test": "node --test test/*.test.js",
+        "dist": "electron-builder",
+        "dist:linux": "electron-builder --linux",
+        "dist:win": "electron-builder --win",
+        "dist:mac": "electron-builder --mac",
+        "pack": "electron-builder --dir"
+    },
+    "devDependencies": {
+        "electron": "^43.2.0",
+        "electron-builder": "^26.15.3"
+    }
+}

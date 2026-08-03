@@ -192,7 +192,11 @@
     html {
         scrollbar-gutter: stable;
     }
+    /* The native shells (frontend/mobile, frontend/desktop) and installed PWAs
+       draw edge to edge, so the page keeps itself clear of the home indicator.
+       Browsers report 0 for that inset. */
     body {
         @apply bg-background text-foreground;
+        padding-bottom: env(safe-area-inset-bottom);
     }
 }

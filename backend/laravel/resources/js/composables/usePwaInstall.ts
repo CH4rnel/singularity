@@ -1,4 +1,5 @@
 import { computed, ref, shallowRef } from 'vue';
+import { isNativeShell } from '@/lib/native';
 
 type InstallChoiceOutcome = 'accepted' | 'dismissed';
 
@@ -50,6 +51,9 @@ function rememberDismissal(): void {
 
 function detectStandaloneMode(): boolean {
     return (
+        // Inside the desktop or mobile app the site is already installed, so
+        // every install affordance has to stay hidden.
+        isNativeShell() ||
         window.matchMedia('(display-mode: standalone)').matches ||
         Boolean((window.navigator as NavigatorWithStandalone).standalone)
     );

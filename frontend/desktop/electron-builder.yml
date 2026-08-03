@@ -1,0 +1,56 @@
+appId: church.cyberia.desktop
+productName: Cyberia
+copyright: Cyberia
+
+directories:
+    buildResources: build
+    output: dist
+
+files:
+    - src/**/*
+    - package.json
+
+asar: true
+
+# Registers `cyberia://` so links from the site, Telegram, or the mobile app can
+# hand a route to an already running desktop window.
+protocols:
+    - name: Cyberia
+      schemes:
+          - cyberia
+
+linux:
+    target:
+        - AppImage
+        - deb
+    category: Network
+    synopsis: Cyberia — social, governance, bridge, and on-chain tools
+    # Ties running windows to the installed launcher entry.
+    syncDesktopName: true
+    maintainer: Cyberia <noreply@cyberia.church>
+    desktop:
+        entry:
+            Name: Cyberia
+            Comment: Cyberia social, governance, bridge, and on-chain tools
+            Categories: Network;Finance;
+            MimeType: x-scheme-handler/cyberia;
+            StartupWMClass: Cyberia
+
+win:
+    target:
+        - nsis
+        - portable
+    executableName: Cyberia
+
+nsis:
+    oneClick: false
+    perMachine: false
+    allowToChangeInstallationDirectory: true
+    shortcutName: Cyberia
+
+mac:
+    target:
+        - dmg
+        - zip
+    category: public.app-category.finance
+    darkModeSupport: true

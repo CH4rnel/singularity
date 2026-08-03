@@ -29,6 +29,8 @@ singularity/
 ├── frontend/ritual/      # Ritual DEX, React 18 / CRA / react-app-rewired
 ├── frontend/landing/     # Static HTML landing/brand pages
 ├── frontend/jekyll/      # Jekyll Cyberia blog/static site
+├── frontend/desktop/     # Cyberia desktop app (Electron shell over the live site)
+├── frontend/mobile/      # Cyberia mobile app (Capacitor shell, Android + iOS)
 ├── crypto/hardhat/       # EVM contracts, Hardhat 3 + viem
 ├── crypto/anchor/        # Solana/Anchor bridge contracts and scripts
 ├── crypto/quickswap-core/ # Legacy QuickSwap/Uniswap v2 core contracts
@@ -69,7 +71,7 @@ LLM orientation:
 Important generated/runtime paths:
 
 - Dependency folders: `backend/laravel/vendor/`, `**/node_modules/`
-- Build outputs: `frontend/ritual/build/`, `frontend/jekyll/_site/`
+- Build outputs: `frontend/ritual/build/`, `frontend/jekyll/_site/`, `frontend/desktop/dist/`, `frontend/mobile/www/`, `frontend/mobile/android/app/build/`
 - Contract outputs: `crypto/hardhat/artifacts/`, `crypto/hardhat/cache/`, `crypto/anchor/target/`, `crypto/anchor/test-ledger/`
 - Blockscout data volumes under `services/blockscout/docker-compose/services/*-data/`, `services/blockscout/docker-compose/services/dets/`, and Redis dumps
 - OS/rootfs artifacts under `linux/custom-root/`
@@ -159,6 +161,32 @@ find build/static -maxdepth 2 -type f | wc -l
 
 - `npm run ipfs-deploy` uses `ipfs-deploy build`. It may fail on modern Node with `RequestInit: duplex option is required when sending a body`; report that exactly rather than pretending deployment succeeded.
 - Be careful with `frontend/ritual/build/`: it is an artifact directory. Only modify or deploy it when the user explicitly asks for build/deploy work.
+
+---
+
+## Native App Shells
+
+Paths: `frontend/desktop/` (Electron), `frontend/mobile/` (Capacitor)
+
+Both ship the Laravel site as an installable app. Neither bundles the frontend: they render `CYBERIA_APP_URL` (default `https://cyberia.church`) in a native window/WebView, so a production deploy is also an app update. The per-directory `README.md` files are authoritative.
+
+```bash
+cd frontend/desktop
+npm install
+npm test
+npm run dist:linux      # AppImage + deb; dist:win needs Wine, dist:mac needs macOS
+
+cd frontend/mobile
+npm install
+npm test
+npm run sync            # regenerate www/ and copy config into android/ and ios/
+npm run android:apk     # needs a local Android SDK + JDK 21
+```
+
+- Windows/macOS installers and the Android APK are built by `.github/workflows/apps.yml` (tag `app-v*` or manual dispatch).
+- `frontend/mobile/android/` and `frontend/mobile/ios/` are committed: they hold the `cyberia://` scheme, the App Links intent filters, and the generated icons.
+- Deep links only resolve to the apps once `APP_ANDROID_SHA256_FINGERPRINT` / `APP_IOS_APP_ID` are set in the Laravel `.env`; both `/.well-known/` association files 404 until then.
+- The site detects the shells from the `CyberiaDesktop/` and `CyberiaMobile/` user-agent suffixes (`backend/laravel/resources/js/lib/native.ts`).
 
 ---
 
@@ -329,6 +357,8 @@ Use the smallest relevant checks:
 - Hardhat change: `cd crypto/hardhat && npx hardhat test`
 - Anchor change: `cd crypto/anchor && anchor test` or at least `anchor build`
 - Jekyll change: `cd frontend/jekyll && bundle exec jekyll build`
+- Desktop shell change: `cd frontend/desktop && npm test`; add `npm run pack` when the Electron main process changed.
+- Mobile shell change: `cd frontend/mobile && npm test && npm run sync`
 - Static landing change: inspect the HTML and, if possible, open it locally or run an HTML validator if available.
 - Blockscout compose/proxy change: `cd services/blockscout/docker-compose && docker compose config`
 

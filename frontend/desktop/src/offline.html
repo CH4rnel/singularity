@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:"
+        />
+        <title>Cyberia is offline</title>
+        <style>
+            :root {
+                color-scheme: dark;
+                font-family:
+                    Manrope, ui-sans-serif, system-ui, -apple-system,
+                    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                background: #0b0f10;
+                color: #eef7f6;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                min-height: 100vh;
+                margin: 0;
+                display: grid;
+                place-items: center;
+                padding: 24px;
+                background:
+                    radial-gradient(
+                        circle at 50% 20%,
+                        rgb(0 229 209 / 12%),
+                        transparent 35%
+                    ),
+                    #0b0f10;
+                -webkit-user-select: none;
+                user-select: none;
+            }
+
+            main {
+                width: min(100%, 430px);
+                padding: 32px;
+                border: 1px solid rgb(0 229 209 / 35%);
+                border-radius: 18px;
+                background: rgb(13 20 21 / 92%);
+                box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+                text-align: center;
+            }
+
+            svg {
+                width: 72px;
+                height: 72px;
+                margin-bottom: 20px;
+            }
+
+            h1 {
+                margin: 0 0 12px;
+                font-size: 30px;
+                letter-spacing: -0.035em;
+            }
+
+            p {
+                margin: 0 0 24px;
+                color: #a7b8b6;
+                line-height: 1.6;
+            }
+
+            code {
+                display: block;
+                margin-top: 8px;
+                font-size: 13px;
+                color: #7f918f;
+                word-break: break-all;
+            }
+
+            button {
+                display: inline-flex;
+                min-height: 44px;
+                align-items: center;
+                justify-content: center;
+                padding: 0 24px;
+                border: 0;
+                border-radius: 9px;
+                background: #00e5d1;
+                color: #07100f;
+                font: inherit;
+                font-weight: 800;
+                cursor: pointer;
+            }
+
+            button:hover {
+                background: #4af4e6;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <svg
+                viewBox="0 0 64 64"
+                role="img"
+                aria-label="Cyberia"
+                xmlns="http://www.w3.org/2000/svg"
+            >
+                <rect width="64" height="64" rx="12" fill="#0b0f10" />
+                <g
+                    fill="none"
+                    stroke="#00e5d1"
+                    stroke-width="3.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <path
+                        d="M32 10 51 20.75v21.5L32 53 13 42.25v-21.5L32 10Z"
+                    />
+                    <path d="M13 20.75 32 31.5l19-10.75" />
+                    <path d="M32 31.5V53" />
+                </g>
+            </svg>
+            <h1>You are outside the Wired.</h1>
+            <p>
+                Cyberia cannot reach the network right now. Check your
+                connection — the app retries by itself once you are back online.
+                <code id="target"></code>
+            </p>
+            <button type="button" id="retry">Try again</button>
+        </main>
+        <script>
+            (function () {
+                const native = window.cyberiaNative;
+                const params = new URLSearchParams(window.location.search);
+
+                document.getElementById('target').textContent =
+                    params.get('url') || (native && native.url) || '';
+
+                const retry = function () {
+                    if (native) {
+                        native.retry();
+                    }
+                };
+
+                document
+                    .getElementById('retry')
+                    .addEventListener('click', retry);
+                window.addEventListener('online', retry);
+            })();
+        </script>
+    </body>
+</html>
