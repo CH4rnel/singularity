@@ -4,6 +4,7 @@ import { useMediaQuery } from '@vueuse/core';
 import { ExternalLink, Languages, Lock } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
+import WalletAddNetwork from '@/components/wallet/WalletAddNetwork.vue';
 import WalletLocked from '@/components/wallet/WalletLocked.vue';
 import WalletNetworkDetail from '@/components/wallet/WalletNetworkDetail.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
@@ -15,8 +16,7 @@ import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
 import { isNativeShell } from '@/lib/native';
-import { WALLET_CHAINS } from '@/lib/wallet';
-import type { WalletChainId } from '@/lib/wallet';
+import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -38,7 +38,12 @@ import { walletMessages } from '@/lib/walletMessages';
 const props = defineProps<{
     solanaRpcUrl: string;
     moneroPayoutAddress: string | null;
-    quotes: { prices: Record<string, number | null>; fetchedAt: string };
+    quotes: {
+        prices: Record<string, number | null>;
+        /** Chain id → (lowercased contract → USD price). */
+        tokens: Record<string, Record<string, number>>;
+        fetchedAt: string;
+    };
 }>();
 
 const { locale, toggleLocale, t } = useLocale(walletMessages);
@@ -59,12 +64,13 @@ const native = isNativeShell();
 const desktop = useMediaQuery('(min-width: 1024px)');
 
 type Section = 'portfolio' | 'network' | 'security';
-type Overlay = 'send' | 'receive';
+type Overlay = 'send' | 'receive' | 'addNetwork';
 
 const section = ref<Section>('portfolio');
 const overlay = ref<Overlay | null>(null);
 const chain = ref<WalletChainId>('cyberia');
 const prices = ref(props.quotes.prices);
+const tokenPrices = ref(props.quotes.tokens ?? {});
 const online = ref(true);
 const error = ref<string | null>(null);
 const payoutSaved = ref(false);
@@ -83,10 +89,18 @@ const stage = computed<'onboarding' | 'locked' | 'app'>(() => {
     return wallet.unlocked.value ? 'app' : 'locked';
 });
 
-/** On desktop the transfer flow is a third column; on mobile it takes over. */
-const asideOverlay = computed(() => (desktop.value ? overlay.value : null));
+/**
+ * On desktop the transfer flow is a third column; on mobile it takes over.
+ * Adding a network is a form rather than a composer, so it always takes the
+ * body — a 392px column would wrap every one of its paired fields.
+ */
+const asideOverlay = computed(() =>
+    desktop.value && overlay.value !== 'addNetwork' ? overlay.value : null,
+);
 
-const bodyOverlay = computed(() => (desktop.value ? null : overlay.value));
+const bodyOverlay = computed(() =>
+    overlay.value === 'addNetwork' || !desktop.value ? overlay.value : null,
+);
 
 const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'portfolio', label: () => t('navPortfolio') },
@@ -97,6 +111,14 @@ const SECTIONS: { id: Section; label: () => string }[] = [
 const openSection = (next: Section): void => {
     section.value = next;
     overlay.value = null;
+};
+
+/** The asset the send screen opens on: a token row, or the network's coin. */
+const sendToken = ref<WalletTokenBalance | null>(null);
+
+const openSend = (token?: WalletTokenBalance): void => {
+    sendToken.value = token ?? null;
+    overlay.value = 'send';
 };
 
 const openChain = (next: WalletChainId): void => {
@@ -112,11 +134,13 @@ const refreshPrices = async (): Promise<void> => {
         });
 
         if (response.ok) {
-            prices.value = (
-                (await response.json()) as {
-                    prices: Record<string, number | null>;
-                }
-            ).prices;
+            const quotes = (await response.json()) as {
+                prices: Record<string, number | null>;
+                tokens?: Record<string, Record<string, number>>;
+            };
+
+            prices.value = quotes.prices;
+            tokenPrices.value = quotes.tokens ?? {};
         }
     } catch {
         // Quotes are a nicety; the balances underneath them are the product.
@@ -131,11 +155,21 @@ const load = async (): Promise<void> => {
 
     await Promise.all([
         wallet.refreshBalances(),
-        ...WALLET_CHAINS.filter((entry) => entry.fetchHistory).map((entry) =>
-            wallet.refreshHistory(entry.id),
-        ),
+        ...wallet.chains.value
+            .filter((entry) => entry.fetchHistory)
+            .map((entry) => wallet.refreshHistory(entry.id)),
+        ...wallet.chains.value
+            .filter((entry) => entry.fetchTokens)
+            .map((entry) => wallet.refreshTokens(entry.id)),
         refreshPrices(),
     ]);
+};
+
+/** A network the user just derived opens on its own detail screen. */
+const networkAdded = (added: WalletChainId): void => {
+    overlay.value = null;
+    openChain(added);
+    void load();
 };
 
 const adopt = async (phrase: string, password: string): Promise<void> => {
@@ -486,14 +520,24 @@ watch(
                         />
                     </div>
 
+                    <WalletAddNetwork
+                        v-else-if="bodyOverlay === 'addNetwork'"
+                        :wallet="wallet"
+                        @back="overlay = null"
+                        @added="networkAdded"
+                    />
+
                     <WalletSend
                         v-else-if="bodyOverlay === 'send'"
                         :wallet="wallet"
                         :chain="chain"
                         :prices="prices"
+                        :token-prices="tokenPrices"
+                        :token="sendToken"
                         @back="overlay = null"
                         @pick="chain = $event"
                         @sent="load()"
+                        @add-network="overlay = 'addNetwork'"
                     />
 
                     <WalletReceive
@@ -506,16 +550,19 @@ watch(
                         @back="overlay = null"
                         @pick="chain = $event"
                         @use-payout="useForPayouts"
+                        @add-network="overlay = 'addNetwork'"
                     />
 
                     <WalletPortfolio
                         v-else-if="section === 'portfolio'"
                         :wallet="wallet"
                         :prices="prices"
+                        :token-prices="tokenPrices"
                         :online="online"
                         @open="openChain"
-                        @send="overlay = 'send'"
+                        @send="openSend()"
                         @receive="overlay = 'receive'"
+                        @add-network="overlay = 'addNetwork'"
                     />
 
                     <WalletNetworkDetail
@@ -523,8 +570,9 @@ watch(
                         :wallet="wallet"
                         :chain="chain"
                         :prices="prices"
+                        :token-prices="tokenPrices"
                         @back="openSection('portfolio')"
-                        @send="overlay = 'send'"
+                        @send="openSend"
                         @receive="overlay = 'receive'"
                     />
 
@@ -532,6 +580,7 @@ watch(
                         v-else
                         :wallet="wallet"
                         @locked="section = 'portfolio'"
+                        @add-network="overlay = 'addNetwork'"
                         @forgotten="
                             restoring = false;
                             section = 'portfolio';
@@ -578,9 +627,12 @@ watch(
                     :wallet="wallet"
                     :chain="chain"
                     :prices="prices"
+                    :token-prices="tokenPrices"
+                    :token="sendToken"
                     @back="overlay = null"
                     @pick="chain = $event"
                     @sent="load()"
+                    @add-network="overlay = 'addNetwork'"
                 />
                 <WalletReceive
                     v-else
@@ -592,6 +644,7 @@ watch(
                     @back="overlay = null"
                     @pick="chain = $event"
                     @use-payout="useForPayouts"
+                    @add-network="overlay = 'addNetwork'"
                 />
             </aside>
 

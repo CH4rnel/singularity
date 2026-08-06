@@ -6,7 +6,14 @@ import {
     SystemProgram,
     Transaction,
 } from '@solana/web3.js';
-import { HDNodeWallet, JsonRpcProvider, isAddress, keccak256 } from 'ethers';
+import {
+    HDNodeWallet,
+    JsonRpcProvider,
+    SigningKey,
+    getBytes,
+    isAddress,
+    keccak256,
+} from 'ethers';
 import {
     CYBERIA_CHAIN_ID,
     EVM_CHAINS,
@@ -18,7 +25,30 @@ import {
     scReduce32,
     scalarMultBase,
 } from '@/lib/wallet/ed25519';
+import {
+    ERC20_TRANSFER_GAS_CAP,
+    blockscoutTokens,
+    readErc20,
+    sendErc20,
+} from '@/lib/wallet/erc20';
+import type { WalletTokenBalance } from '@/lib/wallet/erc20';
 import { deriveEd25519Key } from '@/lib/wallet/slip10';
+import {
+    buildP2wpkhTransaction,
+    esploraBalance,
+    esploraBroadcast,
+    esploraConfirmed,
+    esploraFeeRates,
+    esploraHistory,
+    esploraUtxos,
+    isValidUtxoAddress,
+    p2wpkhVsize,
+    selectCoins,
+    utxoAddress,
+    utxoOutputScript,
+    utxoPath,
+} from '@/lib/wallet/utxo';
+import type { UtxoNetwork } from '@/lib/wallet/utxo';
 
 /**
  * Chain adapters of the unified HD wallet.
@@ -34,20 +64,61 @@ import { deriveEd25519Key } from '@/lib/wallet/slip10';
  * returns a private key to its caller, and none of them log.
  */
 
-export type WalletChainId =
+export type WalletBuiltinChainId =
     | 'cyberia'
     | 'robinhood'
     | 'bnb'
     | 'base'
     | 'solana'
-    | 'monero';
+    | 'monero'
+    | 'bitcoin'
+    | 'litecoin';
+
+/**
+ * A network's id. The built-in ones are known at build time; a network the
+ * user adds gets an id derived from what they typed, so the type stays open —
+ * `(string & {})` keeps the literals in autocomplete without closing the set.
+ */
+export type WalletChainId = WalletBuiltinChainId | (string & {});
 
 /**
  * Which key an address belongs to. Every `evm` chain derives the *same*
  * address from the one seed, so the family — not the chain — is what a user is
  * actually looking at when they compare two addresses.
  */
-export type WalletChainFamily = 'evm' | 'solana' | 'monero';
+export type WalletChainFamily = 'evm' | 'solana' | 'monero' | 'utxo';
+
+/**
+ * How the portfolio groups networks. Chains that share an address belong
+ * together; everything else is grouped by what the account model actually is,
+ * because "why do these two show the same address" is the question the grouping
+ * exists to answer.
+ */
+export const WALLET_FAMILY_GROUPS: readonly {
+    id: 'evm' | 'other' | 'utxo';
+    families: readonly WalletChainFamily[];
+}[] = [
+    { id: 'evm', families: ['evm'] },
+    { id: 'other', families: ['solana', 'monero'] },
+    { id: 'utxo', families: ['utxo'] },
+];
+
+export type WalletMarkShape = 'square' | 'circle' | 'diamond' | 'rounded';
+
+/**
+ * The identity of a network on screen: a hue, a shape and two letters, all
+ * three carrying the same information. Colour alone collapses for a colour-blind
+ * reader and would collide with the amber/green/red that transaction status
+ * owns, so the shape is load-bearing rather than decorative.
+ */
+export type WalletMark = {
+    tag: string;
+    /** Always a CSS custom property, so the palette lives in `wallet.css`. */
+    hue: string;
+    shape: WalletMarkShape;
+    /** User-added networks are drawn dashed: nothing verified their endpoint. */
+    unverified?: boolean;
+};
 
 export type WalletCapabilities = {
     /** The browser can read this chain's balance without extra infrastructure. */
@@ -104,6 +175,15 @@ export type WalletChain = {
     /** EVM chain id, for the networks that have one. */
     chainId?: number;
     family: WalletChainFamily;
+    mark: WalletMark;
+    /**
+     * Added by the user rather than shipped with the wallet. The account is as
+     * real as any other — it comes from the same seed — but nobody vetted the
+     * endpoint it is read through, and the UI has to say so.
+     */
+    custom?: boolean;
+    /** What was added by the user, for the row that offers to remove it. */
+    endpoint?: string;
     /** BIP-44/SLIP-0010 path, shown in the UI so the wallet is restorable. */
     path: string;
     /** Curve the path is walked on — secp256k1 (BIP-32) or ed25519 (SLIP-0010). */
@@ -119,8 +199,43 @@ export type WalletChain = {
     explorerTxUrl: (hash: string) => string | null;
     /** Smallest-unit balance, or null when the chain cannot be read here. */
     fetchBalance?: (address: string, rpcUrl?: string) => Promise<bigint>;
-    /** Live cost of one transfer at each tier, cheapest first. */
-    fetchFees?: (rpcUrl?: string) => Promise<WalletFeeQuote[]>;
+    /**
+     * Every token this address holds, from the chain's own keyless index.
+     *
+     * Absent on a chain with no such index. That is not "this address holds no
+     * tokens" and the UI must not render it as such — it is "nobody here can
+     * enumerate them", which is why `tokensNote` exists next to it.
+     */
+    fetchTokens?: (
+        address: string,
+        rpcUrl?: string,
+    ) => Promise<WalletTokenBalance[]>;
+    /** One token read straight from its contract, for what no index lists. */
+    readToken?: (
+        contract: string,
+        owner: string,
+        rpcUrl?: string,
+    ) => Promise<WalletTokenBalance>;
+    /** Message key explaining why tokens cannot be listed automatically. */
+    tokensNote?: string;
+    /**
+     * Live cost of one transfer at each tier, cheapest first.
+     *
+     * The address is part of the question, not decoration: on a UTXO chain the
+     * fee depends on how many coins have to be spent, so a quote that ignored
+     * the wallet's own outputs would be wrong by whatever the coin selection
+     * turns out to need.
+     */
+    fetchFees?: (context: {
+        address: string;
+        rpcUrl?: string;
+        /**
+         * Contract of the token being moved, or null for the native coin.
+         * A token transfer is a contract call and costs several times what
+         * moving the coin itself does, so the quote has to know which it is.
+         */
+        token?: string | null;
+    }) => Promise<WalletFeeQuote[]>;
     /** Most recent transfers touching this address, newest first. */
     fetchHistory?: (address: string, rpcUrl?: string) => Promise<WalletTx[]>;
     /**
@@ -132,7 +247,12 @@ export type WalletChain = {
         hash: string,
         rpcUrl?: string,
     ) => Promise<'confirmed' | 'failed'>;
-    /** Broadcasts a payment and resolves to the transaction hash. */
+    /**
+     * Broadcasts a payment and resolves to the transaction hash.
+     *
+     * `token` names an ERC20-style contract to move instead of the native coin;
+     * `amount` is then in that token's units, not the chain's.
+     */
     send?: (
         seed: Uint8Array,
         request: {
@@ -140,6 +260,7 @@ export type WalletChain = {
             amount: bigint;
             tier: WalletFeeTier;
             rpcUrl?: string;
+            token?: string | null;
         },
     ) => Promise<string>;
 };
@@ -269,6 +390,7 @@ type EvmSpec = {
     /** Entry in the shared EVM registry this chain's parameters come from. */
     chainId: number;
     label: string;
+    mark: WalletMark;
     /** Blockscout API root, for the chains that have a keyless one. */
     blockscoutApi?: string;
     /**
@@ -336,6 +458,7 @@ const evmChain = (spec: EvmSpec): WalletChain => {
         decimals: registry.nativeCurrency.decimals,
         chainId: registry.chainId,
         family: 'evm',
+        mark: spec.mark,
         path: EVM_PATH,
         curve: 'secp256k1',
         capabilities: {
@@ -352,17 +475,29 @@ const evmChain = (spec: EvmSpec): WalletChain => {
         explorerTxUrl: (hash) => (explorer ? `${explorer}/tx/${hash}` : null),
         fetchBalance: async (address, rpcUrl) =>
             provider(rpcUrl).getBalance(address),
-        fetchFees: async (rpcUrl) =>
-            Promise.all(
+        fetchTokens: spec.blockscoutApi
+            ? (address) => blockscoutTokens(spec.blockscoutApi!, address)
+            : undefined,
+        tokensNote: spec.blockscoutApi ? undefined : 'tokensNoIndexer',
+        readToken: (contract, owner, rpcUrl) =>
+            readErc20(provider(rpcUrl), contract, owner),
+        fetchFees: async ({ rpcUrl, token }) => {
+            // Moving a token is a contract call, not a transfer: it costs
+            // several times the 21000 the coin itself does, and how much more
+            // depends on the token's own code.
+            const gas = token ? ERC20_TRANSFER_GAS_CAP : EVM_TRANSFER_GAS;
+
+            return Promise.all(
                 WALLET_FEE_TIERS.map(async (tier) => ({
                     tier,
-                    fee: (await gasPrice(tier, rpcUrl)) * EVM_TRANSFER_GAS,
+                    fee: (await gasPrice(tier, rpcUrl)) * gas,
                     basis: `network price × ${
                         Number(EVM_TIER_MULTIPLIER[tier][0]) /
                         Number(EVM_TIER_MULTIPLIER[tier][1])
-                    }`,
+                    }${token ? ` × ${gas} gas` : ''}`,
                 })),
-            ),
+            );
+        },
         fetchHistory: spec.blockscoutApi
             ? (address) => blockscoutHistory(spec.blockscoutApi!, address)
             : undefined,
@@ -379,15 +514,21 @@ const evmChain = (spec: EvmSpec): WalletChain => {
 
             return receipt.status === 1 ? 'confirmed' : 'failed';
         },
-        send: async (seed, { to, amount, tier, rpcUrl }) => {
+        send: async (seed, { to, amount, tier, rpcUrl, token }) => {
             const signer = evmWallet(seed).connect(provider(rpcUrl));
+            const price = await gasPrice(tier, rpcUrl);
+
+            if (token) {
+                return sendErc20(signer, token, to, amount, price);
+            }
+
             // Gas is stated rather than estimated: some of these nodes answer
             // eth_estimateGas unreliably, and a native transfer is always 21000.
             const tx = await signer.sendTransaction({
                 to,
                 value: amount,
                 gasLimit: EVM_TRANSFER_GAS,
-                gasPrice: await gasPrice(tier, rpcUrl),
+                gasPrice: price,
             });
 
             return tx.hash;
@@ -517,11 +658,167 @@ const solanaHistory = async (
         .filter((tx) => tx.amount !== 0n);
 };
 
-export const WALLET_CHAINS: readonly WalletChain[] = [
+/**
+ * One Bitcoin-family chain as a wallet chain.
+ *
+ * Everything a UTXO chain needs is in `lib/wallet/utxo.ts`; this only binds it
+ * to an endpoint. The endpoint has to be an Esplora-compatible HTTPS API —
+ * a browser cannot open the TCP connection an Electrum server expects, so the
+ * usual `host:50002` of a desktop wallet is not an option here.
+ */
+const utxoChain = (spec: {
+    id: WalletChainId;
+    label: string;
+    symbol: string;
+    network: UtxoNetwork;
+    mark: WalletMark;
+    custom?: boolean;
+}): WalletChain => {
+    const { network } = spec;
+    const path = utxoPath(network);
+    const node = (seed: Uint8Array): HDNodeWallet =>
+        HDNodeWallet.fromSeed(seed).derivePath(path);
+    const api = network.api;
+    // Only P2WPKH is signed here; a legacy or P2SH account is real and
+    // receivable but needs the pre-segwit sighash, which this wallet does not
+    // implement rather than half-implements.
+    const signable = network.addressType === 'bech32';
+
+    return {
+        id: spec.id,
+        label: spec.label,
+        symbol: spec.symbol,
+        decimals: 8,
+        family: 'utxo',
+        mark: spec.mark,
+        custom: spec.custom,
+        endpoint: api ?? undefined,
+        path,
+        curve: 'secp256k1',
+        capabilities: {
+            balance: api !== null,
+            history: api !== null,
+            send: api !== null && signable,
+        },
+        note: signable
+            ? undefined
+            : 'Receive-only here: spending a legacy or P2SH account needs the pre-segwit sighash, which this wallet does not implement. The same phrase restores it in a full wallet.',
+        historyNote: api === null ? 'historyNoEndpoint' : undefined,
+        derive: (seed) => utxoAddress(network, node(seed)),
+        isValidAddress: (address) => isValidUtxoAddress(network, address),
+        explorerAddressUrl: (address) =>
+            network.explorer ? `${network.explorer}/address/${address}` : null,
+        explorerTxUrl: (hash) =>
+            network.explorer ? `${network.explorer}/tx/${hash}` : null,
+        fetchBalance:
+            api === null
+                ? undefined
+                : (address) => esploraBalance(api, address),
+        fetchHistory:
+            api === null
+                ? undefined
+                : (address) => esploraHistory(api, address),
+        fetchFees:
+            api === null
+                ? undefined
+                : async ({ address }) => {
+                      const [rates, utxos] = await Promise.all([
+                          esploraFeeRates(api),
+                          esploraUtxos(api, address),
+                      ]);
+                      // Worst case is a sweep: every coin the address holds
+                      // becomes an input, and each input is ~68 more vbytes to
+                      // pay for. Quoting for one input would understate the fee
+                      // of exactly the transfer people make most — "send it all".
+                      const vsize = p2wpkhVsize(Math.max(1, utxos.length), 2);
+
+                      return WALLET_FEE_TIERS.map((tier) => ({
+                          tier,
+                          fee: BigInt(vsize) * BigInt(rates[tier]),
+                          basis: `${rates[tier]} sat/vB × ${vsize} vB`,
+                      }));
+                  },
+        awaitOutcome:
+            api === null
+                ? undefined
+                : async (hash) => {
+                      const deadline = Date.now() + 120_000;
+
+                      while (Date.now() < deadline) {
+                          if (await esploraConfirmed(api, hash)) {
+                              return 'confirmed';
+                          }
+
+                          await new Promise((resolve) =>
+                              setTimeout(resolve, 15_000),
+                          );
+                      }
+
+                      // A UTXO transfer that is not mined yet has not failed —
+                      // it is simply still in the mempool, and saying otherwise
+                      // would invite a second, double-spending attempt.
+                      throw new Error('Still unconfirmed');
+                  },
+        send:
+            api === null || !signable
+                ? undefined
+                : async (seed, { to, amount, tier }) => {
+                      const wallet = node(seed);
+                      const own = utxoAddress(network, wallet);
+                      const script = utxoOutputScript(network, to);
+
+                      if (script === null) {
+                          throw new Error(`Not a valid ${spec.label} address`);
+                      }
+
+                      const [utxos, rates] = await Promise.all([
+                          esploraUtxos(api, own),
+                          esploraFeeRates(api),
+                      ]);
+                      const selection = selectCoins(utxos, amount, rates[tier]);
+
+                      const outputs = [{ script, value: amount }];
+                      const ownScript = utxoOutputScript(network, own);
+
+                      if (selection.change > 0n && ownScript !== null) {
+                          outputs.push({
+                              // Change returns to the same address this wallet
+                              // shows: one address per chain is the whole
+                              // premise, and a fresh change address would be a
+                              // balance the user cannot find on paper.
+                              script: ownScript,
+                              value: selection.change,
+                          });
+                      }
+
+                      return esploraBroadcast(
+                          api,
+                          buildP2wpkhTransaction(
+                              new SigningKey(wallet.privateKey),
+                              getBytes(wallet.publicKey),
+                              selection.inputs,
+                              outputs,
+                          ),
+                      );
+                  },
+    };
+};
+
+/** Bitcoin mainnet parameters — the reference every fork below varies from. */
+const BITCOIN_NETWORK: Omit<UtxoNetwork, 'coinType' | 'api' | 'explorer'> = {
+    hrp: 'bc',
+    p2pkhVersion: 0x00,
+    p2shVersion: 0x05,
+    addressType: 'bech32',
+};
+
+/** The networks that ship with the wallet, in the order the portfolio lists them. */
+const BUILTIN_CHAINS: readonly WalletChain[] = [
     evmChain({
         id: 'cyberia',
         chainId: CYBERIA_CHAIN_ID,
         label: 'Cyberia',
+        mark: { tag: 'CY', hue: 'var(--cw-net-cyberia)', shape: 'square' },
         blockscoutApi: `${CYBERIA_EXPLORER}/api`,
         // The node rejects anything under its pool floor outright.
         minGasPrice: 1_500_000_000n,
@@ -531,18 +828,21 @@ export const WALLET_CHAINS: readonly WalletChain[] = [
         id: 'robinhood',
         chainId: 4663,
         label: 'Robinhood',
+        mark: { tag: 'RH', hue: 'var(--cw-net-robinhood)', shape: 'square' },
         blockscoutApi: 'https://robinhoodchain.blockscout.com/api',
     }),
     evmChain({
         id: 'bnb',
         chainId: 56,
         label: 'BNB Chain',
+        mark: { tag: 'BN', hue: 'var(--cw-net-bnb)', shape: 'square' },
         historyNote: 'historyNoIndexer',
     }),
     evmChain({
         id: 'base',
         chainId: 8453,
         label: 'Base',
+        mark: { tag: 'BA', hue: 'var(--cw-net-base)', shape: 'square' },
         historyNote: 'historyNoIndexer',
     }),
     {
@@ -551,6 +851,7 @@ export const WALLET_CHAINS: readonly WalletChain[] = [
         symbol: 'SOL',
         decimals: 9,
         family: 'solana',
+        mark: { tag: 'SO', hue: 'var(--cw-net-solana)', shape: 'circle' },
         path: SOLANA_PATH,
         curve: 'ed25519',
         capabilities: { balance: true, history: true, send: true },
@@ -571,7 +872,7 @@ export const WALLET_CHAINS: readonly WalletChain[] = [
                     new PublicKey(address),
                 ),
             ),
-        fetchFees: async (rpcUrl) => {
+        fetchFees: async ({ rpcUrl }) => {
             const prices = await solanaPriorityPrices(rpcUrl);
 
             return WALLET_FEE_TIERS.map((tier) => ({
@@ -635,6 +936,7 @@ export const WALLET_CHAINS: readonly WalletChain[] = [
         symbol: 'XMR',
         decimals: 12,
         family: 'monero',
+        mark: { tag: 'XM', hue: 'var(--cw-net-monero)', shape: 'diamond' },
         path: MONERO_PATH,
         curve: 'ed25519',
         // Monero balances are not public: finding your own outputs means
@@ -649,10 +951,58 @@ export const WALLET_CHAINS: readonly WalletChain[] = [
         explorerAddressUrl: () => null,
         explorerTxUrl: (hash) => `https://xmrchain.net/tx/${hash}`,
     },
+    utxoChain({
+        id: 'bitcoin',
+        label: 'Bitcoin',
+        symbol: 'BTC',
+        mark: { tag: 'BT', hue: 'var(--cw-net-bitcoin)', shape: 'rounded' },
+        network: {
+            ...BITCOIN_NETWORK,
+            coinType: 0,
+            api: 'https://mempool.space/api',
+            explorer: 'https://mempool.space',
+        },
+    }),
+    utxoChain({
+        id: 'litecoin',
+        label: 'Litecoin',
+        symbol: 'LTC',
+        mark: { tag: 'LT', hue: 'var(--cw-net-litecoin)', shape: 'rounded' },
+        network: {
+            coinType: 2,
+            hrp: 'ltc',
+            p2pkhVersion: 0x30,
+            p2shVersion: 0x32,
+            addressType: 'bech32',
+            api: 'https://litecoinspace.org/api',
+            explorer: 'https://litecoinspace.org',
+        },
+    }),
+];
+
+export const WALLET_CHAINS = BUILTIN_CHAINS;
+
+/**
+ * Networks the user added themselves, layered over the built-in registry.
+ *
+ * Module state rather than a ref, mirroring how the vault holds the decrypted
+ * phrase: the registry is a process-wide fact, and every adapter lookup has to
+ * see the same one whether it happens inside a component or inside `send()`.
+ */
+let customChains: readonly WalletChain[] = [];
+
+export const setCustomWalletChains = (chains: readonly WalletChain[]): void => {
+    customChains = chains;
+};
+
+/** Every network this wallet currently knows, built-in ones first. */
+export const walletChains = (): readonly WalletChain[] => [
+    ...BUILTIN_CHAINS,
+    ...customChains,
 ];
 
 export const walletChain = (id: WalletChainId): WalletChain => {
-    const chain = WALLET_CHAINS.find((candidate) => candidate.id === id);
+    const chain = walletChains().find((candidate) => candidate.id === id);
 
     if (!chain) {
         throw new Error(`Unknown wallet chain "${id}"`);
@@ -660,6 +1010,8 @@ export const walletChain = (id: WalletChainId): WalletChain => {
 
     return chain;
 };
+
+export { utxoChain };
 
 /** Smallest-unit amount for a decimal string typed by a human. */
 export const parseUnits = (value: string, decimals: number): bigint => {

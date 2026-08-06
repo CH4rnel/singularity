@@ -4,13 +4,18 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
-import { formatUnits } from '@/lib/wallet';
+import { WALLET_FAMILY_GROUPS, formatUnits } from '@/lib/wallet';
 import type { WalletChainId, WalletTxStatus } from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
- * The home screen: one total, three networks, recent movement.
+ * The home screen: one total, every network, recent movement.
+ *
+ * Networks are grouped by what the account behind them actually is. All the EVM
+ * chains share one address, so they belong together; Solana and Monero each
+ * have their own key; the Bitcoin family has one key per coin type. The
+ * grouping is the answer to "why do these two show the same string".
  *
  * Every failure a portfolio can have is a designed state here rather than a
  * toast — an unreachable node, a coin with no price, an empty vault. A number
@@ -21,6 +26,8 @@ import { walletMessages } from '@/lib/walletMessages';
 const props = defineProps<{
     wallet: MultiWallet;
     prices: Record<string, number | null>;
+    /** Chain id → (lowercased contract → USD price). */
+    tokenPrices: Record<string, Record<string, number>>;
     online: boolean;
 }>();
 
@@ -28,6 +35,7 @@ const emit = defineEmits<{
     open: [chain: WalletChainId];
     send: [];
     receive: [];
+    addNetwork: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
@@ -42,6 +50,18 @@ const cards = computed(() =>
     props.wallet.accounts.value.map((account) => {
         const balance = props.wallet.balances.value[account.chain];
         const price = props.prices[account.chain] ?? null;
+        const held = (
+            props.wallet.tokens.value[account.chain]?.items ?? []
+        ).filter((token) => token.balance > 0n);
+        const quotes = props.tokenPrices[account.chain] ?? {};
+
+        // Tokens are summed into the network they live on rather than listed
+        // beside it: they share this account and this address, and a portfolio
+        // that split them into rows of their own would claim more networks than
+        // the seed actually derives.
+        const priced = held.filter(
+            (token) => quotes[token.address.toLowerCase()] !== undefined,
+        );
 
         return {
             account,
@@ -53,8 +73,42 @@ const cards = computed(() =>
                     ? null
                     : formatUnits(balance.value, account.decimals, 4),
             usd: usdValue(balance?.value ?? null, account.decimals, price),
+            tokenCount: held.length,
+            unpricedTokens: held.length - priced.length,
+            tokenUsd: priced.reduce(
+                (sum, token) =>
+                    sum +
+                    (usdValue(
+                        token.balance,
+                        token.decimals,
+                        quotes[token.address.toLowerCase()],
+                    ) ?? 0),
+                0,
+            ),
         };
     }),
+);
+
+const GROUP_LABELS: Record<string, string> = {
+    evm: 'groupEvm',
+    other: 'groupOther',
+    utxo: 'groupUtxo',
+};
+
+/**
+ * Cards in family order, each carrying the heading its group opens with. A
+ * heading is on the first card of a group rather than in a wrapper element so
+ * the whole list stays one flat, evenly spaced column.
+ */
+const groupedCards = computed(() =>
+    WALLET_FAMILY_GROUPS.flatMap((group) =>
+        cards.value
+            .filter((card) => group.families.includes(card.account.family))
+            .map((card, index) => ({
+                ...card,
+                heading: index === 0 ? t(GROUP_LABELS[group.id]) : null,
+            })),
+    ),
 );
 
 /** Networks whose balance could not be read at all. */
@@ -64,11 +118,14 @@ const unreachable = computed(() =>
 
 /** Networks holding value the total cannot include — no price, or no read. */
 const unaccounted = computed(
-    () => cards.value.filter((card) => card.usd === null).length,
+    () =>
+        cards.value.filter(
+            (card) => card.usd === null || card.unpricedTokens > 0,
+        ).length,
 );
 
 const total = computed(() =>
-    cards.value.reduce((sum, card) => sum + (card.usd ?? 0), 0),
+    cards.value.reduce((sum, card) => sum + (card.usd ?? 0) + card.tokenUsd, 0),
 );
 
 const isEmpty = computed(() =>
@@ -200,65 +257,151 @@ const recent = computed(() =>
         </div>
 
         <div class="cw-stack" style="gap: 8px">
-            <button
-                v-for="card in cards"
-                :key="card.account.chain"
-                type="button"
-                class="cw-card cw-card-button"
-                @click="emit('open', card.account.chain)"
-            >
-                <div style="display: flex; align-items: center; gap: 12px">
-                    <NetworkMark :chain="card.account.chain" />
-                    <span style="flex: 1; min-width: 0; text-align: left">
-                        <span
-                            style="
-                                display: block;
-                                font: 500 14px/1.2 var(--cw-sans);
-                                color: var(--cw-text);
-                            "
-                            >{{ card.account.label }}</span
-                        >
-                        <span
-                            style="
-                                display: block;
-                                margin-top: 2px;
-                                font: 400 10px/1.4 var(--cw-mono);
-                                color: var(--cw-dim);
-                            "
-                            >{{ card.account.symbol }}</span
-                        >
-                    </span>
-                    <span style="text-align: right">
-                        <span
-                            class="cw-num"
-                            style="display: block"
-                            :style="{
-                                color:
-                                    card.amount === null
-                                        ? 'var(--cw-dim)'
-                                        : 'var(--cw-text)',
-                            }"
-                        >
-                            {{ card.loading ? '…' : (card.amount ?? '—') }}
-                        </span>
-                        <span
-                            style="
-                                display: block;
-                                margin-top: 2px;
-                                font: 400 11px/1.4 var(--cw-mono);
-                                color: var(--cw-dim);
-                            "
-                        >
-                            {{
-                                card.readable
-                                    ? card.usd === null
-                                        ? t('unpriced')
-                                        : formatUsd(card.usd, locale)
-                                    : t('noBalanceHere')
-                            }}
-                        </span>
-                    </span>
+            <template v-for="card in groupedCards" :key="card.account.chain">
+                <div v-if="card.heading" class="cw-group">
+                    <span
+                        class="cw-label"
+                        style="
+                            font-size: 9px;
+                            letter-spacing: 0.2em;
+                            color: var(--cw-faint);
+                        "
+                        >{{ card.heading }}</span
+                    >
                 </div>
+                <button
+                    type="button"
+                    class="cw-card cw-card-button"
+                    :class="{ 'cw-card-custom': card.account.custom }"
+                    @click="emit('open', card.account.chain)"
+                >
+                    <div style="display: flex; align-items: center; gap: 12px">
+                        <NetworkMark :chain="card.account.chain" />
+                        <span style="flex: 1; min-width: 0; text-align: left">
+                            <span
+                                style="
+                                    display: block;
+                                    font: 500 14px/1.2 var(--cw-sans);
+                                    color: var(--cw-text);
+                                "
+                                >{{ card.account.label }}</span
+                            >
+                            <span
+                                style="
+                                    display: block;
+                                    margin-top: 2px;
+                                    font: 400 10px/1.4 var(--cw-mono);
+                                    color: var(--cw-dim);
+                                "
+                                >{{ card.account.symbol
+                                }}<template v-if="card.tokenCount > 0">
+                                    ·
+                                    {{
+                                        t('tokenCount', {
+                                            count: card.tokenCount,
+                                        })
+                                    }}</template
+                                ></span
+                            >
+                        </span>
+                        <span style="text-align: right">
+                            <span
+                                class="cw-num"
+                                style="display: block"
+                                :style="{
+                                    color:
+                                        card.amount === null
+                                            ? 'var(--cw-dim)'
+                                            : 'var(--cw-text)',
+                                }"
+                            >
+                                {{ card.loading ? '…' : (card.amount ?? '—') }}
+                            </span>
+                            <span
+                                style="
+                                    display: block;
+                                    margin-top: 2px;
+                                    font: 400 11px/1.4 var(--cw-mono);
+                                    color: var(--cw-dim);
+                                "
+                            >
+                                {{
+                                    card.readable
+                                        ? card.usd === null
+                                            ? t('unpriced')
+                                            : formatUsd(card.usd, locale)
+                                        : t('noBalanceHere')
+                                }}
+                            </span>
+                        </span>
+                    </div>
+                    <!--
+                      A network the user added carries its own provenance line:
+                      the account is as real as any other, the endpoint it is
+                      read through is the part nobody checked.
+                    -->
+                    <div
+                        v-if="card.account.custom"
+                        style="
+                            margin-top: 11px;
+                            padding-top: 10px;
+                            border-top: 1px solid var(--cw-line);
+                            font: 400 10px/1 var(--cw-mono);
+                            letter-spacing: 0.08em;
+                            color: var(--cw-meta);
+                            text-transform: uppercase;
+                        "
+                    >
+                        {{ t('addedByYou') }} · {{ t('endpointUnverified') }}
+                    </div>
+                </button>
+            </template>
+
+            <button
+                type="button"
+                class="cw-dashed"
+                style="margin-top: 4px"
+                @click="emit('addNetwork')"
+            >
+                <span
+                    style="
+                        display: flex;
+                        width: 32px;
+                        height: 32px;
+                        flex: none;
+                        align-items: center;
+                        justify-content: center;
+                        border: 1px dashed var(--cw-border);
+                        font: 400 15px/1 var(--cw-mono);
+                        color: var(--cw-muted);
+                    "
+                    >+</span
+                >
+                <span style="flex: 1">
+                    <span
+                        style="
+                            display: block;
+                            font: 500 13px/1.2 var(--cw-sans);
+                        "
+                        >{{ t('addNetwork') }}</span
+                    >
+                    <span
+                        style="
+                            display: block;
+                            margin-top: 2px;
+                            font: 400 10px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                        "
+                        >{{ t('addNetworkHint') }}</span
+                    >
+                </span>
+                <span
+                    style="
+                        font: 400 12px/1 var(--cw-mono);
+                        color: var(--cw-dim);
+                    "
+                    >→</span
+                >
             </button>
         </div>
 

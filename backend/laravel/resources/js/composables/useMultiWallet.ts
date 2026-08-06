@@ -1,21 +1,36 @@
 import { computed, ref } from 'vue';
 import {
-    WALLET_CHAINS,
+    customWalletChain,
     deriveAccounts,
     forgetVault,
     hasVault,
     isValidMnemonic,
     openVault,
     parseUnits,
+    mergeTokens,
+    readCustomNetworks,
+    readManualTokens,
+    sameToken,
     saveVault,
     seedFromMnemonic,
+    setCustomWalletChains,
+    validateCustomNetwork,
     walletChain,
+    walletChains,
+    withToken,
+    withoutToken,
+    writeCustomNetworks,
+    writeManualTokens,
 } from '@/lib/wallet';
 import type {
+    CustomNetwork,
+    CustomNetworkProblem,
+    ManualToken,
     WalletAccount,
     WalletChainId,
     WalletFeeQuote,
     WalletFeeTier,
+    WalletTokenBalance,
     WalletTx,
 } from '@/lib/wallet';
 
@@ -41,13 +56,22 @@ export type WalletHistory = {
     error: string | null;
 };
 
+export type WalletTokens = {
+    items: WalletTokenBalance[];
+    loading: boolean;
+    error: string | null;
+};
+
 let phrase: string | null = null;
 
+const customNetworks = ref<CustomNetwork[]>([]);
 const accounts = ref<WalletAccount[]>([]);
 const exists = ref(false);
 const unlocked = ref(false);
 const balances = ref<Record<string, WalletBalance>>({});
 const history = ref<Record<string, WalletHistory>>({});
+const tokens = ref<Record<string, WalletTokens>>({});
+const manualTokens = ref<ManualToken[]>([]);
 const fees = ref<Record<string, WalletFeeQuote[]>>({});
 const busy = ref(false);
 
@@ -62,6 +86,16 @@ let autoLockTimer: ReturnType<typeof setInterval> | null = null;
  */
 export type WalletRpcEndpoints = Partial<Record<WalletChainId, string>>;
 
+/**
+ * Fee quotes are keyed by what is being moved, not only by where.
+ *
+ * A token transfer is a contract call and costs several times what moving the
+ * coin does, so one quote per chain would price a USDC transfer as if it were
+ * a CYBER one — and the sentence above the signature would be wrong.
+ */
+const feeKey = (chain: WalletChainId, token: string | null): string =>
+    token ? `${chain}:${token.toLowerCase()}` : chain;
+
 /** The session object the wallet page hands to its screens. */
 export type MultiWallet = ReturnType<typeof useMultiWallet>;
 
@@ -75,6 +109,58 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     const load = (): void => {
         accounts.value = phrase ? deriveAccounts(phrase) : [];
         unlocked.value = phrase !== null;
+    };
+
+    /**
+     * Publish the stored networks to the chain registry and re-derive.
+     *
+     * The adapters are rebuilt from the records rather than kept alongside
+     * them, so a network is only ever as trustworthy as what the user typed —
+     * there is no cached adapter that could outlive a removal.
+     */
+    const syncCustomNetworks = (networks: CustomNetwork[]): void => {
+        customNetworks.value = networks;
+        setCustomWalletChains(networks.map(customWalletChain));
+        load();
+    };
+
+    if (customNetworks.value.length === 0) {
+        syncCustomNetworks(readCustomNetworks());
+    }
+
+    if (manualTokens.value.length === 0) {
+        manualTokens.value = readManualTokens();
+    }
+
+    /**
+     * Derive an account on a network the user describes. Returns what is wrong
+     * with it, or null once it has been added — the seed is not touched, only
+     * re-walked at a path this vault already covers.
+     */
+    const addNetwork = (draft: CustomNetwork): CustomNetworkProblem | null => {
+        const problem = validateCustomNetwork(draft, walletChains());
+
+        if (problem !== null) {
+            return problem;
+        }
+
+        const next = [...customNetworks.value, draft];
+        writeCustomNetworks(next);
+        syncCustomNetworks(next);
+
+        return null;
+    };
+
+    /**
+     * Forget a network's settings. The account behind it stays derivable from
+     * the seed forever — this removes an endpoint, never coins.
+     */
+    const removeNetwork = (id: WalletChainId): void => {
+        const next = customNetworks.value.filter(
+            (network) => network.id !== id,
+        );
+        writeCustomNetworks(next);
+        syncCustomNetworks(next);
     };
 
     const rpcFor = (chain: WalletChainId): string | undefined => rpc[chain];
@@ -127,6 +213,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         accounts.value = [];
         balances.value = {};
         history.value = {};
+        tokens.value = {};
         unlocked.value = false;
     };
 
@@ -161,6 +248,13 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
 
     const forget = (): void => {
         forgetVault();
+        // The network list goes with the keys. It is a record of what this
+        // person held, and "delete local vault" has to mean the device keeps
+        // nothing about them — the accounts themselves come back from the seed.
+        writeCustomNetworks([]);
+        syncCustomNetworks([]);
+        writeManualTokens([]);
+        manualTokens.value = [];
         lock();
         refreshExists();
     };
@@ -258,24 +352,178 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     };
 
     /**
+     * ERC20-style assets on one chain: whatever its index reports plus every
+     * contract the user added by hand.
+     *
+     * The two sources are kept apart on purpose. An indexed token at zero is
+     * noise the explorer happens to remember; a hand-added one at zero was an
+     * explicit act and stays on the list until it is explicitly removed.
+     */
+    const refreshTokens = async (chainId: WalletChainId): Promise<void> => {
+        const chain = walletChain(chainId);
+        const account = accounts.value.find(
+            (candidate) => candidate.chain === chainId,
+        );
+
+        if (!account || (!chain.fetchTokens && !chain.readToken)) {
+            return;
+        }
+
+        const mine = manualTokens.value.filter(
+            (entry) => entry.chain === chainId,
+        );
+
+        if (!chain.fetchTokens && mine.length === 0) {
+            return;
+        }
+
+        tokens.value = {
+            ...tokens.value,
+            [chainId]: {
+                items: tokens.value[chainId]?.items ?? [],
+                loading: true,
+                error: null,
+            },
+        };
+
+        // A token the user asked for is read individually; one that fails to
+        // read is dropped from this pass rather than taking the list with it,
+        // because a dead contract must not hide the assets that do answer.
+        const manual = await Promise.all(
+            mine.map(async (entry) => {
+                try {
+                    return await chain.readToken?.(
+                        entry.address,
+                        account.address,
+                        rpcFor(chainId),
+                    );
+                } catch {
+                    return undefined;
+                }
+            }),
+        );
+
+        try {
+            const indexed = chain.fetchTokens
+                ? await chain.fetchTokens(account.address, rpcFor(chainId))
+                : [];
+
+            tokens.value = {
+                ...tokens.value,
+                [chainId]: {
+                    items: mergeTokens(
+                        indexed,
+                        manual.filter(
+                            (token): token is WalletTokenBalance =>
+                                token !== undefined,
+                        ),
+                    ),
+                    loading: false,
+                    error: null,
+                },
+            };
+        } catch (error) {
+            tokens.value = {
+                ...tokens.value,
+                [chainId]: {
+                    items: manual.filter(
+                        (token): token is WalletTokenBalance =>
+                            token !== undefined,
+                    ),
+                    loading: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : 'Tokens unavailable',
+                },
+            };
+        }
+    };
+
+    /**
+     * Track a token by contract address. Returns null once it is on the list,
+     * or why the contract could not be read — a wrong address is the common
+     * case here, and it has to fail before anything is stored.
+     */
+    const addToken = async (
+        chainId: WalletChainId,
+        contract: string,
+    ): Promise<string | null> => {
+        const chain = walletChain(chainId);
+        const account = accounts.value.find(
+            (candidate) => candidate.chain === chainId,
+        );
+
+        if (!chain.readToken || !account) {
+            return 'This network cannot hold tokens';
+        }
+
+        try {
+            // Read it before storing it: a contract that cannot answer
+            // symbol() and decimals() is not a token this wallet can render.
+            await chain.readToken(contract, account.address, rpcFor(chainId));
+        } catch {
+            return 'That address did not answer as a token contract';
+        }
+
+        const next = withToken(manualTokens.value, chainId, contract);
+        manualTokens.value = next;
+        writeManualTokens(next);
+        await refreshTokens(chainId);
+
+        return null;
+    };
+
+    /** Stop tracking a token. The balance stays on chain, only the row goes. */
+    const removeToken = async (
+        chainId: WalletChainId,
+        contract: string,
+    ): Promise<void> => {
+        const next = withoutToken(manualTokens.value, chainId, contract);
+        manualTokens.value = next;
+        writeManualTokens(next);
+        tokens.value = {
+            ...tokens.value,
+            [chainId]: {
+                items: (tokens.value[chainId]?.items ?? []).filter(
+                    (token) => !sameToken(token.address, contract),
+                ),
+                loading: false,
+                error: tokens.value[chainId]?.error ?? null,
+            },
+        };
+        await refreshTokens(chainId);
+    };
+
+    /**
      * Live fee tiers for one chain. A failure leaves the previous quote in
      * place and is reported by the absence of a fresh one — the send screen
      * refuses to build a transaction it cannot price.
      */
-    const refreshFees = async (chainId: WalletChainId): Promise<void> => {
+    const refreshFees = async (
+        chainId: WalletChainId,
+        token: string | null = null,
+    ): Promise<void> => {
         const chain = walletChain(chainId);
+        const account = accounts.value.find(
+            (candidate) => candidate.chain === chainId,
+        );
 
-        if (!chain.fetchFees) {
+        if (!chain.fetchFees || !account) {
             return;
         }
 
         try {
             fees.value = {
                 ...fees.value,
-                [chainId]: await chain.fetchFees(rpcFor(chainId)),
+                [feeKey(chainId, token)]: await chain.fetchFees({
+                    address: account.address,
+                    rpcUrl: rpcFor(chainId),
+                    token,
+                }),
             };
         } catch {
-            fees.value = { ...fees.value, [chainId]: [] };
+            fees.value = { ...fees.value, [feeKey(chainId, token)]: [] };
         }
     };
 
@@ -288,6 +536,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         to: string,
         amount: string,
         tier: WalletFeeTier = 'normal',
+        token: WalletTokenBalance | null = null,
     ): Promise<string> => {
         if (!phrase) {
             throw new Error('Wallet is locked');
@@ -308,9 +557,13 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         try {
             return await chain.send(seedFromMnemonic(phrase), {
                 to: to.trim(),
-                amount: parseUnits(amount, chain.decimals),
+                // A token counts in its own units, not the chain's: sending
+                // 5 USDC on a six-decimal contract is 5_000_000, and using the
+                // chain's eighteen would move a millionth of what was typed.
+                amount: parseUnits(amount, token?.decimals ?? chain.decimals),
                 tier,
                 rpcUrl: rpcFor(chainId),
+                token: token?.address ?? null,
             });
         } finally {
             busy.value = false;
@@ -318,7 +571,18 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     };
 
     return {
-        chains: WALLET_CHAINS,
+        chains: computed(() => walletChains()),
+        customNetworks: computed(() => customNetworks.value),
+        addNetwork,
+        removeNetwork,
+        tokens: computed(() => tokens.value),
+        manualTokens: computed(() => manualTokens.value),
+        /** The quote for one asset — the native coin when `token` is null. */
+        feesFor: (chainId: WalletChainId, token: string | null = null) =>
+            fees.value[feeKey(chainId, token)] ?? [],
+        refreshTokens,
+        addToken,
+        removeToken,
         accounts: computed(() => accounts.value),
         balances: computed(() => balances.value),
         history: computed(() => history.value),

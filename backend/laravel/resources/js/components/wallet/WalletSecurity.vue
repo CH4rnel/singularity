@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
+import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import {
@@ -20,7 +21,7 @@ import { walletMessages } from '@/lib/walletMessages';
 
 const props = defineProps<{ wallet: MultiWallet }>();
 
-const emit = defineEmits<{ locked: []; forgotten: [] }>();
+const emit = defineEmits<{ locked: []; forgotten: []; addNetwork: [] }>();
 
 const { t } = useLocale(walletMessages);
 const clipboard = useSecureClipboard();
@@ -32,6 +33,14 @@ const deleting = ref(false);
 const deleteConfirmation = ref('');
 
 const LOCK_OPTIONS = [5, 15, 60];
+
+/** The networks that ship with the wallet, named so "verified" means something. */
+const builtin = computed(() =>
+    props.wallet.chains.value
+        .filter((chain) => !chain.custom)
+        .map((chain) => chain.label)
+        .join(' · '),
+);
 
 const canDelete = computed(
     () => deleteConfirmation.value.trim().toUpperCase() === t('deleteWord'),
@@ -249,6 +258,143 @@ onBeforeUnmount(() => {
                     "
                 />
             </label>
+        </div>
+
+        <!--
+          Networks. The split that matters is who vouched for the endpoint, so
+          that is the split the section draws: everything shipped with the
+          wallet on one row, everything typed in here on its own removable one.
+        -->
+        <div class="cw-label" style="margin: 26px 0 10px">
+            {{ t('networksSection') }}
+        </div>
+
+        <div class="cw-card" style="padding: 0">
+            <div
+                class="cw-row"
+                style="padding: 16px; border-bottom: 1px solid var(--cw-line)"
+            >
+                <div style="flex: 1">
+                    <div
+                        style="
+                            font: 400 14px/1.3 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                    >
+                        {{ t('builtinNetworks') }}
+                    </div>
+                    <div
+                        style="
+                            margin-top: 3px;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                        "
+                    >
+                        {{ builtin }}
+                    </div>
+                </div>
+                <span
+                    class="cw-label"
+                    style="flex: none; color: var(--cw-fainter)"
+                    >{{ t('verified') }}</span
+                >
+            </div>
+
+            <div
+                v-for="network in wallet.customNetworks.value"
+                :key="network.id"
+                class="cw-row"
+                style="padding: 16px; border-bottom: 1px solid var(--cw-line)"
+            >
+                <NetworkMark :chain="network.id" dot :size="9" />
+                <div style="flex: 1">
+                    <div
+                        style="
+                            font: 400 14px/1.3 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                    >
+                        {{ network.name }}
+                    </div>
+                    <div
+                        style="
+                            margin-top: 3px;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                            word-break: break-all;
+                        "
+                    >
+                        {{
+                            network.kind === 'evm'
+                                ? `chain ${network.chainId}`
+                                : `coin ${network.coinType} · ${network.addressType}`
+                        }}
+                        · {{ t('addedByYou').toLowerCase() }}
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    class="cw-back"
+                    style="flex: none; color: var(--cw-bad-soft)"
+                    @click="wallet.removeNetwork(network.id)"
+                >
+                    {{ t('removeNetwork') }}
+                </button>
+            </div>
+
+            <p
+                v-if="wallet.customNetworks.value.length > 0"
+                class="cw-prose"
+                style="
+                    margin: 0;
+                    padding: 12px 16px;
+                    border-bottom: 1px solid var(--cw-line);
+                    font-size: 11px;
+                "
+            >
+                {{ t('removeNetworkHint') }}
+            </p>
+
+            <button
+                type="button"
+                class="cw-row"
+                style="
+                    width: 100%;
+                    padding: 16px;
+                    border: 0;
+                    background: none;
+                    cursor: pointer;
+                    text-align: left;
+                "
+                @click="emit('addNetwork')"
+            >
+                <span style="flex: 1">
+                    <span
+                        style="
+                            display: block;
+                            font: 400 14px/1.3 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                        >{{ t('addNetworkRow') }}</span
+                    >
+                    <span
+                        style="
+                            display: block;
+                            margin-top: 3px;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                        "
+                        >{{ t('addNetworkRowHint') }}</span
+                    >
+                </span>
+                <span
+                    style="
+                        font: 400 12px/1 var(--cw-mono);
+                        color: var(--cw-dim);
+                    "
+                    >→</span
+                >
+            </button>
         </div>
 
         <button

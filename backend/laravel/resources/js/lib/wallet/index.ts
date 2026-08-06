@@ -1,8 +1,9 @@
-import { WALLET_CHAINS, walletChain } from '@/lib/wallet/chains';
+import { walletChain, walletChains } from '@/lib/wallet/chains';
 import type {
     WalletCapabilities,
     WalletChainFamily,
     WalletChainId,
+    WalletMark,
 } from '@/lib/wallet/chains';
 import { seedFromMnemonic } from '@/lib/wallet/vault';
 
@@ -22,6 +23,10 @@ export type WalletAccount = {
     decimals: number;
     /** Which key this address belongs to — every `evm` account shares one. */
     family: WalletChainFamily;
+    mark: WalletMark;
+    /** Added by the user: a real account read through an unvetted endpoint. */
+    custom: boolean;
+    endpoint?: string;
     address: string;
     path: string;
     curve: 'secp256k1' | 'ed25519';
@@ -30,11 +35,18 @@ export type WalletAccount = {
     explorerUrl: string | null;
 };
 
-/** Public accounts for every registered chain, derived from one phrase. */
+/**
+ * Public accounts for every registered chain, derived from one phrase.
+ *
+ * The registry is read at call time rather than captured, because a network the
+ * user adds has to produce an account without the wallet being reopened — and
+ * because that account must come from the seed, not from anything stored
+ * alongside the network's settings.
+ */
 export const deriveAccounts = (phrase: string): WalletAccount[] => {
     const seed = seedFromMnemonic(phrase);
 
-    return WALLET_CHAINS.map((chain) => {
+    return walletChains().map((chain) => {
         const address = chain.derive(seed);
 
         return {
@@ -43,6 +55,9 @@ export const deriveAccounts = (phrase: string): WalletAccount[] => {
             symbol: chain.symbol,
             decimals: chain.decimals,
             family: chain.family,
+            mark: chain.mark,
+            custom: chain.custom ?? false,
+            endpoint: chain.endpoint,
             address,
             path: chain.path,
             curve: chain.curve,
@@ -59,21 +74,61 @@ export const deriveAddress = (phrase: string, chain: WalletChainId): string =>
 
 export {
     WALLET_CHAINS,
+    WALLET_FAMILY_GROUPS,
     WALLET_FEE_TIERS,
     formatUnits,
     parseUnits,
+    setCustomWalletChains,
     walletChain,
+    walletChains,
 } from '@/lib/wallet/chains';
 export type {
+    WalletBuiltinChainId,
     WalletCapabilities,
     WalletChain,
     WalletChainFamily,
     WalletChainId,
     WalletFeeQuote,
     WalletFeeTier,
+    WalletMark,
+    WalletMarkShape,
     WalletTx,
     WalletTxStatus,
 } from '@/lib/wallet/chains';
+export {
+    FORK_PRESETS,
+    customNetworkId,
+    customNetworkTag,
+    customWalletChain,
+    evmPresets,
+    readCustomNetworks,
+    validateCustomNetwork,
+    writeCustomNetworks,
+} from '@/lib/wallet/customChains';
+export type {
+    CustomEvmNetwork,
+    CustomNetwork,
+    CustomNetworkProblem,
+    CustomUtxoNetwork,
+} from '@/lib/wallet/customChains';
+export type { UtxoAddressType } from '@/lib/wallet/utxo';
+export {
+    ERC20_TRANSFER_GAS_CAP,
+    blockscoutTokens,
+    erc20Balance,
+    mergeTokens,
+    readErc20,
+    sameToken,
+    sendErc20,
+} from '@/lib/wallet/erc20';
+export type { WalletTokenBalance } from '@/lib/wallet/erc20';
+export {
+    readManualTokens,
+    withToken,
+    withoutToken,
+    writeManualTokens,
+} from '@/lib/wallet/tokenList';
+export type { ManualToken } from '@/lib/wallet/tokenList';
 export {
     createMnemonic,
     forgetVault,

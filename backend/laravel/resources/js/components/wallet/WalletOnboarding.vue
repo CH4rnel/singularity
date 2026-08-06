@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
-import { WALLET_CHAINS, createMnemonic, isValidMnemonic } from '@/lib/wallet';
+import { createMnemonic, isValidMnemonic, walletChains } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -244,7 +244,7 @@ const onRevealKey = (event: KeyboardEvent, state: boolean): void => {
                 "
             >
                 <span
-                    v-for="chain in WALLET_CHAINS"
+                    v-for="chain in walletChains()"
                     :key="chain.id"
                     class="cw-label"
                     style="color: var(--cw-faint)"
@@ -691,7 +691,7 @@ const onRevealKey = (event: KeyboardEvent, state: boolean): void => {
             </div>
             <div class="cw-stack" style="gap: 10px">
                 <div
-                    v-for="chain in WALLET_CHAINS"
+                    v-for="chain in walletChains()"
                     :key="chain.id"
                     class="cw-row"
                 >

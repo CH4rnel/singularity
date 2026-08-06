@@ -29,6 +29,7 @@ const emit = defineEmits<{
     back: [];
     pick: [chain: WalletChainId];
     usePayout: [address: string];
+    addNetwork: [];
 }>();
 
 const { t } = useLocale(walletMessages);
@@ -40,7 +41,9 @@ const clipboard = useSecureClipboard();
  * For EVM the honest statement is not "assets from another chain are lost" —
  * this wallet holds the same key on all of them, so those assets are simply on
  * a different network and still spendable there. Saying otherwise would teach
- * a panic the wallet's own design makes unnecessary.
+ * a panic the wallet's own design makes unnecessary. For the Bitcoin family the
+ * risk is the opposite shape: the address formats really are interchangeable
+ * between forks, and the coins really do not come back.
  */
 const warning = computed(() => {
     const chain = walletChain(props.chain);
@@ -52,8 +55,15 @@ const warning = computed(() => {
         });
     }
 
+    if (chain.family === 'utxo') {
+        return t('warnUtxo', { chain: chain.label });
+    }
+
     return chain.family === 'solana' ? t('warnSolana') : t('warnMonero');
 });
+
+/** A user-added network carries a second warning: nobody vetted its endpoint. */
+const unverified = computed(() => walletChain(props.chain).custom === true);
 
 const account = computed(() =>
     props.wallet.accounts.value.find(
@@ -96,10 +106,20 @@ const payoutOffered = computed(
                     :style="{
                         background:
                             candidate.chain === chain
-                                ? `var(--cw-net-${candidate.chain})`
+                                ? candidate.mark.hue
                                 : 'transparent',
                     }"
                 />
+            </button>
+            <button
+                type="button"
+                class="cw-seg-item"
+                style="flex: 0 0 56px; color: var(--cw-muted)"
+                :aria-label="t('addNetwork')"
+                @click="emit('addNetwork')"
+            >
+                +
+                <span class="cw-seg-bar" />
             </button>
         </div>
 
@@ -161,6 +181,10 @@ const payoutOffered = computed(
 
         <p class="cw-note cw-note-warn" style="margin-top: 16px">
             <span>{{ warning }}</span>
+        </p>
+
+        <p v-if="unverified" class="cw-note" style="margin-top: 10px">
+            <span>{{ t('warnCustom') }}</span>
         </p>
 
         <!-- Monero doubles as the bridge's payout address, so offer it here. -->

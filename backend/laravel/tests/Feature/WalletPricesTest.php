@@ -3,6 +3,7 @@
 use App\Models\User;
 use App\Services\WalletPriceService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 const DEXSCREENER_URL = 'https://api.dexscreener.com/*';
@@ -12,6 +13,19 @@ const COINGECKO_URL = 'https://api.coingecko.com/*';
 beforeEach(function () {
     Cache::flush();
 });
+
+/**
+ * The DEX pool table the indexer bot owns. It is not a migration — a wallet
+ * running against a database without it has to price nothing rather than break.
+ */
+function indexerTables(): void
+{
+    DB::statement('CREATE TABLE dex_pools (
+        pair_address TEXT PRIMARY KEY, token0 TEXT, token1 TEXT,
+        symbol0 TEXT, symbol1 TEXT, reserve0 REAL, reserve1 REAL,
+        tvl_usd REAL, updated_at TEXT
+    )');
+}
 
 /** @param array<string, mixed> $overrides */
 function fakePriceFeeds(array $overrides = []): void
@@ -23,6 +37,8 @@ function fakePriceFeeds(array $overrides = []): void
             'monero' => ['usd' => 312.25],
             'ethereum' => ['usd' => 2410.0],
             'binancecoin' => ['usd' => 604.5],
+            'bitcoin' => ['usd' => 64000.0],
+            'litecoin' => ['usd' => 78.0],
         ]),
         ...$overrides,
     ]);
@@ -41,7 +57,52 @@ it('quotes every wallet chain in USD, including the ones sharing a coin', functi
         'base' => 2410.0,
         'solana' => 148.5,
         'monero' => 312.25,
+        'bitcoin' => 64000.0,
+        'litecoin' => 78.0,
     ])->and($quotes['fetchedAt'])->toBeString();
+});
+
+it('prices the ERC20s the wallet can hold, from the DEX pool graph', function () {
+    fakePriceFeeds();
+    indexerTables();
+
+    // One pool anchors USDC at $1 and gives ASH a rate against it: 100 ASH
+    // against 50 USDC is $0.50 an ASH.
+    DB::table('dex_pools')->insert([
+        'pair_address' => '0x'.str_repeat('a', 40),
+        'token0' => '0xdc25597B19799010047F17e9591EFE08EFd40077',
+        'token1' => '0x992Fca0a89DD95afb17751f6CC233Adb9B089df5',
+        'symbol0' => 'USDC',
+        'symbol1' => 'ASH',
+        'reserve0' => 50,
+        'reserve1' => 100,
+    ]);
+
+    $tokens = app(WalletPriceService::class)->quotes()['tokens'];
+
+    expect($tokens['cyberia']['0x992fca0a89dd95afb17751f6cc233adb9b089df5'])
+        ->toEqualWithDelta(0.5, 0.0001)
+        ->and($tokens['cyberia']['0xdc25597b19799010047f17e9591efe08efd40077'])
+        ->toEqualWithDelta(1.0, 0.0001);
+});
+
+it('leaves tokens unpriced rather than inventing a number for them', function () {
+    fakePriceFeeds();
+    indexerTables();
+
+    // No pools indexed yet: an unpriced token renders as "—" in the wallet,
+    // and a zero here would understate a balance someone is about to spend.
+    $tokens = app(WalletPriceService::class)->quotes()['tokens'];
+
+    expect($tokens['cyberia'] ?? [])->toBe([]);
+});
+
+it('serves a wallet with no indexer at all rather than failing', function () {
+    fakePriceFeeds();
+
+    // dex_pools is created by the indexer bot, not by a migration, so a fresh
+    // deployment genuinely does not have it.
+    expect(app(WalletPriceService::class)->quotes()['tokens'])->toBe([]);
 });
 
 it('asks the price feed for each coin once, not once per chain', function () {
@@ -68,7 +129,8 @@ it('reports a missing price as null rather than zero', function () {
     expect($prices['cyberia'])->toBe(0.0742)
         ->and($prices['solana'])->toBeNull()
         ->and($prices['monero'])->toBeNull()
-        ->and($prices['base'])->toBeNull();
+        ->and($prices['base'])->toBeNull()
+        ->and($prices['bitcoin'])->toBeNull();
 });
 
 it('serves a cached quote instead of hitting the feeds on every page view', function () {

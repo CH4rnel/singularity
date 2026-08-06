@@ -46,6 +46,14 @@
     --cw-net-base: #4c8dff;
     --cw-net-solana: #8b7bf7;
     --cw-net-monero: #c9d2db;
+    --cw-net-bitcoin: #6e93b8;
+    --cw-net-litecoin: #9fb2c4;
+    /*
+     * Every network the user added shares one violet, drawn dashed. New chains
+     * stay legible without inventing a hue per chain, and a self-added network
+     * can never be mistaken for Solana or Bitcoin at a glance.
+     */
+    --cw-net-custom: #8b7bf7;
 
     --cw-ok: #5bd6a0;
     --cw-pending: #e8b44a;
@@ -458,6 +466,51 @@
 .cw-card-button:hover {
     border-color: var(--cw-border);
     background: #0c0e12;
+}
+
+/*
+ * A network the user added: same card, dashed edge. The list stays one rhythm
+ * while the difference that matters — nobody vetted this endpoint — is legible
+ * without reading a word.
+ */
+.cw-card-custom {
+    border-style: dashed;
+    border-color: rgba(139, 123, 247, 0.35);
+}
+
+/* Group heading inside the network list: a label and a rule to the margin. */
+.cw-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 8px;
+}
+
+.cw-group::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #101418;
+}
+
+/* The "add network" affordance, in the portfolio and in the network pickers. */
+.cw-dashed {
+    display: flex;
+    width: 100%;
+    min-height: 52px;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    border: 1px dashed var(--cw-border-soft);
+    border-radius: 5px;
+    background: none;
+    color: var(--cw-body);
+    cursor: pointer;
+    text-align: left;
+}
+
+.cw-dashed:hover {
+    border-color: var(--cw-accent);
 }
 
 .cw-note {
