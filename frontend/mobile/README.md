@@ -8,6 +8,13 @@ native app is a WebView pointed at `https://cyberia.church`, so a production
 deploy updates the app without a store release. The only local payload is
 `www/`, the page shown when the site cannot be reached.
 
+**The app is the Cyberia wallet.** It launches on `/wallet`, which renders
+without the site header and footer inside a native shell and fills the screen
+instead. The rest of Cyberia is a link away in the wallet's masthead; every
+other route keeps the normal site chrome. The wallet needs no Cyberia account —
+the keys are generated and encrypted in the browser — so the app is usable
+straight after install.
+
 ## Requirements
 
 - Node 20+ (Capacitor 8) — always installed.
@@ -37,15 +44,19 @@ from config alone.
 ## Configuration
 
 `CYBERIA_APP_URL` (default `https://cyberia.church`) decides what the app renders
-and which hosts stay inside the WebView. It is baked into the native project at
-sync time, so re-sync after changing it:
+and which hosts stay inside the WebView; `CYBERIA_APP_PATH` (default `/wallet`)
+decides which route it launches on. Both are baked into the native project at
+sync time, so re-sync after changing either:
 
 ```bash
 CYBERIA_APP_URL=http://192.168.1.10:8000 npm run sync:android
+CYBERIA_APP_PATH=/swap npm run sync:android
 ```
 
 An `http://` URL automatically enables cleartext traffic for that build; anything
-that is not `http`/`https` falls back to production.
+that is not `http`/`https` falls back to production. `CYBERIA_APP_PATH` must be a
+same-origin absolute path: a full URL or `//host` falls back to `/wallet` rather
+than pointing the whole app at another origin.
 
 ## Behaviour
 

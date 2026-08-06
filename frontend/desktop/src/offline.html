@@ -71,6 +71,7 @@
                 margin-top: 8px;
                 font-size: 13px;
                 color: #7f918f;
+                white-space: pre-line;
                 word-break: break-all;
             }
 
@@ -117,8 +118,8 @@
                     <path d="M32 31.5V53" />
                 </g>
             </svg>
-            <h1>You are outside the Wired.</h1>
-            <p>
+            <h1 id="title">You are outside the Wired.</h1>
+            <p id="reason">
                 Cyberia cannot reach the network right now. Check your
                 connection — the app retries by itself once you are back online.
                 <code id="target"></code>
@@ -130,8 +131,53 @@
                 const native = window.cyberiaNative;
                 const params = new URLSearchParams(window.location.search);
 
-                document.getElementById('target').textContent =
-                    params.get('url') || (native && native.url) || '';
+                const dictionaries = {
+                    en: {
+                        title: 'You are outside the Wired.',
+                        network:
+                            'Cyberia cannot reach the network right now. Check your connection — the app retries by itself once you are back online.',
+                        proxy: 'The proxy the app was told to use did not answer. Start it, or run Cyberia with CYBERIA_PROXY=<host:port> — or with --no-proxy to connect directly.',
+                        retry: 'Try again',
+                    },
+                    ru: {
+                        title: 'Ты вне Провода.',
+                        network:
+                            'Cyberia сейчас не достаёт до сети. Проверь соединение — приложение повторит попытку само, как только связь вернётся.',
+                        proxy: 'Прокси, который задан приложению, не ответил. Подними его или запусти Cyberia с CYBERIA_PROXY=<host:port> — либо с --no-proxy, чтобы идти напрямую.',
+                        retry: 'Повторить',
+                    },
+                };
+
+                const locale = (navigator.language || 'en')
+                    .toLowerCase()
+                    .startsWith('ru')
+                    ? 'ru'
+                    : 'en';
+                const dictionary = dictionaries[locale];
+
+                const url = params.get('url') || (native && native.url) || '';
+                const error = params.get('error') || '';
+                const proxy = params.get('proxy') || (native && native.proxy) || '';
+                const isProxyError = error.indexOf('PROXY') !== -1;
+
+                document.documentElement.lang = locale;
+                document.getElementById('title').textContent = dictionary.title;
+                document.getElementById('retry').textContent = dictionary.retry;
+
+                const details = [url, error];
+
+                if (isProxyError && proxy) {
+                    details.push('proxy: ' + proxy);
+                }
+
+                document.getElementById('reason').textContent = isProxyError
+                    ? dictionary.proxy
+                    : dictionary.network;
+                document.getElementById('reason').appendChild(
+                    Object.assign(document.createElement('code'), {
+                        textContent: details.filter(Boolean).join('\n'),
+                    }),
+                );
 
                 const retry = function () {
                     if (native) {

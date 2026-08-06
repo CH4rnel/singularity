@@ -145,7 +145,7 @@ test('every chain derives from the one phrase and exposes no secrets', () => {
     }
 });
 
-test('each account validates its own address and rejects the others', () => {
+test('each account validates its own family and rejects the others', () => {
     const accounts = deriveAccounts(PHRASE);
 
     for (const account of accounts) {
@@ -153,10 +153,40 @@ test('each account validates its own address and rejects the others', () => {
 
         assert.equal(chain.isValidAddress(account.address), true);
 
-        for (const other of accounts.filter((a) => a.chain !== account.chain)) {
+        // A chain accepts every address of its own family — all EVM networks
+        // really do share one address — and no address of any other.
+        for (const other of accounts.filter(
+            (candidate) => candidate.family !== account.family,
+        )) {
             assert.equal(chain.isValidAddress(other.address), false);
         }
     }
+});
+
+test('every EVM network is the same address, and only that address', () => {
+    const accounts = deriveAccounts(PHRASE);
+    const evm = accounts.filter((account) => account.family === 'evm');
+    const [first, ...rest] = evm;
+
+    // The point of BIP-44 coin type 60: one key, one string, many networks.
+    assert.ok(evm.length >= 4, 'expected several EVM networks');
+    assert.equal(first.path, "m/44'/60'/0'/0/0");
+
+    for (const account of rest) {
+        assert.equal(account.address, first.address);
+        assert.equal(account.path, first.path);
+    }
+
+    // Each of them still points at its own chain and explorer.
+    const chainIds = evm.map(
+        (account) => WALLET_CHAINS.find((c) => c.id === account.chain).chainId,
+    );
+
+    assert.equal(new Set(chainIds).size, evm.length);
+    assert.equal(
+        new Set(evm.map((account) => account.explorerUrl)).size,
+        evm.length,
+    );
 });
 
 test('amounts round-trip through the smallest unit', () => {

@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('cyberiaNative', {
     platform: info.platform,
     version: info.version,
     url: info.url,
+    proxy: info.proxy,
     retry: () => ipcRenderer.send('shell:retry'),
     openExternal: (url) => ipcRenderer.send('shell:open-external', url),
 });

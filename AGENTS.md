@@ -59,6 +59,7 @@ Do not rely on older docs that refer to `hardhat/` at the repo root; contracts n
 - Do not edit generated dependency folders (`node_modules/`, `vendor/`, `target/`) or generated build outputs unless the user explicitly asks for deploy/build artifacts.
 - Always verify changes with the narrowest useful command. If verification cannot pass because of known repo state, report the exact blocker and the command used.
 - For production/deploy requests, confirm the expected artifact exists after building, especially `frontend/ritual/build/index.html` and `frontend/ritual/build/static/`.
+- When drafting posts for the user, assume there is no character limit unless the user explicitly sets one.
 
 LLM orientation:
 
@@ -114,7 +115,8 @@ Notes:
 - `npm run types:check` may expose pre-existing TypeScript issues in old pages; do not hide new errors inside that noise.
 - Progression (XP, levels, daily streaks, quests) lives in `App\Services\GamificationService` with rules in `config/gamification.php`, surfaced on `/profile` and `/leaderboard`. XP is paid through the append-only `xp_entries` ledger keyed by `(source, reference)`; the browser may only report visits/page views, while swaps, liquidity, bridges and governance are credited from ground truth by `gamification:sync`. Do not pay value XP from client-reported events.
 - Retention analytics (DAU/WAU/MAU, new vs returning, weekly cohorts, progression health) live in `App\Services\UserAnalyticsService` and render on `/crm/analytics` alongside the existing funnel.
-- The unified multichain wallet (`/wallet`, `resources/js/lib/wallet/`) is non-custodial and lives entirely in the browser: one BIP-39 seed phrase, one chain adapter per network in `chains.ts` (Cyberia/EVM on BIP-44, Solana and Monero on SLIP-0010), the phrase AES-GCM encrypted in localStorage. Never route a seed, phrase or private key through Laravel, an Inertia prop or a log line. Derivation vectors and vault behaviour are covered by `npm run test:frontend` (`tests/Frontend/*Test.mjs`, run with the `@/` alias hook).
+- The unified multichain wallet (`/wallet`, `resources/js/lib/wallet/`, screens in `resources/js/components/wallet/`) is non-custodial and lives entirely in the browser: one BIP-39 seed phrase, one chain adapter per network in `chains.ts` (every EVM network — Cyberia, Robinhood, BNB, Base — on BIP-44 coin type 60 and therefore sharing one address; Solana and Monero on SLIP-0010), the phrase AES-GCM encrypted in localStorage. Balances, history, fee quotes and signing are browser-side too; Laravel only serves a public Solana RPC URL, cached USD quotes and the saved XMR payout address. Never route a seed, phrase or private key through Laravel, an Inertia prop or a log line. Derivation vectors, amount formatting, QR encoding and history parsing are covered by `npm run test:frontend` (`tests/Frontend/*Test.mjs`, run with the `@/` alias hook).
+- Wallet UI rules, in order of importance: a number that could not be read renders as "—" and never as `0`; every signature is preceded by one plain-language sentence and a hold-to-sign control; the seed phrase appears only behind a held finger or a re-entered password, never passively; networks are encoded by hue **plus** shape **plus** a two-letter tile, where the shape is the key family (square = EVM, and every square shares one address), and transaction status uses a separate amber/green/red family. The surface stays dark in either site theme (`resources/css/wallet.css`, `cw-` namespace) and every string is bilingual through `walletMessages`.
 
 ---
 
@@ -169,6 +171,8 @@ find build/static -maxdepth 2 -type f | wc -l
 Paths: `frontend/desktop/` (Electron), `frontend/mobile/` (Capacitor)
 
 Both ship the Laravel site as an installable app. Neither bundles the frontend: they render `CYBERIA_APP_URL` (default `https://cyberia.church`) in a native window/WebView, so a production deploy is also an app update. The per-directory `README.md` files are authoritative.
+
+**Both apps are the Cyberia wallet first.** They launch on `CYBERIA_APP_PATH` (default `/wallet`), and inside a native shell that route drops the site header and footer and fills the frame (`resources/js/layouts/NativeShellLayout.vue`, chosen in `app.ts` from `isNativeShell()`); everything else in the shell keeps the normal site chrome, and the wallet's masthead links back to the site. `/wallet` is a public route so the app works straight after install — the keys are browser-side and were never the server's to gate; signing in only adds the XMR payout binding. `CYBERIA_APP_PATH` is validated as a same-origin absolute path: a full URL or `//host` falls back to `/wallet` instead of repointing the app at another origin.
 
 ```bash
 cd frontend/desktop

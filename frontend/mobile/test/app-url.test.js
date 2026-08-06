@@ -9,7 +9,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
-const { DEFAULT_APP_URL, allowNavigation, resolveAppUrl } = require('../src/app-url');
+const {
+    DEFAULT_APP_PATH,
+    DEFAULT_APP_URL,
+    allowNavigation,
+    resolveAppPath,
+    resolveAppUrl,
+    resolveStartUrl,
+} = require('../src/app-url');
 
 test('falls back to the production URL', () => {
     assert.equal(resolveAppUrl({}), DEFAULT_APP_URL);
@@ -38,6 +45,35 @@ test('tracks the override host instead of the production one', () => {
         '192.168.1.10',
         '*.192.168.1.10',
     ]);
+});
+
+test('launches on the wallet, not on the site home', () => {
+    assert.equal(resolveAppPath({}), DEFAULT_APP_PATH);
+    assert.equal(resolveStartUrl({}), `${DEFAULT_APP_URL}/wallet`);
+    assert.equal(
+        resolveStartUrl({ CYBERIA_APP_URL: 'http://192.168.1.10:8000/' }),
+        'http://192.168.1.10:8000/wallet',
+    );
+});
+
+test('a landing route may never move the app to another origin', () => {
+    assert.equal(resolveAppPath({ CYBERIA_APP_PATH: '//evil.example/wallet' }), DEFAULT_APP_PATH);
+    assert.equal(resolveAppPath({ CYBERIA_APP_PATH: 'https://evil.example' }), DEFAULT_APP_PATH);
+    assert.equal(resolveAppPath({ CYBERIA_APP_PATH: 'wallet' }), DEFAULT_APP_PATH);
+    assert.equal(resolveAppPath({ CYBERIA_APP_PATH: '/bridge?to=sol' }), '/bridge?to=sol');
+});
+
+test('a root landing route keeps its slash, query and all', () => {
+    assert.equal(resolveAppPath({ CYBERIA_APP_PATH: '/' }), '/');
+    assert.equal(resolveAppPath({ CYBERIA_APP_PATH: '/?ref=app' }), '/?ref=app');
+});
+
+test('the WebView is pointed at the landing route, and the host stays the host', () => {
+    const config = require('../capacitor.config');
+
+    assert.equal(config.server.url, `${DEFAULT_APP_URL}/wallet`);
+    assert.equal(config.server.hostname, new URL(DEFAULT_APP_URL).hostname);
+    assert.ok(config.server.allowNavigation.includes(new URL(DEFAULT_APP_URL).hostname));
 });
 
 test('keeps the encrypted wallet vault out of Android backups', () => {

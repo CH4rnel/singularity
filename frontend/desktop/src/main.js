@@ -3,10 +3,14 @@
 /**
  * Cyberia desktop shell.
  *
- * The window renders the live site inside a persistent session, so a login
- * survives restarts exactly like it does in a browser. Anything that is not
- * Cyberia (wallet deep links, explorer links, `target="_blank"`) is handed to
- * the system browser instead of being opened inside the app frame.
+ * The app is the Cyberia wallet: the window opens on `/wallet`, which renders
+ * without the site chrome inside a native shell, and the rest of Cyberia is
+ * reachable from inside it. Everything is still the live site inside a
+ * persistent session, so a login survives restarts exactly like in a browser.
+ *
+ * Anything that is not Cyberia (wallet deep links, explorer links,
+ * `target="_blank"`) is handed to the system browser instead of being opened
+ * inside the app frame.
  */
 
 const path = require('node:path');
@@ -14,14 +18,19 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell } = require('e
 const {
     PARTITION,
     PROTOCOL,
+    describeProxy,
     isExternallyOpenable,
     isNavigable,
     resolveAppUrl,
+    resolveProxy,
+    resolveStartUrl,
 } = require('./config');
 const { loadWindowState, trackWindowState } = require('./window-state');
 
 const APP_URL = resolveAppUrl(process.env, process.argv);
+const START_URL = resolveStartUrl(process.env, process.argv);
 const APP_HOST = new URL(APP_URL).hostname;
+const PROXY = resolveProxy(process.env, process.argv);
 const OFFLINE_PAGE = path.join(__dirname, 'offline.html');
 
 /** Permissions the site legitimately needs; everything else is refused. */
@@ -55,7 +64,7 @@ function openExternal(target) {
     void shell.openExternal(target);
 }
 
-function loadApp(target = APP_URL) {
+function loadApp(target = START_URL) {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return;
     }
@@ -63,16 +72,25 @@ function loadApp(target = APP_URL) {
     void mainWindow.loadURL(target);
 }
 
-function showOffline() {
+function showOffline(error = '') {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return;
     }
 
-    void mainWindow.loadFile(OFFLINE_PAGE, { query: { url: APP_URL } });
+    void mainWindow.loadFile(OFFLINE_PAGE, {
+        query: { url: START_URL, error, proxy: describeProxy(PROXY) },
+    });
 }
 
-function configureSession() {
+async function configureSession() {
     const shellSession = session.fromPartition(PARTITION);
+
+    // Pinned before the first load: on Linux desktops Chromium takes its proxy
+    // from the desktop settings and ignores http_proxy/https_proxy, so a stale
+    // system entry would fail every request with ERR_PROXY_CONNECTION_FAILED.
+    if (PROXY) {
+        await Promise.all([shellSession.setProxy(PROXY), session.defaultSession.setProxy(PROXY)]);
+    }
 
     shellSession.setPermissionRequestHandler((_contents, permission, callback) => {
         callback(ALLOWED_PERMISSIONS.has(permission));
@@ -141,9 +159,9 @@ function createWindow() {
         openExternal(url);
     });
 
-    contents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => {
+    contents.on('did-fail-load', (_event, errorCode, description, _url, isMainFrame) => {
         if (isMainFrame && errorCode !== ERR_ABORTED) {
-            showOffline();
+            showOffline(description);
         }
     });
 
@@ -207,13 +225,18 @@ function buildMenu() {
             label: 'File',
             submenu: [
                 {
-                    label: 'Home',
+                    label: 'Wallet',
                     accelerator: 'CmdOrCtrl+Shift+H',
                     click: () => loadApp(),
                 },
                 {
+                    label: 'Cyberia Site',
+                    accelerator: 'CmdOrCtrl+Shift+S',
+                    click: () => loadApp(APP_URL),
+                },
+                {
                     label: 'Open in Browser',
-                    click: () => openExternal(mainWindow?.webContents.getURL() ?? APP_URL),
+                    click: () => openExternal(mainWindow?.webContents.getURL() ?? START_URL),
                 },
                 { type: 'separator' },
                 isMac ? { role: 'close' } : { role: 'quit' },
@@ -255,7 +278,7 @@ function buildMenu() {
                             type: 'info',
                             title: 'Cyberia',
                             message: `Cyberia ${app.getVersion()}`,
-                            detail: `Electron ${process.versions.electron}\n${APP_URL}`,
+                            detail: `Electron ${process.versions.electron}\n${START_URL}`,
                             buttons: ['OK'],
                         });
                     },
@@ -294,12 +317,14 @@ if (!app.requestSingleInstanceLock()) {
     // directory in a dev run as in the packaged app.
     app.setName('Cyberia');
 
-    app.whenReady().then(() => {
+    app.whenReady().then(async () => {
         app.userAgentFallback = buildUserAgent();
 
         registerProtocol();
-        configureSession();
+        await configureSession();
         buildMenu();
+
+        console.log(`[cyberia] ${START_URL} via proxy ${describeProxy(PROXY)}`);
 
         ipcMain.on('shell:retry', () => loadApp());
         ipcMain.on('shell:open-external', (_event, url) => openExternal(url));
@@ -308,7 +333,8 @@ if (!app.requestSingleInstanceLock()) {
                 shell: 'desktop',
                 platform: process.platform,
                 version: app.getVersion(),
-                url: APP_URL,
+                url: START_URL,
+                proxy: describeProxy(PROXY),
             };
         });
 

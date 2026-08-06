@@ -1,5 +1,9 @@
 import { WALLET_CHAINS, walletChain } from '@/lib/wallet/chains';
-import type { WalletCapabilities, WalletChainId } from '@/lib/wallet/chains';
+import type {
+    WalletCapabilities,
+    WalletChainFamily,
+    WalletChainId,
+} from '@/lib/wallet/chains';
 import { seedFromMnemonic } from '@/lib/wallet/vault';
 
 /**
@@ -16,6 +20,8 @@ export type WalletAccount = {
     label: string;
     symbol: string;
     decimals: number;
+    /** Which key this address belongs to — every `evm` account shares one. */
+    family: WalletChainFamily;
     address: string;
     path: string;
     curve: 'secp256k1' | 'ed25519';
@@ -36,6 +42,7 @@ export const deriveAccounts = (phrase: string): WalletAccount[] => {
             label: chain.label,
             symbol: chain.symbol,
             decimals: chain.decimals,
+            family: chain.family,
             address,
             path: chain.path,
             curve: chain.curve,
@@ -52,6 +59,7 @@ export const deriveAddress = (phrase: string, chain: WalletChainId): string =>
 
 export {
     WALLET_CHAINS,
+    WALLET_FEE_TIERS,
     formatUnits,
     parseUnits,
     walletChain,
@@ -59,7 +67,12 @@ export {
 export type {
     WalletCapabilities,
     WalletChain,
+    WalletChainFamily,
     WalletChainId,
+    WalletFeeQuote,
+    WalletFeeTier,
+    WalletTx,
+    WalletTxStatus,
 } from '@/lib/wallet/chains';
 export {
     createMnemonic,

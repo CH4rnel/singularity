@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useTimeAgo } from '@vueuse/core';
-import { Check, Copy, Flame, Trophy } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import {
+    Check,
+    Copy,
+    Flame,
+    Trophy,
+    UserCheck,
+    UserPlus,
+} from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import FeedItem from '@/components/dao/FeedItem.vue';
 import PostCard from '@/components/social/PostCard.vue';
 import PostComposer from '@/components/social/PostComposer.vue';
@@ -10,7 +17,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import SimplePagination from '@/components/web3/SimplePagination.vue';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
-import { leaderboard } from '@/routes';
+import { fetchCyberBalance, formatCyberBalance } from '@/lib/cyberiaBalance';
+import { leaderboard, login } from '@/routes';
+import {
+    destroy as unfollowUser,
+    store as followUser,
+} from '@/routes/users/follow';
 import type { Activity } from '@/types';
 import type { User } from '@/types/auth';
 import type { Paginated } from '@/types/pagination';
@@ -25,6 +37,7 @@ type Props = {
         wallet_address: string | null;
         solana_wallet_address: string | null;
         created_at: string | null;
+        is_following: boolean;
     };
     stats: {
         posts: number;
@@ -56,6 +69,10 @@ const displayName = computed(
 );
 
 const copied = ref(false);
+const followProcessing = ref(false);
+const cyberBalance = ref<string | null>(null);
+const cyberBalanceLoading = ref(false);
+let cyberBalanceRequest = 0;
 
 async function copyWallet() {
     if (!props.profile.wallet_address) {
@@ -67,8 +84,73 @@ async function copyWallet() {
     setTimeout(() => (copied.value = false), 1500);
 }
 
+function toggleFollow() {
+    if (!authUser.value) {
+        router.visit(login().url);
+
+        return;
+    }
+
+    followProcessing.value = true;
+
+    const options = {
+        preserveScroll: true,
+        onFinish: () => {
+            followProcessing.value = false;
+        },
+    };
+
+    if (props.profile.is_following) {
+        router.delete(unfollowUser(props.profile.id).url, options);
+
+        return;
+    }
+
+    router.post(followUser(props.profile.id).url, {}, options);
+}
+
+if (typeof window !== 'undefined') {
+    watch(
+        () => props.profile.wallet_address,
+        async (walletAddress) => {
+            const request = ++cyberBalanceRequest;
+
+            cyberBalance.value = null;
+
+            if (!walletAddress) {
+                cyberBalanceLoading.value = false;
+
+                return;
+            }
+
+            cyberBalanceLoading.value = true;
+
+            try {
+                const balance = await fetchCyberBalance(walletAddress);
+
+                if (request === cyberBalanceRequest) {
+                    cyberBalance.value = formatCyberBalance(balance);
+                }
+            } catch {
+                if (request === cyberBalanceRequest) {
+                    cyberBalance.value = null;
+                }
+            } finally {
+                if (request === cyberBalanceRequest) {
+                    cyberBalanceLoading.value = false;
+                }
+            }
+        },
+        { immediate: true },
+    );
+}
+
 const statTiles = computed(() => [
     { label: 'XP', value: props.progress.xp.toLocaleString() },
+    {
+        label: 'CYBER',
+        value: cyberBalanceLoading.value ? '…' : (cyberBalance.value ?? '—'),
+    },
     { label: 'Posts', value: props.stats.posts },
     { label: 'Proposals', value: props.stats.proposals },
     { label: 'Votes', value: props.stats.votes },
@@ -140,10 +222,22 @@ const statTiles = computed(() => [
                     </span>
                 </div>
             </div>
+            <Button
+                v-if="!isOwnProfile"
+                type="button"
+                :variant="props.profile.is_following ? 'outline' : 'default'"
+                :disabled="followProcessing"
+                :aria-pressed="props.profile.is_following"
+                @click="toggleFollow"
+            >
+                <UserCheck v-if="props.profile.is_following" />
+                <UserPlus v-else />
+                {{ props.profile.is_following ? 'Following' : 'Follow' }}
+            </Button>
         </header>
 
         <!-- Stats -->
-        <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-6">
             <div
                 v-for="tile in statTiles"
                 :key="tile.label"

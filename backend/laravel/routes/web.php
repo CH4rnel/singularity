@@ -37,11 +37,13 @@ use App\Http\Controllers\ReactionController;
 use App\Http\Controllers\StakingController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
+use App\Http\Controllers\UserFollowController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
 use App\Services\DexAprService;
+use App\Services\WalletPriceService;
 use App\Support\ProfileHandle;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -205,6 +207,25 @@ Route::get('/wallet-login', fn () => inertia('auth/WalletLogin'))->name('wallet.
 // Telegram whales-chat verification page (opened from the bot's one-time link).
 Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-sol');
 
+/**
+ * The unified multichain wallet, and the home screen of the desktop and mobile
+ * apps.
+ *
+ * Deliberately public: the wallet is non-custodial and entirely browser-side,
+ * so demanding a Cyberia account before a phrase can even be generated would
+ * gate a local key behind a server that never sees it. Signing in only adds the
+ * XMR payout binding, which is the one part that belongs to a profile.
+ *
+ * The server hands over a public RPC endpoint, USD quotes and that payout
+ * address. Balances, history, fees and signing are read and done by the
+ * browser, never by us.
+ */
+Route::get('wallet', fn (Request $request, WalletPriceService $prices) => Inertia::render('Wallet', [
+    'solanaRpcUrl' => (string) config('services.staking.solana.public_rpc_url'),
+    'moneroPayoutAddress' => $request->user()?->monero_wallet_address,
+    'quotes' => $prices->quotes(),
+]))->name('wallet');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'Dashboard')->name('dashboard');
 });
@@ -222,14 +243,6 @@ Route::middleware(['auth'])->group(function () {
             ->middleware('throttle:6,1')->name('claims.store');
     });
 
-    // Unified multichain wallet. Non-custodial: the seed phrase is generated,
-    // encrypted and kept in the browser, so the server hands over nothing but
-    // a public RPC endpoint and the XMR payout address already on the profile.
-    Route::get('wallet', fn (Request $request) => Inertia::render('Wallet', [
-        'solanaRpcUrl' => (string) config('services.staking.solana.public_rpc_url'),
-        'moneroPayoutAddress' => $request->user()->monero_wallet_address,
-    ]))->name('wallet');
-
     // Own profile: account info + bridge deposit addresses for every chain.
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
     Route::post('profile/avatar', [ProfileController::class, 'updateAvatar'])
@@ -242,6 +255,10 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('throttle:6,1')->name('profile.achievements.check');
     Route::post('posts', [PostController::class, 'store'])
         ->middleware('throttle:10,1')->name('posts.store');
+    Route::post('users/{user}/follow', [UserFollowController::class, 'store'])
+        ->name('users.follow.store');
+    Route::delete('users/{user}/follow', [UserFollowController::class, 'destroy'])
+        ->name('users.follow.destroy');
 
     Route::get('invitations/{invitation}/accept', [TeamInvitationController::class, 'accept'])->name('invitations.accept');
     Route::resource('links', LinkController::class)->names([

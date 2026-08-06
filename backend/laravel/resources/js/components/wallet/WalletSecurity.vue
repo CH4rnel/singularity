@@ -1,0 +1,371 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { useLocale } from '@/composables/useLocale';
+import type { MultiWallet } from '@/composables/useMultiWallet';
+import {
+    clipboardAutoClear,
+    useSecureClipboard,
+} from '@/composables/useSecureClipboard';
+import { walletMessages } from '@/lib/walletMessages';
+
+/**
+ * Security: the seed behind a password, the two settings that decide how long
+ * a secret lingers, and the one destructive action, kept behind a typed word
+ * rather than a second button.
+ *
+ * The phrase is never on the portfolio and never in a passive panel — it is
+ * shown here only after the password is entered again, and dropped as soon as
+ * the panel closes or the component goes away.
+ */
+
+const props = defineProps<{ wallet: MultiWallet }>();
+
+const emit = defineEmits<{ locked: []; forgotten: [] }>();
+
+const { t } = useLocale(walletMessages);
+const clipboard = useSecureClipboard();
+
+const password = ref('');
+const phrase = ref<string | null>(null);
+const error = ref<string | null>(null);
+const deleting = ref(false);
+const deleteConfirmation = ref('');
+
+const LOCK_OPTIONS = [5, 15, 60];
+
+const canDelete = computed(
+    () => deleteConfirmation.value.trim().toUpperCase() === t('deleteWord'),
+);
+
+const reveal = async (): Promise<void> => {
+    error.value = null;
+
+    try {
+        phrase.value = await props.wallet.reveal(password.value);
+    } catch {
+        error.value = t('wrongPassword');
+    } finally {
+        password.value = '';
+    }
+};
+
+const hide = (): void => {
+    phrase.value = null;
+};
+
+const forget = (): void => {
+    props.wallet.forget();
+    emit('forgotten');
+};
+
+onBeforeUnmount(() => {
+    phrase.value = null;
+    password.value = '';
+});
+</script>
+
+<template>
+    <div class="cw-stack">
+        <h2 class="cw-title" style="margin: 6px 0 22px; font-size: 22px">
+            {{ t('security') }}
+        </h2>
+
+        <div class="cw-label" style="margin-bottom: 10px">
+            {{ t('vaultSection') }}
+        </div>
+
+        <div class="cw-card" style="padding: 0">
+            <!-- Seed backup, password-gated. -->
+            <div style="padding: 16px; border-bottom: 1px solid var(--cw-line)">
+                <div
+                    style="
+                        font: 400 14px/1.3 var(--cw-sans);
+                        color: var(--cw-text);
+                    "
+                >
+                    {{ t('backupSeed') }}
+                </div>
+                <div
+                    style="
+                        margin-top: 3px;
+                        font: 400 11px/1.4 var(--cw-mono);
+                        color: var(--cw-dim);
+                    "
+                >
+                    {{ t('backupSeedHint') }}
+                </div>
+
+                <form
+                    v-if="!phrase"
+                    style="display: flex; gap: 8px; margin-top: 12px"
+                    @submit.prevent="reveal"
+                >
+                    <input
+                        v-model="password"
+                        type="password"
+                        class="cw-input"
+                        autocomplete="current-password"
+                        :aria-label="t('password')"
+                        placeholder="••••••••••••"
+                    />
+                    <button
+                        type="submit"
+                        class="cw-ghost"
+                        style="height: 48px; flex: none"
+                        :disabled="password.length === 0"
+                    >
+                        {{ t('showPhrase') }}
+                    </button>
+                </form>
+
+                <div v-else style="margin-top: 12px">
+                    <ol
+                        style="
+                            display: grid;
+                            grid-template-columns: repeat(
+                                auto-fill,
+                                minmax(120px, 1fr)
+                            );
+                            gap: 1px;
+                            margin: 0;
+                            padding: 0;
+                            list-style: none;
+                            background: var(--cw-line);
+                            border: 1px solid var(--cw-line);
+                        "
+                    >
+                        <li
+                            v-for="(word, index) in phrase.split(' ')"
+                            :key="index"
+                            style="
+                                display: flex;
+                                gap: 8px;
+                                padding: 9px 10px;
+                                background: var(--cw-surface);
+                                font: 500 13px/1 var(--cw-mono);
+                            "
+                        >
+                            <span style="color: var(--cw-faint)">{{
+                                String(index + 1).padStart(2, '0')
+                            }}</span>
+                            {{ word }}
+                        </li>
+                    </ol>
+                    <div style="display: flex; gap: 8px; margin-top: 10px">
+                        <button
+                            type="button"
+                            class="cw-ghost"
+                            @click="clipboard.copy(phrase, 'phrase')"
+                        >
+                            {{
+                                clipboard.copied.value === 'phrase'
+                                    ? t('copiedLabel')
+                                    : t('copyPhrase')
+                            }}
+                        </button>
+                        <button type="button" class="cw-ghost" @click="hide">
+                            {{ t('wroteItDown') }}
+                        </button>
+                    </div>
+                </div>
+
+                <p
+                    v-if="error"
+                    class="cw-note cw-note-bad"
+                    style="margin-top: 10px"
+                >
+                    <span>{{ error }}</span>
+                </p>
+            </div>
+
+            <!-- Auto-lock. -->
+            <div
+                class="cw-row"
+                style="padding: 16px; border-bottom: 1px solid var(--cw-line)"
+            >
+                <div style="flex: 1">
+                    <div
+                        style="
+                            font: 400 14px/1.3 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                    >
+                        {{ t('autoLock') }}
+                    </div>
+                    <div
+                        style="
+                            margin-top: 3px;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                        "
+                    >
+                        {{ t('autoLockHint') }}
+                    </div>
+                </div>
+                <div class="cw-seg" style="flex: none">
+                    <button
+                        v-for="minutes in LOCK_OPTIONS"
+                        :key="minutes"
+                        type="button"
+                        class="cw-seg-item"
+                        style="min-width: 52px; min-height: 36px"
+                        :aria-pressed="wallet.autoLockMinutes.value === minutes"
+                        @click="wallet.setAutoLock(minutes)"
+                    >
+                        {{ minutes }}m
+                    </button>
+                </div>
+            </div>
+
+            <!-- Clipboard hygiene. -->
+            <label class="cw-row" style="padding: 16px; cursor: pointer">
+                <span style="flex: 1">
+                    <span
+                        style="
+                            display: block;
+                            font: 400 14px/1.3 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                        >{{ t('clipboardRow') }}</span
+                    >
+                    <span
+                        style="
+                            display: block;
+                            margin-top: 3px;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                        "
+                        >{{ t('clipboardHint') }}</span
+                    >
+                </span>
+                <input
+                    v-model="clipboardAutoClear"
+                    type="checkbox"
+                    style="
+                        width: 20px;
+                        height: 20px;
+                        flex: none;
+                        accent-color: var(--cw-accent);
+                    "
+                />
+            </label>
+        </div>
+
+        <button
+            type="button"
+            class="cw-btn cw-btn-secondary"
+            style="margin-top: 12px; height: 48px"
+            @click="
+                wallet.lock();
+                emit('locked');
+            "
+        >
+            {{ t('lockNow') }}
+        </button>
+
+        <!-- Danger zone. -->
+        <div
+            style="
+                margin-top: 34px;
+                padding-top: 20px;
+                border-top: 1px dashed #2a1a1c;
+            "
+        >
+            <div
+                class="cw-label"
+                style="margin-bottom: 10px; color: var(--cw-bad)"
+            >
+                {{ t('dangerZone') }}
+            </div>
+            <div
+                style="
+                    padding: 16px;
+                    border: 1px solid rgba(255, 92, 104, 0.24);
+                    background: rgba(255, 92, 104, 0.04);
+                "
+            >
+                <div
+                    style="
+                        font: 400 14px/1.3 var(--cw-sans);
+                        color: var(--cw-bad-soft);
+                    "
+                >
+                    {{ t('deleteVault') }}
+                </div>
+                <p class="cw-prose" style="margin-top: 6px; font-size: 12px">
+                    {{ t('deleteVaultBody') }}
+                </p>
+                <button
+                    type="button"
+                    class="cw-btn cw-btn-danger"
+                    style="height: 44px; margin-top: 14px"
+                    @click="
+                        deleteConfirmation = '';
+                        deleting = true;
+                    "
+                >
+                    {{ t('deleteVaultAction') }}
+                </button>
+            </div>
+        </div>
+
+        <!-- Typed confirmation: a second button is a reflex, a word is not. -->
+        <div v-if="deleting" class="cw-modal">
+            <div
+                style="
+                    width: 100%;
+                    max-width: 420px;
+                    padding: 22px;
+                    border: 1px solid rgba(255, 92, 104, 0.35);
+                    background: var(--cw-surface);
+                "
+            >
+                <div
+                    class="cw-label"
+                    style="margin-bottom: 12px; color: var(--cw-bad)"
+                >
+                    {{ t('irreversible') }}
+                </div>
+                <h3 class="cw-title" style="font-size: 19px">
+                    {{ t('deleteTitle') }}
+                </h3>
+                <p class="cw-prose" style="margin: 10px 0 18px">
+                    {{ t('deleteBody') }}
+                </p>
+                <label
+                    class="cw-label"
+                    style="display: block; margin-bottom: 8px"
+                >
+                    {{ t('typeToConfirm', { word: t('deleteWord') }) }}
+                </label>
+                <input
+                    v-model="deleteConfirmation"
+                    type="text"
+                    class="cw-input"
+                    autocomplete="off"
+                    spellcheck="false"
+                    :placeholder="t('deleteWord')"
+                />
+                <div style="display: flex; gap: 8px; margin-top: 18px">
+                    <button
+                        type="button"
+                        class="cw-btn cw-btn-secondary"
+                        style="height: 48px"
+                        @click="deleting = false"
+                    >
+                        {{ t('cancel') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="cw-btn cw-btn-danger"
+                        style="height: 48px"
+                        :disabled="!canDelete"
+                        @click="forget"
+                    >
+                        {{ t('deleteConfirm') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>

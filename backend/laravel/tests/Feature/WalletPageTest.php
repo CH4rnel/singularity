@@ -9,8 +9,20 @@ beforeEach(function () {
     $this->withoutVite();
 });
 
-it('requires an account', function () {
-    $this->get('/wallet')->assertRedirect('/login');
+/**
+ * The wallet is the home screen of the desktop and mobile shells, so it has to
+ * open for someone who has never had a Cyberia account: the keys are generated
+ * and stored in the browser, and gating them behind a server that never sees
+ * them would be theatre. Signing in adds exactly one thing — the XMR payout
+ * binding.
+ */
+it('opens without an account, because the keys were never ours to gate', function () {
+    $this->get('/wallet')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('Wallet')
+            ->where('moneroPayoutAddress', null)
+        );
 });
 
 it('hands the wallet page a public RPC endpoint and the saved payout address', function () {

@@ -19,13 +19,14 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 class UserProfileController extends Controller
 {
     public function show(
+        Request $request,
         User $user,
         GamificationService $gamification,
         ProfileOnchainService $onchain,
     ): Response {
         $onchain->syncNickname($user);
 
-        return $this->renderProfile($user, $gamification);
+        return $this->renderProfile($user, $gamification, $request->user());
     }
 
     public function legacy(
@@ -44,11 +45,14 @@ class UserProfileController extends Controller
             );
         }
 
-        return $this->renderProfile($user, $gamification);
+        return $this->renderProfile($user, $gamification, $request->user());
     }
 
-    private function renderProfile(User $user, GamificationService $gamification): Response
-    {
+    private function renderProfile(
+        User $user,
+        GamificationService $gamification,
+        ?User $viewer,
+    ): Response {
         $user->loadCount([
             'posts',
             'proposals',
@@ -66,6 +70,9 @@ class UserProfileController extends Controller
                 'wallet_address' => $user->wallet_address,
                 'solana_wallet_address' => $user->solana_wallet_address,
                 'created_at' => $user->created_at?->toISOString(),
+                'is_following' => $viewer?->following()
+                    ->whereKey($user->id)
+                    ->exists() ?? false,
             ],
             'stats' => [
                 'posts' => $user->posts_count,

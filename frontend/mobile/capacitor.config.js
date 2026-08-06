@@ -1,14 +1,16 @@
 'use strict';
 
-const { allowNavigation, resolveAppUrl } = require('./src/app-url');
+const { allowNavigation, resolveAppUrl, resolveStartUrl } = require('./src/app-url');
 
 const appUrl = resolveAppUrl();
+const startUrl = resolveStartUrl();
 const { hostname, protocol } = new URL(appUrl);
 
 /**
- * The shell renders the live site, so `server.url` is the whole app. `www/` is
- * only the local fallback the WebView shows when that URL cannot be reached
- * (`server.errorPath`); regenerate it with `npm run www`.
+ * The shell renders the live site, so `server.url` is the whole app — pointed
+ * at the wallet, which is what this app is for; the rest of Cyberia is a link
+ * away inside it. `www/` is only the local fallback the WebView shows when that
+ * URL cannot be reached (`server.errorPath`); regenerate it with `npm run www`.
  *
  * @type {import('@capacitor/cli').CapacitorConfig}
  */
@@ -21,7 +23,7 @@ const config = {
     appendUserAgent: 'CyberiaMobile/1.0.0',
     zoomEnabled: false,
     server: {
-        url: appUrl,
+        url: startUrl,
         hostname,
         androidScheme: 'https',
         cleartext: protocol === 'http:',

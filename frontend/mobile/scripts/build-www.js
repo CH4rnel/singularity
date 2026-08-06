@@ -11,9 +11,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { resolveAppUrl } = require('../src/app-url');
+const { resolveStartUrl } = require('../src/app-url');
 
-const appUrl = resolveAppUrl();
+// The fallback page retries the route the app launches on, not the site home.
+const appUrl = resolveStartUrl();
 const wwwDir = path.join(__dirname, '..', 'www');
 
 function escapeHtml(value) {

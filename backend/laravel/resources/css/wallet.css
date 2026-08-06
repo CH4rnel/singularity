@@ -1,0 +1,668 @@
+/*
+ * The Cyberia Wallet surface.
+ *
+ * The wallet is its own product inside the site: a dark, high-contrast console
+ * that stays dark in either site theme, because the whole visual language —
+ * hairlines on near-black, one cyan accent, a scan line — only reads that way.
+ * Everything here is namespaced `cw-` and only loaded with the wallet page.
+ *
+ * Two rules carry most of the design:
+ *   - Networks are hue + shape + a two-letter tile. Statuses are a separate
+ *     amber/green/red family. A glance never confuses "Solana" with "pending".
+ *   - Grotesk is for sentences a human reads, mono for anything that is data:
+ *     addresses, amounts, labels, hashes.
+ */
+
+.cw {
+    --cw-canvas: #050607;
+    --cw-app: #07080a;
+    --cw-surface: #0a0c0f;
+    --cw-raised: #0e1216;
+    --cw-hairline: #16191d;
+    --cw-line: #14181c;
+    --cw-border: #2a3038;
+    --cw-border-soft: #23282e;
+    --cw-border-hover: #46505a;
+    --cw-fainter: #3a424a;
+    --cw-faint: #4a525a;
+    --cw-dim: #5a636c;
+    --cw-muted: #8a949e;
+    --cw-body: #d6dde4;
+    --cw-text: #e8edf2;
+    --cw-bright: #f2f6fa;
+
+    --cw-accent: #2fe9e0;
+    --cw-accent-hover: #5cf2eb;
+    --cw-accent-ink: #04191a;
+    --cw-meta: #8b7bf7;
+
+    /*
+     * Network hues. All of them stay clear of the amber/green/red family that
+     * transaction status owns, so a glance never reads a chain as a state.
+     */
+    --cw-net-cyberia: #2fe9e0;
+    --cw-net-robinhood: #ff2bd6;
+    --cw-net-bnb: #f2c230;
+    --cw-net-base: #4c8dff;
+    --cw-net-solana: #8b7bf7;
+    --cw-net-monero: #c9d2db;
+
+    --cw-ok: #5bd6a0;
+    --cw-pending: #e8b44a;
+    --cw-bad: #ff5c68;
+    --cw-bad-soft: #ff9aa2;
+
+    /* Space Grotesk has no Cyrillic; Manrope catches Russian copy. */
+    --cw-sans: 'Space Grotesk', Manrope, ui-sans-serif, system-ui, sans-serif;
+    --cw-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+    color: var(--cw-text);
+    font-family: var(--cw-sans);
+    -webkit-font-smoothing: antialiased;
+}
+
+.cw *,
+.cw *::before,
+.cw *::after {
+    box-sizing: border-box;
+}
+
+@keyframes cw-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.25;
+    }
+}
+
+@keyframes cw-scan {
+    0% {
+        transform: translateY(-100%);
+    }
+    100% {
+        transform: translateY(1400px);
+    }
+}
+
+/* ---------------------------------------------------------------- shell -- */
+
+.cw-shell {
+    position: relative;
+    display: flex;
+    min-height: 640px;
+    overflow: hidden;
+    border: 1px solid var(--cw-border-soft);
+    border-radius: 8px;
+    background: var(--cw-app);
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+    background-size: 32px 32px;
+}
+
+/*
+ * Inside the desktop and mobile apps the wallet is the window, not a card on a
+ * page: it takes the whole frame and drops the border that only made sense
+ * against the site background.
+ */
+.cw-shell-native {
+    flex: 1;
+    min-height: 0;
+    border-color: var(--cw-line);
+    border-radius: 6px;
+}
+
+/* A single scan line and a 3px raster: atmosphere that never eats a click. */
+.cw-raster,
+.cw-scan {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.cw-raster {
+    background-image: repeating-linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.05) 0 1px,
+        transparent 1px 3px
+    );
+    opacity: 0.5;
+}
+
+.cw-scan {
+    inset: 0 0 auto 0;
+    height: 120px;
+    background: linear-gradient(
+        180deg,
+        transparent,
+        rgba(47, 233, 224, 0.035),
+        transparent
+    );
+    animation: cw-scan 7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cw-scan {
+        display: none;
+    }
+    .cw * {
+        animation: none !important;
+    }
+}
+
+.cw-rail {
+    display: none;
+    width: 248px;
+    flex: none;
+    flex-direction: column;
+    padding: 22px 0;
+    border-right: 1px solid var(--cw-line);
+    background: #08090b;
+}
+
+.cw-main {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+}
+
+.cw-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/*
+ * A screen that owns the frame. Grows to fill it so a bottom-anchored primary
+ * action sits at the bottom, and past it when the content is taller — a
+ * percentage min-height cannot do this, because the scrolling parent has no
+ * definite height to be a percentage of.
+ */
+.cw-screen {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+}
+
+/*
+ * Onboarding and the lock screen keep a phone's measure on any display: these
+ * are one-decision-at-a-time screens, and a seed grid or a password field
+ * stretched across 1400px reads as a form to skim rather than a step to finish.
+ */
+.cw-column {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    width: 100%;
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+.cw-aside {
+    display: none;
+    width: 392px;
+    flex: none;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 24px;
+    border-left: 1px solid var(--cw-line);
+    background: #08090b;
+}
+
+@media (min-width: 1024px) {
+    .cw-rail,
+    .cw-aside {
+        display: flex;
+    }
+    .cw-body {
+        padding: 32px;
+    }
+    .cw-tabs {
+        display: none;
+    }
+}
+
+/* --------------------------------------------------------------- typo --- */
+
+.cw-label {
+    font: 400 10px/1 var(--cw-mono);
+    letter-spacing: 0.2em;
+    color: var(--cw-dim);
+    text-transform: uppercase;
+}
+
+.cw-data {
+    font: 400 12px/1.5 var(--cw-mono);
+    color: var(--cw-body);
+}
+
+.cw-num {
+    font: 500 14px/1.2 var(--cw-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.cw-total {
+    font: 500 40px/1 var(--cw-mono);
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--cw-bright);
+}
+
+.cw-title {
+    margin: 0;
+    font: 500 24px/1.25 var(--cw-sans);
+    letter-spacing: -0.01em;
+}
+
+.cw-display {
+    margin: 0;
+    font: 400 clamp(26px, 6vw, 33px) / 1.24 var(--cw-sans);
+    letter-spacing: -0.02em;
+    color: var(--cw-bright);
+    text-wrap: pretty;
+}
+
+.cw-prose {
+    margin: 0;
+    font: 400 13px/1.6 var(--cw-sans);
+    color: var(--cw-muted);
+    text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------ controls -- */
+
+.cw-btn {
+    display: flex;
+    height: 52px;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font: 600 14px/1 var(--cw-sans);
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        border-color 0.15s;
+}
+
+.cw-btn-primary {
+    background: var(--cw-accent);
+    color: var(--cw-accent-ink);
+}
+
+.cw-btn-primary:hover:not(:disabled) {
+    background: var(--cw-accent-hover);
+}
+
+.cw-btn-secondary {
+    border-color: var(--cw-border);
+    background: transparent;
+    color: var(--cw-text);
+    font-weight: 500;
+}
+
+.cw-btn-secondary:hover:not(:disabled) {
+    border-color: var(--cw-border-hover);
+    background: #0c0e11;
+}
+
+.cw-btn-danger {
+    border-color: rgba(255, 92, 104, 0.45);
+    background: rgba(255, 92, 104, 0.06);
+    color: var(--cw-bad-soft);
+    font-weight: 500;
+}
+
+.cw-btn-danger:hover:not(:disabled) {
+    background: rgba(255, 92, 104, 0.14);
+}
+
+.cw-btn:disabled {
+    border-color: #1b2126;
+    background: var(--cw-surface);
+    color: var(--cw-fainter);
+    cursor: not-allowed;
+}
+
+.cw-ghost {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 14px;
+    border: 1px solid var(--cw-border-soft);
+    border-radius: 3px;
+    background: transparent;
+    font: 400 11px/1 var(--cw-mono);
+    letter-spacing: 0.12em;
+    color: var(--cw-muted);
+    cursor: pointer;
+    text-transform: uppercase;
+    transition:
+        color 0.15s,
+        border-color 0.15s;
+}
+
+.cw-ghost:hover:not(:disabled) {
+    border-color: var(--cw-border-hover);
+    color: var(--cw-text);
+}
+
+.cw-ghost:disabled {
+    color: var(--cw-fainter);
+    cursor: not-allowed;
+}
+
+.cw-icon-btn {
+    display: flex;
+    height: 44px;
+    width: 44px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--cw-border-soft);
+    border-radius: 3px;
+    background: transparent;
+    font: 400 12px/1 var(--cw-mono);
+    color: var(--cw-muted);
+    cursor: pointer;
+}
+
+.cw-icon-btn:hover {
+    border-color: var(--cw-border-hover);
+    color: var(--cw-text);
+}
+
+.cw-back {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    border: 0;
+    background: none;
+    font: 400 12px/1 var(--cw-mono);
+    letter-spacing: 0.08em;
+    color: var(--cw-muted);
+    cursor: pointer;
+}
+
+.cw-back:hover {
+    color: var(--cw-text);
+}
+
+.cw-input {
+    width: 100%;
+    height: 48px;
+    padding: 0 14px;
+    border: 1px solid var(--cw-border-soft);
+    border-radius: 4px;
+    background: var(--cw-surface);
+    font: 400 13px/1 var(--cw-mono);
+    color: var(--cw-text);
+    outline: none;
+}
+
+.cw-input::placeholder,
+.cw-textarea::placeholder {
+    color: var(--cw-faint);
+}
+
+.cw-input:focus,
+.cw-textarea:focus {
+    border-color: var(--cw-accent);
+}
+
+.cw-input[aria-invalid='true'],
+.cw-textarea[aria-invalid='true'] {
+    border-color: var(--cw-bad);
+}
+
+.cw-textarea {
+    width: 100%;
+    height: 150px;
+    resize: none;
+    padding: 14px;
+    border: 1px solid var(--cw-border-soft);
+    border-radius: 4px;
+    background: var(--cw-surface);
+    font: 400 14px/1.9 var(--cw-mono);
+    color: var(--cw-text);
+    outline: none;
+}
+
+/* ------------------------------------------------------------ surfaces -- */
+
+.cw-card {
+    border: 1px solid var(--cw-hairline);
+    border-radius: 5px;
+    background: var(--cw-surface);
+    padding: 16px;
+}
+
+.cw-card-button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+}
+
+.cw-card-button:hover {
+    border-color: var(--cw-border);
+    background: #0c0e12;
+}
+
+.cw-note {
+    display: flex;
+    gap: 11px;
+    padding: 13px 14px;
+    border: 1px solid var(--cw-hairline);
+    background: var(--cw-surface);
+    font: 400 12px/1.55 var(--cw-sans);
+    color: var(--cw-body);
+}
+
+.cw-note-warn {
+    border-color: rgba(232, 180, 74, 0.28);
+    background: rgba(232, 180, 74, 0.05);
+    color: #d9c08a;
+}
+
+.cw-note-bad {
+    border-color: rgba(255, 92, 104, 0.3);
+    background: rgba(255, 92, 104, 0.06);
+    color: var(--cw-bad-soft);
+}
+
+.cw-note::before {
+    content: '';
+    flex: none;
+    width: 6px;
+    height: 6px;
+    margin-top: 6px;
+    background: currentColor;
+}
+
+/* --------------------------------------------------------------- misc --- */
+
+.cw-hr {
+    height: 1px;
+    background: var(--cw-hairline);
+}
+
+.cw-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.cw-stack {
+    display: flex;
+    flex-direction: column;
+}
+
+.cw-fill {
+    flex: 1;
+}
+
+.cw-tabs {
+    display: flex;
+    flex: none;
+    height: 66px;
+    border-top: 1px solid var(--cw-line);
+    background: #08090b;
+}
+
+.cw-tab {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 0;
+    border-top: 1px solid transparent;
+    background: none;
+    font: 400 10px/1 var(--cw-mono);
+    letter-spacing: 0.12em;
+    color: var(--cw-dim);
+    cursor: pointer;
+}
+
+.cw-tab[aria-current='page'] {
+    border-top-color: var(--cw-accent);
+    color: var(--cw-accent);
+}
+
+.cw-rail-item {
+    display: flex;
+    height: 44px;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px;
+    border: 0;
+    border-left: 2px solid transparent;
+    background: none;
+    font: 400 13px/1 var(--cw-sans);
+    color: var(--cw-muted);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+}
+
+.cw-rail-item:hover {
+    color: var(--cw-text);
+}
+
+.cw-rail-item[aria-current='page'] {
+    border-left-color: var(--cw-accent);
+    background: var(--cw-raised);
+    color: var(--cw-text);
+    font-weight: 500;
+}
+
+/*
+ * The network picker wraps: with six networks a single row would squeeze the
+ * labels past reading, and a horizontally scrolling row hides the network
+ * someone is looking for.
+ */
+.cw-seg {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    border: 1px solid var(--cw-hairline);
+    background: var(--cw-hairline);
+}
+
+.cw-seg-item {
+    display: flex;
+    flex: 1 0 88px;
+    min-height: 44px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 0;
+    background: var(--cw-surface);
+    font: 500 11px/1 var(--cw-mono);
+    letter-spacing: 0.08em;
+    color: var(--cw-dim);
+    cursor: pointer;
+}
+
+.cw-seg-item[aria-pressed='true'] {
+    background: var(--cw-raised);
+    color: var(--cw-text);
+}
+
+.cw-seg-bar {
+    width: 14px;
+    height: 2px;
+    background: transparent;
+}
+
+.cw-sheet {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    background: rgba(4, 5, 6, 0.72);
+}
+
+.cw-sheet-panel {
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 22px 20px 26px;
+    border-top: 1px solid var(--cw-border);
+    border-radius: 12px 12px 0 0;
+    background: var(--cw-surface);
+}
+
+.cw-modal {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+    background: rgba(4, 5, 6, 0.82);
+}
+
+.cw-kv {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--cw-line);
+}
+
+.cw-kv:last-child {
+    border-bottom: 0;
+}
+
+.cw-kv-key {
+    font: 400 11px/1.4 var(--cw-mono);
+    letter-spacing: 0.1em;
+    color: var(--cw-dim);
+    text-transform: uppercase;
+}
+
+.cw-kv-val {
+    font: 500 12px/1.4 var(--cw-mono);
+    color: var(--cw-text);
+    text-align: right;
+    word-break: break-all;
+}

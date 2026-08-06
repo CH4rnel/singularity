@@ -8,9 +8,10 @@ import { initializeTheme } from '@/composables/useAppearance';
 import { initializePwa } from '@/composables/usePwaInstall';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
+import NativeShellLayout from '@/layouts/NativeShellLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import Web3Layout from '@/layouts/Web3Layout.vue';
-import { initializeNativeShell } from '@/lib/native';
+import { initializeNativeShell, isNativeShell } from '@/lib/native';
 import { track } from '@/lib/track';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -27,6 +28,10 @@ createInertiaApp({
               : appName,
     layout: (name) => {
         switch (true) {
+            // The wallet is the home screen of the desktop and mobile shells,
+            // so there it drops the site chrome and owns the whole frame.
+            case name === 'Wallet':
+                return isNativeShell() ? NativeShellLayout : Web3Layout;
             case name === 'Analytics':
             case name === 'Changelog':
             case name === 'Token':
@@ -46,7 +51,6 @@ createInertiaApp({
             case name === 'Predictions':
             case name === 'PixelBattle':
             case name === 'Profile':
-            case name === 'Wallet':
             case name.startsWith('Growth/'):
             case name.startsWith('dao/'):
             case name.startsWith('proposals/'):

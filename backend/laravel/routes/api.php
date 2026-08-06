@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAuthController;
+use App\Services\WalletPriceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
@@ -16,6 +17,11 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('wallet')->group(function () {
     Route::post('nonce', [WalletAuthController::class, 'generateNonce']);
     Route::post('verify', [WalletAuthController::class, 'verify']);
+
+    // USD quotes for the unified wallet's portfolio total. Public and cached:
+    // it says nothing about any account, only what a coin is worth.
+    Route::get('prices', fn (WalletPriceService $prices) => response()->json($prices->quotes()))
+        ->middleware('throttle:60,1');
 });
 
 // Solana wallet auth (Phantom)

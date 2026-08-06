@@ -35,9 +35,24 @@ export function useLocale(messages?: Messages) {
         setLocale(locale.value === 'ru' ? 'en' : 'ru');
     }
 
-    // Reading locale.value inside t() keeps template usages reactive.
-    function t(key: string): string {
-        return messages?.[locale.value][key] ?? messages?.en[key] ?? key;
+    /**
+     * Reading locale.value inside t() keeps template usages reactive.
+     *
+     * `{name}` placeholders are filled from `params`, so a sentence that has to
+     * name an amount or a chain stays one translatable string instead of being
+     * concatenated from fragments that only line up in English.
+     */
+    function t(key: string, params?: Record<string, string | number>): string {
+        const message =
+            messages?.[locale.value][key] ?? messages?.en[key] ?? key;
+
+        if (!params) {
+            return message;
+        }
+
+        return message.replace(/\{(\w+)\}/g, (whole, name: string) =>
+            name in params ? String(params[name]) : whole,
+        );
     }
 
     return { locale, setLocale, toggleLocale, t };

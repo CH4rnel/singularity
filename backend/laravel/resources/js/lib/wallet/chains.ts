@@ -1,4 +1,5 @@
 import {
+    ComputeBudgetProgram,
     Connection,
     Keypair,
     PublicKey,
@@ -6,7 +7,11 @@ import {
     Transaction,
 } from '@solana/web3.js';
 import { HDNodeWallet, JsonRpcProvider, isAddress, keccak256 } from 'ethers';
-import { CYBERIA_CHAIN_ID, cyberiaReadRpcUrl } from '@/lib/evmChains';
+import {
+    CYBERIA_CHAIN_ID,
+    EVM_CHAINS,
+    cyberiaReadRpcUrl,
+} from '@/lib/evmChains';
 import { isValidMoneroAddress, moneroStandardAddress } from '@/lib/monero';
 import {
     numberToBytesLE,
@@ -29,7 +34,20 @@ import { deriveEd25519Key } from '@/lib/wallet/slip10';
  * returns a private key to its caller, and none of them log.
  */
 
-export type WalletChainId = 'cyberia' | 'solana' | 'monero';
+export type WalletChainId =
+    | 'cyberia'
+    | 'robinhood'
+    | 'bnb'
+    | 'base'
+    | 'solana'
+    | 'monero';
+
+/**
+ * Which key an address belongs to. Every `evm` chain derives the *same*
+ * address from the one seed, so the family — not the chain — is what a user is
+ * actually looking at when they compare two addresses.
+ */
+export type WalletChainFamily = 'evm' | 'solana' | 'monero';
 
 export type WalletCapabilities = {
     /** The browser can read this chain's balance without extra infrastructure. */
@@ -40,11 +58,52 @@ export type WalletCapabilities = {
     send: boolean;
 };
 
+/**
+ * How hard a payment bids for inclusion. The tiers are relative to whatever the
+ * network is charging right now — none of them is a fixed price, and none of
+ * them promises a confirmation time.
+ */
+export type WalletFeeTier = 'slow' | 'normal' | 'fast';
+
+export const WALLET_FEE_TIERS: readonly WalletFeeTier[] = [
+    'slow',
+    'normal',
+    'fast',
+];
+
+export type WalletFeeQuote = {
+    tier: WalletFeeTier;
+    /** Worst-case cost of the transfer, in the chain's smallest unit. */
+    fee: bigint;
+    /** What the tier does to the live network price, e.g. "base × 1.25". */
+    basis: string;
+};
+
+export type WalletTxStatus = 'confirmed' | 'pending' | 'failed';
+
+export type WalletTx = {
+    hash: string;
+    /** Direction as seen from the wallet's own address. */
+    direction: 'in' | 'out';
+    /** Signed smallest-unit change to this address, sign already applied. */
+    amount: bigint;
+    /** Unix seconds, or null when the source does not report one. */
+    timestamp: number | null;
+    status: WalletTxStatus;
+    /** The other side of the transfer, when the source identifies one. */
+    counterparty: string | null;
+    /** Short provenance line — block height, slot, revert reason. */
+    meta: string | null;
+};
+
 export type WalletChain = {
     id: WalletChainId;
     label: string;
     symbol: string;
     decimals: number;
+    /** EVM chain id, for the networks that have one. */
+    chainId?: number;
+    family: WalletChainFamily;
     /** BIP-44/SLIP-0010 path, shown in the UI so the wallet is restorable. */
     path: string;
     /** Curve the path is walked on — secp256k1 (BIP-32) or ed25519 (SLIP-0010). */
@@ -52,16 +111,36 @@ export type WalletChain = {
     capabilities: WalletCapabilities;
     /** Why a capability is missing, when one is. */
     note?: string;
+    /** Message key explaining why there is no in-app history, when there is none. */
+    historyNote?: string;
     derive: (seed: Uint8Array) => string;
     isValidAddress: (address: string) => boolean;
     explorerAddressUrl: (address: string) => string | null;
     explorerTxUrl: (hash: string) => string | null;
     /** Smallest-unit balance, or null when the chain cannot be read here. */
     fetchBalance?: (address: string, rpcUrl?: string) => Promise<bigint>;
+    /** Live cost of one transfer at each tier, cheapest first. */
+    fetchFees?: (rpcUrl?: string) => Promise<WalletFeeQuote[]>;
+    /** Most recent transfers touching this address, newest first. */
+    fetchHistory?: (address: string, rpcUrl?: string) => Promise<WalletTx[]>;
+    /**
+     * Waits for a broadcast transaction to settle. Resolves to how it ended,
+     * or rejects when the wait itself times out — which says nothing about the
+     * transaction, only about the watching.
+     */
+    awaitOutcome?: (
+        hash: string,
+        rpcUrl?: string,
+    ) => Promise<'confirmed' | 'failed'>;
     /** Broadcasts a payment and resolves to the transaction hash. */
     send?: (
         seed: Uint8Array,
-        request: { to: string; amount: bigint; rpcUrl?: string },
+        request: {
+            to: string;
+            amount: bigint;
+            tier: WalletFeeTier;
+            rpcUrl?: string;
+        },
     ) => Promise<string>;
 };
 
@@ -116,41 +195,362 @@ const hexToBytes = (hex: string): Uint8Array => {
     return bytes;
 };
 
-const cyberiaProvider = (rpcUrl?: string): JsonRpcProvider =>
-    new JsonRpcProvider(rpcUrl || cyberiaReadRpcUrl(), {
-        chainId: CYBERIA_CHAIN_ID,
-        name: 'cyberia',
-    });
+/** A plain native transfer, the only shape this wallet sends on an EVM chain. */
+const EVM_TRANSFER_GAS = 21_000n;
 
-export const WALLET_CHAINS: readonly WalletChain[] = [
-    {
-        id: 'cyberia',
-        label: 'Cyberia',
-        symbol: 'CYBER',
-        decimals: 18,
+/** Numerator/denominator per tier — a multiplier on the live network price. */
+const EVM_TIER_MULTIPLIER: Record<WalletFeeTier, [bigint, bigint]> = {
+    slow: [1n, 1n],
+    normal: [5n, 4n],
+    fast: [8n, 5n],
+};
+
+/**
+ * Recent transfers from a Blockscout instance. Only value-bearing transfers
+ * are kept: contract calls belong in the explorer, not in a list whose whole
+ * job is "where did my coins go".
+ *
+ * Etherscan-family explorers speak the same query but now require an API key,
+ * so chains behind one simply declare no history source and say so in the UI
+ * rather than shipping a key or rendering an empty list as "nothing happened".
+ */
+const blockscoutHistory = async (
+    apiUrl: string,
+    address: string,
+): Promise<WalletTx[]> => {
+    const query = new URLSearchParams({
+        module: 'account',
+        action: 'txlist',
+        address,
+        page: '1',
+        offset: '20',
+        sort: 'desc',
+    });
+    const response = await fetch(`${apiUrl}?${query}`);
+
+    if (!response.ok) {
+        throw new Error(`Explorer returned ${response.status}`);
+    }
+
+    const body = (await response.json()) as {
+        status?: string;
+        result?: unknown;
+    };
+
+    // Blockscout answers "no transactions found" with status 0 and an empty
+    // result — an empty history, not a failure.
+    if (!Array.isArray(body.result)) {
+        return [];
+    }
+
+    const mine = address.toLowerCase();
+
+    return (body.result as Record<string, string>[])
+        .filter((tx) => tx.value && tx.value !== '0')
+        .map((tx) => {
+            const outgoing = (tx.from ?? '').toLowerCase() === mine;
+            const value = BigInt(tx.value);
+            const reverted = tx.isError === '1' || tx.txreceipt_status === '0';
+
+            return {
+                hash: tx.hash,
+                direction: outgoing ? 'out' : 'in',
+                amount: outgoing ? -value : value,
+                timestamp: tx.timeStamp ? Number(tx.timeStamp) : null,
+                status: reverted ? 'failed' : 'confirmed',
+                counterparty: outgoing ? (tx.to ?? null) : (tx.from ?? null),
+                meta: tx.blockNumber ? `block ${tx.blockNumber}` : null,
+            } satisfies WalletTx;
+        });
+};
+
+type EvmSpec = {
+    id: WalletChainId;
+    /** Entry in the shared EVM registry this chain's parameters come from. */
+    chainId: number;
+    label: string;
+    /** Blockscout API root, for the chains that have a keyless one. */
+    blockscoutApi?: string;
+    /**
+     * Pool floor for the gas price. Bidding under a node's floor gets the
+     * transaction rejected rather than merely delayed, so it is a floor and
+     * not a preference. Only Cyberia publishes one.
+     */
+    minGasPrice?: bigint;
+    note?: string;
+    /** Message key explaining why there is no in-app history, when there is none. */
+    historyNote?: string;
+};
+
+/**
+ * One EVM network as a wallet chain.
+ *
+ * Every EVM chain here derives the *same* address from the one seed — that is
+ * the point of BIP-44 coin type 60, and why the wallet shows one card per
+ * network rather than one per key. What actually differs is the RPC, the
+ * explorer, the gas price and what the native coin is worth.
+ */
+const evmChain = (spec: EvmSpec): WalletChain => {
+    const registry = EVM_CHAINS.find(
+        (candidate) => candidate.chainId === spec.chainId,
+    );
+
+    if (!registry) {
+        throw new Error(`Chain ${spec.chainId} is not in the EVM registry`);
+    }
+
+    const explorer = registry.blockExplorerUrls?.[0] ?? null;
+    const defaultRpc =
+        spec.id === 'cyberia' ? cyberiaReadRpcUrl() : registry.rpcUrls[0];
+
+    const provider = (rpcUrl?: string): JsonRpcProvider =>
+        new JsonRpcProvider(rpcUrl || defaultRpc, {
+            chainId: registry.chainId,
+            name: spec.id,
+        });
+
+    const gasPrice = async (
+        tier: WalletFeeTier,
+        rpcUrl?: string,
+    ): Promise<bigint> => {
+        const feeData = await provider(rpcUrl).getFeeData();
+        const floor = spec.minGasPrice ?? 0n;
+        const base =
+            feeData.gasPrice && feeData.gasPrice > floor
+                ? feeData.gasPrice
+                : floor;
+
+        if (base === 0n) {
+            throw new Error('The network did not report a gas price');
+        }
+
+        const [numerator, denominator] = EVM_TIER_MULTIPLIER[tier];
+
+        return (base * numerator) / denominator;
+    };
+
+    return {
+        id: spec.id,
+        label: spec.label,
+        symbol: registry.nativeCurrency.symbol,
+        decimals: registry.nativeCurrency.decimals,
+        chainId: registry.chainId,
+        family: 'evm',
         path: EVM_PATH,
         curve: 'secp256k1',
-        capabilities: { balance: true, history: true, send: true },
-        note: 'The same address works on every EVM chain the bridge supports.',
+        capabilities: {
+            balance: true,
+            history: explorer !== null,
+            send: true,
+        },
+        note: spec.note,
+        historyNote: spec.historyNote,
         derive: (seed) => evmWallet(seed).address,
         isValidAddress: (address) => isAddress(address),
         explorerAddressUrl: (address) =>
-            `${CYBERIA_EXPLORER}/address/${address}`,
-        explorerTxUrl: (hash) => `${CYBERIA_EXPLORER}/tx/${hash}`,
+            explorer ? `${explorer}/address/${address}` : null,
+        explorerTxUrl: (hash) => (explorer ? `${explorer}/tx/${hash}` : null),
         fetchBalance: async (address, rpcUrl) =>
-            cyberiaProvider(rpcUrl).getBalance(address),
-        send: async (seed, { to, amount, rpcUrl }) => {
-            const signer = evmWallet(seed).connect(cyberiaProvider(rpcUrl));
-            const tx = await signer.sendTransaction({ to, value: amount });
+            provider(rpcUrl).getBalance(address),
+        fetchFees: async (rpcUrl) =>
+            Promise.all(
+                WALLET_FEE_TIERS.map(async (tier) => ({
+                    tier,
+                    fee: (await gasPrice(tier, rpcUrl)) * EVM_TRANSFER_GAS,
+                    basis: `network price × ${
+                        Number(EVM_TIER_MULTIPLIER[tier][0]) /
+                        Number(EVM_TIER_MULTIPLIER[tier][1])
+                    }`,
+                })),
+            ),
+        fetchHistory: spec.blockscoutApi
+            ? (address) => blockscoutHistory(spec.blockscoutApi!, address)
+            : undefined,
+        awaitOutcome: async (hash, rpcUrl) => {
+            const receipt = await provider(rpcUrl).waitForTransaction(
+                hash,
+                1,
+                120_000,
+            );
+
+            if (receipt === null) {
+                throw new Error('Timed out waiting for a receipt');
+            }
+
+            return receipt.status === 1 ? 'confirmed' : 'failed';
+        },
+        send: async (seed, { to, amount, tier, rpcUrl }) => {
+            const signer = evmWallet(seed).connect(provider(rpcUrl));
+            // Gas is stated rather than estimated: some of these nodes answer
+            // eth_estimateGas unreliably, and a native transfer is always 21000.
+            const tx = await signer.sendTransaction({
+                to,
+                value: amount,
+                gasLimit: EVM_TRANSFER_GAS,
+                gasPrice: await gasPrice(tier, rpcUrl),
+            });
 
             return tx.hash;
         },
-    },
+    };
+};
+
+const SOLANA_PUBLIC_RPC = 'https://api.mainnet-beta.solana.com';
+
+const solanaConnection = (rpcUrl?: string): Connection =>
+    new Connection(rpcUrl || SOLANA_PUBLIC_RPC, 'confirmed');
+
+/** One signature, at the protocol's fixed per-signature price. */
+const SOLANA_BASE_FEE = 5_000n;
+
+/**
+ * Compute budget requested for a transfer. A system transfer plus the two
+ * compute-budget instructions costs well under this; asking for a small,
+ * honest limit is what keeps the priority fee small in absolute terms, since
+ * the network charges per compute unit.
+ */
+const SOLANA_COMPUTE_UNITS = 1_000n;
+
+/** Fallback micro-lamports per compute unit when the RPC reports no history. */
+const SOLANA_FALLBACK_PRICE: Record<WalletFeeTier, bigint> = {
+    slow: 0n,
+    normal: 7_000_000n,
+    fast: 30_000_000n,
+};
+
+const percentile = (sorted: bigint[], fraction: number): bigint =>
+    sorted.length === 0
+        ? 0n
+        : sorted[
+              Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))
+          ];
+
+/**
+ * Priority price per tier, taken from what recent blocks actually paid. The
+ * RPC reports one prioritization fee per recent slot; the tiers are the low,
+ * middle and upper end of that window rather than invented constants.
+ */
+const solanaPriorityPrices = async (
+    rpcUrl?: string,
+): Promise<Record<WalletFeeTier, bigint>> => {
+    try {
+        const recent =
+            await solanaConnection(rpcUrl).getRecentPrioritizationFees();
+        const fees = recent
+            .map((entry) => BigInt(entry.prioritizationFee))
+            .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+        if (fees.length === 0 || fees[fees.length - 1] === 0n) {
+            return SOLANA_FALLBACK_PRICE;
+        }
+
+        return {
+            slow: percentile(fees, 0.25),
+            normal: percentile(fees, 0.6),
+            fast: percentile(fees, 0.9),
+        };
+    } catch {
+        return SOLANA_FALLBACK_PRICE;
+    }
+};
+
+/** Total lamports a transfer costs at a given micro-lamport unit price. */
+const solanaFee = (unitPrice: bigint): bigint =>
+    SOLANA_BASE_FEE +
+    (SOLANA_COMPUTE_UNITS * unitPrice + 999_999n) / 1_000_000n;
+
+/**
+ * Recent transfers, read as the net lamport change of our own account in each
+ * transaction. Deriving the amount from pre/post balances rather than from the
+ * instruction list means a transfer still shows up correctly when it arrives
+ * inside a program call this wallet knows nothing about.
+ */
+const solanaHistory = async (
+    address: string,
+    rpcUrl?: string,
+): Promise<WalletTx[]> => {
+    const connection = solanaConnection(rpcUrl);
+    const owner = new PublicKey(address);
+    const signatures = await connection.getSignaturesForAddress(owner, {
+        limit: 10,
+    });
+
+    if (signatures.length === 0) {
+        return [];
+    }
+
+    const parsed = await connection.getParsedTransactions(
+        signatures.map((signature) => signature.signature),
+        { maxSupportedTransactionVersion: 0 },
+    );
+
+    return signatures
+        .map((signature, index) => {
+            const transaction = parsed[index];
+            const keys = transaction?.transaction.message.accountKeys ?? [];
+            const position = keys.findIndex((key) => key.pubkey.equals(owner));
+            const pre = transaction?.meta?.preBalances?.[position];
+            const post = transaction?.meta?.postBalances?.[position];
+            const delta =
+                position >= 0 && pre !== undefined && post !== undefined
+                    ? BigInt(post) - BigInt(pre)
+                    : 0n;
+            const counterparty = keys.find(
+                (key) => key.signer && !key.pubkey.equals(owner),
+            );
+
+            return {
+                hash: signature.signature,
+                direction: delta < 0n ? 'out' : 'in',
+                amount: delta,
+                timestamp: signature.blockTime ?? null,
+                status: signature.err
+                    ? 'failed'
+                    : signature.confirmationStatus === 'finalized' ||
+                        signature.confirmationStatus === 'confirmed'
+                      ? 'confirmed'
+                      : 'pending',
+                counterparty: counterparty?.pubkey.toBase58() ?? null,
+                meta: `slot ${signature.slot}`,
+            } satisfies WalletTx;
+        })
+        .filter((tx) => tx.amount !== 0n);
+};
+
+export const WALLET_CHAINS: readonly WalletChain[] = [
+    evmChain({
+        id: 'cyberia',
+        chainId: CYBERIA_CHAIN_ID,
+        label: 'Cyberia',
+        blockscoutApi: `${CYBERIA_EXPLORER}/api`,
+        // The node rejects anything under its pool floor outright.
+        minGasPrice: 1_500_000_000n,
+        note: 'One address for every EVM network below — same key, same string.',
+    }),
+    evmChain({
+        id: 'robinhood',
+        chainId: 4663,
+        label: 'Robinhood',
+        blockscoutApi: 'https://robinhoodchain.blockscout.com/api',
+    }),
+    evmChain({
+        id: 'bnb',
+        chainId: 56,
+        label: 'BNB Chain',
+        historyNote: 'historyNoIndexer',
+    }),
+    evmChain({
+        id: 'base',
+        chainId: 8453,
+        label: 'Base',
+        historyNote: 'historyNoIndexer',
+    }),
     {
         id: 'solana',
         label: 'Solana',
         symbol: 'SOL',
         decimals: 9,
+        family: 'solana',
         path: SOLANA_PATH,
         curve: 'ed25519',
         capabilities: { balance: true, history: true, send: true },
@@ -165,25 +565,64 @@ export const WALLET_CHAINS: readonly WalletChain[] = [
         explorerAddressUrl: (address) =>
             `${SOLANA_EXPLORER}/account/${address}`,
         explorerTxUrl: (hash) => `${SOLANA_EXPLORER}/tx/${hash}`,
-        fetchBalance: async (address, rpcUrl) => {
-            const connection = new Connection(
-                rpcUrl || 'https://api.mainnet-beta.solana.com',
-                'confirmed',
-            );
+        fetchBalance: async (address, rpcUrl) =>
+            BigInt(
+                await solanaConnection(rpcUrl).getBalance(
+                    new PublicKey(address),
+                ),
+            ),
+        fetchFees: async (rpcUrl) => {
+            const prices = await solanaPriorityPrices(rpcUrl);
 
-            return BigInt(await connection.getBalance(new PublicKey(address)));
+            return WALLET_FEE_TIERS.map((tier) => ({
+                tier,
+                fee: solanaFee(prices[tier]),
+                basis:
+                    prices[tier] === 0n
+                        ? 'signature only'
+                        : `+ ${prices[tier]} µlamports/CU priority`,
+            }));
         },
-        send: async (seed, { to, amount, rpcUrl }) => {
+        fetchHistory: solanaHistory,
+        awaitOutcome: async (hash, rpcUrl) => {
+            const connection = solanaConnection(rpcUrl);
+            const deadline = Date.now() + 60_000;
+
+            while (Date.now() < deadline) {
+                const status = (await connection.getSignatureStatuses([hash]))
+                    .value[0];
+
+                if (status?.err) {
+                    return 'failed';
+                }
+
+                if (
+                    status?.confirmationStatus === 'confirmed' ||
+                    status?.confirmationStatus === 'finalized'
+                ) {
+                    return 'confirmed';
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, 2_000));
+            }
+
+            throw new Error('Timed out waiting for confirmation');
+        },
+        send: async (seed, { to, amount, tier, rpcUrl }) => {
             const keypair = solanaKeypair(seed);
-            const connection = new Connection(
-                rpcUrl || 'https://api.mainnet-beta.solana.com',
-                'confirmed',
-            );
+            const connection = solanaConnection(rpcUrl);
+            const unitPrice = (await solanaPriorityPrices(rpcUrl))[tier];
             const transaction = new Transaction().add(
+                ComputeBudgetProgram.setComputeUnitLimit({
+                    units: Number(SOLANA_COMPUTE_UNITS),
+                }),
+                ComputeBudgetProgram.setComputeUnitPrice({
+                    microLamports: unitPrice,
+                }),
                 SystemProgram.transfer({
                     fromPubkey: keypair.publicKey,
                     toPubkey: new PublicKey(to),
-                    lamports: Number(amount),
+                    lamports: amount,
                 }),
             );
 
@@ -195,6 +634,7 @@ export const WALLET_CHAINS: readonly WalletChain[] = [
         label: 'Monero',
         symbol: 'XMR',
         decimals: 12,
+        family: 'monero',
         path: MONERO_PATH,
         curve: 'ed25519',
         // Monero balances are not public: finding your own outputs means
@@ -203,6 +643,7 @@ export const WALLET_CHAINS: readonly WalletChain[] = [
         // Monero wallet restored from this same seed phrase.
         capabilities: { balance: false, history: false, send: false },
         note: 'Receive-only here: Monero balances and payments require a view-key scan against a Monero node, which the browser cannot do.',
+        historyNote: 'historyUnsupported',
         derive: moneroAddress,
         isValidAddress: isValidMoneroAddress,
         explorerAddressUrl: () => null,

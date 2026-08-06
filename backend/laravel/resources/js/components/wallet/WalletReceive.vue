@@ -1,0 +1,210 @@
+<script setup lang="ts">
+import { computed } from 'vue';
+import NetworkMark from '@/components/wallet/NetworkMark.vue';
+import QrCode from '@/components/wallet/QrCode.vue';
+import { useLocale } from '@/composables/useLocale';
+import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useSecureClipboard } from '@/composables/useSecureClipboard';
+import { walletChain } from '@/lib/wallet';
+import type { WalletChainId } from '@/lib/wallet';
+import { walletMessages } from '@/lib/walletMessages';
+
+/**
+ * Receive: pick a network, get its address as a QR and as text, and read the
+ * warning that belongs to that network. The warning is per-chain and never
+ * generic, because "wrong network" is the one mistake this screen exists to
+ * prevent and it has a different shape on each of the three.
+ */
+
+const props = defineProps<{
+    wallet: MultiWallet;
+    chain: WalletChainId;
+    moneroPayoutAddress: string | null;
+    payoutSaved: boolean;
+    /** Whether a Cyberia account is signed in — the payout binding needs one. */
+    authenticated: boolean;
+}>();
+
+const emit = defineEmits<{
+    back: [];
+    pick: [chain: WalletChainId];
+    usePayout: [address: string];
+}>();
+
+const { t } = useLocale(walletMessages);
+const clipboard = useSecureClipboard();
+
+/**
+ * The wrong-network warning, per key family rather than per chain.
+ *
+ * For EVM the honest statement is not "assets from another chain are lost" —
+ * this wallet holds the same key on all of them, so those assets are simply on
+ * a different network and still spendable there. Saying otherwise would teach
+ * a panic the wallet's own design makes unnecessary.
+ */
+const warning = computed(() => {
+    const chain = walletChain(props.chain);
+
+    if (chain.family === 'evm') {
+        return t('warnEvm', {
+            chain: chain.label,
+            chainId: chain.chainId ?? '',
+        });
+    }
+
+    return chain.family === 'solana' ? t('warnSolana') : t('warnMonero');
+});
+
+const account = computed(() =>
+    props.wallet.accounts.value.find(
+        (candidate) => candidate.chain === props.chain,
+    ),
+);
+
+const payoutOffered = computed(
+    () =>
+        props.authenticated &&
+        !props.payoutSaved &&
+        props.moneroPayoutAddress !== account.value?.address,
+);
+</script>
+
+<template>
+    <div v-if="account" class="cw-stack">
+        <div class="cw-row" style="margin-bottom: 20px">
+            <button type="button" class="cw-back" @click="emit('back')">
+                ← {{ t('back') }}
+            </button>
+            <span style="font: 500 12px/1 var(--cw-sans)">{{
+                t('receive')
+            }}</span>
+            <span style="width: 44px"></span>
+        </div>
+
+        <div class="cw-seg" style="margin-bottom: 20px">
+            <button
+                v-for="candidate in wallet.accounts.value"
+                :key="candidate.chain"
+                type="button"
+                class="cw-seg-item"
+                :aria-pressed="candidate.chain === chain"
+                @click="emit('pick', candidate.chain)"
+            >
+                {{ candidate.label }}
+                <span
+                    class="cw-seg-bar"
+                    :style="{
+                        background:
+                            candidate.chain === chain
+                                ? `var(--cw-net-${candidate.chain})`
+                                : 'transparent',
+                    }"
+                />
+            </button>
+        </div>
+
+        <div style="align-self: center">
+            <QrCode
+                :value="account.address"
+                :label="t('qrLabel', { chain: account.label })"
+            />
+        </div>
+        <div
+            class="cw-label"
+            style="margin-top: 12px; text-align: center; color: var(--cw-faint)"
+        >
+            {{ t('qrCaption', { chain: account.label }) }}
+        </div>
+
+        <div class="cw-card" style="margin-top: 20px">
+            <div class="cw-label" style="margin-bottom: 8px">
+                {{ t('addressLabel') }}
+            </div>
+            <p
+                style="
+                    margin: 0;
+                    font: 400 12px/1.7 var(--cw-mono);
+                    color: var(--cw-text);
+                    word-break: break-all;
+                "
+            >
+                {{ account.address }}
+            </p>
+            <div style="display: flex; gap: 8px; margin-top: 14px">
+                <button
+                    type="button"
+                    class="cw-ghost"
+                    style="flex: 1"
+                    :style="
+                        clipboard.copied.value === account.address
+                            ? {
+                                  borderColor: 'var(--cw-accent)',
+                                  color: 'var(--cw-accent)',
+                              }
+                            : {}
+                    "
+                    @click="clipboard.copy(account.address)"
+                >
+                    {{
+                        clipboard.copied.value === account.address
+                            ? t('copiedClears')
+                            : t('copyAddress')
+                    }}
+                </button>
+                <NetworkMark
+                    :chain="chain"
+                    :size="44"
+                    style="border-radius: 3px"
+                />
+            </div>
+        </div>
+
+        <p class="cw-note cw-note-warn" style="margin-top: 16px">
+            <span>{{ warning }}</span>
+        </p>
+
+        <!-- Monero doubles as the bridge's payout address, so offer it here. -->
+        <div v-if="chain === 'monero'" class="cw-card" style="margin-top: 16px">
+            <div
+                style="font: 400 14px/1.3 var(--cw-sans); color: var(--cw-text)"
+            >
+                {{ t('useForPayouts') }}
+            </div>
+            <p class="cw-prose" style="margin: 6px 0 0; font-size: 12px">
+                {{ t('useForPayoutsHint') }}
+            </p>
+            <!--
+              Binding a payout address is the one thing here that belongs to a
+              Cyberia account. Without one the wallet still works completely —
+              only this row asks for a sign-in, and says so.
+            -->
+            <a
+                v-if="!authenticated"
+                href="/login"
+                class="cw-ghost"
+                style="margin-top: 12px; text-decoration: none"
+            >
+                {{ t('signInForPayouts') }}
+            </a>
+            <button
+                v-else-if="payoutOffered"
+                type="button"
+                class="cw-ghost"
+                style="margin-top: 12px"
+                @click="emit('usePayout', account.address)"
+            >
+                {{ t('useForPayouts') }}
+            </button>
+            <p
+                v-else
+                style="
+                    margin: 12px 0 0;
+                    font: 400 11px/1 var(--cw-mono);
+                    color: var(--cw-accent);
+                "
+            >
+                {{ t('useForPayoutsDone') }}
+            </p>
+        </div>
+    </div>
+</template>

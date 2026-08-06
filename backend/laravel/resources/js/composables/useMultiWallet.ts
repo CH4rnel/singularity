@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue';
 import {
     WALLET_CHAINS,
-    createMnemonic,
     deriveAccounts,
     forgetVault,
     hasVault,
@@ -12,7 +11,13 @@ import {
     seedFromMnemonic,
     walletChain,
 } from '@/lib/wallet';
-import type { WalletAccount, WalletChainId } from '@/lib/wallet';
+import type {
+    WalletAccount,
+    WalletChainId,
+    WalletFeeQuote,
+    WalletFeeTier,
+    WalletTx,
+} from '@/lib/wallet';
 
 /**
  * Session state of the unified multichain wallet.
@@ -30,18 +35,35 @@ export type WalletBalance = {
     error: string | null;
 };
 
+export type WalletHistory = {
+    items: WalletTx[];
+    loading: boolean;
+    error: string | null;
+};
+
 let phrase: string | null = null;
 
 const accounts = ref<WalletAccount[]>([]);
 const exists = ref(false);
 const unlocked = ref(false);
 const balances = ref<Record<string, WalletBalance>>({});
+const history = ref<Record<string, WalletHistory>>({});
+const fees = ref<Record<string, WalletFeeQuote[]>>({});
 const busy = ref(false);
 
-export type WalletRpcEndpoints = {
-    solana?: string;
-    cyberia?: string;
-};
+/** Minutes of inactivity after which the vault seals itself. 0 disables it. */
+const autoLockMinutes = ref(15);
+const lastActivity = ref(Date.now());
+let autoLockTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Per-chain RPC overrides. Every chain adapter already carries a public
+ * default, so this is only for the endpoints the server prefers we use.
+ */
+export type WalletRpcEndpoints = Partial<Record<WalletChainId, string>>;
+
+/** The session object the wallet page hands to its screens. */
+export type MultiWallet = ReturnType<typeof useMultiWallet>;
 
 export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     const refreshExists = (): void => {
@@ -55,10 +77,22 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         unlocked.value = phrase !== null;
     };
 
-    const rpcFor = (chain: WalletChainId): string | undefined =>
-        chain === 'solana' ? rpc.solana : rpc.cyberia;
+    const rpcFor = (chain: WalletChainId): string | undefined => rpc[chain];
 
-    /** Seal a phrase into this device's vault and open it. */
+    /**
+     * Restart the idle countdown. The page calls this on real interaction, so
+     * a wallet left open on a shared screen seals itself while one that is
+     * being used stays open.
+     */
+    const touch = (): void => {
+        lastActivity.value = Date.now();
+    };
+
+    /**
+     * Seal a phrase into this device's vault and open it. Both onboarding
+     * paths end here: a phrase this device generated and one the user typed
+     * in are the same thing by the time they are stored.
+     */
     const adopt = async (
         candidate: string,
         password: string,
@@ -68,6 +102,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         try {
             await saveVault(candidate, password);
             phrase = candidate;
+            touch();
             refreshExists();
             load();
         } finally {
@@ -75,25 +110,12 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         }
     };
 
-    const create = async (
-        password: string,
-        words: 12 | 24 = 12,
-    ): Promise<string> => {
-        const created = createMnemonic(words);
-
-        await adopt(created, password);
-
-        return created;
-    };
-
-    const restore = (candidate: string, password: string): Promise<void> =>
-        adopt(candidate, password);
-
     const unlock = async (password: string): Promise<void> => {
         busy.value = true;
 
         try {
             phrase = await openVault(password);
+            touch();
             load();
         } finally {
             busy.value = false;
@@ -104,8 +126,35 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         phrase = null;
         accounts.value = [];
         balances.value = {};
+        history.value = {};
         unlocked.value = false;
     };
+
+    /** Change the idle limit and restart the countdown against it. */
+    const setAutoLock = (minutes: number): void => {
+        autoLockMinutes.value = minutes;
+        touch();
+    };
+
+    const startAutoLock = (): void => {
+        if (autoLockTimer !== null || typeof window === 'undefined') {
+            return;
+        }
+
+        autoLockTimer = setInterval(() => {
+            const limit = autoLockMinutes.value * 60_000;
+
+            if (
+                unlocked.value &&
+                limit > 0 &&
+                Date.now() - lastActivity.value >= limit
+            ) {
+                lock();
+            }
+        }, 10_000);
+    };
+
+    startAutoLock();
 
     /** The backup phrase, behind a fresh password check. */
     const reveal = (password: string): Promise<string> => openVault(password);
@@ -163,6 +212,73 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         );
     };
 
+    /** Recent transfers for one chain, from its own indexer or RPC. */
+    const refreshHistory = async (chainId: WalletChainId): Promise<void> => {
+        const chain = walletChain(chainId);
+        const account = accounts.value.find(
+            (candidate) => candidate.chain === chainId,
+        );
+
+        if (!chain.fetchHistory || !account) {
+            return;
+        }
+
+        history.value = {
+            ...history.value,
+            [chainId]: {
+                items: history.value[chainId]?.items ?? [],
+                loading: true,
+                error: null,
+            },
+        };
+
+        try {
+            const items = await chain.fetchHistory(
+                account.address,
+                rpcFor(chainId),
+            );
+
+            history.value = {
+                ...history.value,
+                [chainId]: { items, loading: false, error: null },
+            };
+        } catch (error) {
+            history.value = {
+                ...history.value,
+                [chainId]: {
+                    items: [],
+                    loading: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : 'History unavailable',
+                },
+            };
+        }
+    };
+
+    /**
+     * Live fee tiers for one chain. A failure leaves the previous quote in
+     * place and is reported by the absence of a fresh one — the send screen
+     * refuses to build a transaction it cannot price.
+     */
+    const refreshFees = async (chainId: WalletChainId): Promise<void> => {
+        const chain = walletChain(chainId);
+
+        if (!chain.fetchFees) {
+            return;
+        }
+
+        try {
+            fees.value = {
+                ...fees.value,
+                [chainId]: await chain.fetchFees(rpcFor(chainId)),
+            };
+        } catch {
+            fees.value = { ...fees.value, [chainId]: [] };
+        }
+    };
+
     /**
      * Broadcast a payment. The caller is expected to have shown the user a
      * confirmation step first — this is the point of no return.
@@ -171,6 +287,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         chainId: WalletChainId,
         to: string,
         amount: string,
+        tier: WalletFeeTier = 'normal',
     ): Promise<string> => {
         if (!phrase) {
             throw new Error('Wallet is locked');
@@ -192,6 +309,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
             return await chain.send(seedFromMnemonic(phrase), {
                 to: to.trim(),
                 amount: parseUnits(amount, chain.decimals),
+                tier,
                 rpcUrl: rpcFor(chainId),
             });
         } finally {
@@ -203,17 +321,23 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         chains: WALLET_CHAINS,
         accounts: computed(() => accounts.value),
         balances: computed(() => balances.value),
+        history: computed(() => history.value),
+        fees: computed(() => fees.value),
         exists: computed(() => exists.value),
         unlocked: computed(() => unlocked.value),
         busy: computed(() => busy.value),
+        autoLockMinutes: computed(() => autoLockMinutes.value),
+        setAutoLock,
         isValidMnemonic,
-        create,
-        restore,
+        adopt,
         unlock,
         lock,
+        touch,
         reveal,
         forget,
         refreshBalances,
+        refreshHistory,
+        refreshFees,
         send,
     };
 };

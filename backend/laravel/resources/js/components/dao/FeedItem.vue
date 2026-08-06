@@ -96,7 +96,7 @@ const actorName = computed(
         </InertiaLink>
 
         <div class="min-w-0 flex-1">
-            <p class="text-sm">
+            <p class="flex flex-wrap items-baseline gap-x-1 text-sm">
                 <InertiaLink
                     :href="profileUrl(activity.user, activity.user_id)"
                     class="font-semibold hover:underline"
