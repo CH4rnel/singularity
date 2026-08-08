@@ -10,9 +10,37 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.8.0'),
+    'current_version' => env('APP_VERSION', 'v0.9.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.9.0',
+            'date' => '2026-08-08',
+            'title' => 'One seed phrase, every chain',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'A wallet of your own at /wallet, built from nothing in this release: one recovery phrase and one password give you accounts on Cyberia, Robinhood Chain, BNB Smart Chain, Base, Solana, Bitcoin, Litecoin and Monero. The keys are created on your device and stay there — Cyberia never holds them, never sees them and cannot freeze what it does not have.',
+                        'Everything about your money in one place: a portfolio valued in dollars, balances and transaction history per network, receive screens with QR codes, and sending with a choice of fee.',
+                        'Your tokens show up on their own. On supported networks the wallet finds what you hold and prices it; where that is not possible, a token can be added by its address.',
+                        'Bitcoin and Litecoin are full accounts you can send from, not just addresses that receive.',
+                        'Any network you use can be added yourself — the wallet is not limited to the ones it ships with. Networks you add are marked as such, since their connection is one you chose and we cannot vouch for it.',
+                        'Every payment is spelled out in one plain sentence and signed by holding, because a payment on these networks cannot be recalled.',
+                        'The Cyberia desktop and mobile apps now open straight into the wallet and work the moment they are installed — no Cyberia account required.',
+                        'A launchpad token can now be launched on several networks at once, each with its own supply and liquidity, and an interrupted launch can be resumed without paying twice.',
+                        'Monero joins as a wallet in its own right rather than a bridged token, with its address usable as your bridge payout destination in one click. It receives today; balances are not yet shown, and the wallet tells you so.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'Values in the wallet are the ones we can actually stand behind: a price we cannot read is shown as unavailable rather than as zero, and a total that is missing something says it is partial.',
+                        'Lain can launch a token on the launchpad herself, but only after presenting the full plan — what it costs, what it opens at, and that it cannot be undone — and having that exact plan confirmed.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.8.0',
             'date' => '2026-07-30',

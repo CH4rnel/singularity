@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
@@ -111,9 +111,30 @@ const groupedCards = computed(() =>
     ),
 );
 
-/** Networks whose balance could not be read at all. */
+/**
+ * Failures the user has put away. Dismissal is per network and lasts only
+ * until that network reads again: a node that recovers and then fails later
+ * has something new to say, and a notice silenced for the whole session would
+ * leave a stale balance looking live.
+ */
+const dismissed = ref(new Set<WalletChainId>());
+
+watch(cards, (list) => {
+    for (const card of list) {
+        if (card.error === null) {
+            dismissed.value.delete(card.account.chain);
+        }
+    }
+});
+
+/** Networks whose balance could not be read at all, minus the ones put away. */
 const unreachable = computed(() =>
-    cards.value.filter((card) => card.readable && card.error !== null),
+    cards.value.filter(
+        (card) =>
+            card.readable &&
+            card.error !== null &&
+            !dismissed.value.has(card.account.chain),
+    ),
 );
 
 /** Networks holding value the total cannot include — no price, or no read. */
@@ -183,6 +204,15 @@ const recent = computed(() =>
                 @click="wallet.refreshBalances()"
             >
                 {{ t('retry') }}
+            </button>
+            <button
+                type="button"
+                class="cw-note-close"
+                :title="t('rpcErrorDismiss')"
+                :aria-label="t('rpcErrorDismiss')"
+                @click="dismissed.add(card.account.chain)"
+            >
+                ×
             </button>
         </p>
 

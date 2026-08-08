@@ -544,6 +544,31 @@
     background: currentColor;
 }
 
+/*
+ * Dismiss on a note the user is allowed to put away. Only notices that come
+ * back on their own — a node that failed this refresh — carry one; a warning
+ * the user has to answer must not be closable, or the answer goes with it.
+ */
+.cw-note-close {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: -5px -5px -5px 0;
+    border: 0;
+    background: none;
+    font: 400 15px/1 var(--cw-mono);
+    color: currentColor;
+    opacity: 0.55;
+    cursor: pointer;
+}
+
+.cw-note-close:hover {
+    opacity: 1;
+}
+
 /* --------------------------------------------------------------- misc --- */
 
 .cw-hr {
