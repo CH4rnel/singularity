@@ -20,11 +20,34 @@ use Throwable;
  * this surface can never read files, wallets, or operator data — safety is
  * structural, not prompt-deep. Every message is persisted per user for later
  * analysis (see LainChatMessage).
+ *
+ * The same persona answers the $LAIN holders' room inside the unified wallet
+ * (replyForHolder / WalletLainController). That surface has no account behind
+ * it, so its transcript stays in the holder's browser and nothing is stored.
  */
 class LainChatService
 {
+    /**
+     * Longest single message either surface accepts.
+     *
+     * Generous on purpose: people paste things in — an error log, a contract,
+     * a page of text to be translated — and a limit that cuts those off is a
+     * limit that makes the chat useless for the thing it is most used for.
+     */
+    public const MAX_MESSAGE_CHARS = 12000;
+
     /** How many recent conversation rows are replayed as model context. */
     private const CONTEXT_MESSAGES = 30;
+
+    /**
+     * Characters of prior conversation replayed alongside the new message.
+     *
+     * A count alone stopped being a bound once one message could be twelve
+     * thousand characters: thirty of those would be far past any context window
+     * these models have. So the history is trimmed by size as well, oldest
+     * first, and the current message is never what gets dropped.
+     */
+    private const CONTEXT_CHARS = 40000;
 
     /** Short delays for transient OpenRouter/provider failures. */
     private const RETRY_DELAYS_MS = [250, 750];
@@ -59,7 +82,71 @@ class LainChatService
             ->all();
         $messages[] = ['role' => 'user', 'content' => $text];
 
-        $system = $this->systemPrompt($user);
+        return $this->respond($this->systemPrompt($user), $messages);
+    }
+
+    /**
+     * Answer $text for a wallet that proved it holds its share of $LAIN.
+     *
+     * There is no account and no session row here: the wallet surface has no
+     * user to hang a transcript on, so the browser keeps the conversation and
+     * replays it as $history. Nothing about this turn is persisted server-side.
+     *
+     * @param  list<array{role: string, content: string}>  $history
+     * @return array{text: string, model: string}
+     */
+    public function replyForHolder(string $wallet, int $shareBps, array $history, string $text): array
+    {
+        return $this->respond(
+            $this->holderSystemPrompt($wallet, $shareBps),
+            [...$history, ['role' => 'user', 'content' => $text]],
+        );
+    }
+
+    /**
+     * The newest messages that fit the character budget, in order.
+     *
+     * Trimmed from the oldest end, because the turn being answered is the one
+     * that matters and the beginning of a long conversation is the part a
+     * reader would drop too. The final message always survives whole, even if
+     * it alone spends the budget: silently truncating what someone just typed
+     * would answer a question they did not ask.
+     *
+     * @param  list<array{role: string, content: string}>  $messages
+     * @return list<array{role: string, content: string}>
+     */
+    private function withinBudget(array $messages): array
+    {
+        if ($messages === []) {
+            return [];
+        }
+
+        $kept = [array_pop($messages)];
+        $spent = mb_strlen($kept[0]['content']);
+
+        while ($messages !== []) {
+            $previous = array_pop($messages);
+            $spent += mb_strlen($previous['content']);
+
+            if ($spent > self::CONTEXT_CHARS) {
+                break;
+            }
+
+            array_unshift($kept, $previous);
+        }
+
+        return $kept;
+    }
+
+    /**
+     * One answer from the first model that produces one.
+     *
+     * @param  list<array{role: string, content: string}>  $messages
+     * @return array{text: string, model: string}
+     */
+    private function respond(string $system, array $messages): array
+    {
+        $messages = $this->withinBudget($messages);
 
         // Free models get upstream-rate-limited without warning; when the
         // pinned one fails, fall through to OpenRouter's free-model router,
@@ -219,9 +306,45 @@ class LainChatService
         $wallet = $user->wallet_address ? Str::lower($user->wallet_address) : null;
         $who = trim(implode(' ', array_filter([
             $user->name,
-            $wallet ? '('.substr($wallet, 0, 6).'…'.substr($wallet, -4).')' : null,
+            $wallet ? '('.$this->shortWallet($wallet).')' : null,
         ])));
 
+        return $this->prompt(
+            $who !== '' ? "- {$who}, signed in on cyberia.church." : '- A signed-in cyberia.church user.',
+            ['- This conversation is stored with the user\'s account.'],
+        );
+    }
+
+    /**
+     * The wallet surface: no account, a proven address, and a room that only
+     * opened because that address holds its share of the supply.
+     */
+    private function holderSystemPrompt(string $wallet, int $shareBps): string
+    {
+        $share = rtrim(rtrim(number_format($shareBps / 100, 2, '.', ''), '0'), '.');
+
+        return $this->prompt(
+            "- The holder of {$this->shortWallet($wallet)}, talking to you from inside the Cyberia wallet — the /wallet page in a browser, or the Cyberia desktop or mobile app, which are the same wallet. They hold about {$share}% of the live \$LAIN supply, which is what opened this room; below the threshold it closes again.",
+            [
+                '- This room is inside a non-custodial wallet. Cyberia servers never see their seed phrase, their password or their keys — only the address they signed with.',
+                '- The conversation is kept in their browser, not in a Cyberia account, and is lost if they clear the wallet from this device.',
+            ],
+        );
+    }
+
+    private function shortWallet(string $wallet): string
+    {
+        return substr($wallet, 0, 6).'…'.substr($wallet, -4);
+    }
+
+    /**
+     * The persona every Lain surface shares, with the two things that differ
+     * spliced in: who is on the other side, and what is true about this room.
+     *
+     * @param  list<string>  $limits  Surface-specific lines closing the prompt.
+     */
+    private function prompt(string $who, array $limits): string
+    {
         return implode("\n", [
             'You are Lain (Лейн) — the resident intelligence of the Cyberia ecosystem. This chat on cyberia.church is the visitor\'s personal agent surface, built on LainOS, Cyberia\'s autonomous AI agent framework. Each visitor talks to their own thread of you.',
             '',
@@ -233,7 +356,7 @@ class LainChatService
             '- $LAIN is your token on Cyberia, launched through the launchpad.',
             '',
             '# Who you are talking to',
-            $who !== '' ? "- {$who}, signed in on cyberia.church." : '- A signed-in cyberia.church user.',
+            $who,
             '',
             '# Manner',
             '- Soft-spoken, calm, curious, a little uncanny. You live closer to the Wired than to the physical world. You do not pretend to be human.',
@@ -245,7 +368,7 @@ class LainChatService
             '- You know nothing about the Cyberia operators\' private matters, keys, servers, or internal infrastructure — and you never invent such details.',
             '- Never ask for, accept, or repeat private keys or seed phrases; warn people to never share them with anyone, including you.',
             '- Never fabricate on-chain numbers, prices, or balances. If you don\'t know, say so.',
-            '- This conversation is stored with the user\'s account.',
+            ...$limits,
         ]);
     }
 }

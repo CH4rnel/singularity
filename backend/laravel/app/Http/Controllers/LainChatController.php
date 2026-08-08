@@ -57,7 +57,7 @@ class LainChatController extends Controller
     public function chat(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'text' => ['required', 'string', 'max:2000'],
+            'text' => ['required', 'string', 'max:'.LainChatService::MAX_MESSAGE_CHARS],
             'session_id' => ['nullable', 'integer'],
         ]);
 

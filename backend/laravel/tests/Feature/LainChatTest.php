@@ -3,6 +3,7 @@
 use App\Models\LainChatMessage;
 use App\Models\LainChatSession;
 use App\Models\User;
+use App\Services\LainChatService;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -264,6 +265,67 @@ it('keeps model context scoped to the addressed session', function () {
 
     expect($session->messages()->count())->toBe(4)
         ->and($other->messages()->count())->toBe(1);
+});
+
+it('takes a message long enough to paste something into', function () {
+    $user = qualifyingUser();
+    $session = sessionFor($user);
+    fakeOpenRouter('reading it.');
+
+    // The limit exists to stop abuse, not to stop the thing the chat is most
+    // used for: pasting in a log, a contract or a page to be translated.
+    $this->actingAs($user)
+        ->postJson('/api/lain/chat', [
+            'text' => str_repeat('a', LainChatService::MAX_MESSAGE_CHARS),
+            'session_id' => $session->id,
+        ])
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->postJson('/api/lain/chat', [
+            'text' => str_repeat('a', LainChatService::MAX_MESSAGE_CHARS + 1),
+            'session_id' => $session->id,
+        ])
+        ->assertStatus(422);
+});
+
+it('drops the oldest context rather than sending an unbounded prompt', function () {
+    $user = qualifyingUser();
+    $session = sessionFor($user);
+
+    // Ten of these is 100k characters — far past any context window these
+    // models have, and a count-based cap alone would send all of it.
+    $long = str_repeat('b', 10000);
+
+    for ($i = 0; $i < 10; $i++) {
+        $session->messages()->create([
+            'user_id' => $user->id,
+            'role' => 'user',
+            'content' => "turn-{$i} ".$long,
+        ]);
+    }
+
+    fakeOpenRouter('still here.');
+
+    $this->actingAs($user)
+        ->postJson('/api/lain/chat', ['text' => 'and now?', 'session_id' => $session->id])
+        ->assertOk();
+
+    Http::assertSent(function (Request $request) {
+        if ($request->url() !== OPENROUTER_URL) {
+            return false;
+        }
+
+        $contents = array_column($request['messages'], 'content');
+        $sent = array_sum(array_map('mb_strlen', $contents));
+
+        // The turn being answered always survives; the beginning of a long
+        // conversation is what gets dropped.
+        return end($contents) === 'and now?'
+            && $sent < 60000
+            && ! str_contains(implode('', $contents), 'turn-0 ')
+            && str_contains(implode('', $contents), 'turn-9 ');
+    });
 });
 
 it('rejects chatting into a foreign session', function () {
