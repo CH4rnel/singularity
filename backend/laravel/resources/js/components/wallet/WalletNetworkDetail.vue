@@ -35,6 +35,7 @@ const emit = defineEmits<{
     back: [];
     send: [token?: WalletTokenBalance];
     receive: [];
+    openToken: [token: WalletTokenBalance];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
@@ -198,6 +199,7 @@ watch(() => props.chain, load);
             :chain="props.chain"
             :prices="tokenPrices[props.chain] ?? {}"
             @send="emit('send', $event)"
+            @open="emit('openToken', $event)"
         />
 
         <div class="cw-row" style="margin: 24px 0 6px">

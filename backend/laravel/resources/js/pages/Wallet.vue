@@ -4,14 +4,24 @@ import { useMediaQuery } from '@vueuse/core';
 import { ExternalLink, Languages, Lock } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
+import WalletAccounts from '@/components/wallet/WalletAccounts.vue';
 import WalletAddNetwork from '@/components/wallet/WalletAddNetwork.vue';
+import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
+import WalletDao from '@/components/wallet/WalletDao.vue';
+import WalletFeed from '@/components/wallet/WalletFeed.vue';
+import WalletImportAccount from '@/components/wallet/WalletImportAccount.vue';
+import WalletLain from '@/components/wallet/WalletLain.vue';
+import WalletLaunchpad from '@/components/wallet/WalletLaunchpad.vue';
 import WalletLocked from '@/components/wallet/WalletLocked.vue';
 import WalletNetworkDetail from '@/components/wallet/WalletNetworkDetail.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
 import WalletPortfolio from '@/components/wallet/WalletPortfolio.vue';
+import WalletProfile from '@/components/wallet/WalletProfile.vue';
 import WalletReceive from '@/components/wallet/WalletReceive.vue';
 import WalletSecurity from '@/components/wallet/WalletSecurity.vue';
 import WalletSend from '@/components/wallet/WalletSend.vue';
+import WalletToken from '@/components/wallet/WalletToken.vue';
+import WalletTokens from '@/components/wallet/WalletTokens.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
@@ -44,6 +54,12 @@ const props = defineProps<{
         tokens: Record<string, Record<string, number>>;
         fetchedAt: string;
     };
+    /** Which contract the holders' room counts, and how much of it it wants. */
+    lain: {
+        enabled: boolean;
+        tokenAddress: string;
+        minimumShareBps: number;
+    };
 }>();
 
 const { locale, toggleLocale, t } = useLocale(walletMessages);
@@ -63,7 +79,20 @@ const native = isNativeShell();
 
 const desktop = useMediaQuery('(min-width: 1024px)');
 
-type Section = 'portfolio' | 'network' | 'security';
+type Section =
+    | 'portfolio'
+    | 'tokens'
+    | 'token'
+    | 'analytics'
+    | 'accounts'
+    | 'importAccount'
+    | 'network'
+    | 'security'
+    | 'feed'
+    | 'profile'
+    | 'launchpad'
+    | 'dao'
+    | 'lain';
 type Overlay = 'send' | 'receive' | 'addNetwork';
 
 const section = ref<Section>('portfolio');
@@ -104,17 +133,97 @@ const bodyOverlay = computed(() =>
 
 const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'portfolio', label: () => t('navPortfolio') },
+    { id: 'tokens', label: () => t('tokens') },
+    { id: 'analytics', label: () => t('navAnalytics') },
     { id: 'network', label: () => t('navActivity') },
+    { id: 'accounts', label: () => t('accounts') },
+    { id: 'feed', label: () => t('feed') },
+    { id: 'launchpad', label: () => t('launchpad') },
+    { id: 'dao', label: () => t('dao') },
+    // Listed even for wallets that hold no $LAIN: the room says what it wants
+    // and what this account has, which is the only way to know it exists.
+    { id: 'lain', label: () => t('navLain') },
     { id: 'security', label: () => t('navSecurity') },
 ];
+
+/**
+ * The phone gets five destinations, and they are the five things this app is:
+ * the wallet, the feed, the launchpad, the DAO and Lain.
+ *
+ * Everything else is a place inside one of those rather than a sixth slot —
+ * tokens, analytics, accounts and security are all ways of reading the wallet
+ * and are reached from the portfolio, which is also the only way five labels
+ * fit across 390px without clipping.
+ */
+const TABS: { id: Section; label: () => string }[] = [
+    { id: 'portfolio', label: () => t('tabWallet') },
+    { id: 'feed', label: () => t('feed') },
+    { id: 'launchpad', label: () => t('tabLaunch') },
+    { id: 'dao', label: () => t('dao') },
+    { id: 'lain', label: () => t('navLain') },
+];
+
+/** Which tab a screen lives under, for the bar's active state. */
+const TAB_OF: Record<Section, Section> = {
+    portfolio: 'portfolio',
+    tokens: 'portfolio',
+    token: 'portfolio',
+    analytics: 'portfolio',
+    accounts: 'portfolio',
+    importAccount: 'portfolio',
+    network: 'portfolio',
+    security: 'portfolio',
+    feed: 'feed',
+    profile: 'feed',
+    launchpad: 'launchpad',
+    dao: 'dao',
+    lain: 'lain',
+};
+
+const activeTab = computed(() => TAB_OF[section.value]);
+
+/**
+ * The network chip only belongs above the screens that are about one network.
+ * On the feed or in the DAO it would be answering a question nobody asked.
+ */
+const showNetworkBar = computed(
+    () => activeTab.value === 'portfolio' || overlay.value !== null,
+);
 
 const openSection = (next: Section): void => {
     section.value = next;
     overlay.value = null;
 };
 
+/** Whose profile the profile screen is about — null means this wallet's own. */
+const profileAddress = ref<string | null>(null);
+
+const openProfile = (address: string | null): void => {
+    profileAddress.value = address;
+    openSection('profile');
+};
+
+/**
+ * Which navigation entry a screen belongs under. A few screens are places you
+ * arrive at from another one rather than destinations of their own, so the
+ * navigation keeps pointing at where they came from.
+ */
+const PARENTS: Partial<Record<Section, Section>> = {
+    token: 'tokens',
+    importAccount: 'accounts',
+    profile: 'feed',
+};
+
+const current = computed<Section>(
+    () => PARENTS[section.value] ?? section.value,
+);
+
 /** The asset the send screen opens on: a token row, or the network's coin. */
 const sendToken = ref<WalletTokenBalance | null>(null);
+
+/** The contract the token screen is about, and where it was opened from. */
+const tokenContract = ref<string | null>(null);
+const tokenOrigin = ref<Section>('tokens');
 
 const openSend = (token?: WalletTokenBalance): void => {
     sendToken.value = token ?? null;
@@ -125,6 +234,27 @@ const openChain = (next: WalletChainId): void => {
     chain.value = next;
     section.value = 'network';
     overlay.value = null;
+};
+
+/**
+ * One token, from wherever it was tapped. A token is only ever reached through
+ * a network — its own or the list's — so the chain moves with it and the send
+ * screen that opens next is already pointed at the right account.
+ */
+const openToken = (next: WalletChainId, token: WalletTokenBalance): void => {
+    tokenOrigin.value = section.value === 'network' ? 'network' : 'tokens';
+    chain.value = next;
+    tokenContract.value = token.address;
+    section.value = 'token';
+    overlay.value = null;
+};
+
+const sendChainToken = (
+    next: WalletChainId,
+    token: WalletTokenBalance,
+): void => {
+    chain.value = next;
+    openSend(token);
 };
 
 const refreshPrices = async (): Promise<void> => {
@@ -213,6 +343,30 @@ onBeforeUnmount(() => {
     window.removeEventListener('online', trackConnection);
     window.removeEventListener('offline', trackConnection);
 });
+
+/**
+ * Switching accounts reloads everything, because everything on screen belonged
+ * to the account that was active a moment ago.
+ *
+ * An imported key or a watched address exists on one chain only, so a screen
+ * still pointing at a network this account does not have is moved to one it
+ * does — otherwise the network detail would render an account that is not
+ * there.
+ */
+watch(
+    () => wallet.activeAccountId.value,
+    () => {
+        if (
+            !wallet.accounts.value.some(
+                (account) => account.chain === chain.value,
+            )
+        ) {
+            chain.value = wallet.accounts.value[0]?.chain ?? 'cyberia';
+        }
+
+        void load();
+    },
+);
 
 // A vault that has just been unlocked has nothing loaded behind it yet.
 watch(
@@ -371,7 +525,7 @@ watch(
                         type="button"
                         class="cw-rail-item"
                         :aria-current="
-                            section === entry.id ? 'page' : undefined
+                            current === entry.id ? 'page' : undefined
                         "
                         @click="openSection(entry.id)"
                     >
@@ -470,7 +624,7 @@ watch(
             <div class="cw-main">
                 <!-- Context bar: which network the current screen is about. -->
                 <div
-                    v-if="stage === 'app'"
+                    v-if="stage === 'app' && showNetworkBar"
                     class="cw-row"
                     style="
                         flex: none;
@@ -563,6 +717,55 @@ watch(
                         @send="openSend()"
                         @receive="overlay = 'receive'"
                         @add-network="overlay = 'addNetwork'"
+                        @tokens="openSection('tokens')"
+                        @analytics="openSection('analytics')"
+                        @accounts="openSection('accounts')"
+                        @security="openSection('security')"
+                    />
+
+                    <WalletAccounts
+                        v-else-if="section === 'accounts'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
+                        @import="openSection('importAccount')"
+                    />
+
+                    <WalletImportAccount
+                        v-else-if="section === 'importAccount'"
+                        :wallet="wallet"
+                        @back="openSection('accounts')"
+                        @imported="
+                            openSection('accounts');
+                            load();
+                        "
+                    />
+
+                    <WalletTokens
+                        v-else-if="section === 'tokens'"
+                        :wallet="wallet"
+                        :token-prices="tokenPrices"
+                        @back="openSection('portfolio')"
+                        @open="openToken"
+                        @send="sendChainToken"
+                    />
+
+                    <WalletToken
+                        v-else-if="section === 'token' && tokenContract"
+                        :wallet="wallet"
+                        :chain="chain"
+                        :address="tokenContract"
+                        :prices="tokenPrices[chain] ?? {}"
+                        @back="openSection(tokenOrigin)"
+                        @send="openSend"
+                        @hidden="openSection(tokenOrigin)"
+                    />
+
+                    <WalletAnalytics
+                        v-else-if="section === 'analytics'"
+                        :wallet="wallet"
+                        :prices="prices"
+                        :token-prices="tokenPrices"
+                        @back="openSection('portfolio')"
                     />
 
                     <WalletNetworkDetail
@@ -574,6 +777,32 @@ watch(
                         @back="openSection('portfolio')"
                         @send="openSend"
                         @receive="overlay = 'receive'"
+                        @open-token="openToken(chain, $event)"
+                    />
+
+                    <WalletFeed
+                        v-else-if="section === 'feed'"
+                        @profile="openProfile"
+                    />
+
+                    <WalletProfile
+                        v-else-if="section === 'profile'"
+                        :wallet="wallet"
+                        :address="profileAddress"
+                        @back="openSection('feed')"
+                    />
+
+                    <WalletLaunchpad
+                        v-else-if="section === 'launchpad'"
+                        :prices="prices"
+                    />
+
+                    <WalletDao v-else-if="section === 'dao'" />
+
+                    <WalletLain
+                        v-else-if="section === 'lain'"
+                        :wallet="wallet"
+                        :config="props.lain"
                     />
 
                     <WalletSecurity
@@ -591,12 +820,12 @@ watch(
                 <!-- Mobile tab bar -->
                 <nav v-if="stage === 'app'" class="cw-tabs">
                     <button
-                        v-for="entry in SECTIONS"
+                        v-for="entry in TABS"
                         :key="entry.id"
                         type="button"
                         class="cw-tab"
                         :aria-current="
-                            section === entry.id && overlay === null
+                            activeTab === entry.id && overlay === null
                                 ? 'page'
                                 : undefined
                         "
@@ -610,12 +839,12 @@ watch(
                             "
                             :style="{
                                 background:
-                                    section === entry.id && overlay === null
+                                    activeTab === entry.id && overlay === null
                                         ? 'currentColor'
                                         : 'transparent',
                             }"
                         />
-                        {{ entry.label() }}
+                        <span class="cw-tab-label">{{ entry.label() }}</span>
                     </button>
                 </nav>
             </div>

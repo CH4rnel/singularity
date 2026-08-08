@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\SiteEventController;
 use App\Http\Controllers\Api\SolanaStakingController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
+use App\Http\Controllers\Api\WalletLainController;
+use App\Http\Controllers\Api\WalletSocialController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\Auth\TwitterAuthController;
@@ -43,6 +45,7 @@ use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
 use App\Services\DexAprService;
+use App\Services\LainChatService;
 use App\Services\WalletPriceService;
 use App\Support\ProfileHandle;
 use Illuminate\Http\Request;
@@ -220,11 +223,54 @@ Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-
  * address. Balances, history, fees and signing are read and done by the
  * browser, never by us.
  */
-Route::get('wallet', fn (Request $request, WalletPriceService $prices) => Inertia::render('Wallet', [
+Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatService $lain) => Inertia::render('Wallet', [
     'solanaRpcUrl' => (string) config('services.staking.solana.public_rpc_url'),
     'moneroPayoutAddress' => $request->user()?->monero_wallet_address,
     'quotes' => $prices->quotes(),
+    // What the holders' room needs to check itself: which contract counts and
+    // how much of it. The wallet reads the balance from Cyberia on its own —
+    // the server only learns an address once someone chooses to sign in there.
+    'lain' => [
+        'enabled' => $lain->enabled(),
+        'tokenAddress' => (string) config('services.lain.token_address'),
+        'minimumShareBps' => (int) config('services.lain.minimum_share_bps', 1000),
+    ],
 ]))->name('wallet');
+
+/**
+ * The $LAIN holders' room inside that wallet (WalletLainController).
+ *
+ * Public like the wallet itself, and gated by what the address holds rather
+ * than by an account: sign a challenge with the wallet's Cyberia key, and the
+ * chat opens for as long as the balance holds up.
+ */
+Route::prefix('api/wallet/lain')->name('wallet.lain.')->group(function () {
+    Route::post('nonce', [WalletLainController::class, 'nonce'])
+        ->middleware('throttle:30,1')->name('nonce');
+    Route::post('verify', [WalletLainController::class, 'verify'])
+        ->middleware('throttle:30,1')->name('verify');
+    Route::post('chat', [WalletLainController::class, 'chat'])
+        ->middleware('throttle:10,1')->name('chat');
+});
+
+/**
+ * What the wallet reads about the rest of Cyberia (WalletSocialController).
+ *
+ * Read-only and public, like the wallet itself. The wallet has no session, so
+ * there is nobody here to post, comment or vote as; these answer with the same
+ * fields the public feed, DAO and profile pages already render, and the wallet
+ * links out to those pages for anything that needs an account.
+ */
+Route::prefix('api/wallet')->name('wallet.social.')->group(function () {
+    Route::get('feed', [WalletSocialController::class, 'feed'])
+        ->middleware('throttle:60,1')->name('feed');
+    Route::get('dao', [WalletSocialController::class, 'dao'])
+        ->middleware('throttle:60,1')->name('dao');
+    Route::get('dao/proposals/{proposal}', [WalletSocialController::class, 'proposal'])
+        ->middleware('throttle:60,1')->name('proposal');
+    Route::get('profile/{address}', [WalletSocialController::class, 'profile'])
+        ->middleware('throttle:60,1')->name('profile');
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'Dashboard')->name('dashboard');

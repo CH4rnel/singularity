@@ -1,5 +1,5 @@
 import { getBytes, ripemd160, sha256 } from 'ethers';
-import type { HDNodeWallet, SigningKey } from 'ethers';
+import type { BaseWallet, SigningKey } from 'ethers';
 import { decodeBase58Check, encodeBase58Check } from '@/lib/wallet/base58check';
 import { decodeSegwitAddress, encodeSegwitAddress } from '@/lib/wallet/bech32';
 
@@ -52,8 +52,53 @@ const PURPOSE: Record<UtxoAddressType, number> = {
     legacy: 44,
 };
 
-export const utxoPath = (network: UtxoNetwork): string =>
-    `m/${PURPOSE[network.addressType]}'/${network.coinType}'/0'/0/0`;
+/**
+ * The path of one account on this network.
+ *
+ * The index moves the hardened *account* level, which is what Sparrow, Electrum
+ * and BlueWallet each call "account n" — one xpub per account, so a watch-only
+ * export of account 1 reveals nothing about account 0.
+ */
+export const utxoPath = (network: UtxoNetwork, index = 0): string =>
+    `m/${PURPOSE[network.addressType]}'/${network.coinType}'/${index}'/0/0`;
+
+/**
+ * The WIF version byte of a chain, which every Bitcoin fork sets to its own
+ * P2PKH version plus 0x80 — 0x80 for Bitcoin, 0xb0 for Litecoin.
+ */
+const wifVersion = (network: UtxoNetwork): number =>
+    (network.p2pkhVersion + 0x80) & 0xff;
+
+/**
+ * The private key behind a WIF string, as 0x-hex.
+ *
+ * Only compressed WIF is accepted. An uncompressed key hashes to a different
+ * address than the one this wallet would show for it, so importing one would
+ * silently point at an empty account — better to say the word "compressed"
+ * than to display a balance of zero and let the user conclude their coins are
+ * gone.
+ */
+export const decodeWif = (network: UtxoNetwork, wif: string): string => {
+    const decoded = decodeBase58Check(wif.trim());
+
+    if (decoded === null) {
+        throw new Error('That is not a valid WIF key (bad checksum)');
+    }
+
+    if (decoded.version !== wifVersion(network)) {
+        throw new Error('That WIF key belongs to a different chain');
+    }
+
+    if (decoded.payload.length === 32) {
+        throw new Error('Only compressed WIF keys are supported');
+    }
+
+    if (decoded.payload.length !== 33 || decoded.payload[32] !== 0x01) {
+        throw new Error('That is not a valid WIF key');
+    }
+
+    return `0x${hex(decoded.payload.slice(0, 32))}`;
+};
 
 /* --------------------------------------------------------------- bytes --- */
 
@@ -107,14 +152,16 @@ const outpointHash = (txid: string): number[] => [...fromHex(txid)].reverse();
 
 /* ------------------------------------------------------------ addresses -- */
 
-const publicKeyBytes = (node: HDNodeWallet): Uint8Array =>
-    fromHex(node.publicKey);
+/**
+ * The compressed public key of a signer, read off its signing key rather than
+ * off `HDNodeWallet.publicKey`, so an imported WIF key produces the same 33
+ * bytes — and therefore the same address — as a derived one.
+ */
+export const publicKeyBytes = (node: BaseWallet): Uint8Array =>
+    fromHex(node.signingKey.compressedPublicKey);
 
-/** The wallet's own address for this network, from the derived public key. */
-export const utxoAddress = (
-    network: UtxoNetwork,
-    node: HDNodeWallet,
-): string => {
+/** The wallet's own address for this network, from its public key. */
+export const utxoAddress = (network: UtxoNetwork, node: BaseWallet): string => {
     const keyHash = hash160(publicKeyBytes(node));
 
     if (network.addressType === 'bech32') {

@@ -1,10 +1,17 @@
+import { defaultAccountRecords } from '@/lib/wallet/accounts';
+import type {
+    WalletAccountKind,
+    WalletAccountRecord,
+} from '@/lib/wallet/accounts';
 import { walletChain, walletChains } from '@/lib/wallet/chains';
 import type {
     WalletCapabilities,
+    WalletChain,
     WalletChainFamily,
     WalletChainId,
     WalletMark,
 } from '@/lib/wallet/chains';
+import { seedSource } from '@/lib/wallet/keys';
 import { seedFromMnemonic } from '@/lib/wallet/vault';
 
 /**
@@ -33,45 +40,144 @@ export type WalletAccount = {
     capabilities: WalletCapabilities;
     note?: string;
     explorerUrl: string | null;
+    /**
+     * Where the key behind this address came from. A `key` or `watch` account
+     * is not covered by the seed backup, and every screen that spends from one
+     * has to keep saying so.
+     */
+    kind: WalletAccountKind;
 };
 
+const describe = (
+    chain: WalletChain,
+    address: string,
+    path: string,
+    kind: WalletAccountKind,
+    capabilities: WalletCapabilities,
+): WalletAccount => ({
+    chain: chain.id,
+    label: chain.label,
+    symbol: chain.symbol,
+    decimals: chain.decimals,
+    family: chain.family,
+    mark: chain.mark,
+    custom: chain.custom ?? false,
+    endpoint: chain.endpoint,
+    address,
+    path,
+    curve: chain.curve,
+    capabilities,
+    note: chain.note,
+    explorerUrl: chain.explorerAddressUrl(address),
+    kind,
+});
+
 /**
- * Public accounts for every registered chain, derived from one phrase.
+ * The addresses one vault account holds.
+ *
+ * A seed account spans every registered chain at once — that is what a single
+ * phrase means. An imported key or a watched address is one chain only, because
+ * a key belongs to one curve and one address format, so the portfolio behind
+ * such an account is honestly a single card rather than a grid with four
+ * networks it cannot reach.
  *
  * The registry is read at call time rather than captured, because a network the
  * user adds has to produce an account without the wallet being reopened — and
  * because that account must come from the seed, not from anything stored
  * alongside the network's settings.
  */
-export const deriveAccounts = (phrase: string): WalletAccount[] => {
-    const seed = seedFromMnemonic(phrase);
+export const deriveAccounts = (
+    phrase: string,
+    record: WalletAccountRecord = defaultAccountRecords()[0],
+): WalletAccount[] => {
+    if (record.kind === 'seed' || record.kind === 'phrase') {
+        // An imported phrase is its own root: it walks the same paths, but the
+        // vault's backup restores none of it, which is why the kind travels
+        // out of here on every account it produces.
+        const source = seedSource(
+            seedFromMnemonic(record.kind === 'phrase' ? record.phrase : phrase),
+            record.index,
+        );
 
-    return walletChains().map((chain) => {
-        const address = chain.derive(seed);
+        return walletChains().flatMap((chain) => {
+            // A chain that cannot answer for this account number is skipped
+            // rather than rendered broken: Monero numbers subaddresses and
+            // takes every index, but a custom fork could refuse one.
+            try {
+                return [
+                    describe(
+                        chain,
+                        chain.derive(source),
+                        chain.path(record.index),
+                        record.kind,
+                        chain.capabilities,
+                    ),
+                ];
+            } catch {
+                return [];
+            }
+        });
+    }
 
-        return {
-            chain: chain.id,
-            label: chain.label,
-            symbol: chain.symbol,
-            decimals: chain.decimals,
-            family: chain.family,
-            mark: chain.mark,
-            custom: chain.custom ?? false,
-            endpoint: chain.endpoint,
-            address,
-            path: chain.path,
-            curve: chain.curve,
-            capabilities: chain.capabilities,
-            note: chain.note,
-            explorerUrl: chain.explorerAddressUrl(address),
-        };
-    });
+    let chain;
+
+    try {
+        chain = walletChain(record.chain);
+    } catch {
+        // The network this account was imported on has since been removed. The
+        // account is still in the vault and can still be switched away from or
+        // forgotten — it just has nothing to render, which is better than
+        // taking the whole unlock down with it.
+        return [];
+    }
+
+    return [
+        describe(
+            chain,
+            record.address,
+            record.kind === 'key' ? 'imported key' : 'watched address',
+            record.kind,
+            // A watched address is a public string and nothing else. Reading it
+            // works exactly as it does for any account; signing never can, and
+            // the capability has to say so here rather than let a send screen
+            // build a transaction that dies at the last step.
+            record.kind === 'watch'
+                ? { ...chain.capabilities, send: false }
+                : chain.capabilities,
+        ),
+    ];
 };
 
 /** Address for a single chain, without deriving the rest. */
-export const deriveAddress = (phrase: string, chain: WalletChainId): string =>
-    walletChain(chain).derive(seedFromMnemonic(phrase));
+export const deriveAddress = (
+    phrase: string,
+    chain: WalletChainId,
+    index = 0,
+): string =>
+    walletChain(chain).derive(seedSource(seedFromMnemonic(phrase), index));
 
+export {
+    PRIMARY_ACCOUNT_ID,
+    accountCanSpend,
+    accountChain,
+    accountInSeedBackup,
+    accountName,
+    defaultAccountRecords,
+    importedAccountId,
+    nextSeedIndex,
+    phraseAccountId,
+    seedAccountId,
+} from '@/lib/wallet/accounts';
+export type {
+    KeyAccountRecord,
+    PhraseAccountRecord,
+    SeedAccountRecord,
+    WalletAccountKind,
+    WalletAccountRecord,
+    WatchAccountRecord,
+} from '@/lib/wallet/accounts';
+export { keySource, seedSource } from '@/lib/wallet/keys';
+export type { WalletKeySource } from '@/lib/wallet/keys';
 export {
     WALLET_CHAINS,
     WALLET_FAMILY_GROUPS,
@@ -116,12 +222,22 @@ export {
     ERC20_TRANSFER_GAS_CAP,
     blockscoutTokens,
     erc20Balance,
+    erc20TotalSupply,
     mergeTokens,
     readErc20,
     sameToken,
     sendErc20,
 } from '@/lib/wallet/erc20';
 export type { WalletTokenBalance } from '@/lib/wallet/erc20';
+export {
+    LAIN_CHAT_CONTEXT,
+    LAIN_CHAT_MEMORY,
+    clearLainChat,
+    forgetLainChats,
+    readLainChat,
+    writeLainChat,
+} from '@/lib/wallet/lainChat';
+export type { LainTurn } from '@/lib/wallet/lainChat';
 export {
     readManualTokens,
     withToken,
@@ -139,4 +255,6 @@ export {
     readVault,
     saveVault,
     seedFromMnemonic,
+    unsealVault,
 } from '@/lib/wallet/vault';
+export type { OpenedVault, VaultContents } from '@/lib/wallet/vault';

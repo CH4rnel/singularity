@@ -20,14 +20,25 @@ import { walletMessages } from '@/lib/walletMessages';
  * this wallet cannot make — and in either case a contract can be added by hand.
  */
 
-const props = defineProps<{
-    wallet: MultiWallet;
-    chain: WalletChainId;
-    /** Contract address (lowercased) → USD price, for this chain. */
-    prices: Record<string, number>;
-}>();
+const props = withDefaults(
+    defineProps<{
+        wallet: MultiWallet;
+        chain: WalletChainId;
+        /** Contract address (lowercased) → USD price, for this chain. */
+        prices: Record<string, number>;
+        /**
+         * The caption above the list. Null drops it, for a screen that already
+         * says which network these belong to in its own heading.
+         */
+        heading?: string | null;
+    }>(),
+    { heading: undefined },
+);
 
-const emit = defineEmits<{ send: [token: WalletTokenBalance] }>();
+const emit = defineEmits<{
+    send: [token: WalletTokenBalance];
+    open: [token: WalletTokenBalance];
+}>();
 
 const { locale, t } = useLocale(walletMessages);
 
@@ -71,8 +82,14 @@ const add = async (): Promise<void> => {
 
 <template>
     <div v-if="chain.readToken" class="cw-stack" style="margin-top: 24px">
-        <div class="cw-row" style="margin-bottom: 10px">
-            <span class="cw-label">{{ t('tokens') }}</span>
+        <div
+            v-if="heading !== null || state?.loading"
+            class="cw-row"
+            style="margin-bottom: 10px"
+        >
+            <span v-if="heading !== null" class="cw-label">{{
+                heading ?? t('tokens')
+            }}</span>
             <span
                 v-if="state?.loading"
                 class="cw-label"
@@ -105,7 +122,12 @@ const add = async (): Promise<void> => {
                 class="cw-card"
                 style="padding: 13px 14px"
             >
-                <div style="display: flex; align-items: center; gap: 12px">
+                <button
+                    type="button"
+                    class="cw-open"
+                    style="display: flex; align-items: center; gap: 12px"
+                    @click="emit('open', row.token)"
+                >
                     <span
                         :style="{
                             display: 'flex',
@@ -124,11 +146,21 @@ const add = async (): Promise<void> => {
                     <span style="flex: 1; min-width: 0">
                         <span
                             style="
-                                display: block;
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
                                 font: 500 13px/1.2 var(--cw-sans);
                                 color: var(--cw-text);
                             "
-                            >{{ row.token.symbol }}</span
+                            >{{ row.token.symbol }}
+                            <!--
+                              A symbol is attacker-controlled, so a contract
+                              that arrived by hand rather than through the
+                              chain's index says so wherever it appears.
+                            -->
+                            <span v-if="row.token.manual" class="cw-badge">{{
+                                t('tokenByHand')
+                            }}</span></span
                         >
                         <span
                             style="
@@ -161,7 +193,7 @@ const add = async (): Promise<void> => {
                             }}</span
                         >
                     </span>
-                </div>
+                </button>
                 <div
                     style="
                         display: flex;

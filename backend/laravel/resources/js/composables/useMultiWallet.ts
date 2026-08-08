@@ -1,19 +1,30 @@
 import { computed, ref } from 'vue';
 import {
+    PRIMARY_ACCOUNT_ID,
     customWalletChain,
     deriveAccounts,
+    deriveAddress,
+    forgetLainChats,
     forgetVault,
     hasVault,
+    importedAccountId,
     isValidMnemonic,
+    keySource,
+    nextSeedIndex,
+    normalizeMnemonic,
     openVault,
     parseUnits,
     mergeTokens,
+    phraseAccountId,
     readCustomNetworks,
     readManualTokens,
     sameToken,
     saveVault,
+    seedAccountId,
     seedFromMnemonic,
+    seedSource,
     setCustomWalletChains,
+    unsealVault,
     validateCustomNetwork,
     walletChain,
     walletChains,
@@ -26,10 +37,14 @@ import type {
     CustomNetwork,
     CustomNetworkProblem,
     ManualToken,
+    OpenedVault,
+    VaultContents,
     WalletAccount,
+    WalletAccountRecord,
     WalletChainId,
     WalletFeeQuote,
     WalletFeeTier,
+    WalletKeySource,
     WalletTokenBalance,
     WalletTx,
 } from '@/lib/wallet';
@@ -37,11 +52,15 @@ import type {
 /**
  * Session state of the unified multichain wallet.
  *
- * The decrypted phrase lives in a plain module variable, deliberately not in a
+ * The unsealed vault lives in a plain module variable, deliberately not in a
  * ref: reactive state ends up in Vue devtools and in every component that
- * touches it. Nothing here returns the phrase except `reveal()`, which asks
- * for the password again, and nothing here ever logs. Locking drops the
- * phrase, so a locked tab holds no key material at all.
+ * touches it, and this object holds both the phrase and any imported private
+ * key. Nothing here returns either except `reveal()`, which asks for the
+ * password again, and nothing here ever logs. Locking drops the whole object,
+ * so a locked tab holds no key material at all.
+ *
+ * What is reactive is only ever the public half: which accounts exist, which
+ * one is active, and the addresses that one derives.
  */
 
 export type WalletBalance = {
@@ -62,10 +81,12 @@ export type WalletTokens = {
     error: string | null;
 };
 
-let phrase: string | null = null;
+let vault: OpenedVault | null = null;
 
 const customNetworks = ref<CustomNetwork[]>([]);
 const accounts = ref<WalletAccount[]>([]);
+const accountRecords = ref<WalletAccountRecord[]>([]);
+const activeAccountId = ref<string>(PRIMARY_ACCOUNT_ID);
 const exists = ref(false);
 const unlocked = ref(false);
 const balances = ref<Record<string, WalletBalance>>({});
@@ -106,9 +127,97 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
 
     refreshExists();
 
+    /**
+     * The account the app is acting as, or the primary one when whatever was
+     * stored no longer exists — a vault always has somewhere to fall back to.
+     */
+    const activeRecord = (): WalletAccountRecord | null => {
+        if (!vault) {
+            return null;
+        }
+
+        return (
+            vault.accounts.find((record) => record.id === vault?.activeId) ??
+            vault.accounts[0]
+        );
+    };
+
     const load = (): void => {
-        accounts.value = phrase ? deriveAccounts(phrase) : [];
-        unlocked.value = phrase !== null;
+        const record = activeRecord();
+
+        accountRecords.value = vault ? vault.accounts : [];
+        activeAccountId.value = record?.id ?? PRIMARY_ACCOUNT_ID;
+        accounts.value =
+            vault && record ? deriveAccounts(vault.phrase, record) : [];
+        unlocked.value = vault !== null;
+    };
+
+    /** Everything read from a chain, which belongs to one account only. */
+    const clearReads = (): void => {
+        balances.value = {};
+        history.value = {};
+        tokens.value = {};
+        fees.value = {};
+    };
+
+    /**
+     * Write the vault back and re-derive from it.
+     *
+     * Re-sealing uses the key that opening the vault produced, so none of the
+     * account actions has to ask for the password again — and none of them
+     * keeps it around in order to avoid asking.
+     */
+    const commit = async (next: Partial<VaultContents>): Promise<void> => {
+        if (!vault) {
+            throw new Error('Wallet is locked');
+        }
+
+        const merged: VaultContents = {
+            phrase: vault.phrase,
+            accounts: next.accounts ?? vault.accounts,
+            activeId: next.activeId ?? vault.activeId,
+        };
+
+        await vault.reseal(merged);
+        vault = { ...merged, reseal: vault.reseal };
+        load();
+    };
+
+    /**
+     * The signer behind the active account on one chain.
+     *
+     * Every path that spends or signs goes through here, so the three account
+     * kinds are distinguished once: a seed account walks the phrase at its own
+     * index, an imported key is itself, and a watched address has no key and
+     * is refused before a transaction is ever built.
+     */
+    const sourceFor = (chainId: WalletChainId): WalletKeySource => {
+        const record = activeRecord();
+
+        if (!vault || !record) {
+            throw new Error('Wallet is locked');
+        }
+
+        if (record.kind === 'watch') {
+            throw new Error('This account is watch-only and cannot sign');
+        }
+
+        if (record.kind === 'key') {
+            if (record.chain !== chainId) {
+                throw new Error(
+                    `This account exists only on ${walletChain(record.chain).label}`,
+                );
+            }
+
+            return keySource(record.secret);
+        }
+
+        return seedSource(
+            seedFromMnemonic(
+                record.kind === 'phrase' ? record.phrase : vault.phrase,
+            ),
+            record.index,
+        );
     };
 
     /**
@@ -186,10 +295,10 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         busy.value = true;
 
         try {
-            await saveVault(candidate, password);
-            phrase = candidate;
+            vault = await saveVault(candidate, password);
             touch();
             refreshExists();
+            clearReads();
             load();
         } finally {
             busy.value = false;
@@ -200,8 +309,9 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         busy.value = true;
 
         try {
-            phrase = await openVault(password);
+            vault = await unsealVault(password);
             touch();
+            clearReads();
             load();
         } finally {
             busy.value = false;
@@ -209,11 +319,11 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     };
 
     const lock = (): void => {
-        phrase = null;
+        vault = null;
         accounts.value = [];
-        balances.value = {};
-        history.value = {};
-        tokens.value = {};
+        accountRecords.value = [];
+        activeAccountId.value = PRIMARY_ACCOUNT_ID;
+        clearReads();
         unlocked.value = false;
     };
 
@@ -246,6 +356,205 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     /** The backup phrase, behind a fresh password check. */
     const reveal = (password: string): Promise<string> => openVault(password);
 
+    /**
+     * Act as another account. Everything read from a chain belongs to the
+     * account it was read for, so it is dropped rather than shown against the
+     * new one for the moment before a refresh lands.
+     */
+    const switchAccount = async (id: string): Promise<void> => {
+        if (id === activeAccountId.value) {
+            return;
+        }
+
+        clearReads();
+        await commit({ activeId: id });
+    };
+
+    /**
+     * Walk the phrase one account further along.
+     *
+     * The number is the next free BIP-44 account, not the length of the list:
+     * that is the number which restores this same account in any other wallet,
+     * which is the only reason to follow the standard at all.
+     */
+    const deriveAccount = async (
+        label: string | null = null,
+    ): Promise<void> => {
+        if (!vault) {
+            throw new Error('Wallet is locked');
+        }
+
+        const index = nextSeedIndex(vault.accounts);
+        const record: WalletAccountRecord = {
+            id: seedAccountId(index),
+            kind: 'seed',
+            index,
+            label,
+        };
+
+        clearReads();
+        await commit({
+            accounts: [...vault.accounts, record],
+            activeId: record.id,
+        });
+    };
+
+    /**
+     * Take an account from outside the seed tree. Returns null once it is on
+     * the list, or why it could not be read — a mistyped key is the common
+     * case, and it has to fail before anything is sealed.
+     */
+    const importAccount = async (draft: {
+        kind: 'phrase' | 'key' | 'watch';
+        /** Which chain the secret belongs to. Ignored for a whole phrase. */
+        chain: WalletChainId;
+        /**
+         * The phrase for `phrase`, the private key for `key`, the public
+         * address for `watch`.
+         */
+        secret: string;
+        label: string | null;
+    }): Promise<string | null> => {
+        if (!vault) {
+            throw new Error('Wallet is locked');
+        }
+
+        if (draft.kind === 'phrase') {
+            const candidate = draft.secret.trim();
+
+            if (!isValidMnemonic(candidate)) {
+                return 'That is not a valid BIP-39 seed phrase';
+            }
+
+            const normalized = normalizeMnemonic(candidate);
+
+            if (normalized === vault.phrase) {
+                return 'That is this vault’s own phrase — its accounts are already here';
+            }
+
+            // Identified by what it derives rather than by the words, so the
+            // same phrase pasted twice is caught without the id being a
+            // function of the secret.
+            const id = phraseAccountId(deriveAddress(normalized, 'cyberia'));
+
+            if (vault.accounts.some((record) => record.id === id)) {
+                return 'That phrase is already in this vault';
+            }
+
+            clearReads();
+            await commit({
+                accounts: [
+                    ...vault.accounts,
+                    {
+                        id,
+                        kind: 'phrase',
+                        phrase: normalized,
+                        index: 0,
+                        label: draft.label,
+                    },
+                ],
+                activeId: id,
+            });
+
+            return null;
+        }
+
+        const chain = walletChain(draft.chain);
+        const secret = draft.secret.trim();
+        let address: string;
+
+        if (draft.kind === 'watch') {
+            if (!chain.isValidAddress(secret)) {
+                return `That is not a valid ${chain.label} address`;
+            }
+
+            address = secret;
+        } else {
+            if (!chain.importKey) {
+                return `${chain.label} keys cannot be imported here`;
+            }
+
+            try {
+                address = chain.importKey(secret);
+            } catch (failure) {
+                return failure instanceof Error
+                    ? failure.message
+                    : `That is not a valid ${chain.label} key`;
+            }
+        }
+
+        const id = importedAccountId(draft.kind, draft.chain, address);
+
+        if (vault.accounts.some((record) => record.id === id)) {
+            return 'That account is already in this vault';
+        }
+
+        const record: WalletAccountRecord =
+            draft.kind === 'key'
+                ? {
+                      id,
+                      kind: 'key',
+                      chain: draft.chain,
+                      secret,
+                      address,
+                      label: draft.label,
+                  }
+                : {
+                      id,
+                      kind: 'watch',
+                      chain: draft.chain,
+                      address,
+                      label: draft.label,
+                  };
+
+        clearReads();
+        await commit({
+            accounts: [...vault.accounts, record],
+            activeId: id,
+        });
+
+        return null;
+    };
+
+    const renameAccount = async (id: string, label: string): Promise<void> => {
+        if (!vault) {
+            throw new Error('Wallet is locked');
+        }
+
+        await commit({
+            accounts: vault.accounts.map((record) =>
+                record.id === id
+                    ? { ...record, label: label.trim() || null }
+                    : record,
+            ),
+        });
+    };
+
+    /**
+     * Forget an account. The primary one cannot go: it *is* the phrase, and a
+     * vault without it would be a vault whose backup restores nothing.
+     *
+     * For a seed account this forgets a row and nothing else — the same phrase
+     * derives it again at the same index. For an imported key it forgets the
+     * only copy this device had, which is why the screen asking for it says so.
+     */
+    const removeAccount = async (id: string): Promise<void> => {
+        if (!vault || id === PRIMARY_ACCOUNT_ID) {
+            return;
+        }
+
+        const accountsLeft = vault.accounts.filter(
+            (record) => record.id !== id,
+        );
+
+        clearReads();
+        await commit({
+            accounts: accountsLeft,
+            activeId:
+                vault.activeId === id ? PRIMARY_ACCOUNT_ID : vault.activeId,
+        });
+    };
+
     const forget = (): void => {
         forgetVault();
         // The network list goes with the keys. It is a record of what this
@@ -255,6 +564,9 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         syncCustomNetworks([]);
         writeManualTokens([]);
         manualTokens.value = [];
+        // What was said to Lain from these accounts is as much a record of this
+        // person as the network list is, and it lives only here.
+        forgetLainChats();
         lock();
         refreshExists();
     };
@@ -528,6 +840,58 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     };
 
     /**
+     * Read one token without adding it to the tracked list — what this
+     * account holds of it, and how the contract counts.
+     */
+    const readToken = async (
+        chainId: WalletChainId,
+        contract: string,
+    ): Promise<WalletTokenBalance | null> => {
+        const chain = walletChain(chainId);
+        const account = accounts.value.find(
+            (candidate) => candidate.chain === chainId,
+        );
+
+        if (!chain.readToken || !account) {
+            return null;
+        }
+
+        return chain.readToken(contract, account.address, rpcFor(chainId));
+    };
+
+    /** Everything in existence of a token, for shares rather than amounts. */
+    const readTokenSupply = async (
+        chainId: WalletChainId,
+        contract: string,
+    ): Promise<bigint | null> => {
+        const chain = walletChain(chainId);
+
+        return chain.readTokenSupply
+            ? chain.readTokenSupply(contract, rpcFor(chainId))
+            : null;
+    };
+
+    /**
+     * Sign a plain-text challenge with one chain's key.
+     *
+     * Spends nothing and approves nothing: it is how the browser proves to a
+     * server that it holds the key behind an address. The caller must have
+     * shown the user what they are signing.
+     */
+    const signMessage = async (
+        chainId: WalletChainId,
+        message: string,
+    ): Promise<string> => {
+        const chain = walletChain(chainId);
+
+        if (!chain.signMessage) {
+            throw new Error(`${chain.label} cannot sign messages`);
+        }
+
+        return chain.signMessage(sourceFor(chainId), message);
+    };
+
+    /**
      * Broadcast a payment. The caller is expected to have shown the user a
      * confirmation step first — this is the point of no return.
      */
@@ -538,10 +902,6 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         tier: WalletFeeTier = 'normal',
         token: WalletTokenBalance | null = null,
     ): Promise<string> => {
-        if (!phrase) {
-            throw new Error('Wallet is locked');
-        }
-
         const chain = walletChain(chainId);
 
         if (!chain.send) {
@@ -552,10 +912,14 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
             throw new Error(`Not a valid ${chain.label} address`);
         }
 
+        // Built before the busy flag, so a watch-only account fails here
+        // rather than after the screen has committed to sending something.
+        const source = sourceFor(chainId);
+
         busy.value = true;
 
         try {
-            return await chain.send(seedFromMnemonic(phrase), {
+            return await chain.send(source, {
                 to: to.trim(),
                 // A token counts in its own units, not the chain's: sending
                 // 5 USDC on a six-decimal contract is 5_000_000, and using the
@@ -583,7 +947,24 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         refreshTokens,
         addToken,
         removeToken,
+        readToken,
+        readTokenSupply,
+        signMessage,
         accounts: computed(() => accounts.value),
+        /** The vault-level accounts: seed-derived, imported and watched. */
+        accountRecords: computed(() => accountRecords.value),
+        activeAccountId: computed(() => activeAccountId.value),
+        activeAccount: computed(
+            () =>
+                accountRecords.value.find(
+                    (record) => record.id === activeAccountId.value,
+                ) ?? null,
+        ),
+        switchAccount,
+        deriveAccount,
+        importAccount,
+        renameAccount,
+        removeAccount,
         balances: computed(() => balances.value),
         history: computed(() => history.value),
         fees: computed(() => fees.value),

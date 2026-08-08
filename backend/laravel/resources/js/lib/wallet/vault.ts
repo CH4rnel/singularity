@@ -1,7 +1,12 @@
 import { Mnemonic, getBytes, randomBytes } from 'ethers';
+import {
+    PRIMARY_ACCOUNT_ID,
+    defaultAccountRecords,
+} from '@/lib/wallet/accounts';
+import type { WalletAccountRecord } from '@/lib/wallet/accounts';
 
 /**
- * Encrypted-at-rest storage for the one seed phrase behind every chain.
+ * Encrypted-at-rest storage for everything this device knows about the wallet.
  *
  * The wallet is non-custodial in the strict sense: the phrase is generated in
  * the browser, sealed with a key derived from the user's password, and kept in
@@ -9,6 +14,12 @@ import { Mnemonic, getBytes, randomBytes } from 'ethers';
  * Inertia prop, never written to a log, and never rendered except in the
  * deliberate backup flow the user has to confirm. Losing the phrase and the
  * password means losing the funds — that is the trade for custody.
+ *
+ * The account list is sealed alongside the phrase rather than kept beside it.
+ * An imported account carries a live private key, so it has no business in
+ * plaintext storage; and even a watch-only row is a statement about which
+ * addresses this person cares about, which is exactly the kind of thing a
+ * locked vault should not still be saying out loud.
  *
  * AES-256-GCM over a PBKDF2-SHA-256 key; the tag makes a wrong password fail
  * loudly instead of yielding garbage that would derive plausible addresses.
@@ -19,13 +30,33 @@ const STORAGE_KEY = 'cyberia.wallet.vault.v1';
 const PBKDF2_ITERATIONS = 310_000;
 
 export type VaultRecord = {
-    version: 1;
+    /** 1 sealed a bare phrase; 2 seals the JSON document below. */
+    version: 1 | 2;
     kdf: 'PBKDF2-SHA-256';
     iterations: number;
     salt: string;
     iv: string;
     ciphertext: string;
     createdAt: string;
+};
+
+/** Everything behind the password, once it has been unsealed. */
+export type VaultContents = {
+    phrase: string;
+    accounts: WalletAccountRecord[];
+    /** Which account the app is currently acting as. */
+    activeId: string;
+};
+
+/**
+ * An unsealed vault, plus the means to write it back.
+ *
+ * `reseal` closes over the AES key that opening it produced, so adding an
+ * account does not ask for the password a second time. The key is
+ * non-extractable and dies with the tab; nothing here keeps the password.
+ */
+export type OpenedVault = VaultContents & {
+    reseal: (next: VaultContents) => Promise<void>;
 };
 
 export type VaultStorage = {
@@ -115,36 +146,33 @@ export const readVault = (
     }
 };
 
-export const saveVault = async (
-    phrase: string,
-    password: string,
-    storage: VaultStorage = defaultStorage(),
+/**
+ * Seal one document under a key that is already derived.
+ *
+ * A fresh IV every time, because AES-GCM reusing one under the same key is the
+ * single mistake that breaks it — and this runs on every account change, not
+ * only at setup.
+ */
+const seal = async (
+    contents: VaultContents,
+    key: CryptoKey,
+    salt: Uint8Array,
+    iterations: number,
+    storage: VaultStorage,
 ): Promise<VaultRecord> => {
-    const normalized = normalizeMnemonic(phrase);
-
-    if (!Mnemonic.isValidMnemonic(normalized)) {
-        throw new Error('Not a valid BIP-39 seed phrase');
-    }
-
-    if (password.length < 8) {
-        throw new Error('Wallet password must be at least 8 characters');
-    }
-
-    const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await deriveKey(password, salt, PBKDF2_ITERATIONS);
     const ciphertext = new Uint8Array(
         await crypto.subtle.encrypt(
             { name: 'AES-GCM', iv },
             key,
-            new TextEncoder().encode(normalized),
+            new TextEncoder().encode(JSON.stringify(contents)),
         ),
     );
 
     const record: VaultRecord = {
-        version: 1,
+        version: 2,
         kdf: 'PBKDF2-SHA-256',
-        iterations: PBKDF2_ITERATIONS,
+        iterations,
         salt: toBase64(salt),
         iv: toBase64(iv),
         ciphertext: toBase64(ciphertext),
@@ -156,22 +184,110 @@ export const saveVault = async (
     return record;
 };
 
-/** Decrypt the stored phrase. Throws on a wrong password (GCM tag mismatch). */
-export const openVault = async (
+/**
+ * Create this device's vault around a phrase, and hand back the means to keep
+ * writing to it. Both onboarding paths land here — a phrase this device
+ * generated and one the user typed in are the same thing by now.
+ */
+export const saveVault = async (
+    phrase: string,
     password: string,
     storage: VaultStorage = defaultStorage(),
-): Promise<string> => {
+): Promise<OpenedVault> => {
+    const normalized = normalizeMnemonic(phrase);
+
+    if (!Mnemonic.isValidMnemonic(normalized)) {
+        throw new Error('Not a valid BIP-39 seed phrase');
+    }
+
+    if (password.length < 8) {
+        throw new Error('Wallet password must be at least 8 characters');
+    }
+
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await deriveKey(password, salt, PBKDF2_ITERATIONS);
+
+    const contents: VaultContents = {
+        phrase: normalized,
+        accounts: defaultAccountRecords(),
+        activeId: PRIMARY_ACCOUNT_ID,
+    };
+
+    await seal(contents, key, salt, PBKDF2_ITERATIONS, storage);
+
+    return {
+        ...contents,
+        reseal: (next) =>
+            seal(next, key, salt, PBKDF2_ITERATIONS, storage).then(() => {}),
+    };
+};
+
+/**
+ * The decrypted plaintext as a document, whichever era wrote it.
+ *
+ * The shape is decided by what parses rather than by the record's version
+ * field: a BIP-39 phrase never parses as a JSON object, so this cannot
+ * misread one for the other even if a version were ever written wrongly.
+ */
+const readContents = (plaintext: string): VaultContents => {
+    const legacy: VaultContents = {
+        phrase: plaintext,
+        accounts: defaultAccountRecords(),
+        activeId: PRIMARY_ACCOUNT_ID,
+    };
+
+    let parsed: unknown;
+
+    try {
+        parsed = JSON.parse(plaintext);
+    } catch {
+        return legacy;
+    }
+
+    if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        typeof (parsed as VaultContents).phrase !== 'string'
+    ) {
+        return legacy;
+    }
+
+    const contents = parsed as VaultContents;
+    const accounts = Array.isArray(contents.accounts)
+        ? contents.accounts
+        : defaultAccountRecords();
+
+    return {
+        phrase: contents.phrase,
+        // The primary account is not optional: it is the phrase itself, and a
+        // vault that somehow lost the row still derives every address from it.
+        accounts: accounts.some((account) => account.id === PRIMARY_ACCOUNT_ID)
+            ? accounts
+            : [...defaultAccountRecords(), ...accounts],
+        activeId: contents.activeId || PRIMARY_ACCOUNT_ID,
+    };
+};
+
+/**
+ * Decrypt the whole vault. Throws on a wrong password (GCM tag mismatch).
+ *
+ * A version-1 record holds a bare phrase and predates accounts; it is read as
+ * a vault with the one account it always had, and is rewritten in the new
+ * shape the next time anything is resealed. Nothing is migrated eagerly — an
+ * old vault that is only ever unlocked and read stays exactly as it is.
+ */
+export const unsealVault = async (
+    password: string,
+    storage: VaultStorage = defaultStorage(),
+): Promise<OpenedVault> => {
     const record = readVault(storage);
 
     if (!record) {
         throw new Error('No wallet on this device');
     }
 
-    const key = await deriveKey(
-        password,
-        fromBase64(record.salt),
-        record.iterations,
-    );
+    const salt = fromBase64(record.salt);
+    const key = await deriveKey(password, salt, record.iterations);
 
     let plaintext: ArrayBuffer;
 
@@ -185,8 +301,18 @@ export const openVault = async (
         throw new Error('Wrong wallet password');
     }
 
-    return new TextDecoder().decode(plaintext);
+    return {
+        ...readContents(new TextDecoder().decode(plaintext)),
+        reseal: (next) =>
+            seal(next, key, salt, record.iterations, storage).then(() => {}),
+    };
 };
+
+/** Decrypt the stored phrase alone — what the backup screen asks for. */
+export const openVault = async (
+    password: string,
+    storage: VaultStorage = defaultStorage(),
+): Promise<string> => (await unsealVault(password, storage)).phrase;
 
 /**
  * Delete the encrypted phrase from this device. The wallet itself survives

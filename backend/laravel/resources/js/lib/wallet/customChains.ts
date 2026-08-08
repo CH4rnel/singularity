@@ -1,12 +1,13 @@
-import { HDNodeWallet, JsonRpcProvider, isAddress } from 'ethers';
+import { JsonRpcProvider, isAddress } from 'ethers';
 import { EVM_CHAINS } from '@/lib/evmChains';
-import { EVM_PATH, WALLET_FEE_TIERS, utxoChain } from '@/lib/wallet/chains';
+import { WALLET_FEE_TIERS, utxoChain } from '@/lib/wallet/chains';
 import type { WalletChain, WalletFeeTier } from '@/lib/wallet/chains';
 import {
     ERC20_TRANSFER_GAS_CAP,
     readErc20,
     sendErc20,
 } from '@/lib/wallet/erc20';
+import { evmAddressFromKey, evmPath, evmSigner } from '@/lib/wallet/keys';
 import type { UtxoAddressType } from '@/lib/wallet/utxo';
 
 /**
@@ -162,14 +163,16 @@ const customEvmChain = (network: CustomEvmNetwork): WalletChain => {
         },
         custom: true,
         endpoint: network.rpcUrl,
-        path: EVM_PATH,
+        path: evmPath,
         curve: 'secp256k1',
         capabilities: { balance: true, history: false, send: true },
         // No keyless index is promised for a chain nobody registered, so the
         // history panel says why instead of rendering an empty list.
         historyNote: 'historyNoIndexer',
-        derive: (seed) =>
-            HDNodeWallet.fromSeed(seed).derivePath(EVM_PATH).address,
+        derive: (source) => evmSigner(source).address,
+        importKey: evmAddressFromKey,
+        signMessage: (source, message) =>
+            evmSigner(source).signMessage(message),
         isValidAddress: (address) => isAddress(address),
         explorerAddressUrl: (address) =>
             network.explorer ? `${network.explorer}/address/${address}` : null,
@@ -208,10 +211,8 @@ const customEvmChain = (network: CustomEvmNetwork): WalletChain => {
 
             return receipt.status === 1 ? 'confirmed' : 'failed';
         },
-        send: async (seed, { to, amount, tier, token }) => {
-            const signer = HDNodeWallet.fromSeed(seed)
-                .derivePath(EVM_PATH)
-                .connect(provider());
+        send: async (source, { to, amount, tier, token }) => {
+            const signer = evmSigner(source).connect(provider());
             const price = await gasPrice(tier);
 
             if (token) {

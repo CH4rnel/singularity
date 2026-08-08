@@ -30,7 +30,7 @@ const hexToBytes = (hex: string): Uint8Array => {
 const checksum = (payload: Uint8Array): Uint8Array =>
     hexToBytes(sha256(sha256(bytesToHex(payload)))).slice(0, 4);
 
-const encodeBase58 = (bytes: Uint8Array): string => {
+export const encodeBase58 = (bytes: Uint8Array): string => {
     let value = 0n;
 
     for (const byte of bytes) {
@@ -58,7 +58,12 @@ const encodeBase58 = (bytes: Uint8Array): string => {
     return out;
 };
 
-const decodeBase58 = (text: string): Uint8Array | null => {
+/**
+ * Plain base58, without the checksum. Bitcoin never uses it bare, but a Solana
+ * secret key is written down exactly this way, and importing one has to read
+ * the same alphabet.
+ */
+export const decodeBase58 = (text: string): Uint8Array | null => {
     let value = 0n;
 
     for (const char of text) {

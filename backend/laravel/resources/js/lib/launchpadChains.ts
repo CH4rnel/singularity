@@ -34,7 +34,15 @@ export type LaunchpadChain = {
     defaultLiquidity: string;
 };
 
-const env = import.meta.env as Record<string, string | undefined>;
+/**
+ * Build-time variables, when there is a build.
+ *
+ * `import.meta.env` is Vite's injection, so it is simply absent under plain
+ * Node — in the test runner and during SSR. Defaulting to an empty object keeps
+ * this registry importable there instead of throwing at module scope and taking
+ * everything that imports it down with it.
+ */
+const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
 
 const evmChain = (chainId: number): EvmChain =>
     EVM_CHAINS.find((c) => c.chainId === chainId) ?? CYBERIA_CHAIN;

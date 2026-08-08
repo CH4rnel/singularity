@@ -16,12 +16,13 @@ import type { JsonRpcProvider, Signer } from 'ethers';
  * user can still add a contract by hand, which reads the token directly.
  */
 
-/** The four reads and the one write this wallet ever performs on a token. */
+/** The five reads and the one write this wallet ever performs on a token. */
 const ERC20_ABI = [
     'function balanceOf(address owner) view returns (uint256)',
     'function decimals() view returns (uint8)',
     'function symbol() view returns (string)',
     'function name() view returns (string)',
+    'function totalSupply() view returns (uint256)',
     'function transfer(address to, uint256 amount) returns (bool)',
 ];
 
@@ -98,6 +99,18 @@ export const erc20Balance = async (
     owner: string,
 ): Promise<bigint> =>
     (await erc20(contract, provider).balanceOf(owner)) as bigint;
+
+/**
+ * Everything in existence of one token.
+ *
+ * The denominator when what matters is a share of a supply rather than an
+ * amount — the $LAIN holders' room is gated on one, and a share computed
+ * against a stale hard-coded supply would let the wrong wallets in.
+ */
+export const erc20TotalSupply = async (
+    provider: JsonRpcProvider,
+    contract: string,
+): Promise<bigint> => (await erc20(contract, provider).totalSupply()) as bigint;
 
 /**
  * Move a token. Returns the transaction hash.

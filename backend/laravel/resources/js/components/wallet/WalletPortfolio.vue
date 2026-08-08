@@ -36,9 +36,66 @@ const emit = defineEmits<{
     send: [];
     receive: [];
     addNetwork: [];
+    tokens: [];
+    analytics: [];
+    accounts: [];
+    security: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
+
+const activeRecord = computed(() => props.wallet.activeAccount.value);
+
+const activeAccountName = computed(() => {
+    const record = activeRecord.value;
+
+    if (!record) {
+        return t('accountPrimaryName');
+    }
+
+    if (record.label?.trim()) {
+        return record.label.trim();
+    }
+
+    if (record.kind === 'seed') {
+        return record.index === 0
+            ? t('accountPrimaryName')
+            : t('accountSeedName', { index: record.index + 1 });
+    }
+
+    return record.kind === 'phrase'
+        ? t('accountPhraseName')
+        : record.kind === 'key'
+          ? t('accountKeyName', { chain: record.chain })
+          : t('accountWatchName', { chain: record.chain });
+});
+
+const activeAccountKind = computed(() =>
+    t(
+        {
+            seed: 'accountKindSeed',
+            phrase: 'accountKindPhrase',
+            key: 'accountKindKey',
+            watch: 'accountKindWatch',
+        }[activeRecord.value?.kind ?? 'seed'],
+    ),
+);
+
+/**
+ * What this account is not covered by, said on the screen that spends from it
+ * rather than only on the list it was created in.
+ */
+const activeAccountWarning = computed(() => {
+    const kind = activeRecord.value?.kind;
+
+    return kind === 'watch'
+        ? t('accountWatchOnly')
+        : kind === 'key'
+          ? t('accountNotInBackup')
+          : kind === 'phrase'
+            ? t('accountOwnPhrase')
+            : null;
+});
 
 const statusLabels = computed<Record<WalletTxStatus, string>>(() => ({
     confirmed: t('statusConfirmed'),
@@ -157,6 +214,19 @@ const isEmpty = computed(() =>
     ),
 );
 
+/**
+ * An account with nowhere to be: an imported key or watched address whose
+ * network has since been removed from this wallet. It is a different thing from
+ * an empty vault, and saying "no activity yet" about it would be wrong.
+ */
+const orphaned = computed(
+    () =>
+        cards.value.length === 0 &&
+        activeRecord.value !== null &&
+        activeRecord.value.kind !== 'seed' &&
+        activeRecord.value.kind !== 'phrase',
+);
+
 /** Recent movement across every chain that can report it, newest first. */
 const recent = computed(() =>
     Object.entries(props.wallet.history.value)
@@ -170,6 +240,79 @@ const recent = computed(() =>
 
 <template>
     <div class="cw-stack">
+        <!--
+          Which account this whole screen is about. It sits above the total
+          rather than beside it because every number below belongs to it, and
+          an imported or watched account says so here rather than only in the
+          list it came from.
+        -->
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 22px;
+            "
+        >
+            <button
+                type="button"
+                class="cw-open"
+                style="
+                    display: flex;
+                    align-items: center;
+                    gap: 9px;
+                    width: auto;
+                "
+                @click="emit('accounts')"
+            >
+                <span
+                    style="
+                        display: flex;
+                        width: 18px;
+                        height: 18px;
+                        align-items: center;
+                        justify-content: center;
+                        border: 1px solid var(--cw-accent);
+                    "
+                >
+                    <span
+                        style="
+                            width: 5px;
+                            height: 5px;
+                            background: var(--cw-accent);
+                        "
+                    />
+                </span>
+                <span>
+                    <span
+                        style="
+                            display: block;
+                            font: 500 12px/1.2 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                        >{{ activeAccountName }}</span
+                    >
+                    <span
+                        class="cw-label"
+                        style="
+                            display: block;
+                            margin-top: 3px;
+                            color: var(--cw-muted);
+                        "
+                        >{{ activeAccountKind }} ·
+                        {{ t('accountSwitch') }}</span
+                    >
+                </span>
+            </button>
+            <span class="cw-fill"></span>
+            <span
+                v-if="activeAccountWarning"
+                class="cw-label"
+                style="color: var(--cw-pending); text-align: right"
+                >{{ activeAccountWarning }}</span
+            >
+        </div>
+
         <p v-if="!online" class="cw-note" style="margin-bottom: 18px">
             <span>
                 <strong style="display: block; color: var(--cw-text)">{{
@@ -276,6 +419,37 @@ const recent = computed(() =>
                 @click="emit('receive')"
             >
                 {{ t('receive') }}
+            </button>
+        </div>
+
+        <!--
+          Three shortcuts, not a menu: the same holdings read as tokens, the
+          same holdings read as shares, and the keys underneath both.
+        -->
+        <div style="display: flex; gap: 8px; margin-bottom: 24px">
+            <button type="button" class="cw-tile" @click="emit('tokens')">
+                <span style="font: 500 12px/1 var(--cw-sans)">{{
+                    t('tokens')
+                }}</span>
+                <span class="cw-label" style="font-size: 9px">{{
+                    t('tileTokensHint')
+                }}</span>
+            </button>
+            <button type="button" class="cw-tile" @click="emit('analytics')">
+                <span style="font: 500 12px/1 var(--cw-sans)">{{
+                    t('navAnalytics')
+                }}</span>
+                <span class="cw-label" style="font-size: 9px">{{
+                    t('tileAnalyticsHint')
+                }}</span>
+            </button>
+            <button type="button" class="cw-tile" @click="emit('security')">
+                <span style="font: 500 12px/1 var(--cw-sans)">{{
+                    t('navSecurity')
+                }}</span>
+                <span class="cw-label" style="font-size: 9px">{{
+                    t('tileSecurityHint')
+                }}</span>
             </button>
         </div>
 
@@ -436,7 +610,27 @@ const recent = computed(() =>
         </div>
 
         <div
-            v-if="isEmpty"
+            v-if="orphaned"
+            style="
+                margin-top: 28px;
+                padding: 28px 20px;
+                border: 1px dashed var(--cw-border-soft);
+                text-align: center;
+            "
+        >
+            <div class="cw-label" style="margin-bottom: 10px">
+                {{ t('orphanTitle') }}
+            </div>
+            <p class="cw-prose" style="max-width: 40ch; margin: 0 auto 18px">
+                {{ t('orphanBody') }}
+            </p>
+            <button type="button" class="cw-ghost" @click="emit('accounts')">
+                {{ t('accounts') }}
+            </button>
+        </div>
+
+        <div
+            v-else-if="isEmpty"
             style="
                 margin-top: 28px;
                 padding: 28px 20px;

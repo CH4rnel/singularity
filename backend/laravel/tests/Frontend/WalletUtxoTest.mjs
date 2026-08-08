@@ -441,9 +441,14 @@ test('a user-added network is marked unverified wherever it is drawn', () => {
     assert.equal(chain.mark.unverified, true);
     assert.equal(chain.mark.hue, 'var(--cw-net-custom)');
     assert.equal(
-        chain.path,
+        chain.path(0),
         "m/44'/60'/0'/0/0",
         'a user-added EVM chain is the same key, not a new one',
+    );
+    assert.equal(
+        chain.path(3),
+        "m/44'/60'/0'/0/3",
+        'and it follows the vault to whichever account is active',
     );
 
     for (const builtin of ['cyberia', 'bitcoin', 'solana', 'monero']) {

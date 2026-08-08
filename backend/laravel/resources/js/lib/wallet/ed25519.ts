@@ -22,6 +22,10 @@ export const L = (1n << 252n) + 27742317777372353535851937790883648493n;
 const D =
     37095705934669439343138083508754565189542113879843219016388785533085940283555n;
 
+/** sqrt(-1) mod p = 2^((p-1)/4), the ambiguity decompression has to resolve. */
+const SQRT_M1 =
+    19681161376707505956807079304988542015446066515923890162744021073123829784752n;
+
 const mod = (value: bigint): bigint => ((value % P) + P) % P;
 
 /** Extended homogeneous coordinates (x, y, z, t) with x*y = z*t. */
@@ -135,3 +139,71 @@ const multiply = (scalar: bigint, point: Point): Point => {
  */
 export const scReduce32 = (bytes: Uint8Array): bigint =>
     bytesToNumberLE(bytes) % L;
+
+/**
+ * Recover the point behind a 32-byte compressed encoding, or null when those
+ * bytes are not on the curve.
+ *
+ * Only the y coordinate and x's sign bit are transmitted; x comes back out of
+ * the curve equation x² = (y² − 1)/(dy² + 1). The candidate root can be off by
+ * a factor of sqrt(-1), which is what the second branch fixes — and a value
+ * that satisfies neither branch was never a point, so it is rejected rather
+ * than turned into a plausible-looking address.
+ */
+const decodePoint = (bytes: Uint8Array): Point | null => {
+    if (bytes.length !== 32) {
+        return null;
+    }
+
+    const sign = bytes[31] >> 7;
+    const y = mod(bytesToNumberLE(bytes) & ((1n << 255n) - 1n));
+    const u = mod(y * y - 1n);
+    const v = mod(D * y * y + 1n);
+
+    let x = mod(u * power(v, 3n) * power(mod(u * power(v, 7n)), (P - 5n) / 8n));
+
+    if (mod(v * x * x) === mod(-u)) {
+        x = mod(x * SQRT_M1);
+    }
+
+    if (mod(v * x * x) !== u) {
+        return null;
+    }
+
+    if (x === 0n && sign === 1) {
+        return null;
+    }
+
+    if (Number(x & 1n) !== sign) {
+        x = mod(P - x);
+    }
+
+    return { x, y, z: 1n, t: mod(x * y) };
+};
+
+/**
+ * Sum of two compressed points, compressed again — Monero's `D = B + mG`.
+ * Returns null when either input is not a valid encoding.
+ */
+export const addPoints = (
+    left: Uint8Array,
+    right: Uint8Array,
+): Uint8Array | null => {
+    const a = decodePoint(left);
+    const b = decodePoint(right);
+
+    return a === null || b === null ? null : encodePoint(add(a, b));
+};
+
+/**
+ * A compressed point multiplied by a secret scalar — Monero's `C = aD`.
+ * Returns null when the point is not a valid encoding.
+ */
+export const scalarMultPoint = (
+    scalar: bigint,
+    point: Uint8Array,
+): Uint8Array | null => {
+    const decoded = decodePoint(point);
+
+    return decoded === null ? null : encodePoint(multiply(scalar, decoded));
+};

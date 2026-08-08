@@ -169,6 +169,12 @@
     padding: 22px 0;
     border-right: 1px solid var(--cw-line);
     background: #08090b;
+    /*
+     * Ten destinations plus the network legend and the vault footer is more
+     * than a short window holds. The rail scrolls rather than pushing the lock
+     * control off the bottom of the screen.
+     */
+    overflow-y: auto;
 }
 
 .cw-main {
@@ -545,9 +551,9 @@
 }
 
 /*
- * Dismiss on a note the user is allowed to put away. Only notices that come
- * back on their own — a node that failed this refresh — carry one; a warning
- * the user has to answer must not be closable, or the answer goes with it.
+ * Dismiss on a note the user is allowed to put away. Only notices that repeat
+ * on their own — a node that failed this refresh — carry one; a warning the
+ * user has to answer must not be closable, or the answer is lost with it.
  */
 .cw-note-close {
     display: inline-flex;
@@ -602,11 +608,13 @@
 
 .cw-tab {
     display: flex;
+    min-width: 0;
     flex: 1;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 6px;
+    padding: 0 3px;
     border: 0;
     border-top: 1px solid transparent;
     background: none;
@@ -614,6 +622,24 @@
     letter-spacing: 0.12em;
     color: var(--cw-dim);
     cursor: pointer;
+}
+
+/*
+ * Five destinations across a 390px phone leaves ~75px a label. The tracking
+ * that makes a mono label read as a label is the first thing to go when a
+ * translation is longer than the English — losing a letter is worse.
+ */
+.cw-tab-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 359px) {
+    .cw-tab {
+        letter-spacing: 0.04em;
+    }
 }
 
 .cw-tab[aria-current='page'] {
@@ -743,4 +769,179 @@
     color: var(--cw-text);
     text-align: right;
     word-break: break-all;
+}
+
+/* ------------------------------------------------------------ readouts -- */
+
+/*
+ * The shortcuts under the portfolio total. Three of them fit a phone in one
+ * row, which is the whole point: tokens, analytics and security are places
+ * this wallet already is, not a menu it has to grow.
+ */
+.cw-tile {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 58px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 0 12px;
+    border: 1px solid var(--cw-hairline);
+    border-radius: 5px;
+    background: var(--cw-surface);
+    cursor: pointer;
+    text-align: left;
+}
+
+.cw-tile:hover {
+    border-color: var(--cw-accent);
+}
+
+/*
+ * The readable half of a row that opens something. It carries no chrome of its
+ * own because the card around it already is the surface — this only makes the
+ * identity and the amount a real target, and keeps the row's other controls
+ * out of a nested button.
+ */
+.cw-open {
+    display: block;
+    width: 100%;
+    border: 0;
+    padding: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+/*
+ * A share of the total, drawn as a proportion rather than a number alone. The
+ * track is the same hairline the rest of the page uses, so an empty bar reads
+ * as "almost nothing", never as a missing element.
+ */
+.cw-bar {
+    height: 6px;
+    background: #101418;
+}
+
+.cw-bar-fill {
+    height: 100%;
+    background: var(--cw-accent);
+}
+
+/* Tokens ride on their network's hue at lower weight — they are not chains. */
+.cw-bar-token {
+    opacity: 0.55;
+}
+
+/* A grid of single facts, separated by the hairline itself. */
+.cw-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    border: 1px solid var(--cw-line);
+    background: var(--cw-line);
+}
+
+.cw-grid > * {
+    padding: 14px;
+    background: var(--cw-surface);
+}
+
+/*
+ * A provenance badge: a token nobody vetted, an endpoint nobody checked. Amber
+ * because it is a caution about the claim, not a transaction state.
+ */
+.cw-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 5px;
+    border: 1px solid rgba(232, 180, 74, 0.4);
+    font: 400 8px/1 var(--cw-mono);
+    letter-spacing: 0.14em;
+    color: var(--cw-pending);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- lain --- */
+
+/*
+ * The holders' room. The transcript scrolls inside itself rather than growing
+ * the screen: the composer has to stay put while a conversation gets long, on
+ * a phone as much as on a desktop.
+ */
+.cw-chat {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+}
+
+/*
+ * Capped rather than merely flexible: `.cw-screen` does not shrink, so an
+ * uncapped log would push the composer off the bottom of a long conversation
+ * instead of scrolling under it.
+ */
+.cw-chat-log {
+    display: flex;
+    min-height: 220px;
+    max-height: min(58vh, 620px);
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    padding: 16px;
+    border: 1px solid var(--cw-line);
+    background: var(--cw-surface);
+}
+
+.cw-turn {
+    max-width: 92%;
+    padding: 11px 13px;
+    border: 1px solid var(--cw-hairline);
+}
+
+/* Lain speaks from the left in her own accent; the holder answers right. */
+.cw-turn-lain {
+    align-self: flex-start;
+    border-left: 2px solid var(--cw-accent);
+    background: var(--cw-raised);
+}
+
+.cw-turn-you {
+    align-self: flex-end;
+    border-right: 2px solid var(--cw-border);
+    background: var(--cw-app);
+}
+
+.cw-turn-text {
+    font: 400 13px/1.55 var(--cw-sans);
+    color: var(--cw-body);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.cw-chat-form {
+    display: flex;
+    flex: none;
+    align-items: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.cw-chat-form .cw-textarea {
+    flex: 1;
+    margin: 0;
+}
+
+.cw-spin {
+    animation: cw-spin 1s linear infinite;
+}
+
+@keyframes cw-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }

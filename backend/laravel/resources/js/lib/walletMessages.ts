@@ -21,7 +21,14 @@ export const walletMessages: Messages = {
         refresh: 'Refresh',
         navPortfolio: 'Portfolio',
         navActivity: 'Activity',
+        navAnalytics: 'Analytics',
         navSecurity: 'Security',
+        navLain: 'Lain',
+        tabWallet: 'Wallet',
+        tabLaunch: 'Launch',
+        tileTokensHint: 'ERC-20 · every network',
+        tileAnalyticsHint: 'Allocation · flow',
+        tileSecurityHint: 'Lock · keys',
 
         // Welcome
         welcomeHeadline: 'one key.\nevery network.\nyour custody.',
@@ -192,11 +199,57 @@ export const walletMessages: Messages = {
         tokenContract: 'Token contract address',
         hideToken: 'Hide',
         kToken: 'Token',
+        tokenByHand: 'Added by hand',
+        tokensScreenBody:
+            'Every token this vault holds, network by network. They share the address and the gas of the network they sit on — a token is not a chain of its own.',
+        tokenValue: 'Token value',
+        tokensTracked: '{count} tokens · {networks} networks',
+        tokensUnpricedCount:
+            '{count} of them have no price and are not in the total',
+        tokensNoNetworks:
+            'No network in this vault can hold tokens. Add an EVM chain and its tokens appear here.',
+        tokenPrice: 'Price',
+        tokenQuoteSource:
+            'Priced from the Cyberia pools, through the same index the DEX reads. A pool price is what one trade would get, not a market rate.',
+        tokenNoQuote:
+            'Nothing here quotes this contract, so it has no price — which is not the same as being worth nothing. The balance below is exact.',
+        tokenYourBalance: 'Your balance',
+        tokenValueLabel: 'Value',
+        tokenDecimals: 'Decimals',
+        tokenListedBy: 'Listed by',
+        tokenListedByIndex: "the chain's own index",
+        tokenListedByYou: 'you, by contract',
+        tokenContractLabel: 'Contract',
+        tokenManualWarn:
+            "Anyone can deploy a token with any name. A matching symbol is not proof of anything — check this contract against the project's own site before you send to it or trade it.",
+        tokenGone:
+            'This token is no longer on the list. A contract you hid, or one the index dropped once the balance reached zero.',
         insufficientGasTitle: 'Not enough {gas} for the fee',
         insufficientGasBody:
             'Moving a token is paid for in {gas}, not in {symbol}. You need {amount} {gas} more.',
         signSentenceToken:
             'Transfer {amount} {symbol} from your {chain} account to {to} on {network}, paying up to {fee} {gas} in network fees.',
+
+        // Analytics
+        analyticsBody:
+            'Computed in this browser from balances it already read and prices this page already has. Nothing about what you hold is sent anywhere to be analysed.',
+        netWorth: 'Net worth',
+        analyticsPartial:
+            '{count} holdings have no price, or could not be read at all, and are left out of this total',
+        shareNetworks: 'In network coins',
+        shareTokens: 'In tokens',
+        allocation: 'Allocation',
+        analyticsEmpty:
+            'Nothing priced to break down yet. Receive assets, or add a network whose coin this page can quote.',
+        flowWeek: 'Transfers · last 7 days',
+        flowNote:
+            'Counted from the {indexed} of {total} networks with an index a browser can read without an API key, and only for transfers their source dated.',
+        statNetworks: 'Networks derived',
+        statTokens: 'Tokens tracked',
+        statLargest: 'Largest holding',
+        statUnpriced: 'Left out of the total',
+        statTransfers: 'Transfers · 7d',
+        statSources: 'History sources',
 
         // Network detail
         balance: 'Balance',
@@ -347,6 +400,193 @@ export const walletMessages: Messages = {
         receiveOnly: 'Receive-only',
         path: 'Derivation path',
         openSite: 'Cyberia',
+
+        // Lain — the $LAIN holders' room
+        lainTitle: 'Lain',
+        lainIntro:
+            'Cyberia’s resident intelligence, open to wallets holding {required}% or more of the live $LAIN supply. Your share is read from the contract here, in this browser — nothing is sent anywhere until you choose to open the room.',
+        lainHolding: 'You hold',
+        lainShare: 'Share of supply',
+        lainRequired: 'Required',
+        lainReading: 'Reading the contract…',
+        lainOff: 'Lain is not wired up on this server yet.',
+        lainReadFailed:
+            'Could not read the $LAIN contract on Cyberia. This says nothing about your balance — only that the network did not answer.',
+        lainShort:
+            'The room is open to wallets holding {required}% of the live $LAIN supply. This account holds {share} — {amount} {symbol}.',
+        lainShortHint:
+            'The share is recomputed every time this screen is opened, so it follows both what you hold and what has been minted or burned.',
+        lainQualifies: 'This account qualifies',
+        lainSignBody:
+            'Sign a challenge with this wallet’s Cyberia key to open the room. It moves no funds, approves no transaction and grants no allowance — it only proves that this browser holds the key behind the address.',
+        lainSign: 'Hold to sign',
+        lainSigning: 'Signing…',
+        lainNoTools:
+            'Lain has no tools in this room: she cannot read your balances, sign anything or move funds. Never send her — or anyone — your seed phrase.',
+        lainEmpty: 'Say something. She is listening.',
+        lainName: 'Lain',
+        lainYou: 'You',
+        lainThinking: 'Lain is thinking…',
+        lainPlaceholder:
+            'Write to Lain… (Enter sends, Shift+Enter is a new line)',
+        lainSend: 'Send',
+        lainStored: 'The conversation stays on this device.',
+        lainForget: 'Forget conversation',
+        lainUnreachable:
+            'Lain is unreachable right now. Try again in a moment.',
+
+        // Accounts
+        accounts: 'Accounts',
+        accountsBody:
+            'Accounts derived from your phrase live in one vault. Imported keys, imported phrases and watched addresses are marked — your backup does not cover them.',
+        accountsFootnote:
+            'The active account is the one every screen is about: portfolio, tokens, history, fees and anything you sign.',
+        orphanTitle: 'This account has nowhere to be',
+        orphanBody:
+            'It was imported on a network that is no longer in this wallet. Add that network back to use it again, or switch to another account.',
+        accountActive: 'Active',
+        accountSwitch: 'Switch',
+        accountKindSeed: 'From your phrase',
+        accountKindPhrase: 'Imported phrase',
+        accountKindKey: 'Imported key',
+        accountKindWatch: 'Watch only',
+        accountUse: 'Use',
+        accountRename: 'Rename',
+        accountForget: 'Forget',
+        accountForgetSure: 'Forget it?',
+        accountForgetSecret: 'This device holds the only copy.',
+        accountForgetConfirm: 'Forget',
+        accountPrimaryName: 'Main account',
+        accountSeedName: 'Account {index}',
+        accountPhraseName: 'Imported phrase',
+        accountKeyName: 'Imported {chain} key',
+        accountWatchName: 'Watched {chain} address',
+        accountPathKey: 'no derivation path',
+        accountPathWatch: 'public address',
+        accountNotInBackup: 'Imported key · not in your seed backup',
+        accountOwnPhrase: 'Its own phrase · back it up separately',
+        accountWatchOnly: 'Watch only · cannot sign',
+        accountDeriveNext: 'Derive next',
+        accountSameSeed: 'Same phrase',
+        accountImport: 'Import',
+        accountImportHint: 'Phrase · key · watch',
+
+        // Import an account
+        importAccountTitle: 'Import an account',
+        importAccountBody:
+            'Everything here is checked in this browser and stored in the same encrypted vault as your phrase. Nothing is sent anywhere.',
+        importKindPhrase: 'Seed phrase',
+        importKindPhraseHint: '12 or 24 words',
+        importKindKey: 'Private key',
+        importKindKeyHint: 'one network',
+        importKindWatch: 'Watch address',
+        importKindWatchHint: 'no signing',
+        importNetwork: 'Network',
+        importKeyChainsNote:
+            'Monero is not listed: nothing here can spend it, so an imported spend key would buy an address your phrase already derives.',
+        importName: 'Account name · optional',
+        importNamePlaceholder: 'Airdrop hunter',
+        importSecret: 'Secret',
+        importAddress: 'Address',
+        importPlaceholderPhrase: 'word 01   word 02   word 03 …',
+        importPlaceholderKey: 'The private key, as its own wallet exports it',
+        importPlaceholderAddress: 'A public address to watch',
+        importAwaitPhrase: 'Enter 12 or 24 words',
+        importAwaitKey: 'Paste a private key',
+        importAwaitAddress: 'Enter a public address',
+        importPhraseProgress: '{count} words so far',
+        importLooksValid: 'Looks valid',
+        importUnrecognised: 'Format not recognised',
+        importWarnPhrase:
+            'A second phrase is its own root. Your existing backup does not restore it — write this one down separately or the accounts under it are gone with this device.',
+        importWarnKey:
+            'An imported key is not covered by your seed phrase. If you lose this device, only a separate backup of this key restores the account.',
+        importWarnWatch:
+            'A watched address can be tracked and received to, but nothing can ever be signed or sent from it here.',
+        importAction: 'Import account',
+        importWatchAction: 'Add watch account',
+
+        // Launchpad
+        launchpad: 'Launchpad',
+        launchpadBody:
+            'Fair launches on Cyberia. The coin that paid for a launch is burned into locked liquidity, so there is nothing to reserve and nothing to vest — a launch is a pool from the moment it exists.',
+        launchpadLoading: 'Reading launches from the chain…',
+        launchpadEmpty: 'Nothing has launched here yet.',
+        launchpadUnreadable:
+            'The Cyberia node did not answer. The launches are on chain either way.',
+        launchLocked: 'locked',
+        launchPrice: 'Price',
+        launchValue: 'Price in USD',
+        launchLiquidity: 'Locked liquidity',
+        launchCap: 'Market cap',
+        launchSupply: 'Supply',
+        launchContract: 'Contract',
+        launchLockedBody:
+            'The liquidity behind this token was burned at launch. Nobody — including whoever launched it — can withdraw it.',
+        launchRisk:
+            'Locked liquidity is not an endorsement. Anyone can launch anything here, and a name or a symbol proves nothing about who made it.',
+        launchTrade: 'Trade on the DEX',
+        launchExplorer: 'Explorer',
+
+        // Feed
+        feed: 'Feed',
+        feedBody:
+            'Posts from across Cyberia and what the DAO recorded, newest first.',
+        feedTabAll: 'All',
+        feedTabPosts: 'Posts',
+        feedTabDao: 'DAO',
+        feedTagPost: 'Post',
+        feedTagDao: 'DAO',
+        feedProposalCreated: 'Opened a proposal',
+        feedVoteCast: 'Voted',
+        feedCommentPosted: 'Commented',
+        feedSomeone: 'Someone',
+        feedLoading: 'Loading the feed…',
+        feedEmpty: 'The feed is quiet.',
+        feedUnreadable: 'Could not reach Cyberia for the feed.',
+        feedOpen: 'Open',
+        feedOpenSite: 'On the site',
+        feedReadOnly:
+            'Reading only. This wallet has no account behind it — nothing here knows who you are — so posting and replying happen on the site.',
+
+        // DAO
+        dao: 'DAO',
+        daoBody:
+            'Every proposal and how the vote actually stands. The bar is voting power, not the number of voters.',
+        daoProposals: 'Proposals',
+        daoOpenCount: '{count} open',
+        daoLoading: 'Loading proposals…',
+        daoEmpty: 'No proposals yet.',
+        daoUnreadable: 'Could not reach Cyberia for the proposals.',
+        daoStatusOpen: 'Open',
+        daoStatusClosed: 'Closed',
+        daoNoDeadline: 'No deadline',
+        daoNoVotes: 'No votes yet',
+        daoFor: '{percent}% for',
+        daoAgainst: '{percent}% against',
+        daoCast: '{votes} votes · {comments} comments',
+        daoCastShort: '{votes} votes',
+        daoNoSession:
+            'Voting is weighted by a token snapshot and recorded against an account, which this wallet does not have. Open the proposal on the site to cast a vote.',
+        daoOpenToVote: 'Open to vote',
+
+        // Profile
+        profileTitle: 'Profile',
+        profileYours: 'Your profile',
+        profileAddress: 'Address',
+        profileLoading: 'Loading the profile…',
+        profileUnreadable: 'Could not reach Cyberia for this profile.',
+        profileNoAddress: 'This account has no EVM address to look up.',
+        profileUnclaimed: 'No account on Cyberia has claimed this address.',
+        profileUnclaimedYours:
+            'Nobody has claimed this address on Cyberia. Your wallet works either way — a profile only adds a public name, badges and the social side of the site.',
+        profileClaim: 'Claim it on the site',
+        profileOnchainName: 'Name owned on chain 49406',
+        profilePosts: 'Posts',
+        profileProposals: 'Proposals',
+        profileVotes: 'Votes',
+        profileAchievements: 'Achievements · {earned} of {total}',
+        profileOpen: 'Open full profile',
     },
     ru: {
         // Chrome
@@ -360,8 +600,15 @@ export const walletMessages: Messages = {
         retry: 'Повторить',
         refresh: 'Обновить',
         navPortfolio: 'Портфель',
+        navAnalytics: 'Аналитика',
+        tabWallet: 'Кошелёк',
+        tabLaunch: 'Запуск',
+        tileTokensHint: 'ERC-20 · во всех сетях',
+        tileAnalyticsHint: 'Доли · переводы',
+        tileSecurityHint: 'Замок · ключи',
         navActivity: 'История',
         navSecurity: 'Безопасность',
+        navLain: 'Лейн',
 
         // Welcome
         welcomeHeadline: 'один ключ.\nвсе сети.\nваше хранение.',
@@ -532,11 +779,56 @@ export const walletMessages: Messages = {
         tokenContract: 'Адрес контракта токена',
         hideToken: 'Скрыть',
         kToken: 'Токен',
+        tokenByHand: 'Добавлен вручную',
+        tokensScreenBody:
+            'Все токены этого хранилища, по сетям. Они живут на адресе своей сети и оплачиваются её газом — токен не отдельная сеть.',
+        tokenValue: 'Стоимость токенов',
+        tokensTracked: 'токенов: {count} · сетей: {networks}',
+        tokensUnpricedCount: 'из них без цены: {count} — они не вошли в сумму',
+        tokensNoNetworks:
+            'Ни одна сеть в этом хранилище не хранит токены. Добавьте EVM-сеть — её токены появятся здесь.',
+        tokenPrice: 'Цена',
+        tokenQuoteSource:
+            'Цена из пулов Cyberia, через тот же индекс, что читает DEX. Это цена сделки в пуле, а не рыночный курс.',
+        tokenNoQuote:
+            'Цену этого контракта здесь никто не даёт — это не значит, что он ничего не стоит. Баланс ниже точный.',
+        tokenYourBalance: 'Ваш баланс',
+        tokenValueLabel: 'Стоимость',
+        tokenDecimals: 'Знаков после запятой',
+        tokenListedBy: 'Откуда в списке',
+        tokenListedByIndex: 'из индекса сети',
+        tokenListedByYou: 'вы добавили по контракту',
+        tokenContractLabel: 'Контракт',
+        tokenManualWarn:
+            'Развернуть токен с любым именем может кто угодно. Совпадение тикера ничего не доказывает — сверьте контракт с сайтом самого проекта, прежде чем отправлять на него или менять его.',
+        tokenGone:
+            'Этого токена больше нет в списке: вы его скрыли или индекс убрал его, когда баланс стал нулевым.',
         insufficientGasTitle: 'Не хватает {gas} на комиссию',
         insufficientGasBody:
             'Перевод токена оплачивается в {gas}, а не в {symbol}. Не хватает {amount} {gas}.',
         signSentenceToken:
             'Перевод {amount} {symbol} со счёта {chain} на {to} в сети {network}, комиссия сети — до {fee} {gas}.',
+
+        // Analytics
+        analyticsBody:
+            'Всё посчитано в этом браузере: из уже прочитанных балансов и уже полученных цен. Ничего о ваших активах никуда не отправляется на анализ.',
+        netWorth: 'Стоимость активов',
+        analyticsPartial:
+            'позиций без цены или вовсе не прочитанных: {count} — они не вошли в сумму',
+        shareNetworks: 'В монетах сетей',
+        shareTokens: 'В токенах',
+        allocation: 'Распределение',
+        analyticsEmpty:
+            'Пока нечего раскладывать: нет активов с ценой. Получите средства или добавьте сеть, монету которой эта страница умеет оценивать.',
+        flowWeek: 'Переводы · 7 дней',
+        flowNote:
+            'Считаем по {indexed} из {total} сетей, у которых есть индекс, читаемый браузером без API-ключа, и только по переводам с датой от источника.',
+        statNetworks: 'Сетей выведено',
+        statTokens: 'Токенов в списке',
+        statLargest: 'Крупнейшая позиция',
+        statUnpriced: 'Не вошло в сумму',
+        statTransfers: 'Переводов · 7 дней',
+        statSources: 'Источников истории',
 
         // Network detail
         balance: 'Баланс',
@@ -687,5 +979,194 @@ export const walletMessages: Messages = {
         receiveOnly: 'Только приём',
         path: 'Путь деривации',
         openSite: 'Cyberia',
+
+        // Лейн — комната держателей $LAIN
+        lainTitle: 'Лейн',
+        lainIntro:
+            'Разум Cyberia. Комната открыта кошелькам, у которых есть {required}% и больше живой эмиссии $LAIN. Доля читается прямо из контракта здесь, в браузере, — пока вы сами не откроете комнату, наружу не уходит ничего.',
+        lainHolding: 'У вас',
+        lainShare: 'Доля эмиссии',
+        lainRequired: 'Нужно',
+        lainReading: 'Читаю контракт…',
+        lainOff: 'Лейн на этом сервере ещё не подключена.',
+        lainReadFailed:
+            'Не удалось прочитать контракт $LAIN в Cyberia. Это ничего не говорит о вашем балансе — только о том, что сеть не ответила.',
+        lainShort:
+            'Комната открыта кошелькам с {required}% живой эмиссии $LAIN. На этом счёте {share} — {amount} {symbol}.',
+        lainShortHint:
+            'Доля пересчитывается при каждом открытии экрана, поэтому она следует и за вашим балансом, и за тем, что было выпущено или сожжено.',
+        lainQualifies: 'Этот счёт подходит',
+        lainSignBody:
+            'Подпишите вызов ключом Cyberia из этого кошелька, чтобы открыть комнату. Подпись не двигает средства, не подтверждает транзакцию и не даёт разрешений — она лишь доказывает, что ключ от адреса лежит в этом браузере.',
+        lainSign: 'Держите, чтобы подписать',
+        lainSigning: 'Подписываю…',
+        lainNoTools:
+            'В этой комнате у Лейн нет инструментов: она не может прочитать ваши балансы, что-то подписать или перевести средства. Никогда не отправляйте ей — и никому — сид-фразу.',
+        lainEmpty: 'Скажите что-нибудь. Она слушает.',
+        lainName: 'Лейн',
+        lainYou: 'Вы',
+        lainThinking: 'Лейн думает…',
+        lainPlaceholder:
+            'Написать Лейн… (Enter — отправить, Shift+Enter — новая строка)',
+        lainSend: 'Отправить',
+        lainStored: 'Переписка остаётся на этом устройстве.',
+        lainForget: 'Забыть переписку',
+        lainUnreachable: 'Лейн сейчас недоступна. Попробуйте через минуту.',
+
+        // Accounts
+        accounts: 'Счета',
+        accountsBody:
+            'Счета, выведенные из вашей фразы, живут в одном хранилище. Импортированные ключи, импортированные фразы и наблюдаемые адреса помечены — ваша резервная копия их не покрывает.',
+        accountsFootnote:
+            'Активный счёт — тот, о котором говорит каждый экран: портфель, токены, история, комиссии и всё, что вы подписываете.',
+        orphanTitle: 'Этому счёту негде быть',
+        orphanBody:
+            'Он импортирован в сеть, которой больше нет в этом кошельке. Верните сеть, чтобы снова им пользоваться, или переключитесь на другой счёт.',
+        accountActive: 'Активный',
+        accountSwitch: 'Сменить',
+        accountKindSeed: 'Из вашей фразы',
+        accountKindPhrase: 'Импортированная фраза',
+        accountKindKey: 'Импортированный ключ',
+        accountKindWatch: 'Только наблюдение',
+        accountUse: 'Выбрать',
+        accountRename: 'Переименовать',
+        accountForget: 'Забыть',
+        accountForgetSure: 'Забыть его?',
+        accountForgetSecret: 'Единственная копия — на этом устройстве.',
+        accountForgetConfirm: 'Забыть',
+        accountPrimaryName: 'Основной счёт',
+        accountSeedName: 'Счёт {index}',
+        accountPhraseName: 'Импортированная фраза',
+        accountKeyName: 'Импортированный ключ {chain}',
+        accountWatchName: 'Наблюдаемый адрес {chain}',
+        accountPathKey: 'без пути деривации',
+        accountPathWatch: 'публичный адрес',
+        accountNotInBackup:
+            'Импортированный ключ · его нет в резервной копии фразы',
+        accountOwnPhrase: 'Своя фраза · сохраните её отдельно',
+        accountWatchOnly: 'Только наблюдение · подписать нельзя',
+        accountDeriveNext: 'Вывести следующий',
+        accountSameSeed: 'Та же фраза',
+        accountImport: 'Импорт',
+        accountImportHint: 'Фраза · ключ · наблюдение',
+
+        // Import an account
+        importAccountTitle: 'Импорт счёта',
+        importAccountBody:
+            'Всё здесь проверяется в этом браузере и попадает в то же зашифрованное хранилище, что и ваша фраза. Никуда ничего не отправляется.',
+        importKindPhrase: 'Сид-фраза',
+        importKindPhraseHint: '12 или 24 слова',
+        importKindKey: 'Приватный ключ',
+        importKindKeyHint: 'одна сеть',
+        importKindWatch: 'Наблюдение',
+        importKindWatchHint: 'без подписи',
+        importNetwork: 'Сеть',
+        importKeyChainsNote:
+            'Monero в списке нет: потратить её отсюда нельзя, поэтому импорт ключа траты дал бы адрес, который ваша фраза и так выводит.',
+        importName: 'Название счёта · необязательно',
+        importNamePlaceholder: 'Охотник за аирдропами',
+        importSecret: 'Секрет',
+        importAddress: 'Адрес',
+        importPlaceholderPhrase: 'слово 01   слово 02   слово 03 …',
+        importPlaceholderKey:
+            'Приватный ключ в том виде, в каком его выдаёт свой кошелёк',
+        importPlaceholderAddress: 'Публичный адрес для наблюдения',
+        importAwaitPhrase: 'Введите 12 или 24 слова',
+        importAwaitKey: 'Вставьте приватный ключ',
+        importAwaitAddress: 'Введите публичный адрес',
+        importPhraseProgress: 'Пока {count} слов',
+        importLooksValid: 'Похоже на верный',
+        importUnrecognised: 'Формат не распознан',
+        importWarnPhrase:
+            'Вторая фраза — самостоятельный корень. Существующая резервная копия её не восстановит: запишите эту фразу отдельно, иначе счета под ней исчезнут вместе с устройством.',
+        importWarnKey:
+            'Импортированный ключ не покрывается вашей сид-фразой. Если устройство потеряется, счёт вернёт только отдельная копия этого ключа.',
+        importWarnWatch:
+            'За наблюдаемым адресом можно следить и на него можно получать, но подписать или отправить с него отсюда нельзя никогда.',
+        importAction: 'Импортировать счёт',
+        importWatchAction: 'Добавить наблюдение',
+
+        // Launchpad
+        launchpad: 'Лаунчпад',
+        launchpadBody:
+            'Честные запуски в Cyberia. Монета, которой оплатили запуск, сжигается в заблокированную ликвидность: резервировать и вестить тут нечего — запуск сразу становится пулом.',
+        launchpadLoading: 'Читаю запуски из сети…',
+        launchpadEmpty: 'Здесь пока ничего не запускали.',
+        launchpadUnreadable:
+            'Нода Cyberia не ответила. На запуски в сети это никак не влияет.',
+        launchLocked: 'заблокировано',
+        launchPrice: 'Цена',
+        launchValue: 'Цена в USD',
+        launchLiquidity: 'Заблокированная ликвидность',
+        launchCap: 'Капитализация',
+        launchSupply: 'Эмиссия',
+        launchContract: 'Контракт',
+        launchLockedBody:
+            'Ликвидность за этим токеном сожжена при запуске. Вывести её не может никто — включая того, кто запускал.',
+        launchRisk:
+            'Заблокированная ликвидность — не рекомендация. Запустить здесь может кто угодно что угодно, а название и тикер ничего не доказывают об авторе.',
+        launchTrade: 'Торговать на DEX',
+        launchExplorer: 'Обозреватель',
+
+        // Feed
+        feed: 'Лента',
+        feedBody:
+            'Записи со всей Cyberia и то, что зафиксировал DAO, — сначала свежее.',
+        feedTabAll: 'Всё',
+        feedTabPosts: 'Записи',
+        feedTabDao: 'DAO',
+        feedTagPost: 'Запись',
+        feedTagDao: 'DAO',
+        feedProposalCreated: 'Открыл предложение',
+        feedVoteCast: 'Проголосовал',
+        feedCommentPosted: 'Прокомментировал',
+        feedSomeone: 'Кто-то',
+        feedLoading: 'Загружаю ленту…',
+        feedEmpty: 'В ленте тихо.',
+        feedUnreadable: 'Не удалось получить ленту из Cyberia.',
+        feedOpen: 'Открыть',
+        feedOpenSite: 'На сайте',
+        feedReadOnly:
+            'Только чтение. За этим кошельком нет аккаунта — здесь никто не знает, кто вы, — поэтому писать и отвечать нужно на сайте.',
+
+        // DAO
+        dao: 'DAO',
+        daoBody:
+            'Все предложения и реальный расклад голосов. Полоса — это вес голосов, а не число проголосовавших.',
+        daoProposals: 'Предложения',
+        daoOpenCount: 'Открытых: {count}',
+        daoLoading: 'Загружаю предложения…',
+        daoEmpty: 'Предложений пока нет.',
+        daoUnreadable: 'Не удалось получить предложения из Cyberia.',
+        daoStatusOpen: 'Открыто',
+        daoStatusClosed: 'Закрыто',
+        daoNoDeadline: 'Без срока',
+        daoNoVotes: 'Голосов пока нет',
+        daoFor: '{percent}% за',
+        daoAgainst: '{percent}% против',
+        daoCast: 'Голосов: {votes} · комментариев: {comments}',
+        daoCastShort: 'Голосов: {votes}',
+        daoNoSession:
+            'Вес голоса считается по снимку баланса токена и записывается на аккаунт, которого у этого кошелька нет. Чтобы проголосовать, откройте предложение на сайте.',
+        daoOpenToVote: 'Открыть и проголосовать',
+
+        // Profile
+        profileTitle: 'Профиль',
+        profileYours: 'Ваш профиль',
+        profileAddress: 'Адрес',
+        profileLoading: 'Загружаю профиль…',
+        profileUnreadable: 'Не удалось получить этот профиль из Cyberia.',
+        profileNoAddress: 'У этого счёта нет EVM-адреса для поиска.',
+        profileUnclaimed:
+            'Этот адрес не привязан ни к одному аккаунту Cyberia.',
+        profileUnclaimedYours:
+            'Этот адрес никто не привязал к аккаунту Cyberia. Кошельку это не мешает: профиль добавляет только публичное имя, значки и социальную часть сайта.',
+        profileClaim: 'Привязать на сайте',
+        profileOnchainName: 'Имя закреплено в сети 49406',
+        profilePosts: 'Записи',
+        profileProposals: 'Предложения',
+        profileVotes: 'Голоса',
+        profileAchievements: 'Достижения · {earned} из {total}',
+        profileOpen: 'Открыть полный профиль',
     },
 };

@@ -166,16 +166,18 @@ export const encodeMoneroBase58 = (bytes: Uint8Array): string => {
 };
 
 /**
- * Standard mainnet address for a spend/view public key pair: network byte,
- * the two keys, and the four leading bytes of the payload's Keccak-256.
+ * Mainnet address for a spend/view public key pair under one network byte:
+ * the byte, the two keys, and the four leading bytes of the payload's
+ * Keccak-256.
  */
-export const moneroStandardAddress = (
+const moneroAddress = (
+    networkByte: number,
     spendPublicKey: Uint8Array,
     viewPublicKey: Uint8Array,
 ): string => {
     const payload = new Uint8Array(65);
 
-    payload[0] = 0x12;
+    payload[0] = networkByte;
     payload.set(spendPublicKey, 1);
     payload.set(viewPublicKey, 33);
 
@@ -190,6 +192,23 @@ export const moneroStandardAddress = (
 
     return encodeMoneroBase58(address);
 };
+
+/** The `4…` address of a wallet's own primary account. */
+export const moneroStandardAddress = (
+    spendPublicKey: Uint8Array,
+    viewPublicKey: Uint8Array,
+): string => moneroAddress(0x12, spendPublicKey, viewPublicKey);
+
+/**
+ * The `8…` address of a subaddress. Same two keys in the same order, a
+ * different network byte — and, crucially, keys that were derived for that one
+ * subaddress rather than the wallet's primary pair. Encoding a primary pair
+ * here would produce a valid-looking address that receives nothing.
+ */
+export const moneroSubaddress = (
+    spendPublicKey: Uint8Array,
+    viewPublicKey: Uint8Array,
+): string => moneroAddress(0x2a, spendPublicKey, viewPublicKey);
 
 /** Human label for the address kind, for UI badges. */
 export const moneroKindLabel = (kind: MoneroAddressKind): string =>

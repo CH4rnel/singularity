@@ -189,6 +189,97 @@ test('every EVM network is the same address, and only that address', () => {
     );
 });
 
+test('a second seed account is the one other wallets restore', () => {
+    // MetaMask, Rabby and Trust all put the account number in the address
+    // segment of coin type 60. These are the addresses the test phrase shows
+    // there as "Account 2" and "Account 3" — being interoperable is the whole
+    // reason to follow a standard nobody enforces.
+    assert.equal(
+        deriveAddress(PHRASE, 'cyberia', 1),
+        '0x6Fac4D18c912343BF86fa7049364Dd4E424Ab9C0',
+    );
+    assert.equal(
+        deriveAddress(PHRASE, 'cyberia', 2),
+        '0xb6716976A3ebe8D39aCEB04372f22Ff8e6802D7A',
+    );
+});
+
+test('an account number reaches every chain, each in its own segment', () => {
+    const first = deriveAccounts(PHRASE, {
+        id: 'seed-0',
+        kind: 'seed',
+        index: 0,
+        label: null,
+    });
+    const second = deriveAccounts(PHRASE, {
+        id: 'seed-1',
+        kind: 'seed',
+        index: 1,
+        label: null,
+    });
+
+    assert.equal(second.length, first.length);
+
+    for (const account of second) {
+        const before = first.find(
+            (candidate) => candidate.chain === account.chain,
+        );
+
+        assert.notEqual(
+            account.address,
+            before.address,
+            `${account.chain} handed out the same address for two accounts`,
+        );
+        assert.equal(account.kind, 'seed');
+    }
+
+    const path = (accounts, chain) =>
+        accounts.find((account) => account.chain === chain).path;
+
+    // The number lands wherever that chain's own ecosystem puts it: the
+    // address segment on EVM, the account segment on Solana and Bitcoin.
+    assert.equal(path(second, 'cyberia'), "m/44'/60'/0'/0/1");
+    assert.equal(path(second, 'solana'), "m/44'/501'/1'/0'");
+    assert.equal(path(second, 'bitcoin'), "m/84'/0'/1'/0/0");
+    // Monero numbers subaddresses instead, so the path genuinely does not move.
+    assert.equal(path(second, 'monero'), path(first, 'monero'));
+});
+
+test('an imported account is one chain, and a watched one cannot spend', () => {
+    const key = deriveAccounts(PHRASE, {
+        id: 'key-cyberia-0x98',
+        kind: 'key',
+        chain: 'cyberia',
+        secret: '0x00',
+        address: '0x9858EfFD232B4033E47d90003D41EC34EcaEda94',
+        label: null,
+    });
+
+    // A key belongs to one curve and one address format, so the portfolio
+    // behind it is honestly one card rather than a grid it cannot reach.
+    assert.equal(key.length, 1);
+    assert.equal(key[0].chain, 'cyberia');
+    assert.equal(key[0].kind, 'key');
+    assert.equal(key[0].path, 'imported key');
+    assert.equal(key[0].capabilities.send, true);
+
+    const watched = deriveAccounts(PHRASE, {
+        id: 'watch-cyberia-0x98',
+        kind: 'watch',
+        chain: 'cyberia',
+        address: '0x9858EfFD232B4033E47d90003D41EC34EcaEda94',
+        label: null,
+    });
+
+    assert.equal(watched[0].kind, 'watch');
+    assert.equal(watched[0].capabilities.balance, true);
+    assert.equal(
+        watched[0].capabilities.send,
+        false,
+        'a watched address has no key, and the capability has to say so',
+    );
+});
+
 test('amounts round-trip through the smallest unit', () => {
     assert.equal(parseUnits('1.5', 18), 1_500_000_000_000_000_000n);
     assert.equal(parseUnits('0.000000001', 9), 1n);
