@@ -16,6 +16,8 @@ class LaunchpadToken extends Model
         'image_path',
         'html_path',
         'site_subdomain',
+        'ipfs_cid',
+        'ipfs_pinned_at',
     ];
 
     /** A token launched on several chains has one row per chain. */
@@ -23,6 +25,7 @@ class LaunchpadToken extends Model
     {
         return [
             'chain_id' => 'integer',
+            'ipfs_pinned_at' => 'datetime',
         ];
     }
 }

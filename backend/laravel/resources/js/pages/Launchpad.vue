@@ -94,6 +94,8 @@ type LaunchedToken = {
     imageUrl?: string | null;
     siteSubdomain?: string | null;
     siteUrl?: string | null;
+    ipfsUri?: string | null;
+    ipfsUrl?: string | null;
     // Enriched from pair reserves (price quoted in the pair's quote asset).
     priceCyber?: number | null;
     marketCapCyber?: number | null;
@@ -110,6 +112,9 @@ type LaunchpadMetadata = {
     image_url: string | null;
     site_subdomain: string | null;
     site_url: string | null;
+    ipfs_cid: string | null;
+    ipfs_uri: string | null;
+    ipfs_url: string | null;
 };
 
 type LaunchEventMeta = {
@@ -1078,6 +1083,8 @@ const loadRecent = async (): Promise<void> => {
                 imageUrl: md?.image_url ?? null,
                 siteSubdomain: md?.site_subdomain ?? null,
                 siteUrl: md?.site_url ?? null,
+                ipfsUri: md?.ipfs_uri ?? null,
+                ipfsUrl: md?.ipfs_url ?? null,
                 priceCyber: d.priceCyber,
                 marketCapCyber:
                     d.priceCyber != null ? d.priceCyber * supplyWhole : null,
@@ -1887,6 +1894,10 @@ onMounted(async () => {
                         <span v-if="htmlFileName" class="small muted">{{
                             htmlFileName
                         }}</span>
+                        <span class="small muted">
+                            Published to IPFS on save — the page keeps its
+                            address after any host stops serving it.
+                        </span>
                     </label>
                     <label class="full">
                         <span>Token subdomain (requires an HTML page)</span>
@@ -2050,6 +2061,16 @@ onMounted(async () => {
                                         Site →
                                     </a>
                                     <a
+                                        v-if="t.ipfsUrl && t.ipfsUrl !== t.siteUrl"
+                                        class="ipfsBtn"
+                                        :href="t.ipfsUrl"
+                                        :title="t.ipfsUri ?? undefined"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        IPFS →
+                                    </a>
+                                    <a
                                         class="swapBtn"
                                         :href="swapUrlFor(t.token)"
                                         target="_blank"
@@ -2173,6 +2194,17 @@ onMounted(async () => {
                                         class="small muted"
                                         >{{ editHtmlFileName }}</span
                                     >
+                                    <a
+                                        v-if="t.ipfsUrl"
+                                        class="small muted ipfsAddr"
+                                        :href="t.ipfsUrl"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        >Pinned at {{ t.ipfsUri }}</a
+                                    >
+                                    <span v-else class="small muted">
+                                        Uploading a page also pins it to IPFS.
+                                    </span>
                                 </label>
                                 <label>
                                     <span>Token subdomain</span>
@@ -2666,6 +2698,7 @@ onMounted(async () => {
 }
 .swapBtn,
 .editBtn,
+.ipfsBtn,
 .siteBtn {
     border: 1px solid var(--input);
     background: var(--card);
@@ -2685,6 +2718,19 @@ onMounted(async () => {
 }
 .siteBtn:hover {
     background: rgba(34, 197, 94, 0.25);
+}
+.ipfsAddr {
+    word-break: break-all;
+    color: #d8b4fe;
+    text-decoration: none;
+}
+.ipfsBtn {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.4);
+    color: #d8b4fe;
+}
+.ipfsBtn:hover {
+    background: rgba(168, 85, 247, 0.25);
 }
 .swapBtn {
     background: rgba(59, 130, 246, 0.15);

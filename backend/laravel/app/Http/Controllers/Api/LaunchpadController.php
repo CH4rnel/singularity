@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Wallet\RecoverEvmAddress;
 use App\Http\Controllers\Controller;
 use App\Models\LaunchpadToken;
+use App\Services\IpfsService;
+use App\Services\LaunchpadSiteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -16,7 +18,11 @@ use Illuminate\Validation\ValidationException;
 
 class LaunchpadController extends Controller
 {
-    public function __construct(private readonly RecoverEvmAddress $recoverEvmAddress) {}
+    public function __construct(
+        private readonly RecoverEvmAddress $recoverEvmAddress,
+        private readonly LaunchpadSiteService $sites,
+        private readonly IpfsService $ipfs,
+    ) {}
 
     /** Return metadata for every token registered with the Launchpad. */
     public function index(): JsonResponse
@@ -149,12 +155,22 @@ class LaunchpadController extends Controller
             $file = $chainId.'-'.$address.'.html';
             Storage::disk('public')->putFileAs('launchpad-sites', $request->file('html'), $file);
             $payload['html_path'] = 'launchpad-sites/'.$file;
+            // A CID names bytes: the old one describes the page just replaced.
+            $payload['ipfs_cid'] = null;
+            $payload['ipfs_pinned_at'] = null;
         }
 
         $token = LaunchpadToken::updateOrCreate(
             ['chain_id' => $chainId, 'address' => $address],
             $payload,
         );
+
+        // The page is only durable once it has a CID. This pins new uploads and
+        // catches up rows that predate pinning; if the node is unreachable the
+        // upload still succeeds and `launchpad:pin-sites` finishes the job.
+        if ($token->html_path && ! $token->ipfs_cid) {
+            $this->sites->publish($token);
+        }
 
         return response()->json(['token' => $this->serialize($token)]);
     }
@@ -189,13 +205,22 @@ class LaunchpadController extends Controller
 
         $html = Storage::disk('public')->get($token->html_path);
 
-        return response($html, 200, [
+        $headers = [
             'Content-Type' => 'text/html; charset=UTF-8',
             'Content-Security-Policy' => 'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox',
             'Referrer-Policy' => 'no-referrer',
             'X-Content-Type-Options' => 'nosniff',
             'X-Frame-Options' => 'DENY',
-        ]);
+        ];
+
+        // What this host serves is a mirror; the CID is the address that
+        // survives it, so say so in the response rather than only in the API.
+        if ($token->ipfs_cid) {
+            $headers['Link'] = '<'.$this->ipfs->gatewayUrl($token->ipfs_cid).'>; rel="canonical"';
+            $headers['X-Ipfs-Cid'] = $token->ipfs_cid;
+        }
+
+        return response($html, 200, $headers);
     }
 
     /** Returns true if the message contains an ISO-ish timestamp not older than 10 min. */
@@ -228,6 +253,9 @@ class LaunchpadController extends Controller
             'image_url' => $t->image_path ? Storage::disk('public')->url($t->image_path) : null,
             'site_subdomain' => $t->site_subdomain,
             'site_url' => $this->siteUrl($t),
+            'ipfs_cid' => $t->ipfs_cid,
+            'ipfs_uri' => $t->ipfs_cid ? $this->ipfs->uri($t->ipfs_cid) : null,
+            'ipfs_url' => $t->ipfs_cid ? $this->ipfs->gatewayUrl($t->ipfs_cid) : null,
         ];
     }
 
@@ -239,6 +267,12 @@ class LaunchpadController extends Controller
 
         if ($token->site_subdomain) {
             return 'https://'.$token->site_subdomain.'.'.config('launchpad.sites_domain').'/';
+        }
+
+        // Without a name of its own, a site's primary link is its CID rather
+        // than a path on this host — the same page, addressed by content.
+        if ($token->ipfs_cid) {
+            return $this->ipfs->gatewayUrl($token->ipfs_cid);
         }
 
         return URL::to('/launchpad/sites/'.Str::lower($token->address));
