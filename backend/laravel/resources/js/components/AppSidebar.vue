@@ -46,7 +46,13 @@ import {
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
-import { dashboard, feed, leaderboard, staking } from '@/routes';
+import {
+    dashboard,
+    feed,
+    leaderboard,
+    staking,
+    wallet as walletRoute,
+} from '@/routes';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -75,6 +81,13 @@ const mainNavItems = computed<NavItem[]>(() => [
         title: 'Dashboard',
         href: dashboardUrl.value,
         icon: LayoutGrid,
+    },
+    {
+        // Above Profile because it needs no account at all: the one page here
+        // that works before you have signed in to anything.
+        title: 'Wallet',
+        href: walletRoute().url,
+        icon: Wallet,
     },
     {
         title: 'Profile',

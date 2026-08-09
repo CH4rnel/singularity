@@ -27,6 +27,7 @@ import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
 import { isNativeShell } from '@/lib/native';
+import { unreadChatCount } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -150,16 +151,23 @@ const SECTIONS: { id: Section; label: () => string }[] = [
 ];
 
 /**
- * The phone gets five destinations, and they are the five things this app is:
- * the wallet, the feed, the launchpad, the DAO and Lain.
+ * The phone's destinations, and they are what this app is: the wallet, the
+ * messages that wallet sends, the feed, the launchpad, the DAO and Lain.
  *
- * Everything else is a place inside one of those rather than a sixth slot —
- * tokens, analytics, accounts and security are all ways of reading the wallet
- * and are reached from the portfolio, which is also the only way five labels
- * fit across 390px without clipping.
+ * Messages started life as a shortcut on the portfolio, on the theory that five
+ * labels are all 390px holds. That was wrong in the way that matters: a
+ * correspondence is not a way of reading your holdings, and nobody looks for it
+ * inside them. Six labels do fit — at ~65px each, with the tracking that makes
+ * a mono label read as a label given up below 360px — and the badge for waiting
+ * messages now sits where it can be seen from anywhere in the app.
+ *
+ * Everything else genuinely is a place inside one of these: tokens, analytics,
+ * accounts and security are all ways of reading the wallet, reached from the
+ * portfolio.
  */
 const TABS: { id: Section; label: () => string }[] = [
     { id: 'portfolio', label: () => t('tabWallet') },
+    { id: 'chat', label: () => t('tabChat') },
     { id: 'feed', label: () => t('feed') },
     { id: 'launchpad', label: () => t('tabLaunch') },
     { id: 'dao', label: () => t('dao') },
@@ -172,7 +180,7 @@ const TAB_OF: Record<Section, Section> = {
     tokens: 'portfolio',
     token: 'portfolio',
     analytics: 'portfolio',
-    chat: 'portfolio',
+    chat: 'chat',
     accounts: 'portfolio',
     importAccount: 'portfolio',
     network: 'portfolio',
@@ -185,6 +193,29 @@ const TAB_OF: Record<Section, Section> = {
 };
 
 const activeTab = computed(() => TAB_OF[section.value]);
+
+/**
+ * Messages waiting, for the badge on the tab bar and the rail.
+ *
+ * Counted from the envelopes already cached on this device — the metadata
+ * around a message, never what is inside one — so the number costs no key and
+ * survives a locked vault. It is a `ref` and not a computed because
+ * localStorage is not reactive: the chat screen says when it has changed, and
+ * an account switch changes whose mail this is.
+ *
+ * It deliberately does not poll the relay in the background. Asking for mail
+ * takes a signed proof, and a wallet that signs things nobody asked for is
+ * worse than a badge that is one visit out of date.
+ */
+const unread = ref(0);
+
+const refreshUnread = (): void => {
+    const evm = wallet.accounts.value.find(
+        (account) => account.family === 'evm',
+    )?.address;
+
+    unread.value = evm ? unreadChatCount(evm) : 0;
+};
 
 /**
  * The network chip only belongs above the screens that are about one network.
@@ -340,6 +371,7 @@ onMounted(() => {
     trackConnection();
     window.addEventListener('online', trackConnection);
     window.addEventListener('offline', trackConnection);
+    refreshUnread();
     void load();
 });
 
@@ -368,6 +400,7 @@ watch(
             chain.value = wallet.accounts.value[0]?.chain ?? 'cyberia';
         }
 
+        refreshUnread();
         void load();
     },
 );
@@ -376,6 +409,8 @@ watch(
 watch(
     () => wallet.unlocked.value,
     (unlocked) => {
+        refreshUnread();
+
         if (unlocked) {
             void load();
         } else {
@@ -534,6 +569,11 @@ watch(
                         @click="openSection(entry.id)"
                     >
                         {{ entry.label() }}
+                        <span
+                            v-if="entry.id === 'chat' && unread > 0"
+                            class="cw-badge"
+                            >{{ unread }}</span
+                        >
                     </button>
                 </div>
 
@@ -725,13 +765,12 @@ watch(
                         @analytics="openSection('analytics')"
                         @accounts="openSection('accounts')"
                         @security="openSection('security')"
-                        @chat="openSection('chat')"
                     />
 
                     <WalletChat
                         v-else-if="section === 'chat'"
                         :wallet="wallet"
-                        @back="openSection('portfolio')"
+                        @unread="refreshUnread"
                     />
 
                     <WalletAccounts
@@ -856,6 +895,17 @@ watch(
                             }"
                         />
                         <span class="cw-tab-label">{{ entry.label() }}</span>
+                        <!--
+                          Over the corner rather than beside the label: at 65px
+                          a tab has no room for a second word, and a count that
+                          pushed the label would be the one thing on this bar
+                          that changes width while you read it.
+                        -->
+                        <span
+                            v-if="entry.id === 'chat' && unread > 0"
+                            class="cw-badge cw-tab-badge"
+                            >{{ unread }}</span
+                        >
                     </button>
                 </nav>
             </div>

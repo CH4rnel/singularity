@@ -25,10 +25,11 @@ export const walletMessages: Messages = {
         navSecurity: 'Security',
         navLain: 'Lain',
         tabWallet: 'Wallet',
+        // Shorter than "Messages", because six labels share the width five had.
+        tabChat: 'Chat',
         tabLaunch: 'Launch',
         tileTokensHint: 'ERC-20 · every network',
         tileAnalyticsHint: 'Allocation · flow',
-        tileChatHint: 'Encrypted · E2EE',
         tileSecurityHint: 'Lock · keys',
 
         // Welcome
@@ -645,10 +646,10 @@ export const walletMessages: Messages = {
         navPortfolio: 'Портфель',
         navAnalytics: 'Аналитика',
         tabWallet: 'Кошелёк',
+        tabChat: 'Чат',
         tabLaunch: 'Запуск',
         tileTokensHint: 'ERC-20 · во всех сетях',
         tileAnalyticsHint: 'Доли · переводы',
-        tileChatHint: 'Шифрование · E2EE',
         tileSecurityHint: 'Замок · ключи',
         navActivity: 'История',
         navSecurity: 'Безопасность',

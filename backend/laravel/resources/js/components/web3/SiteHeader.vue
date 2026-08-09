@@ -19,7 +19,7 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
-import { navGroups } from '@/components/web3/nav';
+import { navGroups, walletItem } from '@/components/web3/nav';
 import WalletMenu from '@/components/web3/WalletMenu.vue';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 
@@ -68,6 +68,19 @@ function isGroupActive(items: { href: string; external?: boolean }[]): boolean {
                             </a>
                         </SheetHeader>
                         <div class="space-y-6 py-6">
+                            <InertiaLink
+                                :href="walletItem.href"
+                                class="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+                                :class="
+                                    isCurrentOrParentUrl(walletItem.href)
+                                        ? 'bg-accent text-accent-foreground'
+                                        : ''
+                                "
+                                @click="mobileOpen = false"
+                            >
+                                {{ walletItem.title }}
+                            </InertiaLink>
+
                             <div
                                 v-for="group in navGroups"
                                 :key="group.label"
@@ -128,6 +141,31 @@ function isGroupActive(items: { href: string; external?: boolean }[]): boolean {
                     <NavigationMenuList
                         class="flex h-full items-stretch space-x-1"
                     >
+                        <!--
+                          A link, not a trigger: the wallet has nothing under
+                          it to choose between, and a menu that opens onto one
+                          item is a hover the user pays for nothing.
+                        -->
+                        <NavigationMenuItem
+                            class="relative flex h-full items-center"
+                        >
+                            <InertiaLink
+                                :href="walletItem.href"
+                                class="flex h-9 items-center rounded-md px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+                                :class="
+                                    isCurrentOrParentUrl(walletItem.href)
+                                        ? 'text-foreground'
+                                        : 'text-muted-foreground'
+                                "
+                            >
+                                {{ walletItem.title }}
+                            </InertiaLink>
+                            <div
+                                v-if="isCurrentOrParentUrl(walletItem.href)"
+                                class="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-brand-cyan"
+                            ></div>
+                        </NavigationMenuItem>
+
                         <NavigationMenuItem
                             v-for="group in navGroups"
                             :key="group.label"

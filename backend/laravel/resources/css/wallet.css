@@ -622,6 +622,7 @@
 }
 
 .cw-tab {
+    position: relative;
     display: flex;
     min-width: 0;
     flex: 1;
@@ -629,7 +630,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 0 3px;
+    padding: 0 2px;
     border: 0;
     border-top: 1px solid transparent;
     background: none;
@@ -640,7 +641,7 @@
 }
 
 /*
- * Five destinations across a 390px phone leaves ~75px a label. The tracking
+ * Six destinations across a 390px phone leaves ~65px a label. The tracking
  * that makes a mono label read as a label is the first thing to go when a
  * translation is longer than the English — losing a letter is worse.
  */
@@ -651,10 +652,28 @@
     white-space: nowrap;
 }
 
-@media (max-width: 359px) {
+@media (max-width: 389px) {
     .cw-tab {
         letter-spacing: 0.04em;
     }
+}
+
+@media (max-width: 339px) {
+    .cw-tab {
+        font-size: 9px;
+        letter-spacing: 0;
+    }
+}
+
+/*
+ * The count sits over the corner of its tab. Beside the label it would push
+ * the widest word on the bar sideways as mail arrives; here nothing moves.
+ */
+.cw-tab-badge {
+    position: absolute;
+    top: 9px;
+    left: 50%;
+    margin-left: 4px;
 }
 
 .cw-tab[aria-current='page'] {
@@ -680,6 +699,11 @@
 
 .cw-rail-item:hover {
     color: var(--cw-text);
+}
+
+/* A count in the rail goes to the far edge, away from the label it belongs to. */
+.cw-rail-item .cw-badge {
+    margin-left: auto;
 }
 
 .cw-rail-item[aria-current='page'] {
@@ -789,24 +813,17 @@
 /* ------------------------------------------------------------ readouts -- */
 
 /*
- * The shortcuts under the portfolio total: tokens, analytics, messages and
- * security are places this wallet already is, not a menu it has to grow.
- *
- * Two across on a phone rather than four in one row — a fourth label at this
- * size would either clip or shrink the other three into initials, and a grid
- * keeps every tile the same target size at both counts.
+ * The shortcuts under the portfolio total. Three of them fit a phone in one
+ * row, which is the whole point: tokens, analytics and security are places
+ * this wallet already is, not a menu it has to grow. Messages is not among
+ * them — a correspondence is not a way of reading your holdings, so it is a
+ * destination on the tab bar instead.
  */
 .cw-tiles {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 24px;
-}
-
-@media (min-width: 560px) {
-    .cw-tiles {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
 }
 
 .cw-tile {

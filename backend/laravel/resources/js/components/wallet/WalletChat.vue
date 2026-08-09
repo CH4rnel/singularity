@@ -60,7 +60,13 @@ import { walletMessages } from '@/lib/walletMessages';
 
 const props = defineProps<{ wallet: MultiWallet }>();
 
-const emit = defineEmits<{ back: [] }>();
+/**
+ * `unread` is a nudge, not a number: the count lives in the cache both sides
+ * read, and the page re-reads it rather than being told what it is. Emitted
+ * whenever mail arrives or a thread is read, since those are the only two
+ * things that move the badge.
+ */
+const emit = defineEmits<{ unread: [] }>();
 
 const { t, locale } = useLocale(walletMessages);
 
@@ -374,6 +380,8 @@ const sync = async (): Promise<void> => {
                 markThreadRead(peer.value);
                 await scrollDown();
             }
+
+            emit('unread');
         }
     } catch (failure) {
         const status = (failure as Error & { status?: number }).status;
@@ -466,6 +474,7 @@ const markThreadRead = (who: string): void => {
     if (address.value && last > 0) {
         markChatRead(address.value, who, last);
         readMarks.value = { ...readMarks.value, [who]: last };
+        emit('unread');
     }
 };
 
@@ -520,12 +529,6 @@ const startThread = async (): Promise<void> => {
 };
 
 const back = (): void => {
-    if (view.value === 'list') {
-        emit('back');
-
-        return;
-    }
-
     view.value = 'list';
     peer.value = null;
 };
@@ -587,9 +590,18 @@ onBeforeUnmount(stopPolling);
 
 <template>
     <div class="cw-chat">
-        <button type="button" class="cw-back" @click="back()">
+        <!--
+          Only out of a thread. The list is a destination of its own now, and
+          the tab bar underneath it is already the way back to everything else.
+        -->
+        <button
+            v-if="view !== 'list'"
+            type="button"
+            class="cw-back"
+            @click="back()"
+        >
             <ArrowLeft :size="12" aria-hidden="true" />
-            {{ view === 'list' ? t('navPortfolio') : t('chatTitle') }}
+            {{ t('chatTitle') }}
         </button>
 
         <!-- Thread header: who, and the fingerprint to check them against. -->
