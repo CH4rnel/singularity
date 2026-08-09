@@ -389,7 +389,7 @@ watch(
         class="cw"
         :class="
             native
-                ? 'flex flex-1 flex-col p-3 sm:p-4'
+                ? 'flex min-h-0 flex-1 flex-col p-3 sm:p-4'
                 : 'mx-auto max-w-[1400px] p-4 sm:p-6'
         "
     >

@@ -10,14 +10,21 @@
  * The rest of Cyberia is not amputated: the wallet's own masthead links to it,
  * and every other route in the shell still renders with the normal site
  * layout.
+ *
+ * The frame is `h-dvh`, not `min-h-screen`, and `main` may shrink below its
+ * content: an app window does not scroll as a page. A minimum only says "at
+ * least this tall", which leaves the height indefinite, so the wallet's own
+ * scrolling panes (the rail, the screen body) grow the document instead of
+ * scrolling inside it — a maximized window ended up a few dozen pixels taller
+ * than the screen.
  */
 </script>
 
 <template>
     <div
-        class="flex min-h-screen flex-col bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground"
+        class="flex h-dvh flex-col bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground"
     >
-        <main class="flex flex-1 flex-col">
+        <main class="flex min-h-0 flex-1 flex-col">
             <slot />
         </main>
     </div>
