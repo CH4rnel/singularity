@@ -197,7 +197,10 @@ npm run sync            # regenerate www/ and copy config into android/ and ios/
 npm run android:apk     # needs a local Android SDK + JDK 21
 ```
 
-- Windows/macOS installers and the Android APK are built by `.github/workflows/apps.yml` (tag `app-v*` or manual dispatch).
+- Windows/macOS installers and the Android APK are built by `.github/workflows/apps.yml` (tag `app-v*` or manual dispatch). A tag also **publishes** a GitHub release with every installer and `SHA256SUMS.txt` attached; a manual run only leaves workflow artifacts, which nobody outside GitHub can fetch.
+- Artifact names deliberately carry no version (`Cyberia-Setup-x64.exe`, `Cyberia-mac-arm64.dmg`, `Cyberia-linux-x86_64.AppImage`, `Cyberia-linux-amd64.deb`, `Cyberia.apk`), so `/releases/latest/download/<name>` is a permanent address. Renaming one means editing `electron-builder.yml`, the workflow **and** `config/downloads.php` together.
+- The APK is only published when the Android signing secrets exist (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`; created by `frontend/mobile/scripts/make-keystore.sh`). Without them the job builds a debug APK and keeps it off the release — a debuggable wallet is not something to hand strangers. Android ties updates to the signature, so that key can never be replaced.
+- Users get all of this from `https://cyberia.church/download` (`DownloadController` + `AppDownloadService`), not from GitHub.
 - `frontend/mobile/android/` and `frontend/mobile/ios/` are committed: they hold the `cyberia://` scheme, the App Links intent filters, and the generated icons.
 - Deep links only resolve to the apps once `APP_ANDROID_SHA256_FINGERPRINT` / `APP_IOS_APP_ID` are set in the Laravel `.env`; both `/.well-known/` association files 404 until then.
 - The site detects the shells from the `CyberiaDesktop/` and `CyberiaMobile/` user-agent suffixes (`backend/laravel/resources/js/lib/native.ts`).

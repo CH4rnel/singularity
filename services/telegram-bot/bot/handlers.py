@@ -19,7 +19,7 @@ from bot.config import (
     PROJECT_X_URL, PROJECT_WEBSITE_URL, TELEGRAM_CHANNEL_URL, TELEGRAM_CHAT_URL,
     CYBER_CA_SOLANA, CYBER_CA_EVM,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_VERIFY_URL, WHALE_LINK_TTL_MINUTES,
-    SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL,
+    SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL, APP_DOWNLOAD_URL,
     CYBER_SOL_DECIMALS,
     AI_ENABLED,
 )
@@ -40,6 +40,7 @@ def _main_menu_kb() -> InlineKeyboardMarkup:
     flow. Blank URLs are skipped (Telegram rejects empty url buttons).
     """
     pairs = [
+        ("📱 Wallet app", APP_DOWNLOAD_URL),
         ("🎨 Pixel Battle", PIXEL_BATTLE_URL),
         ("🖼 NFT Market", NFT_MARKET_URL),
         ("💱 Swap", SWAP_URL),
@@ -171,6 +172,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/stats [window] - on-chain activity digest (default 24h, e.g. /stats 6h)\n"
         + ai_lines +
         "/set_channel_wallet <@channel> <0x..> - (channel admins) wallet that receives post NFTs\n"
+        "/app - download the Cyberia wallet app\n"
         "/website - project website\n\n"
         + ai_hint +
         "You can chat in groups without a wallet -- rewards will be saved as "
@@ -181,6 +183,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def website_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(PROJECT_WEBSITE_URL)
+
+
+async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Where to get the wallet app.
+
+    The per-platform links are permanent redirects on the site, so this answer
+    never goes stale between releases — which is the whole point of not sending
+    the APK as a file.
+    """
+    base = APP_DOWNLOAD_URL.rstrip("/")
+    await update.message.reply_text(
+        "Cyberia Wallet — one recovery phrase, every chain.\n\n"
+        f"All platforms: {base}\n"
+        f"Android APK: {base}/android\n"
+        f"Windows: {base}/windows\n"
+        f"macOS: {base}/macos\n"
+        f"Linux: {base}/linux\n\n"
+        "On iPhone open the site in Safari and add it to the home screen. "
+        "The app is the site in a window — your keys stay on your device."
+    )
 
 
 def _build_x_reply() -> str:

@@ -24,6 +24,7 @@ use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmNoteController;
 use App\Http\Controllers\CrmTaskController;
 use App\Http\Controllers\DaoController;
+use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\LainChatController;
 use App\Http\Controllers\LeaderboardController;
@@ -162,6 +163,15 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 Route::get('/tokens', [TokenController::class, 'index'])->name('tokens.index');
 Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.show');
 Route::get('/changelog', ChangelogController::class)->name('changelog');
+// Where the native apps come from. /download/<platform> is the short link worth
+// pasting into a message; it redirects to the current file for that platform.
+Route::get('/download', [DownloadController::class, 'index'])->name('download');
+Route::get('/download/{platform}', [DownloadController::class, 'platform'])
+    ->where('platform', 'windows|macos|linux|android')
+    ->name('download.platform');
+Route::permanentRedirect('/downloads', '/download');
+Route::get('/api/downloads', [DownloadController::class, 'json'])
+    ->middleware('throttle:60,1')->name('download.json');
 Route::get('/lain', [LainChatController::class, 'index'])->name('lain.index');
 Route::middleware('auth')->prefix('api/lain')->name('lain.')->group(function () {
     Route::get('sessions/{session}', [LainChatController::class, 'session'])

@@ -255,6 +255,9 @@ TELEGRAM_CHAT_URL = os.environ.get("TELEGRAM_CHAT_URL", "https://t.me/cyberia_ne
 SWAP_URL = os.environ.get("SWAP_URL", "https://swap.cyberia.church")
 NFT_MARKET_URL = os.environ.get("NFT_MARKET_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/market")
 PIXEL_BATTLE_URL = os.environ.get("PIXEL_BATTLE_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/pixels")
+# The wallet app download page. /app answers with this instead of an APK file
+# passed around by hand, which is how the app used to reach people.
+APP_DOWNLOAD_URL = os.environ.get("APP_DOWNLOAD_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/download")
 
 # --- AI assistant ------------------------------------------------------------
 # Master switch. The assistant stays fully off (no /ask, no DM/mention answers,

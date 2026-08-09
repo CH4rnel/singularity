@@ -8,6 +8,7 @@ import {
     Coins,
     Compass,
     Dices,
+    Download,
     Droplets,
     Folder,
     Globe,
@@ -48,6 +49,7 @@ import { useWallet } from '@/composables/useWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
 import {
     dashboard,
+    download as downloadRoute,
     feed,
     leaderboard,
     staking,
@@ -88,6 +90,12 @@ const mainNavItems = computed<NavItem[]>(() => [
         title: 'Wallet',
         href: walletRoute().url,
         icon: Wallet,
+    },
+    {
+        // Right under the wallet, because it is the same wallet — installed.
+        title: 'Get the app',
+        href: downloadRoute().url,
+        icon: Download,
     },
     {
         title: 'Profile',

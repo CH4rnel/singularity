@@ -10,9 +10,26 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.9.1'),
+    'current_version' => env('APP_VERSION', 'v0.9.2'),
 
     'releases' => [
+        [
+            'version' => 'v0.9.2',
+            'date' => '2026-08-09',
+            'title' => 'The wallet, installable',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'A download page at cyberia.church/download. The Cyberia wallet is now an app you can install on Windows, macOS, Linux and Android, and the page offers the right one for whatever you are reading it on.',
+                        'Every build comes from one published release with a version, a date and checksums, so what you install is something you can verify — instead of a file somebody sent you in a chat.',
+                        'A short link per platform, cyberia.church/download/android among them, that keeps pointing at the current build. One address to share, for good.',
+                        'The app is the same wallet as the site and updates when the site does; you only reinstall when the app itself changes.',
+                        'On iPhone and iPad there is nothing to install, and the page says so instead of pretending otherwise — it shows how to put the wallet on the home screen, which works today.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.9.1',
             'date' => '2026-08-09',

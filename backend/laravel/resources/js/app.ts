@@ -34,6 +34,7 @@ createInertiaApp({
                 return isNativeShell() ? NativeShellLayout : Web3Layout;
             case name === 'Analytics':
             case name === 'Changelog':
+            case name === 'Download':
             case name === 'Token':
             case name === 'Tokens':
             case name === 'Bridge':

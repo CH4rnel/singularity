@@ -83,10 +83,40 @@ than pointing the whole app at another origin.
 
 ## Signing and release
 
-`android:release` produces an unsigned bundle. Add a keystore in
-`android/keystore.properties` (git-ignored) and the matching `signingConfigs`
-block in `android/app/build.gradle` before uploading to Play, then publish the
-key's SHA-256 through `APP_ANDROID_SHA256_FINGERPRINT`.
+An APK is only installable if it is signed, and Android ties updates to the
+signature: the same key has to sign every release forever, or users have to
+uninstall before they can take the next one. So the key is created once and kept:
+
+```bash
+scripts/make-keystore.sh
+```
+
+It writes `android/cyberia-release.jks` and `android/keystore.properties` (both
+git-ignored, both read by `app/build.gradle`), prints the SHA-256 fingerprint for
+`APP_ANDROID_SHA256_FINGERPRINT`, and offers to upload the four repository
+secrets CI needs: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. **Back the keystore and its password
+up somewhere outside this repository** — losing them means the app can never be
+updated in place again.
+
+With the secrets in place:
+
+```bash
+git tag app-v1.0.0 && git push origin app-v1.0.0
+```
+
+builds a signed release APK, attaches it to the GitHub release as `Cyberia.apk`,
+and https://cyberia.church/download starts offering it. Without them the workflow
+still builds a *debug* APK for inspection but does not publish it, and the Android
+card disappears from the download page rather than pointing at a file that is not
+there — a debuggable wallet build is not something to hand strangers.
+
+The tag is also the version: CI passes it in as `CYBERIA_VERSION_NAME`, with
+`CYBERIA_VERSION_CODE` derived from it (`1.2.3` → `10203`), so nothing here has to
+be committed per release.
+
+`android:release` still produces the `.aab` Play wants; the store listing needs a
+developer account and Google's crypto policy on top of that.
 
 ## Known limits
 

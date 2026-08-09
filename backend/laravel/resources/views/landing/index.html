@@ -1165,6 +1165,7 @@ function Nav(){
         <CyberiaLogo />
         <nav className="nav-links">
           <a href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">Whitepaper</a>
+          <a href="/download">Get the app</a>
           <a href="/bridge">Bridge</a>
           <a href="/swap">DEX</a>
           <a href="/staking">Staking</a>
@@ -1767,6 +1768,7 @@ function Philosophy(){
 
 /* ------------ Ecosystem ------------ */
 const ICONS = {
+  wallet: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a2 2 0 0 1 2 2v1"/><rect x="3" y="7.5" width="18" height="12" rx="2.5"/><circle cx="16.5" cy="13.5" r="1.2"/></svg>),
   swap: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h13M14 3l4 4-4 4"/><path d="M20 17H7M10 13l-4 4 4 4"/></svg>),
   bridge: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 18v-5a9 9 0 0 1 18 0v5"/><path d="M2 18h20"/><path d="M8 18v-3M16 18v-3"/></svg>),
   dao: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 21h16"/><path d="M6 21v-9M10 21v-9M14 21v-9M18 21v-9"/><path d="M3 12l9-7 9 7"/></svg>),
@@ -1785,6 +1787,8 @@ const ICONS = {
 };
 
 const ECO_APPS = [
+  { ic:'wallet', k:'Wallet', name:'Cyberia Wallet', href:'/download', status:'live',
+    desc:'One seed phrase for Cyberia, Solana, Bitcoin, Litecoin, Monero and every EVM network you add — plus encrypted messages between wallets. In the browser, or installed on Windows, macOS, Linux and Android.' },
   { ic:'swap', k:'DEX', name:'Ritual Swap', href:'/swap', status:'live',
     desc:'The native exchange of Cyberia. AMM pools for CYBER and every ecosystem token, with routing across the whole pair graph.' },
   { ic:'bridge', k:'Interchain', name:'Bridge', href:'/bridge', status:'live',

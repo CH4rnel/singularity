@@ -19,7 +19,7 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
-import { navGroups, walletItem } from '@/components/web3/nav';
+import { navGroups, topLevelItems } from '@/components/web3/nav';
 import WalletMenu from '@/components/web3/WalletMenu.vue';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 
@@ -69,16 +69,18 @@ function isGroupActive(items: { href: string; external?: boolean }[]): boolean {
                         </SheetHeader>
                         <div class="space-y-6 py-6">
                             <InertiaLink
-                                :href="walletItem.href"
+                                v-for="item in topLevelItems"
+                                :key="item.title"
+                                :href="item.href"
                                 class="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
                                 :class="
-                                    isCurrentOrParentUrl(walletItem.href)
+                                    isCurrentOrParentUrl(item.href)
                                         ? 'bg-accent text-accent-foreground'
                                         : ''
                                 "
                                 @click="mobileOpen = false"
                             >
-                                {{ walletItem.title }}
+                                {{ item.title }}
                             </InertiaLink>
 
                             <div
@@ -142,26 +144,29 @@ function isGroupActive(items: { href: string; external?: boolean }[]): boolean {
                         class="flex h-full items-stretch space-x-1"
                     >
                         <!--
-                          A link, not a trigger: the wallet has nothing under
-                          it to choose between, and a menu that opens onto one
-                          item is a hover the user pays for nothing.
+                          Links, not triggers: neither the wallet nor the app
+                          download has anything under it to choose between, and
+                          a menu that opens onto one item is a hover the user
+                          pays for nothing.
                         -->
                         <NavigationMenuItem
+                            v-for="item in topLevelItems"
+                            :key="item.title"
                             class="relative flex h-full items-center"
                         >
                             <InertiaLink
-                                :href="walletItem.href"
+                                :href="item.href"
                                 class="flex h-9 items-center rounded-md px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
                                 :class="
-                                    isCurrentOrParentUrl(walletItem.href)
+                                    isCurrentOrParentUrl(item.href)
                                         ? 'text-foreground'
                                         : 'text-muted-foreground'
                                 "
                             >
-                                {{ walletItem.title }}
+                                {{ item.title }}
                             </InertiaLink>
                             <div
-                                v-if="isCurrentOrParentUrl(walletItem.href)"
+                                v-if="isCurrentOrParentUrl(item.href)"
                                 class="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-brand-cyan"
                             ></div>
                         </NavigationMenuItem>

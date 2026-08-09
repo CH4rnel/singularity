@@ -2,6 +2,7 @@ import {
     analytics,
     bridge,
     convert,
+    download,
     farm,
     feed,
     launchpad,
@@ -39,6 +40,21 @@ export type Web3NavGroup = {
  * found, which is exactly what happened.
  */
 export const walletItem: Web3NavItem = { title: 'Wallet', href: wallet().url };
+
+/**
+ * Where the apps come from, next to the thing they contain.
+ *
+ * Inside a menu group this was unreachable in the only way that matters: the
+ * apps existed for months with no address to send anyone to, so they travelled
+ * as files in chat messages.
+ */
+export const downloadItem: Web3NavItem = {
+    title: 'Get the app',
+    href: download().url,
+};
+
+/** Rendered as plain links ahead of the groups, in this order. */
+export const topLevelItems: Web3NavItem[] = [walletItem, downloadItem];
 
 export const navGroups: Web3NavGroup[] = [
     {

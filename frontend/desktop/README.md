@@ -31,6 +31,28 @@ npm run pack         # unpacked build, for a quick look at the bundle
 Use the release workflow (`.github/workflows/apps.yml`) to produce all three from
 one tag.
 
+## Releases
+
+```bash
+git tag app-v1.0.0 && git push origin app-v1.0.0
+```
+
+That builds all three platforms and publishes them as a **public GitHub release**
+with `SHA256SUMS.txt` attached; https://cyberia.church/download reads that release
+and hands each visitor the right file. A manual workflow run builds the same
+installers but publishes nothing — workflow artifacts are only reachable by
+signed-in GitHub users, which is not distribution.
+
+The tag is the version: CI writes `1.0.0` into `package.json` before building, so
+nothing here has to be committed per release.
+
+File names carry **no version** — `Cyberia-Setup-x64.exe`,
+`Cyberia-portable-x64.exe`, `Cyberia-mac-arm64.dmg`, `Cyberia-mac-x64.dmg`,
+`Cyberia-linux-x86_64.AppImage`, `Cyberia-linux-amd64.deb`. That is what makes
+`https://github.com/<owner>/<repo>/releases/latest/download/<name>` a permanent
+address. Renaming one is a three-file change: `electron-builder.yml`, the workflow
+notes, and `config/downloads.php` in the Laravel app.
+
 ## Configuration
 
 | Variable / flag   | Default                  | Purpose                              |
