@@ -176,7 +176,7 @@ export type {
     WalletAccountRecord,
     WatchAccountRecord,
 } from '@/lib/wallet/accounts';
-export { keySource, seedSource } from '@/lib/wallet/keys';
+export { evmChatKey, keySource, seedSource } from '@/lib/wallet/keys';
 export type { WalletKeySource } from '@/lib/wallet/keys';
 export {
     WALLET_CHAINS,
@@ -238,6 +238,41 @@ export {
     writeLainChat,
 } from '@/lib/wallet/lainChat';
 export type { LainTurn } from '@/lib/wallet/lainChat';
+export {
+    MAX_MESSAGE_BYTES,
+    chatFingerprint,
+    chatKeyStatement,
+    chatMessageId,
+    chatPrivateKey,
+    chatPublicKey,
+    conversationId,
+    conversationKey,
+    isChatPublicKey,
+    openMessage,
+    sealMessage,
+    verifyChatKey,
+} from '@/lib/wallet/chatCrypto';
+export type {
+    ChatEnvelope,
+    ChatKeyRecord,
+    ChatMeta,
+} from '@/lib/wallet/chatCrypto';
+export {
+    clearChat,
+    fetchChatEnvelopes,
+    forgetWalletChats,
+    lookupChatKey,
+    markChatRead,
+    pinChatKey,
+    proveChatAddress,
+    publishChatKey,
+    readChatState,
+    requestChatNonce,
+    sendChatEnvelope,
+    storeChatRows,
+    unreadChatCount,
+} from '@/lib/wallet/chat';
+export type { ChatRow } from '@/lib/wallet/chat';
 export {
     readManualTokens,
     withToken,

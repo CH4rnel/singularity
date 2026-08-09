@@ -7,6 +7,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import WalletAccounts from '@/components/wallet/WalletAccounts.vue';
 import WalletAddNetwork from '@/components/wallet/WalletAddNetwork.vue';
 import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
+import WalletChat from '@/components/wallet/WalletChat.vue';
 import WalletDao from '@/components/wallet/WalletDao.vue';
 import WalletFeed from '@/components/wallet/WalletFeed.vue';
 import WalletImportAccount from '@/components/wallet/WalletImportAccount.vue';
@@ -84,6 +85,7 @@ type Section =
     | 'tokens'
     | 'token'
     | 'analytics'
+    | 'chat'
     | 'accounts'
     | 'importAccount'
     | 'network'
@@ -135,6 +137,7 @@ const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'portfolio', label: () => t('navPortfolio') },
     { id: 'tokens', label: () => t('tokens') },
     { id: 'analytics', label: () => t('navAnalytics') },
+    { id: 'chat', label: () => t('chatTitle') },
     { id: 'network', label: () => t('navActivity') },
     { id: 'accounts', label: () => t('accounts') },
     { id: 'feed', label: () => t('feed') },
@@ -169,6 +172,7 @@ const TAB_OF: Record<Section, Section> = {
     tokens: 'portfolio',
     token: 'portfolio',
     analytics: 'portfolio',
+    chat: 'portfolio',
     accounts: 'portfolio',
     importAccount: 'portfolio',
     network: 'portfolio',
@@ -721,6 +725,13 @@ watch(
                         @analytics="openSection('analytics')"
                         @accounts="openSection('accounts')"
                         @security="openSection('security')"
+                        @chat="openSection('chat')"
+                    />
+
+                    <WalletChat
+                        v-else-if="section === 'chat'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
                     />
 
                     <WalletAccounts

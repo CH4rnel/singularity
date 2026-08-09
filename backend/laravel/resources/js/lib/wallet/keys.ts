@@ -2,6 +2,7 @@ import { Keypair } from '@solana/web3.js';
 import type { BaseWallet } from 'ethers';
 import { HDNodeWallet, SigningKey, Wallet } from 'ethers';
 import { decodeBase58 } from '@/lib/wallet/base58check';
+import { chatPrivateKey } from '@/lib/wallet/chatCrypto';
 import { deriveEd25519Key } from '@/lib/wallet/slip10';
 
 /**
@@ -88,6 +89,22 @@ export const evmSigner = (source: WalletKeySource): BaseWallet =>
 /** The address an imported EVM key controls, or a throw saying why it is not one. */
 export const evmAddressFromKey = (secret: string): string =>
     new Wallet(evmPrivateKey(secret)).address;
+
+/**
+ * The messaging key behind an EVM account.
+ *
+ * Encrypted chat needs a key that is not the one that signs transactions, and
+ * it belongs here for the same reason everything else in this file does: this
+ * is the one place that turns "which account" into actual key material. The
+ * derivation is one-way, so the account's spending key cannot be recovered
+ * from it, and deterministic, so it needs no backup of its own — see
+ * chatCrypto.ts for what the separation buys.
+ *
+ * A watch-only account never reaches here: `sourceFor` refuses to build a
+ * source for one, which is the same answer it gives to spending.
+ */
+export const evmChatKey = (source: WalletKeySource): string =>
+    chatPrivateKey(evmSigner(source).privateKey);
 
 /* ---------------------------------------------------------------- solana --- */
 

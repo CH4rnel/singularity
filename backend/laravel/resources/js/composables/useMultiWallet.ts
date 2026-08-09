@@ -1,11 +1,17 @@
 import { computed, ref } from 'vue';
 import {
     PRIMARY_ACCOUNT_ID,
+    chatPublicKey,
+    conversationKey,
     customWalletChain,
     deriveAccounts,
     deriveAddress,
+    evmChatKey,
     forgetLainChats,
     forgetVault,
+    forgetWalletChats,
+    openMessage,
+    sealMessage,
     hasVault,
     importedAccountId,
     isValidMnemonic,
@@ -34,6 +40,8 @@ import {
     writeManualTokens,
 } from '@/lib/wallet';
 import type {
+    ChatEnvelope,
+    ChatMeta,
     CustomNetwork,
     CustomNetworkProblem,
     ManualToken,
@@ -82,6 +90,14 @@ export type WalletTokens = {
 };
 
 let vault: OpenedVault | null = null;
+
+/**
+ * Derived AES keys for open conversations, kept out of reactive state for the
+ * same reason the vault is: these decrypt messages. They are non-extractable
+ * WebCrypto keys, they never touch storage, and `clearReads` empties the map
+ * whenever the account changes or the wallet locks.
+ */
+const conversationKeys = new Map<string, CryptoKey>();
 
 const customNetworks = ref<CustomNetwork[]>([]);
 const accounts = ref<WalletAccount[]>([]);
@@ -158,6 +174,9 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         history.value = {};
         tokens.value = {};
         fees.value = {};
+        // Conversation keys belong to one account as much as a balance does,
+        // and they are live key material — locking or switching drops them.
+        conversationKeys.clear();
     };
 
     /**
@@ -567,6 +586,9 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         // What was said to Lain from these accounts is as much a record of this
         // person as the network list is, and it lives only here.
         forgetLainChats();
+        // And what was said to other wallets. The relay drops its copy on its
+        // own schedule, but the only readable one was always this device's.
+        forgetWalletChats();
         lock();
         refreshExists();
     };
@@ -891,6 +913,131 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         return chain.signMessage(sourceFor(chainId), message);
     };
 
+    /* ---------------------------------------------------------------- chat --- */
+
+    /**
+     * The EVM account this wallet chats as.
+     *
+     * Chat is addressed by EVM address, and one key produces the same address
+     * on every EVM network — so which network it is read on does not change
+     * who you are. Cyberia is preferred because that is this wallet's home
+     * chain; an account imported as a bare key on another EVM network still
+     * chats, from the one network it exists on.
+     */
+    const chatAccount = (): WalletAccount | null =>
+        accounts.value.find(
+            (account) =>
+                account.chain === 'cyberia' && account.family === 'evm',
+        ) ??
+        accounts.value.find((account) => account.family === 'evm') ??
+        null;
+
+    /**
+     * Who this wallet is in a conversation.
+     *
+     * The public half only. The messaging private key is derived on demand
+     * inside this closure, used, and dropped — it is never returned, never
+     * stored and never put in reactive state, exactly like the seed.
+     *
+     * Null means this account cannot chat: a watched address has no key to
+     * encrypt with, which is the same answer it gives to spending.
+     */
+    const chatIdentity = (): {
+        address: string;
+        publicKey: string;
+        chain: WalletChainId;
+    } | null => {
+        const account = chatAccount();
+        const record = activeRecord();
+
+        if (!vault || !account || record?.kind === 'watch') {
+            return null;
+        }
+
+        return {
+            address: account.address.toLowerCase(),
+            publicKey: chatPublicKey(evmChatKey(sourceFor(account.chain))),
+            chain: account.chain,
+        };
+    };
+
+    /** The other end of a message, whichever direction it went. */
+    const chatPeer = (meta: ChatMeta): string => {
+        const self = chatAccount()?.address.toLowerCase() ?? '';
+
+        return meta.from.toLowerCase() === self
+            ? meta.to.toLowerCase()
+            : meta.from.toLowerCase();
+    };
+
+    /**
+     * The key one conversation is encrypted under, derived once per peer.
+     *
+     * Cached because every message in a thread needs it and an ECDH per
+     * message would make a long thread visibly slow; keyed by the peer's
+     * *public key* as well as their address, so a peer who rotates keys gets a
+     * new entry rather than a stale one.
+     */
+    const conversationKeyFor = async (
+        peerPublicKey: string,
+        peer: string,
+    ): Promise<CryptoKey> => {
+        const account = chatAccount();
+
+        if (!account) {
+            throw new Error('This wallet has no EVM account to chat from');
+        }
+
+        const self = account.address.toLowerCase();
+        const cacheKey = `${self}:${peer.toLowerCase()}:${peerPublicKey.toLowerCase()}`;
+        const cached = conversationKeys.get(cacheKey);
+
+        if (cached) {
+            return cached;
+        }
+
+        const key = await conversationKey(
+            evmChatKey(sourceFor(account.chain)),
+            peerPublicKey,
+            self,
+            peer,
+        );
+
+        conversationKeys.set(cacheKey, key);
+
+        return key;
+    };
+
+    /** Seal one message for a peer whose published key has been verified. */
+    const chatSeal = async (
+        peerPublicKey: string,
+        meta: ChatMeta,
+        text: string,
+    ): Promise<ChatEnvelope> =>
+        sealMessage(
+            await conversationKeyFor(peerPublicKey, chatPeer(meta)),
+            meta,
+            text,
+        );
+
+    /**
+     * Open one message, or throw.
+     *
+     * A throw means the envelope, the key or the metadata around it is not
+     * what it claims — the caller marks that message unreadable rather than
+     * guessing at what it said.
+     */
+    const chatOpen = async (
+        peerPublicKey: string,
+        meta: ChatMeta,
+        envelope: ChatEnvelope,
+    ): Promise<string> =>
+        openMessage(
+            await conversationKeyFor(peerPublicKey, chatPeer(meta)),
+            meta,
+            envelope,
+        );
+
     /**
      * Broadcast a payment. The caller is expected to have shown the user a
      * confirmation step first — this is the point of no return.
@@ -950,6 +1097,10 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         readToken,
         readTokenSupply,
         signMessage,
+        /** Encrypted chat: the public identity, and sealing under it. */
+        chatIdentity,
+        chatSeal,
+        chatOpen,
         accounts: computed(() => accounts.value),
         /** The vault-level accounts: seed-derived, imported and watched. */
         accountRecords: computed(() => accountRecords.value),

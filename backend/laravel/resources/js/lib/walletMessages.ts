@@ -28,6 +28,7 @@ export const walletMessages: Messages = {
         tabLaunch: 'Launch',
         tileTokensHint: 'ERC-20 · every network',
         tileAnalyticsHint: 'Allocation · flow',
+        tileChatHint: 'Encrypted · E2EE',
         tileSecurityHint: 'Lock · keys',
 
         // Welcome
@@ -435,6 +436,48 @@ export const walletMessages: Messages = {
         lainUnreachable:
             'Lain is unreachable right now. Try again in a moment.',
 
+        // Encrypted chat between wallets
+        chatTitle: 'Messages',
+        chatIntro:
+            'Encrypted messages between wallets, addressed by EVM address. Everything is sealed and opened in this browser with a key derived from your account — Cyberia relays messages it cannot read.',
+        chatNoAccount:
+            'This account is watch-only. It has no key, so it can neither read nor write messages — the same reason it cannot spend.',
+        chatOpenTitle: 'Open encrypted chat',
+        chatOpenBody:
+            'Two signatures, once: one publishes a messaging key others use to encrypt to you, the other proves this address so the relay hands over your mail. Both move no funds, approve no transaction and grant no allowance. The messaging key is derived from this account and is not the key that signs your transactions.',
+        chatOpen: 'Hold to open',
+        chatOpening: 'Signing…',
+        chatYourAddress: 'Your address',
+        chatFingerprintLabel: 'Key fingerprint',
+        chatMetadataNote:
+            'What is protected is the content. The relay still sees which addresses are talking and when, and it keeps envelopes for up to 30 days before deleting them. There is no forward secrecy: anyone who obtains this account’s key can read its past messages too.',
+        chatE2ee: 'End-to-end encrypted',
+        chatSyncing: 'Checking…',
+        chatThreads: '{count} conversations',
+        chatNew: 'New conversation',
+        chatNewBody:
+            'Both wallets have to have opened chat: an address is a hash, so there is nothing to encrypt to until its owner has published a key.',
+        chatAddressLabel: 'Write to which address',
+        chatStart: 'Open thread',
+        chatLookingUp: 'Looking up the key…',
+        chatInvalidAddress: 'That is not an EVM address.',
+        chatNoKey: 'This address has not opened encrypted chat yet.',
+        chatEmpty:
+            'No conversations yet. Anyone who has opened chat can write to you at your EVM address.',
+        chatThreadEmpty: 'Nothing here yet. Write the first message.',
+        chatYou: 'You',
+        chatPlaceholder:
+            'Write a message… (Enter sends, Shift+Enter is a new line)',
+        chatSend: 'Send',
+        chatSending: 'Sealing…',
+        chatUnreadable:
+            'This message could not be opened — it is not what its envelope claims.',
+        chatKeyChanged:
+            'This address is publishing a different key than the one this device saw before. That is either a wallet restored somewhere new or someone attempting to sit in the middle — check the fingerprint with them before continuing.',
+        chatStored:
+            'Messages are stored on this device as ciphertext and opened only while the wallet is unlocked.',
+        chatForget: 'Forget all conversations',
+
         // Accounts
         accounts: 'Accounts',
         accountsBody:
@@ -605,6 +648,7 @@ export const walletMessages: Messages = {
         tabLaunch: 'Запуск',
         tileTokensHint: 'ERC-20 · во всех сетях',
         tileAnalyticsHint: 'Доли · переводы',
+        tileChatHint: 'Шифрование · E2EE',
         tileSecurityHint: 'Замок · ключи',
         navActivity: 'История',
         navSecurity: 'Безопасность',
@@ -1012,6 +1056,48 @@ export const walletMessages: Messages = {
         lainStored: 'Переписка остаётся на этом устройстве.',
         lainForget: 'Забыть переписку',
         lainUnreachable: 'Лейн сейчас недоступна. Попробуйте через минуту.',
+
+        // Encrypted chat between wallets
+        chatTitle: 'Сообщения',
+        chatIntro:
+            'Зашифрованные сообщения между кошельками, адрес получателя — его EVM-адрес. Всё шифруется и расшифровывается в этом браузере ключом, выведенным из вашего счёта: Cyberia передаёт сообщения, которые не может прочитать.',
+        chatNoAccount:
+            'Этот счёт — только наблюдение. У него нет ключа, поэтому он не может ни читать, ни писать — по той же причине, по которой не может тратить.',
+        chatOpenTitle: 'Открыть зашифрованный чат',
+        chatOpenBody:
+            'Две подписи, один раз: первая публикует ключ, которым вам будут шифровать, вторая доказывает адрес, чтобы узел отдал вашу почту. Обе не двигают средства, не подтверждают транзакции и не выдают разрешений. Ключ для переписки выведен из этого счёта и не является ключом, которым подписываются ваши транзакции.',
+        chatOpen: 'Удерживайте, чтобы открыть',
+        chatOpening: 'Подписываем…',
+        chatYourAddress: 'Ваш адрес',
+        chatFingerprintLabel: 'Отпечаток ключа',
+        chatMetadataNote:
+            'Защищено содержимое. Узел всё равно видит, какие адреса переписываются и когда, и хранит конверты до 30 дней, прежде чем удалить. Прямой секретности здесь нет: тот, кто получит ключ этого счёта, прочитает и прошлые сообщения.',
+        chatE2ee: 'Сквозное шифрование',
+        chatSyncing: 'Проверяем…',
+        chatThreads: 'Переписок: {count}',
+        chatNew: 'Новая переписка',
+        chatNewBody:
+            'Чат должен быть открыт с обеих сторон: адрес — это хеш, и пока его владелец не опубликовал ключ, шифровать не для кого.',
+        chatAddressLabel: 'Кому писать',
+        chatStart: 'Открыть переписку',
+        chatLookingUp: 'Ищем ключ…',
+        chatInvalidAddress: 'Это не EVM-адрес.',
+        chatNoKey: 'Этот адрес ещё не открывал зашифрованный чат.',
+        chatEmpty:
+            'Переписок пока нет. Написать вам на ваш EVM-адрес может любой, кто открыл чат.',
+        chatThreadEmpty: 'Здесь пока пусто. Напишите первое сообщение.',
+        chatYou: 'Вы',
+        chatPlaceholder:
+            'Написать сообщение… (Enter — отправить, Shift+Enter — новая строка)',
+        chatSend: 'Отправить',
+        chatSending: 'Шифруем…',
+        chatUnreadable:
+            'Это сообщение не открылось — оно не то, чем себя объявляет конверт.',
+        chatKeyChanged:
+            'Этот адрес публикует не тот ключ, который устройство видело раньше. Либо кошелёк восстановили в новом месте, либо кто-то пытается встать посередине — сверьте отпечаток с собеседником, прежде чем продолжать.',
+        chatStored:
+            'Сообщения лежат на этом устройстве шифротекстом и открываются только пока кошелёк разблокирован.',
+        chatForget: 'Забыть все переписки',
 
         // Accounts
         accounts: 'Счета',

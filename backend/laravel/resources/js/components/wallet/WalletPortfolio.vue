@@ -4,7 +4,11 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
-import { WALLET_FAMILY_GROUPS, formatUnits } from '@/lib/wallet';
+import {
+    WALLET_FAMILY_GROUPS,
+    formatUnits,
+    unreadChatCount,
+} from '@/lib/wallet';
 import type { WalletChainId, WalletTxStatus } from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
@@ -40,9 +44,25 @@ const emit = defineEmits<{
     analytics: [];
     accounts: [];
     security: [];
+    chat: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
+
+/**
+ * Messages waiting, counted from the cached envelopes without opening one.
+ *
+ * The badge needs a number and nothing else, and the number lives in the
+ * metadata around a message rather than inside it — so the portfolio can show
+ * it without ever touching a key.
+ */
+const unread = computed(() => {
+    const address = props.wallet.accounts.value.find(
+        (account) => account.family === 'evm',
+    )?.address;
+
+    return address ? unreadChatCount(address) : 0;
+});
 
 const activeRecord = computed(() => props.wallet.activeAccount.value);
 
@@ -423,10 +443,11 @@ const recent = computed(() =>
         </div>
 
         <!--
-          Three shortcuts, not a menu: the same holdings read as tokens, the
-          same holdings read as shares, and the keys underneath both.
+          Shortcuts, not a menu: the same holdings read as tokens, the same
+          holdings read as shares, the conversations those addresses are in,
+          and the keys underneath all three.
         -->
-        <div style="display: flex; gap: 8px; margin-bottom: 24px">
+        <div class="cw-tiles">
             <button type="button" class="cw-tile" @click="emit('tokens')">
                 <span style="font: 500 12px/1 var(--cw-sans)">{{
                     t('tokens')
@@ -441,6 +462,22 @@ const recent = computed(() =>
                 }}</span>
                 <span class="cw-label" style="font-size: 9px">{{
                     t('tileAnalyticsHint')
+                }}</span>
+            </button>
+            <button type="button" class="cw-tile" @click="emit('chat')">
+                <span
+                    style="
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        font: 500 12px/1 var(--cw-sans);
+                    "
+                >
+                    {{ t('chatTitle') }}
+                    <span v-if="unread > 0" class="cw-badge">{{ unread }}</span>
+                </span>
+                <span class="cw-label" style="font-size: 9px">{{
+                    t('tileChatHint')
                 }}</span>
             </button>
             <button type="button" class="cw-tile" @click="emit('security')">

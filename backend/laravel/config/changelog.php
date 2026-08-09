@@ -10,9 +10,26 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.9.0'),
+    'current_version' => env('APP_VERSION', 'v0.9.1'),
 
     'releases' => [
+        [
+            'version' => 'v0.9.1',
+            'date' => '2026-08-09',
+            'title' => 'Sealed mail between wallets',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Messages in the wallet, addressed by wallet address. There is no account to create, no name to claim and nobody to ask: if you know an address, you can write to whoever holds it.',
+                        'Nothing you write leaves your device readable. Cyberia carries your messages the way a post office carries sealed envelopes — it passes them along and cannot open them. What it can see is which addresses are talking and when, and the wallet tells you that on the screen instead of burying it in a policy.',
+                        'Nothing new to write down: the ability to read your messages comes back with the recovery phrase you already keep, and it is never the ability to spend your money.',
+                        'Every wallet you talk to is remembered. If what protects an address ever changes, the wallet stops and says so rather than quietly carrying on — that is what an attempt to listen in looks like from your side.',
+                        'The relay is a queue, not an archive: messages are handed over and then dropped after 30 days, and clearing your wallet from a device clears its conversations with it.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.9.0',
             'date' => '2026-08-08',

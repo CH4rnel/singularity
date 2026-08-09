@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\SiteEventController;
 use App\Http\Controllers\Api\SolanaStakingController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
+use App\Http\Controllers\Api\WalletChatController;
 use App\Http\Controllers\Api\WalletLainController;
 use App\Http\Controllers\Api\WalletSocialController;
 use App\Http\Controllers\ApiController;
@@ -251,6 +252,30 @@ Route::prefix('api/wallet/lain')->name('wallet.lain.')->group(function () {
         ->middleware('throttle:30,1')->name('verify');
     Route::post('chat', [WalletLainController::class, 'chat'])
         ->middleware('throttle:10,1')->name('chat');
+});
+
+/**
+ * Wallet-to-wallet encrypted chat (WalletChatController).
+ *
+ * Public like the wallet, and addressed by EVM address rather than by account.
+ * The server relays ciphertext it has no key for: it keeps a directory of
+ * signed public keys so wallets can find each other, and a queue of sealed
+ * envelopes it deletes on a retention window. Reading a mailbox means signing
+ * a challenge with the address's own key, exactly as the holders' room does.
+ */
+Route::prefix('api/wallet/chat')->name('wallet.chat.')->group(function () {
+    Route::post('nonce', [WalletChatController::class, 'nonce'])
+        ->middleware('throttle:30,1')->name('nonce');
+    Route::post('verify', [WalletChatController::class, 'verify'])
+        ->middleware('throttle:30,1')->name('verify');
+    Route::post('keys', [WalletChatController::class, 'publishKey'])
+        ->middleware('throttle:20,1')->name('keys.publish');
+    Route::get('keys/{address}', [WalletChatController::class, 'key'])
+        ->middleware('throttle:120,1')->name('keys.show');
+    Route::get('messages', [WalletChatController::class, 'messages'])
+        ->middleware('throttle:120,1')->name('messages');
+    Route::post('messages', [WalletChatController::class, 'send'])
+        ->middleware('throttle:60,1')->name('send');
 });
 
 /**

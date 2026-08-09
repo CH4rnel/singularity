@@ -1,0 +1,51 @@
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Wallet-to-wallet encrypted chat
+    |--------------------------------------------------------------------------
+    |
+    | The server is a relay for messages it cannot read, so nothing here is a
+    | policy about content — there is no content to have a policy about. These
+    | are the limits of the queue itself: how long an undelivered envelope is
+    | held, how large one may be, and how many are handed over per poll.
+    |
+    */
+
+    'chat' => [
+
+        /**
+         * Days an envelope is kept before `wallet:chat-prune` deletes it.
+         *
+         * The wallets at either end hold the conversation; this is only the
+         * window in which a wallet that was closed can still collect its mail.
+         * Shortening it costs the relay nothing and costs an offline recipient
+         * their messages, which is the trade to weigh.
+         */
+        'retention_days' => (int) env('WALLET_CHAT_RETENTION_DAYS', 30),
+
+        /**
+         * Base64 ciphertext characters accepted in one message.
+         *
+         * The client pads plaintext to a 256-byte block and caps it at 4000
+         * bytes, so a legitimate envelope is comfortably under this; the cap
+         * exists so the relay cannot be used as free storage.
+         */
+        'max_body_chars' => (int) env('WALLET_CHAT_MAX_BODY', 8192),
+
+        /** Envelopes handed over in one poll. */
+        'page' => 200,
+
+        /**
+         * Minutes a signed proof keeps a mailbox open before it is re-signed.
+         *
+         * Matches the holders' room: long enough that a conversation is not
+         * interrupted, short enough that a stolen session cookie stops working
+         * without the key behind it.
+         */
+        'proof_minutes' => 30,
+    ],
+
+];

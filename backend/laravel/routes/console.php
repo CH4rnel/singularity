@@ -22,3 +22,7 @@ Schedule::command('gamification:sync')->everyTenMinutes()->withoutOverlapping();
 // backed bridged ASH (unified ASH emission, Path A). Buffers days ahead, so
 // hourly keeps balances and reward rates in sync without racing.
 Schedule::command('farm:fund-satellites')->hourly()->withoutOverlapping();
+// The wallet chat relay is a queue, not an archive: drop delivered and
+// undelivered envelopes alike once they are past the retention window, so the
+// server stops holding a record of who talked to whom.
+Schedule::command('wallet:chat-prune')->daily()->withoutOverlapping();

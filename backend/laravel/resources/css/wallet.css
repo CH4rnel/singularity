@@ -789,10 +789,26 @@
 /* ------------------------------------------------------------ readouts -- */
 
 /*
- * The shortcuts under the portfolio total. Three of them fit a phone in one
- * row, which is the whole point: tokens, analytics and security are places
- * this wallet already is, not a menu it has to grow.
+ * The shortcuts under the portfolio total: tokens, analytics, messages and
+ * security are places this wallet already is, not a menu it has to grow.
+ *
+ * Two across on a phone rather than four in one row — a fourth label at this
+ * size would either clip or shrink the other three into initials, and a grid
+ * keeps every tile the same target size at both counts.
  */
+.cw-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+@media (min-width: 560px) {
+    .cw-tiles {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
 .cw-tile {
     display: flex;
     flex: 1;
@@ -929,6 +945,30 @@
     align-self: flex-end;
     border-right: 2px solid var(--cw-border);
     background: var(--cw-app);
+}
+
+/*
+ * The other wallet in an encrypted thread. Left like Lain, but without her
+ * accent: that colour means "this is Lain speaking", and a correspondent
+ * borrowing it would be the one confusion this screen cannot afford.
+ */
+.cw-turn-them {
+    align-self: flex-start;
+    border-left: 2px solid var(--cw-border);
+    background: var(--cw-raised);
+}
+
+/* Waiting messages, counted without opening any of them. */
+.cw-badge {
+    display: inline-flex;
+    min-width: 18px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--cw-accent);
+    font: 500 10px/18px var(--cw-mono);
+    color: var(--cw-app);
 }
 
 .cw-turn-text {
