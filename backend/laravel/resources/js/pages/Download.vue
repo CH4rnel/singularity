@@ -3,7 +3,6 @@ import { Head, Link } from '@inertiajs/vue3';
 import {
     Download as DownloadIcon,
     Globe,
-    Languages,
     Laptop,
     Monitor,
     ShieldCheck,
@@ -21,7 +20,9 @@ import type { DownloadBuild, DownloadCatalog } from '@/types';
 
 const props = defineProps<{ catalog: DownloadCatalog }>();
 
-const { locale, toggleLocale, t } = useLocale(downloadMessages);
+// `locale` stays for date formatting below; switching languages belongs to the
+// header menu, which every page shares.
+const { locale, t } = useLocale(downloadMessages);
 
 type PlatformCard = {
     id: string;
@@ -115,14 +116,7 @@ function size(build: DownloadBuild): string {
             :eyebrow="t('eyebrow')"
             :title="t('title')"
             :description="t('intro')"
-        >
-            <template #actions>
-                <Button variant="ghost" size="sm" @click="toggleLocale">
-                    <Languages class="mr-1 size-4" />
-                    {{ locale === 'ru' ? 'EN' : 'RU' }}
-                </Button>
-            </template>
-        </PageHero>
+        />
 
         <div class="flex flex-wrap items-center gap-3 text-sm">
             <a
