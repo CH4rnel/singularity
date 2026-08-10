@@ -91,6 +91,13 @@ jobs:
       run:
         working-directory: frontend/mobile
 
+    # The release notes need to know which of the two APKs this run produced.
+    # Reading it back off the file does not work — a modern APK carries only a
+    # v2/v3 signature, which `keytool -jarfile` cannot see — so the job that
+    # knows says so.
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -123,9 +130,12 @@ jobs:
       # An APK is only installable if it is signed, and Android ties updates to
       # the signature: the same key has to sign every release forever.
       # `frontend/mobile/scripts/make-keystore.sh` creates it and uploads these
-      # four secrets. Without them the job still builds a debug APK for
-      # inspection, but nothing is published — a debuggable wallet is not
-      # something to hand strangers.
+      # four secrets. Without them the job falls back to a debug APK, which is
+      # published too but announced as such on the release page: it is signed
+      # with the well-known Android debug key, it is `debuggable`, and the runner
+      # generates that key afresh every run — so no debug APK can ever update
+      # another, signed or not. Set the secrets and the signed path takes over
+      # with no further changes here.
       - name: Signing material
         id: signing
         env:
@@ -136,7 +146,7 @@ jobs:
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
             echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Unsigned Android build::ANDROID_KEYSTORE_BASE64 is not set, so this run produces a debug APK that is not published. Run frontend/mobile/scripts/make-keystore.sh to fix that."
+            echo "::warning title=Unsigned Android build::ANDROID_KEYSTORE_BASE64 is not set, so this release ships a debuggable APK signed with a throwaway debug key. Run frontend/mobile/scripts/make-keystore.sh to fix that."
             exit 0
           fi
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/cyberia-release.jks
@@ -173,16 +183,19 @@ jobs:
             ./gradlew assembleDebug --no-daemon
           fi
 
+      # Either way the asset is `Cyberia.apk`, because that is the name
+      # config/downloads.php looks for — an APK under any other name is an APK
+      # /download will not offer. Which of the two it is travels to the release
+      # notes as this job's `signed` output.
       - name: Name the APK
         id: apk
         run: |
           if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
             cp android/app/build/outputs/apk/release/app-release.apk Cyberia.apk
-            echo "artifact=release-android" >> "$GITHUB_OUTPUT"
           else
-            cp android/app/build/outputs/apk/debug/app-debug.apk Cyberia-debug.apk
-            echo "artifact=debug-android" >> "$GITHUB_OUTPUT"
+            cp android/app/build/outputs/apk/debug/app-debug.apk Cyberia.apk
           fi
+          echo "artifact=release-android" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -219,9 +232,14 @@ jobs:
 
       - name: Release notes
         run: |
-          APK_NOTE="_This release has no Android APK — the signing key is not configured._"
+          APK_NOTE="_This release has no Android APK._"
           if [ -f installers/Cyberia.apk ]; then
             APK_NOTE="**Android** — \`Cyberia.apk\`. Android asks you to allow installs from your browser or file manager the first time."
+            # One line, because it changes what someone has to do at the next
+            # release: a debug APK installs fine, but nothing lands on top of it.
+            if [ "${{ needs.android.outputs.signed }}" != "true" ]; then
+              APK_NOTE="**Android** — \`Cyberia.apk\`, a debug build. It installs the same way (allow installs from your browser or file manager the first time). A later release cannot update it in place: uninstall this one first, then restore from your seed phrase."
+            fi
           fi
           cat > notes.md <<EOF
           The Cyberia wallet as a native app. It is a shell around
