@@ -75,6 +75,88 @@
     box-sizing: border-box;
 }
 
+/*
+ * A long press on a control is a gesture here, never a text selection. Left to
+ * itself an Android WebView answers press-and-hold on a button by selecting its
+ * label and raising the selection handles — which cancels the pointer stream
+ * mid-hold (hold-to-reveal and hold-to-sign both die on it) and leaves the user
+ * a selection to dismiss. Labels are not text anyone copies; the data below
+ * them still is, and stays selectable.
+ */
+.cw button,
+.cw [role='button'],
+.cw .cw-tab,
+.cw .cw-rail-item {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Scrollbars. Everything else on this surface is drawn against near-black, and
+ * the platform's own bar is the one thing on screen that does not know that: a
+ * pale trough down the rail on Windows and Linux, and on a phone a light
+ * overlay painted for a page the wallet is not. `color-scheme: dark` says what
+ * the browser is looking at, which is what fixes the bars we never draw
+ * ourselves — the overlay ones on touch, and native controls with them.
+ */
+.cw {
+    color-scheme: dark;
+}
+
+/*
+ * The drawn bar is only for pointers that can reach one. Defining
+ * `::-webkit-scrollbar` opts the element out of the overlay bar phones use, and
+ * a permanent 10px column is a lot to take out of a 360px screen for something
+ * no finger will ever grab: touch keeps the overlay, now dark.
+ */
+@media (hover: hover) and (pointer: fine) {
+    /* Firefox has no ::-webkit pseudo-elements; both properties inherit. */
+    .cw {
+        scrollbar-width: thin;
+        scrollbar-color: var(--cw-border) transparent;
+    }
+
+    .cw ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    /*
+     * No trough. A scrollable pane here is already bounded by a hairline or a
+     * change of background, so a second track line would only thicken the edge.
+     */
+    .cw ::-webkit-scrollbar-track,
+    .cw ::-webkit-scrollbar-corner {
+        background: transparent;
+    }
+
+    /*
+     * The thumb reads as one more hairline, but it is not 4px wide: it fills
+     * the full 10px and is padded back down by a transparent border, so the
+     * target stays as big as the bar while the mark stays as thin as the rest
+     * of the surface. `background-clip` is what keeps the padding transparent,
+     * so the states below set `background-color` — the `background` shorthand
+     * would reset the clip to the border box and fatten the thumb on hover.
+     */
+    .cw ::-webkit-scrollbar-thumb {
+        border: 3px solid transparent;
+        border-radius: 8px;
+        background-clip: padding-box;
+        background-color: var(--cw-border);
+    }
+
+    .cw ::-webkit-scrollbar-thumb:hover {
+        background-color: var(--cw-border-hover);
+    }
+
+    /* Being dragged is the one moment the bar is a control, not a readout. */
+    .cw ::-webkit-scrollbar-thumb:active {
+        background-color: var(--cw-accent);
+    }
+}
+
 @keyframes cw-pulse {
     0%,
     100% {

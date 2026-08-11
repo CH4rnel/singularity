@@ -44,6 +44,7 @@ const step = ref<Step>(props.start);
 const words = ref<12 | 24>(12);
 const phrase = ref('');
 const revealed = ref(false);
+const latched = ref(false);
 const acknowledged = ref(false);
 const importText = ref('');
 const password = ref('');
@@ -82,6 +83,7 @@ const generate = (): void => {
     slots.value = [null, null, null];
     wrongOrder.value = false;
     revealed.value = false;
+    latched.value = false;
 };
 
 /** Backing out of import: to the welcome screen, or out of the flow entirely. */
@@ -197,24 +199,100 @@ const submit = (): void => {
     );
 };
 
+/**
+ * Press-and-hold reveal, with a latch.
+ *
+ * A press shows the phrase at once and a release hides it again — a peek costs
+ * a deliberate gesture, which is the point. But the phone is held in the hand
+ * that has to write twelve words down, so a hold carried past `SEED_LATCH_MS`
+ * leaves the phrase open until it is closed by hand. Without that the words are
+ * only ever visible while a thumb is on the screen, which is not enough time to
+ * copy them onto paper.
+ */
+const SEED_LATCH_MS = 900;
+
+const holdProgress = ref(0);
+
+let holdFrame: number | null = null;
+let holdStartedAt = 0;
+
+const stopHold = (): void => {
+    if (holdFrame !== null) {
+        cancelAnimationFrame(holdFrame);
+        holdFrame = null;
+    }
+
+    holdProgress.value = 0;
+};
+
+const tickHold = (): void => {
+    holdProgress.value = Math.min(
+        1,
+        (performance.now() - holdStartedAt) / SEED_LATCH_MS,
+    );
+
+    if (holdProgress.value >= 1) {
+        latched.value = true;
+        stopHold();
+
+        return;
+    }
+
+    holdFrame = requestAnimationFrame(tickHold);
+};
+
+const pressReveal = (): void => {
+    // Latched, the same button is the way back to a covered screen.
+    if (latched.value) {
+        latched.value = false;
+        revealed.value = false;
+
+        return;
+    }
+
+    revealed.value = true;
+
+    if (holdFrame === null) {
+        holdStartedAt = performance.now();
+        holdFrame = requestAnimationFrame(tickHold);
+    }
+};
+
+const releaseReveal = (): void => {
+    stopHold();
+
+    if (!latched.value) {
+        revealed.value = false;
+    }
+};
+
+const onRevealKey = (event: KeyboardEvent, pressed: boolean): void => {
+    if (event.key !== ' ' && event.key !== 'Enter') {
+        return;
+    }
+
+    // A held key repeats; only the first press starts the countdown.
+    event.preventDefault();
+
+    if (pressed) {
+        if (!event.repeat) {
+            pressReveal();
+        }
+
+        return;
+    }
+
+    releaseReveal();
+};
+
 /** Nothing secret outlives this component. */
 onBeforeUnmount(() => {
+    stopHold();
     phrase.value = '';
     importText.value = '';
     password.value = '';
     passwordAgain.value = '';
 });
-
-const hold = (state: boolean) => () => {
-    revealed.value = state;
-};
-
-const onRevealKey = (event: KeyboardEvent, state: boolean): void => {
-    if (event.key === ' ' || event.key === 'Enter') {
-        event.preventDefault();
-        revealed.value = state;
-    }
-};
 </script>
 
 <template>
@@ -456,6 +534,8 @@ const onRevealKey = (event: KeyboardEvent, state: boolean): void => {
                     justify-content: center;
                     gap: 6px;
                     background: rgba(7, 8, 10, 0.55);
+                    user-select: none;
+                    -webkit-user-select: none;
                 "
             >
                 <span class="cw-label" style="color: var(--cw-muted)">{{
@@ -474,16 +554,36 @@ const onRevealKey = (event: KeyboardEvent, state: boolean): void => {
         <button
             type="button"
             class="cw-ghost"
-            style="margin-top: 12px; height: 48px; width: 100%"
-            @pointerdown.prevent="hold(true)()"
-            @pointerup="hold(false)()"
-            @pointerleave="hold(false)()"
-            @pointercancel="hold(false)()"
+            style="
+                position: relative;
+                overflow: hidden;
+                margin-top: 12px;
+                height: 48px;
+                width: 100%;
+                touch-action: none;
+            "
+            :aria-pressed="latched"
+            @pointerdown.prevent="pressReveal"
+            @pointerup="releaseReveal"
+            @pointerleave="releaseReveal"
+            @pointercancel="releaseReveal"
             @keydown="onRevealKey($event, true)"
             @keyup="onRevealKey($event, false)"
-            @blur="revealed = false"
+            @blur="releaseReveal"
         >
-            {{ t('holdToReveal') }}
+            <span
+                aria-hidden="true"
+                :style="{
+                    position: 'absolute',
+                    inset: 'auto auto 0 0',
+                    height: '2px',
+                    width: `${holdProgress * 100}%`,
+                    background: 'var(--cw-accent)',
+                }"
+            />
+            <span style="position: relative">{{
+                latched ? t('hidePhrase') : t('holdToReveal')
+            }}</span>
         </button>
 
         <div style="display: flex; gap: 10px; margin-top: 10px">

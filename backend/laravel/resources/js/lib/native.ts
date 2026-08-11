@@ -13,6 +13,7 @@ interface DesktopBridge {
     shell?: string;
     version?: string;
     openExternal?: (url: string) => void;
+    openProxySettings?: () => void;
 }
 
 declare global {
@@ -31,7 +32,10 @@ function detect(): NativeShell {
 
     const userAgent = window.navigator.userAgent;
 
-    if (window.cyberiaNative?.shell === 'desktop' || /\bCyberiaDesktop\//.test(userAgent)) {
+    if (
+        window.cyberiaNative?.shell === 'desktop' ||
+        /\bCyberiaDesktop\//.test(userAgent)
+    ) {
         return 'desktop';
     }
 
@@ -62,4 +66,24 @@ export function nativeShell(): NativeShell {
 
 export function isNativeShell(): boolean {
     return detected !== null;
+}
+
+/**
+ * Whether the shell has network settings of its own to open.
+ *
+ * Only the desktop app does: a browser tab cannot choose a proxy, and on a
+ * phone that choice belongs to the system. Feature-detected rather than
+ * inferred from the shell name, because an older desktop build has no such
+ * window and would give the user a button that does nothing.
+ */
+export function canOpenProxySettings(): boolean {
+    return (
+        typeof window !== 'undefined' &&
+        typeof window.cyberiaNative?.openProxySettings === 'function'
+    );
+}
+
+/** Raises the shell's proxy window. No-op anywhere else. */
+export function openProxySettings(): void {
+    window.cyberiaNative?.openProxySettings?.();
 }

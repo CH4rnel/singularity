@@ -4,6 +4,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { canOpenProxySettings, openProxySettings } from '@/lib/native';
 import { WALLET_FAMILY_GROUPS, formatUnits } from '@/lib/wallet';
 import type { WalletChainId, WalletTxStatus } from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
@@ -194,6 +195,21 @@ const unreachable = computed(() =>
     ),
 );
 
+/**
+ * The way out of a network that blocks Cyberia, offered where the block is
+ * felt: nothing read, or a node that will not answer.
+ *
+ * Only the desktop app can act on it — it owns its own connection — so the
+ * offer appears only where it is true, and only once something has actually
+ * failed. It is worded as a question because an unreachable node is as often
+ * an RPC having a bad minute as it is censorship.
+ */
+const proxyOffer = computed(
+    () =>
+        canOpenProxySettings() &&
+        (!props.online || unreachable.value.length > 0),
+);
+
 /** Networks holding value the total cannot include — no price, or no read. */
 const unaccounted = computed(
     () =>
@@ -356,6 +372,18 @@ const recent = computed(() =>
                 @click="dismissed.add(card.account.chain)"
             >
                 ×
+            </button>
+        </p>
+
+        <p v-if="proxyOffer" class="cw-note" style="margin-bottom: 18px">
+            <span style="flex: 1">
+                <strong style="display: block; color: var(--cw-text)">{{
+                    t('proxyOfferTitle')
+                }}</strong>
+                {{ t('proxyOfferBody') }}
+            </span>
+            <button type="button" class="cw-back" @click="openProxySettings()">
+                {{ t('proxySettings') }}
             </button>
         </p>
 
