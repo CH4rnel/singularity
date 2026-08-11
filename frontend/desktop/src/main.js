@@ -14,24 +14,37 @@
  */
 
 const path = require('node:path');
-const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, net, session, shell } = require('electron');
 const {
     PARTITION,
     PROTOCOL,
     describeProxy,
+    hasProxyFlag,
     isExternallyOpenable,
     isNavigable,
+    normalizeProxySetting,
     resolveAppUrl,
-    resolveProxy,
+    resolveProxyDecision,
     resolveStartUrl,
 } = require('./config');
+const { loadProxySetting, saveProxySetting } = require('./proxy-settings');
 const { loadWindowState, trackWindowState } = require('./window-state');
 
 const APP_URL = resolveAppUrl(process.env, process.argv);
 const START_URL = resolveStartUrl(process.env, process.argv);
 const APP_HOST = new URL(APP_URL).hostname;
-const PROXY = resolveProxy(process.env, process.argv);
 const OFFLINE_PAGE = path.join(__dirname, 'offline.html');
+const PROXY_PAGE = path.join(__dirname, 'proxy.html');
+
+/** A launch flag pins the proxy for this run, so the window cannot change it. */
+const PROXY_LOCKED = hasProxyFlag(process.argv);
+
+/**
+ * How long a new proxy gets to answer before it counts as unreachable. Long
+ * enough for a tunnel abroad to hand-shake, short enough that a dead port does
+ * not look like a frozen window.
+ */
+const PROBE_TIMEOUT_MS = 12000;
 
 /** Permissions the site legitimately needs; everything else is refused. */
 const ALLOWED_PERMISSIONS = new Set([
@@ -45,6 +58,13 @@ const ALLOWED_PERMISSIONS = new Set([
 const ERR_ABORTED = -3;
 
 let mainWindow = null;
+let proxyWindow = null;
+let shellSession = null;
+
+/** The proxy in force right now, what the user saved, and where it came from. */
+let activeProxy = null;
+let proxySetting = { mode: 'system', server: '' };
+let proxySource = 'system';
 
 function buildUserAgent() {
     return `${app.userAgentFallback}`
@@ -78,18 +98,184 @@ function showOffline(error = '') {
     }
 
     void mainWindow.loadFile(OFFLINE_PAGE, {
-        query: { url: START_URL, error, proxy: describeProxy(PROXY) },
+        query: { url: START_URL, error, proxy: describeProxy(activeProxy) },
     });
 }
 
-async function configureSession() {
-    const shellSession = session.fromPartition(PARTITION);
+/**
+ * Pins a proxy onto both sessions.
+ *
+ * Pinned rather than inherited: on Linux desktops Chromium takes its proxy from
+ * the desktop settings and ignores http_proxy/https_proxy, so a stale system
+ * entry there would fail every request with ERR_PROXY_CONNECTION_FAILED. `null`
+ * hands the session back to that system configuration, which is what makes
+ * "System" in the proxy window an actual choice rather than a no-op.
+ */
+async function pinProxy(proxy) {
+    const configuration = proxy ?? { mode: 'system' };
 
-    // Pinned before the first load: on Linux desktops Chromium takes its proxy
-    // from the desktop settings and ignores http_proxy/https_proxy, so a stale
-    // system entry would fail every request with ERR_PROXY_CONNECTION_FAILED.
-    if (PROXY) {
-        await Promise.all([shellSession.setProxy(PROXY), session.defaultSession.setProxy(PROXY)]);
+    await Promise.all([
+        shellSession.setProxy(configuration),
+        session.defaultSession.setProxy(configuration),
+    ]);
+
+    activeProxy = proxy;
+}
+
+/**
+ * Asks the site for its headers through whatever proxy is pinned right now.
+ *
+ * This is what turns the proxy window from a text field into an answer: a
+ * setting is only saved once it has actually carried a request, so nobody is
+ * left staring at the offline page wondering whether they typed the port wrong
+ * or the tunnel is down. A response the site itself sent — even a 404 — proves
+ * the connection; a 5xx is the proxy talking about a hop it could not make.
+ */
+function probeConnection(target) {
+    return new Promise((resolve) => {
+        let settled = false;
+
+        const request = net.request({
+            method: 'HEAD',
+            url: target,
+            session: shellSession,
+            useSessionCookies: false,
+        });
+
+        const finish = (result) => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            clearTimeout(timer);
+            resolve(result);
+        };
+
+        const timer = setTimeout(() => {
+            request.abort();
+            finish({ ok: false, error: 'ERR_CONNECTION_TIMED_OUT' });
+        }, PROBE_TIMEOUT_MS);
+
+        request.on('response', (response) => {
+            response.on('data', () => {});
+            response.on('end', () => {});
+
+            finish(
+                response.statusCode >= 500
+                    ? { ok: false, error: `HTTP ${response.statusCode}` }
+                    : { ok: true, error: '' },
+            );
+        });
+
+        request.on('error', (error) => finish({ ok: false, error: error.message }));
+        request.end();
+    });
+}
+
+function proxyState() {
+    return {
+        mode: proxySetting.mode,
+        server: proxySetting.server,
+        source: proxySource,
+        effective: describeProxy(activeProxy),
+        url: START_URL,
+        locked: PROXY_LOCKED,
+    };
+}
+
+/**
+ * Applies a setting from the proxy window, keeping it only if it connects.
+ *
+ * A proxy that does not answer would otherwise be saved over the one that did
+ * and survive the restart, leaving the app permanently offline with its only
+ * settings window behind the same broken connection.
+ */
+async function applyProxySetting(payload) {
+    if (PROXY_LOCKED) {
+        return { ok: false, error: 'locked' };
+    }
+
+    const requested = normalizeProxySetting(payload);
+    const wanted = payload && typeof payload === 'object' ? String(payload.mode ?? '') : '';
+
+    // A manual entry Chromium cannot use normalises to "system"; silently
+    // connecting directly would read as "it worked" for a typed-in typo.
+    if (wanted.toLowerCase() === 'manual' && requested.mode !== 'manual') {
+        return { ok: false, error: 'invalid' };
+    }
+
+    const previous = activeProxy;
+    const decision = resolveProxyDecision(process.env, process.argv, requested);
+
+    await pinProxy(decision.proxy);
+
+    const probe = await probeConnection(START_URL);
+
+    if (!probe.ok) {
+        await pinProxy(previous);
+
+        return { ok: false, error: probe.error };
+    }
+
+    proxySetting = saveProxySetting(requested);
+    proxySource = decision.source;
+
+    loadApp();
+
+    return { ok: true, error: '', ...proxyState() };
+}
+
+function openProxyWindow() {
+    if (proxyWindow && !proxyWindow.isDestroyed()) {
+        proxyWindow.focus();
+
+        return;
+    }
+
+    proxyWindow = new BrowserWindow({
+        width: 460,
+        // Tall enough for the three choices, a wrapped failure and the line
+        // saying what is in force — the window never has to scroll to answer.
+        height: 700,
+        parent: mainWindow ?? undefined,
+        modal: Boolean(mainWindow),
+        show: false,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        backgroundColor: '#0b0f10',
+        title: 'Cyberia — Proxy',
+        autoHideMenuBar: true,
+        webPreferences: {
+            // Its own preload: reading and changing the proxy is a power the
+            // remote site must not be handed along with the rest of the bridge.
+            preload: path.join(__dirname, 'preload-proxy.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+        },
+    });
+
+    proxyWindow.once('ready-to-show', () => proxyWindow.show());
+    proxyWindow.on('closed', () => {
+        proxyWindow = null;
+    });
+
+    void proxyWindow.loadFile(PROXY_PAGE);
+}
+
+async function configureSession() {
+    shellSession = session.fromPartition(PARTITION);
+
+    proxySetting = loadProxySetting();
+
+    const decision = resolveProxyDecision(process.env, process.argv, proxySetting);
+
+    proxySource = decision.source;
+
+    if (decision.proxy) {
+        await pinProxy(decision.proxy);
     }
 
     shellSession.setPermissionRequestHandler((_contents, permission, callback) => {
@@ -239,6 +425,11 @@ function buildMenu() {
                     click: () => openExternal(mainWindow?.webContents.getURL() ?? START_URL),
                 },
                 { type: 'separator' },
+                {
+                    label: 'Proxy…',
+                    click: () => openProxyWindow(),
+                },
+                { type: 'separator' },
                 isMac ? { role: 'close' } : { role: 'quit' },
             ],
         },
@@ -324,18 +515,31 @@ if (!app.requestSingleInstanceLock()) {
         await configureSession();
         buildMenu();
 
-        console.log(`[cyberia] ${START_URL} via proxy ${describeProxy(PROXY)}`);
+        console.log(
+            `[cyberia] ${START_URL} via proxy ${describeProxy(activeProxy)} (${proxySource})`,
+        );
 
         ipcMain.on('shell:retry', () => loadApp());
         ipcMain.on('shell:open-external', (_event, url) => openExternal(url));
+        // Opening the window is all the site (and the offline page) may do:
+        // reading and changing the proxy lives behind the window's own preload.
+        ipcMain.on('shell:open-proxy', () => openProxyWindow());
         ipcMain.on('shell:info', (event) => {
             event.returnValue = {
                 shell: 'desktop',
                 platform: process.platform,
                 version: app.getVersion(),
                 url: START_URL,
-                proxy: describeProxy(PROXY),
+                proxy: describeProxy(activeProxy),
             };
+        });
+
+        ipcMain.handle('proxy:state', () => proxyState());
+        ipcMain.handle('proxy:apply', (_event, setting) => applyProxySetting(setting));
+        ipcMain.on('proxy:close', () => {
+            if (proxyWindow && !proxyWindow.isDestroyed()) {
+                proxyWindow.close();
+            }
         });
 
         createWindow();
