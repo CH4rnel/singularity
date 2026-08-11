@@ -20,6 +20,8 @@ from bot.config import (
     LENDING_ANNOUNCE_CHAT, LENDING_POLL_SECONDS, LENDING_COMPTROLLER,
     CYBERSOL_SWAP_ADDRESS, CYBERSOL_SWAP_ANNOUNCE_CHAT, CYBERSOL_SWAP_POLL_SECONDS,
     STAKING_MASTERCHEF, STAKING_ANNOUNCE_CHAT, STAKING_POLL_SECONDS,
+    PUMPFUN_ANNOUNCE_CHAT, PUMPFUN_MIN_BUY_USD, PUMPFUN_POLL_SECONDS,
+    PUMPFUN_POOL_ADDRESS,
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, BIG_ANNOUNCE_USD,
     MARKET_SNAPSHOT_SECONDS,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS,
@@ -45,7 +47,8 @@ from bot.ai import ask_command, ai_message_handler
 from bot.announcers import (
     bridge_announcer_loop, swap_announcer_loop, liquidity_announcer_loop,
     lending_announcer_loop, cybersol_swap_announcer_loop, staking_announcer_loop,
-    digest_loop, market_snapshot_loop, whale_loop, run_snapshot_once,
+    pumpfun_announcer_loop, digest_loop, market_snapshot_loop, whale_loop,
+    run_snapshot_once,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,6 +130,17 @@ async def post_init(application: Application):
         )
     else:
         logger.info("Staking announcer disabled: STAKING_MASTERCHEF not set")
+
+    # Background loop that announces CYBER.sol buys on the pump.fun pool.
+    if PUMPFUN_ANNOUNCE_CHAT:
+        application.create_task(pumpfun_announcer_loop(application))
+        logger.info(
+            f"pump.fun buy bot started: chat={PUMPFUN_ANNOUNCE_CHAT} "
+            f"pool={PUMPFUN_POOL_ADDRESS or 'auto'} min=${PUMPFUN_MIN_BUY_USD:g} "
+            f"interval={PUMPFUN_POLL_SECONDS}s"
+        )
+    else:
+        logger.info("pump.fun buy bot disabled: PUMPFUN_ANNOUNCE_CHAT not set")
 
     # Periodic on-chain activity digest.
     if DIGEST_INTERVAL_SECONDS > 0:

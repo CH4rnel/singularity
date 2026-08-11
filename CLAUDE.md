@@ -23,7 +23,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `services/cyberia-node/` | polygon-edge/IBFT PoA, Docker Compose | Cyberia L1 second node: non-validating full/RPC follower (chainID 49406); prepared, not deployed |
 | `services/ipfs/` | Docker Compose | IPFS service config |
 | `services/lisp/` | Common Lisp/SBCL | Daemon and HTTP services |
-| `services/telegram-bot/` | Python, python-telegram-bot, web3, SQLAlchemy | Cyberia Telegram bot: wallet rewards, chat tokens, on-chain announcers, whales gate |
+| `services/telegram-bot/` | Python, python-telegram-bot, web3, SQLAlchemy | Cyberia Telegram bot: wallet rewards, chat tokens, on-chain announcers, pump.fun buy bot, whales gate |
 | `services/lainos/` | TypeScript, Node, Anthropic SDK, viem | LainOS: autonomous AI agent framework (ElizaOS-like) with a Cyberia chain plugin |
 | `game/wired/` | Godot 4, GDScript | Wired: 3D on-chain game; NPCs think via LainOS, world reacts to the Cyberia chain |
 | `game/nocarrier/` | Godot 4, GDScript | NO CARRIER: first-person netstalking survival-horror sim (en/ru); world/UI/audio built procedurally in code; browser build connects a wallet and mints decoded anomalies as CyberiaNFTs |

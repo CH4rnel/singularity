@@ -38,7 +38,7 @@ singularity/
 ├── services/cyberia-node/ # Cyberia L1 second node (polygon-edge follower/RPC); prepared, not deployed
 ├── services/ipfs/        # IPFS docker-compose config
 ├── services/lisp/        # Common Lisp daemon/http services
-├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, whales gate
+├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, pump.fun buy bot, whales gate
 ├── services/lainos/      # LainOS: autonomous AI agent framework (TypeScript), Cyberia chain plugin
 ├── game/wired/           # Wired: 3D on-chain game (Godot 4), NPCs powered by LainOS
 ├── game/nocarrier/       # NO CARRIER: netstalking survival-horror sim (Godot 4, en/ru, optional on-chain NFT sealing)

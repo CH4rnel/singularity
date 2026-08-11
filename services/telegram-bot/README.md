@@ -3,7 +3,7 @@
 The community Telegram bot for Cyberia: wallet linking and hourly TG/chat-token
 rewards, per-chat reward tokens, the CYBER.sol "whales" gate, and on-chain
 announcers (bridge, Ritual DEX swaps/liquidity, lending, CYBER.sol→CYBER
-conversions, solo-pool staking) plus a periodic activity digest and the market snapshot that backs
+conversions, solo-pool staking, pump.fun buys) plus a periodic activity digest and the market snapshot that backs
 the Laravel `/analytics` page. It also includes an optional Cyberia-scoped AI
 assistant backed by any OpenAI-compatible chat completions API.
 
@@ -22,8 +22,9 @@ bot/
   handlers.py    Telegram command/message handlers
   ai.py          Cyberia AI prompt, provider client, and message handlers
   cyberia_knowledge.md  operator-approved facts supplied to the model
+  pumpfun.py     pump.fun buy detection (Solana RPC + market feed) and the post
   announcers.py  background loops (bridge/swap/liquidity/lending/convert/
-                 staking/digest/snapshot/whale) + run_snapshot_once
+                 staking/pumpfun/digest/snapshot/whale) + run_snapshot_once
   app.py         build app, register handlers, schedule loops, main()
   __main__.py    `python -m bot`
 ```
@@ -51,6 +52,33 @@ from, in order: `$BOT_ENV_FILE`, `services/telegram-bot/.env`,
 `services/telegram-bot/bot/.env`, then the legacy
 `scripts/python/.env` (so the prod shim keeps working). `DEPLOYER_PK` is never
 logged.
+
+### pump.fun buy bot
+
+Every CYBER.sol buy worth at least `PUMPFUN_MIN_BUY_USD` (default $5) gets its
+own post in `PUMPFUN_ANNOUNCE_CHAT` — amount in SOL and USD, amount in
+CYBER.sol, buyer and transaction on Solscan, a "New Holder!" line when the buyer
+held none before, and the market cap. Leave `PUMPFUN_ANNOUNCE_CHAT` empty to
+turn it off.
+
+CYBER.sol has graduated off the pump.fun bonding curve, so buys settle on the
+PumpSwap AMM pool its pump.fun page trades against. `bot/pumpfun.py` reads them
+off that pool's **balance deltas** — the coin side leaving while the SOL side
+arrives — instead of decoding pump.fun or router instructions, so a buy routed
+through an aggregator reads like a direct one, and a liquidity deposit (both
+sides moving in) is never mistaken for a buy. The buyer is whoever the coin
+landed with, which stays correct when someone else paid the fee.
+
+USD value, market cap and — unless `PUMPFUN_POOL_ADDRESS` pins one — the pool
+address come from the DexScreener pair feed. Without a readable SOL price the
+tick is deferred rather than posting a buy it cannot size, so nothing is lost.
+On a fresh install the cursor starts at the pool's current head: history is
+never replayed into the chat.
+
+The loop polls Solana every `PUMPFUN_POLL_SECONDS` (default 30) and makes one
+`getTransaction` call per new pool transaction. The default public RPC is enough
+at current volume; point `SOLANA_RPC_URL` at a dedicated endpoint if posts start
+arriving late.
 
 The periodic activity digest can be muted with `DIGEST_INTERVAL_SECONDS=0`.
 Small price changes are hidden by default (`DIGEST_PRICE_CHANGE_MIN_BPS=100`),

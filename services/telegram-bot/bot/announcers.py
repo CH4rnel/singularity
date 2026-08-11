@@ -29,6 +29,8 @@ from bot.config import (
     MARKET_SNAPSHOT_SECONDS, CYBER_CA_EVM,
     SOLANA_RPC_URL, CYBER_SOL_MINT, CYBER_SOL_DECIMALS, WHALE_MIN_RAW,
     WHALE_CHAT_ID, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS, DB_PATH,
+    PUMPFUN_ANNOUNCE_CHAT, PUMPFUN_MIN_BUY_USD, PUMPFUN_POLL_SECONDS,
+    PUMPFUN_POOL_ADDRESS, PUMPFUN_TOKEN_SYMBOL,
 )
 from bot.db import (
     engine, _kv_get, _kv_set, _record_activity,
@@ -46,6 +48,7 @@ from bot.utils import (
     _short_addr, _format_decimal_amount, _format_token_amount, _fmt_usd,
     _format_window,
 )
+from bot import pumpfun
 
 logger = logging.getLogger(__name__)
 
@@ -771,6 +774,94 @@ async def cybersol_swap_announcer_loop(application: Application) -> None:
         except Exception as e:
             logger.error(f"cybersol_swap_announcer_loop: {e}")
         await asyncio.sleep(CYBERSOL_SWAP_POLL_SECONDS)
+async def _announce_pumpfun_tick(bot) -> None:
+    """Post every CYBER.sol buy on the pump.fun pool worth at least
+    PUMPFUN_MIN_BUY_USD. The cursor is (slot, index-in-block), advanced only
+    past transactions that were read — and, for a posted buy, only once
+    Telegram accepted it, so a send failure retries instead of losing the buy.
+
+    Solana RPC and the market feed are blocking urllib calls, so both run off
+    the event loop.
+    """
+    if not PUMPFUN_ANNOUNCE_CHAT:
+        return
+
+    market = await asyncio.to_thread(pumpfun.market_snapshot, CYBER_SOL_MINT)
+    if not market:
+        # No SOL price means no way to size a buy against the threshold. Hold
+        # the cursor: the buys are still there on the next tick.
+        logger.warning("pumpfun_announcer: no market quote yet, deferring this tick")
+        return
+
+    pool = PUMPFUN_POOL_ADDRESS or market.get("pool")
+    if not pool:
+        logger.warning("pumpfun_announcer: no pool to watch")
+        return
+
+    cursor = _get_block_cursor("last_announced_pumpfun_cursor")
+    if cursor is None:
+        slot, index = await asyncio.to_thread(pumpfun.head_cursor, pool)
+        _set_block_cursor("last_announced_pumpfun_cursor", slot, index)
+        logger.info(
+            f"pumpfun_announcer: bootstrapped cursor to pool={pool} head slot={slot}"
+        )
+        return
+
+    buys, scanned = await asyncio.to_thread(
+        pumpfun.collect_buys, pool, CYBER_SOL_MINT, cursor
+    )
+
+    for buy in buys:
+        usd = buy["sol_amount"] * market["sol_usd"]
+        event_kwargs = dict(
+            kind="pumpfun_buy", usd=usd,
+            sym_in="SOL", amt_in=buy["sol_amount"],
+            sym_out=PUMPFUN_TOKEN_SYMBOL, amt_out=buy["token_amount"],
+            user_addr=buy["buyer"], tx_hash=buy["signature"], block=buy["slot"],
+            meta="new_holder" if buy["new_holder"] else None,
+        )
+
+        # Buys under the floor never get their own post; they are recorded and
+        # surface in the periodic digest instead of firehosing the chat.
+        if usd < PUMPFUN_MIN_BUY_USD:
+            _record_activity(**event_kwargs)
+            _set_block_cursor("last_announced_pumpfun_cursor", buy["slot"], buy["tx_index"])
+            logger.info(
+                f"pumpfun_announcer: digest-only tx={buy['signature']} "
+                f"usd={usd:.2f} < {PUMPFUN_MIN_BUY_USD:g}"
+            )
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=PUMPFUN_ANNOUNCE_CHAT,
+                text=pumpfun.format_buy(buy, usd, market.get("market_cap")),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"pumpfun_announcer: send failed for {buy['signature']}: {e}")
+            return  # cursor still before this buy; it retries next tick
+
+        # Record only after a successful send so a retry can't double-count it.
+        _record_activity(**event_kwargs)
+        _set_block_cursor("last_announced_pumpfun_cursor", buy["slot"], buy["tx_index"])
+        logger.info(
+            f"pumpfun_announcer: posted {buy['sol_amount']:.4f} SOL "
+            f"({_fmt_usd(usd)}) tx={buy['signature']}"
+        )
+
+    if scanned > cursor:
+        _set_block_cursor("last_announced_pumpfun_cursor", scanned[0], scanned[1])
+
+
+async def pumpfun_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_pumpfun_tick(application.bot)
+        except Exception as e:
+            logger.error(f"pumpfun_announcer_loop: {e}")
+        await asyncio.sleep(PUMPFUN_POLL_SECONDS)
 # MasterChef staking events: Deposit/Withdraw/EmergencyWithdraw all carry
 # (address indexed user, uint256 indexed pid) with the amount as the only
 # data word.
@@ -1120,6 +1211,15 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
             """),
             {"s": since},
         ).fetchone()
+        sol_buys = conn.execute(
+            text("""
+                SELECT COUNT(*), COALESCE(SUM(usd), 0), COUNT(DISTINCT user_addr),
+                       SUM(CASE WHEN meta = 'new_holder' THEN 1 ELSE 0 END)
+                FROM activity_events
+                WHERE kind = 'pumpfun_buy' AND created_at >= :s
+            """),
+            {"s": since},
+        ).fetchone()
 
     total = (
         swap_count
@@ -1128,6 +1228,7 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
         + sum(row[1] for row in lending)
         + sum(c for c, _v in staking.values())
         + (conversions[0] if conversions else 0)
+        + (sol_buys[0] if sol_buys else 0)
     )
     if total == 0:
         return None
@@ -1188,6 +1289,13 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
         if c_usd:
             conv_line += f" · {_fmt_usd(c_usd)}"
         lines.append(conv_line)
+
+    if sol_buys and sol_buys[0]:
+        b_cnt, b_usd, b_buyers, b_new = sol_buys
+        buy_line = f"🛒 {PUMPFUN_TOKEN_SYMBOL} buys: {b_cnt} · {_fmt_usd(b_usd)} · {b_buyers} buyers"
+        if b_new:
+            buy_line += f" · {b_new} new"
+        lines.append(buy_line)
 
     price_line = _market_price_line()
     if price_line:

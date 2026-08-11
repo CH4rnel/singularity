@@ -250,6 +250,41 @@ PROJECT_WEBSITE_URL = os.environ.get("PROJECT_WEBSITE_URL", "https://cyberia.chu
 TELEGRAM_CHANNEL_URL = os.environ.get("TELEGRAM_CHANNEL_URL", "https://t.me/cyberia_network")
 TELEGRAM_CHAT_URL = os.environ.get("TELEGRAM_CHAT_URL", "https://t.me/cyberia_network_chat")
 
+# --- pump.fun buy bot ---------------------------------------------------------
+# Every CYBER.sol buy worth at least PUMPFUN_MIN_BUY_USD gets its own post. The
+# coin has graduated off the bonding curve, so buys settle on the PumpSwap AMM
+# pool its pump.fun page trades against; bot/pumpfun.py reads them off that
+# pool's balance deltas. Blank PUMPFUN_ANNOUNCE_CHAT disables the loop.
+PUMPFUN_ANNOUNCE_CHAT = os.environ.get("PUMPFUN_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+PUMPFUN_MIN_BUY_USD = float(os.environ.get("PUMPFUN_MIN_BUY_USD", "5"))
+PUMPFUN_POLL_SECONDS = int(os.environ.get("PUMPFUN_POLL_SECONDS", "30"))
+# Pool override. Left blank, the pool is whichever SOL-quoted pair for
+# CYBER_SOL_MINT is deepest in the market feed, so a migration to another pool
+# is picked up without a redeploy.
+PUMPFUN_POOL_ADDRESS = (os.environ.get("PUMPFUN_POOL_ADDRESS", "") or "").strip()
+# Signatures per page and how many pages one tick may walk back. The product is
+# the burst a single tick can catch up on; anything older is left behind rather
+# than replayed into the chat minutes late.
+PUMPFUN_SIG_LIMIT = int(os.environ.get("PUMPFUN_SIG_LIMIT", "25"))
+PUMPFUN_MAX_PAGES = int(os.environ.get("PUMPFUN_MAX_PAGES", "4"))
+PUMPFUN_RPC_TIMEOUT = float(os.environ.get("PUMPFUN_RPC_TIMEOUT", "20"))
+# How long one market quote (SOL/USD + market cap) is reused across ticks.
+PUMPFUN_MARKET_TTL_SECONDS = float(os.environ.get("PUMPFUN_MARKET_TTL_SECONDS", "60"))
+DEXSCREENER_API_URL = os.environ.get(
+    "DEXSCREENER_API_URL", "https://api.dexscreener.com"
+).rstrip("/")
+
+# Post cosmetics: the headline links the coin's name to the community chat, and
+# the emoji row's length is how the post shows size at a glance.
+PUMPFUN_TOKEN_LABEL = os.environ.get("PUMPFUN_TOKEN_LABEL", "cyber.sol")
+PUMPFUN_TOKEN_SYMBOL = os.environ.get("PUMPFUN_TOKEN_SYMBOL", "CYBER.sol")
+PUMPFUN_TOKEN_URL = os.environ.get("PUMPFUN_TOKEN_URL", TELEGRAM_CHAT_URL)
+PUMPFUN_BUY_EMOJI = os.environ.get("PUMPFUN_BUY_EMOJI", "⛓️‍💥🎲")
+PUMPFUN_EMOJI_USD = float(
+    os.environ.get("PUMPFUN_EMOJI_USD", str(PUMPFUN_MIN_BUY_USD or 5))
+)
+PUMPFUN_EMOJI_MAX = int(os.environ.get("PUMPFUN_EMOJI_MAX", "40"))
+
 # Ecosystem links surfaced as inline URL buttons under /start and /help.
 # Defaults derive the marketplace/pixel-battle pages from the project website.
 SWAP_URL = os.environ.get("SWAP_URL", "https://swap.cyberia.church")
