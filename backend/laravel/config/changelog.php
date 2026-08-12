@@ -10,9 +10,27 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.9.2'),
+    'current_version' => env('APP_VERSION', 'v0.10.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.10.0',
+            'date' => '2026-08-12',
+            'title' => 'The wallet, next to the address bar',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'The Cyberia wallet as a browser extension, for Chrome, Brave, Edge and Firefox. It lives next to the address bar and signs for the sites you are already on, so the swap, the launchpad and the DAO stop asking you to bring a wallet from somewhere else.',
+                        'It is a wallet in its own right, not a window onto this site: the keys are made on your machine, encrypted with your password and never leave it. Enter the recovery phrase you already use and the same accounts are simply there.',
+                        'A site sees an account only when you hand it one, one site at a time, and you can take it back whenever you like. Where you have granted nothing, the wallet stays invisible to the page — it cannot even be asked whether it exists.',
+                        'Nothing is signed without being read first. Every request shows what leaves your account, which contract receives it, on which network and the most it can cost; a permission that would have no limit is named as unlimited instead of shown as a very long number.',
+                        'The wallet can send its own traffic through Tor, I2P or a proxy you run, and it says plainly which of the two things your browser allows: in Firefox only the wallet is routed and the rest of your browsing is untouched.',
+                        'Both builds are at cyberia.church/download, next to the desktop and Android apps.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.9.2',
             'date' => '2026-08-09',
