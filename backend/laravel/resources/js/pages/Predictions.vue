@@ -5,6 +5,13 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import ConfigWarning from '@/components/web3/ConfigWarning.vue';
 import PageHero from '@/components/web3/PageHero.vue';
 import { useWallet } from '@/composables/useWallet';
@@ -13,6 +20,12 @@ import {
     cyberiaReadRpcUrl,
     ensureCyberiaNetwork,
 } from '@/lib/evmChains';
+import {
+    PREDICTION_ASSETS,
+    buildPriceQuestion,
+    parsePriceQuestion,
+    questionProse,
+} from '@/lib/predictions';
 
 const env =
     (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
@@ -76,6 +89,35 @@ const amounts = ref<Record<number, string>>({});
 const newQuestion = ref('');
 const newCloseAt = ref('');
 const nowSec = ref(Math.floor(Date.now() / 1000));
+
+// Two kinds of market, and the difference is who settles it. A price question
+// carries its own answer — asset, direction, threshold, feed — so the oracle
+// settles it minutes after close without anyone deciding anything. A free-form
+// one waits on a person, and a person can be away.
+const createMode = ref<'price' | 'custom'>('price');
+const priceSymbol = ref<string>(PREDICTION_ASSETS[0].symbol);
+const priceAbove = ref(true);
+const priceThreshold = ref('');
+
+const closeSec = computed(() =>
+    Math.floor(new Date(newCloseAt.value).getTime() / 1000),
+);
+
+/** The exact string that would go on-chain, or null while it can't be built. */
+const priceQuestion = computed(() =>
+    buildPriceQuestion({
+        symbol: priceSymbol.value,
+        above: priceAbove.value,
+        threshold: priceThreshold.value,
+        closeAt: closeSec.value,
+    }),
+);
+
+const pendingQuestion = computed(() =>
+    createMode.value === 'price'
+        ? priceQuestion.value
+        : newQuestion.value.trim() || null,
+);
 
 const isConfigured = computed(() => !!PREDICTIONS_CONTRACT);
 const userAddress = computed(
@@ -230,6 +272,22 @@ const yesPercent = (m: MarketRow): number => {
     return Number((m.yesPool * 1000n) / total) / 10;
 };
 
+/**
+ * How this market gets settled. It is the most load-bearing fact on the row:
+ * an automatic market is answered minutes after it closes, a free-form one is
+ * answered when a person gets to it — or refunded if nobody does.
+ */
+const resolutionOf = (m: MarketRow): { auto: boolean; label: string } => {
+    const spec = parsePriceQuestion(m.question);
+
+    return spec
+        ? { auto: true, label: `auto · ${spec.source}` }
+        : { auto: false, label: 'settled by a person' };
+};
+
+/** The question without its machine tag — the tag is not for reading. */
+const titleOf = (m: MarketRow): string => questionProse(m.question);
+
 const creatorLabel = (m: MarketRow): string => {
     if (m.creator.toLowerCase() === oracle.value) {
         return 'oracle';
@@ -259,18 +317,19 @@ const createMarket = async (): Promise<void> => {
 
     error.value = null;
 
-    const question = newQuestion.value.trim();
-
-    if (!question) {
-        error.value = 'Enter a question';
+    if (!Number.isFinite(closeSec.value) || closeSec.value <= nowSec.value) {
+        error.value = 'Close time must be in the future';
 
         return;
     }
 
-    const closeSec = Math.floor(new Date(newCloseAt.value).getTime() / 1000);
+    const question = pendingQuestion.value;
 
-    if (!Number.isFinite(closeSec) || closeSec <= nowSec.value) {
-        error.value = 'Close time must be in the future';
+    if (!question) {
+        error.value =
+            createMode.value === 'price'
+                ? 'Enter a threshold above zero'
+                : 'Enter a question';
 
         return;
     }
@@ -302,11 +361,12 @@ const createMarket = async (): Promise<void> => {
             liveOwner.toLowerCase()
                 ? 0n
                 : liveFee;
-        const tx = await c.createMarket(question, closeSec, { value });
+        const tx = await c.createMarket(question, closeSec.value, { value });
         status.value = 'Waiting for block…';
         await tx.wait();
-        status.value = `Market created: "${question}".`;
+        status.value = `Market created: "${questionProse(question)}".`;
         newQuestion.value = '';
+        priceThreshold.value = '';
         await loadMarkets();
     } catch (e) {
         error.value = (e as Error).message ?? String(e);
@@ -441,7 +501,7 @@ onUnmounted(() => {
         <div class="mx-auto max-w-3xl px-4 py-6 pb-16">
             <PageHero
                 title="Predictions"
-                description="Parimutuel YES/NO markets on Cyberia. Stake native CYBER on an outcome; when the oracle resolves, winners split the whole pot pro-rata (2% fee off the losing pool). Markets left unresolved for 30 days refund everyone."
+                description="Parimutuel YES/NO markets on Cyberia. Stake native CYBER on an outcome; when the market is settled, winners split the whole pot pro-rata (2% fee off the losing pool). A price question settles itself minutes after it closes; anything else waits on a person, and is cancelled with every stake refunded if nobody answers it in time."
             />
 
             <ConfigWarning v-if="!isConfigured" class="mt-4">
@@ -469,35 +529,142 @@ onUnmounted(() => {
                         Anyone can open a market
                         <template v-if="createFee > 0n"
                             >for {{ fmt(createFee) }} CYBER</template
-                        ><template v-else>for free</template>; the oracle
-                        resolves it after close.
+                        ><template v-else>for free</template>.
                     </p>
-                    <div class="mt-3 flex flex-wrap items-center gap-2">
-                        <Input
-                            v-model="newQuestion"
-                            placeholder="Will X happen by Y?"
-                            maxlength="200"
-                            class="min-w-52 flex-1"
-                            :disabled="creating"
-                        />
-                        <Input
-                            v-model="newCloseAt"
-                            type="datetime-local"
-                            class="w-52"
-                            :disabled="creating"
-                        />
+
+                    <div class="mt-3 flex gap-2">
                         <Button
                             size="sm"
-                            :disabled="creating || busyMarket !== null"
-                            @click="createMarket"
+                            :variant="
+                                createMode === 'price' ? 'default' : 'outline'
+                            "
+                            :disabled="creating"
+                            @click="createMode = 'price'"
                         >
-                            {{
-                                createFee > 0n
-                                    ? `Create — ${fmt(createFee)} CYBER`
-                                    : 'Create'
-                            }}
+                            Price
+                        </Button>
+                        <Button
+                            size="sm"
+                            :variant="
+                                createMode === 'custom' ? 'default' : 'outline'
+                            "
+                            :disabled="creating"
+                            @click="createMode = 'custom'"
+                        >
+                            Anything else
                         </Button>
                     </div>
+
+                    <template v-if="createMode === 'price'">
+                        <div class="mt-3 flex flex-wrap items-center gap-2">
+                            <Select
+                                v-model="priceSymbol"
+                                :disabled="creating"
+                            >
+                                <SelectTrigger class="w-32">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="a in PREDICTION_ASSETS"
+                                        :key="a.symbol"
+                                        :value="a.symbol"
+                                    >
+                                        {{ a.symbol }} — {{ a.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                class="w-24"
+                                :disabled="creating"
+                                @click="priceAbove = !priceAbove"
+                            >
+                                {{ priceAbove ? 'above' : 'below' }}
+                            </Button>
+                            <Input
+                                v-model="priceThreshold"
+                                placeholder="80"
+                                inputmode="decimal"
+                                class="w-28"
+                                :disabled="creating"
+                            />
+                            <span class="text-xs text-muted-foreground"
+                                >USD at</span
+                            >
+                            <Input
+                                v-model="newCloseAt"
+                                type="datetime-local"
+                                class="w-52"
+                                :disabled="creating"
+                            />
+                            <Button
+                                size="sm"
+                                :disabled="creating || busyMarket !== null"
+                                @click="createMarket"
+                            >
+                                {{
+                                    createFee > 0n
+                                        ? `Create — ${fmt(createFee)} CYBER`
+                                        : 'Create'
+                                }}
+                            </Button>
+                        </div>
+
+                        <p
+                            v-if="priceQuestion"
+                            class="mt-3 rounded border border-dashed p-2 text-xs text-muted-foreground"
+                        >
+                            Goes on-chain as:
+                            <span class="font-mono">{{ priceQuestion }}</span>
+                        </p>
+
+                        <p class="mt-2 text-xs text-muted-foreground">
+                            Settled automatically from the first price the
+                            oracle reads after close — not the price at the
+                            closing instant, which nothing here was watching.
+                            The comparison is strict: a price landing exactly
+                            on the threshold resolves NO.
+                        </p>
+                    </template>
+
+                    <template v-else>
+                        <div class="mt-3 flex flex-wrap items-center gap-2">
+                            <Input
+                                v-model="newQuestion"
+                                placeholder="Will X happen by Y?"
+                                maxlength="200"
+                                class="min-w-52 flex-1"
+                                :disabled="creating"
+                            />
+                            <Input
+                                v-model="newCloseAt"
+                                type="datetime-local"
+                                class="w-52"
+                                :disabled="creating"
+                            />
+                            <Button
+                                size="sm"
+                                :disabled="creating || busyMarket !== null"
+                                @click="createMarket"
+                            >
+                                {{
+                                    createFee > 0n
+                                        ? `Create — ${fmt(createFee)} CYBER`
+                                        : 'Create'
+                                }}
+                            </Button>
+                        </div>
+
+                        <p class="mt-2 text-xs text-muted-foreground">
+                            A question in your own words can only be settled by
+                            a person, so write one whose answer nobody will
+                            argue about — name the source and the moment. If it
+                            goes unanswered it is cancelled before the refund
+                            window closes and every stake comes back.
+                        </p>
+                    </template>
                 </section>
 
                 <section v-if="activeMarkets.length" class="mt-6">
@@ -515,12 +682,16 @@ onUnmounted(() => {
                                     <span class="text-muted-foreground"
                                         >#{{ m.id }}</span
                                     >
-                                    {{ m.question }}
+                                    {{ titleOf(m) }}
                                 </p>
                                 <Badge :variant="statusOf(m).variant">{{
                                     statusOf(m).label
                                 }}</Badge>
                             </div>
+
+                            <p class="mt-1 text-xs text-muted-foreground">
+                                {{ resolutionOf(m).label }}
+                            </p>
 
                             <div
                                 class="mt-3 h-2 overflow-hidden rounded bg-red-900/60"
@@ -627,7 +798,7 @@ onUnmounted(() => {
                                     <span class="text-muted-foreground"
                                         >#{{ m.id }}</span
                                     >
-                                    {{ m.question }}
+                                    {{ titleOf(m) }}
                                 </p>
                                 <Badge :variant="statusOf(m).variant">{{
                                     statusOf(m).label

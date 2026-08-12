@@ -101,6 +101,15 @@ return [
         'jwks_url' => 'https://oauth.telegram.org/.well-known/jwks.json',
     ],
 
+    // One-way operator alerts (TelegramOpsNotifier). Unrelated to the login
+    // flow above and to the Python bot: nothing here receives updates, it only
+    // lets a scheduled command reach a human. Unset means alerts are silently
+    // skipped, which is a supported deploy, not a broken one.
+    'telegram_ops' => [
+        'bot_token' => env('TELEGRAM_OPS_BOT_TOKEN'),
+        'chat_id' => env('TELEGRAM_OPS_CHAT_ID'),
+    ],
+
     'bridge' => [
         'evm_rpc_url' => env('BRIDGE_EVM_RPC_URL', env('CYBERIA_RPC_URL')),
         'evm_bridge_address' => env('BRIDGE_EVM_CONTRACT_ADDRESS'),

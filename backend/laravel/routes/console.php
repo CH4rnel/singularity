@@ -26,6 +26,11 @@ Schedule::command('farm:fund-satellites')->hourly()->withoutOverlapping();
 // that missed it because the IPFS node was down at that moment, so it is a
 // no-op on a healthy host.
 Schedule::command('launchpad:pin-sites')->hourly()->withoutOverlapping();
+// The prediction oracle. Frequent because a price market is settled from the
+// first reading taken after it closes, and every minute of lag is a minute the
+// answer can drift from the question; cheap because a run with nothing to
+// settle is one eth_call and a cached quote, and signs nothing.
+Schedule::command('predictions:resolve')->everyFiveMinutes()->withoutOverlapping();
 // The wallet chat relay is a queue, not an archive: drop delivered and
 // undelivered envelopes alike once they are past the retention window, so the
 // server stops holding a record of who talked to whom.
