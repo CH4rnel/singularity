@@ -31,7 +31,7 @@ type Props = {
 
 const props = defineProps<Props>();
 
-const { locale, toggleLocale, t } = useLocale(crmMessages);
+const { nextTag, toggleLocale, t } = useLocale(crmMessages);
 
 const detailsForm = useForm({
     name: props.contact.name ?? '',
@@ -163,7 +163,7 @@ defineOptions({
             <div class="flex items-center gap-2">
                 <Button variant="ghost" size="sm" @click="toggleLocale">
                     <Languages class="h-4 w-4" />
-                    {{ locale === 'ru' ? 'EN' : 'RU' }}
+                    {{ nextTag }}
                 </Button>
                 <Button variant="ghost" size="sm" @click="deleteContact">
                     <Trash2 class="h-4 w-4" /> {{ t('delete') }}

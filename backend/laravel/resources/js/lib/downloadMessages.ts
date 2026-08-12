@@ -3,9 +3,9 @@ import type { Messages } from '@/composables/useLocale';
 /**
  * Strings for /download.
  *
- * Bilingual for the same reason the wallet is: most of the people who are sent
- * an APK link read Russian first, and an install warning they cannot read is an
- * install they abandon.
+ * Translated for the same reason the wallet is: an install warning somebody
+ * cannot read is an install they abandon — and this page is mostly warnings,
+ * because none of these builds are signed.
  */
 export const downloadMessages: Messages = {
     en: {
@@ -111,5 +111,57 @@ export const downloadMessages: Messages = {
         checksums: 'Контрольные суммы SHA-256',
         allReleases: 'Все релизы',
         sourceCode: 'Исходный код',
+    },
+    zh: {
+        eyebrow: '应用',
+        title: '下载',
+        intro: 'Cyberia 钱包的原生应用版本。它包着的是线上的网站，所以网站更新它就更新 — 只有外壳本身变了，你才需要重装。',
+        version: '版本 {version}',
+        published: '发布于 {date}',
+        unpublished: '还没有发布过任何版本。',
+        unpublishedHint:
+            '安装包由代码仓库构建和发布。在第一个版本打好标签之前，可以从源码运行。',
+        unverified:
+            '连不上 GitHub，所以版本号和大小未知。下面的链接始终指向最新的发布。',
+        forYou: '适合这台设备',
+        otherPlatforms: '其他平台',
+        download: '下载',
+        notPublished: '尚未发布',
+        buildFromSource: '从源码构建',
+        windows: 'Windows',
+        macos: 'macOS',
+        linux: 'Linux',
+        android: 'Android',
+        ios: 'iPhone 和 iPad',
+        extension: '浏览器扩展',
+        'extension-zip': 'Chrome · Brave · Edge',
+        'extension-firefox': 'Firefox',
+        'windows-installer': '安装程序',
+        'windows-portable': '便携版，免安装',
+        'macos-arm64': 'Apple 芯片',
+        'macos-x64': 'Intel',
+        'linux-appimage': 'AppImage',
+        'linux-deb': 'Debian / Ubuntu',
+        'android-apk': 'APK',
+        windowsNote:
+            '安装程序没有签名，所以 Windows 会弹出“Windows 已保护你的电脑”。点“更多信息”，然后点“仍要运行”。',
+        macosNote:
+            '应用没有签名，所以第一次打开必须右键 →“打开”→“打开”。之后就能正常打开了。',
+        linuxNote:
+            '给 AppImage 加上可执行权限（chmod +x）再运行，或者用你的包管理器安装 .deb。',
+        androidNote:
+            '第一次安装时，Android 会请求允许从浏览器安装应用。应用商店里没有上架 — APK 就从这里下载。',
+        iosNote:
+            '没有 App Store 版本。用 Safari 打开 cyberia.church，点“分享”，再点“添加到主屏幕” — 钱包会全屏运行，离线也一样能用。',
+        extensionNote:
+            'Chrome、Brave、Edge：解压，打开 chrome://extensions，开启开发者模式，点“加载已解压的扩展程序”。Firefox 128+：解压，打开 about:debugging#/runtime/this-firefox，选 manifest.json 点“临时载入附加组件” — 在这个版本被签名之前，Firefox 只保留到你关掉浏览器为止。和应用不同，这个扩展是一个自己的钱包：它在网页里为 dapp 签名，导入同一组助记词就会得到同样的账户。',
+        openInBrowser: '在浏览器里打开钱包',
+        webAlternative:
+            '这些你一样都不需要也能用钱包 — 它就在浏览器标签页里跑，用的是同样的密钥。',
+        keysNote:
+            '这些应用都是包着 cyberia.church 的同一层外壳；浏览器扩展是唯一有自己保险库的一个。无论哪种，密钥都在你的设备上生成、用你的密码加密，装什么都不会把它们发到任何地方。',
+        checksums: 'SHA-256 校验和',
+        allReleases: '全部发布',
+        sourceCode: '源代码',
     },
 };

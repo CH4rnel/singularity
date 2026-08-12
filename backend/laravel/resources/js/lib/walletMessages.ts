@@ -3,9 +3,9 @@ import type { Messages } from '@/composables/useLocale';
 /**
  * Strings for the unified multichain wallet.
  *
- * Money moves here, so both languages have to say the same thing about custody
+ * Money moves here, so every language has to say the same thing about custody
  * and about what is irreversible — a mistranslated warning is a lost wallet.
- * Neither language softens a consequence the other states plainly.
+ * No language softens a consequence the others state plainly.
  */
 export const walletMessages: Messages = {
     en: {
@@ -1629,5 +1629,792 @@ export const walletMessages: Messages = {
         torrentError: 'остановлен',
         torrentLawNote:
             'За то, что вы качаете и раздаёте, отвечаете вы. Клиент не отличает образ Linux от чего угодно другого.',
+    },
+    zh: {
+        // Chrome
+        wallet: '钱包',
+        eyebrow: '一组助记词，所有链',
+        intro: '一组助记词派生出你在 Cyberia 和所有 EVM 网络、Solana、Monero 以及比特币系上的账户。助记词在你的浏览器里生成，用你的密码加密，只保存在这台设备上 — 它从不会到达 Cyberia 的服务器。',
+        subtitle: '非托管 · EVM · SOL · XMR · BTC · LTC · +自定义',
+        back: '返回',
+        cancel: '取消',
+        continueLabel: '继续',
+        retry: '重试',
+        refresh: '刷新',
+        navPortfolio: '资产',
+        navActivity: '动态',
+        navAnalytics: '分析',
+        navSecurity: '安全',
+        navLain: 'Lain',
+        tabWallet: '钱包',
+        // Shorter than "Messages", because six labels share the width five had.
+        tabChat: '消息',
+        tabLaunch: '发射台',
+        tileTokensHint: 'ERC-20 · 所有网络',
+        tileAnalyticsHint: '配置 · 流向',
+        tileSecurityHint: '锁定 · 密钥',
+
+        // Welcome
+        welcomeHeadline: '一把密钥。\n所有网络。\n由你保管。',
+        welcomeBody:
+            '一组助记词派生出你在 Cyberia 和所有 EVM 网络、Solana、Monero 以及比特币系上的账户。密钥在这台设备上生成，绝不离开它。',
+        createWallet: '创建钱包',
+        importWallet: '导入钱包',
+        welcomeFinePrint: '无需账号 · 无需邮箱 · 无找回服务',
+
+        // Telegram Mini App
+        tgCustody:
+            '密钥留在这台设备的存储里。Telegram 永远拿不到你的助记词和密码。',
+        tgStorageWarning:
+            '这个钱包存放在 Telegram 自己的存储里。清理 Telegram 缓存就会把它清掉，而能把它找回来的只有你的助记词 — 所以务必保存好那组词。',
+
+        // Risk notice
+        riskTitle: '创建之前',
+        riskBody: '这是一个非托管钱包。请读完下面几条 — 这不是走过场。',
+        risk1: '我们永远看不到你的密钥。没有密码重置，也没有客服帮你找回。',
+        risk2: '助记词是唯一的备份。丢了它，资金就没了。',
+        risk3: '任何人只要读到这组词，就同时控制了这个钱包在所有网络上的全部余额。',
+        riskAck: '我明白，保管助记词完全是我自己的责任。',
+        generateSeed: '生成助记词',
+
+        // Seed reveal
+        stepOf: '第 {step} 步 / 共 {total} 步',
+        seedTitle: '你的助记词',
+        seedBody:
+            '把这 {count} 个词按顺序抄在纸上。你不按住屏幕，它就一直遮着。',
+        seedHidden: '已隐藏',
+        seedHiddenHint: '按住以显示',
+        holdToReveal: '按住显示',
+        hidePhrase: '隐藏助记词',
+        copyPhrase: '复制助记词',
+        copiedLabel: '已复制',
+        clipboardClears: '剪贴板将在 30 秒后清空',
+        seedWarn:
+            '绝不要把助记词留在备忘录、相册或聊天里。截图就是一份别人能找到的副本。',
+        wroteItDown: '我已经抄下来了',
+        words12: '12 个词',
+        words24: '24 个词',
+
+        // Backup confirmation
+        confirmBackupTitle: '确认你的备份',
+        confirmBackupBody: '按顺序选出第 {positions} 个词。这里不会显示完整助记词。',
+        slotEmpty: '点下面的词',
+        confirmWrong: '顺序不对。点一下格子可以清空，然后再试一次。',
+        confirmBackup: '确认备份',
+
+        // Import
+        importTitle: '导入钱包',
+        importBody:
+            '输入你的 12 或 24 个词。校验在这台设备上完成 — 什么都不会被发送出去。',
+        importPlaceholder: '第 01 个词   第 02 个词   第 03 个词 …',
+        importEmpty: '请输入 12 或 24 个词',
+        importCount: '{count} 个词',
+        importValid: '校验和有效',
+        importInvalid: '校验和不通过 — 请检查这些词和它们的顺序',
+        paste: '粘贴',
+        willDerive: '将派生出',
+
+        // Vault password
+        localVault: '本地保险库',
+        passwordTitle: '设置保险库密码',
+        passwordBody:
+            '这个密码用来加密存在本设备上的密钥。它不是找回钱包的办法。',
+        password: '密码',
+        passwordAgain: '再输一次',
+        passwordMismatch: '两次输入的密码不一致。',
+        minChars: '至少 8 个字符',
+        strengthUnset: '未设置',
+        strengthWeak: '太弱',
+        strengthOk: '可以接受',
+        strengthStrong: '强',
+        encryption: '加密',
+        encryptionValue: 'AES-256-GCM',
+        keyDerivation: '密钥派生',
+        keyDerivationValue: 'PBKDF2-SHA-256 · 310 000 轮',
+        storage: '存储',
+        storageValue: '仅这台设备',
+        createVault: '创建保险库',
+        openVault: '打开保险库',
+
+        // Portfolio
+        vaultTag: '保险库',
+        autoLock: '自动锁定',
+        totalPortfolio: '资产总值',
+        priceSource: '价格：DexScreener · CoinGecko',
+        pricePartial: '不完整',
+        priceMissing: '{total} 个网络中有 {count} 个没有价格',
+        networks: '网络',
+        derivedCount: '已派生 {count} 个',
+        emptyTitle: '还没有余额',
+        emptyBody: '这是一个新的保险库。往你的任一地址收一笔资产就可以开始了。',
+        showAddress: '显示地址',
+        recent: '最近',
+        rpcErrorTitle: '{chain} 节点连不上',
+        rpcErrorBody: '这个网络的余额可能缺失或是旧的。',
+        rpcErrorDismiss: '隐藏这条提示',
+        offlineTitle: '没有连接',
+        offlineBody: '显示的是这台设备上一次读到的状态。',
+        proxyOfferTitle: '这个网络是不是屏蔽了 Cyberia？',
+        proxyOfferBody: '桌面版可以走你自己的代理连过去。',
+        proxySettings: '代理设置',
+        unpriced: '无价格',
+        groupEvm: 'EVM 链',
+        groupOther: '其他协议',
+        groupUtxo: '比特币系',
+        addedByYou: '你添加的',
+        endpointUnverified: '节点未经验证',
+
+        // Add network
+        addNetwork: '添加网络',
+        addNetworkHint: 'EVM 链或比特币分叉 · 同一组助记词',
+        addNetworkBody:
+            '新账户由同一组助记词派生。不会生成、发送或再次向你索要任何密钥材料。',
+        addKindEvm: 'EVM 链',
+        addKindEvmHint: '链 ID + RPC',
+        addKindUtxo: '比特币分叉',
+        addKindUtxoHint: '币种编号 + 节点',
+        quickFill: '快速填入',
+        knownForks: '已知分叉',
+        networkNameLabel: '网络名称',
+        coinNameLabel: '币种名称',
+        chainIdLabel: '链 ID',
+        symbolLabel: '符号',
+        tickerLabel: '代号',
+        rpcLabel: 'RPC 节点 · 仅限 HTTPS',
+        explorerLabel: '区块浏览器 · 可选',
+        slip44Label: 'SLIP-44',
+        apiLabel: 'Esplora API · 仅限 HTTPS',
+        apiHint:
+            '浏览器不会说 Electrum 协议，所以这里必须填一个兼容 Esplora 的 HTTPS API — 也就是 mempool.space 及其分叉提供的那种。',
+        addressTypeLabel: '地址类型',
+        addrBech32: '原生隔离见证',
+        addrBech32Note: 'bc1… 手续费最低',
+        addrP2sh: '隔离见证 / P2SH',
+        addrP2shNote: '3… 兼容性广',
+        addrLegacy: '传统地址',
+        addrLegacyNote: '1… 最老的节点',
+        prefixHrpLabel: 'bech32 前缀',
+        prefixVersionLabel: '地址版本字节',
+        prefixHint:
+            '它决定地址长什么样。前缀填错，会生成一个看起来没问题、却属于另一条链的地址。',
+        derivationPath: '派生路径',
+        derivationPathBody:
+            '从你已经解锁的保险库在本地派生。不会显示、也不会再问你要助记词。',
+        addNetworkWarn:
+            '有恶意的节点可以给你看错误的余额和错误的手续费。只添加你自己掌握或信任的节点 — Cyberia 没法替你验证它们。',
+        addEvmAction: '添加 EVM 网络',
+        addForkAction: '派生分叉账户',
+        errName: '给这个网络起个至少两个字符的名字。',
+        errSymbol: '代号是 2 到 8 位字母或数字。',
+        errChainId: '链 ID 是一个正整数。',
+        errRpc: 'RPC 节点必须是 https:// 开头的地址。',
+        errCoinType: 'SLIP-44 币种编号是一个整数。',
+        errApi: '节点地址必须是 https:// 的 Esplora API。',
+        errExplorer: '区块浏览器必须是 https:// 开头的地址。',
+        errPrefix:
+            '这种地址类型需要前缀：像 “bc” 这样的 bech32 前缀，或者 0 到 255 之间的版本字节。',
+        errDuplicate: '这个保险库里已经有一个同样标识的网络了。',
+
+        // Tokens
+        tokens: '代币',
+        tokenCount: '{count} 个代币',
+        tokensEmpty: '这个地址上还没有代币。',
+        tokensNoIndexer:
+            '这个网络没有浏览器不带 API 密钥就能读的公开索引，所以代币没法自动列出来。在下面添加合约地址，它会直接从链上读。',
+        tokensUnavailable:
+            '代币列不出来：{reason}。你手动添加的仍然显示在这里。',
+        addToken: '添加代币',
+        tokenContract: '代币合约地址',
+        hideToken: '隐藏',
+        kToken: '代币',
+        tokenByHand: '手动添加',
+        tokensScreenBody:
+            '这个保险库持有的所有代币，按网络分开。它们和所在网络共用同一个地址、同一份 gas — 代币不是一条自己的链。',
+        tokenValue: '代币价值',
+        tokensTracked: '{count} 个代币 · {networks} 个网络',
+        tokensUnpricedCount: '其中 {count} 个没有价格，未计入总额',
+        tokensNoNetworks:
+            '这个保险库里没有能持有代币的网络。添加一条 EVM 链，它的代币就会出现在这里。',
+        tokenPrice: '价格',
+        tokenQuoteSource:
+            '价格取自 Cyberia 的资金池，走的是 DEX 读的同一份索引。池子价格是一笔交易能换到的价，不是市场行情。',
+        tokenNoQuote:
+            '这里没有任何来源为这个合约报价，所以它没有价格 — 这和一文不值不是一回事。下面的余额是准确的。',
+        tokenYourBalance: '你的余额',
+        tokenValueLabel: '价值',
+        tokenDecimals: '小数位',
+        tokenListedBy: '列出方',
+        tokenListedByIndex: '这条链自己的索引',
+        tokenListedByYou: '你，按合约地址',
+        tokenContractLabel: '合约',
+        tokenManualWarn:
+            '任何人都能用任何名字发一个代币。符号对得上什么也证明不了 — 在你往它转账或交易之前，拿项目自己的官网核对这个合约地址。',
+        tokenGone:
+            '这个代币已经不在列表里了。可能是你隐藏了它，也可能是余额归零后索引把它去掉了。',
+        insufficientGasTitle: '{gas} 不够付手续费',
+        insufficientGasBody:
+            '转移代币是用 {gas} 付费的，不是 {symbol}。你还差 {amount} {gas}。',
+        signSentenceToken:
+            '从你的 {chain} 账户向 {network} 上的 {to} 转账 {amount} {symbol}，网络手续费最多 {fee} {gas}。',
+
+        // Analytics
+        analyticsBody:
+            '这些数字在这个浏览器里算出来，用的是它已经读到的余额和这个页面已经拿到的价格。你持有什么，不会被发到任何地方去分析。',
+        netWorth: '净值',
+        analyticsPartial: '有 {count} 项持仓没有价格，或者根本读不到，未计入这个总额',
+        shareNetworks: '网络原生币',
+        shareTokens: '代币',
+        allocation: '配置',
+        analyticsEmpty:
+            '还没有可以拆解的有价资产。收一笔资产，或者添加一个这个页面能报价的网络。',
+        flowWeek: '转账 · 最近 7 天',
+        flowNote:
+            '统计自 {total} 个网络中那 {indexed} 个有浏览器不带 API 密钥就能读的索引的网络，并且只算来源标了日期的转账。',
+        statNetworks: '已派生网络',
+        statTokens: '已跟踪代币',
+        statLargest: '最大持仓',
+        statUnpriced: '未计入总额',
+        statTransfers: '转账 · 7 天',
+        statSources: '历史数据源',
+
+        // Network detail
+        balance: '余额',
+        yourAddress: '你的地址',
+        history: '历史',
+        historyEmpty: '这个地址上还没有转账记录。',
+        historyUnavailable: '历史读不出来：{reason}。区块浏览器上还是有的。',
+        historyUnsupported:
+            'Monero 的历史需要拿查看密钥去扫描 Monero 节点，这件事浏览器做不到。把同一组助记词恢复到 Monero 钱包里就能看到。',
+        historyNoIndexer:
+            '这个网络没有浏览器不带 API 密钥就能读的公开索引。完整历史在区块浏览器上。',
+        historyNoEndpoint:
+            '添加这个网络时没有填节点地址，所以没有地方可以读历史。在“安全”里补一个就能看到。',
+        sentTo: '发送至',
+        receivedFrom: '收自',
+        statusConfirmed: '已确认',
+        statusPending: '待确认',
+        statusFailed: '失败',
+        loading: '读取中…',
+
+        // Receive
+        receive: '接收',
+        addressLabel: '地址',
+        copyAddress: '复制地址',
+        copiedClears: '已复制 · 30 秒后清空',
+        expandAddress: '显示完整地址',
+        qrLabel: '{chain} 地址的二维码',
+        qrCaption: '{chain} 地址 · 二维码',
+        warnEvm:
+            '在每一个 EVM 网络上，这都是你的同一个地址。只往这里发 {chain} 的资产（链 {chainId}）— 从别的 EVM 网络发过来的东西不会丢，它只是在那个网络上，你得切换过去才能看到和花掉它。',
+        warnSolana: '仅限 Solana 网络。从其他链发到这里的资产无法找回。',
+        warnMonero:
+            'Monero 地址和任何其他网络都不通用。这个钱包能收 XMR，但不能花 — 把同一组助记词恢复到 Monero 钱包里才能转出。',
+        warnUtxo:
+            '仅限 {chain}。比特币的各个分叉彼此共用地址格式，所以一个看起来没问题的地址仍可能属于另一条链 — 转账前先确认对方要你付的是哪条链。',
+        warnCustom:
+            '这个网络是你自己添加的。Cyberia 没有验证过它的节点，也没法告诉你它报的余额、手续费或确认状态是不是真的。',
+
+        // Send
+        send: '发送',
+        recipient: '收款方',
+        addressValid: '有效的 {kind} 地址',
+        addressInvalid: '不是有效的 {kind} 地址',
+        amount: '数量',
+        max: '全部',
+        balanceShort: '余额',
+        insufficientTitle: '余额不足',
+        insufficientBody: '连同网络手续费，你还差 {amount} {symbol}。',
+        networkFee: '网络手续费',
+        feeSlow: '慢',
+        feeNormal: '普通',
+        feeFast: '快',
+        feeLoading: '正在读取网络…',
+        feeUnavailable: '网络手续费读不出来，所以现在还不能签名。',
+        youWillSign: '你将要签名的是',
+        signSentence:
+            '从你的 {chain} 账户向 {network} 上的 {to} 转账 {amount} {symbol}，网络手续费最多 {fee} {symbol}。',
+        reviewTransaction: '核对交易',
+        sendUnsupported:
+            '这个钱包没法在浏览器里花掉 {chain}。把同一组助记词恢复到 {chain} 钱包里才能转出。',
+
+        // Review and signing
+        confirmTransaction: '确认交易',
+        reviewBody: '每一行都核对一遍。签出去的交易撤不回来。',
+        kNetwork: '网络',
+        kTo: '收款方',
+        kAmount: '数量',
+        kFee: '网络手续费',
+        kTotal: '合计扣款',
+        plainLanguage: '大白话',
+        nothingElse: '这个签名不会授权任何别的事情。',
+        holdToSign: '按住签名',
+
+        // Transaction status
+        txSigningLabel: '本地签名',
+        txSigningTitle: '正在这台设备上签名',
+        txSigningBody:
+            '你的私钥从不离开保险库。交易正在签名并广播。',
+        txPendingLabel: '待确认',
+        txPendingTitle: '已广播到网络',
+        txPendingBody: '等待确认。你可以离开这个页面 — 转账会继续。',
+        txConfirmedLabel: '已接受',
+        txConfirmedTitle: '交易已广播',
+        txConfirmedBody: '网络接受了这笔交易。随着确认，余额会更新。',
+        txFailedLabel: '失败',
+        txFailedTitle: '交易没有发出',
+        txFailedBody: '什么都没有转出。',
+        kVault: '保险库',
+        vaultUnlockedLocal: '已解锁 · 本地',
+        kTxHash: '交易',
+        kReason: '原因',
+        adjustRetry: '修改后重试',
+        backToPortfolio: '回到资产',
+        viewInExplorer: '在区块浏览器中查看',
+
+        // Security
+        security: '安全',
+        vaultSection: '保险库',
+        backupSeed: '备份助记词',
+        backupSeedHint: '需要你的密码 · 永远不会显示在资产页上',
+        showPhrase: '显示助记词',
+        autoLockHint: '闲置一段时间后锁定',
+        clipboardRow: '复制后清空剪贴板',
+        clipboardHint: '30 秒，前提是这个标签页保持在前台',
+        networksSection: '网络',
+        builtinNetworks: '内置网络',
+        verified: '已验证',
+        removeNetwork: '移除',
+        removeNetworkHint:
+            '移除一个网络只是忘掉它的节点地址。派生出的账户仍然可以用你的助记词恢复。',
+        addNetworkRow: '添加 EVM 链或比特币分叉',
+        addNetworkRowHint: '由同一组助记词派生 · 无需重新输入',
+        lockNow: '立即锁定钱包',
+        lock: '锁定',
+        dangerZone: '危险区',
+        deleteVault: '删除本地保险库',
+        deleteVaultBody:
+            '把加密的密钥从这台设备上删掉。没有助记词，资金就找不回来了。',
+        deleteVaultAction: '删除保险库',
+        irreversible: '不可撤销',
+        deleteTitle: '删除这个保险库？',
+        deleteBody:
+            '加密的密钥将从这个浏览器里被抹掉。只有你的助记词能恢复访问。',
+        typeToConfirm: '输入 {word} 以确认',
+        deleteWord: 'DELETE',
+        deleteConfirm: '删除',
+
+        // Locked
+        vaultLocked: '保险库已锁定',
+        enterPassword: '输入你的密码',
+        unlock: '解锁',
+        wrongPassword: '钱包密码不对。',
+        forgotPassword: '忘记密码 → 用助记词恢复',
+
+        // Monero payouts
+        useForPayouts: '用作跨链桥收款地址',
+        useForPayoutsDone: '已保存为你的收款地址',
+        useForPayoutsHint:
+            '把这个地址存到你的个人资料里，XMR 跨链桥的出款就会打到这个钱包。',
+        signInForPayouts: '登录后才能用作收款地址',
+        noBalanceHere: '浏览器里读不到',
+        receiveOnly: '仅可接收',
+        path: '派生路径',
+        openSite: 'Cyberia',
+
+        // Lain — the $LAIN holders' room
+        lainTitle: 'Lain',
+        lainIntro:
+            'Cyberia 的常驻智能，向持有 $LAIN 实时流通量 {required}% 及以上的钱包开放。你的占比就在这个浏览器里从合约读出来 — 在你决定进入这个房间之前，什么都不会被发送出去。',
+        lainHolding: '你持有',
+        lainShare: '占流通量',
+        lainRequired: '门槛',
+        lainReading: '正在读取合约…',
+        lainOff: 'Lain 在这台服务器上还没接通。',
+        lainReadFailed:
+            '读不到 Cyberia 上的 $LAIN 合约。这说明不了你的余额如何 — 只说明网络没有回应。',
+        lainShort:
+            '这个房间向持有 $LAIN 实时流通量 {required}% 的钱包开放。这个账户持有 {share} — {amount} {symbol}。',
+        lainShortHint:
+            '每次打开这个页面都会重新计算占比，所以它既跟着你持有的数量走，也跟着增发或销毁走。',
+        lainQualifies: '这个账户符合条件',
+        lainSignBody:
+            '用这个钱包的 Cyberia 密钥签一个挑战即可进入。它不转移资金、不批准交易、不授予任何额度 — 它只证明这个浏览器握有这个地址背后的密钥。',
+        lainSign: '按住签名',
+        lainSigning: '签名中…',
+        lainNoTools:
+            'Lain 在这个房间里没有任何工具：她读不到你的余额，签不了任何东西，也动不了资金。永远不要把助记词发给她 — 或者任何人。',
+        lainEmpty: '说点什么。她在听。',
+        lainName: 'Lain',
+        lainYou: '你',
+        lainThinking: 'Lain 在想…',
+        lainPlaceholder: '给 Lain 写点什么…（回车发送，Shift+回车换行）',
+        lainSend: '发送',
+        lainStored: '这段对话留在这台设备上。',
+        lainForget: '忘掉这段对话',
+        lainUnreachable: 'Lain 现在连不上。过一会儿再试。',
+
+        // Encrypted chat between wallets
+        chatTitle: '消息',
+        chatIntro:
+            '钱包之间的加密消息，以 EVM 地址为收件人。一切都在这个浏览器里用一把从你账户派生出的密钥封装和拆开 — Cyberia 转发的是它读不懂的内容。',
+        chatNoAccount:
+            '这个账户只能观察。它没有密钥，所以既读不了也写不了消息 — 和它不能花钱是同一个原因。',
+        chatOpenTitle: '开通加密聊天',
+        chatOpenBody:
+            '两个签名，只此一次：一个发布一把别人用来加密给你的消息密钥，另一个证明这个地址，好让中继把你的信件交出来。两个都不转移资金、不批准交易、不授予任何额度。消息密钥由这个账户派生，不是给你的交易签名的那把密钥。',
+        chatOpen: '按住开通',
+        chatOpening: '签名中…',
+        chatYourAddress: '你的地址',
+        chatFingerprintLabel: '密钥指纹',
+        chatMetadataNote:
+            '受保护的是内容。中继仍然看得到哪些地址在说话、什么时候说，并且信封最多保留 30 天才删除。没有前向保密：任何人拿到这个账户的密钥，也能读到它过去的消息。',
+        chatE2ee: '端到端加密',
+        chatSyncing: '检查中…',
+        chatThreads: '{count} 个会话',
+        chatNew: '新会话',
+        chatNewBody:
+            '两边的钱包都得开通过聊天：地址是一个哈希，在它的主人发布密钥之前，没有东西可以加密给他。',
+        chatAddressLabel: '写给哪个地址',
+        chatStart: '打开会话',
+        chatLookingUp: '正在查找密钥…',
+        chatInvalidAddress: '这不是一个 EVM 地址。',
+        chatNoKey: '这个地址还没有开通加密聊天。',
+        chatEmpty:
+            '还没有会话。任何开通过聊天的人都可以用你的 EVM 地址给你写信。',
+        chatThreadEmpty: '这里还什么都没有。写下第一条消息。',
+        chatYou: '你',
+        chatPlaceholder: '写一条消息…（回车发送，Shift+回车换行）',
+        chatSend: '发送',
+        chatSending: '封装中…',
+        chatUnreadable: '这条消息打不开 — 它和信封上写的对不上。',
+        chatKeyChanged:
+            '这个地址正在发布的密钥，和这台设备之前见到的那把不一样。要么是钱包在别处恢复了，要么是有人试图坐在中间 — 继续之前，先和对方核对指纹。',
+        chatStored:
+            '消息以密文形式存在这台设备上，只有钱包解锁时才会被打开。',
+        chatForget: '忘掉所有会话',
+
+        // Accounts
+        accounts: '账户',
+        accountsBody:
+            '从你的助记词派生出的账户都在同一个保险库里。导入的私钥、导入的助记词和观察地址会被标出来 — 你的备份不覆盖它们。',
+        accountsFootnote:
+            '当前账户就是每个页面所讲的那个：资产、代币、历史、手续费，以及你签的一切。',
+        orphanTitle: '这个账户无处安放',
+        orphanBody:
+            '它是在一个已经不在这个钱包里的网络上导入的。把那个网络加回来才能再用它，或者切到别的账户。',
+        accountActive: '当前',
+        accountSwitch: '切换',
+        accountKindSeed: '来自你的助记词',
+        accountKindPhrase: '导入的助记词',
+        accountKindKey: '导入的私钥',
+        accountKindWatch: '仅观察',
+        accountUse: '使用',
+        accountRename: '重命名',
+        accountForget: '忘掉',
+        accountForgetSure: '确定忘掉？',
+        accountForgetSecret: '这台设备上是唯一的一份。',
+        accountForgetConfirm: '忘掉',
+        accountPrimaryName: '主账户',
+        accountSeedName: '账户 {index}',
+        accountPhraseName: '导入的助记词',
+        accountKeyName: '导入的 {chain} 私钥',
+        accountWatchName: '观察中的 {chain} 地址',
+        accountPathKey: '没有派生路径',
+        accountPathWatch: '公开地址',
+        accountNotInBackup: '导入的私钥 · 不在你的助记词备份里',
+        accountOwnPhrase: '它有自己的助记词 · 请单独备份',
+        accountWatchOnly: '仅观察 · 不能签名',
+        accountDeriveNext: '派生下一个',
+        accountSameSeed: '同一组助记词',
+        accountImport: '导入',
+        accountImportHint: '助记词 · 私钥 · 观察',
+
+        // Import an account
+        importAccountTitle: '导入一个账户',
+        importAccountBody:
+            '这里的一切都在这个浏览器里校验，并存进和你助记词同一个加密保险库。什么都不会被发送出去。',
+        importKindPhrase: '助记词',
+        importKindPhraseHint: '12 或 24 个词',
+        importKindKey: '私钥',
+        importKindKeyHint: '单个网络',
+        importKindWatch: '观察地址',
+        importKindWatchHint: '不能签名',
+        importNetwork: '网络',
+        importKeyChainsNote:
+            '这里没有列出 Monero：这个钱包花不了它，所以导入一把花费密钥，换来的只是你的助记词本来就能派生出的地址。',
+        importName: '账户名称 · 可选',
+        importNamePlaceholder: '空投猎人',
+        importSecret: '密钥',
+        importAddress: '地址',
+        importPlaceholderPhrase: '第 01 个词   第 02 个词   第 03 个词 …',
+        importPlaceholderKey: '私钥，按它原本的钱包导出的样子',
+        importPlaceholderAddress: '要观察的公开地址',
+        importAwaitPhrase: '请输入 12 或 24 个词',
+        importAwaitKey: '粘贴一把私钥',
+        importAwaitAddress: '输入一个公开地址',
+        importPhraseProgress: '已输入 {count} 个词',
+        importLooksValid: '看起来有效',
+        importUnrecognised: '认不出这个格式',
+        importWarnPhrase:
+            '第二组助记词是它自己的根。你已有的备份恢复不了它 — 把这一组单独抄下来，否则它下面的账户会随这台设备一起消失。',
+        importWarnKey:
+            '导入的私钥不在你助记词的覆盖范围内。这台设备丢了，只有单独备份的这把私钥能恢复这个账户。',
+        importWarnWatch:
+            '观察地址可以跟踪、可以收款，但在这里永远签不了、也发不出任何东西。',
+        importAction: '导入账户',
+        importWatchAction: '添加观察账户',
+
+        // Launchpad
+        launchpad: '发射台',
+        launchpadBody:
+            'Cyberia 上的公平发射。为发射付的币被销毁成了锁定的流动性，所以没有预留、也没有解锁期 — 一次发射从它存在的那一刻起就是一个池子。',
+        launchpadLoading: '正在从链上读取发射…',
+        launchpadEmpty: '这里还没有发射过任何东西。',
+        launchpadUnreadable:
+            'Cyberia 节点没有回应。不管怎样，这些发射都在链上。',
+        launchLocked: '已锁定',
+        launchPrice: '价格',
+        launchValue: '美元价格',
+        launchLiquidity: '锁定的流动性',
+        launchCap: '市值',
+        launchSupply: '供应量',
+        launchContract: '合约',
+        launchLockedBody:
+            '这个代币背后的流动性在发射时就被销毁了。没有人能把它取出来 — 包括发射它的人。',
+        launchRisk:
+            '锁定流动性不等于背书。任何人都能在这里发任何东西，名字和符号证明不了它是谁做的。',
+        launchBuy: '在钱包里买入',
+        launchTrade: '在 DEX 交易',
+        launchExplorer: '区块浏览器',
+
+        // Feed
+        feed: '动态',
+        feedBody: '来自 Cyberia 各处的帖子，以及 DAO 记录下来的事，最新在前。',
+        feedTabAll: '全部',
+        feedTabPosts: '帖子',
+        feedTabDao: 'DAO',
+        feedTagPost: '帖子',
+        feedTagDao: 'DAO',
+        feedProposalCreated: '发起了一个提案',
+        feedVoteCast: '投了票',
+        feedCommentPosted: '发表了评论',
+        feedSomeone: '某人',
+        feedLoading: '正在加载动态…',
+        feedEmpty: '动态很安静。',
+        feedUnreadable: '连不上 Cyberia，拿不到动态。',
+        feedOpen: '打开',
+        feedOpenSite: '在网站上',
+        feedReadOnly:
+            '只能阅读。这个钱包背后没有账号 — 这里没有任何东西知道你是谁 — 所以发帖和回复要在网站上做。',
+
+        // DAO
+        dao: 'DAO',
+        daoBody: '每一个提案，以及投票真实的样子。进度条画的是投票权重，不是投票人数。',
+        daoProposals: '提案',
+        daoOpenCount: '{count} 个进行中',
+        daoLoading: '正在加载提案…',
+        daoEmpty: '还没有提案。',
+        daoUnreadable: '连不上 Cyberia，拿不到提案。',
+        daoStatusOpen: '进行中',
+        daoStatusClosed: '已结束',
+        daoNoDeadline: '没有截止时间',
+        daoNoVotes: '还没有人投票',
+        daoFor: '{percent}% 赞成',
+        daoAgainst: '{percent}% 反对',
+        daoCast: '{votes} 票 · {comments} 条评论',
+        daoCastShort: '{votes} 票',
+        daoNoSession:
+            '投票按代币快照加权，并记在一个账号名下，而这个钱包没有账号。到网站上打开提案才能投票。',
+        daoOpenToVote: '打开去投票',
+
+        // Profile
+        profileTitle: '个人资料',
+        profileYours: '你的资料',
+        profileAddress: '地址',
+        profileLoading: '正在加载资料…',
+        profileUnreadable: '连不上 Cyberia，拿不到这份资料。',
+        profileNoAddress: '这个账户没有可以查询的 EVM 地址。',
+        profileUnclaimed: 'Cyberia 上还没有账号认领这个地址。',
+        profileUnclaimedYours:
+            'Cyberia 上还没有人认领这个地址。你的钱包不受影响 — 资料只是多了一个公开名字、徽章和网站上的社交那一面。',
+        profileClaim: '到网站上认领',
+        profileOnchainName: '在 49406 链上拥有的名字',
+        profilePosts: '帖子',
+        profileProposals: '提案',
+        profileVotes: '投票',
+        profileAchievements: '成就 · {total} 个中的 {earned} 个',
+        profileOpen: '打开完整资料',
+
+        // Swap and wrap
+        swapTitle: '兑换',
+        swapTab: '兑换',
+        wrapTab: '封装',
+        swapPay: '你支付',
+        swapReceive: '你收到',
+        swapPick: '选择',
+        swapPickAsset: '选一个资产',
+        swapAdd: '添加',
+        swapByAddress: '或者粘贴一个合约地址',
+        swapByAddressNote:
+            '合约会先被读一遍再拿出来用：符号和小数位来自链本身，不是来自任何列表。',
+        swapFlip: '对调两边',
+        swapSlippage: '最大滑点',
+        swapRate: '汇率',
+        swapMinOut: '最少收到',
+        swapImpact: '价格影响',
+        swapRoute: '路径',
+        swapReview: '核对兑换',
+        swapQuoting: '正在读取资金池…',
+        swapApproval:
+            '两笔交易：先给正好这么多 {symbol} 的授权额度，然后才是兑换。两笔都要 gas，两笔都算在上面的手续费里。这个钱包从不授权超过这笔交易所需的额度，所以事后不会留下任何东西。',
+        swapApprovalReset:
+            '三笔交易：这个代币不允许把一个非零的授权额度改成别的值，所以先把剩下的清零，再设成正好这么多 {symbol}，最后才跑兑换。这些都算在上面的手续费里。',
+        swapApprovalTx: '授权交易',
+        swapImpactWarn:
+            '这笔交易会把池子价格推动 {impact}%。对这个数额来说池子太浅了 — 小一点的数额能换到更好的价。',
+        swapNoDex:
+            '{chain} 上没有部署交易所，所以这里没有可以交易的对手方。兑换在跑着交易所的网络上才有。',
+        swapOnNetwork: '在 {chain} 上兑换',
+        swapWatchOnly:
+            '这是一个观察地址：可以报价，但永远签不了。把私钥导入进来，它才能交易。',
+        swapSentence:
+            '在 {network} 上用 {amount} {from} 换至少 {min} {to}，收款到这同一个钱包。gas 最多 {fee} {gas}。如果池子给不到这个最小值，整笔兑换会回滚，什么都不会花出去。',
+        wrapSentence:
+            '在 {network} 上把 {amount} {from} 封装成 {amount} {to}。一比一 — 币存在封装合约里，你随时可以取回。gas 最多 {fee} {gas}。',
+        unwrapSentence:
+            '在 {network} 上把 {amount} {from} 解封回 {amount} {to}。一比一。gas 最多 {fee} {gas}。',
+        wrapBody:
+            '{coin} 是这条链运行所用的币，不是代币 — 资金池、农场和大多数合约收的是 {wrapped}。封装两个方向都是一比一，只花 gas。',
+        wrapUnavailable:
+            '这个网络上的封装合约读不出来，所以这里没有任何东西能被如实地叫出名字。等网络有回应了再试。',
+        swapOutcome_signing: '签名中',
+        swapOutcome_approving: '授权中',
+        swapOutcome_pending: '已广播',
+        swapOutcome_confirmed: '已成交',
+        swapOutcome_failed: '未执行',
+        swapOutcomeBody_signing: '交易正在这台设备上构建并签名。',
+        swapOutcomeBody_approving:
+            '先设置授权额度。它一上链，兑换就会被签出去。',
+        swapOutcomeBody_pending: '交易已经进入网络。等待打包。',
+        swapOutcomeBody_confirmed: '你的 {from} 现在是 {to} 了。',
+        swapOutcomeBody_failed: '账户里什么都没有出去。',
+
+        // NFT, IPFS, torrents
+        tabNft: 'NFT',
+        tileIpfsHint: '固定一个文件 · 一个页面',
+        tileTorrentHint: 'DHT · 桌面版',
+
+        nftTitle: 'NFT',
+        nftBody: '一个人人都能铸造进去的合集。一个代币究竟*是*什么，完全取决于它指向的那个地址 — 通常是 IPFS 里的一个文件，有时只是一个链接。',
+        nftMint: '铸造 NFT',
+        nftLoading: '正在读取这个账户持有的东西…',
+        nftEmpty: '这个账户在这个网络上还没有 NFT。',
+        nftUnreadable: '区块浏览器没有回应，所以列不出这个账户拥有什么。',
+        nftOwned: '持有',
+        nftMintedHere: '在这里铸造',
+        nftGatewayNote:
+            '图片来自一个公开的 IPFS 网关，所以那个网关看得到有哪些代币正在被查看。',
+        nftStandard: '标准',
+        nftAmount: '数量',
+        nftContract: '合约',
+        nftPointsAt: '指向',
+        nftExplorer: '区块浏览器',
+        nftExternal: '链接',
+
+        mintTitle: '铸造 NFT',
+        mintBody:
+            '两步。元数据先固定到 IPFS，然后把它的地址写上链 — 只有第二步花 gas，也只有第二步是永久的。',
+        mintNoAccount: '这个账户在合集所在的网络上没有地址。',
+        mintWatchOnly:
+            '这是一个观察地址。它可以持有代币；但没有密钥去签一次铸造。',
+        mintCompose: '现做',
+        mintDirect: '已有地址',
+        mintDirectBody:
+            '铸造一个指向已经发布好的东西的代币。这串字符会原样上链 — 一个 ipfs:// 地址、一个链接，或者一行文字。',
+        mintName: '名称',
+        mintNamePlaceholder: '这是什么？',
+        mintDescription: '描述',
+        mintImage: '文件',
+        mintImageOptional: '可选 — 一个代币也可以只是文字或链接。',
+        mintLink: '链接',
+        mintContinue: '继续',
+        mintPreparing: '正在固定并估价…',
+        mintPinNote:
+            '文件和元数据在任何签名之前就已经固定好了。你的密钥和账户的信息不会跟着它们走。',
+        mintConfirmTitle: '确认铸造',
+        mintCollection: '网络',
+        mintUri: '代币指向',
+        mintFee: '手续费，最多',
+        mintPermanent:
+            '这之后既不能修改也不能删除。只要这条链还在，这个代币就留在合集里，指着这个地址。',
+        mintHold: '按住铸造',
+        mintSentTitle: '铸造已发出',
+        mintSentBody:
+            '交易已经在路上。等链上有了它、区块浏览器读到元数据，它就会进入你的合集。',
+        mintExplorer: '打开这笔交易',
+        mintAnother: '再铸一个',
+
+        ipfsTitle: 'IPFS',
+        ipfsBody:
+            '发布一个文件或一个页面，拿到一个 CID — 一个由内容本身构成的地址。任何拿到这个 CID 的人，都能从任何有这份字节的节点上取到它。',
+        ipfsOff: '这台服务器现在没有在做固定，所以这里发布不了任何东西。',
+        ipfsFile: '文件',
+        ipfsPage: '页面',
+        ipfsFileBody: '任何文件：图片、音频、压缩包、文档。',
+        ipfsPageBody:
+            'HTML，作为一整个站点固定 — CID 打开就是一个页面，而不是一次下载。',
+        ipfsUpTo: '最大 {size}。',
+        ipfsTooLarge: '超过 {size} 了，这台服务器只固定到这么大。',
+        ipfsPin: '发布',
+        ipfsPinning: '发布中…',
+        ipfsCid: 'CID',
+        ipfsSize: '大小',
+        ipfsCopyUri: '复制 ipfs://',
+        ipfsOpen: '打开',
+        ipfsGatewayNote:
+            'CID 就是地址。这个链接是通过一个公开网关打开它的 — 而能提供同样字节的主机有很多，它只是其中之一。',
+        ipfsPersistenceNote:
+            '我们的节点现在固定着它。这里没有任何东西承诺永远，所以如果它重要，把这个 CID 在你自己那边也固定一份。',
+        ipfsMintThis: '把它铸成 NFT',
+        ipfsAgain: '再发布点别的',
+        ipfsRelayNote:
+            '这些字节要经过本站，因为 IPFS 节点没法交给浏览器 — 它能在节点上执行任何命令。这个钱包里没有别的东西是这样运作的。',
+
+        torrentTitle: '种子',
+        torrentBrowserBody:
+            '真正的 BitTorrent 客户端跑在 Cyberia 桌面版里。这个标签页做不到。',
+        torrentWhyNot:
+            'DHT 走 UDP，连接节点走 TCP，而网页两样都没有。网页能够到的那个群 — 走 WebRTC 的浏览器节点 — 对一个普通磁力链来说几乎没有成员，所以这里的下载器会一个人都找不到，看起来就像你的链接填错了。',
+        torrentGetDesktop: '获取桌面版',
+        torrentMobileNote:
+            '手机应用和 Telegram 里也是一样：两个都是网页视图。',
+        torrentDesktopBody:
+            '主线 DHT、节点交换和 tracker — 和其他客户端看到的是同一个群。文件落在应用的下载文件夹里。',
+        torrentSource: '磁力链、info hash 或 .torrent 链接',
+        torrentSourceHint:
+            'magnet:、40 个字符的 info hash，或者指向 .torrent 的 https 链接',
+        torrentBadSource:
+            '这既不是磁力链，也不是 info hash，更不是 https 的 .torrent 链接。',
+        torrentAdd: '添加种子',
+        torrentAdding: '添加中…',
+        torrentPrivacy:
+            '其他节点看得到你的 IP 地址，而且应用的代理不覆盖这部分流量 — 那个设置管的是网页请求，这里走的是裸套接字。',
+        torrentFolder: '文件夹',
+        torrentOpenFolder: '打开文件夹',
+        torrentEmpty: '没有正在下载的东西。',
+        torrentPause: '暂停',
+        torrentResume: '继续',
+        torrentRemove: '移除',
+        torrentRemoveKeep: '移除，保留文件',
+        torrentRemoveDelete: '移除并删除',
+        torrentPeers: '{count} 个节点',
+        torrentPinFile: '固定到 IPFS',
+        torrentMeta: '正在获取元数据',
+        torrentDownloading: '下载中',
+        torrentSeeding: '做种中',
+        torrentPaused: '已暂停',
+        torrentError: '已停止',
+        torrentLawNote:
+            '你下载和分享什么，由你自己负责。客户端分不清 Linux 镜像和别的任何东西。',
     },
 };

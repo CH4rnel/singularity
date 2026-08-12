@@ -68,7 +68,7 @@ const props = defineProps<{ wallet: MultiWallet }>();
  */
 const emit = defineEmits<{ unread: [] }>();
 
-const { t, locale } = useLocale(walletMessages);
+const { t, tag } = useLocale(walletMessages);
 
 /** How often an open room asks the relay for new envelopes. */
 const POLL_MS = 7_000;
@@ -288,7 +288,7 @@ const when = (value: string): string => {
 
     return Number.isNaN(at.getTime())
         ? '—'
-        : at.toLocaleString(locale.value === 'ru' ? 'ru-RU' : 'en-GB', {
+        : at.toLocaleString(tag.value, {
               day: '2-digit',
               month: '2-digit',
               hour: '2-digit',

@@ -81,7 +81,7 @@ const props = defineProps<{
     };
 }>();
 
-const { locale, toggleLocale, t } = useLocale(walletMessages);
+const { nextTag, toggleLocale, t } = useLocale(walletMessages);
 
 // Only Solana takes an override: the server picks that endpoint, while every
 // other chain carries its own public default in the registry.
@@ -643,7 +643,7 @@ watch(
             }}</span>
             <button type="button" class="cw-ghost" @click="toggleLocale">
                 <Languages :size="14" aria-hidden="true" />
-                {{ locale === 'ru' ? 'EN' : 'RU' }}
+                {{ nextTag }}
             </button>
             <!--
               The app is the wallet, not only the wallet: without this the rest

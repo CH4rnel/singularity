@@ -21,9 +21,9 @@ import type { DownloadBuild, DownloadCatalog } from '@/types';
 
 const props = defineProps<{ catalog: DownloadCatalog }>();
 
-// `locale` stays for date formatting below; switching languages belongs to the
+// `tag` stays for date formatting below; switching languages belongs to the
 // header menu, which every page shares.
-const { locale, t } = useLocale(downloadMessages);
+const { tag, t } = useLocale(downloadMessages);
 
 type PlatformCard = {
     id: string;
@@ -102,10 +102,11 @@ const publishedAt = computed(() => {
         return '';
     }
 
-    return new Date(props.catalog.publishedAt).toLocaleDateString(
-        locale.value === 'ru' ? 'ru-RU' : 'en-GB',
-        { year: 'numeric', month: 'long', day: 'numeric' },
-    );
+    return new Date(props.catalog.publishedAt).toLocaleDateString(tag.value, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
 });
 
 function size(build: DownloadBuild): string {
