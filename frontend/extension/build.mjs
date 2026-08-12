@@ -1,25 +1,27 @@
 /**
- * Builds the unpacked extension into `dist/`, and with `--zip` the single file
- * that /download hands out.
+ * Builds the unpacked extension, and with `--zip` the files /download hands out.
  *
- * Everything the browser loads has to be a plain file next to the manifest, so
- * the five entry points are bundled with esbuild and the static files are
- * copied verbatim. The zip is written here rather than shelled out to `zip`
- * because the release workflow runs on three operating systems and only one of
- * them is guaranteed to have that binary.
+ * Two targets from one source, because two engines disagree about three things
+ * and nothing else: Chromium runs the background as a service worker, Gecko as
+ * an ES-module event page; Chromium's `chrome.*` takes callbacks where Gecko's
+ * `browser.*` returns promises; and Gecko wants an extension id it can sign
+ * against. Everything past that — the vault, the provider, the popup — is the
+ * same bytes in both.
+ *
+ * The differences live here rather than in the source: one `define` maps the
+ * namespace, one patch rewrites the manifest, and the code stays free of
+ * `if (firefox)` branches except where the browsers genuinely offer different
+ * capabilities (see `src/background/relay.js`).
  */
 import { build } from 'esbuild';
 import { deflateRawSync, crc32 } from 'node:zlib';
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TARGETS, manifestFor } from './manifest.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
-const dist = join(root, 'dist');
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-
-/** The extension's own name, so the release asset never carries a version. */
-const ZIP_NAME = 'Cyberia-extension.zip';
 
 const ENTRIES = {
     background: 'src/background/index.js',
@@ -36,43 +38,50 @@ const STATIC = [
     ['icons', 'icons'],
 ];
 
-await rm(dist, { recursive: true, force: true });
-await mkdir(dist, { recursive: true });
+const base = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
 
-await build({
-    entryPoints: Object.fromEntries(
-        Object.entries(ENTRIES).map(([name, file]) => [name, join(root, file)]),
-    ),
-    outdir: dist,
-    bundle: true,
-    format: 'esm',
-    target: 'chrome111',
-    platform: 'browser',
-    minify: true,
-    // A wallet people are asked to trust has to be auditable from the file they
-    // installed: the maps make the bundled source readable in devtools.
-    sourcemap: true,
-    legalComments: 'linked',
-    logLevel: 'info',
-});
+for (const [target, { dir, zip, engine }] of Object.entries(TARGETS)) {
+    const out = join(root, dir);
 
-for (const [from, to] of STATIC) {
-    await cp(join(root, from), join(dist, to), { recursive: true });
-}
+    await rm(out, { recursive: true, force: true });
+    await mkdir(out, { recursive: true });
 
-// The manifest version is the package version, which CI writes from the tag.
-const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
-manifest.version = pkg.version;
-await writeFile(join(dist, 'manifest.json'), `${JSON.stringify(manifest, null, 4)}\n`);
+    await build({
+        entryPoints: Object.fromEntries(
+            Object.entries(ENTRIES).map(([name, file]) => [name, join(root, file)]),
+        ),
+        outdir: out,
+        bundle: true,
+        format: 'esm',
+        target: engine,
+        platform: 'browser',
+        minify: true,
+        // A wallet people are asked to trust has to be auditable from the file
+        // they installed: the maps make the bundled source readable in devtools.
+        sourcemap: true,
+        legalComments: 'linked',
+        logLevel: 'warning',
+        // Gecko's `chrome.*` shim takes callbacks; `browser.*` returns the
+        // promises this code awaits. One substitution buys the whole port.
+        define: target === 'firefox' ? { chrome: 'browser' } : {},
+    });
 
-console.log(`built ${manifest.name} ${manifest.version} into dist/`);
+    for (const [from, to] of STATIC) {
+        await cp(join(root, from), join(out, to), { recursive: true });
+    }
 
-if (process.argv.includes('--zip')) {
-    const zip = join(root, ZIP_NAME);
-    await rm(zip, { force: true });
-    await writeFile(zip, await zipDirectory(dist));
-    const { size } = await stat(zip);
-    console.log(`packed ${ZIP_NAME} · ${(size / 1024).toFixed(0)} KB`);
+    const manifest = manifestFor(base, target, pkg.version);
+    await writeFile(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 4)}\n`);
+
+    console.log(`built ${manifest.name} ${manifest.version} for ${target} into ${dir}/`);
+
+    if (process.argv.includes('--zip')) {
+        const archive = join(root, zip);
+        await rm(archive, { force: true });
+        await writeFile(archive, await zipDirectory(out));
+        const { size } = await stat(archive);
+        console.log(`packed ${zip} · ${(size / 1024).toFixed(0)} KB`);
+    }
 }
 
 /* ------------------------------------------------------------------- zip --- */

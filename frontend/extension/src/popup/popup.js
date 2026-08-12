@@ -65,7 +65,10 @@ const head = () => {
 
 const foot = () => {
     const relay = state.relay ?? { mode: 'direct' };
-    const direct = relay.mode === 'direct' || !relay.routeBrowser;
+    // Gecko routes the wallet's own requests as soon as a relay is picked;
+    // Chromium routes nothing until the browser-wide switch is on.
+    const direct =
+        relay.mode === 'direct' || (state.relayScope !== 'wallet' && !relay.routeBrowser);
     const label = direct
         ? 'DIRECT · NO RELAY'
         : `${RELAY_MODES[relay.mode]?.label ?? 'RELAY'} · ${relay.mode === 'tor' ? '3 HOPS' : '1 HOP'}`;
@@ -219,6 +222,16 @@ const homeView = () => {
                 <button class="cw-tile" data-site="/bridge"><span class="cw-tile-glyph">⇄</span><span class="cw-tile-label">BRIDGE</span></button>
                 <button class="cw-tile" data-site="/staking"><span class="cw-tile-glyph">◇</span><span class="cw-tile-label">EARN</span></button>
             </div>
+
+            ${
+                state.networkGranted
+                    ? ''
+                    : `<div class="cw-note is-warn" style="margin-top:16px">
+                            This browser has not let the wallet reach the chains yet, so every
+                            balance here is unread.
+                            <button class="cw-link" style="display:block;margin-top:9px;color:var(--cw-accent)" data-do="grant-network">ALLOW RPC ACCESS</button>
+                       </div>`
+            }
 
             <div class="cw-label cw-section">TOKENS</div>
             ${rows(tokenRows)}
@@ -395,7 +408,10 @@ const sitesView = () => `
 const relayView = () => {
     const relay = state.relay;
     const mode = RELAY_MODES[relay.mode] ?? RELAY_MODES.direct;
-    const routed = relay.routeBrowser && relay.mode !== 'direct';
+    // On Gecko a chosen relay is already carrying the wallet's own traffic; on
+    // Chromium nothing moves until the browser-wide switch is on.
+    const walletScope = state.relayScope === 'wallet';
+    const routed = relay.mode !== 'direct' && (walletScope || relay.routeBrowser);
 
     return `
         <div class="cw-body">
@@ -404,7 +420,11 @@ const relayView = () => {
             <div class="cw-panel" style="border-color:${routed ? 'rgb(91 214 160 / 30%)' : 'rgb(232 180 74 / 34%)'}">
                 <div style="display:flex;align-items:center;gap:8px">
                     <span class="cw-dot${routed ? ' is-ok' : ' is-warn'}"></span>
-                    <span class="cw-label${routed ? '' : ' is-warn'}">${esc(routed ? `${mode.label} APPLIED` : 'NO RELAY')}</span>
+                    <span class="cw-label${routed ? '' : ' is-warn'}">${esc(
+                        routed
+                            ? `${mode.label} · ${walletScope && !relay.routeBrowser ? 'WALLET TRAFFIC' : 'WHOLE BROWSER'}`
+                            : 'NO RELAY',
+                    )}</span>
                 </div>
                 <div style="font:400 10px/1.5 var(--cw-sans);color:var(--cw-soft);margin-top:9px">
                     ${
@@ -440,8 +460,20 @@ const relayView = () => {
             }
 
             ${rows([
+                ...(walletScope
+                    ? [
+                          `<div class="cw-row is-tight">
+                            <span class="cw-grow" style="font:400 10px/1.35 var(--cw-sans);color:var(--cw-muted)">RPC, token and price requests</span>
+                            <span class="cw-key" style="flex:none;color:var(--cw-accent)">ALWAYS ROUTED</span>
+                        </div>`,
+                      ]
+                    : []),
                 `<div class="cw-row is-tight">
-                    <span class="cw-grow" style="font:400 10px/1.35 var(--cw-sans);color:var(--cw-body)">Route this browser through the relay</span>
+                    <span class="cw-grow" style="font:400 10px/1.35 var(--cw-sans);color:var(--cw-body)">${esc(
+                        walletScope
+                            ? 'Route every other tab through it too'
+                            : 'Route this browser through the relay',
+                    )}</span>
                     <button class="cw-toggle${relay.routeBrowser ? ' is-on' : ''}" data-relay-toggle="routeBrowser"></button>
                 </div>`,
                 `<div class="cw-row is-tight">
@@ -450,10 +482,12 @@ const relayView = () => {
                 </div>`,
             ])}
 
-            <div class="cw-note is-warn">
-                MV3 gives an extension one proxy setting for the whole browser, not a private
-                route for its own requests. Turning this on routes every tab — the wallet cannot
-                honestly offer less, so it says so instead.
+            <div class="cw-note${walletScope ? '' : ' is-warn'}">
+                ${
+                    walletScope
+                        ? 'Firefox lets the wallet answer for each request, so only its own traffic goes through the relay and the rest of the browser is untouched. Localhost always stays direct.'
+                        : 'Chromium gives an extension one proxy setting for the whole browser, not a private route for its own requests. Turning this on routes every tab — the wallet cannot honestly offer less, so it says so instead.'
+                }
             </div>
 
             <button class="cw-btn" style="margin-top:12px" data-do="rotate">NEW CIRCUIT · #${esc(4820 + (relay.circuit ?? 0))}</button>
@@ -863,6 +897,21 @@ app.addEventListener('click', async (event) => {
             await refresh();
             break;
 
+        case 'grant-network': {
+            // Firefox treats MV3 host permissions as opt-in, and `request`
+            // needs the click we are already inside.
+            const granted = await chrome.permissions.request({ origins: state.networkOrigins });
+
+            if (!granted) {
+                setNotice('Without it the wallet cannot read a balance');
+                break;
+            }
+
+            money = null;
+            await refresh();
+            break;
+        }
+
         case 'add-account':
             await ask(POPUP.addAccount, {});
             await refresh();
@@ -907,7 +956,9 @@ const applyRelayChange = async (change) => {
     const relay = { ...state.relay, ...change, host: draft.host || state.relay.host, port: draft.port || state.relay.port };
     const needed = [];
 
-    if (relay.routeBrowser && relay.mode !== 'direct') {
+    // On Gecko a picked relay routes the wallet at once, so the permission is
+    // needed as soon as there is somewhere to route to.
+    if (relay.mode !== 'direct' && (state.relayScope === 'wallet' || relay.routeBrowser)) {
         needed.push('proxy');
     }
 

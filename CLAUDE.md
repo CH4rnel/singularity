@@ -118,13 +118,15 @@ cd frontend/mobile && npm install && npm test && npm run sync
 
 ### Browser Extension — `frontend/extension/`
 
-`frontend/extension/README.md` is authoritative. Unlike the shells this one bundles a wallet: MV3 service worker holding an AES-GCM/PBKDF2 vault in the same format as `lib/wallet/vault.ts`, EVM accounts on `m/44'/60'/0'/0/{index}` (so the site's phrase derives the same accounts), and an EIP-1193 + EIP-6963 provider injected **only** into granted origins — there is no `<all_urls>` content script, and `chrome.scripting.registerContentScripts` is re-synced from the grants. Every signing method stops at a human in a separate approval window; `PASSTHROUGH_METHODS` is the complete list of calls that reach the chain unattended. The relay applies `chrome.proxy` browser-wide (MV3 has no per-extension route) and says so in the UI; `proxy`/`privacy` are optional permissions asked for in a click.
+`frontend/extension/README.md` is authoritative. Unlike the shells this one bundles a wallet: an MV3 background holding an AES-GCM/PBKDF2 vault in the same format as `lib/wallet/vault.ts`, EVM accounts on `m/44'/60'/0'/0/{index}` (so the site's phrase derives the same accounts), and an EIP-1193 + EIP-6963 provider injected **only** into granted origins — there is no `<all_urls>` content script, and `scripting.registerContentScripts` is re-synced from the grants. Every signing method stops at a human in a separate approval window; `PASSTHROUGH_METHODS` is the complete list of calls that reach the chain unattended.
+
+**Two engines, one source** (`manifest.mjs` + an esbuild `define`): Chromium gets a service worker and `chrome.*`, Firefox 128+ an ES-module event page, `browser.*` and a gecko id. The relay follows what each engine can honestly do — per-request on Firefox (`proxy.onRequest`, wallet traffic only), browser-wide on Chromium (`proxy.settings`) — and the popup says which. `proxy`/`privacy` are optional permissions asked for in a click; on Firefox `host_permissions` are opt-in too, so the popup offers a one-click grant.
 
 ```bash
 cd frontend/extension && npm install && npm test && npm run zip
 ```
 
-`npm run zip` produces `Cyberia-extension.zip` — the asset `.github/workflows/apps.yml` attaches to the `app-v*` release and `config/downloads.php` looks for. `/download/extension` is its permanent short link.
+`npm run zip` produces `Cyberia-extension.zip` and `Cyberia-extension-firefox.zip` — the assets `.github/workflows/apps.yml` attaches to the `app-v*` release and `config/downloads.php` looks for. `/download/extension` is the permanent short link; the Firefox build is temporary in the browser until it is signed (`npx web-ext sign --channel=unlisted`, AMO credentials from the environment).
 
 Windows/macOS installers and the Android APK come from `.github/workflows/apps.yml` (tag `app-v*` or manual dispatch); the Android build needs a local SDK otherwise. A tag also publishes the GitHub release that `/download` serves. `frontend/mobile/www/` and `frontend/desktop/dist/` are generated; `frontend/mobile/android/` and `ios/` are committed because they carry the deep-link intent filters and icons.
 

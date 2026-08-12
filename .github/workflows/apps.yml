@@ -235,8 +235,8 @@ jobs:
         run: npm version "${GITHUB_REF_NAME#app-v}" --no-git-tag-version --allow-same-version
 
       # `npm run zip` writes the manifest version from package.json and packs
-      # dist/ deterministically, so the checksum on the release is reproducible
-      # from this tag.
+      # both engines' directories deterministically, so the checksums on the
+      # release are reproducible from this tag.
       - name: Build and pack
         run: npm run zip
 
@@ -244,7 +244,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-extension
-          path: frontend/extension/Cyberia-extension.zip
+          # Two files: the Chromium zip and the Gecko one.
+          path: frontend/extension/Cyberia-extension*.zip
           if-no-files-found: error
 
   # One public release per tag, holding every installer the site links to.
@@ -301,11 +302,18 @@ jobs:
 
           $APK_NOTE
 
-          **Browser** — \`Cyberia-extension.zip\`, a Chrome/Brave/Edge extension
-          (Manifest V3). Unzip it, open \`chrome://extensions\`, turn on Developer
-          mode and press *Load unpacked*. Unlike the apps above this one is not a
-          shell around the site: it holds its own encrypted vault and signs for
-          dapps, so it updates only when you install a new release.
+          **Browser** — \`Cyberia-extension.zip\` for Chrome, Brave and Edge: unzip,
+          open \`chrome://extensions\`, turn on Developer mode, *Load unpacked*.
+          \`Cyberia-extension-firefox.zip\` is the same wallet for Firefox 128+:
+          unzip, open \`about:debugging#/runtime/this-firefox\` and *Load Temporary
+          Add-on* on its \`manifest.json\` — Firefox keeps unsigned add-ons only
+          until you close it. On Firefox the relay routes the wallet's own
+          requests and leaves the rest of the browser alone; Chromium has no
+          per-extension proxy, so there it is all tabs or none.
+
+          Unlike the apps above, the extension is not a shell around the site: it
+          holds its own encrypted vault and signs for dapps, so it updates only
+          when you install a new release.
 
           Verify what you downloaded against \`SHA256SUMS.txt\`.
 

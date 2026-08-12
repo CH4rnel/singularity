@@ -31,6 +31,7 @@ export const downloadMessages: Messages = {
         ios: 'iPhone and iPad',
         extension: 'Browser extension',
         'extension-zip': 'Chrome · Brave · Edge',
+        'extension-firefox': 'Firefox',
         'windows-installer': 'Installer',
         'windows-portable': 'Portable, no install',
         'macos-arm64': 'Apple Silicon',
@@ -49,7 +50,7 @@ export const downloadMessages: Messages = {
         iosNote:
             'There is no App Store build. Open cyberia.church in Safari, tap Share, then Add to Home Screen — the wallet runs full screen and works offline the same way.',
         extensionNote:
-            'Unzip it, open chrome://extensions, turn on Developer mode and press Load unpacked. It is not in any web store yet. Unlike the apps, the extension is a wallet of its own: it signs for dapps in the page, and you can import the same seed phrase to see the same accounts.',
+            'Chrome, Brave and Edge: unzip, open chrome://extensions, turn on Developer mode, press Load unpacked. Firefox 128+: unzip, open about:debugging#/runtime/this-firefox and Load Temporary Add-on on manifest.json — until the build is signed, Firefox keeps it only until you close it. Unlike the apps, the extension is a wallet of its own: it signs for dapps in the page, and importing the same seed phrase gives the same accounts.',
         openInBrowser: 'Open the wallet in the browser',
         webAlternative:
             'You do not need any of this to use the wallet — it runs in a browser tab, with the same keys.',
@@ -82,6 +83,7 @@ export const downloadMessages: Messages = {
         ios: 'iPhone и iPad',
         extension: 'Расширение для браузера',
         'extension-zip': 'Chrome · Brave · Edge',
+        'extension-firefox': 'Firefox',
         'windows-installer': 'Установщик',
         'windows-portable': 'Портативная, без установки',
         'macos-arm64': 'Apple Silicon',
@@ -100,7 +102,7 @@ export const downloadMessages: Messages = {
         iosNote:
             'Сборки для App Store нет. Откройте cyberia.church в Safari, нажмите «Поделиться» → «На экран «Домой»» — кошелёк откроется на весь экран.',
         extensionNote:
-            'Распакуйте архив, откройте chrome://extensions, включите режим разработчика и нажмите «Загрузить распакованное расширение». В магазинах его пока нет. В отличие от приложений, расширение — самостоятельный кошелёк: оно подписывает транзакции прямо на странице сайта, а если ввести ту же seed-фразу, счета будут те же.',
+            'Chrome, Brave, Edge: распакуйте архив, откройте chrome://extensions, включите режим разработчика и нажмите «Загрузить распакованное расширение». Firefox 128+: распакуйте, откройте about:debugging#/runtime/this-firefox и «Загрузить временное дополнение», выбрав manifest.json — пока сборка не подписана, Firefox держит её только до закрытия браузера. В отличие от приложений, расширение — самостоятельный кошелёк: оно подписывает транзакции прямо на странице сайта, а с той же seed-фразой счета будут те же.',
         openInBrowser: 'Открыть кошелёк в браузере',
         webAlternative:
             'Ничего из этого не обязательно: кошелёк работает во вкладке браузера с теми же ключами.',

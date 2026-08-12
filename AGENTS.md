@@ -218,16 +218,18 @@ Path: `frontend/extension/` (Manifest V3, esbuild, ethers v6). The per-directory
 cd frontend/extension
 npm install
 npm test                # derivation vectors, grant rules, calldata reading, vault, relay config
-npm run build           # dist/ — load unpacked in chrome://extensions
-npm run zip             # Cyberia-extension.zip
+npm run build           # dist/ (Chromium) + dist-firefox/ (Gecko)
+npm run zip             # Cyberia-extension.zip + Cyberia-extension-firefox.zip
 ```
 
 - **No `<all_urls>`.** `manifest.json` ships no `content_scripts` at all; `src/background/injection.js` registers `inpage.js` (MAIN world) and `content.js` (ISOLATED) for granted origins only and re-syncs on every grant or revoke. A test asserts the manifest never acquires a blanket host pattern.
 - **Signing always stops at a human**, in a window of its own (`chrome.windows.create`), never in the toolbar popup that closes when the page is clicked. `PASSTHROUGH_METHODS` in `src/shared/protocol.js` is the complete set of unattended calls; `eth_sign` is refused outright and `wallet_addEthereumChain` is not offered — a page does not get to choose which RPC sees your addresses.
-- **The relay is browser-wide**, because `chrome.proxy` has no per-extension scope in MV3; the popup states this rather than implying a private tunnel. `proxy` and `privacy` are optional permissions requested inside the click that enables them, and `fixed_servers` fails closed.
+- **The relay differs per engine, and the popup says which one you have.** Firefox has `proxy.onRequest`, so only the wallet's own RPC/token/price traffic is routed (`routesThrough()`, `proxyDNS: true`, localhost always direct) with an opt-in toggle for the whole browser; Chromium has only `proxy.settings`, which is browser-wide or nothing. `proxy` and `privacy` are optional permissions requested inside the click that enables them, and both engines fail closed.
 - Balances come from the chain RPC, tokens from that chain's keyless Blockscout index (so decimals are never hardcoded), USD from `cyberia.church/api/wallet/prices`; an unreadable price stays `null` and renders as a dash.
 - Released from the same `app-v*` tag as the apps (`.github/workflows/apps.yml`, job `extension`). The asset name carries no version, so `/releases/latest/download/Cyberia-extension.zip` and `https://cyberia.church/download/extension` are permanent. Renaming means editing `build.mjs`, the workflow and `backend/laravel/config/downloads.php` together.
-- Chromium only for now: Firefox MV3 has no `background.service_worker` and needs signing for a permanent install.
+- **Two targets from one source** (`manifest.mjs` + one esbuild `define`): Chromium gets `background.service_worker` and `chrome.*`, Gecko gets an ES-module event page, `browser.*` (promises) and `browser_specific_settings.gecko.id = wallet@cyberia.church`. `strict_min_version` is 128.0, where `world: "MAIN"` for registered content scripts landed. Verify the Gecko build with `npx web-ext lint --source-dir=dist-firefox --self-hosted` (0 errors; the two `innerHTML` warnings are the popup's own escaped rendering).
+- **A Firefox build is temporary until Mozilla signs it** — `about:debugging` → Load Temporary Add-on, gone when the browser closes. `npx web-ext sign --channel=unlisted` with AMO credentials produces a permanently installable `.xpi` under the same id; the credentials belong in the environment, never in the repo.
+- Firefox MV3 treats `host_permissions` as opt-in, so `popupState()` reports `networkGranted`/`networkOrigins` and both the onboarding and the popup offer a one-click grant rather than letting every balance read as unavailable.
 
 ---
 

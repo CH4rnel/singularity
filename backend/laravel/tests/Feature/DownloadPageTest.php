@@ -52,6 +52,7 @@ it('offers every file the published release carries', function () {
         releaseAsset('Cyberia-linux-amd64.deb'),
         releaseAsset('Cyberia.apk'),
         releaseAsset('Cyberia-extension.zip', 400_000),
+        releaseAsset('Cyberia-extension-firefox.zip', 400_000),
         releaseAsset('SHA256SUMS.txt'),
     ]);
 
@@ -61,9 +62,10 @@ it('offers every file the published release carries', function () {
             ->component('Download')
             ->where('catalog.version', '1.2.3')
             ->where('catalog.status', 'published')
-            ->has('catalog.builds', 8)
+            ->has('catalog.builds', 9)
             ->where('catalog.builds.7.id', 'extension-zip')
             ->where('catalog.builds.7.platform', 'extension')
+            ->where('catalog.builds.8.id', 'extension-firefox')
             ->where('catalog.builds.0.id', 'windows-installer')
             ->where('catalog.builds.0.size', 90_000_000)
             ->where('catalog.builds.0.url', 'https://github.com/cyberia-temple/singularity/releases/download/app-v1.2.3/Cyberia-Setup-x64.exe')
@@ -123,7 +125,7 @@ it('keeps every download working when GitHub cannot be reached', function () {
             ->where('catalog.version', null)
             ->where('catalog.status', 'unknown')
             // Nothing is hidden on a failed lookup: these URLs are permanent.
-            ->has('catalog.builds', 8)
+            ->has('catalog.builds', 9)
             ->where('catalog.builds.0.url', 'https://github.com/cyberia-temple/singularity/releases/latest/download/Cyberia-Setup-x64.exe')
             ->where('catalog.builds.0.size', null));
 });

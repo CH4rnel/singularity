@@ -8,7 +8,15 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { CHAINS, DEFAULT_CHAIN_ID, chainById, chainIdHex, parseChainId } from '../src/shared/chains.js';
 import { APPROVAL_METHODS, PASSTHROUGH_METHODS, rpcError } from '../src/shared/protocol.js';
-import { permissionsFor, proxyConfigFor } from '../src/background/relay.js';
+import {
+    endpointFor,
+    permissionsFor,
+    proxyConfigFor,
+    proxyInfoFor,
+    routesThrough,
+    walletEndpoints,
+} from '../src/background/relay.js';
+import { GECKO_ID, GECKO_MIN, TARGETS, manifestFor } from '../manifest.mjs';
 import { addressFor, isValidPhrase, normalisePhrase, pathFor } from '../src/background/keyring.js';
 
 const manifest = JSON.parse(await readFile(new URL('../manifest.json', import.meta.url), 'utf8'));
@@ -85,6 +93,65 @@ test('a relay is applied only when it points somewhere', () => {
 
 test('localhost stays direct, so a relay never hides a node on this machine', () => {
     assert.deepEqual(proxyConfigFor({ mode: 'tor' }).rules.bypassList, ['<local>']);
+});
+
+test('gecko gets a per-request route, and it covers the wallet only', () => {
+    const tor = { mode: 'tor' };
+
+    assert.deepEqual(proxyInfoFor({ mode: 'direct' }), { type: 'direct' });
+    assert.deepEqual(proxyInfoFor(tor), {
+        type: 'socks',
+        host: '127.0.0.1',
+        port: 9050,
+        // A name resolved outside the relay announces every host the wallet
+        // talks to, which is the leak the relay exists to close.
+        proxyDNS: true,
+    });
+    assert.equal(proxyInfoFor({ mode: 'i2p' }).type, 'http');
+
+    // The wallet's own endpoints go through it; a page the user happens to have
+    // open does not, unless they asked for that explicitly.
+    assert.equal(routesThrough(tor, 'https://rpc.cyberia.church/'), true);
+    assert.equal(routesThrough(tor, 'https://explorer.cyberia.church/api?x=1'), true);
+    assert.equal(routesThrough(tor, 'https://cyberia.church/api/wallet/prices'), true);
+    assert.equal(routesThrough(tor, 'https://example.com/'), false);
+    assert.equal(routesThrough({ ...tor, routeBrowser: true }, 'https://example.com/'), true);
+
+    // Localhost never routes: a relay must not hide a node on this machine.
+    assert.equal(routesThrough({ ...tor, routeBrowser: true }, 'http://127.0.0.1:8545/'), false);
+    assert.equal(routesThrough({ ...tor, routeBrowser: true }, 'http://localhost:5173/'), false);
+
+    // And nothing routes at all without somewhere to route to.
+    assert.equal(routesThrough({ mode: 'direct' }, 'https://rpc.cyberia.church/'), false);
+    assert.equal(endpointFor({ mode: 'socks5', host: '127.0.0.1', port: '0' }), null);
+    assert.ok(walletEndpoints().includes('https://rpc.cyberia.church'));
+});
+
+test('the firefox manifest is the same wallet in gecko dialect', () => {
+    const gecko = manifestFor(manifest, 'firefox', '9.9.9');
+
+    assert.equal(gecko.version, '9.9.9');
+    assert.deepEqual(gecko.background, { scripts: ['background.js'], type: 'module' });
+    assert.ok(!('service_worker' in gecko.background), 'gecko has no service worker to point at');
+    assert.ok(!('minimum_chrome_version' in gecko));
+    assert.equal(gecko.browser_specific_settings.gecko.id, GECKO_ID);
+    assert.equal(gecko.browser_specific_settings.gecko.strict_min_version, GECKO_MIN);
+
+    // Everything that decides what the wallet may reach stays identical.
+    assert.deepEqual(gecko.permissions, manifest.permissions);
+    assert.deepEqual(gecko.optional_permissions, manifest.optional_permissions);
+    assert.deepEqual(gecko.host_permissions, manifest.host_permissions);
+    assert.ok(!('content_scripts' in gecko));
+
+    const chromium = manifestFor(manifest, 'chrome', '9.9.9');
+    assert.equal(chromium.background.service_worker, 'background.js');
+    assert.ok(!('browser_specific_settings' in chromium));
+});
+
+test('the two builds land in their own directories under their own names', () => {
+    assert.equal(TARGETS.chrome.zip, 'Cyberia-extension.zip');
+    assert.equal(TARGETS.firefox.zip, 'Cyberia-extension-firefox.zip');
+    assert.notEqual(TARGETS.chrome.dir, TARGETS.firefox.dir);
 });
 
 test('a relay profile declares the permissions it needs', () => {

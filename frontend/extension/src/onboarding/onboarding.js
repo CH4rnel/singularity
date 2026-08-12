@@ -34,6 +34,8 @@ let slots = [];
 let chips = [];
 let typed = { phrase: '', password: '', repeat: '' };
 let notice = '';
+/** Whether this browser has let the wallet reach the chains at all. */
+let network = { granted: true, origins: [] };
 
 const words = () => phrase.split(' ').filter(Boolean);
 
@@ -223,6 +225,15 @@ const done = () => `
             No site can see an account until you grant it one, and the provider is not injected
             anywhere until you do. Open a dapp and press Connect.
         </div>
+        ${
+            network.granted
+                ? ''
+                : `<div class="cw-note is-warn" style="text-align:left">
+                        Firefox asks separately before an extension may reach a network. Until you
+                        allow it, the wallet cannot read a single balance.
+                        <button class="cw-btn is-primary" style="margin-top:10px" data-do="grant">ALLOW RPC ACCESS</button>
+                   </div>`
+        }
         <button class="cw-btn" style="margin-top:12px" data-do="close">CLOSE THIS TAB</button>
     </div>`;
 
@@ -356,7 +367,23 @@ app.addEventListener('click', async (event) => {
             // Nothing keeps a plaintext phrase alive past this point.
             phrase = '';
             typed = { phrase: '', password: '', repeat: '' };
+
+            const state = await ask(POPUP.state);
+            network = { granted: state.networkGranted, origins: state.networkOrigins };
+
             step = 'done';
+            render();
+            break;
+        }
+
+        case 'grant': {
+            // Called straight from this click: Gecko refuses `permissions.request`
+            // that arrives after an await chain, and the vault creation above is
+            // exactly such a chain.
+            network = {
+                ...network,
+                granted: await chrome.permissions.request({ origins: network.origins }),
+            };
             render();
             break;
         }

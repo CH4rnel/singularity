@@ -47,8 +47,10 @@ return [
         ['id' => 'linux-deb', 'platform' => 'linux', 'primary' => false, 'file' => 'Cyberia-linux-amd64.deb'],
         ['id' => 'android-apk', 'platform' => 'android', 'primary' => true, 'file' => 'Cyberia.apk'],
         // The one build that is not a shell around this site: the extension
-        // carries its own vault and signs for dapps in the page.
+        // carries its own vault and signs for dapps in the page. Two engines,
+        // two files — Chromium rejects Gecko's background key and vice versa.
         ['id' => 'extension-zip', 'platform' => 'extension', 'primary' => true, 'file' => 'Cyberia-extension.zip'],
+        ['id' => 'extension-firefox', 'platform' => 'extension', 'primary' => false, 'file' => 'Cyberia-extension-firefox.zip'],
     ],
 
     'checksums_file' => 'SHA256SUMS.txt',

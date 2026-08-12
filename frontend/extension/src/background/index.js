@@ -16,7 +16,14 @@
  * an unlocked session actually holds is the AES key, in session memory, which
  * is what makes unlocking cheap without keeping a plaintext seed around.
  */
-import { CHAINS, DEFAULT_CHAIN_ID, chainById, chainIdHex, parseChainId } from '../shared/chains.js';
+import {
+    CHAINS,
+    DEFAULT_CHAIN_ID,
+    PRICES_URL,
+    chainById,
+    chainIdHex,
+    parseChainId,
+} from '../shared/chains.js';
 import { PASSTHROUGH_METHODS, POPUP, PROVIDER_PORT, rpcError } from '../shared/protocol.js';
 import {
     accountsFor,
@@ -40,7 +47,7 @@ import {
     signTypedData,
 } from './keyring.js';
 import { balanceOf, feesFor, gasFor, nonceOf, quotes, rpc, sendRaw, tokensOf } from './rpc.js';
-import { applyRelay, permissionsFor } from './relay.js';
+import { applyRelay, permissionsFor, relayScope } from './relay.js';
 import { syncInjection } from './injection.js';
 import * as requests from './requests.js';
 
@@ -120,6 +127,22 @@ const currentChainId = async () => {
     return chainById(chainId)?.id ?? DEFAULT_CHAIN_ID;
 };
 
+/**
+ * The endpoints the wallet reads, as match patterns.
+ *
+ * Chromium grants `host_permissions` at install; Gecko treats them as opt-in
+ * under MV3, so on Firefox the wallet can be installed and unable to read a
+ * single balance until the user says yes. Rather than let that look like a
+ * broken RPC, the popup asks for it by name.
+ */
+const networkOrigins = () => [
+    ...new Set(
+        [...CHAINS.map((chain) => chain.rpc), ...CHAINS.map((chain) => chain.tokens), PRICES_URL]
+            .filter(Boolean)
+            .map((endpoint) => `${new URL(endpoint).origin}/*`),
+    ),
+];
+
 /** What the popup renders itself from. No phrase, no key, no private data. */
 const popupState = async () => {
     const stored = await readLocal();
@@ -153,6 +176,11 @@ const popupState = async () => {
             grantedAt: grant.grantedAt,
         })),
         relay: stored.relay,
+        // What a relay can reach on this engine — the popup describes the
+        // switch it is actually offering, not the one the other browser has.
+        relayScope: relayScope(),
+        networkGranted: await chrome.permissions.contains({ origins: networkOrigins() }),
+        networkOrigins: networkOrigins(),
         autoLockMinutes: stored.autoLockMinutes,
         requests: requests.list(),
         version: chrome.runtime.getManifest().version,
