@@ -365,23 +365,26 @@ onBeforeUnmount(() => {
             </button>
 
             <!-- Inside Telegram, where a new phrase is never generated. -->
-            <div
-                v-if="telegram"
-                class="cw-note"
-                style="margin-top: 4px; text-align: left"
-            >
-                <strong style="color: var(--cw-text)">
-                    {{ t('tgNoSeedTitle') }}
-                </strong>
-                {{ ' ' }}{{ t('tgNoSeedBody') }}
-                <button
-                    type="button"
-                    class="cw-back"
-                    style="margin-top: 12px"
-                    @click="openSite"
-                >
-                    {{ t('tgOpenSite') }} →
-                </button>
+            <!--
+                One child, because `.cw-note` is a flex row whose first item is
+                the marker dot: a title and a paragraph side by side would be
+                laid out as two columns.
+            -->
+            <div v-if="telegram" class="cw-note" style="margin-top: 4px">
+                <span>
+                    <strong style="color: var(--cw-text)">
+                        {{ t('tgNoSeedTitle') }}
+                    </strong>
+                    {{ ' ' }}{{ t('tgNoSeedBody') }}
+                    <button
+                        type="button"
+                        class="cw-back"
+                        style="margin-top: 12px"
+                        @click="openSite"
+                    >
+                        {{ t('tgOpenSite') }} →
+                    </button>
+                </span>
             </div>
             <p
                 class="cw-label"
