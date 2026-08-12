@@ -580,6 +580,7 @@ export const walletMessages: Messages = {
             'The liquidity behind this token was burned at launch. Nobody — including whoever launched it — can withdraw it.',
         launchRisk:
             'Locked liquidity is not an endorsement. Anyone can launch anything here, and a name or a symbol proves nothing about who made it.',
+        launchBuy: 'Buy in the wallet',
         launchTrade: 'Trade on the DEX',
         launchExplorer: 'Explorer',
 
@@ -642,6 +643,182 @@ export const walletMessages: Messages = {
         profileVotes: 'Votes',
         profileAchievements: 'Achievements · {earned} of {total}',
         profileOpen: 'Open full profile',
+
+        // Swap and wrap
+        swapTitle: 'Swap',
+        swapTab: 'Swap',
+        wrapTab: 'Wrap',
+        swapPay: 'You pay',
+        swapReceive: 'You receive',
+        swapPick: 'Select',
+        swapPickAsset: 'Choose an asset',
+        swapAdd: 'Add',
+        swapByAddress: 'Or paste a contract address',
+        swapByAddressNote:
+            'The contract is read before it is offered: the symbol and the decimals come from the chain itself, not from any list.',
+        swapFlip: 'Swap the two sides',
+        swapSlippage: 'Max slippage',
+        swapRate: 'Rate',
+        swapMinOut: 'Minimum received',
+        swapImpact: 'Price impact',
+        swapRoute: 'Route',
+        swapReview: 'Review swap',
+        swapQuoting: 'Reading pools…',
+        swapApproval:
+            'Two transactions: an allowance for exactly this much {symbol}, then the swap. Both cost gas and both are in the fee above. This wallet never approves more than the trade needs, so nothing is left standing afterwards.',
+        swapApprovalReset:
+            'Three transactions: this token refuses to change an allowance that is not zero, so the leftover one is zeroed first, then set to exactly this much {symbol}, and then the swap runs. All of it is in the fee above.',
+        swapApprovalTx: 'Allowance transaction',
+        swapImpactWarn:
+            'This trade moves the pool price by {impact}%. The pool is thin for an amount this size — a smaller amount pays a better rate.',
+        swapNoDex:
+            'No exchange is deployed on {chain}, so there is nothing here to trade against. Swapping works on the networks that run one.',
+        swapOnNetwork: 'Swap on {chain}',
+        swapWatchOnly:
+            'This is a watched address: it can be quoted but never signed for. Importing the key is what makes it tradeable.',
+        swapSentence:
+            'Trade {amount} {from} for at least {min} {to} on {network}, paid out to this same wallet. Up to {fee} {gas} in gas. If the pool would pay less than that minimum, the whole swap reverts and nothing is spent.',
+        wrapSentence:
+            'Wrap {amount} {from} into {amount} {to} on {network}. One for one — the coin sits in the wrapper contract and you can take it back at any time. Up to {fee} {gas} in gas.',
+        unwrapSentence:
+            'Unwrap {amount} {from} back into {amount} {to} on {network}. One for one. Up to {fee} {gas} in gas.',
+        wrapBody:
+            '{coin} is the coin this chain runs on, not a token — pools, farms and most contracts take {wrapped} instead. Wrapping is one for one in both directions and costs only gas.',
+        wrapUnavailable:
+            'The wrapper contract on this network could not be read, so there is nothing here that can be named honestly. Try again once the network answers.',
+        swapOutcome_signing: 'Signing',
+        swapOutcome_approving: 'Allowance',
+        swapOutcome_pending: 'Broadcast',
+        swapOutcome_confirmed: 'Traded',
+        swapOutcome_failed: 'Not executed',
+        swapOutcomeBody_signing:
+            'The transaction is being built and signed on this device.',
+        swapOutcomeBody_approving:
+            'Setting the allowance first. The swap is signed as soon as it is mined.',
+        swapOutcomeBody_pending:
+            'The transaction is in the network. Waiting for a block.',
+        swapOutcomeBody_confirmed: 'Your {from} is now {to}.',
+        swapOutcomeBody_failed: 'Nothing left the account.',
+
+        // NFT, IPFS, torrents
+        tabNft: 'NFT',
+        tileIpfsHint: 'Pin a file · a page',
+        tileTorrentHint: 'DHT · desktop app',
+
+        nftTitle: 'NFT',
+        nftBody: 'One collection anyone can mint into. What a token *is* lives entirely in the address it points at — usually a file in IPFS, sometimes just a link.',
+        nftMint: 'Mint an NFT',
+        nftLoading: 'Reading what this account holds…',
+        nftEmpty: 'This account holds no NFTs on this network yet.',
+        nftUnreadable:
+            'The explorer did not answer, so what this account owns could not be listed.',
+        nftOwned: 'Owned',
+        nftMintedHere: 'Minted here',
+        nftGatewayNote:
+            'Images come from a public IPFS gateway, so that gateway sees which tokens are being looked at.',
+        nftStandard: 'Standard',
+        nftAmount: 'Amount',
+        nftContract: 'Contract',
+        nftPointsAt: 'Points at',
+        nftExplorer: 'Explorer',
+        nftExternal: 'Link',
+
+        mintTitle: 'Mint an NFT',
+        mintBody:
+            'Two steps. The metadata is pinned to IPFS, then its address is written on chain — only the second costs gas, and only the second is permanent.',
+        mintNoAccount:
+            'This account has no address on the network the collection lives on.',
+        mintWatchOnly:
+            'This is a watched address. It can hold tokens; it has no key to sign a mint with.',
+        mintCompose: 'Compose',
+        mintDirect: 'Existing address',
+        mintDirectBody:
+            'Mint a token pointing at something already published. The string goes on chain verbatim — an ipfs:// address, a link, or a line of text.',
+        mintName: 'Name',
+        mintNamePlaceholder: 'What is this?',
+        mintDescription: 'Description',
+        mintImage: 'File',
+        mintImageOptional: 'Optional — a token can be text or a link alone.',
+        mintLink: 'Link',
+        mintContinue: 'Continue',
+        mintPreparing: 'Pinning and pricing…',
+        mintPinNote:
+            'The file and the metadata are pinned before anything is signed. Nothing about your keys or your account travels with them.',
+        mintConfirmTitle: 'Confirm the mint',
+        mintCollection: 'Network',
+        mintUri: 'Token points at',
+        mintFee: 'Fee, at most',
+        mintPermanent:
+            'This cannot be edited or removed later. The token stays in the collection, pointing at this address, for as long as the chain exists.',
+        mintHold: 'Hold to mint',
+        mintSentTitle: 'Mint sent',
+        mintSentBody:
+            'The transaction is on its way. It joins your collection once the chain has it and the explorer has read the metadata.',
+        mintExplorer: 'Open the transaction',
+        mintAnother: 'Mint another',
+
+        ipfsTitle: 'IPFS',
+        ipfsBody:
+            'Publish a file or a page and get a CID — an address made of the content itself. Anyone holding the CID can fetch it from any node that has the bytes.',
+        ipfsOff: 'This server is not pinning right now, so nothing can be published from here.',
+        ipfsFile: 'File',
+        ipfsPage: 'Page',
+        ipfsFileBody: 'Any file: an image, audio, an archive, a document.',
+        ipfsPageBody:
+            'HTML, pinned as a whole site — the CID opens as a page rather than as a download.',
+        ipfsUpTo: 'Up to {size}.',
+        ipfsTooLarge: 'That is over {size}, which is all this server will pin.',
+        ipfsPin: 'Publish',
+        ipfsPinning: 'Publishing…',
+        ipfsCid: 'CID',
+        ipfsSize: 'Size',
+        ipfsCopyUri: 'Copy ipfs://',
+        ipfsOpen: 'Open',
+        ipfsGatewayNote:
+            'The CID is the address. The link opens it through a public gateway — one host among many that can serve the same bytes.',
+        ipfsPersistenceNote:
+            'Our node pins this now. Nothing here promises forever, so pin the CID somewhere of your own if it matters.',
+        ipfsMintThis: 'Mint this as an NFT',
+        ipfsAgain: 'Publish something else',
+        ipfsRelayNote:
+            'The bytes pass through this site because an IPFS node cannot be handed to a browser — it can run any command on the node. Nothing else in this wallet works that way.',
+
+        torrentTitle: 'Torrents',
+        torrentBrowserBody:
+            'A real BitTorrent client runs inside the Cyberia desktop app. This tab cannot be one.',
+        torrentWhyNot:
+            'The DHT is UDP and peers are reached over TCP, and a web page has neither. The swarm a page can reach — browser peers over WebRTC — has almost no members for an ordinary magnet, so a downloader here would find nobody and make it look like your link was wrong.',
+        torrentGetDesktop: 'Get the desktop app',
+        torrentMobileNote:
+            'The same is true in the mobile app and inside Telegram: both are web views.',
+        torrentDesktopBody:
+            'Mainline DHT, peer exchange and trackers — the same swarm any other client sees. Files land in the app’s download folder.',
+        torrentSource: 'Magnet, info hash or .torrent link',
+        torrentSourceHint:
+            'magnet:, a 40-character info hash, or an https link to a .torrent',
+        torrentBadSource:
+            'That is not a magnet link, an info hash or an https .torrent link.',
+        torrentAdd: 'Add torrent',
+        torrentAdding: 'Adding…',
+        torrentPrivacy:
+            'Peers see your IP address, and the app’s proxy does not cover this traffic — that setting is for web requests, and these are raw sockets.',
+        torrentFolder: 'Folder',
+        torrentOpenFolder: 'Open the folder',
+        torrentEmpty: 'Nothing is downloading.',
+        torrentPause: 'Pause',
+        torrentResume: 'Resume',
+        torrentRemove: 'Remove',
+        torrentRemoveKeep: 'Remove, keep files',
+        torrentRemoveDelete: 'Remove and delete',
+        torrentPeers: '{count} peers',
+        torrentPinFile: 'Pin to IPFS',
+        torrentMeta: 'fetching metadata',
+        torrentDownloading: 'downloading',
+        torrentSeeding: 'seeding',
+        torrentPaused: 'paused',
+        torrentError: 'stopped',
+        torrentLawNote:
+            'What you download and share is yours to answer for. The client makes no distinction between a Linux image and anything else.',
     },
     ru: {
         // Chrome
@@ -1214,6 +1391,7 @@ export const walletMessages: Messages = {
             'Ликвидность за этим токеном сожжена при запуске. Вывести её не может никто — включая того, кто запускал.',
         launchRisk:
             'Заблокированная ликвидность — не рекомендация. Запустить здесь может кто угодно что угодно, а название и тикер ничего не доказывают об авторе.',
+        launchBuy: 'Купить в кошельке',
         launchTrade: 'Торговать на DEX',
         launchExplorer: 'Обозреватель',
 
@@ -1277,5 +1455,179 @@ export const walletMessages: Messages = {
         profileVotes: 'Голоса',
         profileAchievements: 'Достижения · {earned} из {total}',
         profileOpen: 'Открыть полный профиль',
+
+        // Обмен и обёртка
+        swapTitle: 'Обмен',
+        swapTab: 'Обмен',
+        wrapTab: 'Обёртка',
+        swapPay: 'Отдаёте',
+        swapReceive: 'Получаете',
+        swapPick: 'Выбрать',
+        swapPickAsset: 'Выберите актив',
+        swapAdd: 'Добавить',
+        swapByAddress: 'Или вставьте адрес контракта',
+        swapByAddressNote:
+            'Контракт читается до того, как попадёт в список: символ и разрядность берутся из самой сети, а не из какого-либо перечня.',
+        swapFlip: 'Поменять стороны местами',
+        swapSlippage: 'Допустимое проскальзывание',
+        swapRate: 'Курс',
+        swapMinOut: 'Минимум к получению',
+        swapImpact: 'Влияние на цену',
+        swapRoute: 'Маршрут',
+        swapReview: 'Проверить обмен',
+        swapQuoting: 'Читаем пулы…',
+        swapApproval:
+            'Две транзакции: разрешение ровно на эту сумму {symbol}, затем сам обмен. Обе стоят газа, и обе учтены в комиссии выше. Кошелёк никогда не выдаёт разрешение больше, чем нужно сделке, — после обмена ничего не остаётся.',
+        swapApprovalReset:
+            'Три транзакции: этот токен не разрешает менять ненулевое разрешение, поэтому старое сначала обнуляется, потом ставится ровно на эту сумму {symbol}, и только затем идёт обмен. Всё это учтено в комиссии выше.',
+        swapApprovalTx: 'Транзакция разрешения',
+        swapImpactWarn:
+            'Сделка двигает цену пула на {impact}%. Для такой суммы пул тонкий — на меньшем объёме курс будет лучше.',
+        swapNoDex:
+            'В сети {chain} биржа не развёрнута, обменивать здесь не с чем. Обмен работает в сетях, где есть роутер.',
+        swapOnNetwork: 'Обменять в сети {chain}',
+        swapWatchOnly:
+            'Это адрес только для наблюдения: курс он покажет, но подписать обмен нечем. Нужен импорт ключа.',
+        swapSentence:
+            'Обменять {amount} {from} минимум на {min} {to} в сети {network}, с зачислением на этот же кошелёк. Газа — до {fee} {gas}. Если пул даст меньше минимума, обмен целиком откатится и деньги останутся на месте.',
+        wrapSentence:
+            'Завернуть {amount} {from} в {amount} {to} в сети {network}. Один к одному — монета лежит в контракте обёртки, забрать её обратно можно в любой момент. Газа — до {fee} {gas}.',
+        unwrapSentence:
+            'Развернуть {amount} {from} обратно в {amount} {to} в сети {network}. Один к одному. Газа — до {fee} {gas}.',
+        wrapBody:
+            '{coin} — монета самой сети, а не токен: пулы, фермы и большинство контрактов принимают {wrapped}. Обёртка работает один к одному в обе стороны и стоит только газа.',
+        wrapUnavailable:
+            'Контракт обёртки в этой сети не читается, поэтому назвать честно нечего. Попробуйте снова, когда сеть ответит.',
+        swapOutcome_signing: 'Подпись',
+        swapOutcome_approving: 'Разрешение',
+        swapOutcome_pending: 'Отправлено',
+        swapOutcome_confirmed: 'Обменяно',
+        swapOutcome_failed: 'Не выполнено',
+        swapOutcomeBody_signing:
+            'Транзакция собирается и подписывается на этом устройстве.',
+        swapOutcomeBody_approving:
+            'Сначала выставляется разрешение. Обмен подписывается сразу после того, как оно попадёт в блок.',
+        swapOutcomeBody_pending: 'Транзакция в сети. Ждём блок.',
+        swapOutcomeBody_confirmed: 'Ваш {from} теперь {to}.',
+        swapOutcomeBody_failed: 'Со счёта ничего не ушло.',
+
+        // NFT, IPFS, торренты
+        tabNft: 'NFT',
+        tileIpfsHint: 'Файл · страница',
+        tileTorrentHint: 'DHT · десктоп',
+
+        nftTitle: 'NFT',
+        nftBody: 'Одна коллекция, минтить в неё может кто угодно. Чем токен *является*, целиком решает адрес, на который он указывает: обычно это файл в IPFS, иногда просто ссылка.',
+        nftMint: 'Сминтить NFT',
+        nftLoading: 'Читаю, что на этом счёте…',
+        nftEmpty: 'На этом счёте в этой сети пока нет NFT.',
+        nftUnreadable:
+            'Обозреватель не ответил, поэтому список токенов этого счёта получить не удалось.',
+        nftOwned: 'В собственности',
+        nftMintedHere: 'Сминчено здесь',
+        nftGatewayNote:
+            'Картинки грузятся через публичный IPFS-шлюз, так что шлюз видит, какие токены вы смотрите.',
+        nftStandard: 'Стандарт',
+        nftAmount: 'Количество',
+        nftContract: 'Контракт',
+        nftPointsAt: 'Указывает на',
+        nftExplorer: 'Обозреватель',
+        nftExternal: 'Ссылка',
+
+        mintTitle: 'Сминтить NFT',
+        mintBody:
+            'Два шага. Сначала метаданные пиннятся в IPFS, потом их адрес записывается в сеть — газ стоит только второй шаг, и необратим тоже только он.',
+        mintNoAccount: 'У этого счёта нет адреса в сети, где живёт коллекция.',
+        mintWatchOnly:
+            'Это адрес только для наблюдения. Держать токены он может, подписать минт — нечем.',
+        mintCompose: 'Собрать',
+        mintDirect: 'Готовый адрес',
+        mintDirectBody:
+            'Сминтить токен, указывающий на что-то уже опубликованное. Строка попадает в сеть как есть — адрес ipfs://, ссылка или просто текст.',
+        mintName: 'Название',
+        mintNamePlaceholder: 'Что это?',
+        mintDescription: 'Описание',
+        mintImage: 'Файл',
+        mintImageOptional: 'Необязательно — токен может быть текстом или ссылкой.',
+        mintLink: 'Ссылка',
+        mintContinue: 'Дальше',
+        mintPreparing: 'Пинню и считаю комиссию…',
+        mintPinNote:
+            'Файл и метаданные пиннятся до того, как что-либо подписано. Ничего о ваших ключах и счёте вместе с ними не уходит.',
+        mintConfirmTitle: 'Подтвердите минт',
+        mintCollection: 'Сеть',
+        mintUri: 'Токен указывает на',
+        mintFee: 'Комиссия, не больше',
+        mintPermanent:
+            'Это нельзя будет изменить или удалить. Токен останется в коллекции и будет указывать на этот адрес столько, сколько существует сеть.',
+        mintHold: 'Удерживайте, чтобы сминтить',
+        mintSentTitle: 'Минт отправлен',
+        mintSentBody:
+            'Транзакция ушла в сеть. В коллекции токен появится, когда сеть его примет, а обозреватель прочитает метаданные.',
+        mintExplorer: 'Открыть транзакцию',
+        mintAnother: 'Сминтить ещё',
+
+        ipfsTitle: 'IPFS',
+        ipfsBody:
+            'Опубликуйте файл или страницу и получите CID — адрес, собранный из самого содержимого. Имея CID, его можно забрать с любого узла, где лежат эти байты.',
+        ipfsOff: 'Сервер сейчас не пиннит, поэтому опубликовать отсюда ничего нельзя.',
+        ipfsFile: 'Файл',
+        ipfsPage: 'Страница',
+        ipfsFileBody: 'Любой файл: картинка, звук, архив, документ.',
+        ipfsPageBody:
+            'HTML, запиненный как целый сайт: CID открывается страницей, а не скачиванием.',
+        ipfsUpTo: 'До {size}.',
+        ipfsTooLarge: 'Это больше {size} — больше сервер не пиннит.',
+        ipfsPin: 'Опубликовать',
+        ipfsPinning: 'Публикую…',
+        ipfsCid: 'CID',
+        ipfsSize: 'Размер',
+        ipfsCopyUri: 'Скопировать ipfs://',
+        ipfsOpen: 'Открыть',
+        ipfsGatewayNote:
+            'Адрес — это CID. Ссылка открывает его через публичный шлюз, один из многих, кто может отдать те же байты.',
+        ipfsPersistenceNote:
+            'Сейчас это пиннит наш узел. Обещания «навсегда» здесь нет — если содержимое важно, запиньте CID и у себя.',
+        ipfsMintThis: 'Сминтить это как NFT',
+        ipfsAgain: 'Опубликовать ещё',
+        ipfsRelayNote:
+            'Байты идут через сайт, потому что IPFS-узел нельзя отдать браузеру — через него выполняется любая команда узла. Больше ничто в кошельке так не работает.',
+
+        torrentTitle: 'Торренты',
+        torrentBrowserBody:
+            'Настоящий торрент-клиент работает в десктопном приложении Cyberia. Вкладка браузера им быть не может.',
+        torrentWhyNot:
+            'DHT — это UDP, а пиры — TCP, и у страницы нет ни того, ни другого. Рой, до которого страница дотягивается (браузерные пиры по WebRTC), для обычного магнета почти пуст — качалка здесь не нашла бы никого и выглядело бы это как «неправильная ссылка».',
+        torrentGetDesktop: 'Скачать десктоп-приложение',
+        torrentMobileNote:
+            'В мобильном приложении и внутри Telegram то же самое: это тоже веб-вью.',
+        torrentDesktopBody:
+            'Mainline DHT, обмен пирами и трекеры — тот же рой, что видит любой другой клиент. Файлы падают в папку загрузок приложения.',
+        torrentSource: 'Магнет, инфохеш или ссылка на .torrent',
+        torrentSourceHint:
+            'magnet:, инфохеш из 40 символов или https-ссылка на .torrent',
+        torrentBadSource:
+            'Это не магнет-ссылка, не инфохеш и не https-ссылка на .torrent.',
+        torrentAdd: 'Добавить торрент',
+        torrentAdding: 'Добавляю…',
+        torrentPrivacy:
+            'Пиры видят ваш IP, а прокси приложения этот трафик не закрывает — та настройка про веб-запросы, а здесь сырые сокеты.',
+        torrentFolder: 'Папка',
+        torrentOpenFolder: 'Открыть папку',
+        torrentEmpty: 'Ничего не качается.',
+        torrentPause: 'Пауза',
+        torrentResume: 'Продолжить',
+        torrentRemove: 'Убрать',
+        torrentRemoveKeep: 'Убрать, файлы оставить',
+        torrentRemoveDelete: 'Убрать и удалить',
+        torrentPeers: 'пиров: {count}',
+        torrentPinFile: 'Запинить в IPFS',
+        torrentMeta: 'получаю метаданные',
+        torrentDownloading: 'качается',
+        torrentSeeding: 'раздаётся',
+        torrentPaused: 'на паузе',
+        torrentError: 'остановлен',
+        torrentLawNote:
+            'За то, что вы качаете и раздаёте, отвечаете вы. Клиент не отличает образ Linux от чего угодно другого.',
     },
 };

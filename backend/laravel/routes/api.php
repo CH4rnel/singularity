@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAuthController;
+use App\Http\Controllers\Api\WalletIpfsController;
 use App\Services\WalletPriceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -22,6 +23,11 @@ Route::prefix('wallet')->group(function () {
     // it says nothing about any account, only what a coin is worth.
     Route::get('prices', fn (WalletPriceService $prices) => response()->json($prices->quotes()))
         ->middleware('throttle:60,1');
+
+    // Pinning for the wallet: bytes in, a CID out. Kubo listens on localhost
+    // and can run any node command, so the browser never talks to it directly.
+    Route::post('ipfs/file', [WalletIpfsController::class, 'file'])->middleware('throttle:20,1');
+    Route::post('ipfs/page', [WalletIpfsController::class, 'page'])->middleware('throttle:20,1');
 });
 
 // Solana wallet auth (Phantom)

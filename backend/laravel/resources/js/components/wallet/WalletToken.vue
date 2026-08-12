@@ -4,7 +4,7 @@ import AddressField from '@/components/wallet/AddressField.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
-import { formatUnits, sameToken, walletChain } from '@/lib/wallet';
+import { formatUnits, hasSwap, sameToken, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
@@ -34,6 +34,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     back: [];
     send: [token: WalletTokenBalance];
+    swap: [token: WalletTokenBalance];
     /** The token was dropped from the list and this screen has nothing left. */
     hidden: [];
 }>();
@@ -236,6 +237,20 @@ const hide = async (): Promise<void> => {
                     @click="emit('send', token)"
                 >
                     {{ t('send') }}
+                </button>
+                <!--
+                  Trading it needs a pool, not a balance: a token at zero can
+                  still be the thing you are about to buy.
+                -->
+                <button
+                    v-if="hasSwap(chain.chainId)"
+                    type="button"
+                    class="cw-btn cw-btn-secondary"
+                    style="height: 50px"
+                    :disabled="!chain.send"
+                    @click="emit('swap', token)"
+                >
+                    {{ t('swapTitle') }}
                 </button>
                 <a
                     v-if="explorerUrl"

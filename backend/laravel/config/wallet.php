@@ -48,4 +48,37 @@ return [
         'proof_minutes' => 30,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Pinning from the wallet
+    |--------------------------------------------------------------------------
+    |
+    | The wallet composes NFT metadata and pages in the browser, but the Kubo
+    | API is bound to localhost and is never handed to a browser — it can run
+    | any node command. So the bytes come through this app, which pins them and
+    | hands back a CID and nothing else.
+    |
+    | Storage on the node is the cost of this, which is what the cap and the
+    | throttle are about. Anything stricter than a cap — a holding gate, an
+    | allowlist — goes in `WalletIpfsController::guard()`, the one place both
+    | routes ask permission, so the shape of the endpoint does not change when
+    | it arrives.
+    |
+    */
+
+    'ipfs' => [
+
+        /** Off means the wallet screens say pinning is unavailable, not that they fail. */
+        'enabled' => (bool) env('WALLET_IPFS_ENABLED', true),
+
+        /**
+         * Largest object one call may pin.
+         *
+         * PHP's own `upload_max_filesize` and `post_max_size` have to be at
+         * least this, or a browser gets Laravel's 413 before this cap is ever
+         * consulted — which is a worse error message for the same limit.
+         */
+        'max_bytes' => (int) env('WALLET_IPFS_MAX_BYTES', 10 * 1024 * 1024),
+    ],
+
 ];

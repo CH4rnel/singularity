@@ -31,7 +31,6 @@ import {
 } from '@/components/ui/select';
 import { useWallet } from '@/composables/useWallet';
 import {
-    CYBER_SOL_ADDRESS,
     KNOWN_TOKENS,
     USDC_ADDRESS,
     filterJunkPools,
@@ -853,19 +852,10 @@ const impactClass = computed(() => {
 });
 
 // --- routing: candidate paths over the known pool graph --------------------
-// Fallback routing hubs when the pool graph has no direct route. Per-chain:
-// Cyberia routes through WCYBER/CYBER.sol/stables; satellites through their
-// wrapped native only (the shared hub of their curated pools).
-const HUBS = computed<string[]>(() =>
-    activeChain.value.serverPools
-        ? [
-              activeChain.value.wrappedNative,
-              CYBER_SOL_ADDRESS,
-              USDC_ADDRESS,
-              '0x94845aF24a3E431593A2b941b2b31836dE45185D', // USDT
-          ]
-        : [activeChain.value.wrappedNative],
-);
+// Fallback routing hubs when the pool graph has no direct route. They are per
+// chain and live in the DEX registry, so the wallet's own swap screen routes
+// through exactly the same assets this page does.
+const HUBS = computed<string[]>(() => activeChain.value.hubs);
 
 // The dex_pools table is fed by an off-chain indexer and can lag the chain by
 // weeks (freshly launched pools missing → routes silently ignored). Merge in

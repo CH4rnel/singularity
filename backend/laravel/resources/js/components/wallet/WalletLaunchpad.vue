@@ -17,15 +17,18 @@ import { walletMessages } from '@/lib/walletMessages';
  * vest, so this screen has no controls for those — it lists what exists and
  * what it costs.
  *
- * Buying is a swap, and this wallet does not swap. Rather than draw a buy
- * button that would fail, the detail links out to the DEX, which is where the
- * order actually happens.
+ * Buying is a swap, and the wallet has one — so the detail hands the launch's
+ * contract to the swap screen, which reads it from the chain before quoting
+ * anything. The DEX link stays alongside it: this screen has no chart, no
+ * order book and no depth, and those are real reasons to go there.
  */
 
 const props = defineProps<{
     /** Chain id → (lowercased contract → USD price), for pricing the coin. */
     prices: Record<string, number | null>;
 }>();
+
+const emit = defineEmits<{ swap: [contract: string] }>();
 
 const { locale, t } = useLocale(walletMessages);
 
@@ -169,8 +172,16 @@ onMounted(load);
             </p>
 
             <div style="display: flex; gap: 8px; margin-top: 20px">
-                <a
+                <button
+                    type="button"
                     class="cw-btn cw-btn-primary"
+                    style="flex: 1"
+                    @click="emit('swap', detail.address)"
+                >
+                    {{ t('launchBuy') }}
+                </button>
+                <a
+                    class="cw-btn cw-btn-secondary"
                     style="flex: 1; text-decoration: none"
                     :href="detail.swapUrl"
                     target="_blank"

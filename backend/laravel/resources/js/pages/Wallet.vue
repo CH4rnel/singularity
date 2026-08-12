@@ -11,18 +11,23 @@ import WalletChat from '@/components/wallet/WalletChat.vue';
 import WalletDao from '@/components/wallet/WalletDao.vue';
 import WalletFeed from '@/components/wallet/WalletFeed.vue';
 import WalletImportAccount from '@/components/wallet/WalletImportAccount.vue';
+import WalletIpfs from '@/components/wallet/WalletIpfs.vue';
 import WalletLain from '@/components/wallet/WalletLain.vue';
 import WalletLaunchpad from '@/components/wallet/WalletLaunchpad.vue';
 import WalletLocked from '@/components/wallet/WalletLocked.vue';
 import WalletNetworkDetail from '@/components/wallet/WalletNetworkDetail.vue';
+import WalletNft from '@/components/wallet/WalletNft.vue';
+import WalletNftMint from '@/components/wallet/WalletNftMint.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
 import WalletPortfolio from '@/components/wallet/WalletPortfolio.vue';
 import WalletProfile from '@/components/wallet/WalletProfile.vue';
 import WalletReceive from '@/components/wallet/WalletReceive.vue';
 import WalletSecurity from '@/components/wallet/WalletSecurity.vue';
 import WalletSend from '@/components/wallet/WalletSend.vue';
+import WalletSwap from '@/components/wallet/WalletSwap.vue';
 import WalletToken from '@/components/wallet/WalletToken.vue';
 import WalletTokens from '@/components/wallet/WalletTokens.vue';
+import WalletTorrent from '@/components/wallet/WalletTorrent.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
@@ -68,6 +73,12 @@ const props = defineProps<{
         tokenAddress: string;
         minimumShareBps: number;
     };
+    /** The limits this server pins under, so the screens can say them first. */
+    ipfs: {
+        enabled: boolean;
+        maxBytes: number;
+        gateway: string;
+    };
 }>();
 
 const { locale, toggleLocale, t } = useLocale(walletMessages);
@@ -101,8 +112,12 @@ type Section =
     | 'profile'
     | 'launchpad'
     | 'dao'
-    | 'lain';
-type Overlay = 'send' | 'receive' | 'addNetwork';
+    | 'lain'
+    | 'nft'
+    | 'nftMint'
+    | 'ipfs'
+    | 'torrent';
+type Overlay = 'send' | 'receive' | 'swap' | 'addNetwork';
 
 const section = ref<Section>('portfolio');
 const overlay = ref<Overlay | null>(null);
@@ -149,6 +164,7 @@ const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'accounts', label: () => t('accounts') },
     { id: 'feed', label: () => t('feed') },
     { id: 'launchpad', label: () => t('launchpad') },
+    { id: 'nft', label: () => t('nftTitle') },
     { id: 'dao', label: () => t('dao') },
     // Listed even for wallets that hold no $LAIN: the room says what it wants
     // and what this account has, which is the only way to know it exists.
@@ -158,14 +174,19 @@ const SECTIONS: { id: Section; label: () => string }[] = [
 
 /**
  * The phone's destinations, and they are what this app is: the wallet, the
- * messages that wallet sends, the feed, the launchpad, the DAO and Lain.
+ * messages that wallet sends, the feed, the launchpad, what you own that is
+ * not fungible, the DAO and Lain.
  *
  * Messages started life as a shortcut on the portfolio, on the theory that five
  * labels are all 390px holds. That was wrong in the way that matters: a
  * correspondence is not a way of reading your holdings, and nobody looks for it
- * inside them. Six labels do fit — at ~65px each, with the tracking that makes
- * a mono label read as a label given up below 360px — and the badge for waiting
- * messages now sits where it can be seen from anywhere in the app.
+ * inside them. NFT is here for the same reason — a thing you own is not a way
+ * of reading a balance, and it is where minting, pinning and downloading are
+ * reached from.
+ *
+ * Seven labels is ~56px each on a 390px phone, which the bar spends its
+ * tracking and then a point of its font size to hold; the label is what
+ * survives, because a tab nobody can read is not a destination.
  *
  * Everything else genuinely is a place inside one of these: tokens, analytics,
  * accounts and security are all ways of reading the wallet, reached from the
@@ -176,6 +197,7 @@ const TABS: { id: Section; label: () => string }[] = [
     { id: 'chat', label: () => t('tabChat') },
     { id: 'feed', label: () => t('feed') },
     { id: 'launchpad', label: () => t('tabLaunch') },
+    { id: 'nft', label: () => t('nftTitle') },
     { id: 'dao', label: () => t('dao') },
     { id: 'lain', label: () => t('navLain') },
 ];
@@ -196,6 +218,10 @@ const TAB_OF: Record<Section, Section> = {
     launchpad: 'launchpad',
     dao: 'dao',
     lain: 'lain',
+    nft: 'nft',
+    nftMint: 'nft',
+    ipfs: 'nft',
+    torrent: 'nft',
 };
 
 const activeTab = computed(() => TAB_OF[section.value]);
@@ -215,6 +241,14 @@ const telegramBack = computed<(() => void) | null>(() => {
         return () => {
             overlay.value = null;
         };
+    }
+
+    // A screen that was opened from another one goes back to that one, which
+    // is the only answer that matches what the user did to get here.
+    const parent = PARENTS[section.value];
+
+    if (parent) {
+        return () => openSection(parent);
     }
 
     if (section.value !== 'portfolio' && activeTab.value === 'portfolio') {
@@ -322,6 +356,9 @@ const PARENTS: Partial<Record<Section, Section>> = {
     token: 'tokens',
     importAccount: 'accounts',
     profile: 'feed',
+    nftMint: 'nft',
+    ipfs: 'nft',
+    torrent: 'nft',
 };
 
 const current = computed<Section>(
@@ -338,6 +375,49 @@ const tokenOrigin = ref<Section>('tokens');
 const openSend = (token?: WalletTokenBalance): void => {
     sendToken.value = token ?? null;
     overlay.value = 'send';
+};
+
+/**
+ * Trading, from wherever the asset was tapped. A swap belongs to one network —
+ * it is that network's router, that network's pools and that network's gas —
+ * so it opens as a composer over the network the asset lives on, exactly like
+ * sending does.
+ */
+const swapToken = ref<WalletTokenBalance | null>(null);
+
+/** A contract to buy, from a screen that knows an address and nothing else. */
+const swapContract = ref<string | null>(null);
+
+const openSwap = (token?: WalletTokenBalance): void => {
+    swapToken.value = token ?? null;
+    swapContract.value = null;
+    overlay.value = 'swap';
+};
+
+/**
+ * Buying one specific token — a launch, so far. It lives on the launchpad's
+ * chain, and the swap screen reads the contract itself rather than trusting
+ * the row that was tapped for anything but its address.
+ */
+const openSwapContract = (contract: string): void => {
+    swapToken.value = null;
+    swapContract.value = contract;
+    chain.value = 'cyberia';
+    overlay.value = 'swap';
+};
+
+/**
+ * A CID the mint screen should open with.
+ *
+ * Publishing a file and minting a token that points at it are two acts, and
+ * the second one costs gas — so the CID travels between the screens rather
+ * than one screen quietly doing both.
+ */
+const mintPreset = ref<string | null>(null);
+
+const openMint = (uri: string | null): void => {
+    mintPreset.value = uri;
+    openSection('nftMint');
 };
 
 const openChain = (next: WalletChainId): void => {
@@ -814,6 +894,19 @@ watch(
                         @add-network="overlay = 'addNetwork'"
                     />
 
+                    <WalletSwap
+                        v-else-if="bodyOverlay === 'swap'"
+                        :wallet="wallet"
+                        :chain="chain"
+                        :prices="prices"
+                        :token-prices="tokenPrices"
+                        :token="swapToken"
+                        :contract="swapContract"
+                        @back="overlay = null"
+                        @pick="chain = $event"
+                        @swapped="load()"
+                    />
+
                     <WalletReceive
                         v-else-if="bodyOverlay === 'receive'"
                         :wallet="wallet"
@@ -844,6 +937,7 @@ watch(
                             :online="online"
                             @open="openChain"
                             @send="openSend()"
+                            @swap="openSwap()"
                             @receive="overlay = 'receive'"
                             @add-network="overlay = 'addNetwork'"
                             @tokens="openSection('tokens')"
@@ -893,6 +987,7 @@ watch(
                         :prices="tokenPrices[chain] ?? {}"
                         @back="openSection(tokenOrigin)"
                         @send="openSend"
+                        @swap="openSwap"
                         @hidden="openSection(tokenOrigin)"
                     />
 
@@ -912,6 +1007,7 @@ watch(
                         :token-prices="tokenPrices"
                         @back="openSection('portfolio')"
                         @send="openSend"
+                        @swap="openSwap()"
                         @receive="overlay = 'receive'"
                         @open-token="openToken(chain, $event)"
                     />
@@ -931,9 +1027,45 @@ watch(
                     <WalletLaunchpad
                         v-else-if="section === 'launchpad'"
                         :prices="prices"
+                        @swap="openSwapContract"
                     />
 
                     <WalletDao v-else-if="section === 'dao'" />
+
+                    <!--
+                      One tab for the things that are not balances: what this
+                      account owns, where a file can be published, and how a
+                      file gets here in the first place.
+                    -->
+                    <WalletNft
+                        v-else-if="section === 'nft'"
+                        :wallet="wallet"
+                        @mint="openMint(null)"
+                        @ipfs="openSection('ipfs')"
+                        @torrents="openSection('torrent')"
+                    />
+
+                    <WalletNftMint
+                        v-else-if="section === 'nftMint'"
+                        :wallet="wallet"
+                        :ipfs="props.ipfs"
+                        :preset="mintPreset"
+                        @back="openSection('nft')"
+                        @minted="load()"
+                    />
+
+                    <WalletIpfs
+                        v-else-if="section === 'ipfs'"
+                        :ipfs="props.ipfs"
+                        @back="openSection('nft')"
+                        @mint="openMint"
+                    />
+
+                    <WalletTorrent
+                        v-else-if="section === 'torrent'"
+                        @back="openSection('nft')"
+                        @mint="openMint"
+                    />
 
                     <WalletLain
                         v-else-if="section === 'lain'"
@@ -1009,6 +1141,18 @@ watch(
                     @pick="chain = $event"
                     @sent="load()"
                     @add-network="overlay = 'addNetwork'"
+                />
+                <WalletSwap
+                    v-else-if="asideOverlay === 'swap'"
+                    :wallet="wallet"
+                    :chain="chain"
+                    :prices="prices"
+                    :token-prices="tokenPrices"
+                    :token="swapToken"
+                    :contract="swapContract"
+                    @back="overlay = null"
+                    @pick="chain = $event"
+                    @swapped="load()"
                 />
                 <WalletReceive
                     v-else

@@ -36,6 +36,7 @@ const emit = defineEmits<{
     open: [chain: WalletChainId];
     send: [];
     receive: [];
+    swap: [];
     addNetwork: [];
     tokens: [];
     analytics: [];
@@ -431,6 +432,11 @@ const recent = computed(() =>
             }}</span>
         </div>
 
+        <!--
+          Three things you do with a balance rather than three ways of reading
+          one: move it out, take it in, or trade it for something else on the
+          network's own exchange.
+        -->
         <div style="display: flex; gap: 8px; margin: 22px 0 24px">
             <button
                 type="button"
@@ -447,6 +453,14 @@ const recent = computed(() =>
                 @click="emit('receive')"
             >
                 {{ t('receive') }}
+            </button>
+            <button
+                type="button"
+                class="cw-btn cw-btn-secondary"
+                style="height: 48px"
+                @click="emit('swap')"
+            >
+                {{ t('swapTitle') }}
             </button>
         </div>
 

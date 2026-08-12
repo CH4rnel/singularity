@@ -10,6 +10,7 @@
  * not a native shell.
  */
 import { isTelegramMiniApp } from '@/lib/telegram';
+import type { TorrentBridge } from '@/lib/wallet/torrent';
 
 export type NativeShell = 'desktop' | 'mobile' | 'telegram' | null;
 
@@ -18,6 +19,11 @@ interface DesktopBridge {
     version?: string;
     openExternal?: (url: string) => void;
     openProxySettings?: () => void;
+    /**
+     * A real BitTorrent client, which only the desktop shell can host — the
+     * DHT is UDP and peers are TCP, neither of which a web view has.
+     */
+    torrent?: TorrentBridge;
 }
 
 declare global {

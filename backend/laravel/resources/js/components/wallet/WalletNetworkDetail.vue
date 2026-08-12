@@ -7,7 +7,7 @@ import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
-import { formatUnits, walletChain } from '@/lib/wallet';
+import { formatUnits, hasSwap, walletChain } from '@/lib/wallet';
 import type {
     WalletChainId,
     WalletTokenBalance,
@@ -35,6 +35,7 @@ const emit = defineEmits<{
     back: [];
     send: [token?: WalletTokenBalance];
     receive: [];
+    swap: [];
     openToken: [token: WalletTokenBalance];
 }>();
 
@@ -191,6 +192,21 @@ watch(() => props.chain, load);
                 @click="emit('receive')"
             >
                 {{ t('receive') }}
+            </button>
+            <!--
+              Only where an exchange is actually deployed: a network with no
+              router has nothing to trade against, and a button that opens a
+              screen to say so is a button that lied.
+            -->
+            <button
+                v-if="hasSwap(chain.chainId)"
+                type="button"
+                class="cw-btn cw-btn-secondary"
+                style="height: 48px"
+                :disabled="!account.capabilities.send"
+                @click="emit('swap')"
+            >
+                {{ t('swapTitle') }}
             </button>
         </div>
 

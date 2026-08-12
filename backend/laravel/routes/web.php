@@ -246,6 +246,14 @@ Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatS
         'tokenAddress' => (string) config('services.lain.token_address'),
         'minimumShareBps' => (int) config('services.lain.minimum_share_bps', 1000),
     ],
+    // Pinning is the one thing in the wallet this server actually performs, so
+    // the limits it will enforce are stated up front rather than discovered by
+    // uploading something too large and reading the rejection.
+    'ipfs' => [
+        'enabled' => (bool) config('wallet.ipfs.enabled'),
+        'maxBytes' => (int) config('wallet.ipfs.max_bytes'),
+        'gateway' => (string) config('ipfs.gateway'),
+    ],
 ]))->name('wallet');
 
 /**

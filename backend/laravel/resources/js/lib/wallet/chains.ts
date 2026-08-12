@@ -264,6 +264,17 @@ export type WalletChain = {
          */
         token?: string | null;
     }) => Promise<WalletFeeQuote[]>;
+    /**
+     * Live price of one unit of gas at a tier, with the network's floor
+     * already applied.
+     *
+     * Only the chains that price a transaction that way have one, and it
+     * exists so that a caller building something other than a transfer — a
+     * swap, a wrap, a mint — prices it against the same number a send does.
+     * Cyberia's node rejects anything under its pool floor outright, and that
+     * floor lives here rather than in every screen that signs.
+     */
+    gasPrice?: (tier: WalletFeeTier, rpcUrl?: string) => Promise<bigint>;
     /** Most recent transfers touching this address, newest first. */
     fetchHistory?: (address: string, rpcUrl?: string) => Promise<WalletTx[]>;
     /**
@@ -495,6 +506,7 @@ const evmChain = (spec: EvmSpec): WalletChain => {
                 })),
             );
         },
+        gasPrice: (tier, rpcUrl) => gasPrice(tier, rpcUrl),
         fetchHistory: spec.blockscoutApi
             ? (address) => blockscoutHistory(spec.blockscoutApi!, address)
             : undefined,

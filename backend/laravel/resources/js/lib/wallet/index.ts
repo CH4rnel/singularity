@@ -274,6 +274,29 @@ export {
 } from '@/lib/wallet/chat';
 export type { ChatRow } from '@/lib/wallet/chat';
 export {
+    APPROVE_GAS,
+    SWAP_GAS_CAP,
+    applySlippage,
+    executeSwap,
+    forgetPoolEdges,
+    hasSwap,
+    poolEdges,
+    priceImpactPct,
+    quoteSwap,
+    swapChainFor,
+    swapChains,
+    swapPaths,
+    swapTxUrl,
+} from '@/lib/wallet/swap';
+export type { SwapAsset, SwapQuote, SwapReceipt } from '@/lib/wallet/swap';
+export {
+    WRAP_GAS_CAP,
+    executeWrap,
+    quoteWrap,
+    wrapDirection,
+} from '@/lib/wallet/wrap';
+export type { WrapDirection, WrapQuote } from '@/lib/wallet/wrap';
+export {
     readManualTokens,
     withToken,
     withoutToken,

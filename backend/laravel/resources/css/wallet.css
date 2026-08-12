@@ -723,9 +723,10 @@
 }
 
 /*
- * Six destinations across a 390px phone leaves ~65px a label. The tracking
+ * Seven destinations across a 390px phone leaves ~56px a label. The tracking
  * that makes a mono label read as a label is the first thing to go when a
- * translation is longer than the English — losing a letter is worse.
+ * translation is longer than the English, and the point of font size after it —
+ * losing a letter to an ellipsis is worse than either.
  */
 .cw-tab-label {
     max-width: 100%;
@@ -734,13 +735,13 @@
     white-space: nowrap;
 }
 
-@media (max-width: 389px) {
+@media (max-width: 429px) {
     .cw-tab {
         letter-spacing: 0.04em;
     }
 }
 
-@media (max-width: 339px) {
+@media (max-width: 369px) {
     .cw-tab {
         font-size: 9px;
         letter-spacing: 0;

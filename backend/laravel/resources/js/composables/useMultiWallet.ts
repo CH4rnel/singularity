@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue';
+import { nftChain } from '@/lib/nftChains';
 import {
     PRIMARY_ACCOUNT_ID,
     chatPublicKey,
@@ -56,6 +57,12 @@ import type {
     WalletTokenBalance,
     WalletTx,
 } from '@/lib/wallet';
+import { mintNft as submitMint } from '@/lib/wallet/nft';
+import type { MintQuote } from '@/lib/wallet/nft';
+import { executeSwap } from '@/lib/wallet/swap';
+import type { SwapQuote, SwapReceipt } from '@/lib/wallet/swap';
+import { executeWrap } from '@/lib/wallet/wrap';
+import type { WrapQuote } from '@/lib/wallet/wrap';
 
 /**
  * Session state of the unified multichain wallet.
@@ -913,6 +920,114 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         return chain.signMessage(sourceFor(chainId), message);
     };
 
+    /**
+     * Mint one NFT into the network's shared collection.
+     *
+     * The only write in this wallet that is not a payment, and it goes through
+     * the same door as one: the key is derived inside `sourceFor`, used, and
+     * dropped. `quote` is the gas limit and price the user was shown and held
+     * a button to agree to — the mint is signed for those numbers or not at
+     * all.
+     */
+    const mintNft = async (
+        chainId: WalletChainId,
+        uri: string,
+        quote: MintQuote,
+    ): Promise<string> => {
+        const chain = walletChain(chainId);
+        const target = chain.chainId ? nftChain(chain.chainId) : null;
+
+        if (!target?.collection) {
+            throw new Error(`${chain.label} has no collection to mint into`);
+        }
+
+        return submitMint(
+            sourceFor(chainId),
+            uri,
+            target,
+            quote,
+            rpcFor(chainId),
+        );
+    };
+
+    /* ---------------------------------------------------------------- dex --- */
+
+    /**
+     * What the network charges per unit of gas right now.
+     *
+     * Screens that build something other than a transfer — a swap, a wrap —
+     * price it against this, so the number under a hold button is the same one
+     * a send would have used, floors and all.
+     */
+    const gasPrice = async (
+        chainId: WalletChainId,
+        tier: WalletFeeTier = 'normal',
+    ): Promise<bigint> => {
+        const chain = walletChain(chainId);
+
+        if (!chain.gasPrice) {
+            throw new Error(`${chain.label} does not price gas`);
+        }
+
+        return chain.gasPrice(tier, rpcFor(chainId));
+    };
+
+    /**
+     * Trade one asset for another on the network's own exchange.
+     *
+     * `quote` is the route, the floor and the gas the user read and held a
+     * button for — nothing is re-quoted between the hold and the signature.
+     * The output goes to this wallet's own address on that chain: a swap that
+     * could pay out somewhere else is a transfer wearing a swap's clothes.
+     */
+    const swap = async (
+        chainId: WalletChainId,
+        quote: SwapQuote,
+        onApproved?: (hash: string) => void,
+    ): Promise<SwapReceipt> => {
+        const account = accounts.value.find(
+            (candidate) => candidate.chain === chainId,
+        );
+
+        if (!account) {
+            throw new Error('This account has no address on that network');
+        }
+
+        const source = sourceFor(chainId);
+
+        busy.value = true;
+
+        try {
+            return await executeSwap(source, {
+                quote,
+                recipient: account.address,
+                rpcUrl: rpcFor(chainId),
+                onApproved,
+            });
+        } finally {
+            busy.value = false;
+        }
+    };
+
+    /** Turn the network's coin into its ERC20 wrapper, or back again. */
+    const wrap = async (
+        chainId: WalletChainId,
+        quote: WrapQuote,
+    ): Promise<string> => {
+        const source = sourceFor(chainId);
+
+        busy.value = true;
+
+        try {
+            return await executeWrap(source, {
+                quote,
+                rpcUrl: rpcFor(chainId),
+            });
+        } finally {
+            busy.value = false;
+        }
+    };
+
     /* ---------------------------------------------------------------- chat --- */
 
     /**
@@ -1097,6 +1212,10 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         readToken,
         readTokenSupply,
         signMessage,
+        mintNft,
+        gasPrice,
+        swap,
+        wrap,
         /** Encrypted chat: the public identity, and sealing under it. */
         chatIdentity,
         chatSeal,

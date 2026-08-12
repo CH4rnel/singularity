@@ -18,9 +18,10 @@ import type { LaunchpadChain } from '@/lib/launchpadChains';
  * cannot happen.
  *
  * Everything here is a read against the chain the wallet already talks to.
- * Nothing is bought or signed from these screens: buying a launched token is a
- * swap, which this wallet does not do, so the detail screen links out to the
- * DEX rather than pretending to route an order.
+ * Nothing is bought or signed from this file: buying a launched token is a
+ * swap, and that lives in `lib/wallet/swap.ts` — the detail screen hands it a
+ * contract address and the swap screen reads the token for itself, so nothing
+ * here has to know a launch's decimals or quote a route.
  */
 
 const LAUNCHPAD_ABI = [
