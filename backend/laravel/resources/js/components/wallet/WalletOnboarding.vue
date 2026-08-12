@@ -379,7 +379,7 @@ onBeforeUnmount(() => {
                     <button
                         type="button"
                         class="cw-back"
-                        style="margin-top: 12px"
+                        style="display: flex; margin-top: 12px"
                         @click="openSite"
                     >
                         {{ t('tgOpenSite') }} →
