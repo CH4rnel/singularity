@@ -222,8 +222,10 @@ async def open_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "It opens inside Telegram, but the keys are created and encrypted on "
         "your device. Telegram never receives your recovery phrase or your "
         "password, and neither does this bot.\n\n"
-        "A new phrase is not shown inside Telegram: create a wallet in the app "
-        f"or at {PROJECT_WEBSITE_URL.rstrip('/')}/wallet, then import it here.",
+        "You can create a wallet here or import one you already have. Write "
+        "the recovery phrase down either way: the wallet lives in Telegram's "
+        "own storage, and clearing Telegram's cache clears it — the phrase is "
+        "what brings it back.",
         reply_markup=mini_app_markup(_is_private(update)),
     )
 

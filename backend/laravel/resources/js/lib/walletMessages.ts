@@ -43,10 +43,6 @@ export const walletMessages: Messages = {
         // Telegram Mini App
         tgCustody:
             'Keys stay in this device’s storage. Telegram never receives your seed phrase or your password.',
-        tgNoSeedTitle: 'A new phrase is not shown here',
-        tgNoSeedBody:
-            'Creating a wallet means writing down twelve words, and a chat window is the wrong place to show them. Create one in the app or on the site, then import it here.',
-        tgOpenSite: 'Open cyberia.church',
         tgStorageWarning:
             'This wallet lives in Telegram’s own storage. Clearing Telegram’s cache clears it, and your recovery phrase is what brings it back — so keep that phrase.',
 
@@ -682,10 +678,6 @@ export const walletMessages: Messages = {
         // Telegram Mini App
         tgCustody:
             'Ключи остаются в хранилище этого устройства. Telegram не получает ни сид-фразу, ни пароль.',
-        tgNoSeedTitle: 'Новая фраза здесь не показывается',
-        tgNoSeedBody:
-            'Создать кошелёк — значит выписать двенадцать слов, а окно чата для этого неподходящее место. Создайте кошелёк в приложении или на сайте и импортируйте его сюда.',
-        tgOpenSite: 'Открыть cyberia.church',
         tgStorageWarning:
             'Этот кошелёк лежит в хранилище самого Telegram. Очистка кэша Telegram сотрёт его, и вернуть его можно только сид-фразой — берегите её.',
 

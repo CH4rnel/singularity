@@ -73,8 +73,10 @@ is offered as an ordinary link — `mini_app_markup()` makes that choice and
 `tests/test_mini_app.py` pins it. Configuring "Mini App" in BotFather is needed
 only for a `t.me/<bot>/<app>` direct link, which nothing here depends on.
 
-A new recovery phrase is never generated inside the frame: the wallet offers
-import there and sends you to the site or the installed app to create one.
+A wallet can be created inside the frame as well as imported, with the same
+risk notice, held reveal and backup check the site uses. The one warning added
+there is that the vault lives in Telegram's own storage, which Telegram clears
+without asking — the recovery phrase is what brings it back.
 
 ### pump.fun buy bot
 

@@ -52,8 +52,9 @@ class OpenCommandTests(unittest.TestCase):
 
         self.assertIn("recovery phrase", answer)
         self.assertIn("your device", answer)
-        # The one rule the frame itself enforces, said before anyone taps.
-        self.assertIn("not shown inside Telegram", answer)
+        # The one thing that is genuinely different about this frame, said
+        # before anyone taps: the storage belongs to Telegram.
+        self.assertIn("clearing Telegram's cache clears it", answer)
         self.assertIsNotNone(kwargs["reply_markup"].inline_keyboard[0][0].web_app)
 
     def test_group_reply_carries_a_link_instead(self):

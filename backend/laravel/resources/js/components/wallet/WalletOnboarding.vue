@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
-import { telegramOpenLink } from '@/lib/telegram';
 import { createMnemonic, isValidMnemonic, walletChains } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -35,13 +34,15 @@ const props = withDefaults(
         start?: Step;
         cancellable?: boolean;
         /**
-         * Inside Telegram's frame, where a new phrase is never generated.
+         * Inside Telegram's frame.
          *
-         * Twelve words that have to be written down are the one thing a chat
-         * window is the wrong place for: the frame is small, it is somebody
-         * else's chrome, and a screenshot lands in the same app. So the Mini
-         * App imports a phrase you already keep and sends you elsewhere to
-         * make a new one.
+         * Creating a wallet works here exactly as it does anywhere else —
+         * risk notice, held reveal, backup check — because a Mini App that
+         * cannot make a wallet sends every newcomer away at the one moment
+         * they were willing to start. What is different is where the vault
+         * lands: Telegram's own web-view storage, which Telegram empties
+         * without asking. That is said on the first screen, before a phrase
+         * exists, since the phrase is what makes it survivable.
          */
         telegram?: boolean;
     }>(),
@@ -50,13 +51,6 @@ const props = withDefaults(
 
 const { t } = useLocale(walletMessages);
 const clipboard = useSecureClipboard();
-
-/**
- * Out of the Mini App and into a browser, where a phrase can be created and
- * written down. Telegram's own opener is used so the page gets an address bar
- * rather than another frame without one.
- */
-const openSite = (): void => telegramOpenLink('https://cyberia.church/wallet');
 
 const step = ref<Step>(props.start);
 const words = ref<12 | 24>(12);
@@ -348,7 +342,6 @@ onBeforeUnmount(() => {
                 >
             </div>
             <button
-                v-if="!telegram"
                 type="button"
                 class="cw-btn cw-btn-primary"
                 @click="step = 'risk'"
@@ -357,34 +350,22 @@ onBeforeUnmount(() => {
             </button>
             <button
                 type="button"
-                class="cw-btn"
-                :class="telegram ? 'cw-btn-primary' : 'cw-btn-secondary'"
+                class="cw-btn cw-btn-secondary"
                 @click="step = 'import'"
             >
                 {{ t('importWallet') }}
             </button>
 
-            <!-- Inside Telegram, where a new phrase is never generated. -->
             <!--
+                What is actually different about creating a wallet in here: the
+                storage it lands in belongs to Telegram, and Telegram empties it
+                without asking. Said before the phrase exists rather than after.
+
                 One child, because `.cw-note` is a flex row whose first item is
-                the marker dot: a title and a paragraph side by side would be
-                laid out as two columns.
+                the marker dot — two children lay out as two columns.
             -->
             <div v-if="telegram" class="cw-note" style="margin-top: 4px">
-                <span>
-                    <strong style="color: var(--cw-text)">
-                        {{ t('tgNoSeedTitle') }}
-                    </strong>
-                    {{ ' ' }}{{ t('tgNoSeedBody') }}
-                    <button
-                        type="button"
-                        class="cw-back"
-                        style="display: flex; margin-top: 12px"
-                        @click="openSite"
-                    >
-                        {{ t('tgOpenSite') }} →
-                    </button>
-                </span>
+                <span>{{ t('tgStorageWarning') }}</span>
             </div>
             <p
                 class="cw-label"

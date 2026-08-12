@@ -215,7 +215,7 @@ The wallet inside Telegram is **the site's own `/wallet` page in Telegram's web 
 On the site, `resources/js/lib/telegram.ts` decides the frame from the launch parameters Telegram appends to the URL, synchronously, so `initializeNativeShell()` returns `'telegram'` and `app.ts` picks `NativeShellLayout` before anything paints. The SDK is fetched from telegram.org **only** inside the frame. Rules that are load-bearing rather than cosmetic:
 
 - **Telegram is told nothing.** `initData` is never forwarded and `CloudStorage` is never touched — a vault synced through Telegram is a vault Telegram holds. The custody sentence is the first thing on the portfolio there (`tgCustody`).
-- **No new phrase in the frame.** `WalletOnboarding` takes a `telegram` prop: import only, with a link out to the site or the app to create one.
+- **Creating a wallet works in the frame**, with the same risk notice, held reveal and backup check as anywhere else — a Mini App that cannot make a wallet turns away every newcomer at the moment they were willing to start. What `WalletOnboarding`'s `telegram` prop adds is the sentence that is only true here: the vault lands in Telegram's own web-view storage, which Telegram empties without asking, so the recovery phrase is what makes it survivable (`tgStorageWarning`, shown before a phrase exists).
 - **The main button never signs.** It mirrors a screen's primary action where that action is a tap; every signature stays a hold in the page, because a tap is not a hold. Telegram's back arrow is wired to the wallet's own navigation, or it closes the whole app mid-send.
 
 Covered by `tests/Frontend/WalletTelegramTest.mjs` (frame detection) and `services/telegram-bot/tests/test_mini_app.py` (the buttons and what the reply promises).
