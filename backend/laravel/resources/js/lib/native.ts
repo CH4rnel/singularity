@@ -3,11 +3,15 @@
  *
  * `frontend/desktop` (Electron) exposes `window.cyberiaNative` and appends
  * `CyberiaDesktop/<version>` to the user agent; `frontend/mobile` (Capacitor)
- * appends `CyberiaMobile/<version>`. Everything else — browsers and the
- * installed PWA — is not a native shell.
+ * appends `CyberiaMobile/<version>`. Telegram opens the same pages in its own
+ * web view as a Mini App, which is a shell in every way that matters here: it
+ * owns the frame, so the site header and footer would be a second chrome
+ * inside someone's chat. Everything else — browsers and the installed PWA — is
+ * not a native shell.
  */
+import { isTelegramMiniApp } from '@/lib/telegram';
 
-export type NativeShell = 'desktop' | 'mobile' | null;
+export type NativeShell = 'desktop' | 'mobile' | 'telegram' | null;
 
 interface DesktopBridge {
     shell?: string;
@@ -43,7 +47,10 @@ function detect(): NativeShell {
         return 'mobile';
     }
 
-    return null;
+    // Read off the launch parameters in the URL rather than off the SDK: the
+    // layout is chosen before any script has loaded, and a wallet that flashes
+    // a site header inside a chat looks like the wrong page opened.
+    return isTelegramMiniApp() ? 'telegram' : null;
 }
 
 /**

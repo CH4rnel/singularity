@@ -26,7 +26,13 @@ import WalletTokens from '@/components/wallet/WalletTokens.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
-import { isNativeShell } from '@/lib/native';
+import { isNativeShell, nativeShell } from '@/lib/native';
+import {
+    hideMainButton,
+    setBackButton,
+    setMainButton,
+    telegramHaptic,
+} from '@/lib/telegram';
 import { unreadChatCount } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
@@ -193,6 +199,75 @@ const TAB_OF: Record<Section, Section> = {
 };
 
 const activeTab = computed(() => TAB_OF[section.value]);
+
+/* ------------------------------------------------------- telegram mini app --- */
+
+/**
+ * Inside Telegram the frame is not ours: the header carries a back arrow and
+ * the bottom carries one main button, and an app that leaves those two wired to
+ * nothing is an app that closes itself when someone tries to go back.
+ */
+const telegram = nativeShell() === 'telegram';
+
+/** Where "back" goes, or null on a screen that is already the top of the app. */
+const telegramBack = computed<(() => void) | null>(() => {
+    if (overlay.value !== null) {
+        return () => {
+            overlay.value = null;
+        };
+    }
+
+    if (section.value !== 'portfolio' && activeTab.value === 'portfolio') {
+        return () => openSection('portfolio');
+    }
+
+    return null;
+});
+
+if (telegram) {
+    let releaseMain = (): void => {};
+    let releaseBack = (): void => {};
+
+    watch(
+        // The main button mirrors the screen's primary action, and *only*
+        // where that action is a tap. Signing is a hold in this wallet — a
+        // gesture a page cannot perform and a thumb cannot perform by accident
+        // — so the signing screens leave Telegram's button hidden rather than
+        // quietly demoting a hold to a tap.
+        () => [stage.value, section.value, overlay.value] as const,
+        () => {
+            releaseMain();
+
+            if (stage.value === 'app' && section.value === 'portfolio' && overlay.value === null) {
+                releaseMain = setMainButton({
+                    text: t('send').toUpperCase(),
+                    onClick: () => {
+                        telegramHaptic();
+                        openSend();
+                    },
+                });
+            } else {
+                hideMainButton();
+                releaseMain = () => {};
+            }
+        },
+        { immediate: true },
+    );
+
+    watch(
+        telegramBack,
+        (handler) => {
+            releaseBack();
+            releaseBack = setBackButton(handler);
+        },
+        { immediate: true },
+    );
+
+    onBeforeUnmount(() => {
+        releaseMain();
+        releaseBack();
+    });
+}
 
 /**
  * Messages waiting, for the badge on the tab bar and the rail.
@@ -708,6 +783,7 @@ watch(
                             :busy="wallet.busy.value"
                             :start="restoring ? 'import' : 'welcome'"
                             :cancellable="restoring"
+                            :telegram="telegram"
                             @adopt="adopt"
                             @cancel="restoring = false"
                         />
@@ -751,21 +827,31 @@ watch(
                         @add-network="overlay = 'addNetwork'"
                     />
 
-                    <WalletPortfolio
-                        v-else-if="section === 'portfolio'"
-                        :wallet="wallet"
-                        :prices="prices"
-                        :token-prices="tokenPrices"
-                        :online="online"
-                        @open="openChain"
-                        @send="openSend()"
-                        @receive="overlay = 'receive'"
-                        @add-network="overlay = 'addNetwork'"
-                        @tokens="openSection('tokens')"
-                        @analytics="openSection('analytics')"
-                        @accounts="openSection('accounts')"
-                        @security="openSection('security')"
-                    />
+                    <!--
+                        Arriving from a chat, the first question is what
+                        Telegram can see. It is answered before the balances,
+                        not in a policy page nobody opens.
+                    -->
+                    <template v-else-if="section === 'portfolio'">
+                        <p v-if="telegram" class="cw-note" style="margin-bottom: 16px">
+                            {{ t('tgCustody') }}
+                        </p>
+
+                        <WalletPortfolio
+                            :wallet="wallet"
+                            :prices="prices"
+                            :token-prices="tokenPrices"
+                            :online="online"
+                            @open="openChain"
+                            @send="openSend()"
+                            @receive="overlay = 'receive'"
+                            @add-network="overlay = 'addNetwork'"
+                            @tokens="openSection('tokens')"
+                            @analytics="openSection('analytics')"
+                            @accounts="openSection('accounts')"
+                            @security="openSection('security')"
+                        />
+                    </template>
 
                     <WalletChat
                         v-else-if="section === 'chat'"

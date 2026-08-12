@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from web3 import Web3
 from sqlalchemy import text
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 
@@ -20,6 +20,7 @@ from bot.config import (
     CYBER_CA_SOLANA, CYBER_CA_EVM,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_VERIFY_URL, WHALE_LINK_TTL_MINUTES,
     SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL, APP_DOWNLOAD_URL,
+    WALLET_MINI_APP_URL,
     CYBER_SOL_DECIMALS,
     AI_ENABLED,
 )
@@ -185,6 +186,48 @@ async def website_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(PROJECT_WEBSITE_URL)
 
 
+def mini_app_markup(is_private: bool) -> InlineKeyboardMarkup:
+    """The button that opens the wallet inside Telegram.
+
+    A `web_app` button is only allowed in private chats — Telegram rejects the
+    message otherwise — so in a group the same wallet is offered as an ordinary
+    link, which opens in the browser instead of in the frame. Both lead to the
+    same page; only the chrome around it differs.
+    """
+    if is_private:
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton("👛 Open wallet", web_app=WebAppInfo(url=WALLET_MINI_APP_URL))]]
+        )
+
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("👛 Open wallet", url=WALLET_MINI_APP_URL)]]
+    )
+
+
+def _is_private(update: Update) -> bool:
+    chat = update.effective_chat
+    return chat is not None and chat.type == "private"
+
+
+async def open_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Open the wallet as a Mini App, without leaving Telegram.
+
+    The keys are made and kept by the page itself, in this device's storage;
+    the bot hands out a URL and learns nothing about what happens inside it.
+    That is worth saying here, because a wallet opened from a chat is exactly
+    where someone will assume the chat can see it.
+    """
+    await update.message.reply_text(
+        "Cyberia Wallet — one recovery phrase, every chain.\n\n"
+        "It opens inside Telegram, but the keys are created and encrypted on "
+        "your device. Telegram never receives your recovery phrase or your "
+        "password, and neither does this bot.\n\n"
+        "A new phrase is not shown inside Telegram: create a wallet in the app "
+        f"or at {PROJECT_WEBSITE_URL.rstrip('/')}/wallet, then import it here.",
+        reply_markup=mini_app_markup(_is_private(update)),
+    )
+
+
 async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Where to get the wallet app.
 
@@ -199,9 +242,13 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Android APK: {base}/android\n"
         f"Windows: {base}/windows\n"
         f"macOS: {base}/macos\n"
-        f"Linux: {base}/linux\n\n"
+        f"Linux: {base}/linux\n"
+        f"Browser extension: {base}/extension\n\n"
         "On iPhone open the site in Safari and add it to the home screen. "
-        "The app is the site in a window — your keys stay on your device."
+        "The app is the site in a window — your keys stay on your device.",
+        # The same wallet without installing anything, for whoever is reading
+        # this on a phone in a chat.
+        reply_markup=mini_app_markup(_is_private(update)),
     )
 
 

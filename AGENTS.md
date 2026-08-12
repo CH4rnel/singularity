@@ -39,7 +39,7 @@ singularity/
 ├── services/cyberia-node/ # Cyberia L1 second node (polygon-edge follower/RPC); prepared, not deployed
 ├── services/ipfs/        # IPFS docker-compose config
 ├── services/lisp/        # Common Lisp daemon/http services
-├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, pump.fun buy bot, whales gate
+├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, pump.fun buy bot, whales gate, wallet Mini App
 ├── services/lainos/      # LainOS: autonomous AI agent framework (TypeScript), Cyberia chain plugin
 ├── game/wired/           # Wired: 3D on-chain game (Godot 4), NPCs powered by LainOS
 ├── game/nocarrier/       # NO CARRIER: netstalking survival-horror sim (Godot 4, en/ru, optional on-chain NFT sealing)
@@ -205,6 +205,20 @@ npm run android:apk     # needs a local Android SDK + JDK 21
 - `frontend/mobile/android/` and `frontend/mobile/ios/` are committed: they hold the `cyberia://` scheme, the App Links intent filters, and the generated icons.
 - Deep links only resolve to the apps once `APP_ANDROID_SHA256_FINGERPRINT` / `APP_IOS_APP_ID` are set in the Laravel `.env`; both `/.well-known/` association files 404 until then.
 - The site detects the shells from the `CyberiaDesktop/` and `CyberiaMobile/` user-agent suffixes (`backend/laravel/resources/js/lib/native.ts`).
+
+---
+
+## Telegram Mini App
+
+The wallet inside Telegram is **the site's own `/wallet` page in Telegram's web view** — no second app, no second vault. `services/telegram-bot` hands out `WALLET_MINI_APP_URL` (default `https://cyberia.church/wallet`) from `/open`, the ☰ menu button set in `post_init`, and a button under `/app`; `mini_app_markup()` falls back to a plain link outside private chats because Telegram rejects `web_app` buttons there. None of it needs BotFather — that is only for a `t.me/<bot>/<app>` link.
+
+On the site, `resources/js/lib/telegram.ts` decides the frame from the launch parameters Telegram appends to the URL, synchronously, so `initializeNativeShell()` returns `'telegram'` and `app.ts` picks `NativeShellLayout` before anything paints. The SDK is fetched from telegram.org **only** inside the frame. Rules that are load-bearing rather than cosmetic:
+
+- **Telegram is told nothing.** `initData` is never forwarded and `CloudStorage` is never touched — a vault synced through Telegram is a vault Telegram holds. The custody sentence is the first thing on the portfolio there (`tgCustody`).
+- **No new phrase in the frame.** `WalletOnboarding` takes a `telegram` prop: import only, with a link out to the site or the app to create one.
+- **The main button never signs.** It mirrors a screen's primary action where that action is a tap; every signature stays a hold in the page, because a tap is not a hold. Telegram's back arrow is wired to the wallet's own navigation, or it closes the whole app mid-send.
+
+Covered by `tests/Frontend/WalletTelegramTest.mjs` (frame detection) and `services/telegram-bot/tests/test_mini_app.py` (the buttons and what the reply promises).
 
 ---
 

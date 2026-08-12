@@ -294,6 +294,17 @@ PIXEL_BATTLE_URL = os.environ.get("PIXEL_BATTLE_URL", PROJECT_WEBSITE_URL.rstrip
 # passed around by hand, which is how the app used to reach people.
 APP_DOWNLOAD_URL = os.environ.get("APP_DOWNLOAD_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/download")
 
+# The Mini App: the wallet on the site, opened inside Telegram's web view.
+# Nothing is bundled here — the page is the same /wallet everyone else uses, so
+# a deploy updates the Mini App with it. Telegram requires HTTPS, and only that.
+WALLET_MINI_APP_URL = os.environ.get(
+    "WALLET_MINI_APP_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/wallet"
+)
+
+# Whether to put the Mini App behind the chat menu button (the ☰ beside the
+# input box) at startup. Off switches the bot back to the plain command menu.
+WALLET_MINI_APP_MENU = os.environ.get("WALLET_MINI_APP_MENU", "1") not in ("0", "false", "False")
+
 # --- AI assistant ------------------------------------------------------------
 # Master switch. The assistant stays fully off (no /ask, no DM/mention answers,
 # no "not configured" replies) unless AI_ENABLED is set to a truthy value.

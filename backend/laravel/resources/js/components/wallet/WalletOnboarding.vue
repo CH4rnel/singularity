@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
+import { telegramOpenLink } from '@/lib/telegram';
 import { createMnemonic, isValidMnemonic, walletChains } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -33,12 +34,29 @@ const props = withDefaults(
          */
         start?: Step;
         cancellable?: boolean;
+        /**
+         * Inside Telegram's frame, where a new phrase is never generated.
+         *
+         * Twelve words that have to be written down are the one thing a chat
+         * window is the wrong place for: the frame is small, it is somebody
+         * else's chrome, and a screenshot lands in the same app. So the Mini
+         * App imports a phrase you already keep and sends you elsewhere to
+         * make a new one.
+         */
+        telegram?: boolean;
     }>(),
-    { start: 'welcome', cancellable: false },
+    { start: 'welcome', cancellable: false, telegram: false },
 );
 
 const { t } = useLocale(walletMessages);
 const clipboard = useSecureClipboard();
+
+/**
+ * Out of the Mini App and into a browser, where a phrase can be created and
+ * written down. Telegram's own opener is used so the page gets an address bar
+ * rather than another frame without one.
+ */
+const openSite = (): void => telegramOpenLink('https://cyberia.church/wallet');
 
 const step = ref<Step>(props.start);
 const words = ref<12 | 24>(12);
@@ -330,6 +348,7 @@ onBeforeUnmount(() => {
                 >
             </div>
             <button
+                v-if="!telegram"
                 type="button"
                 class="cw-btn cw-btn-primary"
                 @click="step = 'risk'"
@@ -338,11 +357,32 @@ onBeforeUnmount(() => {
             </button>
             <button
                 type="button"
-                class="cw-btn cw-btn-secondary"
+                class="cw-btn"
+                :class="telegram ? 'cw-btn-primary' : 'cw-btn-secondary'"
                 @click="step = 'import'"
             >
                 {{ t('importWallet') }}
             </button>
+
+            <!-- Inside Telegram, where a new phrase is never generated. -->
+            <div
+                v-if="telegram"
+                class="cw-note"
+                style="margin-top: 4px; text-align: left"
+            >
+                <strong style="color: var(--cw-text)">
+                    {{ t('tgNoSeedTitle') }}
+                </strong>
+                {{ ' ' }}{{ t('tgNoSeedBody') }}
+                <button
+                    type="button"
+                    class="cw-back"
+                    style="margin-top: 12px"
+                    @click="openSite"
+                >
+                    {{ t('tgOpenSite') }} →
+                </button>
+            </div>
             <p
                 class="cw-label"
                 style="

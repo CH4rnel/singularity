@@ -53,6 +53,29 @@ from, in order: `$BOT_ENV_FILE`, `services/telegram-bot/.env`,
 `scripts/python/.env` (so the prod shim keeps working). `DEPLOYER_PK` is never
 logged.
 
+### Wallet Mini App
+
+The bot opens the Cyberia wallet inside Telegram. There is nothing to build
+here and nothing to host: the Mini App is `WALLET_MINI_APP_URL`
+(default `https://cyberia.church/wallet`), the same page a browser gets, so a
+site deploy updates it. The bot hands out a URL and learns nothing about what
+happens inside — the keys are made and encrypted by the page, in the web view's
+own storage.
+
+Three ways in, none of which needs BotFather:
+
+- the **☰ menu button** beside the input box, set at startup (`WALLET_MINI_APP_MENU=0` turns it off);
+- **`/open`**, which explains what Telegram cannot see and then offers the button;
+- **`/app`**, which lists the installable builds and offers the Mini App underneath.
+
+A `web_app` button is legal only in a private chat, so in groups the same page
+is offered as an ordinary link — `mini_app_markup()` makes that choice and
+`tests/test_mini_app.py` pins it. Configuring "Mini App" in BotFather is needed
+only for a `t.me/<bot>/<app>` direct link, which nothing here depends on.
+
+A new recovery phrase is never generated inside the frame: the wallet offers
+import there and sends you to the site or the installed app to create one.
+
 ### pump.fun buy bot
 
 Every CYBER.sol buy worth at least `PUMPFUN_MIN_BUY_USD` (default $5) gets its
