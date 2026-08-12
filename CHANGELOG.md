@@ -12,6 +12,7 @@ vYYYY.MM.DD
 
 ### Added
 
+- Cyberia Wallet browser extension (`frontend/extension`): Manifest V3 wallet with its own encrypted vault and an EIP-1193 provider for dapps, published with the apps and offered at `/download`.
 - LainOS: autonomous AI agent framework with a Cyberia chain plugin (`services/lainos`).
 - Wired: 3D on-chain Godot game whose NPCs think via LainOS (`game/wired`).
 - Cyberia L1 second-node config: non-validating full/RPC follower, prepared but not deployed (`services/cyberia-node`).

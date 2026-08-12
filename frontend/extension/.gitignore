@@ -1,0 +1,5 @@
+node_modules/
+
+# `npm run build` writes the unpacked extension here; `npm run zip` packs it.
+dist/
+Cyberia-extension.zip

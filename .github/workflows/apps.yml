@@ -204,12 +204,55 @@ jobs:
           path: frontend/mobile/Cyberia*.apk
           if-no-files-found: error
 
+  extension:
+    name: Browser extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/extension
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The wallet's own rules — derivation paths, what a page may call without
+      # a human, what the manifest may ask for — are what these pin.
+      - name: Tests
+        run: npm test
+
+      - name: Version from tag
+        if: github.ref_type == 'tag'
+        run: npm version "${GITHUB_REF_NAME#app-v}" --no-git-tag-version --allow-same-version
+
+      # `npm run zip` writes the manifest version from package.json and packs
+      # dist/ deterministically, so the checksum on the release is reproducible
+      # from this tag.
+      - name: Build and pack
+        run: npm run zip
+
+      - name: Upload extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-extension
+          path: frontend/extension/Cyberia-extension.zip
+          if-no-files-found: error
+
   # One public release per tag, holding every installer the site links to.
   # Android is allowed to be missing (see above) — a broken Android job must not
   # keep the desktop builds off the download page.
   publish:
     name: Publish release
-    needs: [desktop, android]
+    needs: [desktop, android, extension]
     if: ${{ always() && github.ref_type == 'tag' && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
@@ -257,6 +300,12 @@ jobs:
           \`Cyberia-linux-amd64.deb\`.
 
           $APK_NOTE
+
+          **Browser** — \`Cyberia-extension.zip\`, a Chrome/Brave/Edge extension
+          (Manifest V3). Unzip it, open \`chrome://extensions\`, turn on Developer
+          mode and press *Load unpacked*. Unlike the apps above this one is not a
+          shell around the site: it holds its own encrypted vault and signs for
+          dapps, so it updates only when you install a new release.
 
           Verify what you downloaded against \`SHA256SUMS.txt\`.
 

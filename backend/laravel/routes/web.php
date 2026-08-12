@@ -167,7 +167,7 @@ Route::get('/changelog', ChangelogController::class)->name('changelog');
 // pasting into a message; it redirects to the current file for that platform.
 Route::get('/download', [DownloadController::class, 'index'])->name('download');
 Route::get('/download/{platform}', [DownloadController::class, 'platform'])
-    ->where('platform', 'windows|macos|linux|android')
+    ->where('platform', 'windows|macos|linux|android|extension')
     ->name('download.platform');
 Route::permanentRedirect('/downloads', '/download');
 Route::get('/api/downloads', [DownloadController::class, 'json'])

@@ -16,6 +16,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `frontend/jekyll/` | Jekyll | Cyberia blog/static site |
 | `frontend/desktop/` | Electron 43, electron-builder | Cyberia desktop app (Linux/Windows/macOS) wrapping the live site |
 | `frontend/mobile/` | Capacitor 8, Android, iOS | Cyberia mobile app (Android/iOS) wrapping the live site |
+| `frontend/extension/` | Manifest V3, esbuild, ethers v6 | Cyberia Wallet browser extension: own vault, EIP-1193 provider for dapps |
 | `crypto/hardhat/` | Hardhat 3, Solidity, viem, ethers v6, OpenZeppelin 4.9 | EVM contracts and deployment scripts |
 | `crypto/anchor/` | Anchor, Rust, Solana Web3.js, SPL Token | Solana bridge contracts and relayer scripts |
 | `crypto/quickswap-core/` | Truffle-era Uniswap v2 core fork | Legacy DEX core contracts/tests |
@@ -35,7 +36,7 @@ Each component manages its own dependencies. There is no root Turbo/Nx workspace
 ## Safety Rules
 
 - Do not print or commit secrets from `.env`, wallet keypair JSON files, cookies, bot tokens, private keys, or production Blockscout env files. Mention variable names only.
-- Do not edit generated dependency/runtime folders unless explicitly requested: `node_modules/`, `vendor/`, `target/`, `build/`, `_site/`, `artifacts/`, `cache/`, `test-ledger/`, `logs/`, `linux/custom-root/`, `frontend/desktop/dist/`, `frontend/mobile/www/`, and Blockscout data volumes under `services/blockscout/docker-compose/services/*-data/`.
+- Do not edit generated dependency/runtime folders unless explicitly requested: `node_modules/`, `vendor/`, `target/`, `build/`, `_site/`, `artifacts/`, `cache/`, `test-ledger/`, `logs/`, `linux/custom-root/`, `frontend/desktop/dist/`, `frontend/mobile/www/`, `frontend/extension/dist/`, and Blockscout data volumes under `services/blockscout/docker-compose/services/*-data/`.
 - Prefer `rg --files` and scoped searches over broad `find` walks through runtime trees.
 - Root `README.md` is user-facing and currently less complete than agent docs. Do not rely on stale root paths such as `hardhat/`; EVM contracts live in `crypto/hardhat/`.
 - When drafting posts for the user, assume there is no character limit unless the user explicitly sets one.
@@ -115,6 +116,16 @@ cd frontend/desktop && npm install && npm test && npm run dist:linux
 cd frontend/mobile && npm install && npm test && npm run sync
 ```
 
+### Browser Extension — `frontend/extension/`
+
+`frontend/extension/README.md` is authoritative. Unlike the shells this one bundles a wallet: MV3 service worker holding an AES-GCM/PBKDF2 vault in the same format as `lib/wallet/vault.ts`, EVM accounts on `m/44'/60'/0'/0/{index}` (so the site's phrase derives the same accounts), and an EIP-1193 + EIP-6963 provider injected **only** into granted origins — there is no `<all_urls>` content script, and `chrome.scripting.registerContentScripts` is re-synced from the grants. Every signing method stops at a human in a separate approval window; `PASSTHROUGH_METHODS` is the complete list of calls that reach the chain unattended. The relay applies `chrome.proxy` browser-wide (MV3 has no per-extension route) and says so in the UI; `proxy`/`privacy` are optional permissions asked for in a click.
+
+```bash
+cd frontend/extension && npm install && npm test && npm run zip
+```
+
+`npm run zip` produces `Cyberia-extension.zip` — the asset `.github/workflows/apps.yml` attaches to the `app-v*` release and `config/downloads.php` looks for. `/download/extension` is its permanent short link.
+
 Windows/macOS installers and the Android APK come from `.github/workflows/apps.yml` (tag `app-v*` or manual dispatch); the Android build needs a local SDK otherwise. A tag also publishes the GitHub release that `/download` serves. `frontend/mobile/www/` and `frontend/desktop/dist/` are generated; `frontend/mobile/android/` and `ios/` are committed because they carry the deep-link intent filters and icons.
 
 ### Static Frontends
@@ -171,6 +182,7 @@ Use the smallest relevant check:
 - Ritual: `cd frontend/ritual && npx eslint <changed files>` or the deploy build flow above
 - Desktop shell: `cd frontend/desktop && npm test` (add `npm run pack` when the Electron main process changed)
 - Mobile shell: `cd frontend/mobile && npm test && npm run sync`
+- Browser extension: `cd frontend/extension && npm test && npm run build`
 - Hardhat: `cd crypto/hardhat && npx hardhat test`
 - Anchor: `cd crypto/anchor && anchor test` or at least `anchor build`
 - NO CARRIER: `cd game/nocarrier && godot4 --headless --import . && godot4 --headless --path . -s tests/smoke.gd`

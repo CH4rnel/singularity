@@ -1,0 +1,42 @@
+{
+    "manifest_version": 3,
+    "name": "Cyberia Wallet",
+    "version": "0.0.0",
+    "description": "Non-custodial wallet for Cyberia and other EVM chains. Keys are generated on this device and never leave it.",
+    "homepage_url": "https://cyberia.church/wallet",
+    "minimum_chrome_version": "111",
+    "action": {
+        "default_title": "Cyberia Wallet",
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/icon-16.png",
+            "32": "icons/icon-32.png",
+            "48": "icons/icon-48.png",
+            "128": "icons/icon-128.png"
+        }
+    },
+    "icons": {
+        "16": "icons/icon-16.png",
+        "32": "icons/icon-32.png",
+        "48": "icons/icon-48.png",
+        "128": "icons/icon-128.png"
+    },
+    "background": {
+        "service_worker": "background.js",
+        "type": "module"
+    },
+    "permissions": ["storage", "alarms", "scripting", "activeTab"],
+    "optional_permissions": ["proxy", "privacy"],
+    "host_permissions": [
+        "https://rpc.cyberia.church/*",
+        "https://explorer.cyberia.church/*",
+        "https://cyberia.church/*",
+        "https://rpc.mainnet.chain.robinhood.com/*",
+        "https://bsc-dataseed.binance.org/*",
+        "https://mainnet.base.org/*"
+    ],
+    "optional_host_permissions": ["https://*/*", "http://localhost/*"],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src https:; img-src 'self' data:"
+    }
+}

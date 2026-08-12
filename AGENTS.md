@@ -31,6 +31,7 @@ singularity/
 ├── frontend/jekyll/      # Jekyll Cyberia blog/static site
 ├── frontend/desktop/     # Cyberia desktop app (Electron shell over the live site)
 ├── frontend/mobile/      # Cyberia mobile app (Capacitor shell, Android + iOS)
+├── frontend/extension/   # Cyberia Wallet browser extension (MV3, own vault, EIP-1193)
 ├── crypto/hardhat/       # EVM contracts, Hardhat 3 + viem
 ├── crypto/anchor/        # Solana/Anchor bridge contracts and scripts
 ├── crypto/quickswap-core/ # Legacy QuickSwap/Uniswap v2 core contracts
@@ -72,7 +73,7 @@ LLM orientation:
 Important generated/runtime paths:
 
 - Dependency folders: `backend/laravel/vendor/`, `**/node_modules/`
-- Build outputs: `frontend/ritual/build/`, `frontend/jekyll/_site/`, `frontend/desktop/dist/`, `frontend/mobile/www/`, `frontend/mobile/android/app/build/`
+- Build outputs: `frontend/ritual/build/`, `frontend/jekyll/_site/`, `frontend/desktop/dist/`, `frontend/mobile/www/`, `frontend/mobile/android/app/build/`, `frontend/extension/dist/`
 - Contract outputs: `crypto/hardhat/artifacts/`, `crypto/hardhat/cache/`, `crypto/anchor/target/`, `crypto/anchor/test-ledger/`
 - Blockscout data volumes under `services/blockscout/docker-compose/services/*-data/`, `services/blockscout/docker-compose/services/dets/`, and Redis dumps
 - OS/rootfs artifacts under `linux/custom-root/`
@@ -204,6 +205,29 @@ npm run android:apk     # needs a local Android SDK + JDK 21
 - `frontend/mobile/android/` and `frontend/mobile/ios/` are committed: they hold the `cyberia://` scheme, the App Links intent filters, and the generated icons.
 - Deep links only resolve to the apps once `APP_ANDROID_SHA256_FINGERPRINT` / `APP_IOS_APP_ID` are set in the Laravel `.env`; both `/.well-known/` association files 404 until then.
 - The site detects the shells from the `CyberiaDesktop/` and `CyberiaMobile/` user-agent suffixes (`backend/laravel/resources/js/lib/native.ts`).
+
+---
+
+## Browser Extension
+
+Path: `frontend/extension/` (Manifest V3, esbuild, ethers v6). The per-directory `README.md` is authoritative.
+
+**Not a shell.** A dapp expects `window.ethereum` in its own page, so this build carries a wallet: an MV3 service worker with an AES-256-GCM / PBKDF2-SHA-256 (310k) vault in the same format as `resources/js/lib/wallet/vault.ts`, EVM accounts on `m/44'/60'/0'/0/{index}`, and an EIP-1193 + EIP-6963 provider. Importing the phrase from the wallet on the site gives the same accounts — that is the only thing the two surfaces share; there is no sync.
+
+```bash
+cd frontend/extension
+npm install
+npm test                # derivation vectors, grant rules, calldata reading, vault, relay config
+npm run build           # dist/ — load unpacked in chrome://extensions
+npm run zip             # Cyberia-extension.zip
+```
+
+- **No `<all_urls>`.** `manifest.json` ships no `content_scripts` at all; `src/background/injection.js` registers `inpage.js` (MAIN world) and `content.js` (ISOLATED) for granted origins only and re-syncs on every grant or revoke. A test asserts the manifest never acquires a blanket host pattern.
+- **Signing always stops at a human**, in a window of its own (`chrome.windows.create`), never in the toolbar popup that closes when the page is clicked. `PASSTHROUGH_METHODS` in `src/shared/protocol.js` is the complete set of unattended calls; `eth_sign` is refused outright and `wallet_addEthereumChain` is not offered — a page does not get to choose which RPC sees your addresses.
+- **The relay is browser-wide**, because `chrome.proxy` has no per-extension scope in MV3; the popup states this rather than implying a private tunnel. `proxy` and `privacy` are optional permissions requested inside the click that enables them, and `fixed_servers` fails closed.
+- Balances come from the chain RPC, tokens from that chain's keyless Blockscout index (so decimals are never hardcoded), USD from `cyberia.church/api/wallet/prices`; an unreadable price stays `null` and renders as a dash.
+- Released from the same `app-v*` tag as the apps (`.github/workflows/apps.yml`, job `extension`). The asset name carries no version, so `/releases/latest/download/Cyberia-extension.zip` and `https://cyberia.church/download/extension` are permanent. Renaming means editing `build.mjs`, the workflow and `backend/laravel/config/downloads.php` together.
+- Chromium only for now: Firefox MV3 has no `background.service_worker` and needs signing for a permanent install.
 
 ---
 
@@ -376,6 +400,7 @@ Use the smallest relevant checks:
 - Jekyll change: `cd frontend/jekyll && bundle exec jekyll build`
 - Desktop shell change: `cd frontend/desktop && npm test`; add `npm run pack` when the Electron main process changed.
 - Mobile shell change: `cd frontend/mobile && npm test && npm run sync`
+- Browser extension change: `cd frontend/extension && npm test && npm run build`
 - Static landing change: inspect the HTML and, if possible, open it locally or run an HTML validator if available.
 - Blockscout compose/proxy change: `cd services/blockscout/docker-compose && docker compose config`
 

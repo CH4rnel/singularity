@@ -5,6 +5,7 @@ import {
     Globe,
     Laptop,
     Monitor,
+    Puzzle,
     ShieldCheck,
     Smartphone,
     TabletSmartphone,
@@ -42,6 +43,10 @@ const PLATFORMS: { id: string; icon: typeof Terminal; note: string }[] = [
     { id: 'linux', icon: Terminal, note: 'linuxNote' },
     { id: 'android', icon: Smartphone, note: 'androidNote' },
     { id: 'ios', icon: TabletSmartphone, note: 'iosNote' },
+    // The extension belongs to a browser rather than to an operating system,
+    // so it is never the "for this device" card — it is offered alongside
+    // whichever one is.
+    { id: 'extension', icon: Puzzle, note: 'extensionNote' },
 ];
 
 const cards = computed<PlatformCard[]>(() =>

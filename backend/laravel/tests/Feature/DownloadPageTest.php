@@ -51,6 +51,7 @@ it('offers every file the published release carries', function () {
         releaseAsset('Cyberia-linux-x86_64.AppImage'),
         releaseAsset('Cyberia-linux-amd64.deb'),
         releaseAsset('Cyberia.apk'),
+        releaseAsset('Cyberia-extension.zip', 400_000),
         releaseAsset('SHA256SUMS.txt'),
     ]);
 
@@ -60,7 +61,9 @@ it('offers every file the published release carries', function () {
             ->component('Download')
             ->where('catalog.version', '1.2.3')
             ->where('catalog.status', 'published')
-            ->has('catalog.builds', 7)
+            ->has('catalog.builds', 8)
+            ->where('catalog.builds.7.id', 'extension-zip')
+            ->where('catalog.builds.7.platform', 'extension')
             ->where('catalog.builds.0.id', 'windows-installer')
             ->where('catalog.builds.0.size', 90_000_000)
             ->where('catalog.builds.0.url', 'https://github.com/cyberia-temple/singularity/releases/download/app-v1.2.3/Cyberia-Setup-x64.exe')
@@ -120,7 +123,7 @@ it('keeps every download working when GitHub cannot be reached', function () {
             ->where('catalog.version', null)
             ->where('catalog.status', 'unknown')
             // Nothing is hidden on a failed lookup: these URLs are permanent.
-            ->has('catalog.builds', 7)
+            ->has('catalog.builds', 8)
             ->where('catalog.builds.0.url', 'https://github.com/cyberia-temple/singularity/releases/latest/download/Cyberia-Setup-x64.exe')
             ->where('catalog.builds.0.size', null));
 });
@@ -143,6 +146,15 @@ it('redirects the per-platform short link to that platform s file', function () 
 
     $this->get('/download/android')
         ->assertRedirect('https://github.com/cyberia-temple/singularity/releases/download/app-v1.2.3/Cyberia.apk');
+});
+
+it('gives the browser extension a short link of its own', function () {
+    // The extension belongs to a browser, not to an operating system, so it is
+    // never the platform detected for a visitor — the link is how it is shared.
+    fakeRelease([releaseAsset('Cyberia-extension.zip')]);
+
+    $this->get('/download/extension')
+        ->assertRedirect('https://github.com/cyberia-temple/singularity/releases/download/app-v1.2.3/Cyberia-extension.zip');
 });
 
 it('sends the short link back to the page when that platform has no build', function () {

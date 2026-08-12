@@ -29,6 +29,8 @@ export const downloadMessages: Messages = {
         linux: 'Linux',
         android: 'Android',
         ios: 'iPhone and iPad',
+        extension: 'Browser extension',
+        'extension-zip': 'Chrome · Brave · Edge',
         'windows-installer': 'Installer',
         'windows-portable': 'Portable, no install',
         'macos-arm64': 'Apple Silicon',
@@ -46,11 +48,13 @@ export const downloadMessages: Messages = {
             'Android asks for permission to install apps from your browser the first time. There is no Play listing — the APK is downloaded from here.',
         iosNote:
             'There is no App Store build. Open cyberia.church in Safari, tap Share, then Add to Home Screen — the wallet runs full screen and works offline the same way.',
+        extensionNote:
+            'Unzip it, open chrome://extensions, turn on Developer mode and press Load unpacked. It is not in any web store yet. Unlike the apps, the extension is a wallet of its own: it signs for dapps in the page, and you can import the same seed phrase to see the same accounts.',
         openInBrowser: 'Open the wallet in the browser',
         webAlternative:
             'You do not need any of this to use the wallet — it runs in a browser tab, with the same keys.',
         keysNote:
-            'Every build is the same shell around cyberia.church. Keys are generated on your device and encrypted with your password; installing the app does not send them anywhere.',
+            'The apps are the same shell around cyberia.church; the browser extension is the one build that holds its own vault. Either way keys are generated on your device and encrypted with your password, and installing nothing sends them anywhere.',
         checksums: 'SHA-256 checksums',
         allReleases: 'All releases',
         sourceCode: 'Source code',
@@ -76,6 +80,8 @@ export const downloadMessages: Messages = {
         linux: 'Linux',
         android: 'Android',
         ios: 'iPhone и iPad',
+        extension: 'Расширение для браузера',
+        'extension-zip': 'Chrome · Brave · Edge',
         'windows-installer': 'Установщик',
         'windows-portable': 'Портативная, без установки',
         'macos-arm64': 'Apple Silicon',
@@ -93,11 +99,13 @@ export const downloadMessages: Messages = {
             'При первой установке Android попросит разрешить установку приложений из браузера. Приложения нет в Play — APK скачивается отсюда.',
         iosNote:
             'Сборки для App Store нет. Откройте cyberia.church в Safari, нажмите «Поделиться» → «На экран «Домой»» — кошелёк откроется на весь экран.',
+        extensionNote:
+            'Распакуйте архив, откройте chrome://extensions, включите режим разработчика и нажмите «Загрузить распакованное расширение». В магазинах его пока нет. В отличие от приложений, расширение — самостоятельный кошелёк: оно подписывает транзакции прямо на странице сайта, а если ввести ту же seed-фразу, счета будут те же.',
         openInBrowser: 'Открыть кошелёк в браузере',
         webAlternative:
             'Ничего из этого не обязательно: кошелёк работает во вкладке браузера с теми же ключами.',
         keysNote:
-            'Любая сборка — одна и та же оболочка вокруг cyberia.church. Ключи создаются на устройстве и шифруются вашим паролем; установка приложения никуда их не отправляет.',
+            'Приложения — одна и та же оболочка вокруг cyberia.church; расширение для браузера — единственная сборка со своим хранилищем. В обоих случаях ключи создаются на устройстве и шифруются вашим паролем, и установка никуда их не отправляет.',
         checksums: 'Контрольные суммы SHA-256',
         allReleases: 'Все релизы',
         sourceCode: 'Исходный код',
