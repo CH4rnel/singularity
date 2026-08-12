@@ -271,7 +271,13 @@ const receiveView = () => {
         </div>`;
 };
 
-const sendView = () => {
+/**
+ * What the send screen makes of what has been typed so far.
+ *
+ * Shared by the render and by the repaint that runs on each keystroke, so the
+ * button can never disagree with the form it belongs to.
+ */
+const sendState = () => {
     const chain = chainById(state.chainId);
     const amount = parseUnits(draft.amount, chain.decimals);
     // A balance that could not be read is unknown, not zero — saying "more than
@@ -279,7 +285,24 @@ const sendView = () => {
     const known = money && money.balance !== null && money.balance !== undefined;
     const balance = known ? BigInt(money.balance) : null;
     const overdrawn = known && amount !== null && amount > balance;
-    const ready = known && Boolean(draft.to) && amount !== null && amount > 0n && !overdrawn;
+
+    return {
+        chain,
+        amount,
+        known,
+        balance,
+        overdrawn,
+        ready: known && Boolean(draft.to) && amount !== null && amount > 0n && !overdrawn,
+        label: !known
+            ? 'BALANCE UNREADABLE — RPC UNREACHABLE'
+            : overdrawn
+              ? 'MORE THAN YOU HOLD'
+              : 'HOLD TO SIGN',
+    };
+};
+
+const sendView = () => {
+    const { chain, known, balance, overdrawn, ready, label } = sendState();
 
     return `
         <div class="cw-body">
@@ -297,11 +320,7 @@ const sendView = () => {
                 The network fee is read from the chain when you sign, and the wallet signs for no
                 more than it quotes. Fees are paid in ${esc(chain.symbol)}.
             </div>
-            ${holdButton(
-                'send',
-                !known ? 'BALANCE UNREADABLE — RPC UNREACHABLE' : overdrawn ? 'MORE THAN YOU HOLD' : 'HOLD TO SIGN',
-                !ready,
-            )}
+            ${holdButton('send', label, !ready)}
             ${noticeLine()}
         </div>`;
 };
@@ -739,7 +758,7 @@ const doSend = async () => {
 const wireHold = () => {
     const button = app.querySelector('[data-hold]');
 
-    if (!button || button.disabled) {
+    if (!button) {
         return;
     }
 
@@ -774,6 +793,13 @@ const wireHold = () => {
     };
 
     button.addEventListener('pointerdown', () => {
+        // Checked here rather than at wiring time: the form repaints this
+        // button as it is typed into, and a listener attached once must still
+        // respect a button that is disabled right now.
+        if (button.disabled) {
+            return;
+        }
+
         started = Date.now();
         frame = requestAnimationFrame(tick);
     });
@@ -783,11 +809,44 @@ const wireHold = () => {
     }
 };
 
+/**
+ * The send screen's button, brought up to date with what has been typed.
+ *
+ * Nothing here touches an input. Re-rendering a screen from a keystroke puts
+ * the text back into a fresh element with the caret at the start, and the
+ * password then arrives backwards — so the form is left alone and only the
+ * controls that read it are repainted.
+ */
+const paintSend = () => {
+    const button = app.querySelector('[data-hold="send"]');
+
+    if (!button) {
+        return;
+    }
+
+    const { overdrawn, ready, label } = sendState();
+
+    button.disabled = !ready;
+    button.querySelector('.cw-hold-label').textContent = label;
+
+    const amount = app.querySelector('[data-field="amount"]');
+
+    if (amount) {
+        amount.className = `cw-input${overdrawn ? ' is-bad' : ''}`;
+    }
+};
+
 app.addEventListener('input', (event) => {
     const field = event.target.dataset?.field;
 
-    if (field) {
-        draft = { ...draft, [field]: event.target.value };
+    if (!field) {
+        return;
+    }
+
+    draft = { ...draft, [field]: event.target.value };
+
+    if (field === 'to' || field === 'amount') {
+        paintSend();
     }
 });
 

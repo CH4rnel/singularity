@@ -70,6 +70,33 @@ test('no method both bypasses the human and reaches the signer', () => {
     assert.equal(rpcError('unauthorized').code, 4100);
 });
 
+test('no screen is re-rendered from a keystroke', async () => {
+    /*
+     * The popup and the onboarding page render by replacing markup. Doing that
+     * from an `input` event puts the text into a fresh element with the caret
+     * at position 0, so each character lands in front of the last one — the
+     * password was typed backwards, and it shipped that way in app-v1.2.0.
+     *
+     * The fix is architectural, which makes it easy to undo by accident: any
+     * future handler that "just re-renders" brings the bug straight back. So
+     * the rule is pinned here rather than left to a browser nobody runs.
+     */
+    for (const file of ['../src/popup/popup.js', '../src/onboarding/onboarding.js']) {
+        const source = await readFile(new URL(file, import.meta.url), 'utf8');
+        const at = source.indexOf("addEventListener('input'");
+
+        assert.ok(at > 0, `${file} has no input handler`);
+
+        // The handler body, up to the listener that follows it.
+        const body = source.slice(at, source.indexOf('addEventListener', at + 30));
+
+        assert.ok(
+            !/\brender\(\)/.test(body),
+            `${file} re-renders on input — the caret jumps and text arrives reversed`,
+        );
+    }
+});
+
 test('a relay is applied only when it points somewhere', () => {
     assert.equal(proxyConfigFor({ mode: 'direct' }), null);
     assert.equal(proxyConfigFor({ mode: 'socks5', host: '', port: '1080' }), null);

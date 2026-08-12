@@ -244,18 +244,49 @@ const render = () => {
 
 /* ------------------------------------------------------------ interaction --- */
 
+/**
+ * The parts of the password screen that answer to a keystroke — and nothing
+ * else, least of all the inputs.
+ *
+ * Re-rendering the screen on every keystroke put the password back into a new
+ * element with the caret at position 0, so each letter landed in front of the
+ * last one and the password was typed backwards. The fix is not to restore the
+ * caret afterwards but never to move it: the inputs are left exactly as the
+ * person is typing into them, and only the meter, the mismatch outline and the
+ * button's enabled state are repainted.
+ */
+const paintPassword = () => {
+    const score = strength(typed.password);
+    const mismatch = typed.repeat !== '' && typed.repeat !== typed.password;
+
+    app.querySelectorAll('.cw-strength .cw-bar').forEach((bar, at) => {
+        bar.className = `cw-bar${at < score ? (score >= 3 ? ' is-strong' : ' is-weak') : ''}`;
+    });
+
+    const repeat = app.querySelector('[data-field="repeat"]');
+
+    if (repeat) {
+        repeat.className = `cw-input${mismatch ? ' is-bad' : ''}`;
+    }
+
+    const finish = app.querySelector('[data-do="finish"]');
+
+    if (finish) {
+        finish.disabled = !(typed.password.length >= 8 && typed.password === typed.repeat);
+    }
+};
+
 app.addEventListener('input', (event) => {
     const field = event.target.dataset?.field;
 
-    if (field) {
-        typed = { ...typed, [field]: event.target.value };
+    if (!field) {
+        return;
+    }
 
-        // Re-render only where a keystroke changes the screen, so typing a
-        // phrase does not fight the cursor.
-        if (field !== 'phrase') {
-            render();
-            app.querySelector(`[data-field="${field}"]`)?.focus();
-        }
+    typed = { ...typed, [field]: event.target.value };
+
+    if (step === 'password') {
+        paintPassword();
     }
 });
 
