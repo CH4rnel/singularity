@@ -10,9 +10,41 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.10.0'),
+    'current_version' => env('APP_VERSION', 'v0.11.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.11.0',
+            'date' => '2026-08-12',
+            'title' => 'The wallet stops being only a place to keep things',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Swapping, inside the wallet. Trade one coin for another without leaving it and without connecting it to anything: the wallet finds the route itself, so a pair with no direct market still trades in one step, and you see the rate, the price impact and the fee before you sign.',
+                        'The price you agreed to is the price you are protected at. What you read on the screen goes into the transaction as a floor, so if the market moves while you are deciding, the trade simply does not happen — you are never quietly filled at a worse rate.',
+                        'Permission to spend a token is asked for the exact amount of the trade in front of you and nothing is left standing afterwards, so there is no open-ended approval sitting on your account waiting to be remembered.',
+                        'Wrapping, one for one, on the networks where a coin has to become a token before a pool will accept it. No route, no slippage and nothing to choose, because there is nothing to choose.',
+                        'NFTs in the wallet: what each of your accounts owns, and minting your own. What a token points at can be a picture, a page or a single line of text, and nothing here assumes it is an image.',
+                        'Publishing to IPFS from the wallet. Put up a file or a whole page and get a permanent address made out of the contents themselves — anyone who has that address can fetch it from any node that holds it. Up to 10 MB at a time.',
+                        'The wallet opens inside Telegram. @cyberia_bot has it behind the ☰ button and behind /open: the same wallet as the site, in the chat you were already in, and you can now create one there too. It carries the one warning that is only true inside Telegram — Telegram empties its own storage without asking, and your recovery phrase is what brings the wallet back.',
+                        'The wallet, the download page and the leaderboard now read in Simplified Chinese as well as English and Russian — 简体中文, every screen, including every warning about what nobody can undo for you.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'Prediction markets answer their own question where the question allows it. A market that names a price and where to read it settles from that source the moment it closes, without waiting on anybody. A market only a person can judge is refunded in full instead — every stake back, no fee — rather than expiring with the money still inside it, which is how two earlier markets ended.',
+                    ],
+                ],
+                [
+                    'label' => 'Fixed',
+                    'items' => [
+                        'The browser extension took new passwords backwards. Setting up an extension wallet, each character went in front of the one before it, so what was saved was your password reversed — invisibly, since the field only ever shows dots. The current build at cyberia.church/download is fixed. If a wallet you set up earlier will not unlock, try typing that password in reverse; your recovery phrase restores it either way.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.10.0',
             'date' => '2026-08-12',
