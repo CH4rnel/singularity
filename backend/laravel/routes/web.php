@@ -49,6 +49,7 @@ use App\Services\BridgeConfigService;
 use App\Services\DexAprService;
 use App\Services\GasSponsorService;
 use App\Services\LainChatService;
+use App\Services\SolanaRpcProxy;
 use App\Services\WalletPriceService;
 use App\Support\ProfileHandle;
 use Illuminate\Http\Request;
@@ -235,8 +236,15 @@ Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-
  * address. Balances, history, fees and signing are read and done by the
  * browser, never by us.
  */
-Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatService $lain, GasSponsorService $gas) => Inertia::render('Wallet', [
-    'solanaRpcUrl' => (string) config('services.staking.solana.public_rpc_url'),
+Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatService $lain, GasSponsorService $gas, SolanaRpcProxy $solana) => Inertia::render('Wallet', [
+    // Solana's public cluster answers this server and refuses the browser, so
+    // the endpoint handed over is our own relay (/api/solana/rpc). It reads
+    // the chain on the page's behalf and nothing else — the keys, the signing
+    // and the phrase never leave the device either way.
+    'solanaRpcUrl' => $solana->browserEndpoint(
+        SolanaRpcProxy::DEFAULT_CLUSTER,
+        (string) config('services.staking.public_rpc_url'),
+    ),
     'moneroPayoutAddress' => $request->user()?->monero_wallet_address,
     'quotes' => $prices->quotes(),
     // What the holders' room needs to check itself: which contract counts and

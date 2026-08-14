@@ -19,6 +19,7 @@ import {
     cyberiaReadRpcUrl,
 } from '@/lib/evmChains';
 import { isValidMoneroAddress } from '@/lib/monero';
+import { solanaRpcUrl } from '@/lib/solanaRpc';
 import {
     ERC20_TRANSFER_GAS_CAP,
     blockscoutTokens,
@@ -621,10 +622,14 @@ const evmChain = (spec: EvmSpec): WalletChain => {
     };
 };
 
-const SOLANA_PUBLIC_RPC = 'https://api.mainnet-beta.solana.com';
-
+/**
+ * The page is handed an endpoint by Laravel; this is what it falls back to
+ * when it is not. Solana's public cluster is not that fallback any more — it
+ * answers `403 Access forbidden` to anything carrying a browser `Origin` — so
+ * both roads now end at this app's relay. See `@/lib/solanaRpc`.
+ */
 const solanaConnection = (rpcUrl?: string): Connection =>
-    new Connection(rpcUrl || SOLANA_PUBLIC_RPC, 'confirmed');
+    new Connection(rpcUrl || solanaRpcUrl(), 'confirmed');
 
 /** One signature, at the protocol's fixed per-signature price. */
 const SOLANA_BASE_FEE = 5_000n;

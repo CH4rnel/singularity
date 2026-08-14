@@ -26,6 +26,8 @@ class SolanaStakingService
         SolanaStakingTransaction::STATUS_NEEDS_REVIEW,
     ];
 
+    public function __construct(private readonly SolanaRpcProxy $solanaRpc) {}
+
     /**
      * Browser-safe staking configuration. Signing keys never leave the server.
      *
@@ -50,7 +52,14 @@ class SolanaStakingService
         return [
             'enabled' => $enabled,
             'cluster' => (string) config('services.staking.cluster', 'mainnet'),
-            'rpc_url' => (string) config('services.staking.public_rpc_url'),
+            // The relay (/api/solana/rpc), because the endpoint this used to
+            // hand over is the public cluster, and the public cluster answers
+            // 403 to anything carrying a browser Origin. Falls back to the
+            // configured URL when the relay is switched off.
+            'rpc_url' => $this->solanaRpc->browserEndpoint(
+                (string) config('services.staking.cluster', 'mainnet'),
+                (string) config('services.staking.public_rpc_url'),
+            ),
             'treasury_address' => $treasury,
             'cyber_sol_mint' => (string) config('services.staking.cyber_sol_mint'),
             'cyber_sol_decimals' => (int) config('services.staking.cyber_sol_decimals', 6),

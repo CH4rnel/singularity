@@ -25,9 +25,13 @@ it('opens without an account, because the keys were never ours to gate', functio
         );
 });
 
-it('hands the wallet page a public RPC endpoint and the saved payout address', function () {
-    config(['services.staking.solana.public_rpc_url' => 'https://api.mainnet-beta.solana.com']);
-
+/**
+ * The endpoint handed over is this app's own relay, not Solana's public
+ * cluster: the cluster answers `403 Access forbidden` to any request carrying
+ * a browser `Origin`, so the address that used to be here read the chain from
+ * curl and from nowhere else.
+ */
+it('hands the wallet page the Solana relay and the saved payout address', function () {
     $user = User::factory()->create(['monero_wallet_address' => XMR_PAYOUT_ADDRESS]);
 
     $this->actingAs($user)
@@ -35,8 +39,21 @@ it('hands the wallet page a public RPC endpoint and the saved payout address', f
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('Wallet')
-            ->where('solanaRpcUrl', 'https://api.mainnet-beta.solana.com')
+            ->where('solanaRpcUrl', url('/api/solana/rpc'))
             ->where('moneroPayoutAddress', XMR_PAYOUT_ADDRESS)
+        );
+});
+
+it('falls back to the configured endpoint when the relay is switched off', function () {
+    config([
+        'solana.rpc.enabled' => false,
+        'services.staking.public_rpc_url' => 'https://api.mainnet-beta.solana.com',
+    ]);
+
+    $this->get('/wallet')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('solanaRpcUrl', 'https://api.mainnet-beta.solana.com')
         );
 });
 

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\BridgeEventController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\NFTController;
 use App\Http\Controllers\Api\SlotsController;
+use App\Http\Controllers\Api\SolanaRpcController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAuthController;
@@ -40,6 +41,14 @@ Route::prefix('wallet')->group(function () {
     Route::get('gas', [WalletGasController::class, 'status'])->middleware('throttle:60,1');
     Route::post('gas/claim', [WalletGasController::class, 'claim'])->middleware('throttle:10,1');
 });
+
+// Solana JSON-RPC relay. Solana's public cluster refuses any request carrying
+// a browser Origin, and the endpoints that answer browsers want a key in the
+// URL — so the browser asks this host and this host asks Solana. It holds no
+// key and signs nothing: what arrives is already signed. See SolanaRpcProxy.
+Route::post('solana/rpc/{cluster?}', SolanaRpcController::class)
+    ->whereAlpha('cluster')
+    ->middleware('throttle:240,1');
 
 // Solana wallet auth (Phantom)
 Route::prefix('solana-wallet')->group(function () {

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SlotSpin;
 use App\Services\Slots\SlotMachineService;
 use App\Services\Slots\SlotPoolService;
+use App\Services\SolanaRpcProxy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,6 +15,7 @@ class SlotsController extends Controller
     public function __construct(
         private readonly SlotPoolService $pools,
         private readonly SlotMachineService $machine,
+        private readonly SolanaRpcProxy $solanaRpc,
     ) {}
 
     public function pool(): JsonResponse
@@ -31,7 +33,13 @@ class SlotsController extends Controller
             'house_edge_bps' => $pool->house_edge_bps,
             'jackpot_bps' => $pool->jackpot_threshold_bps,
             'cluster' => config('services.slots.cluster'),
-            'rpc_url' => config('services.slots.rpc_url'),
+            // The relay for this cluster rather than the cluster itself: a
+            // browser asking Solana directly is answered 403 whichever cluster
+            // it asks. Falls back to the configured URL when the relay is off.
+            'rpc_url' => $this->solanaRpc->browserEndpoint(
+                (string) config('services.slots.cluster', 'devnet'),
+                (string) config('services.slots.rpc_url'),
+            ),
             'tokens' => $this->pools->snapshot($pool),
         ]);
     }

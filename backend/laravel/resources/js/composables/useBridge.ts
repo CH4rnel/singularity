@@ -26,6 +26,7 @@ import { bridgeChainInfo, tokenOnChain } from '@/lib/bridgeConfig';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenInfo, BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import { getSelectedEvmProvider } from '@/lib/evmProvider';
+import { confirmSignature, solanaRpcUrl } from '@/lib/solanaRpc';
 import { getSelectedSolanaTransactionProvider } from '@/lib/solanaWalletProvider';
 import {
     fetchTonJettonBalance,
@@ -46,8 +47,10 @@ function getCyberiaProvider(): JsonRpcProvider {
 const TOKEN_EXTENSIONS_PROGRAM_ID =
     'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 
-const SOLANA_RPC =
-    'https://mainnet.helius-rpc.com/?api-key=7e740762-a25d-4d37-b854-de4cec9815ed';
+// This app's relay, not a keyed endpoint. The key it used to carry was in
+// every visitor's bundle for anyone to spend, and the public cluster it could
+// fall back to refuses browsers outright. See `@/lib/solanaRpc`.
+const SOLANA_RPC = solanaRpcUrl();
 const SOLANA_NATIVE_MINT = new PublicKey(
     'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump',
 );
@@ -435,10 +438,9 @@ export const useBridge = () => {
         );
 
         try {
-            await connection.confirmTransaction(
-                { signature, blockhash, lastValidBlockHeight },
-                'confirmed',
-            );
+            await confirmSignature(connection, signature, {
+                lastValidBlockHeight,
+            });
         } catch (error) {
             const status = await connection.getSignatureStatus(signature, {
                 searchTransactionHistory: true,
@@ -783,10 +785,9 @@ export const useBridge = () => {
         );
 
         try {
-            await connection.confirmTransaction(
-                { signature, blockhash, lastValidBlockHeight },
-                'confirmed',
-            );
+            await confirmSignature(connection, signature, {
+                lastValidBlockHeight,
+            });
         } catch (error) {
             const status = await connection.getSignatureStatus(signature, {
                 searchTransactionHistory: true,
@@ -850,10 +851,9 @@ export const useBridge = () => {
         );
 
         try {
-            await connection.confirmTransaction(
-                { signature, blockhash, lastValidBlockHeight },
-                'confirmed',
-            );
+            await confirmSignature(connection, signature, {
+                lastValidBlockHeight,
+            });
         } catch (error) {
             const status = await connection.getSignatureStatus(signature, {
                 searchTransactionHistory: true,
