@@ -105,7 +105,13 @@ return [
             'type' => 'solana',
             'address_type' => 'solana',
             'wallet' => 'solana',
-            'rpc_url' => env('BRIDGE_SOLANA_RPC_URL', 'https://mainnet.helius-rpc.com/?api-key=7e740762-a25d-4d37-b854-de4cec9815ed'),
+            // Keyless on purpose. A credential written here is a credential in
+            // a public repository and in its history forever — the key that
+            // used to be this default was spent by a stranger. Point
+            // BRIDGE_SOLANA_RPC_URL at a keyed endpoint in .env instead; the
+            // official cluster answers a server perfectly well (only browsers
+            // are refused, which is what /api/solana/rpc is for).
+            'rpc_url' => env('BRIDGE_SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com'),
             'explorer_tx' => 'https://solscan.io/tx/{hash}',
             'deposit_address' => env('BRIDGE_SOLANA_HOT_WALLET', 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w'),
         ],
