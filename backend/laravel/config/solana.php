@@ -48,21 +48,25 @@ return [
          * host does not double a timeout.
          */
         'upstreams' => [
-            'mainnet' => array_values(array_unique(array_filter(array_map(
-                fn ($url) => trim((string) $url),
+            'mainnet' => array_values(array_unique(array_filter(array_merge(
+                [trim((string) env('SOLANA_RPC_URL'))],
+                // Comma-separated, because one free tier is a single point of
+                // failure and stacking three costs nothing: a provider that
+                // rate-limits us hands the call to the next in the same
+                // second. Every one of them is a key, and a key here never
+                // reaches a browser — that is the whole point of the relay.
+                array_map('trim', explode(',', (string) env('SOLANA_RPC_FALLBACK_URL', ''))),
                 [
-                    env('SOLANA_RPC_URL'),
-                    env('SOLANA_RPC_FALLBACK_URL'),
-                    env('BRIDGE_SOLANA_RPC_URL'),
+                    trim((string) env('BRIDGE_SOLANA_RPC_URL')),
+                    // Keyless and last: it answers a server perfectly well
+                    // (only browsers get the 403), so it is the floor under
+                    // every key above it rather than a plan.
                     'https://api.mainnet-beta.solana.com',
                 ],
             )))),
-            'devnet' => array_values(array_unique(array_filter(array_map(
-                fn ($url) => trim((string) $url),
-                [
-                    env('SOLANA_DEVNET_RPC_URL'),
-                    'https://api.devnet.solana.com',
-                ],
+            'devnet' => array_values(array_unique(array_filter(array_merge(
+                array_map('trim', explode(',', (string) env('SOLANA_DEVNET_RPC_URL', ''))),
+                ['https://api.devnet.solana.com'],
             )))),
         ],
 

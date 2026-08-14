@@ -33,10 +33,13 @@ class SolanaRpcProxy
 
     /**
      * JSON-RPC error codes that mean "not from me, ask elsewhere" rather than
-     * "here is your answer": an unhealthy or rate-limited node, and a refusal.
-     * Anything else the upstream says is a real answer and is passed back.
+     * "here is your answer": an unhealthy or rate-limited node, a refusal, and
+     * a method this particular provider does not serve — free tiers differ on
+     * exactly which calls they answer, and one node's gap should hand the call
+     * on rather than end it. Anything else an upstream says is a real answer
+     * about the chain and is passed straight back.
      */
-    private const REFUSAL_CODES = [-32005, 403, 429];
+    private const REFUSAL_CODES = [-32601, -32005, 403, 429];
 
     /** Whether the relay is switched on at all. */
     public function enabled(): bool

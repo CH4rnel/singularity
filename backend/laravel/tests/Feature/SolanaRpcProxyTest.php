@@ -60,6 +60,44 @@ it('falls through to the next upstream when the first refuses', function () use 
         ->assertJson(['result' => 1]);
 });
 
+/**
+ * Free tiers disagree about which calls they serve, so a provider's gap is a
+ * reason to ask the next one — not the answer the wallet renders as "you have
+ * no tokens".
+ */
+it('hands the call on when an upstream does not serve the method', function () use ($call) {
+    Http::fake([
+        'keyed.test*' => Http::response([
+            'jsonrpc' => '2.0',
+            'id' => 7,
+            'error' => ['code' => -32601, 'message' => 'Method not found'],
+        ]),
+        'public.test*' => Http::response(['jsonrpc' => '2.0', 'id' => 7, 'result' => 'served']),
+    ]);
+
+    $this->postJson('/api/solana/rpc', $call('getTokenAccountsByOwner', ['addr']))
+        ->assertOk()
+        ->assertJson(['result' => 'served']);
+});
+
+it('works down the whole stack, in the order given', function () {
+    config(['solana.rpc.upstreams.mainnet' => [
+        'https://first.test', 'https://second.test', 'https://third.test',
+    ]]);
+
+    Http::fake([
+        'first.test*' => Http::response('over quota', 429),
+        'second.test*' => Http::response('over quota', 429),
+        'third.test*' => Http::response(['jsonrpc' => '2.0', 'id' => 1, 'result' => 'third']),
+    ]);
+
+    $this->postJson('/api/solana/rpc', [
+        'jsonrpc' => '2.0', 'id' => 1, 'method' => 'getBalance', 'params' => ['addr'],
+    ])->assertOk()->assertJson(['result' => 'third']);
+
+    Http::assertSentCount(3);
+});
+
 it('reports every upstream failing as a JSON-RPC error, naming none of them', function () use ($call) {
     Http::fake(['*' => Http::response('nope', 500)]);
 
@@ -226,6 +264,27 @@ it('keeps a devnet endpoint out of the mainnet list, and the reverse', function 
     $this->postJson('/api/solana/rpc/devnet', $call())->assertOk()->assertJson(['result' => 2]);
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'solana.com'));
+});
+
+/**
+ * One free tier is a single point of failure, so the fallback variable takes a
+ * list: stacking three providers is the difference between a daily cap being
+ * theirs and it being ours.
+ */
+it('reads a comma-separated fallback list out of the environment', function () {
+    $_ENV['SOLANA_RPC_FALLBACK_URL'] = 'https://a.test, https://b.test';
+    $_SERVER['SOLANA_RPC_FALLBACK_URL'] = 'https://a.test, https://b.test';
+
+    try {
+        $upstreams = (require config_path('solana.php'))['rpc']['upstreams']['mainnet'];
+    } finally {
+        unset($_ENV['SOLANA_RPC_FALLBACK_URL'], $_SERVER['SOLANA_RPC_FALLBACK_URL']);
+    }
+
+    expect($upstreams)->toContain('https://a.test')
+        ->toContain('https://b.test')
+        // The official cluster is always the floor under whatever was named.
+        ->toContain('https://api.mainnet-beta.solana.com');
 });
 
 it('says so plainly when it is switched off', function () use ($call) {
