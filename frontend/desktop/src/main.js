@@ -28,6 +28,7 @@ const {
     resolveStartUrl,
 } = require('./config');
 const { loadProxySetting, saveProxySetting } = require('./proxy-settings');
+const torrent = require('./torrent');
 const { loadWindowState, trackWindowState } = require('./window-state');
 
 const APP_URL = resolveAppUrl(process.env, process.argv);
@@ -534,6 +535,14 @@ if (!app.requestSingleInstanceLock()) {
             };
         });
 
+        // The torrent client. Only the site's own pages may reach it, and it
+        // stays unstarted until someone agrees to run one in a dialog no page
+        // can draw.
+        torrent.register({
+            getWindow: () => mainWindow,
+            isTrusted: (url) => isNavigable(url, APP_HOST),
+        });
+
         ipcMain.handle('proxy:state', () => proxyState());
         ipcMain.handle('proxy:apply', (_event, setting) => applyProxySetting(setting));
         ipcMain.on('proxy:close', () => {
@@ -551,6 +560,9 @@ if (!app.requestSingleInstanceLock()) {
             }
         });
     });
+
+    // No swarm outlives the window: the client is stopped before the app is.
+    app.on('before-quit', () => torrent.shutdown());
 
     app.on('window-all-closed', () => {
         if (process.platform !== 'darwin') {

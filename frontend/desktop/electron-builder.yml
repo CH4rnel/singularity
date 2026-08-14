@@ -12,6 +12,15 @@ files:
 
 asar: true
 
+# WebTorrent is ESM with a top-level await, so it can only be loaded through a
+# dynamic import — and Node's ESM loader cannot read an asar archive. The
+# engine and the modules it imports therefore live outside it; everything else
+# stays packed.
+asarUnpack:
+    - src/torrent-engine.js
+    - src/torrent-rules.js
+    - '**/node_modules/**'
+
 # Installer file names carry no version on purpose. The site links to
 # https://github.com/<repo>/releases/latest/download/<name>, which only stays a
 # permanent address while the name is stable; the version is shown on the page,

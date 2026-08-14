@@ -155,8 +155,48 @@ can do is ask for the window to be raised.
   the dev binary.
 - **Remembered geometry** — window size and position are restored, and revalidated
   against the displays that currently exist.
+- **A real BitTorrent client** — see below. This is the one capability the site
+  cannot have on its own.
 - **User agent** — `CyberiaDesktop/<version>` is appended so the site can tell it
   is running inside the app (`resources/js/lib/native.ts`).
+
+## Torrents
+
+The wallet's torrent screen is a downloader only inside this app, and that is
+not a product decision: the mainline DHT is UDP and peers are reached over TCP,
+and a web page has neither. What a page *can* reach — browser peers over WebRTC
+— has almost no members for an ordinary magnet, so the browser build of that
+screen explains this and links to the installer instead of shipping a client
+that finds nobody.
+
+- `src/torrent-engine.js` runs WebTorrent in an Electron `utilityProcess`:
+  piece verification is CPU work that would otherwise compete with the window,
+  and a client that dies on a malformed torrent should not take the wallet with
+  it. DHT, peer exchange, trackers and local discovery are all on.
+- `src/torrent.js` is the main process's side — it owns the download directory,
+  the concurrency cap, and the one-time dialog that has to be agreed to before
+  any socket opens. That dialog is where the true sentence gets said: **peers
+  see your IP address, and the app's proxy setting does not cover this traffic**
+  (that setting is for web requests; these are raw sockets).
+- `src/preload.js` exposes it as `window.cyberiaNative.torrent`. The page may
+  name a magnet and a file index — never a path. `read()` hands back one
+  finished file under 10 MB, which is what the wallet pins to IPFS and mints
+  against; anything larger is refused.
+- `src/torrent-rules.js` holds the limits and the summary shape, and is tested
+  under plain Node (`npm test`) like the navigation rules.
+- Downloads land in `<Downloads>/Cyberia`. `CYBERIA_TORRENT_DIR` (an absolute
+  path) moves that; it is an operator's setting, never the page's.
+- WebTorrent is ESM with a top-level await, so it can only be loaded through a
+  dynamic `import()` — and Node's ESM loader cannot read an asar archive. The
+  engine and `node_modules` are therefore in `asarUnpack`.
+- WebTorrent pulls one **optional** native module, `utp-native` (µTP peers).
+  `electron-builder` rebuilds it during packaging; if a platform has no prebuild
+  the client still runs, over TCP peers only. It also adds ~44 MB of unpacked
+  `node_modules` to the installer.
+- Bootstrap nodes are resolved to IPv4 in the engine rather than left to the
+  DHT. Two of the three defaults have been unreliable for years and the third
+  is IPv6-first; on a machine with no IPv6 route that leaves an empty routing
+  table, and a client with no peers looks broken rather than blocked.
 
 ## Known limits
 
