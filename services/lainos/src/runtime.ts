@@ -604,7 +604,7 @@ export class AgentRuntime implements IAgentRuntime {
       `LainOS answered with a missing-capability refusal instead of solving it:`,
       replyText,
       ``,
-      `Required behavior: build the missing LainOS tool/skill/workflow with Codex or Claude, ` +
+      `Required behavior: build the missing LainOS tool/skill/workflow with Codex, Claude or OpenCode, ` +
         `wire it into the normal tool loop, verify it, and make Lain report progress/results to ` +
         `the current TUI or Telegram room. Refusal should remain only for genuinely impossible, ` +
         `unsafe, or externally blocked requests.`,
@@ -626,7 +626,7 @@ export class AgentRuntime implements IAgentRuntime {
     return [
       `План:`,
       `1. Зафиксировать недостающую способность как wish.`,
-      `2. Передать реализацию в forge через Codex/Claude.`,
+      `2. Передать реализацию в forge через Codex/Claude/OpenCode.`,
       `3. Вернуть результат сюда; когда forge закончит, LainOS сообщит в этот TUI/Telegram room.`,
       ``,
       started?.ok

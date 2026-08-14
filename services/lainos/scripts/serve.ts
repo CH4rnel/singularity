@@ -95,7 +95,8 @@ async function main() {
     });
   }
 
-  // Channel-post reminders go to the watch's subscriber when known, otherwise to all.
+  // Quiet-room reminders (channel posts, Discord, X chats) go to the watch's
+  // subscriber when known, otherwise to all.
   const channels = agent.getService<ChannelWatchService>("channel-watch");
   if (channels && telegramUp) {
     channels.onEvent((ev) => {

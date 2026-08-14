@@ -1,6 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Static, Text, useApp, useStdin, useStdout } from "ink";
-import Spinner from "ink-spinner";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Text, useApp, useStdin, useStdout } from "ink";
 import { ModelTier, type AgentEvent, type IAgentRuntime } from "../../types.js";
 import {
   CHAT_PROVIDER_CHOICES,
@@ -9,12 +8,10 @@ import {
   SwitchableModelProvider,
 } from "../../models/routing.js";
 import {
-  BANNER,
-  CHAIN_ID,
   DEFAULT_THEME,
   GLYPH,
-  lerpColor,
-  VERSION,
+  THEME_ORDER,
+  THEMES,
   loadCursor,
   loadEffort,
   loadPulse,
@@ -23,36 +20,29 @@ import {
   saveEffort,
   savePulse,
   saveSkin,
-  THEME_ORDER,
-  THEMES,
   type Theme,
 } from "./theme.js";
+import { blank, concat, fitLine, padLine, sp, truncateLine, type Line, type Span } from "./markdown.js";
 import { editLine } from "./editor.js";
 import { InputHistory, loadInputHistory, saveInputHistory } from "./history.js";
-import { ESC_TIMEOUT_MS, KeyReader, type KeyPress, type TuiKey } from "./keys.js";
+import { ESC_TIMEOUT_MS, KeyReader, type KeyPress, type MouseInfo, type TuiKey } from "./keys.js";
 import { ChainPulse } from "./pulse.js";
-import { transcriptLines } from "./transcript.js";
+import { cursorToWrap, wrapIndices } from "./transcript.js";
+import {
+  bannerLines,
+  bootLines,
+  sidebarLines,
+  spinnerChar,
+  turnLines,
+  type FeedRegion,
+  type SidebarRegion,
+  type Turn,
+} from "./layout.js";
 import type { ForgeService } from "../../plugins/forge/index.js";
 import type { ScoutService } from "../../plugins/scout/index.js";
 import type { SentinelService } from "../../plugins/sentinel/index.js";
 
-// ------------------------------------------------------------- theme ctx
-
-const ThemeContext = createContext<Theme>(THEMES[DEFAULT_THEME]);
-const useTheme = () => useContext(ThemeContext);
-
-// ---------------------------------------------------------------- model
-
-type ToolBlock = {
-  id: string;
-  name: string;
-  input: Record<string, unknown>;
-  status: "running" | "ok" | "fail";
-  summary?: string;
-};
-type Part = { kind: "text"; text: string } | { kind: "tool"; tool: ToolBlock };
-type Role = "you" | "lain" | "sys" | "banner" | "pulse";
-type Turn = { id: string; role: Role; parts: Part[]; model?: string };
+// ------------------------------------------------------------------ model
 
 type PickerOption = { value: string; label: string; hint?: string };
 type PickerState = {
@@ -79,7 +69,7 @@ const COMMANDS = [
   { name: "/clear", desc: "clear the screen (memory intact)" },
   { name: "/copy", desc: "copy lain's last reply to the clipboard" },
   { name: "/reset", desc: "fresh memory room" },
-  { name: "/model", desc: "switch claude/codex (arrows)" },
+  { name: "/model", desc: "switch claude/codex/opencode (arrows)" },
   { name: "/exit", desc: "leave the wired" },
 ];
 
@@ -113,9 +103,7 @@ let _seq = 0;
 const nextId = () => `t${++_seq}`;
 const sysTurn = (text: string): Turn => ({ id: nextId(), role: "sys", parts: [{ kind: "text", text }] });
 
-function truncate(s: string, n: number): string {
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
-}
+const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
 function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
@@ -165,10 +153,7 @@ function useChainHeight(rpc: string): number | null {
   return block;
 }
 
-/** Terminal size that tracks window resizes (Ink re-lays out, but React
- *  needs a state change to re-render width-bound rules). The App also
- *  repaints the static transcript when the width settles — the terminal
- *  rewraps scrollback on its own and mangles the old frames. */
+/** Terminal size that tracks window resizes. */
 function useStdoutDimensions(): { width: number; rows: number } {
   const { stdout } = useStdout();
   const [size, setSize] = useState(() => ({
@@ -186,350 +171,180 @@ function useStdoutDimensions(): { width: number; rows: number } {
   return size;
 }
 
+/** Advance a frame counter while `active` — drives spinner glyphs. */
+function useSpin(active: boolean): number {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setFrame((f) => f + 1), 90);
+    return () => clearInterval(id);
+  }, [active]);
+  return frame;
+}
+
+/** One vertical strip of the feed's scrollbar thumb (empty when not needed). */
+function scrollbarChar(i: number, viewport: number, maxScroll: number, scrollTop: number): string {
+  if (maxScroll <= 0) return " ";
+  const thumb = Math.max(1, Math.round((viewport * viewport) / (viewport + maxScroll)));
+  const track = viewport - thumb;
+  const pos = maxScroll ? Math.round((track * scrollTop) / maxScroll) : 0;
+  return i >= pos && i < pos + thumb ? "█" : "░";
+}
+
 // ------------------------------------------------------------ components
 
-function GradientText({ text, from, to }: { text: string; from: string; to: string }) {
-  const chars = [...text];
+/** Render one styled line into a single ink <Text>. */
+function LineView({ line }: { line: Line }) {
   return (
-    <Text>
-      {chars.map((ch, i) => (
-        <Text key={i} color={lerpColor(from, to, chars.length <= 1 ? 0 : i / (chars.length - 1))}>
-          {ch}
+    <Text wrap="truncate">
+      {line.map((s, i) => (
+        <Text key={i} color={s.c} bold={s.b} italic={s.i} underline={s.u} backgroundColor={s.bg}>
+          {s.t}
         </Text>
       ))}
     </Text>
   );
 }
 
-function Banner({ tagline, width }: { tagline: string; width: number }) {
-  const c = useTheme();
-  // The figure-font logo is 49 columns; on narrower terminals fall back to
-  // plain text so nothing wraps into a broken frame.
-  const wide = width > BANNER[0].length;
-  return (
-    <Box flexDirection="column" marginBottom={1} flexShrink={0}>
-      {wide ? (
-        BANNER.map((row, i) => (
-          <Text key={i} color={lerpColor(c.gradFrom, c.gradTo, BANNER.length <= 1 ? 0 : i / (BANNER.length - 1))}>
-            {row}
-          </Text>
-        ))
-      ) : (
-        <GradientText text="LAIN OS" from={c.gradFrom} to={c.gradTo} />
-      )}
-      <Box marginTop={1}>
-        <Text color={c.mutedDim}>{GLYPH.spark} </Text>
-        <GradientText text={truncate(tagline, Math.max(10, width - 4))} from={c.gradFrom} to={c.gradTo} />
-      </Box>
-    </Box>
-  );
-}
-
-function BootCard({
-  runtime,
-  block,
-  session,
-  width,
-}: {
-  runtime: IAgentRuntime;
-  block: number | null;
-  session: string;
+/** The bottom widget: status divider, status line, thinking row, menus and
+ *  the multi-line composer, flattened to exactly `chromeRows` lines. */
+function chromeLines(args: {
+  theme: Theme;
   width: number;
-}) {
-  const c = useTheme();
-  const provider = runtime.model.name;
-  const model = runtime.model.modelFor(runtime.character.modelTier ?? ModelTier.LARGE);
-  const cwd = process.cwd();
-
-  // Never wider than the terminal: a line that overflows gets hard-wrapped by
-  // the terminal itself and shreds the whole <Static> frame.
-  const cardWidth = Math.min(width, 100);
-  // Info column + skills side by side only when both genuinely fit.
-  const narrow = cardWidth < 72;
-
-  // Bucket the registered skills into stylish categories.
-  const groups: Record<string, string[]> = {};
-  for (const a of runtime.actions) {
-    (groups[skillCategory(a.name)] ??= []).push(a.name);
-  }
-  const order = SKILL_ORDER.filter((o) => groups[o]);
-
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor={c.primary}
-        paddingX={2}
-        width={cardWidth}
-      >
-        <Box justifyContent="center">
-          <Text color={c.primary} bold>
-            Lain OS
-          </Text>
-          <Text color={c.mutedDim} wrap="truncate">
-            {"  ·  "}v{VERSION}
-            {"  ·  "}Cyberia {CHAIN_ID}
-            {"  ·  "}the Wired
-          </Text>
-        </Box>
-
-        <Box marginTop={1} flexDirection={narrow ? "column" : "row"}>
-          <Box
-            flexDirection="column"
-            width={narrow ? undefined : 26}
-            marginRight={narrow ? 0 : 2}
-            flexShrink={0}
-          >
-            <Box>
-              <Text color={c.secondary}>{truncate(model, 24)}</Text>
-            </Box>
-            <Text color={c.mutedDim}>{truncate(provider, 24)}</Text>
-            <Text color={c.mutedDim}>{truncate(cwd, 24)}</Text>
-            <Text color={c.mutedDim}>
-              {GLYPH.chain} {block === null ? "—" : block.toLocaleString("en-US")}
-            </Text>
-            <Text color={c.mutedDim}>session {session}</Text>
-          </Box>
-
-          <Box flexDirection="column" flexGrow={1} marginTop={narrow ? 1 : 0}>
-            <Text color={c.fg} bold>
-              SKILLS
-            </Text>
-            {order.map((cat) => (
-              <Box key={cat}>
-                <Text color={c.secondary}>{cat.padEnd(8)}</Text>
-                <Box flexGrow={1}>
-                  <Text color={c.fg}>{groups[cat].join(" · ")}</Text>
-                </Box>
-              </Box>
-            ))}
-            <Box marginTop={1}>
-              <Text color={c.mutedDim}>
-                {runtime.actions.length} chain skills {GLYPH.dot} /help for commands
-              </Text>
-            </Box>
-          </Box>
-        </Box>
-      </Box>
-
-      <Box flexDirection="column" marginTop={1}>
-        <Text color={c.fg}>welcome to the wired. type to speak with Lain, or /help for commands.</Text>
-        <Text color={c.mutedDim}>
-          {GLYPH.spark} tip: she reads the Cyberia chain live — try “what's the latest block?”
-        </Text>
-      </Box>
-    </Box>
-  );
-}
-
-function ToolCard({ tool }: { tool: ToolBlock }) {
-  const c = useTheme();
-  const color = tool.status === "running" ? c.warn : tool.status === "ok" ? c.ok : c.err;
-  const args = Object.entries(tool.input)
-    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
-    .join("  ");
-  return (
-    <Box flexDirection="column" marginLeft={2}>
-      <Box>
-        <Text color={c.mutedDim}>{GLYPH.tool} </Text>
-        <Text color={color}>
-          {tool.status === "running" ? <Spinner type="dots" /> : tool.status === "ok" ? GLYPH.ok : GLYPH.fail}{" "}
-        </Text>
-        <Text color={c.secondary}>{tool.name}</Text>
-        {args ? <Text color={c.mutedDim}>  {truncate(args, 70)}</Text> : null}
-      </Box>
-      {tool.summary ? (
-        <Box marginLeft={4}>
-          <Text color={c.muted}>{truncate(tool.summary, 220)}</Text>
-        </Box>
-      ) : null}
-    </Box>
-  );
-}
-
-function TurnView({ turn }: { turn: Turn }) {
-  const c = useTheme();
-  const meta =
-    turn.role === "you"
-      ? { label: `${GLYPH.you} you`, color: c.secondary }
-      : turn.role === "lain"
-        ? { label: `${GLYPH.lain} lain`, color: c.primary }
-        : turn.role === "pulse"
-          ? { label: `${GLYPH.spark} wired`, color: c.muted }
-          : { label: `${GLYPH.dot} sys`, color: c.mutedDim };
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Box>
-        <Text color={meta.color} bold>
-          {meta.label}
-        </Text>
-        {turn.role === "lain" && turn.model ? (
-          <Text color={c.mutedDim}> · {turn.model}</Text>
-        ) : null}
-      </Box>
-      {turn.parts.map((part, i) =>
-        part.kind === "tool" ? (
-          <ToolCard key={i} tool={part.tool} />
-        ) : part.text.trim() ? (
-          <Box key={i} marginLeft={2}>
-            <Text
-              color={turn.role === "sys" ? c.mutedDim : turn.role === "pulse" ? c.muted : c.fg}
-              italic={turn.role === "pulse"}
-            >
-              {part.text.trimEnd()}
-            </Text>
-          </Box>
-        ) : null,
-      )}
-    </Box>
-  );
-}
-
-function Autocomplete({ items, index }: { items: typeof COMMANDS; index: number }) {
-  const c = useTheme();
-  return (
-    <Box flexDirection="column" marginTop={1} flexShrink={0}>
-      {items.map((it, i) => {
-        const on = i === index;
-        return (
-          <Box key={it.name}>
-            <Text color={on ? c.primary : c.mutedDim}>{on ? "❯ " : "  "}</Text>
-            <Text color={on ? c.primary : c.secondary} bold={on}>
-              {it.name.padEnd(10)}
-            </Text>
-            <Text color={c.mutedDim}>{it.desc}</Text>
-          </Box>
-        );
-      })}
-    </Box>
-  );
-}
-
-function Picker({ state }: { state: PickerState }) {
-  const c = useTheme();
-  return (
-    <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={c.primary} paddingX={1} flexShrink={0}>
-      <Text>
-        <Text color={c.primary} bold>
-          {state.title}
-        </Text>
-        <Text color={c.mutedDim}>{"   ↑↓ move · enter select · esc cancel"}</Text>
-      </Text>
-      {state.options.map((opt, i) => {
-        const on = i === state.index;
-        const th = state.kind === "skin" ? THEMES[opt.value] : undefined;
-        return (
-          <Box key={opt.value}>
-            <Text color={on ? c.primary : c.mutedDim}>{on ? " ❯ " : "   "}</Text>
-            <Text color={on ? c.primary : c.fg} bold={on}>
-              {opt.label.padEnd(11)}
-            </Text>
-            {th
-              ? [th.primary, th.secondary, th.ok, th.warn, th.err].map((col, k) => (
-                  <Text key={k} color={col}>
-                    {GLYPH.swatch}
-                  </Text>
-                ))
-              : null}
-            {th ? <Text color={c.mutedDim}>{"  "}{th.label}</Text> : null}
-            {!th && opt.hint ? <Text color={c.mutedDim}>{opt.hint}</Text> : null}
-          </Box>
-        );
-      })}
-    </Box>
-  );
-}
-
-function Composer(props: {
-  value: string;
-  cursor: number;
+  status: "idle" | "thinking" | "streaming";
+  thinkingOn: boolean;
+  spin: number;
+  provider: string;
+  model: string;
+  block: number | null;
+  tokens: number;
+  room: string;
+  effort: string;
+  statusLines: number;
+  thinkingLines: number;
+  menuLines: Line[];
+  pickerLines: Line[];
+  composerWrap: { text: string; start: number; end: number }[];
+  cursorLine: number;
+  cursorCol: number;
   blinkOn: boolean;
   blinkEnabled: boolean;
   cursorStyle: "block" | "line";
   busy: boolean;
-}) {
-  const c = useTheme();
-  const { value, cursor, busy } = props;
-  const before = value.slice(0, cursor);
-  const at = value.slice(cursor, cursor + 1) || " ";
-  const after = value.slice(cursor + 1);
-  const show = !props.blinkEnabled || props.blinkOn;
-  const cursorCell =
-    props.cursorStyle === "line" ? (
-      <Text underline={show} color={show ? c.primary : c.fg}>
-        {at}
-      </Text>
-    ) : (
-      <Text backgroundColor={show ? c.primary : undefined} color={show ? "#0b0b12" : c.fg}>
-        {at}
-      </Text>
-    );
-  return (
-    <Box flexDirection="column" flexShrink={0}>
-      <Box marginTop={1}>
-        <Text color={busy ? c.mutedDim : c.primary}>{GLYPH.you} </Text>
-        <Text color={c.fg}>{before}</Text>
-        {cursorCell}
-        <Text color={c.fg}>{after}</Text>
-        {value.length === 0 ? (
-          <Text color={c.mutedDim}>  {busy ? "lain is speaking…" : "ask lain…"}</Text>
-        ) : null}
-      </Box>
-      {value.length === 0 && !busy ? (
-        <Box marginLeft={2}>
-          <Text color={c.mutedDim}>↑↓ history · PgUp scrollback · / commands · Tab complete · ctrl+a/e home/end</Text>
-        </Box>
-      ) : null}
-    </Box>
+  showHint: boolean;
+}): Line[] {
+  const c = args.theme;
+  const out: Line[] = [];
+
+  out.push([{ t: "─".repeat(args.width), c: c.mutedDim }]);
+  out.push(
+    truncateLine(
+      padLine(
+        concat(
+          [sp(args.status === "idle" ? "● " : "◐ ", args.status === "idle" ? c.ok : c.warn)],
+          [sp(args.provider, c.primary)],
+          [sp(` ${GLYPH.dot} `, c.mutedDim)],
+          [sp(args.model, c.secondary)],
+          [sp(`   ${GLYPH.chain} `, c.mutedDim)],
+          [sp(args.block === null ? "—" : args.block.toLocaleString("en-US"), c.fg)],
+          [sp("   ◷ ", c.mutedDim)],
+          [sp(fmtTokens(args.tokens), c.fg)],
+          [sp(" tok", c.mutedDim)],
+          [sp("   effort:", c.mutedDim)],
+          [sp(args.effort, c.secondary)],
+          [sp("   skin:", c.mutedDim)],
+          [sp(c.name, c.primary)],
+          [sp("   room:", c.mutedDim)],
+          [sp(args.room, c.fg)],
+        ),
+        args.width,
+      ),
+      args.width,
+    ),
   );
+
+  if (args.thinkingOn) {
+    out.push(concat([sp(`${spinnerChar(args.spin)} `, c.warn)], [sp("reaching into the wired…", c.mutedDim)]));
+  }
+
+  if (args.menuLines.length) out.push(...args.menuLines);
+  if (args.pickerLines.length) out.push(...args.pickerLines);
+
+  const prefix = (busy: boolean, first: boolean): Span => sp(first ? `${GLYPH.you} ` : "  ", busy ? c.mutedDim : c.primary);
+  out.push(blank(args.width)); // margin above the composer
+  args.composerWrap.forEach((wl, li) => {
+    const first = li === 0;
+    const row: Span[] = [prefix(args.busy, first)];
+    if (li === args.cursorLine) {
+      const before = wl.text.slice(0, args.cursorCol);
+      const at = wl.text.slice(args.cursorCol, args.cursorCol + 1) || " ";
+      const after = wl.text.slice(args.cursorCol + 1);
+      const show = !args.blinkEnabled || args.blinkOn;
+      const cursor: Span =
+        args.cursorStyle === "line"
+          ? { t: at, c: show ? c.primary : c.fg, u: show }
+          : show
+            ? { t: at, c: "#0b0b12", bg: c.primary }
+            : { t: at, c: c.fg };
+      row.push(sp(before, c.fg), cursor, sp(after, c.fg));
+    } else {
+      row.push(sp(wl.text, c.fg));
+    }
+    if (first && args.cursorLine === 0 && wl.text.length === 0 && !args.busy) {
+      row.push(sp("  ask lain…", c.mutedDim));
+    }
+    out.push(padLine(truncateLine(row, args.width), args.width));
+  });
+
+  if (args.showHint) {
+    out.push(concat([sp("  ", c.mutedDim)], [sp("↑↓ history · wheel scroll · / commands · Tab complete · shift/ctrl+enter newline", c.mutedDim)]));
+  }
+
+  return out;
 }
 
-/**
- * Scrollback pager — a window over the transcript, opened with PageUp.
- *
- * Completed turns are printed straight into the terminal's own scrollback by
- * <Static> and are never repainted, so the app cannot scroll them in place.
- * While the pager is open the screen is wiped, <Static> is kept quiet, and the
- * same turns are re-rendered here as flat lines (see ./transcript.ts).
- */
-function Pager({
-  lines,
-  top,
-  height,
-  width,
-}: {
-  lines: string[];
-  top: number;
-  height: number;
-  width: number;
-}) {
-  const c = useTheme();
-  const shown = lines.slice(top, top + height);
-  return (
-    <Box flexDirection="column" flexShrink={0}>
-      <Text color={c.mutedDim}>{"─".repeat(Math.max(8, width))}</Text>
-      <Text wrap="truncate">
-        <Text color={c.primary} bold>
-          ⇡ scrollback
-        </Text>
-        <Text color={c.mutedDim}>{"   lines "}</Text>
-        <Text color={c.fg}>
-          {lines.length ? top + 1 : 0}–{top + shown.length}
-        </Text>
-        <Text color={c.mutedDim}> of {lines.length}</Text>
-        <Text color={c.warn}>{"   ⏸ not at the bottom"}</Text>
-      </Text>
-      {shown.map((line, i) => (
-        <Text key={i} color={c.fg} wrap="truncate">
-          {line.length ? line : " "}
-        </Text>
-      ))}
-      <Text color={c.mutedDim} wrap="truncate">
-        {"PgUp/PgDn page · ↑↓ line · home top · end/esc back to now · wheel scrolls the terminal itself"}
-      </Text>
-    </Box>
-  );
+/** The slash-command autocomplete menu, margin + one row per command. */
+function menuLines(items: typeof COMMANDS, index: number, theme: Theme, width: number): Line[] {
+  const c = theme;
+  const out: Line[] = [blank(width)];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const on = i === index;
+    out.push(
+      concat(
+        [sp(on ? "❯ " : "  ", on ? c.primary : c.mutedDim)],
+        [{ t: it.name.padEnd(10), c: on ? c.primary : c.secondary, b: on }],
+        [sp(it.desc, c.mutedDim)],
+      ),
+    );
+  }
+  return out;
+}
+
+/** The bordered arrow-key picker (skin/effort/cursor/model). */
+function pickerLines(state: PickerState, theme: Theme, width: number): Line[] {
+  const c = theme;
+  const out: Line[] = [blank(width)];
+  const title = ` ${state.title}  ↑↓ move · enter select · esc cancel `;
+  out.push(truncateLine([{ t: `╭─${title}${"─".repeat(Math.max(0, width - title.length - 3))}╮`, c: c.border }], width));
+  for (let i = 0; i < state.options.length; i++) {
+    const opt = state.options[i];
+    const on = i === state.index;
+    const th = state.kind === "skin" ? THEMES[opt.value] : undefined;
+    const row: Span[] = [
+      sp(on ? " ❯ " : "   ", on ? c.primary : c.mutedDim),
+      { t: opt.label.padEnd(11), c: on ? c.primary : c.fg, b: on },
+    ];
+    if (th) {
+      for (const col of [th.primary, th.secondary, th.ok, th.warn, th.err]) row.push(sp(GLYPH.swatch, col));
+      row.push(sp(`  ${th.label}`, c.mutedDim));
+    } else if (opt.hint) {
+      row.push(sp(opt.hint, c.mutedDim));
+    }
+    out.push(truncateLine(concat(row), width));
+  }
+  out.push([{ t: `╰${"─".repeat(Math.max(1, width - 2))}╯`, c: c.border }]);
+  return out;
 }
 
 /**
@@ -538,10 +353,13 @@ function Pager({
  * ink's `useInput` is deliberately bypassed: it hands the handler a parsed
  * `Key` with the escape sequence already gone, so Home, End, Delete and
  * ctrl+←/→ are indistinguishable from nothing at all. We subscribe to the raw
- * stdin chunks ink emits and parse them ourselves (see ./keys.ts).
+ * stdin chunks ink emits and parse them ourselves (see ./keys.ts). Mouse
+ * reporting is enabled here too: wheel events scroll the feed, and clicks
+ * toggle tools / sidebar rows.
  */
 function InputCapture({ onKey }: { onKey: (input: string, key: TuiKey) => void }) {
   const { setRawMode, internal_eventEmitter, internal_exitOnCtrlC } = useStdin();
+  const { stdout } = useStdout();
   const sink = useRef(onKey);
   useEffect(() => {
     sink.current = onKey;
@@ -565,13 +383,18 @@ function InputCapture({ onKey }: { onKey: (input: string, key: TuiKey) => void }
       // Escape key) looks exactly like such a head, so it fires on a timer.
       if (reader.partial) escTimer = setTimeout(() => emit(reader.flush()), ESC_TIMEOUT_MS);
     };
+    // xterm buttons + SGR coordinates: gives the wheel and exact click cells.
+    // Kitty keyboard protocol (level 1, progressive): terminals that support it
+    // send shift+enter as \x1b[13;2u instead of an ordinary \r.
+    stdout?.write("\x1b[?1000h\x1b[?1006h\x1b[>1u");
     internal_eventEmitter.on("input", onData);
     return () => {
       if (escTimer) clearTimeout(escTimer);
       internal_eventEmitter.removeListener("input", onData);
+      stdout?.write("\x1b[<1u\x1b[?1006l\x1b[?1000l");
       setRawMode(false);
     };
-  }, [internal_eventEmitter, internal_exitOnCtrlC, setRawMode]);
+  }, [internal_eventEmitter, internal_exitOnCtrlC, setRawMode, stdout]);
 
   return null;
 }
@@ -593,17 +416,18 @@ const HELP = [
   "  /clear         clear the screen (conversation memory stays)",
   "  /copy          copy lain's last reply to the clipboard (OSC 52)",
   "  /reset         start a fresh memory room",
-  "  /model         switch the chat model (arrows) — or /model claude|codex",
+  "  /model         switch the chat model (arrows) — or /model claude|codex|opencode",
   "  /exit /quit    leave the wired",
   "",
   "editing: ← → move · home/end (or ctrl+a/ctrl+e) · ctrl+←/→ word",
   "         ⌫ delete back · del delete forward · alt+b/alt+f word",
   "         ctrl+w / alt+⌫ del word · alt+d del word fwd · ctrl+u/ctrl+k kill line",
   "         ↑ ↓ recall history (kept between runs) · type / for autocomplete",
+  "         shift+enter (or ctrl+enter) starts a new line — the composer wraps like a chat app",
   "",
-  "scrollback: PgUp/PgDn page the transcript · ctrl+↑/↓ one line",
-  "            ↑ ↓ line · home oldest · end/esc back to now",
-  "            the mouse wheel still scrolls the terminal's own scrollback",
+  "scrollback: the transcript scrolls inside the app — PgUp/PgDn page,",
+  "            ctrl+↑/↓ one line, or just roll the mouse wheel.",
+  "            click a ⚙ tool row to expand/collapse it.",
 ].join("\n");
 
 /** Render the registered skills grouped by category, with descriptions. */
@@ -632,7 +456,6 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const character = runtime.character;
   const provider = runtime.model.name;
   const model = runtime.model.modelFor(character.modelTier ?? ModelTier.LARGE);
-  const tagline = "the wired remembers  ·  autonomous agent of cyberia";
   const rpc = process.env.CYBERIA_RPC_URL ?? "https://rpc.cyberia.church";
   const block = useChainHeight(rpc);
 
@@ -658,9 +481,6 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
 
   const [room, setRoom] = useState("tui");
   const [history, setHistory] = useState<Turn[]>(() => []);
-  // Bumped by /clear: remounts <Static> so its internal cursor resets and the
-  // banner + boot card are printed afresh onto the wiped screen.
-  const [gen, setGen] = useState(0);
   const session = useMemo(() => {
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, "0");
@@ -669,33 +489,13 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const [live, setLive] = useState<Turn | null>(null);
   const [status, setStatus] = useState<"idle" | "thinking" | "streaming">("idle");
   const busy = status !== "idle";
+  const thinkingOn = status === "thinking";
 
   // Terminal/window title (OSC 0) — without it the tab shows the launcher
-  // command ("npm lainos"). Tracks activity so the tab shows when she is
-  // busy. In VS Code the tab picks this up via the "${sequence}" variable of
-  // terminal.integrated.tabs.title.
+  // command ("npm lainos"). Tracks activity so the tab shows when she is busy.
   useEffect(() => {
     stdout?.write(`\x1b]0;${busy ? "Lain OS ✦ thinking…" : "Lain OS · the wired"}\x07`);
   }, [busy, stdout]);
-
-  // <Static> frames are printed once and never touched again, so anything
-  // that invalidates them (skin change, terminal rewrap on resize) needs a
-  // full repaint: wipe the screen and remount <Static> so the banner, boot
-  // card and every stored turn are reprinted with the current theme/width.
-  const repaint = useCallback(() => {
-    stdout?.write("\x1b[2J\x1b[3J\x1b[H");
-    setGen((g) => g + 1);
-  }, [stdout]);
-
-  // Repaint once the width settles (resize events fire in bursts while the
-  // window is being dragged). Height changes don't rewrap, so they're free.
-  const prevWidthRef = useRef(width);
-  useEffect(() => {
-    if (prevWidthRef.current === width) return;
-    prevWidthRef.current = width;
-    const t = setTimeout(repaint, 200);
-    return () => clearTimeout(t);
-  }, [width, repaint]);
 
   // input line + ui
   const [value, setValue] = useState("");
@@ -705,8 +505,8 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const [picker, setPicker] = useState<PickerState | null>(null);
   // true while walking history — suppresses the slash menu so ↑/↓ stay on history
   const [browsing, setBrowsing] = useState(false);
-  // scrollback pager: how many lines above the bottom we are, null = at "now"
-  const [scroll, setScroll] = useState<number | null>(null);
+  // which tool calls are expanded in the feed (click to toggle)
+  const [expandedTools, setExpandedTools] = useState<ReadonlySet<string>>(new Set());
 
   // input history (shell-style ↑/↓), remembered across runs
   const histRef = useRef<InputHistory | null>(null);
@@ -724,56 +524,19 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const acIdx = menuItems.length ? Math.min(acIndex, menuItems.length - 1) : 0;
   const pushHistory = useCallback((t: Turn) => setHistory((h) => [...h, t]), []);
 
-  // --- scrollback pager ---------------------------------------------------
-  // The transcript window is sized to the terminal, minus the pager's own
-  // header/footer and a line of slack (a frame taller than the screen makes
-  // ink clear the terminal on every render).
-  const paging = scroll !== null;
-  const pageRows = Math.max(3, rows - 6);
-  const lines = useMemo(() => transcriptLines(history, width), [history, width]);
-  const maxScroll = Math.max(0, lines.length - pageRows);
-
-  // Entering/leaving the pager swaps the <Static> transcript for a rendered
-  // window, so the screen is wiped and <Static> remounted in both directions.
-  const goScroll = useCallback(
-    (next: number | null) => {
-      if ((scroll === null) !== (next === null)) repaint();
-      setScroll(next);
-    },
-    [repaint, scroll],
-  );
-  const scrollTo = useCallback(
-    (n: number) => {
-      const clamped = Math.min(maxScroll, Math.max(0, n));
-      goScroll(clamped === 0 ? null : clamped);
-    },
-    [goScroll, maxScroll],
-  );
-
-  // Anything new in the feed — her reply, a pulse, an alert — snaps back to now.
-  const feedLenRef = useRef(0);
-  useEffect(() => {
-    const n = history.length + (live ? 1 : 0);
-    if (feedLenRef.current === n) return;
-    feedLenRef.current = n;
-    if (scroll !== null) goScroll(null);
-  }, [goScroll, history.length, live, scroll]);
-
   // Blink only around actual typing. A permanent 530ms repaint wipes mouse
   // selection in the terminal, making copy/paste impossible; once the keyboard
-  // has been idle for a spell the cursor goes solid and repaints stop — which
-  // is exactly when people select text to copy.
+  // has been idle for a spell the cursor goes solid and repaints stop.
   const [blinkAlive, setBlinkAlive] = useState(true);
   const blinkIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    // The pager owns the whole screen and has no cursor to blink.
-    if (!blinkEnabled || !blinkAlive || paging) {
+    if (!blinkEnabled || !blinkAlive) {
       setBlink(true);
       return;
     }
     const id = setInterval(() => setBlink((b) => !b), 530);
     return () => clearInterval(id);
-  }, [blinkEnabled, blinkAlive, paging]);
+  }, [blinkEnabled, blinkAlive]);
   useEffect(() => {
     blinkIdleRef.current = setTimeout(() => setBlinkAlive(false), 10_000);
     return () => {
@@ -827,14 +590,11 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       onHighlight: (v) => setPreviewSkin(v),
       onPick: (v) => {
         setPreviewSkin(null);
-        if (v !== skin) {
-          setSkin(v);
-          repaint();
-        }
+        if (v !== skin) setSkin(v);
       },
       onCancel: () => setPreviewSkin(null),
     });
-  }, [repaint, skin]);
+  }, [skin]);
 
   const openEffortPicker = useCallback(() => {
     setPicker({
@@ -857,8 +617,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   }, [cursorPref]);
 
   // The live chat model is a SwitchableModelProvider, so /model re-routes
-  // replies mid-session. The choice is persisted for the next boot — but the
-  // daemon (Telegram, sentinel) is another process: it adopts it on restart.
+  // replies mid-session. The choice is persisted for the next boot.
   const switchable = useMemo(
     () => (runtime.model instanceof SwitchableModelProvider ? runtime.model : undefined),
     [runtime],
@@ -873,9 +632,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       const kind = resolveChatProviderKind(name);
       if (!kind) {
         pushHistory(
-          sysTurn(
-            `unknown provider "${name}" — try: ${CHAT_PROVIDER_CHOICES.map((p) => p.name).join(" · ")}`,
-          ),
+          sysTurn(`unknown provider "${name}" — try: ${CHAT_PROVIDER_CHOICES.map((p) => p.name).join(" · ")}`),
         );
         return;
       }
@@ -921,10 +678,9 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           pushHistory(sysTurn(HELP));
           break;
         case "clear":
-          // Wipe the scrollback too, so what was cleared is really gone.
+          // The flat feed is rebuilt from history, so a clear is just state.
           setLive(null);
           setHistory([]);
-          repaint();
           break;
         case "copy": {
           const lastLain = [...history].reverse().find((t) => t.role === "lain");
@@ -984,9 +740,9 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         case "wishes": {
           const forge = runtime.getService<ForgeService>("forge");
           const wishes = forge?.listWishes() ?? [];
-          const provider = forge?.forgeProvider();
-          const providerLine = provider
-            ? `forge provider: ${provider.selected} (${provider.available ? "ready" : "unavailable"})\n`
+          const fprovider = forge?.forgeProvider();
+          const providerLine = fprovider
+            ? `forge provider: ${fprovider.selected} (${fprovider.available ? "ready" : "unavailable"})\n`
             : "";
           pushHistory(
             sysTurn(
@@ -1057,7 +813,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           pushHistory(sysTurn(`unknown command: /${cmd}  (try /help)`));
       }
     },
-    [exit, history, model, openCursorPicker, openEffortPicker, openModelPicker, openSkinPicker, provider, pulseOn, pushHistory, repaint, runtime, stdout, switchProvider, switchable],
+    [exit, history, model, openCursorPicker, openEffortPicker, openModelPicker, openSkinPicker, provider, pulseOn, pushHistory, runtime, stdout, switchProvider, switchable],
   );
 
   const send = useCallback(
@@ -1110,12 +866,239 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     [pushHistory, room, runtime],
   );
 
+  // ---------------------------------------------------------- layout math
+
+  const sidebarOn = width >= 100;
+  const sidebarW = sidebarOn ? 28 : 0;
+  const contentW = sidebarOn ? width - sidebarW : width;
+  const composerWidth = Math.max(4, contentW - 2);
+
+  const spin = useSpin(busy);
+  const feed = useMemo(() => {
+    const bn = bannerLines(theme, contentW);
+    const lines: Line[] = [...bn];
+    const regions: (FeedRegion | undefined)[] = bn.map(() => undefined);
+    const push = (ls: Line[], rs: (FeedRegion | undefined)[]) => {
+      lines.push(...ls);
+      regions.push(...rs);
+    };
+    const bt = bootLines(theme, contentW);
+    push(bt, bt.map(() => undefined));
+    for (const t of history) {
+      const tl = turnLines(t, expandedTools, theme, contentW, spinnerChar(spin));
+      push(tl.lines, tl.regions);
+    }
+    if (live) {
+      const tl = turnLines(live, expandedTools, theme, contentW, spinnerChar(spin));
+      push(tl.lines, tl.regions);
+    }
+    return { lines, regions };
+  }, [contentW, expandedTools, history, live, spin, theme]);
+
+  const watches = runtime.getService<SentinelService>("sentinel")?.listWatches()?.length ?? 0;
+  const wishes = runtime.getService<ForgeService>("forge")?.listWishes()?.length ?? 0;
+  const topics = runtime.getService<ScoutService>("scout")?.listTopics()?.length ?? 0;
+  const skills = runtime.actions.length;
+  const sidebar = sidebarOn
+    ? sidebarLines(theme, sidebarW, rows, {
+        provider,
+        model,
+        block,
+        tokens,
+        room,
+        effort,
+        skinLabel: theme.name,
+        watches,
+        wishes,
+        topics,
+        skills,
+      })
+    : { lines: Array.from({ length: rows }, () => blank(sidebarW)), regions: [] as (SidebarRegion | undefined)[] };
+
+  // ---- chrome (status bar + thinking + menus + picker + composer)
+  const showHint = value.length === 0 && !busy && !picker;
+  const composerWrap = useMemo(() => wrapIndices(value, composerWidth), [value, composerWidth]);
+  const cursorPos = useMemo(() => cursorToWrap(value, cursor, composerWidth), [value, cursor, composerWidth]);
+  const menu = !picker && menuItems.length ? menuLines(menuItems, acIdx, theme, contentW) : [];
+  const pickerRows = picker ? pickerLines(picker, theme, contentW) : [];
+  const statusLines = 2;
+  const thinkingLines = thinkingOn ? 1 : 0;
+  const menuRows = menu.length;
+  const pickerRowsN = pickerRows.length;
+  const composerRows = picker ? 0 : 1 + Math.max(1, composerWrap.length);
+  const hintRows = showHint && !picker ? 1 : 0;
+  const chromeRows = statusLines + thinkingLines + menuRows + pickerRowsN + composerRows + hintRows;
+  const viewportRows = Math.max(1, rows - chromeRows);
+  const composerTop = viewportRows + statusLines + thinkingLines + menuRows + pickerRowsN;
+
+  // ---- scrolling (in-app; the terminal's own scrollback is not used)
+  const maxScroll = Math.max(0, feed.lines.length - viewportRows);
+  const [scrollTop, setScrollTop] = useState(0);
+  const atBottomRef = useRef(true);
+  const feedLenRef = useRef(0);
+  useEffect(() => {
+    const n = history.length + (live ? 1 : 0);
+    const newContent = feedLenRef.current !== n;
+    if (newContent) {
+      feedLenRef.current = n;
+      atBottomRef.current = true;
+    }
+    if (atBottomRef.current) {
+      setScrollTop(Math.max(0, feed.lines.length - viewportRows));
+    }
+  }, [feed.lines.length, viewportRows, history.length, live]);
+
+  // ---- assemble the frame: feed slice + scrollbar, chrome, sidebar merge
+  const feedRef = useRef(feed);
+  const layoutRef = useRef({
+    viewportRows,
+    composerTop,
+    composerWrap,
+    contentW,
+    sidebarOn,
+    rows,
+    feedRegions: [] as (FeedRegion | undefined)[],
+    sidebarRegions: [] as (SidebarRegion | undefined)[],
+  });
+
+  const scrollBy = useCallback((delta: number) => {
+    setScrollTop((prev) => {
+      const max = Math.max(0, feedRef.current.lines.length - layoutRef.current.viewportRows);
+      const next = clamp(prev + delta, 0, max);
+      atBottomRef.current = next >= max;
+      return next;
+    });
+  }, []);
+
+  const slice = feed.lines.slice(scrollTop, scrollTop + viewportRows);
+  const sliceRegions = feed.regions.slice(scrollTop, scrollTop + viewportRows);
+  const hasScrollbar = feed.lines.length > viewportRows;
+  const trackW = hasScrollbar ? contentW - 1 : contentW;
+  const screenLines: Line[] = [];
+  const feedRegions: (FeedRegion | undefined)[] = [];
+  for (let i = 0; i < viewportRows; i++) {
+    let l = slice[i] ?? blank(contentW);
+    l = truncateLine(l, trackW);
+    l = padLine(l, trackW);
+    if (hasScrollbar) l = concat(l, [sp(scrollbarChar(i, viewportRows, maxScroll, scrollTop), theme.mutedDim)]);
+    screenLines.push(l);
+    feedRegions.push(sliceRegions[i]);
+  }
+
+  const chrome = chromeLines({
+    theme,
+    width: contentW,
+    status,
+    thinkingOn,
+    spin,
+    provider,
+    model,
+    block,
+    tokens,
+    room,
+    effort,
+    statusLines,
+    thinkingLines,
+    menuLines: menu,
+    pickerLines: pickerRows,
+    composerWrap: composerWrap as { text: string; start: number; end: number }[],
+    cursorLine: cursorPos.line,
+    cursorCol: cursorPos.col,
+    blinkOn: blink,
+    blinkEnabled,
+    cursorStyle,
+    busy,
+    showHint,
+  });
+
+  feedRef.current = feed;
+  layoutRef.current = {
+    viewportRows,
+    composerTop,
+    composerWrap,
+    contentW,
+    sidebarOn,
+    rows,
+    feedRegions,
+    sidebarRegions: sidebar.regions,
+  };
+
+  const all: Line[] = [];
+  for (let i = 0; i < rows; i++) {
+    const l = i < viewportRows ? screenLines[i] : chrome[i - viewportRows];
+    if (!l) {
+      all.push(blank(width));
+      continue;
+    }
+    all.push(sidebarOn ? concat(fitLine(l, contentW), sidebar.lines[i] ?? blank(sidebarW)) : fitLine(l, width));
+  }
+
+  // ------------------------------------------------------------- handlers
+
+  const toggleTool = useCallback((id: string) => {
+    setExpandedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const openPickerBy = useCallback(
+    (action: "model" | "effort" | "skin") => {
+      if (action === "skin") openSkinPicker();
+      else if (action === "effort") openEffortPicker();
+      else openModelPicker();
+    },
+    [openEffortPicker, openModelPicker, openSkinPicker],
+  );
+
+  const handleMouse = useCallback(
+    (m: MouseInfo) => {
+      if (picker) return;
+      const L = layoutRef.current;
+      if (m.wheel) {
+        scrollBy(m.wheel === "down" ? 3 : -3);
+        return;
+      }
+      if (m.action !== "press") return;
+      const col = m.x - 1;
+      const row = m.y - 1;
+      if (row < 0 || row >= L.rows || col < 0) return;
+      if (L.sidebarOn && col >= L.contentW) {
+        const sr = L.sidebarRegions[row];
+        if (sr?.kind === "pick") openPickerBy(sr.action);
+        return;
+      }
+      if (col >= L.contentW) return;
+      if (row < L.viewportRows) {
+        const r = L.feedRegions[row];
+        if (r?.kind === "tool") toggleTool(r.toolId);
+        return;
+      }
+      const local = row - L.composerTop;
+      const lineIdx = local - 1;
+      const wl = L.composerWrap[lineIdx];
+      if (wl) {
+        const colIn = clamp(col - 2, 0, wl.text.length);
+        setCursor(wl.start + colIn);
+        setBrowsing(false);
+      }
+    },
+    [openPickerBy, picker, scrollBy, toggleTool],
+  );
+
   const onKey = useCallback(
     (input: string, key: TuiKey) => {
       setBlink(true);
       setBlinkAlive(true);
       if (blinkIdleRef.current) clearTimeout(blinkIdleRef.current);
       blinkIdleRef.current = setTimeout(() => setBlinkAlive(false), 10_000);
+
+      if (key.mouse) {
+        handleMouse(key.mouse);
+        return;
+      }
 
       // 1) picker captures everything
       if (picker) {
@@ -1134,43 +1117,23 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         return;
       }
 
-      // 2) scrollback pager. ↑/↓ belong to the input history (bash rules), so
-      // paging is on PageUp/PageDown and ctrl+↑/↓; inside the pager, where
-      // there is no input line on screen, bare ↑/↓ move by one line.
-      const page = Math.max(1, pageRows - 1);
-      if (scroll !== null) {
-        if (key.pageUp) {
-          scrollTo(scroll + page);
-          return;
-        }
-        if (key.pageDown) {
-          scrollTo(scroll - page);
-          return;
-        }
-        if (key.upArrow) {
-          scrollTo(scroll + 1);
-          return;
-        }
-        if (key.downArrow) {
-          scrollTo(scroll - 1);
-          return;
-        }
-        if (key.home) {
-          scrollTo(maxScroll);
-          return;
-        }
-        if (key.end || key.escape || key.return) {
-          goScroll(null);
-          return;
-        }
-        // Anything else (typing) returns to the bottom and is handled below.
-        goScroll(null);
-      } else {
-        if (key.pageUp || (key.ctrl && key.upArrow)) {
-          scrollTo(key.pageUp ? page : 1);
-          return;
-        }
-        if (key.pageDown || (key.ctrl && key.downArrow)) return; // already at the bottom
+      // 2) scroll the feed with the keyboard.
+      const page = Math.max(1, layoutRef.current.viewportRows - 2);
+      if (key.pageUp) {
+        scrollBy(page);
+        return;
+      }
+      if (key.pageDown) {
+        scrollBy(-page);
+        return;
+      }
+      if (key.ctrl && key.upArrow) {
+        scrollBy(1);
+        return;
+      }
+      if (key.ctrl && key.downArrow) {
+        scrollBy(-1);
+        return;
       }
 
       // The slash menu is "open" only while actively typing a command — not when
@@ -1200,23 +1163,25 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           setAcIndex((idx + (key.shift ? items.length - 1 : 1)) % items.length);
           return;
         }
-        if (key.return) {
+        if (key.return && !key.shift) {
           commit(items[idx].name);
           return;
         }
-        // other keys fall through to editing (narrows the menu)
+        // other keys (incl. shift+enter) fall through to editing
       } else {
-        // 3b) menu closed → arrows walk input history, fully replacing the line
-        if (key.upArrow) {
-          const v = hist.prev(value);
-          if (v === null) return;
-          setBrowsing(true);
-          setValue(v);
-          setCursor(v.length);
-          return;
-        }
-        if (key.downArrow) {
-          const v = hist.next();
+        // 3b) menu closed → ↑/↓ move a visual line first, then history.
+        if (key.upArrow || key.downArrow) {
+          if (!browsing) {
+            const edited = editLine({ value, cursor }, input, key, composerWidth);
+            if (edited) {
+              setBrowsing(false);
+              setValue(edited.value);
+              setCursor(edited.cursor);
+              setAcIndex(0);
+              return;
+            }
+          }
+          const v = key.upArrow ? hist.prev(value) : hist.next();
           if (v === null) return;
           setBrowsing(true);
           setValue(v);
@@ -1224,13 +1189,16 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           return;
         }
         if (key.return) {
-          if (!busy) commit(value.trim());
-          return;
+          if (!key.shift && !busy) {
+            commit(value.trim());
+            return;
+          }
+          // shift+enter / ctrl+enter falls through to editLine → new line.
         }
       }
 
       // 4) line editing — any edit exits history-browsing (re-arms the menu)
-      const edited = editLine({ value, cursor }, input, key);
+      const edited = editLine({ value, cursor }, input, key, composerWidth);
       if (edited) {
         setBrowsing(false);
         setValue(edited.value);
@@ -1238,136 +1206,15 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         setAcIndex(0);
       }
     },
-    [acIndex, browsing, busy, command, cursor, goScroll, hist, maxScroll, pageRows, picker, scroll, scrollTo, send, value],
-  );
-
-  // Completed turns are printed permanently into the terminal's own
-  // scrollback via <Static> — ink never repaints them, so selecting and
-  // copying transcript text survives cursor blinks, status updates, and
-  // streaming. Only the small bottom widget (live turn, status bar, composer)
-  // is a dynamic frame that gets rewritten.
-  type FeedItem =
-    | { key: string; kind: "banner" }
-    | { key: string; kind: "boot" }
-    | { key: string; kind: "turn"; turn: Turn };
-  // While the pager is open the same turns are drawn as a scrollable window,
-  // so <Static> must print nothing at all.
-  const feed = useMemo<FeedItem[]>(
-    () =>
-      paging
-        ? []
-        : [
-            { key: "banner", kind: "banner" },
-            { key: "boot", kind: "boot" },
-            ...history.map((t) => ({ key: t.id, kind: "turn" as const, turn: t })),
-          ],
-    [history, paging],
+    [acIndex, browsing, busy, command, composerWidth, cursor, handleMouse, hist, picker, scrollBy, send, value],
   );
 
   return (
-    <ThemeContext.Provider value={theme}>
-      <Static key={`gen-${gen}`} items={feed}>
-        {(item) =>
-          item.kind === "banner" ? (
-            <Banner key={item.key} tagline={tagline} width={width} />
-          ) : item.kind === "boot" ? (
-            <BootCard key={item.key} runtime={runtime} block={block} session={session} width={width} />
-          ) : (
-            <TurnView key={item.key} turn={item.turn} />
-          )
-        }
-      </Static>
-
-      <Box flexDirection="column">
-        {paging ? (
-          <Pager
-            lines={lines}
-            top={Math.max(0, lines.length - pageRows - (scroll ?? 0))}
-            height={pageRows}
-            width={width}
-          />
-        ) : (
-          <>
-            {live ? <TurnView turn={live} /> : null}
-
-            {status === "thinking" ? (
-              <Box marginLeft={2} flexShrink={0}>
-                <Text color={theme.warn}>
-                  <Spinner type="dots" />
-                </Text>
-                <Text color={theme.mutedDim}>  reaching into the wired…</Text>
-              </Box>
-            ) : null}
-
-            <StatusBar
-              provider={provider}
-              model={model}
-              block={block}
-              tokens={tokens}
-              room={room}
-              effort={effort}
-              status={status}
-              width={width}
-            />
-
-            {picker ? (
-              <Picker state={picker} />
-            ) : (
-              <>
-                {menuItems.length ? <Autocomplete items={menuItems} index={acIdx} /> : null}
-                <Composer
-                  value={value}
-                  cursor={cursor}
-                  blinkOn={blink}
-                  blinkEnabled={blinkEnabled}
-                  cursorStyle={cursorStyle}
-                  busy={busy}
-                />
-              </>
-            )}
-          </>
-        )}
-
-        {isRawModeSupported ? <InputCapture onKey={onKey} /> : null}
-      </Box>
-    </ThemeContext.Provider>
-  );
-}
-
-function StatusBar(props: {
-  provider: string;
-  model: string;
-  block: number | null;
-  tokens: number;
-  room: string;
-  effort: string;
-  status: "idle" | "thinking" | "streaming";
-  width: number;
-}) {
-  const c = useTheme();
-  const dot = props.status === "idle" ? c.ok : c.warn;
-  return (
-    <Box flexDirection="column" marginTop={1} flexShrink={0}>
-      <Text color={c.mutedDim}>{"─".repeat(Math.max(8, props.width))}</Text>
-      {/* One outer Text so the whole bar truncates at the terminal edge —
-          sibling Texts in a row refuse to shrink below their content and
-          overflow narrow terminals. */}
-      <Text wrap="truncate">
-        <Text color={dot}>● </Text>
-        <Text color={c.primary}>{props.provider}</Text>
-        <Text color={c.mutedDim}> {GLYPH.dot} </Text>
-        <Text color={c.secondary}>{props.model}</Text>
-        <Text color={c.mutedDim}>{"   "}{GLYPH.chain} </Text>
-        <Text color={c.fg}>{props.block === null ? "—" : props.block.toLocaleString("en-US")}</Text>
-        <Text color={c.mutedDim}>{"   ◷ "}</Text>
-        <Text color={c.fg}>{fmtTokens(props.tokens)} tok</Text>
-        <Text color={c.mutedDim}>{"   effort:"}</Text>
-        <Text color={c.secondary}>{props.effort}</Text>
-        <Text color={c.mutedDim}>{"   skin:"}</Text>
-        <Text color={c.primary}>{c.name}</Text>
-        <Text color={c.mutedDim}>{"   room:"}</Text>
-        <Text color={c.fg}>{props.room}</Text>
-      </Text>
+    <Box flexDirection="column">
+      {all.map((line, i) => (
+        <LineView key={i} line={line} />
+      ))}
+      {isRawModeSupported ? <InputCapture onKey={onKey} /> : null}
     </Box>
   );
 }

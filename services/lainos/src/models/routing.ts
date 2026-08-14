@@ -96,6 +96,7 @@ export class TieredModelProvider implements ModelProvider {
 export const CHAT_PROVIDER_CHOICES: { name: string; kind: string; desc: string }[] = [
   { name: "claude", kind: "claude", desc: "Claude CLI · subscription, no key" },
   { name: "codex", kind: "codex", desc: "Codex CLI · ChatGPT subscription" },
+  { name: "opencode", kind: "opencode", desc: "OpenCode CLI · your own OpenCode setup" },
   { name: "claude-api", kind: "anthropic", desc: "Anthropic API key · per token" },
 ];
 
@@ -111,6 +112,7 @@ export function resolveChatProviderKind(raw: string): string | undefined {
 /** Human label for a kind: "claude" and "anthropic" are the same models. */
 export function chatProviderLabel(kind: string): string {
   if (kind === "claude") return "claude (cli)";
+  if (kind === "opencode") return "opencode (cli)";
   return kind === "anthropic" ? "claude (anthropic api)" : kind;
 }
 

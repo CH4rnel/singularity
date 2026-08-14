@@ -20,6 +20,21 @@ export interface TuiKey extends Key {
   home: boolean;
   /** End (\x1b[F, \x1bOF, \x1b[4~, \x1b[8~). */
   end: boolean;
+  /** A mouse event, 1-based terminal coordinates. Set on mouse presses. */
+  mouse?: MouseInfo;
+}
+
+/** Decoded SGR/xterm mouse event (see {@link parseKey}). */
+export interface MouseInfo {
+  /** 1-based column. */
+  x: number;
+  /** 1-based row. */
+  y: number;
+  /** Raw xterm button byte (wheel bits + modifiers). */
+  b: number;
+  action: "press" | "release";
+  /** Wheel direction, or null for button events. */
+  wheel: "up" | "down" | null;
 }
 
 export interface KeyPress {
@@ -32,7 +47,7 @@ export interface KeyPress {
  *  reader waits this long for the tail before calling it the Escape key. */
 export const ESC_TIMEOUT_MS = 30;
 
-type Flags = { -readonly [K in keyof TuiKey]: boolean };
+type Flags = { -readonly [K in Exclude<keyof TuiKey, "mouse">]: boolean };
 
 const BLANK: TuiKey = {
   upArrow: false,
@@ -59,7 +74,7 @@ const named = (over: Partial<TuiKey>): KeyPress => ({ input: "", key: mk(over) }
 const ignored = (): KeyPress => ({ input: "", key: mk() });
 
 /** Key names → the `TuiKey` flag they raise. Names with no flag are ignored. */
-const FLAG: Record<string, keyof TuiKey> = {
+const FLAG: Record<string, Exclude<keyof TuiKey, "mouse">> = {
   up: "upArrow",
   down: "downArrow",
   left: "leftArrow",
@@ -110,6 +125,9 @@ function parseCsi(seq: string): KeyPress | null {
     s = s.slice(1);
     meta = true;
   }
+  // kitty keyboard protocol encodes shift+enter as CSI 13;2u.
+  if (s === "\x1b[13;2u") return named({ return: true, shift: true });
+  if (s === "\x1b[13u" || s === "\x1b[13;5u") return named({ return: true });
   const m = CSI_RE.exec(s);
   if (!m) return null;
   const [, intro, num, mod, final] = m;
@@ -143,13 +161,39 @@ function parseCsi(seq: string): KeyPress | null {
   return { input: "", key };
 }
 
+/** Build the KeyPress for a decoded mouse event (1-based coordinates). */
+function mousePress(b: number, x: number, y: number, action: "press" | "release"): KeyPress {
+  const wheel = b & 64 ? (b & 1 ? "down" : "up") : null;
+  return { input: "", key: { ...BLANK, mouse: { x, y, b, action, wheel } } };
+}
+
+/** Decode SGR (\x1b[<b;x;yM) and legacy xterm (\x1b[M...) mouse reports. */
+function parseMouse(seq: string): KeyPress | null {
+  const sgr = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/.exec(seq);
+  if (sgr) {
+    return mousePress(Number(sgr[1]), Number(sgr[2]), Number(sgr[3]), sgr[4] === "M" ? "press" : "release");
+  }
+  const legacy = /^\x1b\[M(.{3})/.exec(seq);
+  if (legacy) {
+    const cb = legacy[1].charCodeAt(0) - 32;
+    const x = legacy[1].charCodeAt(1) - 32;
+    const y = legacy[1].charCodeAt(2) - 32;
+    return mousePress(cb & ~32, x, y, cb & 32 ? "release" : "press");
+  }
+  return null;
+}
+
 /**
  * Turn one key sequence (or one pasted chunk) into a keypress. Sequences we do
  * not recognise are swallowed rather than typed, so an exotic terminal never
  * sprays `[3;5~` into the input line.
  */
 export function parseKey(seq: string): KeyPress {
-  if (seq === "\r" || seq === "\n") return named({ return: true });
+  // Plain Enter submits (\r); Ctrl+Enter / Ctrl+J send \n — treat that as
+  // "return with shift", i.e. a literal newline, so every terminal can make a
+  // second line even without the kitty keyboard protocol.
+  if (seq === "\r") return named({ return: true });
+  if (seq === "\n") return named({ return: true, shift: true });
   if (seq === "\t") return named({ tab: true });
   if (seq === "\x1b[Z") return named({ tab: true, shift: true });
   if (seq === "\x7f" || seq === "\b") return named({ backspace: true });
@@ -159,6 +203,9 @@ export function parseKey(seq: string): KeyPress {
 
   const csi = parseCsi(seq);
   if (csi) return csi;
+
+  const mouse = parseMouse(seq);
+  if (mouse) return mouse;
 
   // alt/meta + character: alt+b, alt+f, alt+d …
   if (/^\x1b[^\x1b[O]$/.test(seq)) {
@@ -187,8 +234,13 @@ function escapeAt(data: string, i: number): string | null {
   while (data[j] === "\x1b") j++; // \x1b\x1b… = alt prefix
   if (j >= data.length) return null; // a lone ESC: the key, or a prefix
   if (data[j] === "[") {
+    // Legacy xterm mouse report \x1b[M followed by exactly three bytes.
+    if (data[j + 1] === "M") {
+      return j + 5 <= data.length ? data.slice(i, j + 5) : null;
+    }
     j++;
-    while (j < data.length && /[\d;?]/.test(data[j])) j++;
+    // `<` (SGR mouse) and `?` (DEC modes) are also part of a CSI head.
+    while (j < data.length && /[\d;?<]/.test(data[j])) j++;
     return j < data.length ? data.slice(i, j + 1) : null;
   }
   if (data[j] === "O") return j + 1 < data.length ? data.slice(i, j + 2) : null;

@@ -6,6 +6,7 @@
  *   npm run provider           # who is answering right now
  *   npm run provider claude    # switch to the Claude CLI subscription
  *   npm run provider codex     # switch back to the Codex CLI
+ *   npm run provider opencode  # switch to the OpenCode CLI
  *
  * The switch is immediate and persisted (data/chat-provider.json), so it also
  * survives the daemon's next restart. The TUI is a separate process with its

@@ -41,9 +41,11 @@ export {
   FallbackModelProvider,
   MockModelProvider,
   OpenRouterModelProvider,
+  OpencodeModelProvider,
   SwitchableModelProvider,
   TieredModelProvider,
   resolveCodexBin,
+  resolveOpenCodeBin,
 } from "./models/index.js";
 export type { ChatProviderState } from "./models/index.js";
 export { bootstrapPlugin } from "./plugins/bootstrap/index.js";
@@ -68,8 +70,18 @@ export {
   parseChannelPosts,
   normalizeChannel,
   localDay,
+  inferVenueKind,
+  isReadableVenue,
+  isVenueDue,
+  reminderText,
+  venueLabel,
 } from "./plugins/channel/index.js";
-export type { ChannelActivity, ChannelEvent, ChannelWatch } from "./plugins/channel/index.js";
+export type {
+  ChannelActivity,
+  ChannelEvent,
+  ChannelWatch,
+  VenueKind,
+} from "./plugins/channel/index.js";
 export { TelegramClient } from "./clients/telegram.js";
 export { telegramPlugin, resolveOperatorChatId, sendToOperator } from "./plugins/telegram/index.js";
 export { skillsPlugin, SkillsService } from "./plugins/skills/index.js";

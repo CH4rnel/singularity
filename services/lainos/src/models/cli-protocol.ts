@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ModelRequest, ModelToolCall, ToolSchema } from "../types.js";
 
 /**
- * Shared glue for the CLI-backed model providers (codex, claude).
+ * Shared glue for the CLI-backed model providers (codex, claude, opencode).
  *
  * Both drive a coding-agent CLI that is an agent, not a chat API: there is no
  * tool-use block in the wire format, so tool calling is emulated with a
@@ -85,7 +85,9 @@ function tryParseCall(candidate: string): ModelToolCall | null {
 export function resolveCliBin(name: string, explicit?: string): string | null {
   if (explicit) return explicit;
   const home = process.env.HOME ?? "";
-  for (const bin of [name, join(home, ".local/bin", name)]) {
+  // ~/.opencode/bin is where the opencode installer drops the binary; it is a
+  // no-op candidate for codex/claude but lets opencode autodetect everywhere.
+  for (const bin of [name, join(home, ".local/bin", name), join(home, ".opencode/bin", name)]) {
     if (bin.includes("/") ? existsSync(bin) : onPath(bin)) return bin;
   }
   return null;

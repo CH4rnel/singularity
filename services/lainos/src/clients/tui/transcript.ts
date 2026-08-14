@@ -21,23 +21,106 @@ export interface TranscriptTurn {
   parts: readonly TranscriptPart[];
 }
 
-/** Greedy word wrap onto `width` columns, every line carrying `indent`. */
+/** Greedy word wrap onto `width` columns, every line carrying `indent`.
+ *  Hard newlines in `text` are kept as line breaks. */
 export function wrapText(text: string, width: number, indent = ""): string[] {
   const room = Math.max(8, width - indent.length);
   const out: string[] = [];
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    const last = out[out.length - 1];
-    if (last !== undefined && last.length + 1 + word.length <= room) {
-      out[out.length - 1] = `${last} ${word}`;
-    } else if (word.length <= room) {
-      out.push(word);
-    } else {
-      // A single monster token (an address, a base64 blob) is cut to fit.
-      for (let i = 0; i < word.length; i += room) out.push(word.slice(i, i + room));
+  const wrapLine = (line: string) => {
+    const rows: string[] = [];
+    for (const word of line.split(/\s+/).filter(Boolean)) {
+      const last = rows[rows.length - 1];
+      if (last !== undefined && last.length + 1 + word.length <= room) {
+        rows[rows.length - 1] = `${last} ${word}`;
+      } else if (word.length <= room) {
+        rows.push(word);
+      } else {
+        // A single monster token (an address, a base64 blob) is cut to fit.
+        for (let i = 0; i < word.length; i += room) rows.push(word.slice(i, i + room));
+      }
     }
-  }
-  if (!out.length) out.push("");
+    if (!rows.length) rows.push("");
+    out.push(...rows);
+  };
+  for (const line of text.split("\n")) wrapLine(line);
   return out.map((l) => indent + l);
+}
+
+/** One wrapped display line plus its source range in the flat string. */
+export interface WrappedLine {
+  text: string;
+  /** Flat index of the first character of the line. */
+  start: number;
+  /** Flat index just past the last character of the line. */
+  end: number;
+}
+
+/** Word-wrap `value` exactly like {@link wrapText}, tracking flat indices so
+ *  a cursor position can be mapped onto the visual layout. Hard newlines in
+ *  `value` start a fresh display line, so shift+enter stays visible. */
+export function wrapIndices(value: string, width: number): WrappedLine[] {
+  const w = Math.max(4, width);
+  const out: WrappedLine[] = [];
+  let offset = 0;
+  for (const logical of value.split("\n")) {
+    const words: { text: string; index: number }[] = [];
+    const re = /\S+/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(logical)) !== null) words.push({ text: m[0], index: offset + m.index });
+    if (!words.length) {
+      out.push({ text: logical, start: offset, end: offset + logical.length });
+    } else {
+      let lineWords: typeof words = [];
+      let lineStart = words[0].index;
+      let lineEnd = words[0].index + words[0].text.length;
+      let used = 0;
+      const flush = () => {
+        if (lineWords.length) {
+          out.push({ text: lineWords.map((x) => x.text).join(" "), start: lineStart, end: lineEnd });
+        }
+        lineWords = [];
+      };
+      for (const word of words) {
+        if (word.text.length > w) {
+          flush();
+          for (let i = 0; i < word.text.length; i += w) {
+            out.push({
+              text: word.text.slice(i, i + w),
+              start: word.index + i,
+              end: word.index + Math.min(i + w, word.text.length),
+            });
+          }
+          lineStart = word.index + word.text.length;
+          continue;
+        }
+        const need = lineWords.length ? 1 + word.text.length : word.text.length;
+        if (lineWords.length && used + need > w) {
+          flush();
+          lineStart = word.index;
+          used = 0;
+        }
+        lineWords.push(word);
+        used += need;
+        lineEnd = word.index + word.text.length;
+      }
+      flush();
+    }
+    offset += logical.length + 1;
+  }
+  if (!out.length) out.push({ text: "", start: 0, end: 0 });
+  return out;
+}
+
+/** Map a flat cursor index to (line, col) in the wrapped layout. */
+export function cursorToWrap(value: string, cursor: number, width: number): { line: number; col: number } {
+  const lines = wrapIndices(value, width);
+  for (let i = 0; i < lines.length; i++) {
+    const { start, end } = lines[i];
+    if (cursor <= start) return { line: i, col: 0 };
+    if (cursor <= end) return { line: i, col: cursor - start };
+    if (i === lines.length - 1) return { line: i, col: lines[i].text.length };
+  }
+  return { line: 0, col: 0 };
 }
 
 /** The header line of a turn: who spoke, and through which model. */
