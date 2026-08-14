@@ -57,7 +57,91 @@ export type SponsorStatus = {
     tank?: string | null;
     paused?: boolean | null;
     served?: number | null;
+    /** What the contract will spend in a day, and what is left of it. */
+    dailyCap?: string | null;
+    remainingToday?: string | null;
+    spent?: string | null;
     address?: SponsorEligibility;
+};
+
+/**
+ * What the station is doing right now, in one word.
+ *
+ * Deliberately separate from whether *this* address may be sponsored: a live
+ * station that has already served this address today is a completely different
+ * sentence from a station whose tank is empty, and a screen that collapsed the
+ * two would send someone to wait for a cooldown that is not the problem.
+ */
+export type StationState = 'off' | 'paused' | 'empty' | 'live' | 'unreadable';
+
+export const stationState = (status: SponsorStatus | null): StationState => {
+    if (status === null || !status.enabled) {
+        return 'off';
+    }
+
+    if (status.paused === true) {
+        return 'paused';
+    }
+
+    // A tank the server could not read is not an empty one. The station may be
+    // handing out coin perfectly well behind an RPC that failed one call, and
+    // printing "empty" would be a rumour this screen started.
+    if (status.tank === null || status.tank === undefined) {
+        return 'unreadable';
+    }
+
+    return dripsLeft(status) === 0 ? 'empty' : 'live';
+};
+
+/**
+ * How many more addresses the tank can cover, or null when either half is
+ * unknown.
+ *
+ * The tank's own number means little to a reader — a drip is the unit this
+ * station actually spends in, and "enough for 400 more addresses" is the same
+ * fact in the terms of the thing it does.
+ */
+export const dripsLeft = (status: SponsorStatus | null): number | null => {
+    if (!status?.tank || !status.drip) {
+        return null;
+    }
+
+    try {
+        const drip = BigInt(status.drip);
+
+        return drip > 0n ? Number(BigInt(status.tank) / drip) : null;
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * The share of today's allowance still unspent, 0–1, or null when the contract
+ * did not report the pair.
+ *
+ * A cap with no remainder (or the other way round) is half a fact, and half a
+ * fact drawn as a full bar is a wrong one.
+ */
+export const dailyShare = (status: SponsorStatus | null): number | null => {
+    if (!status?.dailyCap || !status.remainingToday) {
+        return null;
+    }
+
+    try {
+        const cap = BigInt(status.dailyCap);
+
+        if (cap <= 0n) {
+            return null;
+        }
+
+        const left = BigInt(status.remainingToday);
+
+        // Basis points rather than a float division of two bigints, which
+        // would lose the whole answer for any tank a chain would actually hold.
+        return Math.min(1, Number((left * 10_000n) / cap) / 10_000);
+    } catch {
+        return null;
+    }
 };
 
 export type SponsorOutcome =

@@ -7,9 +7,13 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import WalletAccounts from '@/components/wallet/WalletAccounts.vue';
 import WalletAddNetwork from '@/components/wallet/WalletAddNetwork.vue';
 import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
+import WalletBridge from '@/components/wallet/WalletBridge.vue';
+import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
 import WalletChat from '@/components/wallet/WalletChat.vue';
 import WalletDao from '@/components/wallet/WalletDao.vue';
+import WalletEarn from '@/components/wallet/WalletEarn.vue';
 import WalletFeed from '@/components/wallet/WalletFeed.vue';
+import WalletGasStation from '@/components/wallet/WalletGasStation.vue';
 import WalletImportAccount from '@/components/wallet/WalletImportAccount.vue';
 import WalletIpfs from '@/components/wallet/WalletIpfs.vue';
 import WalletLain from '@/components/wallet/WalletLain.vue';
@@ -21,6 +25,7 @@ import WalletNftMint from '@/components/wallet/WalletNftMint.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
 import WalletPortfolio from '@/components/wallet/WalletPortfolio.vue';
 import WalletProfile from '@/components/wallet/WalletProfile.vue';
+import WalletProxy from '@/components/wallet/WalletProxy.vue';
 import WalletReceive from '@/components/wallet/WalletReceive.vue';
 import WalletSecurity from '@/components/wallet/WalletSecurity.vue';
 import WalletSend from '@/components/wallet/WalletSend.vue';
@@ -40,6 +45,7 @@ import {
 } from '@/lib/telegram';
 import { unreadChatCount } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
+import type { BridgeConfig } from '@/lib/wallet/bridge';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -73,6 +79,8 @@ const props = defineProps<{
         tokenAddress: string;
         minimumShareBps: number;
     };
+    /** Which bridge corridors exist, which are open, and where deposits go. */
+    bridge: BridgeConfig;
     /** The limits this server pins under, so the screens can say them first. */
     ipfs: {
         enabled: boolean;
@@ -116,7 +124,12 @@ type Section =
     | 'nft'
     | 'nftMint'
     | 'ipfs'
-    | 'torrent';
+    | 'torrent'
+    | 'gas'
+    | 'proxy'
+    | 'earn'
+    | 'bridge'
+    | 'browse';
 type Overlay = 'send' | 'receive' | 'swap' | 'addNetwork';
 
 const section = ref<Section>('portfolio');
@@ -162,6 +175,11 @@ const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'chat', label: () => t('chatTitle') },
     { id: 'network', label: () => t('navActivity') },
     { id: 'accounts', label: () => t('accounts') },
+    // Three things done *with* a balance rather than three ways of reading
+    // one, which is why they sit apart from the screens above them.
+    { id: 'bridge', label: () => t('bridgeTitle') },
+    { id: 'earn', label: () => t('earnTitle') },
+    { id: 'browse', label: () => t('browseTitle') },
     { id: 'feed', label: () => t('feed') },
     { id: 'launchpad', label: () => t('launchpad') },
     { id: 'nft', label: () => t('nftTitle') },
@@ -213,6 +231,11 @@ const TAB_OF: Record<Section, Section> = {
     importAccount: 'portfolio',
     network: 'portfolio',
     security: 'portfolio',
+    gas: 'portfolio',
+    proxy: 'portfolio',
+    earn: 'portfolio',
+    bridge: 'portfolio',
+    browse: 'browse',
     feed: 'feed',
     profile: 'feed',
     launchpad: 'launchpad',
@@ -272,7 +295,11 @@ if (telegram) {
         () => {
             releaseMain();
 
-            if (stage.value === 'app' && section.value === 'portfolio' && overlay.value === null) {
+            if (
+                stage.value === 'app' &&
+                section.value === 'portfolio' &&
+                overlay.value === null
+            ) {
                 releaseMain = setMainButton({
                     text: t('send').toUpperCase(),
                     onClick: () => {
@@ -355,6 +382,10 @@ const openProfile = (address: string | null): void => {
 const PARENTS: Partial<Record<Section, Section>> = {
     token: 'tokens',
     importAccount: 'accounts',
+    gas: 'portfolio',
+    proxy: 'security',
+    earn: 'portfolio',
+    bridge: 'portfolio',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -926,7 +957,11 @@ watch(
                         not in a policy page nobody opens.
                     -->
                     <template v-else-if="section === 'portfolio'">
-                        <p v-if="telegram" class="cw-note" style="margin-bottom: 16px">
+                        <p
+                            v-if="telegram"
+                            class="cw-note"
+                            style="margin-bottom: 16px"
+                        >
                             {{ t('tgCustody') }}
                         </p>
 
@@ -944,6 +979,10 @@ watch(
                             @analytics="openSection('analytics')"
                             @accounts="openSection('accounts')"
                             @security="openSection('security')"
+                            @gas="openSection('gas')"
+                            @earn="openSection('earn')"
+                            @bridge="openSection('bridge')"
+                            @browse="openSection('browse')"
                         />
                     </template>
 
@@ -989,6 +1028,56 @@ watch(
                         @send="openSend"
                         @swap="openSwap"
                         @hidden="openSection(tokenOrigin)"
+                    />
+
+                    <!--
+                      Sponsored fees as a place, not only as the offer that
+                      appears mid-transaction: what the station is, and why it
+                      said no, are questions asked when nobody is signing.
+                    -->
+                    <WalletGasStation
+                        v-else-if="section === 'gas'"
+                        :wallet="wallet"
+                        :prices="prices"
+                        @back="openSection('portfolio')"
+                    />
+
+                    <!--
+                      The directory of what is on this chain — and the plain
+                      answer to what a page can and cannot ask a wallet for.
+                    -->
+                    <WalletBrowse
+                        v-else-if="section === 'browse'"
+                        :wallet="wallet"
+                        @swap="openSwap()"
+                        @earn="openSection('earn')"
+                        @launchpad="openSection('launchpad')"
+                        @dao="openSection('dao')"
+                        @bridge="openSection('bridge')"
+                    />
+
+                    <!--
+                      Leaving the chain: one transfer signed here, one payout
+                      made there, and nothing in between that can be undone.
+                    -->
+                    <WalletBridge
+                        v-else-if="section === 'bridge'"
+                        :wallet="wallet"
+                        :config="props.bridge"
+                        :prices="prices"
+                        @back="openSection('portfolio')"
+                    />
+
+                    <!--
+                      A pool position is not a balance: it is money at work,
+                      with its own risk and its own unclaimed half.
+                    -->
+                    <WalletEarn
+                        v-else-if="section === 'earn'"
+                        :wallet="wallet"
+                        :chain="chain"
+                        :prices="prices"
+                        @back="openSection('portfolio')"
                     />
 
                     <WalletAnalytics
@@ -1073,11 +1162,22 @@ watch(
                         :config="props.lain"
                     />
 
+                    <!--
+                      Where the requests go, which is the half of privacy a
+                      local key does not cover on its own.
+                    -->
+                    <WalletProxy
+                        v-else-if="section === 'proxy'"
+                        :wallet="wallet"
+                        @back="openSection('security')"
+                    />
+
                     <WalletSecurity
                         v-else
                         :wallet="wallet"
                         @locked="section = 'portfolio'"
                         @add-network="overlay = 'addNetwork'"
+                        @proxy="openSection('proxy')"
                         @forgotten="
                             restoring = false;
                             section = 'portfolio';

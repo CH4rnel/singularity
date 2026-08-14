@@ -146,6 +146,38 @@ it('reports the station and where an address stands with it', function () {
         ->assertJsonPath('address.grounds', 'tokens');
 });
 
+/**
+ * The station's own screen draws a gauge, and a gauge needs a denominator. The
+ * day's allowance is the only bound here that has one — a tank has no capacity
+ * to measure against — so both halves of it travel, or the wallet draws no bar
+ * rather than a bar it invented a scale for.
+ */
+it('sends the day’s allowance with its cap, so a share can be drawn from it', function () {
+    fakeGasStation(tokens: [gasToken()]);
+
+    $this->getJson('/api/wallet/gas')
+        ->assertOk()
+        ->assertJsonPath('tank', '100000000000000000000')
+        ->assertJsonPath('dailyCap', '5000000000000000000')
+        ->assertJsonPath('remainingToday', '5000000000000000000')
+        ->assertJsonPath('spent', '70000000000000000')
+        ->assertJsonPath('served', 7);
+});
+
+/**
+ * Asked without an address it stays one cached read of the contract: the
+ * portfolio's card is about the station, not about whoever is looking at it,
+ * and eligibility costs an index lookup per address.
+ */
+it('answers about the station alone when no address is named', function () {
+    fakeGasStation(tokens: [gasToken()]);
+
+    $this->getJson('/api/wallet/gas')
+        ->assertOk()
+        ->assertJsonPath('enabled', true)
+        ->assertJsonMissingPath('address');
+});
+
 it('says sponsorship is off rather than failing when no station is configured', function () {
     config()->set('wallet.sponsor.station', '');
 

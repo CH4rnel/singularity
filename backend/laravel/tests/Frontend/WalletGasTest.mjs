@@ -4,8 +4,11 @@ import { EVM_CONTRACT_SEND_GAS_CAP, nativeSendGas } from '@/lib/wallet';
 import {
     SPONSORED_CHAIN,
     canAskForGas,
+    dailyShare,
     dripCovers,
+    dripsLeft,
     sponsorReasonKey,
+    stationState,
 } from '@/lib/wallet/gas';
 
 /**
@@ -85,6 +88,120 @@ test('the contract limit is generous, because unused gas comes back', () => {
     // shape of it, and the excess is refunded rather than spent.
     assert.ok(EVM_CONTRACT_SEND_GAS_CAP >= 100_000n);
     assert.equal(nativeSendGas(true, 60_000n), 60_000n);
+});
+
+/**
+ * The station's own state, which the screen has to keep separate from this
+ * address's. "The tank is empty" and "you were served an hour ago" send a
+ * person to completely different places, and a station that could not be read
+ * is not an empty one — printing that would be a rumour this wallet started.
+ */
+test('a station that could not be read is never called empty', () => {
+    assert.equal(stationState(null), 'off');
+    assert.equal(stationState({ enabled: false, chain: 'cyberia' }), 'off');
+    assert.equal(
+        stationState({ enabled: true, chain: 'cyberia', tank: null }),
+        'unreadable',
+    );
+    assert.equal(
+        stationState({ enabled: true, chain: 'cyberia' }),
+        'unreadable',
+    );
+});
+
+test('paused outranks whatever is in the tank', () => {
+    const full = {
+        enabled: true,
+        chain: 'cyberia',
+        tank: (CYBER * 10n).toString(),
+        drip: (CYBER / 100n).toString(),
+    };
+
+    assert.equal(stationState(full), 'live');
+    assert.equal(stationState({ ...full, paused: true }), 'paused');
+});
+
+test('empty is a tank that cannot cover one more drip', () => {
+    const drip = (CYBER / 100n).toString();
+
+    assert.equal(
+        stationState({ enabled: true, chain: 'cyberia', tank: drip, drip }),
+        'live',
+    );
+    assert.equal(
+        stationState({
+            enabled: true,
+            chain: 'cyberia',
+            tank: (CYBER / 200n).toString(),
+            drip,
+        }),
+        'empty',
+    );
+});
+
+test('a tank is counted in the unit the station spends', () => {
+    assert.equal(
+        dripsLeft({
+            enabled: true,
+            chain: 'cyberia',
+            tank: CYBER.toString(),
+            drip: (CYBER / 100n).toString(),
+        }),
+        100,
+    );
+
+    // Either half missing is not a count of zero.
+    assert.equal(dripsLeft({ enabled: true, chain: 'cyberia' }), null);
+    assert.equal(
+        dripsLeft({ enabled: true, chain: 'cyberia', tank: '0', drip: '0' }),
+        null,
+    );
+});
+
+/**
+ * The gauge. A share of a cap needs both halves, and a cap this wallet cannot
+ * see is not a full bar — it is no bar, which is why null travels all the way
+ * to the template instead of becoming 0 or 1 on the way.
+ */
+test("today's allowance is only drawn when both halves are known", () => {
+    const status = {
+        enabled: true,
+        chain: 'cyberia',
+        dailyCap: (CYBER * 20n).toString(),
+        remainingToday: (CYBER * 5n).toString(),
+    };
+
+    assert.equal(dailyShare(status), 0.25);
+    assert.equal(dailyShare({ ...status, remainingToday: undefined }), null);
+    assert.equal(dailyShare({ ...status, dailyCap: '0' }), null);
+    assert.equal(dailyShare(null), null);
+});
+
+test('a remainder above the cap still reads as a full bar', () => {
+    // The contract resets the day's remainder before it spends against it, so
+    // a read that lands between the two can report more left than the cap.
+    assert.equal(
+        dailyShare({
+            enabled: true,
+            chain: 'cyberia',
+            dailyCap: CYBER.toString(),
+            remainingToday: (CYBER * 2n).toString(),
+        }),
+        1,
+    );
+});
+
+test('a tank far larger than the cap does not overflow the arithmetic', () => {
+    // Two bigints divided as floats would be Infinity or a lost answer; the
+    // share is computed in basis points for exactly this reason.
+    const share = dailyShare({
+        enabled: true,
+        chain: 'cyberia',
+        dailyCap: (CYBER * 1_000_000n).toString(),
+        remainingToday: (CYBER * 3n).toString(),
+    });
+
+    assert.ok(share !== null && share >= 0 && share < 0.0001);
 });
 
 test('every refusal maps to its own message key', () => {

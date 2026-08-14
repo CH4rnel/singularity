@@ -5,12 +5,15 @@ import {
     MAX_MESSAGE_BYTES,
     chatFingerprint,
     chatKeyStatement,
+    chatKeyVerifiedAt,
     chatMessageId,
     chatPrivateKey,
     chatPublicKey,
     conversationId,
     conversationKey,
+    markChatKeyVerified,
     openMessage,
+    pinChatKey,
     sealMessage,
     verifyChatKey,
 } from '@/lib/wallet';
@@ -228,4 +231,85 @@ test('a fingerprint is stable and readable out loud', () => {
         fingerprint,
         chatFingerprint(chatPublicKey(chatPrivateKey(BOB.privateKey))),
     );
+});
+
+/**
+ * A safety number is only worth drawing if the mark it leaves behind cannot
+ * outlive the key it was about. Pinning already catches a substituted key; the
+ * danger this pins is subtler — a verification carried across a re-key would
+ * turn "we two compared these numbers" into "this address was checked once",
+ * which is precisely the claim an interception wants to inherit.
+ */
+const chatStorage = () => {
+    const store = new Map();
+
+    return {
+        getItem: (key) => store.get(key) ?? null,
+        setItem: (key, value) => void store.set(key, String(value)),
+        removeItem: (key) => void store.delete(key),
+    };
+};
+
+const record = (wallet, issuedAt = '2026-08-14T00:00:00.000Z') => ({
+    address: wallet.address.toLowerCase(),
+    publicKey: chatPublicKey(chatPrivateKey(wallet.privateKey)),
+    issuedAt,
+    signature: '0x',
+});
+
+test('a verification never survives the key it was about', () => {
+    globalThis.window = { localStorage: chatStorage() };
+
+    const me = ALICE.address.toLowerCase();
+    const them = BOB.address.toLowerCase();
+
+    assert.equal(pinChatKey(me, them, record(BOB)), 'new');
+    assert.equal(chatKeyVerifiedAt(me, them), null);
+
+    assert.equal(markChatKeyVerified(me, them), true);
+    assert.match(chatKeyVerifiedAt(me, them) ?? '', /^\d{4}-\d{2}-\d{2}T/);
+
+    // The same key again is not a re-key, and the check still stands.
+    assert.equal(
+        pinChatKey(me, them, record(BOB, '2026-08-15T00:00:00.000Z')),
+        'same',
+    );
+    assert.notEqual(chatKeyVerifiedAt(me, them), null);
+
+    // A different key published for the same address drops it, whatever the
+    // signature on it says.
+    assert.equal(pinChatKey(me, them, record(MALLORY)), 'changed');
+    assert.equal(chatKeyVerifiedAt(me, them), null);
+
+    delete globalThis.window;
+});
+
+test('an address whose key was never seen cannot be marked verified', () => {
+    globalThis.window = { localStorage: chatStorage() };
+
+    const me = ALICE.address.toLowerCase();
+
+    // Nothing pinned: a mark here would be about a key this device has never
+    // seen, so it is refused rather than written.
+    assert.equal(markChatKeyVerified(me, BOB.address.toLowerCase()), false);
+    assert.equal(chatKeyVerifiedAt(me, BOB.address.toLowerCase()), null);
+
+    delete globalThis.window;
+});
+
+test('one account’s verifications say nothing about another’s', () => {
+    globalThis.window = { localStorage: chatStorage() };
+
+    const me = ALICE.address.toLowerCase();
+    const other = MALLORY.address.toLowerCase();
+    const them = BOB.address.toLowerCase();
+
+    pinChatKey(me, them, record(BOB));
+    markChatKeyVerified(me, them);
+
+    // The second account has its own mailbox, its own pins and its own checks.
+    assert.equal(chatKeyVerifiedAt(other, them), null);
+    assert.equal(markChatKeyVerified(other, them), false);
+
+    delete globalThis.window;
 });

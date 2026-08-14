@@ -26,6 +26,7 @@ import {
     clearChat,
     fetchChatEnvelopes,
     lookupChatKey,
+    markChatKeyVerified,
     markChatRead,
     pinChatKey,
     proveChatAddress,
@@ -92,7 +93,7 @@ const sending = ref(false);
 const syncing = ref(false);
 const error = ref<string | null>(null);
 
-const view = ref<'list' | 'thread' | 'new'>('list');
+const view = ref<'list' | 'thread' | 'new' | 'verify'>('list');
 const peer = ref<string | null>(null);
 const draft = ref('');
 const lookupAddress = ref('');
@@ -484,6 +485,7 @@ const openThread = (who: string): void => {
     error.value = null;
 
     markThreadRead(who);
+    readVerifications();
 
     void keyFor(who);
     void scrollDown();
@@ -529,8 +531,74 @@ const startThread = async (): Promise<void> => {
 };
 
 const back = (): void => {
+    // The safety number belongs to one thread, so leaving it goes back to that
+    // thread rather than all the way out — the same rule every screen opened
+    // from another one follows here.
+    if (view.value === 'verify') {
+        view.value = 'thread';
+
+        return;
+    }
+
     view.value = 'list';
     peer.value = null;
+};
+
+/* ------------------------------------------------------------ verifying --- */
+
+/**
+ * Peer address → when its safety number was last compared out of band.
+ *
+ * Held in a ref rather than read on demand because the thread list draws from
+ * it too, and localStorage does not tell Vue when it changes. Reloaded
+ * whenever a verification is recorded, and whenever the account switches —
+ * another account's checks were not about these keys.
+ */
+const verifiedPeers = ref<Record<string, string>>({});
+
+const readVerifications = (): void => {
+    const state = address.value ? readChatState(address.value) : null;
+
+    verifiedPeers.value = Object.fromEntries(
+        Object.entries(state?.peers ?? {})
+            .filter(([, pin]) => typeof pin.verifiedAt === 'string')
+            .map(([who, pin]) => [who, pin.verifiedAt as string]),
+    );
+};
+
+const peerVerifiedAt = computed(() =>
+    peer.value ? (verifiedPeers.value[peer.value.toLowerCase()] ?? null) : null,
+);
+
+const openVerify = (): void => {
+    readVerifications();
+    view.value = 'verify';
+};
+
+/**
+ * Both halves of the comparison, in the order they are read aloud: this
+ * wallet's own number and the peer's. Shown together on one screen because
+ * that is how the check is actually performed — each side reads their own and
+ * listens for the other.
+ */
+const fingerprintGroups = computed(() =>
+    (peerFingerprint.value || '').split(' ').filter(Boolean),
+);
+
+const confirmVerified = (): void => {
+    if (!address.value || !peer.value) {
+        return;
+    }
+
+    if (markChatKeyVerified(address.value, peer.value)) {
+        readVerifications();
+        // Whatever made this peer suspect has now been settled by two people
+        // reading numbers to each other, which is the only thing that can
+        // settle it.
+        suspectPeers.value = suspectPeers.value.filter(
+            (entry) => entry !== peer.value,
+        );
+    }
 };
 
 /** Forget every conversation this account holds on this device. */
@@ -576,6 +644,7 @@ watch(
         const state = self ? readChatState(self) : null;
         rows.value = state?.rows ?? [];
         readMarks.value = state?.read ?? {};
+        readVerifications();
 
         // Cached envelopes are ciphertext; the wallet is unlocked, so they can
         // be read back now without another round trip to the relay.
@@ -609,9 +678,30 @@ onBeforeUnmount(stopPolling);
             <h2 class="cw-title" style="margin: 18px 0 4px; font-size: 20px">
                 {{ short(peer) }}
             </h2>
-            <p class="cw-label" style="margin-bottom: 14px">
-                {{ t('chatFingerprintLabel') }} · {{ peerFingerprint || '—' }}
-            </p>
+            <!--
+              The number is a link, not a caption: reading it is an act two
+              people perform together, and it needs a screen of its own to say
+              what a match proves and what it does not.
+            -->
+            <button
+                type="button"
+                class="cw-back"
+                style="margin-bottom: 14px"
+                @click="openVerify()"
+            >
+                {{
+                    peerVerifiedAt
+                        ? t('chatVerifiedShort')
+                        : t('chatFingerprintLabel')
+                }}
+                · {{ peerFingerprint || '—' }}
+            </button>
+        </template>
+
+        <template v-else-if="view === 'verify' && peer">
+            <h2 class="cw-title" style="margin: 18px 0 8px">
+                {{ t('chatVerifyTitle') }}
+            </h2>
         </template>
 
         <template v-else>
@@ -719,6 +809,18 @@ onBeforeUnmount(stopPolling);
             >
                 <div class="cw-row" style="gap: 10px">
                     <span class="cw-data">{{ short(entry.peer) }}</span>
+                    <!--
+                      A checked correspondent is marked in the list, because
+                      the question "did we ever compare numbers" is asked
+                      before opening a thread as often as inside one.
+                    -->
+                    <span
+                        v-if="verifiedPeers[entry.peer]"
+                        class="cw-label"
+                        style="color: var(--cw-ok)"
+                        :title="t('chatVerifiedShort')"
+                        >✓</span
+                    >
                     <span
                         v-if="entry.unread > 0"
                         class="cw-badge"
@@ -804,6 +906,130 @@ onBeforeUnmount(stopPolling);
                     {{ t('cancel') }}
                 </button>
             </div>
+        </div>
+
+        <!--
+          Open: the safety number.
+
+          The whole screen exists because pinning cannot do this job on its
+          own. Pinning says "this is the key I have always talked to"; only two
+          people reading the same twelve groups to each other can say "and it
+          belongs to you". What the relay could still do — withhold a key, or
+          answer for an address nobody has claimed — is what the comparison
+          catches, and it is the only thing that does.
+        -->
+        <div v-else-if="view === 'verify' && peer" class="cw-stack">
+            <p class="cw-prose" style="max-width: 62ch">
+                {{ t('chatVerifyBody', { peer: short(peer) }) }}
+            </p>
+
+            <div
+                v-if="fingerprintGroups.length > 0"
+                class="cw-card"
+                style="margin-top: 16px; padding: 18px"
+            >
+                <div class="cw-label" style="margin-bottom: 12px">
+                    {{ t('chatVerifyTheirs') }}
+                </div>
+                <div
+                    style="
+                        display: grid;
+                        grid-template-columns: repeat(3, minmax(0, 1fr));
+                        gap: 10px;
+                    "
+                >
+                    <span
+                        v-for="(group, index) in fingerprintGroups"
+                        :key="index"
+                        style="
+                            font: 500 15px/1 var(--cw-mono);
+                            letter-spacing: 0.06em;
+                            color: var(--cw-text);
+                        "
+                    >
+                        {{ group }}
+                    </span>
+                </div>
+            </div>
+
+            <p v-else class="cw-note cw-note-warn" style="margin-top: 16px">
+                <span>{{ t('chatVerifyNoKey') }}</span>
+            </p>
+
+            <div class="cw-card" style="margin-top: 10px; padding: 18px">
+                <div class="cw-label" style="margin-bottom: 12px">
+                    {{ t('chatVerifyYours') }}
+                </div>
+                <span class="cw-data" style="word-break: break-all">{{
+                    fingerprint || '—'
+                }}</span>
+            </div>
+
+            <p
+                v-if="peerSuspect"
+                class="cw-note cw-note-bad"
+                style="margin-top: 16px"
+            >
+                <ShieldAlert :size="13" aria-hidden="true" />
+                <span>{{ t('chatVerifyChanged') }}</span>
+            </p>
+
+            <!--
+              What this conversation actually is, stated where somebody is
+              checking it. A static ECDH is not a ratchet and must never be
+              drawn as one: whoever learns a key reads that account's whole
+              history, and a screen about trust is the wrong place to be vague.
+            -->
+            <div style="margin-top: 16px; border: 1px solid var(--cw-line)">
+                <div class="cw-kv">
+                    <span class="cw-kv-key">{{ t('chatVerifyScheme') }}</span>
+                    <span class="cw-kv-val">{{
+                        t('chatVerifySchemeVal')
+                    }}</span>
+                </div>
+                <div class="cw-kv">
+                    <span class="cw-kv-key">{{ t('chatVerifyKey') }}</span>
+                    <span class="cw-kv-val">{{ t('chatVerifyKeyVal') }}</span>
+                </div>
+                <div class="cw-kv">
+                    <span class="cw-kv-key">{{ t('chatVerifySecrecy') }}</span>
+                    <span class="cw-kv-val" style="color: var(--cw-pending)">{{
+                        t('chatVerifySecrecyVal')
+                    }}</span>
+                </div>
+                <div class="cw-kv">
+                    <span class="cw-kv-key">{{ t('chatVerifyState') }}</span>
+                    <span
+                        class="cw-kv-val"
+                        :style="{
+                            color: peerVerifiedAt
+                                ? 'var(--cw-ok)'
+                                : 'var(--cw-muted)',
+                        }"
+                        >{{
+                            peerVerifiedAt
+                                ? t('chatVerifiedOn', {
+                                      when: when(peerVerifiedAt),
+                                  })
+                                : t('chatVerifyUnchecked')
+                        }}</span
+                    >
+                </div>
+            </div>
+
+            <button
+                v-if="fingerprintGroups.length > 0 && !peerVerifiedAt"
+                type="button"
+                class="cw-btn cw-btn-primary"
+                style="margin-top: 18px"
+                @click="confirmVerified()"
+            >
+                {{ t('chatVerifyMark') }}
+            </button>
+
+            <p class="cw-prose" style="margin-top: 12px; max-width: 62ch">
+                {{ t('chatVerifyLocal') }}
+            </p>
         </div>
 
         <!-- Open: one conversation. -->

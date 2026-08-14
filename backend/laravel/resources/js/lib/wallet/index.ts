@@ -260,10 +260,12 @@ export type {
     ChatMeta,
 } from '@/lib/wallet/chatCrypto';
 export {
+    chatKeyVerifiedAt,
     clearChat,
     fetchChatEnvelopes,
     forgetWalletChats,
     lookupChatKey,
+    markChatKeyVerified,
     markChatRead,
     pinChatKey,
     proveChatAddress,

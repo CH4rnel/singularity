@@ -181,7 +181,21 @@ export const fetchChatEnvelopes = (
 
 /* ---------------------------------------------------------------- store --- */
 
-type Pinned = { publicKey: string; issuedAt: string };
+type Pinned = {
+    publicKey: string;
+    issuedAt: string;
+    /**
+     * When the two of you compared safety numbers out of band, if you ever
+     * did. Absent on a key that was merely pinned — pinning says "this is the
+     * key I have always talked to", which is a much weaker claim than "I have
+     * checked, on another channel, that it belongs to this person".
+     *
+     * Cleared whenever the key changes, because a verification is about one
+     * key and cannot survive its replacement. This device only: nothing here
+     * is published, and a relay that could see it could also lie about it.
+     */
+    verifiedAt?: string;
+};
 
 type OwnerState = {
     /** Peer address → the key first seen for it. */
@@ -311,6 +325,11 @@ export const pinChatKey = (
         return 'same';
     }
 
+    // Written without `verifiedAt` on purpose: a comparison two people made
+    // was about the key they compared, and a new key has never been checked by
+    // anybody. Carrying the mark across would turn "we verified this" into
+    // "this address was verified once", which is the claim an interception
+    // needs.
     writeOwner(owner, {
         ...state,
         peers: {
@@ -323,6 +342,43 @@ export const pinChatKey = (
     });
 
     return known ? 'changed' : 'new';
+};
+
+/**
+ * When this device last had its safety number compared with a peer's, or null.
+ *
+ * Null covers both "never checked" and "checked, then the key changed" — from
+ * the wallet's side those are the same state, and it is the state in which a
+ * message is private from the relay but not proven to reach one person.
+ */
+export const chatKeyVerifiedAt = (owner: string, peer: string): string | null =>
+    readChatState(owner).peers[peer.toLowerCase()]?.verifiedAt ?? null;
+
+/**
+ * Record that the fingerprints matched.
+ *
+ * Only meaningful for a key this device has already pinned: verifying an
+ * address whose key was never seen would be a mark about nothing, so it is
+ * refused rather than invented.
+ */
+export const markChatKeyVerified = (owner: string, peer: string): boolean => {
+    const state = readChatState(owner);
+    const key = peer.toLowerCase();
+    const known = state.peers[key];
+
+    if (!known) {
+        return false;
+    }
+
+    writeOwner(owner, {
+        ...state,
+        peers: {
+            ...state.peers,
+            [key]: { ...known, verifiedAt: new Date().toISOString() },
+        },
+    });
+
+    return true;
 };
 
 /**

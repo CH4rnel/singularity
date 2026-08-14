@@ -141,6 +141,36 @@ export const walletMessages: Messages = {
         proxyOfferBody:
             'The desktop app can reach it through a proxy of your own.',
         proxySettings: 'Proxy settings',
+
+        // Proxy & routing. Keys stay on the device; requests do not, and this
+        // is the inventory of where they go.
+        proxyTitle: 'Proxy & routing',
+        proxyBody:
+            'Your keys never leave this device. Your requests do — reading a balance tells whoever answers that this address is being watched from this connection. Here is what carries them.',
+        proxyRowHint: 'What carries these requests',
+        proxyTransport: 'Transport',
+        proxyModeSystem: 'System settings',
+        proxyModeDirect: 'Direct',
+        proxyDesktopRouted:
+            'The app is sending its requests through this relay. If it stops answering, requests fail rather than quietly falling back to your own line.',
+        proxyDesktopDirect:
+            'Requests go out over this machine’s own connection. The nodes below see the address it comes from.',
+        proxyBrowser:
+            'A page in a browser tab cannot choose what carries its requests — there is no such setting to offer you here, and a switch that did nothing would be worse than none. Two Cyberia builds can: the extension routes the wallet’s own traffic, and the desktop app owns its whole connection.',
+        proxyMobile:
+            'On a phone the connection belongs to the system. Anything routing this app has to be set up in the device’s own network or VPN settings.',
+        proxyTelegram:
+            'Inside Telegram the frame is Telegram’s and so is the connection under it. Telegram’s own proxy setting is what carries these requests.',
+        proxyGetExtension: 'Get the extension',
+        proxyGetDesktop: 'Get the desktop app',
+        proxyPerNetwork: 'Per network',
+        proxyNotRead:
+            'Nothing is read — no request is made about this account at all',
+        proxyViaRelay: 'Through this site’s relay',
+        proxyRelayNote:
+            'Solana’s public cluster refuses any request carrying a browser origin, so those reads go through Cyberia’s own relay instead. That means this server sees the address rather than Solana’s node — a different disclosure, not a smaller one. The relay holds no key and signs nothing.',
+        proxyLinkability:
+            'A relay hides the line, not the habits. One address reused across sites is still one address on a public chain, and everything it did stays linked there whatever carried the request.',
         unpriced: 'no price',
         groupEvm: 'EVM chains',
         groupOther: 'Other protocols',
@@ -268,6 +298,202 @@ export const walletMessages: Messages = {
             'Cyberia could not be read just now, so the station is not answering. Try again shortly.',
         signSentenceToken:
             'Transfer {amount} {symbol} from your {chain} account to {to} on {network}, paying up to {fee} {gas} in network fees.',
+
+        // The gas station as a place rather than an offer: what it is, and
+        // where this address stands with it.
+        gasStation: 'Gas station',
+        gasStationBody:
+            'A fee can only be paid in the coin the network runs on, so an address holding tokens and no CYBER cannot move them. On Cyberia the station hands such an address enough CYBER to pay for itself — you then sign your own transaction, unchanged.',
+        gasTank: 'Tank',
+        gasStateLive: 'Serving',
+        gasStatePaused: 'Stopped',
+        gasStateEmpty: 'Empty',
+        gasStateOff: 'Off',
+        gasStateUnreadable: 'Unreadable',
+        gasDripsLeft: 'Enough for about {count} more addresses',
+        gasToday: "Today's allowance",
+        gasTodayLeft: '{left} of {cap} {symbol} left',
+        gasDrip: 'Handed over',
+        gasCooldown: 'Per address',
+        gasCeiling: 'Balance ceiling',
+        gasServed: 'Addresses served',
+        gasContract: 'Station contract',
+        gasBoundsNote:
+            'These four are the contract’s own bounds, read from it rather than promised here. They hold against anything running on Cyberia’s servers, a stolen station key included.',
+        gasYourAccount: 'This account',
+        gasYourBalance: 'Coin balance',
+        gasClaim: 'Send me the drip',
+        gasHours: '{hours} h',
+        gasGroundsTokens:
+            'This address holds tokens on Cyberia, which is what the fee would be for moving.',
+        gasGroundsNft:
+            'This address holds an NFT on Cyberia, which is what the fee would be for moving.',
+        gasGroundsAccount: 'This address has signed into Cyberia before.',
+        gasGroundsOpen: 'The station is open to any address at the moment.',
+        gasTransferCost: 'What a transfer costs now',
+        gasDripCovers: 'One drip pays for about {count}',
+        gasNoSignature:
+            'Asking costs no signature. A drip can only ever arrive at the address named in the request, so proving you hold its key would cost you a tap and cost a script nothing.',
+        gasCyberiaOnly:
+            'Cyberia only, permanently. Sponsoring a fee on BNB or Base would mean buying ETH for strangers.',
+        tileGasHint: 'Sponsored fees',
+        tileBridgeHint: 'Another chain',
+        tileEarnHint: 'Pools · APR',
+        tileBrowseHint: 'Dapps on this chain',
+
+        // Earn. A pool is one claim about the chain; a position is another
+        // about this address, and the screen never merges the two.
+        earnTitle: 'Earn',
+        earnBody:
+            'Ritual pools, settled on the network they trade on. What a position earns is swap fees plus emissions — both variable, neither promised, and both paid out of what other people trade.',
+        earnPools: 'Pools',
+        earnSupplied: 'Supplied',
+        earnUnclaimed: 'Unclaimed',
+        earnPositions: '{count} with a stake',
+        earnTvl: 'TVL',
+        earnYours: 'yours',
+        earnUnstaked: 'held, not staked',
+        earnLoading: 'Reading the farm…',
+        earnNoPools: 'This farm has no pools yet.',
+        earnUnreadable:
+            '{count} pool(s) could not be read, so they are left out rather than shown empty.',
+        earnIdle:
+            'You hold LP for {count} pool(s) without staking it. It still earns swap fees; it earns no emissions until it is in the farm.',
+        earnAprNote:
+            'APR is backward-looking — it is what the last day would have paid, annualised. Nothing here is a forecast, and impermanent loss is not netted out of it.',
+        earnShare: '{percent}% of emissions',
+        earnStaked: 'Staked',
+        earnInWallet: 'In this wallet',
+        earnUnderlying: 'Your share of the pool',
+        earnPending: 'Unclaimed reward',
+        earnActStake: 'Stake',
+        earnActUnstake: 'Unstake',
+        earnActClaim: 'Claim',
+        earnAmountStake: 'Amount to stake',
+        earnAmountUnstake: 'Amount to unstake',
+        earnRefusalEmpty: 'Enter an amount.',
+        earnRefusalTooMuch: 'More than you hold.',
+        earnRefusalNothingStaked: 'Nothing is staked in this pool.',
+        earnNothingToClaim: 'Nothing has accrued in this pool yet.',
+        earnApprovalNote:
+            'The farm cannot move your {pool} yet, so this signs an allowance first — for exactly this amount, never an unlimited one. It is a separate transaction and it costs its own fee.',
+        earnSignStake:
+            'Put {amount} LP from this account into the {pool} farm, paying up to {fee} in network fees. Unstaking it back is one transaction and has no lock-up.',
+        earnSignUnstake:
+            'Take {amount} LP out of the {pool} farm and back into this account, paying up to {fee} in network fees. Whatever it has earned is paid out at the same time.',
+        earnSignClaim:
+            'Collect {amount} {symbol} earned in the {pool} farm, leaving the stake where it is and paying up to {fee} in network fees.',
+        earnSent: 'Signed and broadcast.',
+        earnImpermanent:
+            'This is a two-sided pool. If the two assets move apart in price you get back a different mix than you put in, and that difference is not in the APR above.',
+        earnAddLiquidityNote:
+            'Creating an LP position takes two assets, a ratio that moves while you decide, and a floor on both sides — it is done on the pool page rather than here.',
+        earnAddLiquidity: 'Add liquidity',
+
+        // Bridge. One transfer signed here, one payout made there, and no
+        // cancel in between — which is the sentence the screen is built around.
+        bridgeTitle: 'Bridge',
+        bridgeBody:
+            'Moving an asset to another chain is two acts. This wallet signs an ordinary transfer to the bridge’s deposit address on the chain you are leaving; Cyberia’s relayer pays out on the chain you are going to, against that deposit.',
+        bridgeRoutes: 'Routes you can take from here',
+        bridgeNoneOpen:
+            'No corridor can be started from this wallet right now. The bridge page carries the ones that need another wallet.',
+        bridgeAsset: 'Asset',
+        bridgeRecipient: 'Recipient on the destination chain',
+        bridgeOwnAddress:
+            'This is your own address on that chain — same seed, both sides.',
+        bridgeYouReceive: 'You receive on {chain}',
+        bridgeFee: 'Bridge fee',
+        bridgeGasSource: 'Gas, source chain',
+        bridgeArrival: 'Arrival',
+        bridgeArrivalAuto: 'Automatic, once the deposit confirms',
+        bridgeArrivalManual: 'Released by an operator',
+        bridgeDeposit: 'Deposit address',
+        bridgeLeavingTitle: 'Leaving this chain',
+        bridgeLeavingBody:
+            'Once the transfer below is final the asset is out of your hands until the payout lands. There is no cancel and no reversal — check the recipient and the network before you hold.',
+        bridgeSentence:
+            'Transfer {amount} {symbol} from your {source} account to the bridge, to be paid out on {destination} to {to}, paying up to {fee} in network fees on this side.',
+        bridgeSubmitted: 'Deposit sent and registered',
+        bridgeNotSubmitted: 'Deposit sent — not registered yet',
+        bridgeNotSubmittedBody:
+            'The transfer is on the chain, but this app could not tell the bridge about it. Keep the transaction hash: it is the proof of the deposit, and the transfer can be registered from it.',
+        bridgeElsewhere: 'Corridors this wallet cannot start',
+        bridgeElsewhereNote:
+            'These exist, and some are open — they just need a wallet or a lock this screen does not build.',
+        bridgeOpenPage: 'Open the bridge page',
+        bridgeSameSeed:
+            'One seed derives your address on both sides of every EVM corridor.',
+        bridgeBlockOk: '',
+        bridgeBlockClosed: 'This corridor is not running at the moment.',
+        bridgeBlockNoAccount:
+            'This wallet holds no account on that source chain.',
+        bridgeBlockSourceUnsupported:
+            'The transfer out has to be signed on a chain this wallet cannot sign on yet.',
+        bridgeBlockContractLock:
+            'This asset does not move by transfer — it is locked through the bridge contract, which this screen does not build. The bridge page does.',
+        bridgeBlockNoDeposit:
+            'No deposit address is configured for that chain, so there is nowhere to send it.',
+        bridgeRefusalNoAmount: 'Enter an amount.',
+        bridgeRefusalNoRecipient: 'Enter the address that receives it.',
+        bridgeRefusalBadRecipient: 'That is not an address that chain uses.',
+        bridgeRefusalTooMuch: 'More than you hold on this chain.',
+        bridgeRefusalNoGas:
+            'Not enough of the source chain’s coin to pay the network fee.',
+        bridgeRefusalNoFee:
+            'The network fee could not be read, so nothing can be signed yet.',
+
+        // The Wired: what is on this chain, and how a page gets to talk to a
+        // wallet. Not an embedded browser, and the screen says why.
+        browseTitle: 'The Wired',
+        browseBody:
+            'What runs on this chain, and where it is reached. This is a directory, not a browser: a page in a tab cannot hand another site a wallet, and a frame that could reach this vault could read the keys in it. What mediates between a page and a key is the extension, per site, with you in front of every signature.',
+        browseBridgeLabel: 'Pages here can talk to',
+        browseModeExtension: 'A wallet is offered',
+        browseModeExtensionBody:
+            'Something in this browser is offering pages an EIP-1193 wallet. Cyberia’s extension grants that per origin and stops every signing method at a separate approval window — a page can ask, and only your hold moves anything.',
+        browseModeBrowser: 'Nothing',
+        browseModeBrowserBody:
+            'No wallet is offered to pages in this browser, so the sites below will ask for one and find none. The Cyberia extension provides it to the origins you grant, and to no others.',
+        browseModeDesktop: 'Nothing, in this window',
+        browseModeDesktopBody:
+            'The desktop app owns its own connection but does not host other sites’ pages. Reaching a dapp with a wallet still goes through the extension in a browser.',
+        browseModeMobile: 'The system browser',
+        browseModeMobileBody:
+            'On a phone the pages below open in the system browser, which has its own wallet or none. This app is the wallet for what it does itself.',
+        browseWatchOnly:
+            'This account is watch-only. Pages can be opened and read, but nothing here can sign for them.',
+        browseDirectory: 'On this chain',
+        browseOpenHere: 'Open in the wallet',
+        browseOpenPage: 'Open the page',
+        browseReadOnly: 'No signature needed',
+        browseLeavingNote:
+            'Opening a page leaves the wallet. It is an ordinary page on this site and it will look for a wallet of its own — the ones marked “open in the wallet” are the same thing done here, signed by this key with nothing in between.',
+        dappSwap: 'Swap',
+        dappSwapNote: 'Trade one asset for another through the Ritual pools.',
+        dappLiquidity: 'Liquidity',
+        dappLiquidityNote:
+            'Put two assets into a pool and take the trading fees on them.',
+        dappFarm: 'Farm',
+        dappFarmNote: 'Stake a pool position for emissions on top of its fees.',
+        dappStaking: 'Staking',
+        dappStakingNote: 'Single-asset pools that pay a share of emissions.',
+        dappLending: 'Lending',
+        dappLendingNote:
+            'Borrow against a deposit, or lend one out at interest.',
+        dappLaunchpad: 'Launchpad',
+        dappLaunchpadNote:
+            'Fair launches — the coin that paid for one is burned into locked liquidity.',
+        dappPredictions: 'Predictions',
+        dappPredictionsNote:
+            'Parimutuel yes/no markets in the coin, settled from a named feed.',
+        dappTokens: 'Tokens',
+        dappTokensNote:
+            'Every token on the chain, with its pool and its price.',
+        dappDao: 'DAO',
+        dappDaoNote: 'Proposals and votes, weighted by what an address holds.',
+        dappBridge: 'Bridge',
+        dappBridgeNote: 'Move an asset to another chain and back.',
 
         // Analytics
         analyticsBody:
@@ -516,6 +742,32 @@ export const walletMessages: Messages = {
             'Messages are stored on this device as ciphertext and opened only while the wallet is unlocked.',
         chatForget: 'Forget all conversations',
 
+        // The safety number. Pinning says "this is the key I have always
+        // talked to"; only two people reading the same groups to each other
+        // can say "and it belongs to you".
+        chatVerifyTitle: 'Safety number',
+        chatVerifyBody:
+            'Read these groups with {peer} — in person, or on a channel you already trust. If both screens show the same twelve, nobody is sitting between you. The relay can withhold a key; it cannot substitute one without changing this number.',
+        chatVerifyTheirs: 'Their number',
+        chatVerifyYours: 'Yours, for them to check',
+        chatVerifyNoKey:
+            'This address has not published a messaging key yet, so there is nothing to compare.',
+        chatVerifyChanged:
+            'This address published a different key than the one seen before, so any earlier check no longer applies. Compare the number again before trusting this thread.',
+        chatVerifyScheme: 'Scheme',
+        chatVerifySchemeVal: 'ECDH · AES-256-GCM',
+        chatVerifyKey: 'Messaging key',
+        chatVerifyKeyVal: 'Derived from this account, never the signing key',
+        chatVerifySecrecy: 'Forward secrecy',
+        chatVerifySecrecyVal: 'None — one static key per account',
+        chatVerifyState: 'Checked',
+        chatVerifyUnchecked: 'Not yet',
+        chatVerifiedOn: 'Verified {when}',
+        chatVerifiedShort: 'Verified',
+        chatVerifyMark: 'The numbers match',
+        chatVerifyLocal:
+            'A check is remembered on this device only. Nothing about it is published, and it is dropped the moment this address publishes a different key.',
+
         // Accounts
         accounts: 'Accounts',
         accountsBody:
@@ -732,7 +984,8 @@ export const walletMessages: Messages = {
         tileTorrentHint: 'DHT · desktop app',
 
         nftTitle: 'NFT',
-        nftBody: 'One collection anyone can mint into. What a token *is* lives entirely in the address it points at — usually a file in IPFS, sometimes just a link.',
+        nftBody:
+            'One collection anyone can mint into. What a token *is* lives entirely in the address it points at — usually a file in IPFS, sometimes just a link.',
         nftMint: 'Mint an NFT',
         nftLoading: 'Reading what this account holds…',
         nftEmpty: 'This account holds no NFTs on this network yet.',
@@ -786,7 +1039,8 @@ export const walletMessages: Messages = {
         ipfsTitle: 'IPFS',
         ipfsBody:
             'Publish a file or a page and get a CID — an address made of the content itself. Anyone holding the CID can fetch it from any node that has the bytes.',
-        ipfsOff: 'This server is not pinning right now, so nothing can be published from here.',
+        ipfsOff:
+            'This server is not pinning right now, so nothing can be published from here.',
         ipfsFile: 'File',
         ipfsPage: 'Page',
         ipfsFileBody: 'Any file: an image, audio, an archive, a document.',
@@ -979,6 +1233,35 @@ export const walletMessages: Messages = {
         proxyOfferBody:
             'Настольное приложение может ходить через ваш собственный прокси.',
         proxySettings: 'Настройки прокси',
+
+        // Прокси и маршрутизация: ключи остаются на устройстве, запросы — нет.
+        proxyTitle: 'Прокси и маршруты',
+        proxyBody:
+            'Ключи никогда не покидают это устройство. Запросы покидают — и чтение баланса сообщает тому, кто отвечает, что за этим адресом следят с этого соединения. Вот кто их несёт.',
+        proxyRowHint: 'Что несёт эти запросы',
+        proxyTransport: 'Транспорт',
+        proxyModeSystem: 'Системные настройки',
+        proxyModeDirect: 'Напрямую',
+        proxyDesktopRouted:
+            'Приложение отправляет запросы через этот релей. Если он перестанет отвечать, запросы будут падать с ошибкой, а не тихо уходить по вашей собственной линии.',
+        proxyDesktopDirect:
+            'Запросы уходят через собственное соединение этой машины. Узлы ниже видят адрес, с которого они пришли.',
+        proxyBrowser:
+            'Страница во вкладке браузера не может выбрать, что несёт её запросы, — такой настройки здесь просто нет, а переключатель, который ничего не делает, был бы хуже, чем его отсутствие. Это умеют две сборки Cyberia: расширение маршрутизирует собственный трафик кошелька, а настольное приложение владеет всем своим соединением.',
+        proxyMobile:
+            'На телефоне соединение принадлежит системе. Всё, что маршрутизирует это приложение, настраивается в сетевых настройках устройства или в его VPN.',
+        proxyTelegram:
+            'Внутри Telegram окно принадлежит Telegram — и соединение под ним тоже. Эти запросы несёт настройка прокси самого Telegram.',
+        proxyGetExtension: 'Поставить расширение',
+        proxyGetDesktop: 'Скачать приложение',
+        proxyPerNetwork: 'По сетям',
+        proxyNotRead:
+            'Ничего не читается — об этом счёте не делается ни одного запроса',
+        proxyViaRelay: 'Через релей этого сайта',
+        proxyRelayNote:
+            'Публичный кластер Solana отклоняет любой запрос с браузерным Origin, поэтому такие чтения идут через собственный релей Cyberia. Значит, адрес видит этот сервер, а не узел Solana, — это другое раскрытие, а не меньшее. Релей не хранит ключей и ничего не подписывает.',
+        proxyLinkability:
+            'Релей скрывает линию, а не привычки. Один адрес, использованный на разных сайтах, остаётся одним адресом в публичной цепочке, и всё, что он делал, там связано — чем бы ни был доставлен запрос.',
         unpriced: 'нет цены',
         groupEvm: 'EVM-сети',
         groupOther: 'Другие протоколы',
@@ -1102,6 +1385,197 @@ export const walletMessages: Messages = {
             'Сейчас не удалось прочитать Cyberia, станция не отвечает. Попробуйте чуть позже.',
         signSentenceToken:
             'Перевод {amount} {symbol} со счёта {chain} на {to} в сети {network}, комиссия сети — до {fee} {gas}.',
+
+        // Газовая станция как место, а не как разовое предложение.
+        gasStation: 'Газовая станция',
+        gasStationBody:
+            'Комиссию можно заплатить только той монетой, на которой работает сеть, — поэтому адрес с токенами и без CYBER не может сдвинуть эти токены. В Cyberia на это есть ответ: станция выдаёт такому адресу CYBER на его собственную комиссию, а вы подписываете свою транзакцию без изменений.',
+        gasTank: 'Бак',
+        gasStateLive: 'Работает',
+        gasStatePaused: 'Остановлена',
+        gasStateEmpty: 'Пусто',
+        gasStateOff: 'Выключена',
+        gasStateUnreadable: 'Не читается',
+        gasDripsLeft: 'Хватит примерно на {count} адресов',
+        gasToday: 'Лимит на сегодня',
+        gasTodayLeft: 'осталось {left} из {cap} {symbol}',
+        gasDrip: 'Выдаётся',
+        gasCooldown: 'Один адрес — раз в',
+        gasCeiling: 'Потолок баланса',
+        gasServed: 'Обслужено адресов',
+        gasContract: 'Контракт станции',
+        gasBoundsNote:
+            'Эти четыре числа — собственные границы контракта, прочитанные из него, а не обещанные здесь. Они держатся против всего, что работает на серверах Cyberia, включая украденный ключ станции.',
+        gasYourAccount: 'Этот счёт',
+        gasYourBalance: 'Баланс монеты',
+        gasClaim: 'Выдать мне газ',
+        gasHours: '{hours} ч',
+        gasGroundsTokens:
+            'На этом адресе есть токены в Cyberia — именно за их перевод и берётся комиссия.',
+        gasGroundsNft:
+            'На этом адресе есть NFT в Cyberia — именно за его перевод и берётся комиссия.',
+        gasGroundsAccount: 'С этого адреса уже входили в Cyberia.',
+        gasGroundsOpen: 'Сейчас станция открыта для любого адреса.',
+        gasTransferCost: 'Сколько сейчас стоит перевод',
+        gasDripCovers: 'Одной выдачи хватит примерно на {count}',
+        gasNoSignature:
+            'Запрос не требует подписи. Газ может прийти только на тот адрес, который назван в запросе, — так что доказательство владения ключом стоило бы вам одного нажатия, а скрипту не стоило бы ничего.',
+        gasCyberiaOnly:
+            'Только Cyberia и навсегда. Спонсировать комиссию в BNB или Base значило бы покупать ETH для незнакомых людей.',
+        tileGasHint: 'Комиссии за счёт станции',
+        tileBridgeHint: 'В другую сеть',
+        tileEarnHint: 'Пулы · APR',
+        tileBrowseHint: 'Дапки этой цепочки',
+
+        // Доход: пул — это утверждение о цепочке, позиция — об этом адресе.
+        earnTitle: 'Доход',
+        earnBody:
+            'Пулы Ritual, рассчитанные в той сети, где они торгуют. Позиция зарабатывает комиссии свопов плюс эмиссию — и то и другое переменное, ничего не обещано, и платится это из того, чем торгуют другие.',
+        earnPools: 'Пулы',
+        earnSupplied: 'Вложено',
+        earnUnclaimed: 'Не забрано',
+        earnPositions: '{count} с долей',
+        earnTvl: 'TVL',
+        earnYours: 'ваши',
+        earnUnstaked: 'на руках, не в фарме',
+        earnLoading: 'Читаем фарм…',
+        earnNoPools: 'В этом фарме пока нет пулов.',
+        earnUnreadable:
+            'Пулов не прочиталось: {count}. Они пропущены, а не показаны пустыми.',
+        earnIdle:
+            'У вас есть LP по {count} пулу(ам), не отправленные в фарм. Комиссии свопов они получают, эмиссию — нет, пока лежат на руках.',
+        earnAprNote:
+            'APR смотрит назад: это то, сколько заплатил бы прошедший день, в пересчёте на год. Здесь нет прогноза, и непостоянные потери из него не вычтены.',
+        earnShare: '{percent}% эмиссии',
+        earnStaked: 'В фарме',
+        earnInWallet: 'В этом кошельке',
+        earnUnderlying: 'Ваша доля пула',
+        earnPending: 'Награда к получению',
+        earnActStake: 'Внести',
+        earnActUnstake: 'Забрать',
+        earnActClaim: 'Собрать',
+        earnAmountStake: 'Сколько внести',
+        earnAmountUnstake: 'Сколько забрать',
+        earnRefusalEmpty: 'Введите сумму.',
+        earnRefusalTooMuch: 'Больше, чем у вас есть.',
+        earnRefusalNothingStaked: 'В этом пуле ничего не внесено.',
+        earnNothingToClaim: 'В этом пуле пока ничего не накопилось.',
+        earnApprovalNote:
+            'Фарм пока не может двигать ваши {pool}, поэтому сначала подписывается разрешение — ровно на эту сумму, а не безлимитное. Это отдельная транзакция со своей комиссией.',
+        earnSignStake:
+            'Отправить {amount} LP с этого счёта в фарм {pool}, комиссия сети — до {fee}. Забрать обратно можно одной транзакцией, блокировки нет.',
+        earnSignUnstake:
+            'Забрать {amount} LP из фарма {pool} обратно на этот счёт, комиссия сети — до {fee}. Всё накопленное выплачивается тем же действием.',
+        earnSignClaim:
+            'Забрать {amount} {symbol}, накопленные в фарме {pool}, оставив долю на месте; комиссия сети — до {fee}.',
+        earnSent: 'Подписано и отправлено.',
+        earnImpermanent:
+            'Это двусторонний пул. Если цены двух активов разойдутся, обратно вы получите другой набор, чем внесли, — и этой разницы в APR выше нет.',
+        earnAddLiquidityNote:
+            'Создание LP-позиции — это два актива, соотношение, которое меняется, пока вы решаете, и минимум по обеим сторонам. Это делается на странице пулов, а не здесь.',
+        earnAddLiquidity: 'Добавить ликвидность',
+
+        // Мост: одна подпись здесь, одна выплата там и никакой отмены между.
+        bridgeTitle: 'Мост',
+        bridgeBody:
+            'Перенос актива в другую сеть — это два действия. Кошелёк подписывает обычный перевод на депозитный адрес моста в той сети, которую вы покидаете; релеер Cyberia выплачивает в той, куда вы идёте, — под этот депозит.',
+        bridgeRoutes: 'Маршруты, доступные отсюда',
+        bridgeNoneOpen:
+            'Сейчас из этого кошелька нельзя начать ни один коридор. Те, что требуют другого кошелька, есть на странице моста.',
+        bridgeAsset: 'Актив',
+        bridgeRecipient: 'Получатель в сети назначения',
+        bridgeOwnAddress:
+            'Это ваш собственный адрес в той сети — одна фраза, обе стороны.',
+        bridgeYouReceive: 'Придёт в сети {chain}',
+        bridgeFee: 'Комиссия моста',
+        bridgeGasSource: 'Газ в сети отправления',
+        bridgeArrival: 'Поступление',
+        bridgeArrivalAuto: 'Автоматически, после подтверждения депозита',
+        bridgeArrivalManual: 'Выпускает оператор',
+        bridgeDeposit: 'Депозитный адрес',
+        bridgeLeavingTitle: 'Актив покидает эту сеть',
+        bridgeLeavingBody:
+            'Как только перевод ниже станет окончательным, актив выходит из ваших рук до момента выплаты. Отмены и возврата нет — проверьте получателя и сеть, прежде чем удерживать кнопку.',
+        bridgeSentence:
+            'Перевод {amount} {symbol} со счёта {source} на мост, с выплатой в сети {destination} на {to}; комиссия сети с этой стороны — до {fee}.',
+        bridgeSubmitted: 'Депозит отправлен и зарегистрирован',
+        bridgeNotSubmitted: 'Депозит отправлен — ещё не зарегистрирован',
+        bridgeNotSubmittedBody:
+            'Перевод уже в цепочке, но приложение не смогло сообщить о нём мосту. Сохраните хеш транзакции: это и есть доказательство депозита, по нему перевод можно зарегистрировать.',
+        bridgeElsewhere: 'Коридоры, которые отсюда не начать',
+        bridgeElsewhereNote:
+            'Они существуют, и часть из них открыта, — просто им нужен кошелёк или блокировка, которых этот экран не строит.',
+        bridgeOpenPage: 'Открыть страницу моста',
+        bridgeSameSeed:
+            'Одна фраза выводит ваш адрес по обе стороны любого EVM-коридора.',
+        bridgeBlockOk: '',
+        bridgeBlockClosed: 'Этот коридор сейчас не работает.',
+        bridgeBlockNoAccount: 'В этом кошельке нет счёта в сети отправления.',
+        bridgeBlockSourceUnsupported:
+            'Перевод наружу нужно подписать в сети, которую этот кошелёк пока не подписывает.',
+        bridgeBlockContractLock:
+            'Этот актив не переводится обычным переводом — он блокируется через контракт моста, а этот экран такую транзакцию не строит. Страница моста строит.',
+        bridgeBlockNoDeposit:
+            'Для этой сети не настроен депозитный адрес — отправлять некуда.',
+        bridgeRefusalNoAmount: 'Введите сумму.',
+        bridgeRefusalNoRecipient: 'Укажите адрес получателя.',
+        bridgeRefusalBadRecipient: 'Это не адрес той сети.',
+        bridgeRefusalTooMuch: 'Больше, чем у вас есть в этой сети.',
+        bridgeRefusalNoGas:
+            'Не хватает монеты сети отправления, чтобы оплатить комиссию.',
+        bridgeRefusalNoFee:
+            'Комиссию сети прочитать не удалось, поэтому подписывать пока нечего.',
+
+        // Провода: что живёт в этой цепочке и как страница вообще
+        // разговаривает с кошельком.
+        browseTitle: 'Провода',
+        browseBody:
+            'Что работает в этой цепочке и где это открыть. Это каталог, а не браузер: страница во вкладке не может выдать другому сайту кошелёк, а фрейм, который дотянулся бы до этого хранилища, прочитал бы и ключи в нём. Посредник между страницей и ключом — расширение: по одному сайту за раз и с вами перед каждой подписью.',
+        browseBridgeLabel: 'Страницам здесь доступен',
+        browseModeExtension: 'Кошелёк предложен',
+        browseModeExtensionBody:
+            'Что-то в этом браузере уже предлагает страницам кошелёк EIP-1193. Расширение Cyberia выдаёт его отдельно каждому источнику и останавливает любой метод подписи в отдельном окне подтверждения — страница может попросить, а двигает средства только ваше удержание.',
+        browseModeBrowser: 'Ничего',
+        browseModeBrowserBody:
+            'В этом браузере страницам не предложен ни один кошелёк, так что сайты ниже попросят его и не найдут. Расширение Cyberia выдаёт его тем источникам, которым вы разрешили, и никаким другим.',
+        browseModeDesktop: 'Ничего, в этом окне',
+        browseModeDesktopBody:
+            'Настольное приложение владеет своим соединением, но не размещает у себя страницы чужих сайтов. Чтобы дать дапке кошелёк, всё равно нужно расширение в браузере.',
+        browseModeMobile: 'Системный браузер',
+        browseModeMobileBody:
+            'На телефоне страницы ниже открываются в системном браузере — со своим кошельком или без него. Для того, что делает само это приложение, кошелёк — оно.',
+        browseWatchOnly:
+            'Это наблюдательный счёт. Страницы можно открыть и прочитать, но подписать за них отсюда нечем.',
+        browseDirectory: 'В этой цепочке',
+        browseOpenHere: 'Открыть в кошельке',
+        browseOpenPage: 'Открыть страницу',
+        browseReadOnly: 'Подпись не нужна',
+        browseLeavingNote:
+            'Открытая страница уводит из кошелька. Это обычная страница этого сайта, и она будет искать свой кошелёк, — а помеченные «открыть в кошельке» делают то же самое здесь, подписывая этим ключом и без посредников.',
+        dappSwap: 'Обмен',
+        dappSwapNote: 'Поменять один актив на другой через пулы Ritual.',
+        dappLiquidity: 'Ликвидность',
+        dappLiquidityNote:
+            'Внести два актива в пул и получать с них комиссии сделок.',
+        dappFarm: 'Фарминг',
+        dappFarmNote:
+            'Внести позицию в пуле и получать эмиссию поверх комиссий.',
+        dappStaking: 'Стейкинг',
+        dappStakingNote: 'Односторонние пулы, которые платят долю эмиссии.',
+        dappLending: 'Кредиты',
+        dappLendingNote: 'Занять под залог или выдать свой актив под процент.',
+        dappLaunchpad: 'Лаунчпад',
+        dappLaunchpadNote:
+            'Честные запуски: монета, которой оплачен запуск, сжигается в запертую ликвидность.',
+        dappPredictions: 'Прогнозы',
+        dappPredictionsNote:
+            'Тотализатор «да/нет» в монете сети, расчёт по названному источнику цены.',
+        dappTokens: 'Токены',
+        dappTokensNote: 'Все токены цепочки, с их пулом и ценой.',
+        dappDao: 'DAO',
+        dappDaoNote: 'Предложения и голоса, вес — по тому, чем владеет адрес.',
+        dappBridge: 'Мост',
+        dappBridgeNote: 'Перенести актив в другую сеть и обратно.',
 
         // Analytics
         analyticsBody:
@@ -1349,6 +1823,31 @@ export const walletMessages: Messages = {
             'Сообщения лежат на этом устройстве шифротекстом и открываются только пока кошелёк разблокирован.',
         chatForget: 'Забыть все переписки',
 
+        // Код безопасности: закрепление ключа говорит «это тот ключ, с которым
+        // я всегда говорил», а совпадение цифр — «и он принадлежит тебе».
+        chatVerifyTitle: 'Код безопасности',
+        chatVerifyBody:
+            'Прочитайте эти группы вместе с {peer} — лично или по каналу, которому вы уже доверяете. Если на обоих экранах одни и те же двенадцать групп, между вами никто не стоит. Релей может не отдать ключ, но не может подменить его, не изменив этот код.',
+        chatVerifyTheirs: 'Их код',
+        chatVerifyYours: 'Ваш — чтобы сверили с вами',
+        chatVerifyNoKey:
+            'Этот адрес ещё не опубликовал ключ для сообщений, так что сверять нечего.',
+        chatVerifyChanged:
+            'Этот адрес опубликовал не тот ключ, который был виден раньше, поэтому прошлая сверка больше не действует. Сверьте код заново, прежде чем доверять этой переписке.',
+        chatVerifyScheme: 'Схема',
+        chatVerifySchemeVal: 'ECDH · AES-256-GCM',
+        chatVerifyKey: 'Ключ переписки',
+        chatVerifyKeyVal: 'Выведен из этого счёта, никогда не ключ подписи',
+        chatVerifySecrecy: 'Прямая секретность',
+        chatVerifySecrecyVal: 'Нет — один статический ключ на счёт',
+        chatVerifyState: 'Сверено',
+        chatVerifyUnchecked: 'Ещё нет',
+        chatVerifiedOn: 'Сверено {when}',
+        chatVerifiedShort: 'Сверено',
+        chatVerifyMark: 'Коды совпадают',
+        chatVerifyLocal:
+            'Сверка запоминается только на этом устройстве. Ничего о ней не публикуется, и она сбрасывается, как только адрес опубликует другой ключ.',
+
         // Accounts
         accounts: 'Счета',
         accountsBody:
@@ -1567,7 +2066,8 @@ export const walletMessages: Messages = {
         tileTorrentHint: 'DHT · десктоп',
 
         nftTitle: 'NFT',
-        nftBody: 'Одна коллекция, минтить в неё может кто угодно. Чем токен *является*, целиком решает адрес, на который он указывает: обычно это файл в IPFS, иногда просто ссылка.',
+        nftBody:
+            'Одна коллекция, минтить в неё может кто угодно. Чем токен *является*, целиком решает адрес, на который он указывает: обычно это файл в IPFS, иногда просто ссылка.',
         nftMint: 'Сминтить NFT',
         nftLoading: 'Читаю, что на этом счёте…',
         nftEmpty: 'На этом счёте в этой сети пока нет NFT.',
@@ -1598,7 +2098,8 @@ export const walletMessages: Messages = {
         mintNamePlaceholder: 'Что это?',
         mintDescription: 'Описание',
         mintImage: 'Файл',
-        mintImageOptional: 'Необязательно — токен может быть текстом или ссылкой.',
+        mintImageOptional:
+            'Необязательно — токен может быть текстом или ссылкой.',
         mintLink: 'Ссылка',
         mintContinue: 'Дальше',
         mintPreparing: 'Пинню и считаю комиссию…',
@@ -1620,7 +2121,8 @@ export const walletMessages: Messages = {
         ipfsTitle: 'IPFS',
         ipfsBody:
             'Опубликуйте файл или страницу и получите CID — адрес, собранный из самого содержимого. Имея CID, его можно забрать с любого узла, где лежат эти байты.',
-        ipfsOff: 'Сервер сейчас не пиннит, поэтому опубликовать отсюда ничего нельзя.',
+        ipfsOff:
+            'Сервер сейчас не пиннит, поэтому опубликовать отсюда ничего нельзя.',
         ipfsFile: 'Файл',
         ipfsPage: 'Страница',
         ipfsFileBody: 'Любой файл: картинка, звук, архив, документ.',
@@ -1747,7 +2249,8 @@ export const walletMessages: Messages = {
 
         // Backup confirmation
         confirmBackupTitle: '确认你的备份',
-        confirmBackupBody: '按顺序选出第 {positions} 个词。这里不会显示完整助记词。',
+        confirmBackupBody:
+            '按顺序选出第 {positions} 个词。这里不会显示完整助记词。',
         slotEmpty: '点下面的词',
         confirmWrong: '顺序不对。点一下格子可以清空，然后再试一次。',
         confirmBackup: '确认备份',
@@ -1807,6 +2310,34 @@ export const walletMessages: Messages = {
         proxyOfferTitle: '这个网络是不是屏蔽了 Cyberia？',
         proxyOfferBody: '桌面版可以走你自己的代理连过去。',
         proxySettings: '代理设置',
+
+        // 代理与线路：密钥留在设备上，请求不会。
+        proxyTitle: '代理与线路',
+        proxyBody:
+            '你的密钥从不离开这台设备，请求会。读一次余额，就等于告诉应答的那一方：有人正从这条线上盯着这个地址。下面是这些请求由谁承载。',
+        proxyRowHint: '这些请求由什么承载',
+        proxyTransport: '传输',
+        proxyModeSystem: '系统设置',
+        proxyModeDirect: '直连',
+        proxyDesktopRouted:
+            '应用正通过这个中继发送请求。中继一旦不再应答，请求会直接失败，而不会悄悄退回你自己的线路。',
+        proxyDesktopDirect:
+            '请求走这台机器自己的连接。下面这些节点看到的就是它的地址。',
+        proxyBrowser:
+            '浏览器标签页里的页面无法选择由什么承载它的请求 — 这里根本没有这样的设置，而一个什么都不做的开关比没有更糟。有两个 Cyberia 版本可以：扩展会路由钱包自己的流量，桌面版则掌控整条连接。',
+        proxyMobile:
+            '在手机上，连接属于系统。要路由这个应用，得在设备自己的网络或 VPN 设置里做。',
+        proxyTelegram:
+            '在 Telegram 里，窗口是 Telegram 的，底下的连接也是。承载这些请求的是 Telegram 自己的代理设置。',
+        proxyGetExtension: '安装扩展',
+        proxyGetDesktop: '下载桌面版',
+        proxyPerNetwork: '按网络',
+        proxyNotRead: '什么都不读 — 关于这个账户，一个请求也不会发出',
+        proxyViaRelay: '经由本站的中继',
+        proxyRelayNote:
+            'Solana 的公共集群会拒绝任何带浏览器 Origin 的请求，所以这些读取改走 Cyberia 自己的中继。也就是说看到这个地址的是这台服务器，而不是 Solana 的节点 — 这是另一种披露，不是更少的披露。中继不持有任何密钥，也不签任何东西。',
+        proxyLinkability:
+            '中继遮住的是线路，不是习惯。同一个地址在不同站点上重复使用，在公链上仍然是同一个地址，它做过的一切都还连在一起 — 无论请求是由什么送出去的。',
         unpriced: '无价格',
         groupEvm: 'EVM 链',
         groupOther: '其他协议',
@@ -1917,23 +2448,204 @@ export const walletMessages: Messages = {
             '加油站每次只发固定金额，而这笔手续费比它更高。这一笔需要你自己充值。',
         sponsorDisabled: '目前不代付手续费。',
         sponsorPaused: '加油站目前已停止。',
-        sponsorEmpty: '加油站的 {symbol} 用完了。它是人工补充的，所以只是暂时的。',
+        sponsorEmpty:
+            '加油站的 {symbol} 用完了。它是人工补充的，所以只是暂时的。',
         sponsorHoldsNothing:
             '加油站只为在 Cyberia 上已经持有东西的地址付费 — 代币、NFT — 因为手续费正是用来转移它们的。这个地址还什么都没有，也就没有需要支付的东西。',
         sponsorCoolingDown:
             '这个地址刚刚领取过。大约 {hours} 小时后可以再次申请。',
         sponsorDailyCap: '加油站今天的额度已经用完，UTC 午夜重新开始。',
         sponsorQuota: '今天从这里发出的请求太多了。',
-        sponsorUnreadable:
-            '暂时读不到 Cyberia，加油站没有回应。请稍后再试。',
+        sponsorUnreadable: '暂时读不到 Cyberia，加油站没有回应。请稍后再试。',
         signSentenceToken:
             '从你的 {chain} 账户向 {network} 上的 {to} 转账 {amount} {symbol}，网络手续费最多 {fee} {gas}。',
+
+        // 加油站：一个地方，而不是一次性的提议。
+        gasStation: '加油站',
+        gasStationBody:
+            '手续费只能用这条链自己的币来付，所以一个只有代币、没有 CYBER 的地址动不了这些代币。在 Cyberia 上，加油站会给这样的地址一笔 CYBER 用来付它自己的手续费 — 然后你照原样签自己的交易。',
+        gasTank: '油箱',
+        gasStateLive: '供应中',
+        gasStatePaused: '已停止',
+        gasStateEmpty: '已空',
+        gasStateOff: '未开启',
+        gasStateUnreadable: '读不到',
+        gasDripsLeft: '大约还够 {count} 个地址',
+        gasToday: '今日额度',
+        gasTodayLeft: '还剩 {left}／{cap} {symbol}',
+        gasDrip: '每次发放',
+        gasCooldown: '同一地址间隔',
+        gasCeiling: '余额上限',
+        gasServed: '已服务地址',
+        gasContract: '加油站合约',
+        gasBoundsNote:
+            '这四个数是合约自己的边界，直接从合约读出来，而不是这里的承诺。它们对运行在 Cyberia 服务器上的任何东西都成立，包括被盗的加油站密钥。',
+        gasYourAccount: '这个账户',
+        gasYourBalance: '币余额',
+        gasClaim: '给我发一笔',
+        gasHours: '{hours} 小时',
+        gasGroundsTokens:
+            '这个地址在 Cyberia 上持有代币 — 手续费正是为转移它们而付的。',
+        gasGroundsNft:
+            '这个地址在 Cyberia 上持有 NFT — 手续费正是为转移它而付的。',
+        gasGroundsAccount: '这个地址此前登录过 Cyberia。',
+        gasGroundsOpen: '加油站目前对任何地址开放。',
+        gasTransferCost: '现在转一笔要多少',
+        gasDripCovers: '一次发放大约够 {count} 笔',
+        gasNoSignature:
+            '申请不需要签名。发放只会到达请求里写明的那个地址，所以证明你握有它的私钥，对你是一次点击，对脚本则毫无成本。',
+        gasCyberiaOnly:
+            '只限 Cyberia，且永远如此。替 BNB 或 Base 上的手续费买单，等于替陌生人买 ETH。',
+        tileGasHint: '手续费由加油站代付',
+        tileBridgeHint: '去另一条链',
+        tileEarnHint: '池子 · APR',
+        tileBrowseHint: '这条链上的 dapp',
+
+        // 赚取：池子是关于链的一个说法，仓位是关于这个地址的另一个说法。
+        earnTitle: '赚取',
+        earnBody:
+            'Ritual 的池子，在它们交易的那条链上结算。一个仓位赚的是交易手续费加排放 — 两者都会变，都不是承诺，而且都来自别人交易付出的钱。',
+        earnPools: '池子',
+        earnSupplied: '已投入',
+        earnUnclaimed: '未领取',
+        earnPositions: '{count} 个有仓位',
+        earnTvl: 'TVL',
+        earnYours: '你的',
+        earnUnstaked: '在手上，没质押',
+        earnLoading: '正在读取农场…',
+        earnNoPools: '这个农场还没有池子。',
+        earnUnreadable: '有 {count} 个池子读不到，因此略过，而不是显示成空的。',
+        earnIdle:
+            '你有 {count} 个池子的 LP 没有质押。它仍然拿交易手续费，但不在农场里就拿不到排放。',
+        earnAprNote:
+            'APR 是往回看的：它是过去一天会付出多少，按年折算。这里没有预测，也没有把无常损失扣掉。',
+        earnShare: '占排放 {percent}%',
+        earnStaked: '已质押',
+        earnInWallet: '在这个钱包里',
+        earnUnderlying: '你在池中的份额',
+        earnPending: '待领奖励',
+        earnActStake: '质押',
+        earnActUnstake: '取出',
+        earnActClaim: '领取',
+        earnAmountStake: '质押数量',
+        earnAmountUnstake: '取出数量',
+        earnRefusalEmpty: '请输入数量。',
+        earnRefusalTooMuch: '超过你持有的数量。',
+        earnRefusalNothingStaked: '这个池子里没有质押。',
+        earnNothingToClaim: '这个池子还没有累计到任何东西。',
+        earnApprovalNote:
+            '农场还不能动你的 {pool}，所以会先签一笔授权 — 只授权这一笔的数量，绝不是无限。这是一笔单独的交易，有它自己的手续费。',
+        earnSignStake:
+            '把这个账户里的 {amount} LP 投进 {pool} 农场，网络手续费最多 {fee}。取回是一笔交易，没有锁仓。',
+        earnSignUnstake:
+            '把 {amount} LP 从 {pool} 农场取回这个账户，网络手续费最多 {fee}。已经赚到的会同时发给你。',
+        earnSignClaim:
+            '领取在 {pool} 农场赚到的 {amount} {symbol}，质押原样留着，网络手续费最多 {fee}。',
+        earnSent: '已签名并广播。',
+        earnImpermanent:
+            '这是一个双边池子。如果两种资产的价格走开，你拿回来的组合会和投进去的不一样，而上面的 APR 没有把这个差额扣掉。',
+        earnAddLiquidityNote:
+            '建一个 LP 仓位需要两种资产、一个在你决定期间还在动的比例，以及两边的下限。这件事在池子页面做，不在这里。',
+        earnAddLiquidity: '添加流动性',
+
+        // 跨链桥：这边签一笔，那边付一笔，中间没有取消。
+        bridgeTitle: '跨链桥',
+        bridgeBody:
+            '把资产搬到另一条链上是两个动作。这个钱包在你要离开的链上，签一笔到桥的存入地址的普通转账；Cyberia 的中继在你要去的链上，凭这笔存入付款给你。',
+        bridgeRoutes: '从这里可以走的路线',
+        bridgeNoneOpen:
+            '目前没有能从这个钱包发起的通道。需要别的钱包的那些，在桥页面上。',
+        bridgeAsset: '资产',
+        bridgeRecipient: '目标链上的接收地址',
+        bridgeOwnAddress: '这就是你在那条链上的地址 — 同一句助记词，两边都是。',
+        bridgeYouReceive: '在 {chain} 上收到',
+        bridgeFee: '桥手续费',
+        bridgeGasSource: '来源链的 gas',
+        bridgeArrival: '到账',
+        bridgeArrivalAuto: '存入确认后自动到账',
+        bridgeArrivalManual: '由运营方放行',
+        bridgeDeposit: '存入地址',
+        bridgeLeavingTitle: '资产要离开这条链',
+        bridgeLeavingBody:
+            '下面这笔转账一旦最终确认，在对面付款到账之前，这笔资产就不在你手上了。没有取消，也没有回滚 — 按住之前请核对接收地址和网络。',
+        bridgeSentence:
+            '把 {amount} {symbol} 从你的 {source} 账户转给桥，在 {destination} 上付给 {to}；这一侧的网络手续费最多 {fee}。',
+        bridgeSubmitted: '存入已发送并登记',
+        bridgeNotSubmitted: '存入已发送 — 尚未登记',
+        bridgeNotSubmittedBody:
+            '转账已经在链上，但这个应用没能把它告诉桥。请保留交易哈希：它就是这笔存入的凭据，凭它可以补登记。',
+        bridgeElsewhere: '这个钱包发不了的通道',
+        bridgeElsewhereNote:
+            '它们是存在的，有些也开着 — 只是需要这个屏幕不构造的钱包或锁定方式。',
+        bridgeOpenPage: '打开桥页面',
+        bridgeSameSeed: '一句助记词，在每条 EVM 通道的两端都派生出你的地址。',
+        bridgeBlockOk: '',
+        bridgeBlockClosed: '这条通道目前没有运行。',
+        bridgeBlockNoAccount: '这个钱包在那条来源链上没有账户。',
+        bridgeBlockSourceUnsupported:
+            '转出这一笔要在这个钱包还签不了的链上签。',
+        bridgeBlockContractLock:
+            '这个资产不是靠普通转账走的 — 它通过桥合约锁定，而这个屏幕不构造那种交易。桥页面可以。',
+        bridgeBlockNoDeposit: '那条链没有配置存入地址，没有地方可以发。',
+        bridgeRefusalNoAmount: '请输入数量。',
+        bridgeRefusalNoRecipient: '请填写接收地址。',
+        bridgeRefusalBadRecipient: '这不是那条链使用的地址。',
+        bridgeRefusalTooMuch: '超过你在这条链上持有的数量。',
+        bridgeRefusalNoGas: '来源链的币不够付网络手续费。',
+        bridgeRefusalNoFee: '读不到网络手续费，暂时不能签。',
+
+        // 线路：这条链上有什么，以及一个页面怎么跟钱包说话。
+        browseTitle: '线路',
+        browseBody:
+            '这条链上跑着什么，在哪里打开。这是一份目录，不是浏览器：标签页里的页面没法把钱包交给另一个站点，而一个能碰到这个保险库的框架，也就能读到里面的密钥。在页面和密钥之间做中间人的是扩展 — 按站点授权，每一次签名前都有你在。',
+        browseBridgeLabel: '这里的页面能连到',
+        browseModeExtension: '有钱包可用',
+        browseModeExtensionBody:
+            '这个浏览器里已经有东西在向页面提供 EIP-1193 钱包。Cyberia 扩展按来源逐个授权，并把每个签名方法都停在一个单独的确认窗口 — 页面可以请求，只有你按住才会动。',
+        browseModeBrowser: '没有',
+        browseModeBrowserBody:
+            '这个浏览器没有向页面提供任何钱包，所以下面的站点会去找钱包而找不到。Cyberia 扩展只把它交给你授权过的来源，其他一律没有。',
+        browseModeDesktop: '这个窗口里没有',
+        browseModeDesktopBody:
+            '桌面版掌握着自己的连接，但不承载别的站点的页面。要让一个 dapp 拿到钱包，仍然要靠浏览器里的扩展。',
+        browseModeMobile: '系统浏览器',
+        browseModeMobileBody:
+            '在手机上，下面的页面会在系统浏览器里打开，那里有它自己的钱包，或者根本没有。这个应用自己能做的事，钱包就是它。',
+        browseWatchOnly:
+            '这是一个观察账户。页面可以打开、可以读，但这里没有东西能替它签名。',
+        browseDirectory: '这条链上',
+        browseOpenHere: '在钱包里打开',
+        browseOpenPage: '打开页面',
+        browseReadOnly: '不需要签名',
+        browseLeavingNote:
+            '打开一个页面就离开了钱包。那是本站的普通页面，它会去找自己的钱包 — 标着「在钱包里打开」的那些，是同一件事在这里做，用这把密钥签，中间没有别的东西。',
+        dappSwap: '兑换',
+        dappSwapNote: '通过 Ritual 的池子把一种资产换成另一种。',
+        dappLiquidity: '流动性',
+        dappLiquidityNote: '把两种资产放进池子，拿它们的交易手续费。',
+        dappFarm: '农场',
+        dappFarmNote: '把池子仓位质押进去，在手续费之外再拿排放。',
+        dappStaking: '质押',
+        dappStakingNote: '单币池子，付出排放中的一份。',
+        dappLending: '借贷',
+        dappLendingNote: '拿存入的资产借出，或把自己的借给别人收息。',
+        dappLaunchpad: '发射台',
+        dappLaunchpadNote: '公平发射 — 为发射付的币会被烧进锁定的流动性里。',
+        dappPredictions: '预测',
+        dappPredictionsNote: '用链上的币下注的是非市场，按指定的价格源结算。',
+        dappTokens: '代币',
+        dappTokensNote: '链上的每一个代币，带上它的池子和价格。',
+        dappDao: 'DAO',
+        dappDaoNote: '提案和投票，权重按地址持有的东西算。',
+        dappBridge: '跨链桥',
+        dappBridgeNote: '把资产搬到另一条链，再搬回来。',
 
         // Analytics
         analyticsBody:
             '这些数字在这个浏览器里算出来，用的是它已经读到的余额和这个页面已经拿到的价格。你持有什么，不会被发到任何地方去分析。',
         netWorth: '净值',
-        analyticsPartial: '有 {count} 项持仓没有价格，或者根本读不到，未计入这个总额',
+        analyticsPartial:
+            '有 {count} 项持仓没有价格，或者根本读不到，未计入这个总额',
         shareNetworks: '网络原生币',
         shareTokens: '代币',
         allocation: '配置',
@@ -2024,8 +2736,7 @@ export const walletMessages: Messages = {
         // Transaction status
         txSigningLabel: '本地签名',
         txSigningTitle: '正在这台设备上签名',
-        txSigningBody:
-            '你的私钥从不离开保险库。交易正在签名并广播。',
+        txSigningBody: '你的私钥从不离开保险库。交易正在签名并广播。',
         txPendingLabel: '待确认',
         txPendingTitle: '已广播到网络',
         txPendingBody: '等待确认。你可以离开这个页面 — 转账会继续。',
@@ -2161,9 +2872,32 @@ export const walletMessages: Messages = {
         chatUnreadable: '这条消息打不开 — 它和信封上写的对不上。',
         chatKeyChanged:
             '这个地址正在发布的密钥，和这台设备之前见到的那把不一样。要么是钱包在别处恢复了，要么是有人试图坐在中间 — 继续之前，先和对方核对指纹。',
-        chatStored:
-            '消息以密文形式存在这台设备上，只有钱包解锁时才会被打开。',
+        chatStored: '消息以密文形式存在这台设备上，只有钱包解锁时才会被打开。',
         chatForget: '忘掉所有会话',
+
+        // 安全码：钉住密钥说的是「这是我一直在跟它说话的那把」，
+        // 只有两个人对读同样的分组，才能说「而且它属于你」。
+        chatVerifyTitle: '安全码',
+        chatVerifyBody:
+            '和 {peer} 一起把这些分组读一遍 — 当面，或者在一条你本来就信任的通道上。如果两边屏幕上的十二组一样，就没有人坐在你们中间。中继可以扣下一把密钥，但换不掉它而不改变这个码。',
+        chatVerifyTheirs: '对方的码',
+        chatVerifyYours: '你的，给对方核对',
+        chatVerifyNoKey: '这个地址还没有发布消息密钥，没有可核对的东西。',
+        chatVerifyChanged:
+            '这个地址发布的密钥和之前见到的不一样，所以之前的核对已经不作数。信任这条会话之前，请重新核对一次。',
+        chatVerifyScheme: '方案',
+        chatVerifySchemeVal: 'ECDH · AES-256-GCM',
+        chatVerifyKey: '消息密钥',
+        chatVerifyKeyVal: '由这个账户派生，从不是签名密钥',
+        chatVerifySecrecy: '前向保密',
+        chatVerifySecrecyVal: '没有 — 每个账户一把静态密钥',
+        chatVerifyState: '已核对',
+        chatVerifyUnchecked: '还没有',
+        chatVerifiedOn: '{when} 核对过',
+        chatVerifiedShort: '已核对',
+        chatVerifyMark: '两边一致',
+        chatVerifyLocal:
+            '核对只记在这台设备上。它不会被发布出去，而且这个地址一旦发布了另一把密钥，它就会被丢掉。',
 
         // Accounts
         accounts: '账户',
@@ -2281,7 +3015,8 @@ export const walletMessages: Messages = {
 
         // DAO
         dao: 'DAO',
-        daoBody: '每一个提案，以及投票真实的样子。进度条画的是投票权重，不是投票人数。',
+        daoBody:
+            '每一个提案，以及投票真实的样子。进度条画的是投票权重，不是投票人数。',
         daoProposals: '提案',
         daoOpenCount: '{count} 个进行中',
         daoLoading: '正在加载提案…',
@@ -2377,7 +3112,8 @@ export const walletMessages: Messages = {
         tileTorrentHint: 'DHT · 桌面版',
 
         nftTitle: 'NFT',
-        nftBody: '一个人人都能铸造进去的合集。一个代币究竟*是*什么，完全取决于它指向的那个地址 — 通常是 IPFS 里的一个文件，有时只是一个链接。',
+        nftBody:
+            '一个人人都能铸造进去的合集。一个代币究竟*是*什么，完全取决于它指向的那个地址 — 通常是 IPFS 里的一个文件，有时只是一个链接。',
         nftMint: '铸造 NFT',
         nftLoading: '正在读取这个账户持有的东西…',
         nftEmpty: '这个账户在这个网络上还没有 NFT。',
@@ -2458,8 +3194,7 @@ export const walletMessages: Messages = {
         torrentWhyNot:
             'DHT 走 UDP，连接节点走 TCP，而网页两样都没有。网页能够到的那个群 — 走 WebRTC 的浏览器节点 — 对一个普通磁力链来说几乎没有成员，所以这里的下载器会一个人都找不到，看起来就像你的链接填错了。',
         torrentGetDesktop: '获取桌面版',
-        torrentMobileNote:
-            '手机应用和 Telegram 里也是一样：两个都是网页视图。',
+        torrentMobileNote: '手机应用和 Telegram 里也是一样：两个都是网页视图。',
         torrentDesktopBody:
             '主线 DHT、节点交换和 tracker — 和其他客户端看到的是同一个群。文件落在应用的下载文件夹里。',
         torrentSource: '磁力链、info hash 或 .torrent 链接',

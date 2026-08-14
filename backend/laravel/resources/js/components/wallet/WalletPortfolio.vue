@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
+import StatusPill from '@/components/wallet/StatusPill.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { canOpenProxySettings, openProxySettings } from '@/lib/native';
-import { WALLET_FAMILY_GROUPS, formatUnits } from '@/lib/wallet';
+import { WALLET_FAMILY_GROUPS, formatUnits, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTxStatus } from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
+import {
+    SPONSORED_CHAIN,
+    dripsLeft,
+    gasSponsorStatus,
+    stationState,
+} from '@/lib/wallet/gas';
+import type { SponsorStatus } from '@/lib/wallet/gas';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -42,6 +50,10 @@ const emit = defineEmits<{
     analytics: [];
     accounts: [];
     security: [];
+    gas: [];
+    bridge: [];
+    earn: [];
+    browse: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
@@ -210,6 +222,43 @@ const proxyOffer = computed(
         canOpenProxySettings() &&
         (!props.online || unreachable.value.length > 0),
 );
+
+/**
+ * The gas station, as a state rather than as an offer.
+ *
+ * Asked without an address on purpose. Eligibility costs the server an
+ * eth_call and an index lookup for whichever address is named, and this card
+ * is not about one address — it says whether the station is serving at all,
+ * which is the same answer for every reader and is cached as such. Whether
+ * *this* account may be sponsored is asked on the station's own screen, and at
+ * the moment of a transaction, which are the two places it is the question.
+ */
+const station = ref<SponsorStatus | null>(null);
+
+onMounted(async () => {
+    station.value = await gasSponsorStatus();
+});
+
+const stationTone = {
+    live: 'confirmed',
+    paused: 'pending',
+    empty: 'failed',
+    off: 'failed',
+    unreadable: 'pending',
+} as const;
+
+const stationStatus = computed(() => stationState(station.value));
+
+const stationDrips = computed(() => dripsLeft(station.value));
+
+/** How much coin the station is still holding, in CYBER. */
+const stationTank = computed(() => {
+    const tank = station.value?.tank;
+
+    return tank
+        ? formatUnits(BigInt(tank), walletChain(SPONSORED_CHAIN).decimals, 2)
+        : null;
+});
 
 /** Networks holding value the total cannot include — no price, or no read. */
 const unaccounted = computed(
@@ -465,6 +514,60 @@ const recent = computed(() =>
         </div>
 
         <!--
+          The station, when there is one to speak of. It sits above the
+          shortcuts because it is not a way of reading holdings: it is the
+          answer to the one state in which holdings cannot be moved at all.
+        -->
+        <button
+            v-if="station?.enabled"
+            type="button"
+            class="cw-card cw-card-button"
+            style="margin-bottom: 10px; padding: 14px 16px"
+            @click="emit('gas')"
+        >
+            <div class="cw-row">
+                <span style="display: flex; align-items: center; gap: 10px">
+                    <span
+                        style="
+                            font: 500 12px/1 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                        >{{ t('gasStation') }}</span
+                    >
+                    <StatusPill
+                        :status="stationTone[stationStatus]"
+                        :label="
+                            t(
+                                `gasState${stationStatus.charAt(0).toUpperCase()}${stationStatus.slice(1)}`,
+                            )
+                        "
+                        bare
+                    />
+                </span>
+                <span class="cw-label" style="color: var(--cw-faint)">→</span>
+            </div>
+            <div
+                style="
+                    margin-top: 8px;
+                    font: 400 10px/1.5 var(--cw-mono);
+                    color: var(--cw-dim);
+                "
+            >
+                <template v-if="stationTank !== null"
+                    >{{ stationTank }} CYBER<template
+                        v-if="stationDrips !== null"
+                    >
+                        ·
+                        {{
+                            t('gasDripsLeft', { count: stationDrips })
+                        }}</template
+                    ></template
+                >
+                <template v-else>{{ t('tileGasHint') }}</template>
+            </div>
+        </button>
+
+        <!--
           Shortcuts, not a menu: the same holdings read as tokens, the same
           holdings read as shares, and the keys underneath both.
         -->
@@ -491,6 +594,39 @@ const recent = computed(() =>
                 }}</span>
                 <span class="cw-label" style="font-size: 9px">{{
                     t('tileSecurityHint')
+                }}</span>
+            </button>
+        </div>
+
+        <!--
+          A second row, and the difference from the first is what they are
+          about: those three are ways of reading what you hold, these three are
+          things done with it — moved to another chain, put to work, or spent
+          on something running here.
+        -->
+        <div class="cw-tiles">
+            <button type="button" class="cw-tile" @click="emit('bridge')">
+                <span style="font: 500 12px/1 var(--cw-sans)">{{
+                    t('bridgeTitle')
+                }}</span>
+                <span class="cw-label" style="font-size: 9px">{{
+                    t('tileBridgeHint')
+                }}</span>
+            </button>
+            <button type="button" class="cw-tile" @click="emit('earn')">
+                <span style="font: 500 12px/1 var(--cw-sans)">{{
+                    t('earnTitle')
+                }}</span>
+                <span class="cw-label" style="font-size: 9px">{{
+                    t('tileEarnHint')
+                }}</span>
+            </button>
+            <button type="button" class="cw-tile" @click="emit('browse')">
+                <span style="font: 500 12px/1 var(--cw-sans)">{{
+                    t('browseTitle')
+                }}</span>
+                <span class="cw-label" style="font-size: 9px">{{
+                    t('tileBrowseHint')
                 }}</span>
             </button>
         </div>

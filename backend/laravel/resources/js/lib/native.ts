@@ -17,6 +17,8 @@ export type NativeShell = 'desktop' | 'mobile' | 'telegram' | null;
 interface DesktopBridge {
     shell?: string;
     version?: string;
+    /** The proxy in force for this window, as the shell describes it. */
+    proxy?: string;
     openExternal?: (url: string) => void;
     openProxySettings?: () => void;
     /**
@@ -99,4 +101,23 @@ export function canOpenProxySettings(): boolean {
 /** Raises the shell's proxy window. No-op anywhere else. */
 export function openProxySettings(): void {
     window.cyberiaNative?.openProxySettings?.();
+}
+
+/**
+ * What the shell says is carrying this window's requests: `direct`, `system`,
+ * or the proxy rules in force (`socks5://host:port`). Null everywhere else,
+ * which is the honest answer — a browser tab is not told.
+ *
+ * Read at page load and never after: the shell only reapplies a proxy by
+ * restarting its sessions, so a value that changed since would mean the page
+ * had been reloaded anyway.
+ */
+export function nativeProxy(): string | null {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    const described = window.cyberiaNative?.proxy;
+
+    return typeof described === 'string' && described !== '' ? described : null;
 }

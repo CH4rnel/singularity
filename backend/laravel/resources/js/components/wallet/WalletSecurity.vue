@@ -21,7 +21,12 @@ import { walletMessages } from '@/lib/walletMessages';
 
 const props = defineProps<{ wallet: MultiWallet }>();
 
-const emit = defineEmits<{ locked: []; forgotten: []; addNetwork: [] }>();
+const emit = defineEmits<{
+    locked: [];
+    forgotten: [];
+    addNetwork: [];
+    proxy: [];
+}>();
 
 const { t } = useLocale(walletMessages);
 const clipboard = useSecureClipboard();
@@ -385,6 +390,54 @@ onBeforeUnmount(() => {
                             color: var(--cw-dim);
                         "
                         >{{ t('addNetworkRowHint') }}</span
+                    >
+                </span>
+                <span
+                    style="
+                        font: 400 12px/1 var(--cw-mono);
+                        color: var(--cw-dim);
+                    "
+                    >→</span
+                >
+            </button>
+
+            <!--
+              The endpoints above are half the story: which hosts answer for
+              this wallet. The other half is what carries the question to them,
+              and it belongs next to them rather than in a settings page of its
+              own.
+            -->
+            <button
+                type="button"
+                class="cw-row"
+                style="
+                    width: 100%;
+                    padding: 16px;
+                    border: 0;
+                    border-top: 1px solid var(--cw-line);
+                    background: none;
+                    cursor: pointer;
+                    text-align: left;
+                "
+                @click="emit('proxy')"
+            >
+                <span style="flex: 1">
+                    <span
+                        style="
+                            display: block;
+                            font: 400 14px/1.3 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                        >{{ t('proxyTitle') }}</span
+                    >
+                    <span
+                        style="
+                            display: block;
+                            margin-top: 3px;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                        "
+                        >{{ t('proxyRowHint') }}</span
                     >
                 </span>
                 <span

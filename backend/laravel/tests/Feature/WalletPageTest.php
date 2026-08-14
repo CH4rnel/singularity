@@ -73,3 +73,41 @@ it('never sends key material to the browser', function () {
             ->missing('privateKey')
         );
 });
+
+/**
+ * The wallet's own bridge screen is rendered from the same tables /bridge is,
+ * so a corridor opened in config opens in both places at once rather than in
+ * one and then, later, in the other.
+ *
+ * A deposit address is public by necessity — it has to be paid — but a
+ * *private* key never is, and the relayer's is the one that would be worth
+ * something to an attacker. The prop carries the address only.
+ */
+it('hands the wallet the bridge corridors it may start', function () {
+    $this->get('/wallet')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('Wallet')
+            ->has('bridge.chains')
+            ->has('bridge.routes')
+            ->has('bridge.tokens')
+            ->has('bridge.relayer')
+            ->has('bridge.feeBps')
+        );
+});
+
+it('never sends a relayer key with the bridge corridors', function () {
+    $response = $this->get('/wallet')->assertOk();
+
+    $props = $response->viewData('page')['props']['bridge'];
+
+    expect($props)->not->toHaveKey('relayerPrivateKey');
+    expect(json_encode($props))->not->toContain('private_key');
+
+    // Every corridor names its source and destination, because the screen
+    // refuses the ones whose lock leg the wallet cannot build and has to say
+    // which ones those are.
+    foreach ($props['routes'] as $route) {
+        expect($route)->toHaveKeys(['direction', 'source', 'destination', 'operational']);
+    }
+});

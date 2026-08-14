@@ -57,6 +57,14 @@ import type {
     WalletTokenBalance,
     WalletTx,
 } from '@/lib/wallet';
+import { lockOnEvm } from '@/lib/wallet/bridge';
+import type { BridgeLock } from '@/lib/wallet/bridge';
+import {
+    claim as claimReward,
+    stake as stakeLp,
+    unstake as unstakeLp,
+} from '@/lib/wallet/earn';
+import type { EarnReceipt } from '@/lib/wallet/earn';
 import { mintNft as submitMint } from '@/lib/wallet/nft';
 import type { MintQuote } from '@/lib/wallet/nft';
 import { executeSwap } from '@/lib/wallet/swap';
@@ -897,9 +905,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     ): Promise<boolean> => {
         const chain = walletChain(chainId);
 
-        return chain.hasCode
-            ? chain.hasCode(address, rpcFor(chainId))
-            : false;
+        return chain.hasCode ? chain.hasCode(address, rpcFor(chainId)) : false;
     };
 
     /**
@@ -1038,6 +1044,115 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
                 rpcUrl: rpcFor(chainId),
                 onApproved,
             });
+        } finally {
+            busy.value = false;
+        }
+    };
+
+    /**
+     * Farming: put an LP position to work, take it back, or take the reward.
+     *
+     * Three calls rather than one, because they are three different agreements
+     * — one of them costs an allowance, one moves a stake and one moves only
+     * what the stake has already earned. The gas price arrives with the
+     * request, so what is signed is the number the screen quoted rather than
+     * whatever the pool happened to be charging a moment later.
+     */
+    const farm = {
+        stake: async (
+            chainId: WalletChainId,
+            request: {
+                chainId: number;
+                pid: number;
+                stakingToken: string;
+                amount: bigint;
+                allowance: bigint;
+                gasPrice: bigint;
+            },
+            onApproved?: (hash: string) => void,
+        ): Promise<EarnReceipt> => {
+            const source = sourceFor(chainId);
+
+            busy.value = true;
+
+            try {
+                return await stakeLp(source, {
+                    ...request,
+                    rpcUrl: rpcFor(chainId),
+                    onApproved,
+                });
+            } finally {
+                busy.value = false;
+            }
+        },
+        unstake: async (
+            chainId: WalletChainId,
+            request: {
+                chainId: number;
+                pid: number;
+                amount: bigint;
+                gasPrice: bigint;
+            },
+        ): Promise<EarnReceipt> => {
+            const source = sourceFor(chainId);
+
+            busy.value = true;
+
+            try {
+                return await unstakeLp(source, {
+                    ...request,
+                    rpcUrl: rpcFor(chainId),
+                });
+            } finally {
+                busy.value = false;
+            }
+        },
+        claim: async (
+            chainId: WalletChainId,
+            request: { chainId: number; pid: number; gasPrice: bigint },
+        ): Promise<EarnReceipt> => {
+            const source = sourceFor(chainId);
+
+            busy.value = true;
+
+            try {
+                return await claimReward(source, {
+                    ...request,
+                    rpcUrl: rpcFor(chainId),
+                });
+            } finally {
+                busy.value = false;
+            }
+        },
+    };
+
+    /**
+     * The source leg of a bridge transfer: one ordinary transfer to the
+     * bridge's deposit address on this chain.
+     *
+     * Nothing about it is special, which is the point — the wallet signs a
+     * send with a known recipient and the relayer does the rest. Kept here
+     * rather than in the screen for the one reason every signing path is:
+     * the key source never leaves this closure.
+     */
+    const bridgeDeposit = async (
+        chainId: WalletChainId,
+        request: {
+            chainId: number;
+            rpcUrl: string;
+            deposit: string;
+            contract: string | null;
+            amount: bigint;
+            gasPrice: bigint;
+            gasLimit: bigint;
+        },
+    ): Promise<BridgeLock> => {
+        const source = sourceFor(chainId);
+
+        busy.value = true;
+
+        try {
+            return await lockOnEvm(source, request);
         } finally {
             busy.value = false;
         }
@@ -1253,6 +1368,8 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         mintNft,
         gasPrice,
         swap,
+        farm,
+        bridgeDeposit,
         wrap,
         /** Encrypted chat: the public identity, and sealing under it. */
         chatIdentity,

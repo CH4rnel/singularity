@@ -46,6 +46,7 @@ use App\Http\Controllers\UserProfileController;
 use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
+use App\Services\BridgeRelayerService;
 use App\Services\DexAprService;
 use App\Services\GasSponsorService;
 use App\Services\LainChatService;
@@ -236,7 +237,7 @@ Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-
  * address. Balances, history, fees and signing are read and done by the
  * browser, never by us.
  */
-Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatService $lain, GasSponsorService $gas, SolanaRpcProxy $solana) => Inertia::render('Wallet', [
+Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatService $lain, GasSponsorService $gas, SolanaRpcProxy $solana, BridgeConfigService $bridgeConfig) => Inertia::render('Wallet', [
     // Solana's public cluster answers this server and refuses the browser, so
     // the endpoint handed over is our own relay (/api/solana/rpc). It reads
     // the chain on the page's behalf and nothing else — the keys, the signing
@@ -271,6 +272,23 @@ Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatS
     'sponsor' => [
         'enabled' => $gas->enabled(),
         'chain' => 'cyberia',
+    ],
+    /*
+     * The bridge, as the wallet needs to see it: which corridors exist, which
+     * are actually open, what each carries, and where a deposit goes.
+     *
+     * The same tables /bridge is rendered from, so a corridor opened in config
+     * opens in both places at once. Nothing secret is in here — a deposit
+     * address has to be public to be paid, and the relayer's is the address
+     * every bridge transfer on this chain already lands on.
+     */
+    'bridge' => [
+        'chains' => $bridgeConfig->publicChains(),
+        'routes' => $bridgeConfig->publicRoutes(),
+        'tokens' => $bridgeConfig->publicTokens(),
+        'relayer' => app(BridgeRelayerService::class)->evmAddress(),
+        'feeBps' => (int) config('bridge.fee.rate_bps', 0),
+        'feeFlatUsd' => (float) config('bridge.fee.flat_usd', 0.1),
     ],
 ]))->name('wallet');
 

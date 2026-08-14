@@ -292,6 +292,16 @@ class GasSponsorService
             'tank' => $summary['tank'] ?? null,
             'paused' => $summary['paused'] ?? null,
             'served' => $summary['served'] ?? null,
+            /*
+             * The day's allowance, which is the one bound on this station with
+             * a number to compare against: a tank has no capacity to draw a
+             * gauge from, and "12 CYBER left" says nothing on its own about
+             * whether the station is about to stop answering. Both halves are
+             * sent because a share needs its denominator.
+             */
+            'dailyCap' => $summary['dailyCap'] ?? null,
+            'remainingToday' => $summary['remainingToday'] ?? null,
+            'spent' => $summary['spent'] ?? null,
         ];
 
         if ($address !== null && preg_match('/^0x[a-fA-F0-9]{40}$/', $address) === 1) {

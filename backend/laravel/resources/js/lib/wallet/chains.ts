@@ -191,7 +191,15 @@ export type WalletChain = {
      * endpoint it is read through, and the UI has to say so.
      */
     custom?: boolean;
-    /** What was added by the user, for the row that offers to remove it. */
+    /**
+     * The host this network is actually read through.
+     *
+     * On a user-added network it is what the row that offers to remove it
+     * forgets. On a built-in one it is there for the routing screen, which
+     * cannot honestly say what carries a request without naming it — and the
+     * answer differs per family: an EVM chain talks to an RPC, Solana talks to
+     * this site's own relay, and Monero talks to nobody at all.
+     */
     endpoint?: string;
     /**
      * BIP-44/SLIP-0010 path of one account, shown in the UI so the wallet is
@@ -529,6 +537,7 @@ const evmChain = (spec: EvmSpec): WalletChain => {
         chainId: registry.chainId,
         family: 'evm',
         mark: spec.mark,
+        endpoint: defaultRpc,
         path: evmPath,
         curve: 'secp256k1',
         capabilities: {
@@ -946,6 +955,10 @@ const BUILTIN_CHAINS: readonly WalletChain[] = [
         decimals: 9,
         family: 'solana',
         mark: { tag: 'SO', hue: 'var(--cw-net-solana)', shape: 'circle' },
+        // Not a cluster: the public one refuses anything carrying a browser
+        // Origin, so every read here goes through this site's own relay, and
+        // the routing screen has to be able to say so.
+        endpoint: solanaRpcUrl(),
         path: solanaPath,
         curve: 'ed25519',
         capabilities: { balance: true, history: true, send: true },
