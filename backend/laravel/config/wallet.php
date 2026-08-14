@@ -81,4 +81,99 @@ return [
         'max_bytes' => (int) env('WALLET_IPFS_MAX_BYTES', 10 * 1024 * 1024),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Sponsored fees on Cyberia
+    |--------------------------------------------------------------------------
+    |
+    | A fee is payable only in the coin the chain runs on, so an address holding
+    | USDC and no CYBER cannot move its USDC. That is the failure people
+    | actually hit, and this is the answer to it: the CyberiaGasStation contract
+    | hands such an address a small amount of CYBER, and the user then signs
+    | their own transaction in the ordinary way. Nothing about signing changes,
+    | which is why this covers sends, swaps, mints and everything not yet built.
+    |
+    | The division of labour is deliberate. What the station will do at most —
+    | how much, how often, to whom, up to what daily total — is enforced by the
+    | contract and cannot be exceeded by anything on this server, including a
+    | stolen sponsor key. Who *deserves* a drip is a question about the world,
+    | and that is answered here.
+    |
+    | Cyberia only. Sponsoring BNB or Base would mean buying ETH for strangers.
+    |
+    */
+
+    'sponsor' => [
+
+        /** Off means the wallet says fees are not sponsored, not that sending fails. */
+        'enabled' => (bool) env('WALLET_GAS_SPONSOR_ENABLED', true),
+
+        /** CyberiaGasStation. Unset disables sponsorship as surely as `enabled` false. */
+        'station' => (string) env('WALLET_GAS_STATION_ADDRESS', ''),
+
+        /**
+         * The operator key that pulls drips out of the station.
+         *
+         * Its own balance pays the gas for delivering them, so it needs
+         * topping up separately from the tank — `gas:station` watches both.
+         *
+         * There is deliberately no fallback to BRIDGE_RELAYER_PRIVATE_KEY.
+         * That EOA is shared with the Telegram minter and the DCA bot, and
+         * transactions from it already lose races for nonces; a sponsorship
+         * that fails because a bridge payout went first is a worse outcome
+         * than sponsorship being switched off until a key exists.
+         */
+        'private_key' => (string) env('GAS_SPONSOR_PRIVATE_KEY', ''),
+
+        /** Cyberia's keyless index, used to ask what an address holds. */
+        'explorer_api' => (string) env(
+            'WALLET_GAS_EXPLORER_API',
+            'https://explorer.cyberia.church/api',
+        ),
+
+        /**
+         * The gate: sponsor an address that already owns something on Cyberia.
+         *
+         * Which is the same sentence as the problem — "I have something I
+         * cannot move" — and it is self-limiting in a way a captcha is not.
+         * To farm this faucet a bot would have to first put real assets into
+         * every address it invents, and those cost more than the drip.
+         *
+         * Turning it off makes the station a plain faucet: better onboarding
+         * for a genuinely empty wallet, and an open invitation to scripts.
+         */
+        'require_holding' => (bool) env('WALLET_GAS_REQUIRE_HOLDING', true),
+
+        /**
+         * An address that has signed into the site with this wallet is also
+         * sponsored, holdings or not. An account here was earned by doing
+         * something, which is the same evidence a balance is.
+         */
+        'allow_site_accounts' => (bool) env('WALLET_GAS_ALLOW_ACCOUNTS', true),
+
+        /**
+         * Quotas this server adds on top of the contract's own.
+         *
+         * The contract bounds the money; these bound the noise. Counted from
+         * the `gas_sponsorships` table rather than the cache, so flushing the
+         * cache does not reset anyone's day.
+         */
+        'daily_per_ip' => (int) env('WALLET_GAS_DAILY_PER_IP', 5),
+        'daily_total' => (int) env('WALLET_GAS_DAILY_TOTAL', 500),
+
+        /** Seconds a station read is cached. Policy changes rarely; the tank drains. */
+        'cache_seconds' => 30,
+
+        /*
+         * When `gas:station --alert` starts shouting.
+         *
+         * Two numbers because there are two ways to run dry, and only one of
+         * them is the tank: the operator key pays the gas that *delivers* each
+         * drip, so a full station behind a broke key sponsors nobody. The
+         * relayer has run empty once before, unnoticed for hours.
+         */
+        'low_water_drips' => (int) env('WALLET_GAS_LOW_WATER_DRIPS', 50),
+        'operator_min_wei' => (string) env('WALLET_GAS_OPERATOR_MIN_WEI', '50000000000000000'),
+    ],
+
 ];

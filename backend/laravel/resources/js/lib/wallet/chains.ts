@@ -263,7 +263,19 @@ export type WalletChain = {
          * moving the coin itself does, so the quote has to know which it is.
          */
         token?: string | null;
+        /**
+         * Whether the recipient has code. Paying a contract is a contract call
+         * too — its `receive()` runs on the sender's gas — so the coin costs
+         * several times what it costs to pay a plain address, and a quote that
+         * ignored this would promise a fee that cannot complete the transfer.
+         */
+        toContract?: boolean;
     }) => Promise<WalletFeeQuote[]>;
+    /**
+     * Whether an address is a contract. EVM only, and only where a quote or a
+     * gas limit turns on the answer.
+     */
+    hasCode?: (address: string, rpcUrl?: string) => Promise<boolean>;
     /**
      * Live price of one unit of gas at a tier, with the network's floor
      * already applied.
@@ -319,8 +331,41 @@ const CYBERIA_EXPLORER = 'https://explorer.cyberia.church';
 
 const SOLANA_EXPLORER = 'https://solscan.io';
 
-/** A plain native transfer, the only shape this wallet sends on an EVM chain. */
+/** A plain native transfer to an address that is only an address. */
 const EVM_TRANSFER_GAS = 21_000n;
+
+/**
+ * Ceiling for a native transfer whose recipient turns out to be a contract.
+ *
+ * 21000 is the entire cost of paying a plain address and the entire cost of
+ * nothing else. A contract's `receive()` runs *after* those 21000 are already
+ * spent, so a coin sent to a contract with a 21000 limit does not underpay —
+ * it runs out of gas, reverts, and burns the whole fee for nothing. This is
+ * the same promise `ERC20_TRANSFER_GAS_CAP` makes: the figure quoted is the
+ * figure that will not be exceeded, and an estimate above it is refused rather
+ * than signed for more than the sentence said.
+ */
+export const EVM_CONTRACT_SEND_GAS_CAP = 120_000n;
+
+/**
+ * Gas for one native transfer, given what the recipient turned out to be.
+ *
+ * Stated, never estimated, and that is not caution — it is this chain being
+ * measured. Cyberia's node answers `eth_estimateGas` for a value transfer with
+ * empty calldata by returning 21000 whether or not the recipient has code: it
+ * prices the transaction without running the `receive()` that transaction will
+ * run. A wallet that believes that answer signs a transfer which reverts out
+ * of gas and keeps the fee, which is exactly how the first payment into the
+ * gas station was lost. So the recipient is *read* — code or no code — and a
+ * contract is paid at the cap, which is also the figure its quote promised.
+ *
+ * Unused gas is refunded, so the cost of being generous here is zero; the cost
+ * of being tight is a failed transfer that still charges for failing.
+ */
+export const nativeSendGas = (
+    recipientIsContract: boolean,
+    cap = EVM_CONTRACT_SEND_GAS_CAP,
+): bigint => (recipientIsContract ? cap : EVM_TRANSFER_GAS);
 
 /** Numerator/denominator per tier — a multiplier on the live network price. */
 const EVM_TIER_MULTIPLIER: Record<WalletFeeTier, [bigint, bigint]> = {
@@ -434,6 +479,27 @@ const evmChain = (spec: EvmSpec): WalletChain => {
             name: spec.id,
         });
 
+    /**
+     * Does anything live at this address?
+     *
+     * Cheap, and the answer decides both the quote and the gas limit, so it is
+     * asked rather than assumed. A read that fails is answered "yes": paying a
+     * plain address at the contract limit costs the sender nothing (the excess
+     * is refunded), while paying a contract at 21000 loses the fee outright.
+     */
+    const hasCode = async (
+        address: string,
+        rpcUrl?: string,
+    ): Promise<boolean> => {
+        try {
+            const code = await provider(rpcUrl).getCode(address);
+
+            return code !== '0x' && code !== '0x0';
+        } catch {
+            return true;
+        }
+    };
+
     const gasPrice = async (
         tier: WalletFeeTier,
         rpcUrl?: string,
@@ -489,11 +555,17 @@ const evmChain = (spec: EvmSpec): WalletChain => {
             erc20TotalSupply(provider(rpcUrl), contract),
         signMessage: (source, message) =>
             evmSigner(source).signMessage(message),
-        fetchFees: async ({ rpcUrl, token }) => {
+        fetchFees: async ({ rpcUrl, token, toContract }) => {
             // Moving a token is a contract call, not a transfer: it costs
             // several times the 21000 the coin itself does, and how much more
-            // depends on the token's own code.
-            const gas = token ? ERC20_TRANSFER_GAS_CAP : EVM_TRANSFER_GAS;
+            // depends on the token's own code. Paying a *contract* in the coin
+            // is a contract call for the same reason — the code at the other
+            // end runs on this transaction's gas.
+            const gas = token
+                ? ERC20_TRANSFER_GAS_CAP
+                : toContract
+                  ? EVM_CONTRACT_SEND_GAS_CAP
+                  : EVM_TRANSFER_GAS;
 
             return Promise.all(
                 WALLET_FEE_TIERS.map(async (tier) => ({
@@ -502,11 +574,12 @@ const evmChain = (spec: EvmSpec): WalletChain => {
                     basis: `network price × ${
                         Number(EVM_TIER_MULTIPLIER[tier][0]) /
                         Number(EVM_TIER_MULTIPLIER[tier][1])
-                    }${token ? ` × ${gas} gas` : ''}`,
+                    }${token || toContract ? ` × ${gas} gas` : ''}`,
                 })),
             );
         },
         gasPrice: (tier, rpcUrl) => gasPrice(tier, rpcUrl),
+        hasCode: (address, rpcUrl) => hasCode(address, rpcUrl),
         fetchHistory: spec.blockscoutApi
             ? (address) => blockscoutHistory(spec.blockscoutApi!, address)
             : undefined,
@@ -531,12 +604,15 @@ const evmChain = (spec: EvmSpec): WalletChain => {
                 return sendErc20(signer, token, to, amount, price);
             }
 
-            // Gas is stated rather than estimated: some of these nodes answer
-            // eth_estimateGas unreliably, and a native transfer is always 21000.
+            // Gas is stated rather than estimated: these nodes answer
+            // eth_estimateGas for a value transfer by pricing it as if the
+            // recipient were a plain address, even when it is a contract whose
+            // `receive()` this transaction will run. So what the recipient *is*
+            // decides the limit, and that is read rather than guessed.
             const tx = await signer.sendTransaction({
                 to,
                 value: amount,
-                gasLimit: EVM_TRANSFER_GAS,
+                gasLimit: nativeSendGas(await hasCode(to, rpcUrl)),
                 gasPrice: price,
             });
 

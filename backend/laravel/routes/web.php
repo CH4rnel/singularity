@@ -47,6 +47,7 @@ use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
 use App\Services\DexAprService;
+use App\Services\GasSponsorService;
 use App\Services\LainChatService;
 use App\Services\WalletPriceService;
 use App\Support\ProfileHandle;
@@ -234,7 +235,7 @@ Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-
  * address. Balances, history, fees and signing are read and done by the
  * browser, never by us.
  */
-Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatService $lain) => Inertia::render('Wallet', [
+Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatService $lain, GasSponsorService $gas) => Inertia::render('Wallet', [
     'solanaRpcUrl' => (string) config('services.staking.solana.public_rpc_url'),
     'moneroPayoutAddress' => $request->user()?->monero_wallet_address,
     'quotes' => $prices->quotes(),
@@ -253,6 +254,15 @@ Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatS
         'enabled' => (bool) config('wallet.ipfs.enabled'),
         'maxBytes' => (int) config('wallet.ipfs.max_bytes'),
         'gateway' => (string) config('ipfs.gateway'),
+    ],
+    // Whether fees can be sponsored at all, which is a question of
+    // configuration and costs nothing to answer. How much is in the tank and
+    // whether *this* address qualifies are live questions, and the browser asks
+    // them at /api/wallet/gas when it has a reason to — rendering this page
+    // must not wait on an RPC.
+    'sponsor' => [
+        'enabled' => $gas->enabled(),
+        'chain' => 'cyberia',
     ],
 ]))->name('wallet');
 

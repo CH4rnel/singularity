@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ExternalLink } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
+import GasSponsor from '@/components/wallet/GasSponsor.vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
@@ -88,6 +89,18 @@ const feeText = computed(() =>
         ? '—'
         : `${formatUnits(quote.value.fee, 18, 6)} ${symbol.value}`,
 );
+
+/** The coin the mint fee is paid in, which is not the thing being minted. */
+const gasBalance = computed(() =>
+    chainId.value === null
+        ? null
+        : (props.wallet.balances.value[chainId.value]?.value ?? null),
+);
+
+/** Gas arrived from the station; re-read the balance that was short. */
+const onFunded = (): void => {
+    void props.wallet.refreshBalances();
+};
 
 const pickImage = (event: Event): void => {
     const file = (event.target as HTMLInputElement).files?.[0] ?? null;
@@ -265,6 +278,22 @@ onMounted(() => {
             <p class="cw-note cw-note-warn" style="margin-top: 14px">
                 <span>{{ t('mintPermanent') }}</span>
             </p>
+
+            <!--
+              A mint is a contract call and costs more gas than a transfer, so
+              this is where a wallet with no coin discovers it. Silent unless
+              the fee above is genuinely out of reach.
+            -->
+            <GasSponsor
+                v-if="chainId !== null"
+                :chain="chainId"
+                :address="account?.address"
+                :fee="quote?.fee ?? null"
+                :gas-balance="gasBalance"
+                :symbol="symbol"
+                :decimals="18"
+                @funded="onFunded"
+            />
 
             <p v-if="failure" class="cw-note cw-note-bad" style="margin-top: 12px">
                 <span>{{ failure }}</span>

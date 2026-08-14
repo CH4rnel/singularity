@@ -179,10 +179,12 @@ export type {
 export { evmChatKey, keySource, seedSource } from '@/lib/wallet/keys';
 export type { WalletKeySource } from '@/lib/wallet/keys';
 export {
+    EVM_CONTRACT_SEND_GAS_CAP,
     WALLET_CHAINS,
     WALLET_FAMILY_GROUPS,
     WALLET_FEE_TIERS,
     formatUnits,
+    nativeSendGas,
     parseUnits,
     setCustomWalletChains,
     walletChain,

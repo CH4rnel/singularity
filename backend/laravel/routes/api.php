@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAuthController;
+use App\Http\Controllers\Api\WalletGasController;
 use App\Http\Controllers\Api\WalletIpfsController;
 use App\Http\Middleware\AuthenticateAiApiKey;
 use App\Services\WalletPriceService;
@@ -32,6 +33,12 @@ Route::prefix('wallet')->group(function () {
     // and can run any node command, so the browser never talks to it directly.
     Route::post('ipfs/file', [WalletIpfsController::class, 'file'])->middleware('throttle:20,1');
     Route::post('ipfs/page', [WalletIpfsController::class, 'page'])->middleware('throttle:20,1');
+
+    // Sponsored fees on Cyberia: an address that owns something here but holds
+    // no CYBER is handed enough CYBER to move it. Unsigned on purpose — a drip
+    // can only ever arrive at the address that was named. See GasSponsorService.
+    Route::get('gas', [WalletGasController::class, 'status'])->middleware('throttle:60,1');
+    Route::post('gas/claim', [WalletGasController::class, 'claim'])->middleware('throttle:10,1');
 });
 
 // Solana wallet auth (Phantom)

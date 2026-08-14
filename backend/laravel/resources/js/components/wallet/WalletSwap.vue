@@ -7,6 +7,7 @@ import {
     RefreshCw,
 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import GasSponsor from '@/components/wallet/GasSponsor.vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
@@ -753,6 +754,11 @@ const sign = async (): Promise<void> => {
     void props.wallet.refreshHistory(props.chain);
 };
 
+/** Gas arrived from the station: only the coin balance changed. */
+const onFunded = (): void => {
+    void props.wallet.refreshBalances();
+};
+
 const reset = (): void => {
     phase.value = 'compose';
     hash.value = null;
@@ -1390,6 +1396,17 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                         }}
                     </span>
                 </p>
+
+                <!-- The station pays fees on Cyberia; silent everywhere else. -->
+                <GasSponsor
+                    :chain="props.chain"
+                    :address="account?.address"
+                    :fee="fee"
+                    :gas-balance="nativeBalance"
+                    :symbol="chain.symbol"
+                    :decimals="chain.decimals"
+                    @funded="onFunded"
+                />
 
                 <p
                     v-if="failure"

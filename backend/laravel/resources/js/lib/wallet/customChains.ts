@@ -1,6 +1,11 @@
 import { JsonRpcProvider, isAddress } from 'ethers';
 import { EVM_CHAINS } from '@/lib/evmChains';
-import { WALLET_FEE_TIERS, utxoChain } from '@/lib/wallet/chains';
+import {
+    EVM_CONTRACT_SEND_GAS_CAP,
+    WALLET_FEE_TIERS,
+    nativeSendGas,
+    utxoChain,
+} from '@/lib/wallet/chains';
 import type { WalletChain, WalletFeeTier } from '@/lib/wallet/chains';
 import {
     ERC20_TRANSFER_GAS_CAP,
@@ -112,7 +117,7 @@ export const customNetworkTag = (name: string, symbol: string): string => {
     ).toUpperCase();
 };
 
-/** A plain native transfer, the only shape this wallet sends on an EVM chain. */
+/** A plain native transfer to an address that is only an address. */
 const EVM_TRANSFER_GAS = 21_000n;
 
 const EVM_TIER_MULTIPLIER: Record<WalletFeeTier, [bigint, bigint]> = {
@@ -184,8 +189,23 @@ const customEvmChain = (network: CustomEvmNetwork): WalletChain => {
         tokensNote: 'tokensNoIndexer',
         readToken: (contract, owner, rpcUrl) =>
             readErc20(provider(rpcUrl), contract, owner),
-        fetchFees: async ({ token }) => {
-            const gas = token ? ERC20_TRANSFER_GAS_CAP : EVM_TRANSFER_GAS;
+        hasCode: async (address, rpcUrl) => {
+            try {
+                const code = await provider(rpcUrl).getCode(address);
+
+                return code !== '0x' && code !== '0x0';
+            } catch {
+                // Unreadable is answered "contract": overpaying a plain
+                // address costs nothing, underpaying a contract loses the fee.
+                return true;
+            }
+        },
+        fetchFees: async ({ token, toContract }) => {
+            const gas = token
+                ? ERC20_TRANSFER_GAS_CAP
+                : toContract
+                  ? EVM_CONTRACT_SEND_GAS_CAP
+                  : EVM_TRANSFER_GAS;
 
             return Promise.all(
                 WALLET_FEE_TIERS.map(async (tier) => ({
@@ -194,7 +214,7 @@ const customEvmChain = (network: CustomEvmNetwork): WalletChain => {
                     basis: `network price × ${
                         Number(EVM_TIER_MULTIPLIER[tier][0]) /
                         Number(EVM_TIER_MULTIPLIER[tier][1])
-                    }${token ? ` × ${gas} gas` : ''}`,
+                    }${token || toContract ? ` × ${gas} gas` : ''}`,
                 })),
             );
         },
@@ -219,10 +239,16 @@ const customEvmChain = (network: CustomEvmNetwork): WalletChain => {
                 return sendErc20(signer, token, to, amount, price);
             }
 
+            // Paying a contract runs its code on this transaction's gas, and
+            // 21000 does not cover a single opcode of it. See nativeSendGas.
+            const code = await provider()
+                .getCode(to)
+                .catch(() => '0x1');
+
             const tx = await signer.sendTransaction({
                 to,
                 value: amount,
-                gasLimit: EVM_TRANSFER_GAS,
+                gasLimit: nativeSendGas(code !== '0x' && code !== '0x0'),
                 gasPrice: price,
             });
 

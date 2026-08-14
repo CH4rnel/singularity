@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { CircleCheck, CircleX, Loader, RefreshCw } from 'lucide-vue-next';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import GasSponsor from '@/components/wallet/GasSponsor.vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import StatusPill from '@/components/wallet/StatusPill.vue';
@@ -95,8 +96,21 @@ const gasBalance = computed(
     () => props.wallet.balances.value[props.chain]?.value ?? null,
 );
 
+/**
+ * Whether the recipient has code behind it.
+ *
+ * It changes the fee, so it is part of the quote and not a detail: a coin sent
+ * to a contract runs that contract's code on this transaction's gas, and the
+ * 21000 that pays a plain address does not cover a single opcode of it.
+ */
+const toIsContract = ref(false);
+
 const quotes = computed(() =>
-    props.wallet.feesFor(props.chain, asset.value?.address ?? null),
+    props.wallet.feesFor(
+        props.chain,
+        asset.value?.address ?? null,
+        toIsContract.value,
+    ),
 );
 
 const fee = computed(
@@ -293,12 +307,72 @@ const reset = (): void => {
 };
 
 const loadFees = (): void => {
-    void props.wallet.refreshFees(props.chain, asset.value?.address ?? null);
+    void props.wallet.refreshFees(
+        props.chain,
+        asset.value?.address ?? null,
+        toIsContract.value,
+    );
+};
+
+/** Pending recipient lookup, so typing an address does not spray reads. */
+let codeCheck: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Ask what the recipient is, once they have typed enough to be asking about.
+ *
+ * A wrong answer here is the difference between a transfer and a transfer that
+ * reverts out of gas and keeps the fee, so an unreadable node is treated as
+ * "contract" — the expensive-but-working side of the guess.
+ */
+const checkRecipient = (): void => {
+    if (codeCheck !== null) {
+        clearTimeout(codeCheck);
+    }
+
+    if (!addressValid.value) {
+        if (toIsContract.value) {
+            toIsContract.value = false;
+            loadFees();
+        }
+
+        return;
+    }
+
+    const address = to.value.trim();
+
+    codeCheck = setTimeout(async () => {
+        const isContract = await props.wallet.recipientIsContract(
+            props.chain,
+            address,
+        );
+
+        // The field may have moved on while the node was answering.
+        if (address !== to.value.trim()) {
+            return;
+        }
+
+        toIsContract.value = isContract;
+        loadFees();
+    }, 400);
+};
+
+/**
+ * Gas arrived from the station. The balance that was too small to pay a fee is
+ * the one thing that changed, so it is the one thing re-read.
+ */
+const onFunded = (): void => {
+    void props.wallet.refreshBalances();
 };
 
 onMounted(() => {
     loadFees();
     void props.wallet.refreshTokens(props.chain);
+});
+
+onBeforeUnmount(() => {
+    if (codeCheck !== null) {
+        clearTimeout(codeCheck);
+    }
 });
 
 watch(
@@ -310,10 +384,15 @@ watch(
         // selected across a network switch would price and sign it against a
         // contract that is not there.
         asset.value = null;
+        // And so does the answer about the recipient: the same address is a
+        // contract on one network and nothing at all on the next.
+        toIsContract.value = false;
         loadFees();
         void props.wallet.refreshTokens(props.chain);
     },
 );
+
+watch(to, checkRecipient);
 
 // Each asset is priced separately, because moving a token costs several times
 // what moving the coin does.
@@ -621,6 +700,35 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                             })
                         }}
                     </span>
+                </p>
+
+                <!--
+                  On Cyberia there is something to be done about a fee that
+                  cannot be paid: ask the station for it. Renders nothing on any
+                  other chain, and nothing when this wallet can already pay.
+                -->
+                <GasSponsor
+                    :chain="props.chain"
+                    :address="account?.address"
+                    :fee="fee"
+                    :gas-balance="gasBalance"
+                    :symbol="chain.symbol"
+                    :decimals="chain.decimals"
+                    @funded="onFunded"
+                />
+
+                <!--
+                  Paying a contract is a contract call, and the fee above says
+                  so. Worth a sentence rather than a silently larger number:
+                  the same address pasted twice costs different amounts
+                  depending on what is behind it.
+                -->
+                <p
+                    v-if="toIsContract && asset === null"
+                    class="cw-note"
+                    style="margin-top: 10px"
+                >
+                    <span>{{ t('toContractNote') }}</span>
                 </p>
 
                 <div class="cw-label" style="margin: 22px 0 8px">

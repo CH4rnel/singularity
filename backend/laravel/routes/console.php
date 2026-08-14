@@ -38,3 +38,7 @@ Schedule::command('wallet:chat-prune')->daily()->withoutOverlapping();
 // The inference API's metering log is a quota and an invoice, not an archive
 // of who asked what — drop rows once they are past the retention window.
 Schedule::command('ai:prune-usage')->daily()->withoutOverlapping();
+// Sponsored fees fail silently: when the tank or the operator key runs dry the
+// button simply stops working, and nobody reports a wallet that never offered
+// them anything. Reads only, and it shouts at most once every six hours.
+Schedule::command('gas:station --alert')->hourly()->withoutOverlapping();

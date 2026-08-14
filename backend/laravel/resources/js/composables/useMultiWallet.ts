@@ -137,8 +137,18 @@ export type WalletRpcEndpoints = Partial<Record<WalletChainId, string>>;
  * coin does, so one quote per chain would price a USDC transfer as if it were
  * a CYBER one — and the sentence above the signature would be wrong.
  */
-const feeKey = (chain: WalletChainId, token: string | null): string =>
-    token ? `${chain}:${token.toLowerCase()}` : chain;
+const feeKey = (
+    chain: WalletChainId,
+    token: string | null,
+    toContract = false,
+): string =>
+    token
+        ? `${chain}:${token.toLowerCase()}`
+        : // Paying a contract in the coin runs the contract's code on this
+          // transaction's gas, so it is its own quote and not the coin's.
+          toContract
+          ? `${chain}@contract`
+          : chain;
 
 /** The session object the wallet page hands to its screens. */
 export type MultiWallet = ReturnType<typeof useMultiWallet>;
@@ -844,6 +854,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     const refreshFees = async (
         chainId: WalletChainId,
         token: string | null = null,
+        toContract = false,
     ): Promise<void> => {
         const chain = walletChain(chainId);
         const account = accounts.value.find(
@@ -857,15 +868,38 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         try {
             fees.value = {
                 ...fees.value,
-                [feeKey(chainId, token)]: await chain.fetchFees({
+                [feeKey(chainId, token, toContract)]: await chain.fetchFees({
                     address: account.address,
                     rpcUrl: rpcFor(chainId),
                     token,
+                    toContract,
                 }),
             };
         } catch {
-            fees.value = { ...fees.value, [feeKey(chainId, token)]: [] };
+            fees.value = {
+                ...fees.value,
+                [feeKey(chainId, token, toContract)]: [],
+            };
         }
+    };
+
+    /**
+     * Whether an address has code behind it.
+     *
+     * Asked by the send screen about a recipient, because paying a contract
+     * costs several times what paying a plain address does and the quote has
+     * to say so before the sentence above the signature is read. Chains that
+     * cannot answer say "no", which is the shape of every non-EVM chain here.
+     */
+    const recipientIsContract = async (
+        chainId: WalletChainId,
+        address: string,
+    ): Promise<boolean> => {
+        const chain = walletChain(chainId);
+
+        return chain.hasCode
+            ? chain.hasCode(address, rpcFor(chainId))
+            : false;
     };
 
     /**
@@ -1204,8 +1238,12 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         tokens: computed(() => tokens.value),
         manualTokens: computed(() => manualTokens.value),
         /** The quote for one asset — the native coin when `token` is null. */
-        feesFor: (chainId: WalletChainId, token: string | null = null) =>
-            fees.value[feeKey(chainId, token)] ?? [],
+        feesFor: (
+            chainId: WalletChainId,
+            token: string | null = null,
+            toContract = false,
+        ) => fees.value[feeKey(chainId, token, toContract)] ?? [],
+        recipientIsContract,
         refreshTokens,
         addToken,
         removeToken,

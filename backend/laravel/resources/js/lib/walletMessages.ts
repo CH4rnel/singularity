@@ -237,9 +237,35 @@ export const walletMessages: Messages = {
             "Anyone can deploy a token with any name. A matching symbol is not proof of anything — check this contract against the project's own site before you send to it or trade it.",
         tokenGone:
             'This token is no longer on the list. A contract you hid, or one the index dropped once the balance reached zero.',
+        toContractNote:
+            'There is a contract at this address, not a person. Paying one runs its code on your gas, so this transfer costs several times what paying a plain address costs — the fee below already accounts for it, and whatever is not used comes back.',
         insufficientGasTitle: 'Not enough {gas} for the fee',
         insufficientGasBody:
             'Moving a token is paid for in {gas}, not in {symbol}. You need {amount} {gas} more.',
+
+        // Sponsored fees. Every one of these is a different place to go next,
+        // which is why none of them is "unavailable".
+        sponsorTitle: 'The fee here can be paid for you',
+        sponsorBody:
+            'Cyberia runs a gas station. This wallet already owns something on this network, so it can be handed {amount} {symbol} to pay its own fees with. The coin arrives at this address, and you sign exactly what you were about to sign.',
+        sponsorAction: 'Have my fee paid',
+        sponsorAsking: 'Sending…',
+        sponsorSent: '{symbol} arrived. The fee is covered — sign when ready.',
+        sponsorTooSmall:
+            'The station hands over a fixed amount, and this fee is larger than it. This one has to be topped up by hand.',
+        sponsorDisabled: 'Fees are not being sponsored at the moment.',
+        sponsorPaused: 'The gas station is stopped at the moment.',
+        sponsorEmpty:
+            'The gas station has run out of {symbol}. It is refilled by hand, so this is temporary.',
+        sponsorHoldsNothing:
+            'The station pays for addresses that already own something on Cyberia — a token, an NFT — because that is what a fee is for moving. This one owns nothing here yet, so there is nothing to pay for.',
+        sponsorCoolingDown:
+            'This address was sponsored recently. It can ask again in about {hours} h.',
+        sponsorDailyCap:
+            "The station has spent today's budget. It starts again at midnight UTC.",
+        sponsorQuota: 'Too many requests from here today.',
+        sponsorUnreadable:
+            'Cyberia could not be read just now, so the station is not answering. Try again shortly.',
         signSentenceToken:
             'Transfer {amount} {symbol} from your {chain} account to {to} on {network}, paying up to {fee} {gas} in network fees.',
 
@@ -1047,9 +1073,33 @@ export const walletMessages: Messages = {
             'Развернуть токен с любым именем может кто угодно. Совпадение тикера ничего не доказывает — сверьте контракт с сайтом самого проекта, прежде чем отправлять на него или менять его.',
         tokenGone:
             'Этого токена больше нет в списке: вы его скрыли или индекс убрал его, когда баланс стал нулевым.',
+        toContractNote:
+            'По этому адресу находится контракт, а не человек. Платёж контракту исполняет его код за ваш газ, поэтому такой перевод стоит в несколько раз дороже перевода на обычный адрес — комиссия ниже это уже учитывает, а неизрасходованное вернётся.',
         insufficientGasTitle: 'Не хватает {gas} на комиссию',
         insufficientGasBody:
             'Перевод токена оплачивается в {gas}, а не в {symbol}. Не хватает {amount} {gas}.',
+
+        sponsorTitle: 'Комиссию могут оплатить за вас',
+        sponsorBody:
+            'В Cyberia работает газовая станция. На этом кошельке в этой сети уже что-то есть, поэтому ему можно выдать {amount} {symbol} на комиссии. Монета придёт на этот же адрес, а подписываете вы сами и ровно то, что собирались.',
+        sponsorAction: 'Оплатить комиссию за меня',
+        sponsorAsking: 'Отправляем…',
+        sponsorSent: '{symbol} пришли. Комиссия покрыта — можно подписывать.',
+        sponsorTooSmall:
+            'Станция выдаёт фиксированную сумму, и эта комиссия больше неё. Такую придётся пополнить самому.',
+        sponsorDisabled: 'Сейчас комиссии не спонсируются.',
+        sponsorPaused: 'Газовая станция сейчас остановлена.',
+        sponsorEmpty:
+            'В газовой станции закончился {symbol}. Её пополняют руками, так что это ненадолго.',
+        sponsorHoldsNothing:
+            'Станция платит за адреса, у которых в Cyberia уже что-то есть — токен, NFT, — потому что комиссия и нужна, чтобы это двигать. Здесь пока пусто, и платить не за что.',
+        sponsorCoolingDown:
+            'Этому адресу недавно уже выдавали. Попросить снова можно примерно через {hours} ч.',
+        sponsorDailyCap:
+            'Станция израсходовала дневной лимит. Он начинается заново в полночь UTC.',
+        sponsorQuota: 'Слишком много запросов отсюда за сегодня.',
+        sponsorUnreadable:
+            'Сейчас не удалось прочитать Cyberia, станция не отвечает. Попробуйте чуть позже.',
         signSentenceToken:
             'Перевод {amount} {symbol} со счёта {chain} на {to} в сети {network}, комиссия сети — до {fee} {gas}.',
 
@@ -1851,9 +1901,31 @@ export const walletMessages: Messages = {
             '任何人都能用任何名字发一个代币。符号对得上什么也证明不了 — 在你往它转账或交易之前，拿项目自己的官网核对这个合约地址。',
         tokenGone:
             '这个代币已经不在列表里了。可能是你隐藏了它，也可能是余额归零后索引把它去掉了。',
+        toContractNote:
+            '这个地址上是一个合约，不是人。给合约付款会用你的 gas 执行它的代码，所以这笔转账比转给普通地址贵好几倍 — 下面的手续费已经算进去了，没用掉的部分会退回。',
         insufficientGasTitle: '{gas} 不够付手续费',
         insufficientGasBody:
             '转移代币是用 {gas} 付费的，不是 {symbol}。你还差 {amount} {gas}。',
+
+        sponsorTitle: '这里的手续费可以由我们代付',
+        sponsorBody:
+            'Cyberia 有一座加油站。这个钱包在这条网络上已经持有东西，所以可以领取 {amount} {symbol} 来支付自己的手续费。币会打到这个地址上，签名依然由你自己完成，签的还是你本来要签的那笔。',
+        sponsorAction: '让加油站付这笔手续费',
+        sponsorAsking: '发送中…',
+        sponsorSent: '{symbol} 已到账。手续费够了 — 可以签名了。',
+        sponsorTooSmall:
+            '加油站每次只发固定金额，而这笔手续费比它更高。这一笔需要你自己充值。',
+        sponsorDisabled: '目前不代付手续费。',
+        sponsorPaused: '加油站目前已停止。',
+        sponsorEmpty: '加油站的 {symbol} 用完了。它是人工补充的，所以只是暂时的。',
+        sponsorHoldsNothing:
+            '加油站只为在 Cyberia 上已经持有东西的地址付费 — 代币、NFT — 因为手续费正是用来转移它们的。这个地址还什么都没有，也就没有需要支付的东西。',
+        sponsorCoolingDown:
+            '这个地址刚刚领取过。大约 {hours} 小时后可以再次申请。',
+        sponsorDailyCap: '加油站今天的额度已经用完，UTC 午夜重新开始。',
+        sponsorQuota: '今天从这里发出的请求太多了。',
+        sponsorUnreadable:
+            '暂时读不到 Cyberia，加油站没有回应。请稍后再试。',
         signSentenceToken:
             '从你的 {chain} 账户向 {network} 上的 {to} 转账 {amount} {symbol}，网络手续费最多 {fee} {gas}。',
 
