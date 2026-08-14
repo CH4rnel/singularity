@@ -82,9 +82,18 @@ without asking — the recovery phrase is what brings it back.
 
 Every CYBER.sol buy worth at least `PUMPFUN_MIN_BUY_USD` (default $5) gets its
 own post in `PUMPFUN_ANNOUNCE_CHAT` — amount in SOL and USD, amount in
-CYBER.sol, buyer and transaction on Solscan, a "New Holder!" line when the buyer
-held none before, and the market cap. Leave `PUMPFUN_ANNOUNCE_CHAT` empty to
-turn it off.
+CYBER.sol, buyer and transaction on Solscan, what the buy did to the buyer's
+bag, and the market cap. Leave `PUMPFUN_ANNOUNCE_CHAT` empty to turn it off.
+
+The bag line is "New Holder!" when they held none before and
+"Position: N% Up!" when they did — the growth of everything that address holds
+of the coin, across all of its token accounts, read off the same balances the
+buy itself is read off. A buyer who kept nothing (an arbitrage passing through)
+gets neither line, and neither does growth under `PUMPFUN_MIN_POSITION_PCT`
+(default 1), which would round to "0% Up!". The post is laid out in three
+blocks separated by blank lines — headline and size, the trade, then the
+`PUMPFUN_CHART_URL` / `PUMPFUN_TRADE_URL` links — because Telegram gives every
+line the same weight and an unbroken run of emoji lines reads as one paragraph.
 
 CYBER.sol has graduated off the pump.fun bonding curve, so buys settle on the
 PumpSwap AMM pool its pump.fun page trades against. `bot/pumpfun.py` reads them

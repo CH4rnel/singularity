@@ -284,6 +284,17 @@ PUMPFUN_EMOJI_USD = float(
     os.environ.get("PUMPFUN_EMOJI_USD", str(PUMPFUN_MIN_BUY_USD or 5))
 )
 PUMPFUN_EMOJI_MAX = int(os.environ.get("PUMPFUN_EMOJI_MAX", "40"))
+# A returning buyer gets a "Position: N% Up!" line — how much the bag they
+# already held grew. Rounding makes anything under a percent read as "0% Up!",
+# so below this floor the line is left out rather than printed empty.
+PUMPFUN_MIN_POSITION_PCT = float(os.environ.get("PUMPFUN_MIN_POSITION_PCT", "1"))
+# Footer links, one blank line under the post. Blank turns a link off.
+PUMPFUN_CHART_URL = os.environ.get(
+    "PUMPFUN_CHART_URL", f"https://dexscreener.com/solana/{CYBER_SOL_MINT}"
+)
+PUMPFUN_TRADE_URL = os.environ.get(
+    "PUMPFUN_TRADE_URL", f"https://pump.fun/coin/{CYBER_SOL_MINT}"
+)
 
 # Ecosystem links surfaced as inline URL buttons under /start and /help.
 # Defaults derive the marketplace/pixel-battle pages from the project website.

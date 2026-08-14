@@ -70,6 +70,24 @@ REAL_BUY = _tx(
 )
 
 
+def _top_up(held_before, gained, extra_pre=(), extra_post=()):
+    """A buyer who already holds `held_before` units buying `gained` more."""
+    return _tx(
+        pre=[
+            _balance(19, MINT, POOL, POOL_COIN_PRE, 6),
+            _balance(20, WSOL, POOL, POOL_SOL_PRE, 9),
+            _balance(4, MINT, BUYER, held_before, 6),
+            *extra_pre,
+        ],
+        post=[
+            _balance(19, MINT, POOL, POOL_COIN_PRE - gained, 6),
+            _balance(20, WSOL, POOL, POOL_SOL_POST, 9),
+            _balance(4, MINT, BUYER, held_before + gained, 6),
+            *extra_post,
+        ],
+    )
+
+
 class ParseBuyTest(unittest.TestCase):
     def test_reads_the_real_trade(self):
         buy = pumpfun.parse_buy(REAL_BUY, POOL, MINT)
@@ -90,6 +108,26 @@ class ParseBuyTest(unittest.TestCase):
             post=REAL_BUY["meta"]["postTokenBalances"],
         )
         self.assertFalse(pumpfun.parse_buy(tx, POOL, MINT)["new_holder"])
+
+    def test_position_growth_is_the_bag_it_added_to(self):
+        buy = pumpfun.parse_buy(_top_up(1_000_000_000_000, 340_000_000_000), POOL, MINT)
+        self.assertFalse(buy["new_holder"])
+        self.assertAlmostEqual(buy["position_pct"], 34.0, places=6)
+
+    def test_position_growth_counts_every_account_of_the_buyer(self):
+        """A second token account of the same buyer is the same position."""
+        buy = pumpfun.parse_buy(
+            _top_up(
+                500_000_000_000, 340_000_000_000,
+                extra_pre=[_balance(7, MINT, BUYER, 500_000_000_000, 6)],
+                extra_post=[_balance(7, MINT, BUYER, 500_000_000_000, 6)],
+            ),
+            POOL, MINT,
+        )
+        self.assertAlmostEqual(buy["position_pct"], 34.0, places=6)
+
+    def test_a_new_holder_has_no_position_growth(self):
+        self.assertIsNone(pumpfun.parse_buy(REAL_BUY, POOL, MINT)["position_pct"])
 
     def test_sell_is_not_a_buy(self):
         """Same pool, both deltas reversed."""
@@ -173,6 +211,7 @@ class ParseBuyTest(unittest.TestCase):
         buy = pumpfun.parse_buy(tx, POOL, MINT)
         self.assertEqual(buy["buyer"], arb)
         self.assertFalse(buy["new_holder"])
+        self.assertIsNone(buy["position_pct"])
 
 
 class FormatBuyTest(unittest.TestCase):
@@ -184,20 +223,48 @@ class FormatBuyTest(unittest.TestCase):
 
         self.assertEqual(lines[0], '<a href="https://t.me/cyberia_network_chat">cyber.sol</a> Buy!')
         self.assertEqual(lines[1], "⛓️‍💥🎲" * 11)
-        self.assertEqual(lines[2], "🔀 0.9814 SOL ($52.51)")
-        self.assertEqual(lines[3], "🔀 3 133 447.2 CYBER.sol")
+        # The blank lines are the layout: header, then the trade, then links.
+        self.assertEqual(lines[2], "")
+        self.assertEqual(lines[3], "🔀 0.9814 SOL ($52.51)")
+        self.assertEqual(lines[4], "🔀 3 133 447.2 CYBER.sol")
         self.assertEqual(
-            lines[4],
+            lines[5],
             f'👤 <a href="https://solscan.io/address/{BUYER}">Dox7A7...hSUJ</a> | '
             f'<a href="https://solscan.io/tx/{SIGNATURE}">Txn</a>',
         )
-        self.assertEqual(lines[5], "⬆️ New Holder!")
-        self.assertEqual(lines[6], "💸 Market Cap $22 662")
-        self.assertEqual(len(lines), 7)
+        self.assertEqual(lines[6], "⬆️ New Holder!")
+        self.assertEqual(lines[7], "💸 Market Cap $22 662")
+        self.assertEqual(lines[8], "")
+        self.assertEqual(
+            lines[9],
+            f'📈 <a href="https://dexscreener.com/solana/{MINT}">Chart</a>   '
+            f'🛒 <a href="https://pump.fun/coin/{MINT}">Buy</a>',
+        )
+        self.assertEqual(len(lines), 10)
 
-    def test_returning_buyer_has_no_new_holder_line(self):
-        buy = dict(pumpfun.parse_buy(REAL_BUY, POOL, MINT), new_holder=False)
-        self.assertNotIn("New Holder", pumpfun.format_buy(buy, usd=52.51, market_cap=22662.0))
+    def test_growing_a_position_says_so_instead_of_new_holder(self):
+        buy = pumpfun.parse_buy(_top_up(1_000_000_000_000, 340_000_000_000), POOL, MINT)
+        text = pumpfun.format_buy(buy, usd=52.51, market_cap=22662.0)
+        self.assertIn("⬆️ Position: 34% Up!", text.split("\n"))
+        self.assertNotIn("New Holder", text)
+
+    def test_a_position_that_barely_moved_says_nothing(self):
+        """Rounded, a 0.1% top-up would print as '0% Up!'."""
+        buy = pumpfun.parse_buy(_top_up(1_000_000_000_000, 1_000_000_000), POOL, MINT)
+        self.assertNotIn("Position", pumpfun.format_buy(buy, usd=52.51, market_cap=22662.0))
+
+    def test_a_big_position_jump_is_grouped_like_the_other_numbers(self):
+        buy = pumpfun.parse_buy(_top_up(1_000_000, 12_500_000_000), POOL, MINT)
+        self.assertIn(
+            "⬆️ Position: 1 250 000% Up!",
+            pumpfun.format_buy(buy, usd=52.51, market_cap=22662.0).split("\n"),
+        )
+
+    def test_a_buyer_who_kept_nothing_has_neither_line(self):
+        buy = dict(pumpfun.parse_buy(REAL_BUY, POOL, MINT), new_holder=False, position_pct=None)
+        text = pumpfun.format_buy(buy, usd=52.51, market_cap=22662.0)
+        self.assertNotIn("New Holder", text)
+        self.assertNotIn("Position", text)
 
     def test_unknown_market_cap_is_omitted_never_zero(self):
         buy = pumpfun.parse_buy(REAL_BUY, POOL, MINT)

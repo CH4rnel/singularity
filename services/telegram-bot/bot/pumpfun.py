@@ -26,6 +26,7 @@ from bot.config import (
     PUMPFUN_MARKET_TTL_SECONDS,
     PUMPFUN_TOKEN_LABEL, PUMPFUN_TOKEN_SYMBOL, PUMPFUN_TOKEN_URL,
     PUMPFUN_BUY_EMOJI, PUMPFUN_EMOJI_USD, PUMPFUN_EMOJI_MAX,
+    PUMPFUN_MIN_POSITION_PCT, PUMPFUN_CHART_URL, PUMPFUN_TRADE_URL,
 )
 from bot.utils import _short_addr
 
@@ -219,11 +220,16 @@ def parse_buy(tx: dict, pool: str, mint: str) -> dict | None:
     if buyer is None:
         buyer = keys[0] if keys else None
 
-    held_before = sum(
-        account["amount"]
-        for account in pre.values()
-        if account["mint"] == mint and account["owner"] == buyer
-    )
+    # The whole bag either side of the trade, across every account the buyer
+    # holds this coin in — how much a position that already existed grew by.
+    held_before = held_after = 0
+    for index in set(pre) | set(post):
+        account = post.get(index) or pre[index]
+        if account["mint"] != mint or account["owner"] != buyer:
+            continue
+        held_before += pre.get(index, {}).get("amount", 0)
+        held_after += post.get(index, {}).get("amount", 0)
+    grew = held_after - held_before
 
     signatures = ((tx or {}).get("transaction") or {}).get("signatures") or []
     return {
@@ -234,6 +240,9 @@ def parse_buy(tx: dict, pool: str, mint: str) -> dict | None:
         "sol_amount": sol_delta / 10 ** SOL_DECIMALS,
         # Nothing of this coin before the trade, and it did land with them.
         "new_holder": gained > 0 and held_before == 0,
+        # Growth of an existing bag, in percent. None when there was nothing to
+        # grow (a new holder) or nothing stayed (an arbitrage passing through).
+        "position_pct": grew / held_before * 100 if held_before > 0 and grew > 0 else None,
         "slot": int((tx or {}).get("slot") or 0),
         "tx_index": 0,
         "block_time": (tx or {}).get("blockTime"),
@@ -291,8 +300,33 @@ def _emoji_row(usd: float | None) -> str:
     return PUMPFUN_BUY_EMOJI * max(1, min(int(steps), PUMPFUN_EMOJI_MAX))
 
 
+def _position_line(buy: dict) -> str | None:
+    """What this buy did to the buyer's bag: opened it, or grew it by so much.
+    Nothing at all when they walked away with none of it."""
+    if buy.get("new_holder"):
+        return "⬆️ New Holder!"
+    pct = buy.get("position_pct")
+    if pct is None or pct < PUMPFUN_MIN_POSITION_PCT:
+        return None
+    return f"⬆️ Position: {_fmt_grouped(pct, 0)}% Up!"
+
+
+def _footer() -> str:
+    links = []
+    if PUMPFUN_CHART_URL:
+        links.append(f'📈 <a href="{html.escape(PUMPFUN_CHART_URL, quote=True)}">Chart</a>')
+    if PUMPFUN_TRADE_URL:
+        links.append(f'🛒 <a href="{html.escape(PUMPFUN_TRADE_URL, quote=True)}">Buy</a>')
+    return "   ".join(links)
+
+
 def format_buy(buy: dict, usd: float | None, market_cap: float | None) -> str:
-    """The chat post, in Telegram HTML."""
+    """The chat post, in Telegram HTML.
+
+    Three blocks separated by blank lines — what happened, the trade itself,
+    where to go next — because Telegram sets every line at the same weight and
+    a seven-line wall of emoji reads as one paragraph without them.
+    """
     buyer = buy.get("buyer") or ""
     signature = buy.get("signature") or ""
 
@@ -310,12 +344,17 @@ def format_buy(buy: dict, usd: float | None, market_cap: float | None) -> str:
         f'<a href="{html.escape(PUMPFUN_TOKEN_URL, quote=True)}">'
         f"{html.escape(PUMPFUN_TOKEN_LABEL)}</a> Buy!",
         _emoji_row(usd),
+        "",
         sol_line,
         f"🔀 {_fmt_grouped(buy['token_amount'], 1)} {html.escape(PUMPFUN_TOKEN_SYMBOL)}",
         f"👤 {who} | {txn}",
     ]
-    if buy.get("new_holder"):
-        lines.append("⬆️ New Holder!")
+    position = _position_line(buy)
+    if position:
+        lines.append(position)
     if market_cap:
         lines.append(f"💸 Market Cap ${_fmt_grouped(market_cap, 0)}")
+    footer = _footer()
+    if footer:
+        lines += ["", footer]
     return "\n".join(lines)
