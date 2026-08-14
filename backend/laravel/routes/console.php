@@ -35,3 +35,6 @@ Schedule::command('predictions:resolve')->everyFiveMinutes()->withoutOverlapping
 // undelivered envelopes alike once they are past the retention window, so the
 // server stops holding a record of who talked to whom.
 Schedule::command('wallet:chat-prune')->daily()->withoutOverlapping();
+// The inference API's metering log is a quota and an invoice, not an archive
+// of who asked what — drop rows once they are past the retention window.
+Schedule::command('ai:prune-usage')->daily()->withoutOverlapping();

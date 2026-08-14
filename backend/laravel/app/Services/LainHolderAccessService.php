@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
@@ -15,6 +14,8 @@ use RuntimeException;
 class LainHolderAccessService
 {
     private const CACHE_SECONDS = 30;
+
+    public function __construct(private Erc20SupplyReader $erc20) {}
 
     /**
      * @return array{wallet: string, balance: string, total_supply: string, minimum_balance: string, share_bps: int, qualifies: bool}
@@ -35,20 +36,18 @@ class LainHolderAccessService
      */
     private function liveStatus(string $wallet): array
     {
-        $balance = $this->call('0x70a08231'.str_pad(substr($wallet, 2), 64, '0', STR_PAD_LEFT));
-        $totalSupply = $this->call('0x18160ddd');
+        $rpc = (string) (config('services.ethereum.rpc_url') ?: 'https://rpc.cyberia.church');
+        $token = (string) config('services.lain.token_address');
+
+        ['balance' => $balance, 'total_supply' => $totalSupply] = $this->erc20->holding($rpc, $token, $wallet);
         $minimumShareBps = (int) config('services.lain.minimum_share_bps', 1000);
 
         if (bccomp($totalSupply, '0') <= 0) {
             throw new RuntimeException('LAIN total supply is unavailable.');
         }
 
-        $minimumBalance = bcdiv(
-            bcadd(bcmul($totalSupply, (string) $minimumShareBps), '9999'),
-            '10000',
-            0,
-        );
-        $shareBps = (int) bcdiv(bcmul($balance, '10000'), $totalSupply, 0);
+        $minimumBalance = $this->erc20->minimumBalance($totalSupply, $minimumShareBps);
+        $shareBps = $this->erc20->shareBps($balance, $totalSupply);
 
         return [
             'wallet' => $wallet,
@@ -61,43 +60,5 @@ class LainHolderAccessService
                 bcmul($totalSupply, (string) $minimumShareBps),
             ) >= 0,
         ];
-    }
-
-    private function call(string $data): string
-    {
-        $response = Http::timeout(10)->post(
-            (string) (config('services.ethereum.rpc_url') ?: 'https://rpc.cyberia.church'),
-            [
-                'jsonrpc' => '2.0',
-                'id' => 1,
-                'method' => 'eth_call',
-                'params' => [
-                    [
-                        'to' => (string) config('services.lain.token_address'),
-                        'data' => $data,
-                    ],
-                    'latest',
-                ],
-            ],
-        );
-
-        $result = $response->json('result');
-
-        if (! $response->successful() || ! is_string($result) || ! preg_match('/^0x[0-9a-fA-F]+$/', $result)) {
-            throw new RuntimeException('Cyberia RPC did not return a valid LAIN balance.');
-        }
-
-        return $this->hexToDecimal(substr($result, 2));
-    }
-
-    private function hexToDecimal(string $hex): string
-    {
-        $decimal = '0';
-
-        foreach (str_split(strtolower($hex)) as $digit) {
-            $decimal = bcadd(bcmul($decimal, '16'), (string) hexdec($digit));
-        }
-
-        return $decimal;
     }
 }

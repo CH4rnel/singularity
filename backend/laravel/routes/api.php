@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\Ai\AiKeyController;
+use App\Http\Controllers\Api\Ai\ChatCompletionsController;
+use App\Http\Controllers\Api\Ai\ModelsController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
 use App\Http\Controllers\Api\LaunchpadController;
@@ -9,6 +12,7 @@ use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAuthController;
 use App\Http\Controllers\Api\WalletIpfsController;
+use App\Http\Middleware\AuthenticateAiApiKey;
 use App\Services\WalletPriceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -60,6 +64,38 @@ Route::post('nft/upload', [NFTController::class, 'upload'])->middleware('throttl
 Route::prefix('launchpad')->group(function () {
     Route::get('tokens', [LaunchpadController::class, 'index']);
     Route::post('tokens', [LaunchpadController::class, 'store'])->middleware('throttle:30,1');
+});
+
+/*
+ * The Cyberia inference API: OpenAI-compatible endpoints in front of providers
+ * whose keys live on this server, opened by holding the gate token rather than
+ * by signing up. See config/ai.php and docs/ai-api.md.
+ *
+ * Two halves with different credentials. Key self-service is proved by a
+ * wallet signature (no session, no account); the API itself is proved by the
+ * key that flow hands out, checked in AuthenticateAiApiKey together with the
+ * holding behind it and the quota on it.
+ */
+Route::prefix('ai')->group(function () {
+    Route::post('keys/nonce', [AiKeyController::class, 'nonce'])->middleware('throttle:30,1');
+    Route::post('keys', [AiKeyController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('keys/list', [AiKeyController::class, 'index'])->middleware('throttle:30,1');
+    Route::post('keys/revoke', [AiKeyController::class, 'revoke'])->middleware('throttle:30,1');
+
+    Route::prefix('v1')->group(function () {
+        // Public: what this is, and what it serves. Both are things you need
+        // before you hold anything, so neither sits behind the gate.
+        Route::get('/', [ModelsController::class, 'root'])->middleware('throttle:60,1');
+        Route::get('models', [ModelsController::class, 'index'])->middleware('throttle:60,1');
+
+        Route::middleware(AuthenticateAiApiKey::class)->group(function () {
+            Route::get('me', [AiKeyController::class, 'status']);
+            // Per-key limits are enforced in the middleware; this coarse IP
+            // throttle is only there to keep a flood off the database.
+            Route::post('chat/completions', [ChatCompletionsController::class, 'store'])
+                ->middleware('throttle:120,1');
+        });
+    });
 });
 
 // Cyberia RPC proxy (avoids mixed content on HTTPS sites)
