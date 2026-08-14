@@ -204,6 +204,30 @@ it('honours an origin allowlist when the host sets one', function () use ($call)
         ->assertStatus(403);
 });
 
+/**
+ * The env these upstreams come from is shared with the bridge and the slot
+ * machine, and the machine runs on devnet — prod's `.env` already carries a
+ * devnet URL under a name the mainnet list reads. A devnet node answers a
+ * mainnet address with zero rather than with an error, so the wrong endpoint
+ * would not fail, it would quietly say every account is empty.
+ */
+it('keeps a devnet endpoint out of the mainnet list, and the reverse', function () use ($call) {
+    config([
+        'solana.rpc.upstreams.mainnet' => ['https://api.devnet.solana.com', 'https://public.test'],
+        'solana.rpc.upstreams.devnet' => ['https://api.mainnet-beta.solana.com', 'https://devnet.test'],
+    ]);
+
+    Http::fake([
+        'public.test*' => Http::response(['jsonrpc' => '2.0', 'id' => 7, 'result' => 1]),
+        'devnet.test*' => Http::response(['jsonrpc' => '2.0', 'id' => 7, 'result' => 2]),
+    ]);
+
+    $this->postJson('/api/solana/rpc', $call())->assertOk()->assertJson(['result' => 1]);
+    $this->postJson('/api/solana/rpc/devnet', $call())->assertOk()->assertJson(['result' => 2]);
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'solana.com'));
+});
+
 it('says so plainly when it is switched off', function () use ($call) {
     config(['solana.rpc.enabled' => false]);
     Http::fake();

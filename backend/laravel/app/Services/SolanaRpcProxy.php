@@ -81,7 +81,35 @@ class SolanaRpcProxy
         /** @var array<int, string> $upstreams */
         $upstreams = (array) config('solana.rpc.upstreams.'.$cluster, []);
 
-        return array_values(array_filter($upstreams, fn ($url) => is_string($url) && $url !== ''));
+        return array_values(array_filter(
+            $upstreams,
+            fn ($url) => is_string($url) && $url !== '' && $this->fitsCluster($url, $cluster),
+        ));
+    }
+
+    /**
+     * Keep an endpoint out of the wrong cluster's list.
+     *
+     * A devnet node answers a mainnet address perfectly well — with zero — so
+     * one misplaced URL here reads as "this account is empty" rather than as
+     * an error, everywhere at once. The env is shared with the bridge and the
+     * slot machine, one of which runs on devnet, which makes the mistake a
+     * plausible one rather than a hypothetical.
+     *
+     * A host that names no cluster (a private node) is trusted for whichever
+     * list it was put in.
+     */
+    private function fitsCluster(string $url, string $cluster): bool
+    {
+        $host = strtolower($this->host($url));
+
+        foreach (['devnet', 'testnet', 'mainnet'] as $named) {
+            if (str_contains($host, $named)) {
+                return str_contains(strtolower($cluster), $named);
+            }
+        }
+
+        return true;
     }
 
     public function allows(string $method): bool
