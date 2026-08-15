@@ -1,5 +1,21 @@
 apply plugin: 'com.android.application'
 
+// Release version comes from the build, not from this file: the tag `app-v1.2.3`
+// is what CI turns into 1.2.3 / 10203, so shipping a version never means editing
+// and committing Gradle.
+def appVersionName = System.getenv('CYBERIA_VERSION_NAME') ?: '1.0.0'
+def appVersionCode = System.getenv('CYBERIA_VERSION_CODE') ? System.getenv('CYBERIA_VERSION_CODE').toInteger() : 1
+
+// Signing material never lives in Git (see .gitignore). CI writes this file from
+// repository secrets; on a workstation you write it by hand. Without it the
+// release build is simply unsigned — Gradle still runs, the APK just cannot be
+// installed, which is the honest outcome.
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 android {
     namespace = "church.cyberia.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +23,8 @@ android {
         applicationId "church.cyberia.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +32,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

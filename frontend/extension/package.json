@@ -1,0 +1,21 @@
+{
+    "name": "cyberia-extension",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Cyberia Wallet browser extension (MV3)",
+    "homepage": "https://cyberia.church",
+    "author": "Cyberia <noreply@cyberia.church>",
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+        "build": "node build.mjs",
+        "zip": "node build.mjs --zip",
+        "test": "node --test test/*.test.js"
+    },
+    "dependencies": {
+        "ethers": "^6.16.0"
+    },
+    "devDependencies": {
+        "esbuild": "^0.28.2"
+    }
+}

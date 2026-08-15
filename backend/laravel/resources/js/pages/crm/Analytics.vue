@@ -74,7 +74,7 @@ const props = defineProps<{
     topMembers: TopMember[];
 }>();
 
-const { locale, toggleLocale, t } = useLocale(crmMessages);
+const { nextTag, toggleLocale, t } = useLocale(crmMessages);
 
 const steps = computed(() => [
     { key: 'fVisitors', value: props.funnel.visitors },
@@ -156,7 +156,7 @@ defineOptions({
             <div class="flex items-center gap-2">
                 <Button variant="ghost" size="sm" @click="toggleLocale">
                     <Languages class="h-4 w-4" />
-                    {{ locale === 'ru' ? 'EN' : 'RU' }}
+                    {{ nextTag }}
                 </Button>
                 <Button
                     v-for="window in [7, 30, 90]"

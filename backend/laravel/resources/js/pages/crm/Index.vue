@@ -51,7 +51,7 @@ type Props = {
 
 const props = defineProps<Props>();
 
-const { locale, toggleLocale, t } = useLocale(crmMessages);
+const { nextTag, toggleLocale, t } = useLocale(crmMessages);
 
 const typeVariant: Record<CrmContactType, string> = {
     lead: 'secondary',
@@ -175,7 +175,7 @@ defineOptions({
             <div class="flex flex-wrap items-center gap-2">
                 <Button variant="ghost" size="sm" @click="toggleLocale">
                     <Languages class="h-4 w-4" />
-                    {{ locale === 'ru' ? 'EN' : 'RU' }}
+                    {{ nextTag }}
                 </Button>
                 <Link href="/crm/tasks">
                     <Button variant="outline">

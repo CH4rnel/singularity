@@ -2,6 +2,7 @@ import {
     analytics,
     bridge,
     convert,
+    download,
     farm,
     feed,
     launchpad,
@@ -13,6 +14,7 @@ import {
     predictions,
     staking,
     swap,
+    wallet,
 } from '@/routes';
 import { index as daoIndex } from '@/routes/dao';
 import { index as lainIndex } from '@/routes/lain';
@@ -28,6 +30,31 @@ export type Web3NavGroup = {
     label: string;
     items: Web3NavItem[];
 };
+
+/**
+ * The wallet, alone and ahead of the groups.
+ *
+ * It is not a category and it does not belong inside one: everything under
+ * Trade needs an account and a connected extension, and the wallet is the one
+ * thing here that needs neither. Buried one hover deep it was a page nobody
+ * found, which is exactly what happened.
+ */
+export const walletItem: Web3NavItem = { title: 'Wallet', href: wallet().url };
+
+/**
+ * Where the apps come from, next to the thing they contain.
+ *
+ * Inside a menu group this was unreachable in the only way that matters: the
+ * apps existed for months with no address to send anyone to, so they travelled
+ * as files in chat messages.
+ */
+export const downloadItem: Web3NavItem = {
+    title: 'Get the app',
+    href: download().url,
+};
+
+/** Rendered as plain links ahead of the groups, in this order. */
+export const topLevelItems: Web3NavItem[] = [walletItem, downloadItem];
 
 export const navGroups: Web3NavGroup[] = [
     {

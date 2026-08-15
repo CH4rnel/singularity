@@ -7,6 +7,7 @@ import { ClaudeCliModelProvider, resolveClaudeBin } from "./claude-cli.js";
 import { CodexModelProvider, resolveCodexBin } from "./codex.js";
 import { MockModelProvider } from "./mock.js";
 import { OpenRouterModelProvider } from "./openrouter.js";
+import { OpencodeModelProvider, resolveOpenCodeBin } from "./opencode.js";
 import {
   FallbackModelProvider,
   SwitchableModelProvider,
@@ -18,6 +19,7 @@ const log = createLogger("model");
 export { AnthropicModelProvider, MockModelProvider, OpenRouterModelProvider };
 export { ClaudeCliModelProvider, resolveClaudeBin } from "./claude-cli.js";
 export { CodexModelProvider, resolveCodexBin } from "./codex.js";
+export { OpencodeModelProvider, resolveOpenCodeBin } from "./opencode.js";
 export {
   CHAT_PROVIDER_CHOICES,
   chatProviderLabel,
@@ -53,17 +55,18 @@ function splitArgs(raw?: string): string[] {
  * Pick a model provider from the environment.
  *
  * Base selection order:
- *   1. LAINOS_MODEL_PROVIDER, if set (codex | claude | openrouter | anthropic | mock)
+ *   1. LAINOS_MODEL_PROVIDER, if set (codex | claude | opencode | openrouter | anthropic | mock)
  *   2. OPENROUTER_API_KEY present  -> openrouter
  *   3. ANTHROPIC_API_KEY present   -> anthropic
  *   4. claude CLI on the machine   -> claude
  *   5. otherwise                   -> offline mock
  *
- * `codex` and `claude` run completions through a coding-agent CLI on the
- * machine (ChatGPT / Claude subscription, no API key) and retry a failed call
- * once on their own (LAINOS_CODEX_RETRIES / LAINOS_CLAUDE_RETRIES). `claude`
- * and `anthropic` are the same model family by two routes — subscription CLI
- * vs. API key — and each falls back to the other when its own route is
+ * `codex`, `claude` and `opencode` run completions through a coding-agent CLI
+ * on the machine (ChatGPT / Claude subscription / OpenCode config, no LainOS
+ * API key) and retry a failed call once on their own
+ * (LAINOS_CODEX_RETRIES / LAINOS_CLAUDE_RETRIES / LAINOS_OPENCODE_RETRIES).
+ * `claude` and `anthropic` are the same model family by two routes — subscription
+ * CLI vs. API key — and each falls back to the other when its own route is
  * missing, so "switch to Claude" works with either one configured.
  *
  * Cross-provider fallback is opt-in: LAINOS_MODEL_FALLBACK=<provider> retries
@@ -183,6 +186,28 @@ export function createModelProvider(
           cwd:
             getSetting("LAINOS_CODEX_CWD") ??
             join(getSetting("LAINOS_DATA_DIR") ?? "./data", "codex"),
+          proxy,
+        });
+      }
+      case "opencode": {
+        const bin = resolveOpenCodeBin(getSetting("LAINOS_OPENCODE_BIN"));
+        if (!bin) {
+          log.warn(
+            "opencode selected but no opencode CLI found (PATH, ~/.local/bin or ~/.opencode/bin).",
+          );
+          return undefined;
+        }
+        const timeoutRaw = Number(getSetting("LAINOS_OPENCODE_TIMEOUT_MS"));
+        const retriesRaw = Number(getSetting("LAINOS_OPENCODE_RETRIES"));
+        return new OpencodeModelProvider({
+          bin,
+          models: tierOverrides(getSetting, "LAINOS_OPENCODE_MODEL"),
+          timeoutMs: Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : undefined,
+          retries: Number.isFinite(retriesRaw) && retriesRaw >= 0 ? retriesRaw : undefined,
+          extraArgs: splitArgs(getSetting("LAINOS_OPENCODE_ARGS")),
+          cwd:
+            getSetting("LAINOS_OPENCODE_CWD") ??
+            join(getSetting("LAINOS_DATA_DIR") ?? "./data", "opencode"),
           proxy,
         });
       }

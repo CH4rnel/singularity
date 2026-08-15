@@ -4,19 +4,48 @@ import { useMediaQuery } from '@vueuse/core';
 import { ExternalLink, Languages, Lock } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
+import WalletAccounts from '@/components/wallet/WalletAccounts.vue';
+import WalletAddNetwork from '@/components/wallet/WalletAddNetwork.vue';
+import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
+import WalletBridge from '@/components/wallet/WalletBridge.vue';
+import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
+import WalletChat from '@/components/wallet/WalletChat.vue';
+import WalletDao from '@/components/wallet/WalletDao.vue';
+import WalletEarn from '@/components/wallet/WalletEarn.vue';
+import WalletFeed from '@/components/wallet/WalletFeed.vue';
+import WalletGasStation from '@/components/wallet/WalletGasStation.vue';
+import WalletImportAccount from '@/components/wallet/WalletImportAccount.vue';
+import WalletIpfs from '@/components/wallet/WalletIpfs.vue';
+import WalletLain from '@/components/wallet/WalletLain.vue';
+import WalletLaunchpad from '@/components/wallet/WalletLaunchpad.vue';
 import WalletLocked from '@/components/wallet/WalletLocked.vue';
 import WalletNetworkDetail from '@/components/wallet/WalletNetworkDetail.vue';
+import WalletNft from '@/components/wallet/WalletNft.vue';
+import WalletNftMint from '@/components/wallet/WalletNftMint.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
 import WalletPortfolio from '@/components/wallet/WalletPortfolio.vue';
+import WalletProfile from '@/components/wallet/WalletProfile.vue';
+import WalletProxy from '@/components/wallet/WalletProxy.vue';
 import WalletReceive from '@/components/wallet/WalletReceive.vue';
 import WalletSecurity from '@/components/wallet/WalletSecurity.vue';
 import WalletSend from '@/components/wallet/WalletSend.vue';
+import WalletSwap from '@/components/wallet/WalletSwap.vue';
+import WalletToken from '@/components/wallet/WalletToken.vue';
+import WalletTokens from '@/components/wallet/WalletTokens.vue';
+import WalletTorrent from '@/components/wallet/WalletTorrent.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
-import { isNativeShell } from '@/lib/native';
-import { WALLET_CHAINS } from '@/lib/wallet';
-import type { WalletChainId } from '@/lib/wallet';
+import { isNativeShell, nativeShell } from '@/lib/native';
+import {
+    hideMainButton,
+    setBackButton,
+    setMainButton,
+    telegramHaptic,
+} from '@/lib/telegram';
+import { unreadChatCount } from '@/lib/wallet';
+import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
+import type { BridgeConfig } from '@/lib/wallet/bridge';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -38,10 +67,29 @@ import { walletMessages } from '@/lib/walletMessages';
 const props = defineProps<{
     solanaRpcUrl: string;
     moneroPayoutAddress: string | null;
-    quotes: { prices: Record<string, number | null>; fetchedAt: string };
+    quotes: {
+        prices: Record<string, number | null>;
+        /** Chain id → (lowercased contract → USD price). */
+        tokens: Record<string, Record<string, number>>;
+        fetchedAt: string;
+    };
+    /** Which contract the holders' room counts, and how much of it it wants. */
+    lain: {
+        enabled: boolean;
+        tokenAddress: string;
+        minimumShareBps: number;
+    };
+    /** Which bridge corridors exist, which are open, and where deposits go. */
+    bridge: BridgeConfig;
+    /** The limits this server pins under, so the screens can say them first. */
+    ipfs: {
+        enabled: boolean;
+        maxBytes: number;
+        gateway: string;
+    };
 }>();
 
-const { locale, toggleLocale, t } = useLocale(walletMessages);
+const { nextTag, toggleLocale, t } = useLocale(walletMessages);
 
 // Only Solana takes an override: the server picks that endpoint, while every
 // other chain carries its own public default in the registry.
@@ -58,13 +106,37 @@ const native = isNativeShell();
 
 const desktop = useMediaQuery('(min-width: 1024px)');
 
-type Section = 'portfolio' | 'network' | 'security';
-type Overlay = 'send' | 'receive';
+type Section =
+    | 'portfolio'
+    | 'tokens'
+    | 'token'
+    | 'analytics'
+    | 'chat'
+    | 'accounts'
+    | 'importAccount'
+    | 'network'
+    | 'security'
+    | 'feed'
+    | 'profile'
+    | 'launchpad'
+    | 'dao'
+    | 'lain'
+    | 'nft'
+    | 'nftMint'
+    | 'ipfs'
+    | 'torrent'
+    | 'gas'
+    | 'proxy'
+    | 'earn'
+    | 'bridge'
+    | 'browse';
+type Overlay = 'send' | 'receive' | 'swap' | 'addNetwork';
 
 const section = ref<Section>('portfolio');
 const overlay = ref<Overlay | null>(null);
 const chain = ref<WalletChainId>('cyberia');
 const prices = ref(props.quotes.prices);
+const tokenPrices = ref(props.quotes.tokens ?? {});
 const online = ref(true);
 const error = ref<string | null>(null);
 const payoutSaved = ref(false);
@@ -83,26 +155,327 @@ const stage = computed<'onboarding' | 'locked' | 'app'>(() => {
     return wallet.unlocked.value ? 'app' : 'locked';
 });
 
-/** On desktop the transfer flow is a third column; on mobile it takes over. */
-const asideOverlay = computed(() => (desktop.value ? overlay.value : null));
+/**
+ * On desktop the transfer flow is a third column; on mobile it takes over.
+ * Adding a network is a form rather than a composer, so it always takes the
+ * body — a 392px column would wrap every one of its paired fields.
+ */
+const asideOverlay = computed(() =>
+    desktop.value && overlay.value !== 'addNetwork' ? overlay.value : null,
+);
 
-const bodyOverlay = computed(() => (desktop.value ? null : overlay.value));
+const bodyOverlay = computed(() =>
+    overlay.value === 'addNetwork' || !desktop.value ? overlay.value : null,
+);
 
 const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'portfolio', label: () => t('navPortfolio') },
+    { id: 'tokens', label: () => t('tokens') },
+    { id: 'analytics', label: () => t('navAnalytics') },
+    { id: 'chat', label: () => t('chatTitle') },
     { id: 'network', label: () => t('navActivity') },
+    { id: 'accounts', label: () => t('accounts') },
+    // Three things done *with* a balance rather than three ways of reading
+    // one, which is why they sit apart from the screens above them.
+    { id: 'bridge', label: () => t('bridgeTitle') },
+    { id: 'earn', label: () => t('earnTitle') },
+    { id: 'browse', label: () => t('browseTitle') },
+    { id: 'feed', label: () => t('feed') },
+    { id: 'launchpad', label: () => t('launchpad') },
+    { id: 'nft', label: () => t('nftTitle') },
+    { id: 'dao', label: () => t('dao') },
+    // Listed even for wallets that hold no $LAIN: the room says what it wants
+    // and what this account has, which is the only way to know it exists.
+    { id: 'lain', label: () => t('navLain') },
     { id: 'security', label: () => t('navSecurity') },
 ];
+
+/**
+ * The phone's destinations, and they are what this app is: the wallet, the
+ * messages that wallet sends, the feed, the launchpad, what you own that is
+ * not fungible, the DAO and Lain.
+ *
+ * Messages started life as a shortcut on the portfolio, on the theory that five
+ * labels are all 390px holds. That was wrong in the way that matters: a
+ * correspondence is not a way of reading your holdings, and nobody looks for it
+ * inside them. NFT is here for the same reason — a thing you own is not a way
+ * of reading a balance, and it is where minting, pinning and downloading are
+ * reached from.
+ *
+ * Seven labels is ~56px each on a 390px phone, which the bar spends its
+ * tracking and then a point of its font size to hold; the label is what
+ * survives, because a tab nobody can read is not a destination.
+ *
+ * Everything else genuinely is a place inside one of these: tokens, analytics,
+ * accounts and security are all ways of reading the wallet, reached from the
+ * portfolio.
+ */
+const TABS: { id: Section; label: () => string }[] = [
+    { id: 'portfolio', label: () => t('tabWallet') },
+    { id: 'chat', label: () => t('tabChat') },
+    { id: 'feed', label: () => t('feed') },
+    { id: 'launchpad', label: () => t('tabLaunch') },
+    { id: 'nft', label: () => t('nftTitle') },
+    { id: 'dao', label: () => t('dao') },
+    { id: 'lain', label: () => t('navLain') },
+];
+
+/** Which tab a screen lives under, for the bar's active state. */
+const TAB_OF: Record<Section, Section> = {
+    portfolio: 'portfolio',
+    tokens: 'portfolio',
+    token: 'portfolio',
+    analytics: 'portfolio',
+    chat: 'chat',
+    accounts: 'portfolio',
+    importAccount: 'portfolio',
+    network: 'portfolio',
+    security: 'portfolio',
+    gas: 'portfolio',
+    proxy: 'portfolio',
+    earn: 'portfolio',
+    bridge: 'portfolio',
+    browse: 'browse',
+    feed: 'feed',
+    profile: 'feed',
+    launchpad: 'launchpad',
+    dao: 'dao',
+    lain: 'lain',
+    nft: 'nft',
+    nftMint: 'nft',
+    ipfs: 'nft',
+    torrent: 'nft',
+};
+
+const activeTab = computed(() => TAB_OF[section.value]);
+
+/* ------------------------------------------------------- telegram mini app --- */
+
+/**
+ * Inside Telegram the frame is not ours: the header carries a back arrow and
+ * the bottom carries one main button, and an app that leaves those two wired to
+ * nothing is an app that closes itself when someone tries to go back.
+ */
+const telegram = nativeShell() === 'telegram';
+
+/** Where "back" goes, or null on a screen that is already the top of the app. */
+const telegramBack = computed<(() => void) | null>(() => {
+    if (overlay.value !== null) {
+        return () => {
+            overlay.value = null;
+        };
+    }
+
+    // A screen that was opened from another one goes back to that one, which
+    // is the only answer that matches what the user did to get here.
+    const parent = PARENTS[section.value];
+
+    if (parent) {
+        return () => openSection(parent);
+    }
+
+    if (section.value !== 'portfolio' && activeTab.value === 'portfolio') {
+        return () => openSection('portfolio');
+    }
+
+    return null;
+});
+
+if (telegram) {
+    let releaseMain = (): void => {};
+    let releaseBack = (): void => {};
+
+    watch(
+        // The main button mirrors the screen's primary action, and *only*
+        // where that action is a tap. Signing is a hold in this wallet — a
+        // gesture a page cannot perform and a thumb cannot perform by accident
+        // — so the signing screens leave Telegram's button hidden rather than
+        // quietly demoting a hold to a tap.
+        () => [stage.value, section.value, overlay.value] as const,
+        () => {
+            releaseMain();
+
+            if (
+                stage.value === 'app' &&
+                section.value === 'portfolio' &&
+                overlay.value === null
+            ) {
+                releaseMain = setMainButton({
+                    text: t('send').toUpperCase(),
+                    onClick: () => {
+                        telegramHaptic();
+                        openSend();
+                    },
+                });
+            } else {
+                hideMainButton();
+                releaseMain = () => {};
+            }
+        },
+        { immediate: true },
+    );
+
+    watch(
+        telegramBack,
+        (handler) => {
+            releaseBack();
+            releaseBack = setBackButton(handler);
+        },
+        { immediate: true },
+    );
+
+    onBeforeUnmount(() => {
+        releaseMain();
+        releaseBack();
+    });
+}
+
+/**
+ * Messages waiting, for the badge on the tab bar and the rail.
+ *
+ * Counted from the envelopes already cached on this device — the metadata
+ * around a message, never what is inside one — so the number costs no key and
+ * survives a locked vault. It is a `ref` and not a computed because
+ * localStorage is not reactive: the chat screen says when it has changed, and
+ * an account switch changes whose mail this is.
+ *
+ * It deliberately does not poll the relay in the background. Asking for mail
+ * takes a signed proof, and a wallet that signs things nobody asked for is
+ * worse than a badge that is one visit out of date.
+ */
+const unread = ref(0);
+
+const refreshUnread = (): void => {
+    const evm = wallet.accounts.value.find(
+        (account) => account.family === 'evm',
+    )?.address;
+
+    unread.value = evm ? unreadChatCount(evm) : 0;
+};
+
+/**
+ * The network chip only belongs above the screens that are about one network.
+ * On the feed or in the DAO it would be answering a question nobody asked.
+ */
+const showNetworkBar = computed(
+    () => activeTab.value === 'portfolio' || overlay.value !== null,
+);
 
 const openSection = (next: Section): void => {
     section.value = next;
     overlay.value = null;
 };
 
+/** Whose profile the profile screen is about — null means this wallet's own. */
+const profileAddress = ref<string | null>(null);
+
+const openProfile = (address: string | null): void => {
+    profileAddress.value = address;
+    openSection('profile');
+};
+
+/**
+ * Which navigation entry a screen belongs under. A few screens are places you
+ * arrive at from another one rather than destinations of their own, so the
+ * navigation keeps pointing at where they came from.
+ */
+const PARENTS: Partial<Record<Section, Section>> = {
+    token: 'tokens',
+    importAccount: 'accounts',
+    gas: 'portfolio',
+    proxy: 'security',
+    earn: 'portfolio',
+    bridge: 'portfolio',
+    profile: 'feed',
+    nftMint: 'nft',
+    ipfs: 'nft',
+    torrent: 'nft',
+};
+
+const current = computed<Section>(
+    () => PARENTS[section.value] ?? section.value,
+);
+
+/** The asset the send screen opens on: a token row, or the network's coin. */
+const sendToken = ref<WalletTokenBalance | null>(null);
+
+/** The contract the token screen is about, and where it was opened from. */
+const tokenContract = ref<string | null>(null);
+const tokenOrigin = ref<Section>('tokens');
+
+const openSend = (token?: WalletTokenBalance): void => {
+    sendToken.value = token ?? null;
+    overlay.value = 'send';
+};
+
+/**
+ * Trading, from wherever the asset was tapped. A swap belongs to one network —
+ * it is that network's router, that network's pools and that network's gas —
+ * so it opens as a composer over the network the asset lives on, exactly like
+ * sending does.
+ */
+const swapToken = ref<WalletTokenBalance | null>(null);
+
+/** A contract to buy, from a screen that knows an address and nothing else. */
+const swapContract = ref<string | null>(null);
+
+const openSwap = (token?: WalletTokenBalance): void => {
+    swapToken.value = token ?? null;
+    swapContract.value = null;
+    overlay.value = 'swap';
+};
+
+/**
+ * Buying one specific token — a launch, so far. It lives on the launchpad's
+ * chain, and the swap screen reads the contract itself rather than trusting
+ * the row that was tapped for anything but its address.
+ */
+const openSwapContract = (contract: string): void => {
+    swapToken.value = null;
+    swapContract.value = contract;
+    chain.value = 'cyberia';
+    overlay.value = 'swap';
+};
+
+/**
+ * A CID the mint screen should open with.
+ *
+ * Publishing a file and minting a token that points at it are two acts, and
+ * the second one costs gas — so the CID travels between the screens rather
+ * than one screen quietly doing both.
+ */
+const mintPreset = ref<string | null>(null);
+
+const openMint = (uri: string | null): void => {
+    mintPreset.value = uri;
+    openSection('nftMint');
+};
+
 const openChain = (next: WalletChainId): void => {
     chain.value = next;
     section.value = 'network';
     overlay.value = null;
+};
+
+/**
+ * One token, from wherever it was tapped. A token is only ever reached through
+ * a network — its own or the list's — so the chain moves with it and the send
+ * screen that opens next is already pointed at the right account.
+ */
+const openToken = (next: WalletChainId, token: WalletTokenBalance): void => {
+    tokenOrigin.value = section.value === 'network' ? 'network' : 'tokens';
+    chain.value = next;
+    tokenContract.value = token.address;
+    section.value = 'token';
+    overlay.value = null;
+};
+
+const sendChainToken = (
+    next: WalletChainId,
+    token: WalletTokenBalance,
+): void => {
+    chain.value = next;
+    openSend(token);
 };
 
 const refreshPrices = async (): Promise<void> => {
@@ -112,11 +485,13 @@ const refreshPrices = async (): Promise<void> => {
         });
 
         if (response.ok) {
-            prices.value = (
-                (await response.json()) as {
-                    prices: Record<string, number | null>;
-                }
-            ).prices;
+            const quotes = (await response.json()) as {
+                prices: Record<string, number | null>;
+                tokens?: Record<string, Record<string, number>>;
+            };
+
+            prices.value = quotes.prices;
+            tokenPrices.value = quotes.tokens ?? {};
         }
     } catch {
         // Quotes are a nicety; the balances underneath them are the product.
@@ -131,11 +506,21 @@ const load = async (): Promise<void> => {
 
     await Promise.all([
         wallet.refreshBalances(),
-        ...WALLET_CHAINS.filter((entry) => entry.fetchHistory).map((entry) =>
-            wallet.refreshHistory(entry.id),
-        ),
+        ...wallet.chains.value
+            .filter((entry) => entry.fetchHistory)
+            .map((entry) => wallet.refreshHistory(entry.id)),
+        ...wallet.chains.value
+            .filter((entry) => entry.fetchTokens)
+            .map((entry) => wallet.refreshTokens(entry.id)),
         refreshPrices(),
     ]);
+};
+
+/** A network the user just derived opens on its own detail screen. */
+const networkAdded = (added: WalletChainId): void => {
+    overlay.value = null;
+    openChain(added);
+    void load();
 };
 
 const adopt = async (phrase: string, password: string): Promise<void> => {
@@ -172,6 +557,7 @@ onMounted(() => {
     trackConnection();
     window.addEventListener('online', trackConnection);
     window.addEventListener('offline', trackConnection);
+    refreshUnread();
     void load();
 });
 
@@ -180,10 +566,37 @@ onBeforeUnmount(() => {
     window.removeEventListener('offline', trackConnection);
 });
 
+/**
+ * Switching accounts reloads everything, because everything on screen belonged
+ * to the account that was active a moment ago.
+ *
+ * An imported key or a watched address exists on one chain only, so a screen
+ * still pointing at a network this account does not have is moved to one it
+ * does — otherwise the network detail would render an account that is not
+ * there.
+ */
+watch(
+    () => wallet.activeAccountId.value,
+    () => {
+        if (
+            !wallet.accounts.value.some(
+                (account) => account.chain === chain.value,
+            )
+        ) {
+            chain.value = wallet.accounts.value[0]?.chain ?? 'cyberia';
+        }
+
+        refreshUnread();
+        void load();
+    },
+);
+
 // A vault that has just been unlocked has nothing loaded behind it yet.
 watch(
     () => wallet.unlocked.value,
     (unlocked) => {
+        refreshUnread();
+
         if (unlocked) {
             void load();
         } else {
@@ -201,7 +614,7 @@ watch(
         class="cw"
         :class="
             native
-                ? 'flex flex-1 flex-col p-3 sm:p-4'
+                ? 'flex min-h-0 flex-1 flex-col p-3 sm:p-4'
                 : 'mx-auto max-w-[1400px] p-4 sm:p-6'
         "
     >
@@ -261,7 +674,7 @@ watch(
             }}</span>
             <button type="button" class="cw-ghost" @click="toggleLocale">
                 <Languages :size="14" aria-hidden="true" />
-                {{ locale === 'ru' ? 'EN' : 'RU' }}
+                {{ nextTag }}
             </button>
             <!--
               The app is the wallet, not only the wallet: without this the rest
@@ -337,11 +750,16 @@ watch(
                         type="button"
                         class="cw-rail-item"
                         :aria-current="
-                            section === entry.id ? 'page' : undefined
+                            current === entry.id ? 'page' : undefined
                         "
                         @click="openSection(entry.id)"
                     >
                         {{ entry.label() }}
+                        <span
+                            v-if="entry.id === 'chat' && unread > 0"
+                            class="cw-badge"
+                            >{{ unread }}</span
+                        >
                     </button>
                 </div>
 
@@ -436,7 +854,7 @@ watch(
             <div class="cw-main">
                 <!-- Context bar: which network the current screen is about. -->
                 <div
-                    v-if="stage === 'app'"
+                    v-if="stage === 'app' && showNetworkBar"
                     class="cw-row"
                     style="
                         flex: none;
@@ -476,6 +894,7 @@ watch(
                             :busy="wallet.busy.value"
                             :start="restoring ? 'import' : 'welcome'"
                             :cancellable="restoring"
+                            :telegram="telegram"
                             @adopt="adopt"
                             @cancel="restoring = false"
                         />
@@ -486,14 +905,37 @@ watch(
                         />
                     </div>
 
+                    <WalletAddNetwork
+                        v-else-if="bodyOverlay === 'addNetwork'"
+                        :wallet="wallet"
+                        @back="overlay = null"
+                        @added="networkAdded"
+                    />
+
                     <WalletSend
                         v-else-if="bodyOverlay === 'send'"
                         :wallet="wallet"
                         :chain="chain"
                         :prices="prices"
+                        :token-prices="tokenPrices"
+                        :token="sendToken"
                         @back="overlay = null"
                         @pick="chain = $event"
                         @sent="load()"
+                        @add-network="overlay = 'addNetwork'"
+                    />
+
+                    <WalletSwap
+                        v-else-if="bodyOverlay === 'swap'"
+                        :wallet="wallet"
+                        :chain="chain"
+                        :prices="prices"
+                        :token-prices="tokenPrices"
+                        :token="swapToken"
+                        :contract="swapContract"
+                        @back="overlay = null"
+                        @pick="chain = $event"
+                        @swapped="load()"
                     />
 
                     <WalletReceive
@@ -506,16 +948,144 @@ watch(
                         @back="overlay = null"
                         @pick="chain = $event"
                         @use-payout="useForPayouts"
+                        @add-network="overlay = 'addNetwork'"
                     />
 
-                    <WalletPortfolio
-                        v-else-if="section === 'portfolio'"
+                    <!--
+                        Arriving from a chat, the first question is what
+                        Telegram can see. It is answered before the balances,
+                        not in a policy page nobody opens.
+                    -->
+                    <template v-else-if="section === 'portfolio'">
+                        <p
+                            v-if="telegram"
+                            class="cw-note"
+                            style="margin-bottom: 16px"
+                        >
+                            {{ t('tgCustody') }}
+                        </p>
+
+                        <WalletPortfolio
+                            :wallet="wallet"
+                            :prices="prices"
+                            :token-prices="tokenPrices"
+                            :online="online"
+                            @open="openChain"
+                            @send="openSend()"
+                            @swap="openSwap()"
+                            @receive="overlay = 'receive'"
+                            @add-network="overlay = 'addNetwork'"
+                            @tokens="openSection('tokens')"
+                            @analytics="openSection('analytics')"
+                            @accounts="openSection('accounts')"
+                            @security="openSection('security')"
+                            @gas="openSection('gas')"
+                            @earn="openSection('earn')"
+                            @bridge="openSection('bridge')"
+                            @browse="openSection('browse')"
+                        />
+                    </template>
+
+                    <WalletChat
+                        v-else-if="section === 'chat'"
+                        :wallet="wallet"
+                        @unread="refreshUnread"
+                    />
+
+                    <WalletAccounts
+                        v-else-if="section === 'accounts'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
+                        @import="openSection('importAccount')"
+                    />
+
+                    <WalletImportAccount
+                        v-else-if="section === 'importAccount'"
+                        :wallet="wallet"
+                        @back="openSection('accounts')"
+                        @imported="
+                            openSection('accounts');
+                            load();
+                        "
+                    />
+
+                    <WalletTokens
+                        v-else-if="section === 'tokens'"
+                        :wallet="wallet"
+                        :token-prices="tokenPrices"
+                        @back="openSection('portfolio')"
+                        @open="openToken"
+                        @send="sendChainToken"
+                    />
+
+                    <WalletToken
+                        v-else-if="section === 'token' && tokenContract"
+                        :wallet="wallet"
+                        :chain="chain"
+                        :address="tokenContract"
+                        :prices="tokenPrices[chain] ?? {}"
+                        @back="openSection(tokenOrigin)"
+                        @send="openSend"
+                        @swap="openSwap"
+                        @hidden="openSection(tokenOrigin)"
+                    />
+
+                    <!--
+                      Sponsored fees as a place, not only as the offer that
+                      appears mid-transaction: what the station is, and why it
+                      said no, are questions asked when nobody is signing.
+                    -->
+                    <WalletGasStation
+                        v-else-if="section === 'gas'"
                         :wallet="wallet"
                         :prices="prices"
-                        :online="online"
-                        @open="openChain"
-                        @send="overlay = 'send'"
-                        @receive="overlay = 'receive'"
+                        @back="openSection('portfolio')"
+                    />
+
+                    <!--
+                      The directory of what is on this chain — and the plain
+                      answer to what a page can and cannot ask a wallet for.
+                    -->
+                    <WalletBrowse
+                        v-else-if="section === 'browse'"
+                        :wallet="wallet"
+                        @swap="openSwap()"
+                        @earn="openSection('earn')"
+                        @launchpad="openSection('launchpad')"
+                        @dao="openSection('dao')"
+                        @bridge="openSection('bridge')"
+                    />
+
+                    <!--
+                      Leaving the chain: one transfer signed here, one payout
+                      made there, and nothing in between that can be undone.
+                    -->
+                    <WalletBridge
+                        v-else-if="section === 'bridge'"
+                        :wallet="wallet"
+                        :config="props.bridge"
+                        :prices="prices"
+                        @back="openSection('portfolio')"
+                    />
+
+                    <!--
+                      A pool position is not a balance: it is money at work,
+                      with its own risk and its own unclaimed half.
+                    -->
+                    <WalletEarn
+                        v-else-if="section === 'earn'"
+                        :wallet="wallet"
+                        :chain="chain"
+                        :prices="prices"
+                        @back="openSection('portfolio')"
+                    />
+
+                    <WalletAnalytics
+                        v-else-if="section === 'analytics'"
+                        :wallet="wallet"
+                        :prices="prices"
+                        :token-prices="tokenPrices"
+                        @back="openSection('portfolio')"
                     />
 
                     <WalletNetworkDetail
@@ -523,15 +1093,91 @@ watch(
                         :wallet="wallet"
                         :chain="chain"
                         :prices="prices"
+                        :token-prices="tokenPrices"
                         @back="openSection('portfolio')"
-                        @send="overlay = 'send'"
+                        @send="openSend"
+                        @swap="openSwap()"
                         @receive="overlay = 'receive'"
+                        @open-token="openToken(chain, $event)"
+                    />
+
+                    <WalletFeed
+                        v-else-if="section === 'feed'"
+                        @profile="openProfile"
+                    />
+
+                    <WalletProfile
+                        v-else-if="section === 'profile'"
+                        :wallet="wallet"
+                        :address="profileAddress"
+                        @back="openSection('feed')"
+                    />
+
+                    <WalletLaunchpad
+                        v-else-if="section === 'launchpad'"
+                        :prices="prices"
+                        @swap="openSwapContract"
+                    />
+
+                    <WalletDao v-else-if="section === 'dao'" />
+
+                    <!--
+                      One tab for the things that are not balances: what this
+                      account owns, where a file can be published, and how a
+                      file gets here in the first place.
+                    -->
+                    <WalletNft
+                        v-else-if="section === 'nft'"
+                        :wallet="wallet"
+                        @mint="openMint(null)"
+                        @ipfs="openSection('ipfs')"
+                        @torrents="openSection('torrent')"
+                    />
+
+                    <WalletNftMint
+                        v-else-if="section === 'nftMint'"
+                        :wallet="wallet"
+                        :ipfs="props.ipfs"
+                        :preset="mintPreset"
+                        @back="openSection('nft')"
+                        @minted="load()"
+                    />
+
+                    <WalletIpfs
+                        v-else-if="section === 'ipfs'"
+                        :ipfs="props.ipfs"
+                        @back="openSection('nft')"
+                        @mint="openMint"
+                    />
+
+                    <WalletTorrent
+                        v-else-if="section === 'torrent'"
+                        @back="openSection('nft')"
+                        @mint="openMint"
+                    />
+
+                    <WalletLain
+                        v-else-if="section === 'lain'"
+                        :wallet="wallet"
+                        :config="props.lain"
+                    />
+
+                    <!--
+                      Where the requests go, which is the half of privacy a
+                      local key does not cover on its own.
+                    -->
+                    <WalletProxy
+                        v-else-if="section === 'proxy'"
+                        :wallet="wallet"
+                        @back="openSection('security')"
                     />
 
                     <WalletSecurity
                         v-else
                         :wallet="wallet"
                         @locked="section = 'portfolio'"
+                        @add-network="overlay = 'addNetwork'"
+                        @proxy="openSection('proxy')"
                         @forgotten="
                             restoring = false;
                             section = 'portfolio';
@@ -542,12 +1188,12 @@ watch(
                 <!-- Mobile tab bar -->
                 <nav v-if="stage === 'app'" class="cw-tabs">
                     <button
-                        v-for="entry in SECTIONS"
+                        v-for="entry in TABS"
                         :key="entry.id"
                         type="button"
                         class="cw-tab"
                         :aria-current="
-                            section === entry.id && overlay === null
+                            activeTab === entry.id && overlay === null
                                 ? 'page'
                                 : undefined
                         "
@@ -561,12 +1207,23 @@ watch(
                             "
                             :style="{
                                 background:
-                                    section === entry.id && overlay === null
+                                    activeTab === entry.id && overlay === null
                                         ? 'currentColor'
                                         : 'transparent',
                             }"
                         />
-                        {{ entry.label() }}
+                        <span class="cw-tab-label">{{ entry.label() }}</span>
+                        <!--
+                          Over the corner rather than beside the label: at 65px
+                          a tab has no room for a second word, and a count that
+                          pushed the label would be the one thing on this bar
+                          that changes width while you read it.
+                        -->
+                        <span
+                            v-if="entry.id === 'chat' && unread > 0"
+                            class="cw-badge cw-tab-badge"
+                            >{{ unread }}</span
+                        >
                     </button>
                 </nav>
             </div>
@@ -578,9 +1235,24 @@ watch(
                     :wallet="wallet"
                     :chain="chain"
                     :prices="prices"
+                    :token-prices="tokenPrices"
+                    :token="sendToken"
                     @back="overlay = null"
                     @pick="chain = $event"
                     @sent="load()"
+                    @add-network="overlay = 'addNetwork'"
+                />
+                <WalletSwap
+                    v-else-if="asideOverlay === 'swap'"
+                    :wallet="wallet"
+                    :chain="chain"
+                    :prices="prices"
+                    :token-prices="tokenPrices"
+                    :token="swapToken"
+                    :contract="swapContract"
+                    @back="overlay = null"
+                    @pick="chain = $event"
+                    @swapped="load()"
                 />
                 <WalletReceive
                     v-else
@@ -592,6 +1264,7 @@ watch(
                     @back="overlay = null"
                     @pick="chain = $event"
                     @use-payout="useForPayouts"
+                    @add-network="overlay = 'addNetwork'"
                 />
             </aside>
 

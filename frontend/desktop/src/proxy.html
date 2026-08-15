@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:"
+        />
+        <title>Cyberia — Proxy</title>
+        <style>
+            :root {
+                color-scheme: dark;
+                font-family:
+                    Manrope, ui-sans-serif, system-ui, -apple-system,
+                    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                background: #0b0f10;
+                color: #eef7f6;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                min-height: 100vh;
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 18px;
+                padding: 26px 24px;
+                background:
+                    radial-gradient(
+                        circle at 50% 0%,
+                        rgb(0 229 209 / 10%),
+                        transparent 42%
+                    ),
+                    #0b0f10;
+                -webkit-user-select: none;
+                user-select: none;
+            }
+
+            h1 {
+                margin: 0;
+                font-size: 22px;
+                letter-spacing: -0.03em;
+            }
+
+            p {
+                margin: 0;
+                color: #a7b8b6;
+                font-size: 13px;
+                line-height: 1.6;
+            }
+
+            fieldset {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin: 0;
+                padding: 0;
+                border: 0;
+            }
+
+            label.choice {
+                display: flex;
+                gap: 10px;
+                align-items: flex-start;
+                padding: 12px 14px;
+                border: 1px solid #1e2a2a;
+                border-radius: 10px;
+                background: rgb(13 20 21 / 70%);
+                cursor: pointer;
+            }
+
+            label.choice:hover {
+                border-color: #2f4746;
+            }
+
+            label.choice:has(input:checked) {
+                border-color: rgb(0 229 209 / 55%);
+                background: rgb(0 229 209 / 6%);
+            }
+
+            input[type='radio'] {
+                margin: 2px 0 0;
+                accent-color: #00e5d1;
+            }
+
+            .choice span {
+                display: block;
+                font-size: 14px;
+                font-weight: 700;
+            }
+
+            .choice small {
+                display: block;
+                margin-top: 2px;
+                color: #a7b8b6;
+                font-size: 12px;
+                font-weight: 400;
+                line-height: 1.5;
+            }
+
+            input[type='text'] {
+                width: 100%;
+                height: 44px;
+                margin-top: 10px;
+                padding: 0 12px;
+                border: 1px solid #24403f;
+                border-radius: 9px;
+                background: #08100f;
+                color: #eef7f6;
+                font: inherit;
+                font-size: 14px;
+                -webkit-user-select: text;
+                user-select: text;
+            }
+
+            input[type='text']:focus {
+                border-color: #00e5d1;
+                outline: none;
+            }
+
+            input[type='text']:disabled {
+                border-color: #1a2423;
+                color: #5d6d6c;
+            }
+
+            .status {
+                min-height: 40px;
+                font-size: 13px;
+                line-height: 1.5;
+                color: #a7b8b6;
+            }
+
+            .status.bad {
+                color: #ff9aa2;
+            }
+
+            .status.good {
+                color: #6ff3d9;
+            }
+
+            code {
+                display: block;
+                margin-top: 4px;
+                color: #7f918f;
+                font-size: 12px;
+                word-break: break-all;
+            }
+
+            .actions {
+                display: flex;
+                gap: 10px;
+                margin-top: auto;
+            }
+
+            button {
+                display: inline-flex;
+                min-height: 44px;
+                flex: 1;
+                align-items: center;
+                justify-content: center;
+                padding: 0 18px;
+                border: 0;
+                border-radius: 9px;
+                background: #00e5d1;
+                color: #07100f;
+                font: inherit;
+                font-weight: 800;
+                cursor: pointer;
+            }
+
+            button:hover:not(:disabled) {
+                background: #4af4e6;
+            }
+
+            button.secondary {
+                flex: 0 0 auto;
+                border: 1px solid #24403f;
+                background: transparent;
+                color: #a7b8b6;
+                font-weight: 600;
+            }
+
+            button.secondary:hover:not(:disabled) {
+                border-color: #2f4746;
+                color: #eef7f6;
+            }
+
+            button:disabled {
+                background: #16211f;
+                color: #5d6d6c;
+                cursor: not-allowed;
+            }
+
+            .footnote {
+                color: #7f918f;
+                font-size: 12px;
+                line-height: 1.5;
+            }
+        </style>
+    </head>
+    <body>
+        <h1 id="title">Proxy</h1>
+        <p id="intro"></p>
+
+        <form id="form">
+            <fieldset>
+                <label class="choice">
+                    <input
+                        type="radio"
+                        name="mode"
+                        value="system"
+                        checked
+                    />
+                    <span
+                        >System<small id="hint-system"></small
+                    ></span>
+                </label>
+                <label class="choice">
+                    <input type="radio" name="mode" value="direct" />
+                    <span>Direct<small id="hint-direct"></small></span>
+                </label>
+                <label class="choice">
+                    <input type="radio" name="mode" value="manual" />
+                    <span style="flex: 1"
+                        >Manual<small id="hint-manual"></small>
+                        <input
+                            type="text"
+                            id="server"
+                            spellcheck="false"
+                            autocomplete="off"
+                            placeholder="socks5://127.0.0.1:10808"
+                            disabled
+                        />
+                    </span>
+                </label>
+            </fieldset>
+        </form>
+
+        <div class="status" id="status"></div>
+
+        <div class="actions">
+            <button type="button" id="apply"></button>
+            <button type="button" class="secondary" id="close"></button>
+        </div>
+
+        <div class="footnote" id="current"></div>
+
+        <script>
+            (function () {
+                const bridge = window.cyberiaProxy;
+
+                const dictionaries = {
+                    en: {
+                        title: 'Proxy',
+                        intro: 'How the app reaches Cyberia. If the network blocks the site, point the app at a proxy — it has to carry a request before it is saved.',
+                        system: 'System',
+                        systemHint:
+                            "Whatever this computer's own network settings say.",
+                        direct: 'Direct',
+                        directHint:
+                            'Ignore every proxy, including a broken one the desktop still advertises.',
+                        manual: 'Manual',
+                        manualHint:
+                            'host:port, or socks5://host:port. A username and password cannot be used.',
+                        apply: 'Check and connect',
+                        close: 'Close',
+                        checking: 'Checking the connection…',
+                        connected: 'Connected. Loading Cyberia…',
+                        invalid:
+                            'That is not an address the app can use. Write it as host:port, or with http://, https://, socks4:// or socks5:// in front.',
+                        locked: 'This run was started with a proxy on the command line, so it cannot be changed here. Quit and start Cyberia without --proxy / --no-proxy to choose.',
+                        failed: 'No answer through that proxy. Check that it is running and that the port is right.',
+                        source: {
+                            flag: 'set on the command line',
+                            saved: 'chosen here',
+                            env: 'from the environment',
+                            system: "this computer's settings",
+                        },
+                        current: 'Now: {effective} ({source})',
+                    },
+                    ru: {
+                        title: 'Прокси',
+                        intro: 'Через что приложение доходит до Cyberia. Если сеть блокирует сайт, укажи прокси — он сохранится только после того, как через него пройдёт запрос.',
+                        system: 'Системный',
+                        systemHint:
+                            'То, что записано в сетевых настройках этого компьютера.',
+                        direct: 'Напрямую',
+                        directHint:
+                            'Игнорировать любой прокси, в том числе нерабочий, который всё ещё прописан в системе.',
+                        manual: 'Вручную',
+                        manualHint:
+                            'host:port или socks5://host:port. Логин и пароль использовать нельзя.',
+                        apply: 'Проверить и подключиться',
+                        close: 'Закрыть',
+                        checking: 'Проверяю соединение…',
+                        connected: 'Соединение есть. Загружаю Cyberia…',
+                        invalid:
+                            'Такой адрес приложение использовать не может. Напиши host:port или добавь впереди http://, https://, socks4:// либо socks5://.',
+                        locked: 'Приложение запущено с прокси в командной строке — отсюда его не изменить. Выйди и запусти Cyberia без --proxy / --no-proxy, чтобы выбрать здесь.',
+                        failed: 'Через этот прокси ответа нет. Проверь, что он запущен и что порт указан верно.',
+                        source: {
+                            flag: 'задан в командной строке',
+                            saved: 'выбран здесь',
+                            env: 'из окружения',
+                            system: 'настройки компьютера',
+                        },
+                        current: 'Сейчас: {effective} ({source})',
+                    },
+                };
+
+                const locale = (navigator.language || 'en')
+                    .toLowerCase()
+                    .startsWith('ru')
+                    ? 'ru'
+                    : 'en';
+                const dictionary = dictionaries[locale];
+
+                const status = document.getElementById('status');
+                const server = document.getElementById('server');
+                const applyButton = document.getElementById('apply');
+                const closeButton = document.getElementById('close');
+                const current = document.getElementById('current');
+
+                const modes = () =>
+                    Array.prototype.slice.call(
+                        document.querySelectorAll('input[name="mode"]'),
+                    );
+
+                const selectedMode = () => {
+                    const checked = modes().filter((input) => input.checked)[0];
+
+                    return checked ? checked.value : 'system';
+                };
+
+                function setStatus(text, kind, detail) {
+                    status.className = 'status' + (kind ? ' ' + kind : '');
+                    status.textContent = text || '';
+
+                    if (detail) {
+                        status.appendChild(
+                            Object.assign(document.createElement('code'), {
+                                textContent: detail,
+                            }),
+                        );
+                    }
+                }
+
+                function paintCurrent(state) {
+                    const source =
+                        dictionary.source[state.source] ||
+                        dictionary.source.system;
+
+                    current.textContent = dictionary.current
+                        .replace('{effective}', state.effective)
+                        .replace('{source}', source);
+                }
+
+                document.documentElement.lang = locale;
+                document.getElementById('title').textContent = dictionary.title;
+                document.getElementById('intro').textContent = dictionary.intro;
+                document.getElementById('hint-system').textContent =
+                    dictionary.systemHint;
+                document.getElementById('hint-direct').textContent =
+                    dictionary.directHint;
+                document.getElementById('hint-manual').textContent =
+                    dictionary.manualHint;
+                applyButton.textContent = dictionary.apply;
+                closeButton.textContent = dictionary.close;
+
+                modes().forEach(function (input) {
+                    const label = input.parentNode.querySelector('span');
+
+                    label.firstChild.textContent = dictionary[input.value];
+
+                    input.addEventListener('change', function () {
+                        server.disabled = selectedMode() !== 'manual';
+
+                        if (!server.disabled) {
+                            server.focus();
+                        }
+                    });
+                });
+
+                closeButton.addEventListener('click', function () {
+                    if (bridge) {
+                        bridge.close();
+                    }
+                });
+
+                // Enter in the address field is the same as pressing the button.
+                document
+                    .getElementById('form')
+                    .addEventListener('submit', function (event) {
+                        event.preventDefault();
+                        applyButton.click();
+                    });
+
+                applyButton.addEventListener('click', function () {
+                    if (!bridge) {
+                        return;
+                    }
+
+                    applyButton.disabled = true;
+                    setStatus(dictionary.checking);
+
+                    bridge
+                        .apply({
+                            mode: selectedMode(),
+                            server: server.value.trim(),
+                        })
+                        .then(function (result) {
+                            applyButton.disabled = false;
+
+                            if (result && result.ok) {
+                                setStatus(dictionary.connected, 'good');
+                                paintCurrent(result);
+                                setTimeout(bridge.close, 900);
+
+                                return;
+                            }
+
+                            const error = (result && result.error) || '';
+
+                            if (error === 'invalid') {
+                                setStatus(dictionary.invalid, 'bad');
+
+                                return;
+                            }
+
+                            if (error === 'locked') {
+                                setStatus(dictionary.locked, 'bad');
+
+                                return;
+                            }
+
+                            setStatus(dictionary.failed, 'bad', error);
+                        })
+                        .catch(function (failure) {
+                            applyButton.disabled = false;
+                            setStatus(
+                                dictionary.failed,
+                                'bad',
+                                String(failure && failure.message),
+                            );
+                        });
+                });
+
+                if (!bridge) {
+                    return;
+                }
+
+                bridge.state().then(function (state) {
+                    modes().forEach(function (input) {
+                        input.checked = input.value === state.mode;
+                        input.disabled = state.locked;
+                    });
+
+                    server.value = state.server || '';
+                    server.disabled = state.mode !== 'manual' || state.locked;
+                    applyButton.disabled = state.locked;
+
+                    paintCurrent(state);
+
+                    if (state.locked) {
+                        setStatus(dictionary.locked, 'bad');
+                    }
+                });
+            })();
+        </script>
+    </body>
+</html>

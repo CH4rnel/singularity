@@ -26,13 +26,16 @@
     "wired:smoke": "tsx scripts/wired-smoke.ts",
     "dev": "tsx watch scripts/chat.ts",
     "tui:smoke": "FORCE_COLOR=3 tsx scripts/tui-smoke.tsx",
-    "keys:smoke": "tsx scripts/keys-smoke.ts"
+    "keys:smoke": "tsx scripts/keys-smoke.ts",
+    "markdown:smoke": "tsx scripts/markdown-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "dotenv": "^16.4.5",
+    "highlight.js": "^11.11.1",
     "ink": "^5.2.1",
     "ink-spinner": "^5.0.0",
+    "marked": "^18.0.9",
     "react": "^18.3.1",
     "undici": "^8.7.0",
     "viem": "^2.21.0"

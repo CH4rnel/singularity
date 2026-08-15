@@ -2,12 +2,17 @@
 import { computed, onMounted, watch } from 'vue';
 import AddressField from '@/components/wallet/AddressField.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
+import TokenList from '@/components/wallet/TokenList.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
-import { formatUnits, walletChain } from '@/lib/wallet';
-import type { WalletChainId, WalletTxStatus } from '@/lib/wallet';
+import { formatUnits, hasSwap, walletChain } from '@/lib/wallet';
+import type {
+    WalletChainId,
+    WalletTokenBalance,
+    WalletTxStatus,
+} from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -22,9 +27,17 @@ const props = defineProps<{
     wallet: MultiWallet;
     chain: WalletChainId;
     prices: Record<string, number | null>;
+    /** Chain id → (lowercased contract → USD price). */
+    tokenPrices: Record<string, Record<string, number>>;
 }>();
 
-const emit = defineEmits<{ back: []; send: []; receive: [] }>();
+const emit = defineEmits<{
+    back: [];
+    send: [token?: WalletTokenBalance];
+    receive: [];
+    swap: [];
+    openToken: [token: WalletTokenBalance];
+}>();
 
 const { locale, t } = useLocale(walletMessages);
 const clipboard = useSecureClipboard();
@@ -49,6 +62,7 @@ const statusLabels = computed<Record<WalletTxStatus, string>>(() => ({
 
 const load = (): void => {
     void props.wallet.refreshHistory(props.chain);
+    void props.wallet.refreshTokens(props.chain);
 };
 
 onMounted(load);
@@ -179,9 +193,32 @@ watch(() => props.chain, load);
             >
                 {{ t('receive') }}
             </button>
+            <!--
+              Only where an exchange is actually deployed: a network with no
+              router has nothing to trade against, and a button that opens a
+              screen to say so is a button that lied.
+            -->
+            <button
+                v-if="hasSwap(chain.chainId)"
+                type="button"
+                class="cw-btn cw-btn-secondary"
+                style="height: 48px"
+                :disabled="!account.capabilities.send"
+                @click="emit('swap')"
+            >
+                {{ t('swapTitle') }}
+            </button>
         </div>
 
-        <div class="cw-row" style="margin-bottom: 6px">
+        <TokenList
+            :wallet="wallet"
+            :chain="props.chain"
+            :prices="tokenPrices[props.chain] ?? {}"
+            @send="emit('send', $event)"
+            @open="emit('openToken', $event)"
+        />
+
+        <div class="cw-row" style="margin: 24px 0 6px">
             <span class="cw-label">{{ t('history') }}</span>
             <a
                 v-if="account.explorerUrl"

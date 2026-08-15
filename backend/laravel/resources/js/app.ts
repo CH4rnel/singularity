@@ -12,12 +12,16 @@ import NativeShellLayout from '@/layouts/NativeShellLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import Web3Layout from '@/layouts/Web3Layout.vue';
 import { initializeNativeShell, isNativeShell } from '@/lib/native';
+import { initializeTelegram } from '@/lib/telegram';
 import { track } from '@/lib/track';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 initializeNativeShell();
 initializePwa();
+// Fetches Telegram's SDK, and only inside Telegram: the frame needs to be told
+// we are ready and to take the full height. Everything renders without it.
+void initializeTelegram();
 
 createInertiaApp({
     title: (title) =>
@@ -28,12 +32,14 @@ createInertiaApp({
               : appName,
     layout: (name) => {
         switch (true) {
-            // The wallet is the home screen of the desktop and mobile shells,
-            // so there it drops the site chrome and owns the whole frame.
+            // The wallet is the home screen of the desktop and mobile shells
+            // and the whole of the Telegram Mini App, so there it drops the
+            // site chrome and owns the frame.
             case name === 'Wallet':
                 return isNativeShell() ? NativeShellLayout : Web3Layout;
             case name === 'Analytics':
             case name === 'Changelog':
+            case name === 'Download':
             case name === 'Token':
             case name === 'Tokens':
             case name === 'Bridge':

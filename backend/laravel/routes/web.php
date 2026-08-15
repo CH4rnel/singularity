@@ -8,6 +8,9 @@ use App\Http\Controllers\Api\SiteEventController;
 use App\Http\Controllers\Api\SolanaStakingController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
+use App\Http\Controllers\Api\WalletChatController;
+use App\Http\Controllers\Api\WalletLainController;
+use App\Http\Controllers\Api\WalletSocialController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\Auth\TwitterAuthController;
@@ -21,6 +24,7 @@ use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmNoteController;
 use App\Http\Controllers\CrmTaskController;
 use App\Http\Controllers\DaoController;
+use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\LainChatController;
 use App\Http\Controllers\LeaderboardController;
@@ -42,7 +46,11 @@ use App\Http\Controllers\UserProfileController;
 use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
+use App\Services\BridgeRelayerService;
 use App\Services\DexAprService;
+use App\Services\GasSponsorService;
+use App\Services\LainChatService;
+use App\Services\SolanaRpcProxy;
 use App\Services\WalletPriceService;
 use App\Support\ProfileHandle;
 use Illuminate\Http\Request;
@@ -158,6 +166,15 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 Route::get('/tokens', [TokenController::class, 'index'])->name('tokens.index');
 Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.show');
 Route::get('/changelog', ChangelogController::class)->name('changelog');
+// Where the native apps come from. /download/<platform> is the short link worth
+// pasting into a message; it redirects to the current file for that platform.
+Route::get('/download', [DownloadController::class, 'index'])->name('download');
+Route::get('/download/{platform}', [DownloadController::class, 'platform'])
+    ->where('platform', 'windows|macos|linux|android|extension')
+    ->name('download.platform');
+Route::permanentRedirect('/downloads', '/download');
+Route::get('/api/downloads', [DownloadController::class, 'json'])
+    ->middleware('throttle:60,1')->name('download.json');
 Route::get('/lain', [LainChatController::class, 'index'])->name('lain.index');
 Route::middleware('auth')->prefix('api/lain')->name('lain.')->group(function () {
     Route::get('sessions/{session}', [LainChatController::class, 'session'])
@@ -220,11 +237,119 @@ Route::get('/tg/cyber-sol', [TgWhaleController::class, 'page'])->name('tg.cyber-
  * address. Balances, history, fees and signing are read and done by the
  * browser, never by us.
  */
-Route::get('wallet', fn (Request $request, WalletPriceService $prices) => Inertia::render('Wallet', [
-    'solanaRpcUrl' => (string) config('services.staking.solana.public_rpc_url'),
+Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatService $lain, GasSponsorService $gas, SolanaRpcProxy $solana, BridgeConfigService $bridgeConfig) => Inertia::render('Wallet', [
+    // Solana's public cluster answers this server and refuses the browser, so
+    // the endpoint handed over is our own relay (/api/solana/rpc). It reads
+    // the chain on the page's behalf and nothing else — the keys, the signing
+    // and the phrase never leave the device either way.
+    'solanaRpcUrl' => $solana->browserEndpoint(
+        SolanaRpcProxy::DEFAULT_CLUSTER,
+        (string) config('services.staking.public_rpc_url'),
+    ),
     'moneroPayoutAddress' => $request->user()?->monero_wallet_address,
     'quotes' => $prices->quotes(),
+    // What the holders' room needs to check itself: which contract counts and
+    // how much of it. The wallet reads the balance from Cyberia on its own —
+    // the server only learns an address once someone chooses to sign in there.
+    'lain' => [
+        'enabled' => $lain->enabled(),
+        'tokenAddress' => (string) config('services.lain.token_address'),
+        'minimumShareBps' => (int) config('services.lain.minimum_share_bps', 1000),
+    ],
+    // Pinning is the one thing in the wallet this server actually performs, so
+    // the limits it will enforce are stated up front rather than discovered by
+    // uploading something too large and reading the rejection.
+    'ipfs' => [
+        'enabled' => (bool) config('wallet.ipfs.enabled'),
+        'maxBytes' => (int) config('wallet.ipfs.max_bytes'),
+        'gateway' => (string) config('ipfs.gateway'),
+    ],
+    // Whether fees can be sponsored at all, which is a question of
+    // configuration and costs nothing to answer. How much is in the tank and
+    // whether *this* address qualifies are live questions, and the browser asks
+    // them at /api/wallet/gas when it has a reason to — rendering this page
+    // must not wait on an RPC.
+    'sponsor' => [
+        'enabled' => $gas->enabled(),
+        'chain' => 'cyberia',
+    ],
+    /*
+     * The bridge, as the wallet needs to see it: which corridors exist, which
+     * are actually open, what each carries, and where a deposit goes.
+     *
+     * The same tables /bridge is rendered from, so a corridor opened in config
+     * opens in both places at once. Nothing secret is in here — a deposit
+     * address has to be public to be paid, and the relayer's is the address
+     * every bridge transfer on this chain already lands on.
+     */
+    'bridge' => [
+        'chains' => $bridgeConfig->publicChains(),
+        'routes' => $bridgeConfig->publicRoutes(),
+        'tokens' => $bridgeConfig->publicTokens(),
+        'relayer' => app(BridgeRelayerService::class)->evmAddress(),
+        'feeBps' => (int) config('bridge.fee.rate_bps', 0),
+        'feeFlatUsd' => (float) config('bridge.fee.flat_usd', 0.1),
+    ],
 ]))->name('wallet');
+
+/**
+ * The $LAIN holders' room inside that wallet (WalletLainController).
+ *
+ * Public like the wallet itself, and gated by what the address holds rather
+ * than by an account: sign a challenge with the wallet's Cyberia key, and the
+ * chat opens for as long as the balance holds up.
+ */
+Route::prefix('api/wallet/lain')->name('wallet.lain.')->group(function () {
+    Route::post('nonce', [WalletLainController::class, 'nonce'])
+        ->middleware('throttle:30,1')->name('nonce');
+    Route::post('verify', [WalletLainController::class, 'verify'])
+        ->middleware('throttle:30,1')->name('verify');
+    Route::post('chat', [WalletLainController::class, 'chat'])
+        ->middleware('throttle:10,1')->name('chat');
+});
+
+/**
+ * Wallet-to-wallet encrypted chat (WalletChatController).
+ *
+ * Public like the wallet, and addressed by EVM address rather than by account.
+ * The server relays ciphertext it has no key for: it keeps a directory of
+ * signed public keys so wallets can find each other, and a queue of sealed
+ * envelopes it deletes on a retention window. Reading a mailbox means signing
+ * a challenge with the address's own key, exactly as the holders' room does.
+ */
+Route::prefix('api/wallet/chat')->name('wallet.chat.')->group(function () {
+    Route::post('nonce', [WalletChatController::class, 'nonce'])
+        ->middleware('throttle:30,1')->name('nonce');
+    Route::post('verify', [WalletChatController::class, 'verify'])
+        ->middleware('throttle:30,1')->name('verify');
+    Route::post('keys', [WalletChatController::class, 'publishKey'])
+        ->middleware('throttle:20,1')->name('keys.publish');
+    Route::get('keys/{address}', [WalletChatController::class, 'key'])
+        ->middleware('throttle:120,1')->name('keys.show');
+    Route::get('messages', [WalletChatController::class, 'messages'])
+        ->middleware('throttle:120,1')->name('messages');
+    Route::post('messages', [WalletChatController::class, 'send'])
+        ->middleware('throttle:60,1')->name('send');
+});
+
+/**
+ * What the wallet reads about the rest of Cyberia (WalletSocialController).
+ *
+ * Read-only and public, like the wallet itself. The wallet has no session, so
+ * there is nobody here to post, comment or vote as; these answer with the same
+ * fields the public feed, DAO and profile pages already render, and the wallet
+ * links out to those pages for anything that needs an account.
+ */
+Route::prefix('api/wallet')->name('wallet.social.')->group(function () {
+    Route::get('feed', [WalletSocialController::class, 'feed'])
+        ->middleware('throttle:60,1')->name('feed');
+    Route::get('dao', [WalletSocialController::class, 'dao'])
+        ->middleware('throttle:60,1')->name('dao');
+    Route::get('dao/proposals/{proposal}', [WalletSocialController::class, 'proposal'])
+        ->middleware('throttle:60,1')->name('proposal');
+    Route::get('profile/{address}', [WalletSocialController::class, 'profile'])
+        ->middleware('throttle:60,1')->name('profile');
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'Dashboard')->name('dashboard');

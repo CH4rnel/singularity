@@ -2,7 +2,7 @@
 import sys
 import logging
 
-from telegram import BotCommand
+from telegram import BotCommand, MenuButtonWebApp, WebAppInfo
 from telegram.ext import (
     Application,
     ChatMemberHandler,
@@ -20,11 +20,14 @@ from bot.config import (
     LENDING_ANNOUNCE_CHAT, LENDING_POLL_SECONDS, LENDING_COMPTROLLER,
     CYBERSOL_SWAP_ADDRESS, CYBERSOL_SWAP_ANNOUNCE_CHAT, CYBERSOL_SWAP_POLL_SECONDS,
     STAKING_MASTERCHEF, STAKING_ANNOUNCE_CHAT, STAKING_POLL_SECONDS,
+    PUMPFUN_ANNOUNCE_CHAT, PUMPFUN_MIN_BUY_USD, PUMPFUN_POLL_SECONDS,
+    PUMPFUN_POOL_ADDRESS,
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, BIG_ANNOUNCE_USD,
     MARKET_SNAPSHOT_SECONDS,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS,
     NFT_FROM_POSTS, NFT_FROM_POSTS_DRYRUN, CYBERIA_NFT_ADDRESS, IPFS_API_URL,
     AI_ENABLED, AI_API_KEY, AI_MODEL,
+    WALLET_MINI_APP_URL, WALLET_MINI_APP_MENU,
 )
 from bot.db import ensure_schema
 from bot.nft import (
@@ -33,7 +36,7 @@ from bot.nft import (
 from bot.handlers import (
     start_command, help_command, set_wallet_command, unset_wallet_command,
     wallet_command, cancel_command, balance_command, token_command,
-    github_command, website_command, create_token_command,
+    github_command, website_command, app_command, open_command, create_token_command,
     set_rewards_interval_command, reward_now_command, whois_command,
     whale_command, x_command, ca_command, stats_command,
     pending_input_handler, pending_create_token_handler, track_chat_member,
@@ -45,7 +48,8 @@ from bot.ai import ask_command, ai_message_handler
 from bot.announcers import (
     bridge_announcer_loop, swap_announcer_loop, liquidity_announcer_loop,
     lending_announcer_loop, cybersol_swap_announcer_loop, staking_announcer_loop,
-    digest_loop, market_snapshot_loop, whale_loop, run_snapshot_once,
+    pumpfun_announcer_loop, digest_loop, market_snapshot_loop, whale_loop,
+    run_snapshot_once,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +68,8 @@ async def post_init(application: Application):
             BotCommand("cancel", "Cancel an interactive prompt"),
             BotCommand("github", "Link GitHub for GITHUB airdrop"),
             BotCommand("website", "Open the project website"),
+            BotCommand("app", "Download the Cyberia wallet app"),
+            BotCommand("open", "Open the wallet inside Telegram"),
             BotCommand("x", "Show X (Twitter) and Telegram links"),
             BotCommand("ca", "Show the CYBER contract address"),
             BotCommand("stats", "On-chain activity digest (default 24h)"),
@@ -76,6 +82,22 @@ async def post_init(application: Application):
         ]
     )
     logger.info("Bot commands published to Telegram")
+
+    # The ☰ beside the input box becomes the wallet. This is the entry point
+    # people actually find — a command has to be remembered, a button does not
+    # — and it needs no BotFather setup, only the URL.
+    if WALLET_MINI_APP_MENU:
+        try:
+            await application.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="Wallet", web_app=WebAppInfo(url=WALLET_MINI_APP_URL)
+                )
+            )
+            logger.info(f"Mini App menu button set: {WALLET_MINI_APP_URL}")
+        except Exception as e:
+            # A menu button that could not be set is not a reason to keep the
+            # bot from starting: every other way in still works.
+            logger.warning(f"Mini App menu button not set: {e}")
 
     # Background loop that announces successful bridge txs in the public chat.
     application.create_task(bridge_announcer_loop(application))
@@ -126,6 +148,17 @@ async def post_init(application: Application):
         )
     else:
         logger.info("Staking announcer disabled: STAKING_MASTERCHEF not set")
+
+    # Background loop that announces CYBER.sol buys on the pump.fun pool.
+    if PUMPFUN_ANNOUNCE_CHAT:
+        application.create_task(pumpfun_announcer_loop(application))
+        logger.info(
+            f"pump.fun buy bot started: chat={PUMPFUN_ANNOUNCE_CHAT} "
+            f"pool={PUMPFUN_POOL_ADDRESS or 'auto'} min=${PUMPFUN_MIN_BUY_USD:g} "
+            f"interval={PUMPFUN_POLL_SECONDS}s"
+        )
+    else:
+        logger.info("pump.fun buy bot disabled: PUMPFUN_ANNOUNCE_CHAT not set")
 
     # Periodic on-chain activity digest.
     if DIGEST_INTERVAL_SECONDS > 0:
@@ -205,6 +238,8 @@ def run_dispatcher():
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("github", github_command))
     application.add_handler(CommandHandler("website", website_command))
+    application.add_handler(CommandHandler("app", app_command))
+    application.add_handler(CommandHandler("open", open_command))
     application.add_handler(CommandHandler("create_token", create_token_command))
     application.add_handler(CommandHandler("set_rewards_interval", set_rewards_interval_command))
     application.add_handler(CommandHandler("reward_now", reward_now_command))

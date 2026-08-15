@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { WalletChainId } from '@/lib/wallet';
+import { walletChain } from '@/lib/wallet';
+import type { WalletChainId, WalletMark } from '@/lib/wallet';
 
 /**
  * The identity tile for a network: hue, shape and a two-letter mono tag, all
  * three at once. Colour alone would collapse for a colour-blind reader and
  * would also collide with the amber/green/red the page spends on transaction
  * status, so the shape is load-bearing rather than decorative.
+ *
+ * Shape encodes the account model — square for an EVM chain, circle for
+ * Solana, diamond for Monero, soft square for the Bitcoin family. Every square
+ * mark holds the same address, so the shape is telling the truth about what a
+ * user would see if they compared two of these strings.
+ *
+ * A network the user added is violet and dashed whatever its family, because
+ * the one thing worth reading at a glance about it is that nobody verified the
+ * endpoint behind it.
  */
 
 const props = withDefaults(
@@ -15,64 +25,44 @@ const props = withDefaults(
         size?: number;
         /** A bare dot, for legends and inline chips. */
         dot?: boolean;
+        /** Override, for a mark drawn before its network exists. */
+        mark?: WalletMark;
     }>(),
-    { size: 32, dot: false },
+    { size: 32, dot: false, mark: undefined },
 );
 
-/**
- * Shape encodes the key family, hue and tile encode the network. Every square
- * mark is an EVM chain, and every EVM chain holds the same address — so the
- * shape is telling the truth about what a user would see if they compared two
- * of these addresses.
- *
- * The hues stay out of the amber/green/red family reserved for transaction
- * status. BNB keeps its gold because a network mark is an outlined tile with
- * two letters while a status is a filled 5px dot with a caption — the two are
- * never the same object on screen.
- */
-const MARKS: Record<
-    WalletChainId,
-    { tag: string; color: string; radius: string; rotate: boolean }
-> = {
-    cyberia: {
-        tag: 'CY',
-        color: 'var(--cw-net-cyberia)',
-        radius: '0',
-        rotate: false,
-    },
-    robinhood: {
-        tag: 'RH',
-        color: 'var(--cw-net-robinhood)',
-        radius: '0',
-        rotate: false,
-    },
-    bnb: {
-        tag: 'BN',
-        color: 'var(--cw-net-bnb)',
-        radius: '0',
-        rotate: false,
-    },
-    base: {
-        tag: 'BA',
-        color: 'var(--cw-net-base)',
-        radius: '0',
-        rotate: false,
-    },
-    solana: {
-        tag: 'SO',
-        color: 'var(--cw-net-solana)',
-        radius: '50%',
-        rotate: false,
-    },
-    monero: {
-        tag: 'XM',
-        color: 'var(--cw-net-monero)',
-        radius: '0',
-        rotate: true,
-    },
+const FALLBACK: WalletMark = {
+    tag: '??',
+    hue: 'var(--cw-net-custom)',
+    shape: 'square',
+    unverified: true,
 };
 
-const mark = computed(() => MARKS[props.chain]);
+const mark = computed<WalletMark>(() => {
+    if (props.mark) {
+        return props.mark;
+    }
+
+    try {
+        return walletChain(props.chain).mark;
+    } catch {
+        // A chain removed while a screen still points at it — draw the tile
+        // rather than take the page down with it.
+        return FALLBACK;
+    }
+});
+
+const radius = computed(() =>
+    mark.value.shape === 'circle'
+        ? '50%'
+        : mark.value.shape === 'rounded'
+          ? `${Math.max(2, Math.round(props.size / 12))}px`
+          : '0',
+);
+
+const rotate = computed(() => mark.value.shape === 'diamond');
+
+const line = computed(() => (mark.value.unverified ? 'dashed' : 'solid'));
 </script>
 
 <template>
@@ -81,9 +71,10 @@ const mark = computed(() => MARKS[props.chain]);
         :style="{
             width: `${size}px`,
             height: `${size}px`,
-            background: mark.color,
-            borderRadius: mark.radius,
-            transform: mark.rotate ? 'rotate(45deg)' : undefined,
+            background: mark.unverified ? 'transparent' : mark.hue,
+            border: mark.unverified ? `1px dashed ${mark.hue}` : undefined,
+            borderRadius: radius,
+            transform: rotate ? 'rotate(45deg)' : undefined,
             display: 'inline-block',
             flex: 'none',
         }"
@@ -93,10 +84,10 @@ const mark = computed(() => MARKS[props.chain]);
         :style="{
             width: `${size}px`,
             height: `${size}px`,
-            border: `1px solid ${mark.color}`,
-            color: mark.color,
-            borderRadius: mark.radius,
-            transform: mark.rotate ? 'rotate(45deg)' : undefined,
+            border: `1px ${line} ${mark.hue}`,
+            color: mark.hue,
+            borderRadius: radius,
+            transform: rotate ? 'rotate(45deg)' : undefined,
             display: 'flex',
             flex: 'none',
             alignItems: 'center',
@@ -105,7 +96,7 @@ const mark = computed(() => MARKS[props.chain]);
             letterSpacing: '0.05em',
         }"
     >
-        <span :style="mark.rotate ? { transform: 'rotate(-45deg)' } : {}">
+        <span :style="rotate ? { transform: 'rotate(-45deg)' } : {}">
             {{ mark.tag }}
         </span>
     </span>

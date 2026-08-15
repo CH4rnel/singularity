@@ -6,6 +6,7 @@ import {
     Contact,
     Download,
     Globe,
+    Languages,
     LogOut,
     User,
     Wallet,
@@ -24,6 +25,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
+import { LOCALE_LABELS, LOCALES, useLocale } from '@/composables/useLocale';
+import type { Locale } from '@/composables/useLocale';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { useWeb3Login } from '@/composables/useWeb3Login';
@@ -134,6 +137,20 @@ const displayAddress = computed(() => {
 const displayName = computed(
     () => authUser.value?.name || displayAddress.value || 'Profile',
 );
+
+// The language switch lives here rather than on any one page: it is a setting
+// for the whole site, and `useLocale` keeps a single shared value, so flipping
+// it from the header re-renders whichever page is open. The labels come from
+// `useLocale` already written in their own language.
+const { locale, setLocale } = useLocale();
+
+// The one word this menu says for itself. Everything below it is a language
+// name, which is never translated.
+const MENU_LABELS: Record<Locale, string> = {
+    en: 'Language',
+    ru: 'Язык',
+    zh: '语言',
+};
 
 const connectEvm = (providerId: string) => web3Login.loginWithEvm(providerId);
 const connectSolana = (providerId: string) =>
@@ -334,6 +351,39 @@ onMounted(refreshWalletChoices);
                         </DropdownMenuItem>
                     </template>
                 </template>
+
+                <!--
+                  Outside both branches on purpose: a visitor who has connected
+                  nothing is exactly the one most likely to be reading the wrong
+                  language.
+                -->
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                        <Languages class="mr-2 h-4 w-4" />
+                        {{ MENU_LABELS[locale] }}
+                        <span
+                            class="ml-auto font-mono text-[10px] text-muted-foreground uppercase"
+                        >
+                            {{ locale }}
+                        </span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                        <DropdownMenuItem
+                            v-for="option in LOCALES"
+                            :key="option"
+                            @select="setLocale(option)"
+                            @click="setLocale(option)"
+                        >
+                            <Check
+                                v-if="locale === option"
+                                class="mr-2 h-4 w-4"
+                            />
+                            <span v-else class="mr-2 h-4 w-4" />
+                            {{ LOCALE_LABELS[option] }}
+                        </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
             </DropdownMenuContent>
         </DropdownMenu>
 

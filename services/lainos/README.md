@@ -28,10 +28,10 @@ and repeat-protected.
 
 ### Model providers
 
-LainOS speaks to five backends through one `ModelProvider` interface, selected
+LainOS speaks to six backends through one `ModelProvider` interface, selected
 from the environment:
 
-1. `LAINOS_MODEL_PROVIDER` if set (`codex` | `claude` | `openrouter` |
+1. `LAINOS_MODEL_PROVIDER` if set (`codex` | `claude` | `opencode` | `openrouter` |
    `anthropic` | `mock`)
 2. else `OPENROUTER_API_KEY` present → **OpenRouter**
 3. else `ANTHROPIC_API_KEY` present → **Anthropic** (direct)
@@ -39,25 +39,27 @@ from the environment:
 5. else → **offline mock** (deterministic; the whole pipeline still runs — this
    is what the smoke test exercises)
 
-**Codex CLI** (`codex`) and **Claude CLI** (`claude`) run each completion
-through one non-interactive CLI run — `codex exec` and `claude --print` —
-billed to the machine's ChatGPT / Claude subscription, no API key. Both are
-coding agents fenced down to a chat (codex: read-only sandbox, scratch cwd;
-claude: `--tools ""`, `--safe-mode`, scratch cwd), and both do tool calling via
-the shared JSON reply protocol in `models/cli-protocol.ts`; replies arrive
-whole (no streaming). A failed run is retried once in-house
-(`LAINOS_CODEX_RETRIES` / `LAINOS_CLAUDE_RETRIES`); it never falls back to
-another provider unless `LAINOS_MODEL_FALLBACK` explicitly names one — so the
-agent can't silently land on a model the operator didn't choose. On top of any
-base provider, `LAINOS_MODEL_TIER_SMALL/MEDIUM/LARGE` can route a single tier
-elsewhere.
+**Codex CLI** (`codex`), **Claude CLI** (`claude`) and **OpenCode CLI**
+(`opencode`) run each completion through one non-interactive CLI run —
+`codex exec`, `claude --print` and `opencode run` — billed to the machine's
+ChatGPT / Claude subscription / OpenCode setup, no LainOS API key. All three
+are coding agents fenced down to a chat (codex: read-only sandbox, scratch cwd;
+claude: `--tools ""`, `--safe-mode`, scratch cwd; opencode: every native tool
+disabled via inline config, scratch cwd), and all do tool calling via the
+shared JSON reply protocol in `models/cli-protocol.ts`; replies arrive whole
+(no streaming). A failed run is retried once in-house
+(`LAINOS_CODEX_RETRIES` / `LAINOS_CLAUDE_RETRIES` / `LAINOS_OPENCODE_RETRIES`);
+it never falls back to another provider unless `LAINOS_MODEL_FALLBACK`
+explicitly names one — so the agent can't silently land on a model the operator
+didn't choose. On top of any base provider, `LAINOS_MODEL_TIER_SMALL/MEDIUM/LARGE`
+can route a single tier elsewhere.
 
 `claude` and `anthropic` are the same models by two routes (subscription CLI
 vs. API key), so each falls back to the other when its own route is missing —
 asking Lain for Claude works with either one configured.
 
 The live chat routing is switchable at runtime — same switch behind three
-surfaces, all taking `claude` | `codex` | `claude-api`:
+surfaces, all taking `claude` | `codex` | `opencode` | `claude-api`:
 
 ```bash
 /model                      # in the TUI: pick with the arrows (/model codex switches straight away)
@@ -107,7 +109,7 @@ npm run smoke               # end-to-end check (uses a real Cyberia chain read)
 npm run chat                # interactive REPL with Lain
 npm run tui                 # full-screen terminal UI (skins, live chain pulse)
 npm run serve               # daemon: HTTP bridge on :7777 + Telegram bot (if token set)
-npm run provider [claude|codex]  # who writes the daemon's replies (no arg = show)
+npm run provider [claude|codex|opencode]  # who writes the daemon's replies (no arg = show)
 ```
 
 ## systemd daemon
@@ -132,9 +134,9 @@ startup during boot without an interactive login (`loginctl show-user "$USER"
 ## Debugging model/tool decisions
 
 Every turn writes a JSON transcript under `data/model-transcripts/` by default.
-Use these files to see the exact prompt sent to Codex/Claude/OpenRouter, the
-model response, requested tool calls, tool results, and the final reply. Disable
-with `LAINOS_MODEL_TRANSCRIPTS=0` or redirect with
+Use these files to see the exact prompt sent to Codex/Claude/OpenCode/OpenRouter,
+the model response, requested tool calls, tool results, and the final reply.
+Disable with `LAINOS_MODEL_TRANSCRIPTS=0` or redirect with
 `LAINOS_MODEL_TRANSCRIPTS_DIR=/path/to/logs`. Secret-like env values, private
 keys, and bot-token-shaped strings are redacted before the file is written.
 
@@ -161,7 +163,8 @@ and secret values loaded from the environment.
   - `remember` — persist a durable fact (survives restarts, across rooms)
   - `recall` — search durable facts + this room's history
   - `set_chat_provider` / `chat_provider_status` — switch which model writes
-    the live replies (claude | codex; persisted) and report the active one
+    the live replies (claude | codex | opencode; persisted) and report the
+    active one
 - **cyberia** — reads/writes the Cyberia chain (id `49406`):
   - `check_balance` — native CYBER balance of an address
   - `token_balance` — ERC20 balance (symbol like `USDC`/`BTC` or a `0x` address)
@@ -210,20 +213,22 @@ and secret values loaded from the environment.
   Cyberia holders, and every wish they voice becomes part of her:
   - `log_wish` — any feature request or bug report lands on a persistent
     wishboard (`data/forge.json`) with a stable id;
-  - `build_wish` — a coding agent (**Claude Code** or **Codex CLI**, whichever
-    is installed) implements the wish in the singularity repo **directly on the
-    current branch and commits it** — her learning lands in place, no
-    `lain/<wish-id>` side branches. Commits are **never pushed**; publishing
-    stays with the operator.
-    Seed the initial agent with `LAINOS_FORGE_AGENT=claude|codex`, then switch
-    the live daemon with `set_forge_provider` (persisted in `data/forge.json`;
-    running and already queued jobs keep their recorded worker). Choose the coding
-    model with `LAINOS_FORGE_MODEL` (or `LAINOS_FORGE_CLAUDE_MODEL` /
-    `LAINOS_FORGE_CODEX_MODEL` for per-agent overrides). For unattended
+  - `build_wish` — a coding agent (**Claude Code**, **Codex CLI** or
+    **OpenCode CLI**, whichever is installed) implements the wish in the
+    singularity repo **directly on the current branch and commits it** — her
+    learning lands in place, no `lain/<wish-id>` side branches. Commits are
+    **never pushed**; publishing stays with the operator.
+    Seed the initial agent with `LAINOS_FORGE_AGENT=claude|codex|opencode`,
+    then switch the live daemon with `set_forge_provider` (persisted in
+    `data/forge.json`; running and already queued jobs keep their recorded
+    worker). Choose the coding model with `LAINOS_FORGE_MODEL` (or
+    `LAINOS_FORGE_CLAUDE_MODEL` / `LAINOS_FORGE_CODEX_MODEL` /
+    `LAINOS_FORGE_OPENCODE_MODEL` for per-agent overrides). For unattended
     self-upgrades on a trusted host, set `LAINOS_FORGE_YOLO=1`: Codex is
-    launched with `--dangerously-bypass-approvals-and-sandbox`, and Claude with
-    `--dangerously-skip-permissions`. Leave it unset to keep the normal
-    workspace-limited Codex sandbox / Claude `acceptEdits` mode.
+    launched with `--dangerously-bypass-approvals-and-sandbox`, Claude with
+    `--dangerously-skip-permissions`, and OpenCode with `--auto`. Leave it
+    unset to keep the normal workspace-limited Codex sandbox / Claude
+    `acceptEdits` mode / host OpenCode permissions (unanswerable asks denied).
   - `learn_skill` — when Lain discovers a missing capability in herself, she
     logs that capability as a wish and immediately starts `build_wish`; this is
     the deep-change path (new services, signing flows). Small self-contained
@@ -335,15 +340,26 @@ and secret values loaded from the environment.
   `stop_github_watch` removes the watch. Watches persist in `data/github.json`;
   tune with `LAINOS_GITHUB_REMIND_HOUR` (default 18), `LAINOS_GITHUB_INTERVAL_MS`
   and `LAINOS_GITHUB_PROXY`.
-- **channel** — a Telegram channel keeper: `watch_channel_posts <name>` watches
-  a public channel's web preview (`t.me/s/<name>`, no admin rights needed) and
-  sends one reminder in the evening of any day the channel published nothing —
-  the channel's posts mirror to Twitter, which moves CYBER.sol, so postless
-  days cost signal. `check_channel_posts` answers "did the channel post
-  today?" on demand and `stop_channel_watch` removes the watch. Watches
-  persist in `data/channels.json`; tune with `LAINOS_CHANNEL_REMIND_HOUR`
-  (default 18), `LAINOS_CHANNEL_INTERVAL_MS` and `LAINOS_CHANNEL_PROXY`
-  (falls back to `TELEGRAM_PROXY`).
+- **channel** — keeper of the rooms Cyberia speaks in, split by whether a room
+  can be read at all:
+  - *readable* — `watch_channel_posts <name>` watches a public Telegram
+    channel's web preview (`t.me/s/<name>`, no admin rights needed) and
+    reminds only on days it published nothing; the channel's posts mirror to
+    Twitter, which moves CYBER.sol, so postless days cost signal.
+    `check_channel_posts` answers "did the channel post today?" on demand.
+  - *blind* — `watch_chat_silence <place>` covers a Discord behind an invite
+    or a group chat in X. Neither can be read from outside (Discord would need
+    a bot inside the guild, an X chat the account's own session), so the
+    schedule is the entire signal: the nudge fires daily and says outright
+    that it did not look. `mark_venue_posted` ("я уже написал в дискорд")
+    silences one until tomorrow.
+
+  Every due room lands in **one** evening message per chat rather than a ping
+  each. `stop_channel_watch` removes a watch by id, channel or name. Watches
+  persist in `data/channels.json` (pre-venue records read back as Telegram
+  channels); tune with `LAINOS_CHANNEL_REMIND_HOUR` (default 18),
+  `LAINOS_CHANNEL_INTERVAL_MS` and `LAINOS_CHANNEL_PROXY` (falls back to
+  `TELEGRAM_PROXY`).
 - **telegram** — the operator notification channel: `send_telegram` delivers a
   message via the Bot API from TUI, HTTP, or daemon mode and returns
   delivery status. The token stays on the host; the model never sees it. The
@@ -436,7 +452,7 @@ GET  /wishes                          -> { wishes } (the forge wishboard)
 GET  /research                        -> { topics } (the scout's subscriptions)
 POST /research/cyberia-study/run      -> { topic, digest, message }
 GET  /provider                        -> { provider, choices } (who answers)
-POST /provider { provider }           -> { provider } (switch claude/codex live)
+POST /provider { provider }           -> { provider } (switch claude/codex/opencode live)
 POST /chat { roomId, userId, text }   -> { text, actions }
 ```
 
@@ -451,7 +467,7 @@ src/
   runtime.ts          AgentRuntime — the think→act→evaluate loop
   memory/store.ts     file-backed long-term memory + retrieval
   memory/embeddings.ts  embedding providers (OpenAI-compatible | offline hash)
-  models/             codex.ts | claude-cli.ts (subscription CLIs, cli-protocol.ts)
+  models/             codex.ts | claude-cli.ts | opencode.ts (agent CLIs, cli-protocol.ts)
                       anthropic.ts | openrouter.ts | mock.ts | index.ts (factory)
   plugins/bootstrap/  time provider + fact extractor + remember/recall
   plugins/cyberia/    chain service + balance/transfer actions

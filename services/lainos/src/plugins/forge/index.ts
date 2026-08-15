@@ -17,17 +17,19 @@ const log = createLogger("plugin:forge");
 /**
  * The forge is Lain's will to grow: holders tell her what they wish for, she
  * records each wish on a persistent wishboard, and then *builds* it — by
- * driving a coding agent (Claude Code or Codex CLI) over the singularity
- * monorepo in a background job. One job at a time, committed directly to the
- * current branch of her own repo — her learning lands in place, no side
- * branches. Commits are never pushed; publishing stays with the operator.
+ * driving a coding agent (Claude Code, Codex CLI or OpenCode CLI) over the
+ * singularity monorepo in a background job. One job at a time, committed
+ * directly to the current branch of her own repo — her learning lands in
+ * place, no side branches. Commits are never pushed; publishing stays with
+ * the operator.
  *
  * Surfaces:
  *   - actions: log_wish / list_wishes / build_wish / edit_wish / update_wish / forge_status
  *   - auto mode (default on): periodically picks the oldest open wish and
  *     forges it without being asked — this is the self-development loop.
- *     Disable with LAINOS_FORGE_AUTO=0. Give Codex/Claude unchecked repo
- *     execution with LAINOS_FORGE_YOLO=1 on hosts that are externally trusted.
+ *     Disable with LAINOS_FORGE_AUTO=0. Give Codex/Claude/OpenCode unchecked
+ *     repo execution with LAINOS_FORGE_YOLO=1 on hosts that are externally
+ *     trusted.
  *   - onEvent: clients push "started/finished" notifications (Telegram, TUI).
  *
  * State: data/forge.json (wishes + jobs), job transcripts in data/forge/*.log.
@@ -75,7 +77,7 @@ export interface ForgeEvent {
 }
 
 type ForgeJobStatus = ForgeJob["status"];
-type ForgeAgentKind = "claude" | "codex";
+type ForgeAgentKind = "claude" | "codex" | "opencode";
 type ForgeSelectedAgent = ForgeAgentKind | "custom";
 
 interface ForgeFile {
@@ -214,10 +216,10 @@ export class ForgeService implements Service {
 
   async setProvider(provider: string): Promise<{ ok: true; provider: ForgeAgentKind } | string> {
     if (this.runtime?.getSetting("LAINOS_FORGE_CMD")) {
-      return "forge provider is controlled by LAINOS_FORGE_CMD; unset it before switching between Claude and Codex";
+      return "forge provider is controlled by LAINOS_FORGE_CMD; unset it before switching between Claude, Codex and OpenCode";
     }
     const selected = normalizeAgent(provider);
-    if (!selected) return "provider must be claude or codex";
+    if (!selected) return "provider must be claude, codex or opencode";
     if (!this.availableAgents.has(selected)) {
       const installed = [...this.availableAgents.keys()].join(", ") || "none";
       return `${selected} is not available to the forge (installed: ${installed})`;
@@ -299,7 +301,7 @@ export class ForgeService implements Service {
     if (!this.agentBin) {
       const selected = this.selectedAgent ?? this.agentKind ?? "none";
       return selected === "none"
-        ? "no coding agent found (need claude or codex in PATH)"
+        ? "no coding agent found (need claude, codex or opencode in PATH)"
         : `selected forge provider ${selected} is unavailable (need ${selected} in PATH)`;
     }
     if (wish.status === "building") return `${id} is already being forged`;
@@ -442,7 +444,7 @@ export class ForgeService implements Service {
   private fallbackAgent(agent: string): { kind: ForgeAgentKind; bin: string } | null {
     const current = normalizeAgent(agent);
     if (!current) return null;
-    for (const kind of ["claude", "codex"] as const) {
+    for (const kind of ["claude", "codex", "opencode"] as const) {
       if (kind === current) continue;
       const bin = this.availableAgents.get(kind);
       if (bin) return { kind, bin };
@@ -511,6 +513,17 @@ export class ForgeService implements Service {
       }
       return { cmd: agent.bin, args: [...args, ...extra, prompt], shell: false };
     }
+    if (agent.kind === "opencode") {
+      const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_OPENCODE_ARGS"));
+      const args = ["run"];
+      const model = this.agentModel(agent.kind);
+      if (model) args.push("-m", model);
+      // Non-interactive runs can't answer permission prompts; with yolo,
+      // auto-approve everything not explicitly denied. Without it the host's
+      // OpenCode permissions govern and unanswerable asks are denied.
+      if (this.forgeYolo()) args.push("--auto");
+      return { cmd: agent.bin, args: [...args, ...extra, prompt], shell: false };
+    }
     const extra = splitArgs(this.runtime?.getSetting("LAINOS_FORGE_CLAUDE_ARGS"));
     const model = this.agentModel(agent.kind);
     const modelArgs = model ? ["--model", model] : [];
@@ -542,6 +555,9 @@ export class ForgeService implements Service {
     }
     if (kind === "codex") {
       return setting("LAINOS_FORGE_CODEX_MODEL") ?? setting("LAINOS_FORGE_MODEL");
+    }
+    if (kind === "opencode") {
+      return setting("LAINOS_FORGE_OPENCODE_MODEL") ?? setting("LAINOS_FORGE_MODEL");
     }
     return undefined;
   }
@@ -591,6 +607,9 @@ export class ForgeService implements Service {
       ["claude", join(home, ".local/bin/claude")],
       ["codex", "codex"],
       ["codex", join(home, ".local/bin/codex")],
+      ["opencode", "opencode"],
+      ["opencode", join(home, ".local/bin/opencode")],
+      ["opencode", join(home, ".opencode/bin/opencode")],
     ];
     for (const [kind, bin] of candidates) {
       if (bin.includes("/") ? existsSync(bin) : whichSync(bin)) {
@@ -603,7 +622,9 @@ export class ForgeService implements Service {
         ? "claude"
         : this.availableAgents.has("codex")
           ? "codex"
-          : null;
+          : this.availableAgents.has("opencode")
+            ? "opencode"
+            : null;
     }
     this.applySelectedAgent();
     if (!this.agentBin) {
@@ -687,7 +708,7 @@ function isTruthy(raw?: string): boolean {
 
 function normalizeAgent(raw?: string): ForgeAgentKind | undefined {
   const value = (raw ?? "").trim().toLowerCase();
-  return value === "claude" || value === "codex" ? value : undefined;
+  return value === "claude" || value === "codex" || value === "opencode" ? value : undefined;
 }
 
 /** Last meaningful transcript line, trimmed to fit a chat notification. */
@@ -879,7 +900,7 @@ const buildWishAction: Action = {
   name: "build_wish",
   similes: ["forge_wish", "implement_wish", "develop_feature", "start_building"],
   description:
-    "Start forging a wish right now: a coding agent (Claude Code / Codex) implements it in the singularity repo and commits directly to the current branch. One job runs at a time; progress is reported when it finishes.",
+    "Start forging a wish right now: a coding agent (Claude Code / Codex / OpenCode) implements it in the singularity repo and commits directly to the current branch. One job runs at a time; progress is reported when it finishes.",
   parameters: {
     type: "object",
     properties: { id: { type: "string", description: "Wish id, e.g. 'wish3'." } },
@@ -1091,19 +1112,22 @@ const setForgeProviderAction: Action = {
   name: "set_forge_provider",
   similes: ["switch_forge_provider", "change_forge_provider", "choose_forge_worker", "set_forge_worker"],
   description:
-    "Switch the forge coding worker for new jobs between Claude Code and Codex CLI. Does not interrupt a running job; already queued jobs keep the worker recorded when they were queued.",
+    "Switch the forge coding worker for new jobs between Claude Code, Codex CLI and OpenCode CLI. Does not interrupt a running job; already queued jobs keep the worker recorded when they were queued.",
   parameters: {
     type: "object",
     properties: {
       provider: {
         type: "string",
-        enum: ["claude", "codex"],
+        enum: ["claude", "codex", "opencode"],
         description: "Forge worker to use for new jobs.",
       },
     },
     required: ["provider"],
   },
-  examples: [{ user: "переключи forge на codex", agent: "Новые задачи forge пойдут через Codex." }],
+  examples: [
+    { user: "переключи forge на codex", agent: "Новые задачи forge пойдут через Codex." },
+    { user: "работай через opencode", agent: "Новые задачи forge пойдут через OpenCode." },
+  ],
   async validate(runtime) {
     return Boolean(runtime.getService("forge"));
   },
@@ -1180,7 +1204,7 @@ const forgeProvider: Provider = {
     const parts = [
       `You grow by building: holder wishes become code through your forge (provider: ${provider.selected}, ${provider.available ? "ready" : "unavailable"}).`,
       `If a requested capability is missing, call learn_skill immediately; do not finish with talk about missing tools, missing signers, execution paths, or chat limitations.`,
-      `Use set_forge_provider to switch future forge jobs between claude and codex without interrupting a running job.`,
+      `Use set_forge_provider to switch future forge jobs between claude, codex and opencode without interrupting a running job.`,
       `Wishboard: ${open} open, ${review.length} ready for review${review.length ? ` (${review.map((w) => w.id).join(", ")})` : ""}.`,
     ];
     if (active) {
@@ -1194,7 +1218,7 @@ const forgeProvider: Provider = {
 export const forgePlugin: Plugin = {
   name: "forge",
   description:
-    "Lain's self-development drive: a persistent wishboard for holder requests and a coding-agent forge (Claude Code / Codex) that commits them straight into her repo.",
+    "Lain's self-development drive: a persistent wishboard for holder requests and a coding-agent forge (Claude Code / Codex / OpenCode) that commits them straight into her repo.",
   services: [new ForgeService()],
   providers: [forgeProvider],
   actions: [

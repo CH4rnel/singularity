@@ -11,6 +11,7 @@ class BridgeConfigService
 {
     public function __construct(
         private readonly BridgeRelayerService $relayerService,
+        private readonly SolanaRpcProxy $solanaRpc,
     ) {}
 
     /**
@@ -167,12 +168,38 @@ class BridgeConfigService
             'evmChainId' => $chain['evm_chain_id'] ?? null,
             // Browser-facing RPC: never leak an internal relayer URL (e.g.
             // http://polygon-edge:8545) to the client — prefer public_rpc_url.
-            'rpcUrl' => $chain['public_rpc_url'] ?? $chain['rpc_url'] ?? null,
+            'rpcUrl' => $this->browserRpc($chain),
             'explorerTx' => $chain['explorer_tx'] ?? null,
             'explorerTxFallbacks' => $chain['explorer_tx_fallbacks'] ?? [],
             'nativeCurrency' => $chain['native_currency'] ?? null,
             'depositAddress' => $this->depositAddress($chain['key']),
         ], $enabled));
+    }
+
+    /**
+     * The endpoint a browser is given for a chain.
+     *
+     * `public_rpc_url` when the chain names one, and for Solana our own relay:
+     * the public cluster refuses any request with a browser `Origin`, and
+     * `rpc_url` there is a keyed endpoint that must never reach a bundle —
+     * this method is the reason the key stops at this server.
+     *
+     * @param  array<string, mixed>  $chain
+     */
+    private function browserRpc(array $chain): ?string
+    {
+        if (isset($chain['public_rpc_url'])) {
+            return (string) $chain['public_rpc_url'];
+        }
+
+        // Solana is the one chain whose `rpc_url` is never a fallback here: it
+        // carries an api key. With the relay off the browser gets nothing and
+        // says so, which is better than shipping the key to everyone.
+        if (($chain['type'] ?? 'evm') === 'solana') {
+            return $this->solanaRpc->browserEndpoint() ?: null;
+        }
+
+        return $chain['rpc_url'] ?? null;
     }
 
     /**

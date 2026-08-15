@@ -31,6 +31,28 @@ npm run pack         # unpacked build, for a quick look at the bundle
 Use the release workflow (`.github/workflows/apps.yml`) to produce all three from
 one tag.
 
+## Releases
+
+```bash
+git tag app-v1.0.0 && git push origin app-v1.0.0
+```
+
+That builds all three platforms and publishes them as a **public GitHub release**
+with `SHA256SUMS.txt` attached; https://cyberia.church/download reads that release
+and hands each visitor the right file. A manual workflow run builds the same
+installers but publishes nothing — workflow artifacts are only reachable by
+signed-in GitHub users, which is not distribution.
+
+The tag is the version: CI writes `1.0.0` into `package.json` before building, so
+nothing here has to be committed per release.
+
+File names carry **no version** — `Cyberia-Setup-x64.exe`,
+`Cyberia-portable-x64.exe`, `Cyberia-mac-arm64.dmg`, `Cyberia-mac-x64.dmg`,
+`Cyberia-linux-x86_64.AppImage`, `Cyberia-linux-amd64.deb`. That is what makes
+`https://github.com/<owner>/<repo>/releases/latest/download/<name>` a permanent
+address. Renaming one is a three-file change: `electron-builder.yml`, the workflow
+notes, and `config/downloads.php` in the Laravel app.
+
 ## Configuration
 
 | Variable / flag   | Default                  | Purpose                              |
@@ -40,8 +62,11 @@ one tag.
 | `CYBERIA_APP_PATH` | `/wallet`                | Route the window opens on            |
 | `--path=<path>`    | —                        | Same, as a command-line switch       |
 | `CYBERIA_PROXY`    | —                        | Proxy for the shell, wins over `*_proxy` |
-| `--proxy=<url>`    | —                        | Same, as a command-line switch       |
+| `--proxy=<url>`    | —                        | Same, as a command-line switch, and pins this run |
 | `--no-proxy`       | —                        | Ignore every proxy, connect directly |
+
+The proxy is also settable inside the app (_File → Proxy…_), which is what a
+packaged install has instead of a command line — see [Proxies](#proxies).
 
 ```bash
 CYBERIA_APP_URL=http://localhost:8000 npm start
@@ -64,11 +89,15 @@ exported in the shell.
 So the shell resolves the proxy itself and pins it onto the session before the
 first load:
 
-1. `--no-proxy`, `--proxy=direct`, `CYBERIA_PROXY=direct` — explicit direct mode,
-   the only way to override a broken system entry.
-2. `--proxy=<url>` / `CYBERIA_PROXY=<url>` — one server for every scheme.
-3. `https_proxy` / `http_proxy` / `all_proxy` (either case) — per scheme, with
-   `no_proxy` as the bypass list on top of `localhost,127.0.0.1,::1,<local>`.
+1. `--no-proxy`, `--proxy=direct`, `--proxy=<url>` — this run was launched with
+   an instruction, and it holds for this run.
+2. **The setting saved in the app** (_File → Proxy…_, or the button on the
+   offline page). It outranks the environment because it is the last thing a
+   human chose about this app, and for someone who starts Cyberia from an icon
+   it is the only lever that exists.
+3. `CYBERIA_PROXY=<url>` or `direct`, then `https_proxy` / `http_proxy` /
+   `all_proxy` (either case), with `no_proxy` as the bypass list on top of
+   `localhost,127.0.0.1,::1,<local>`.
 4. Nothing set — Chromium keeps using the system configuration.
 
 Servers may be written as `host:port` (assumed `http`), `http://`, `https://`,
@@ -80,8 +109,31 @@ CYBERIA_PROXY=http://127.0.0.1:10808 npm start   # xray/v2ray on the usual port
 npm start -- --no-proxy                          # straight out, ignore the desktop
 ```
 
-The startup line `[cyberia] <url> via proxy <rules>` says what was picked, and the
-offline page names the failing proxy when a load dies with a proxy error.
+The startup line `[cyberia] <url> via proxy <rules> (<source>)` says what was
+picked and where it came from.
+
+#### The proxy window
+
+`src/proxy.html`, opened from _File → Proxy…_ and from the **Proxy settings**
+button on the offline page — the one place it is needed most, since a packaged
+app has no command line to relaunch with. System, direct, or an address typed by
+hand; the wallet offers the same button when a network read fails inside it.
+
+A setting is applied to the live session, then **checked** with one request to
+the site before it is saved to `proxy.json` in `userData`. A proxy that does not
+answer is rolled back to the previous one and reported with its error code —
+otherwise a typo would be saved over a working connection and survive the
+restart, leaving the app permanently offline with its own settings window behind
+the same dead tunnel. Nothing needs restarting when it works: the session is
+re-pinned and the site reloads.
+
+A run launched with `--proxy=` / `--no-proxy` shows the window read-only and says
+so: the flag is this run's instruction, and the window would be lying if it
+pretended to override it.
+
+Reading or changing the proxy lives behind that window's own preload
+(`src/preload-proxy.js`), which no remote page is ever loaded into. All the site
+can do is ask for the window to be raised.
 
 ## What the shell adds over a browser tab
 
@@ -94,14 +146,57 @@ offline page names the failing proxy when a load dies with a proxy error.
 - **Offline fallback** — `src/offline.html` replaces the network error page (in
   English or Russian, following the system language), names the failure —
   including the proxy that refused the connection — and reloads the site by
-  itself once the connection returns.
+  itself once the connection returns. It also opens the proxy window, so a
+  network that blocks Cyberia is answerable from the screen that reports it.
+- **A proxy of its own** — chosen in the app, checked before it is kept, and
+  pinned onto the session ahead of the desktop's own setting.
 - **`cyberia://` deep links** — `cyberia://profile?tab=xp` focuses the running
   window and navigates it. Registered by the installers; `npm start` registers
   the dev binary.
 - **Remembered geometry** — window size and position are restored, and revalidated
   against the displays that currently exist.
+- **A real BitTorrent client** — see below. This is the one capability the site
+  cannot have on its own.
 - **User agent** — `CyberiaDesktop/<version>` is appended so the site can tell it
   is running inside the app (`resources/js/lib/native.ts`).
+
+## Torrents
+
+The wallet's torrent screen is a downloader only inside this app, and that is
+not a product decision: the mainline DHT is UDP and peers are reached over TCP,
+and a web page has neither. What a page *can* reach — browser peers over WebRTC
+— has almost no members for an ordinary magnet, so the browser build of that
+screen explains this and links to the installer instead of shipping a client
+that finds nobody.
+
+- `src/torrent-engine.js` runs WebTorrent in an Electron `utilityProcess`:
+  piece verification is CPU work that would otherwise compete with the window,
+  and a client that dies on a malformed torrent should not take the wallet with
+  it. DHT, peer exchange, trackers and local discovery are all on.
+- `src/torrent.js` is the main process's side — it owns the download directory,
+  the concurrency cap, and the one-time dialog that has to be agreed to before
+  any socket opens. That dialog is where the true sentence gets said: **peers
+  see your IP address, and the app's proxy setting does not cover this traffic**
+  (that setting is for web requests; these are raw sockets).
+- `src/preload.js` exposes it as `window.cyberiaNative.torrent`. The page may
+  name a magnet and a file index — never a path. `read()` hands back one
+  finished file under 10 MB, which is what the wallet pins to IPFS and mints
+  against; anything larger is refused.
+- `src/torrent-rules.js` holds the limits and the summary shape, and is tested
+  under plain Node (`npm test`) like the navigation rules.
+- Downloads land in `<Downloads>/Cyberia`. `CYBERIA_TORRENT_DIR` (an absolute
+  path) moves that; it is an operator's setting, never the page's.
+- WebTorrent is ESM with a top-level await, so it can only be loaded through a
+  dynamic `import()` — and Node's ESM loader cannot read an asar archive. The
+  engine and `node_modules` are therefore in `asarUnpack`.
+- WebTorrent pulls one **optional** native module, `utp-native` (µTP peers).
+  `electron-builder` rebuilds it during packaging; if a platform has no prebuild
+  the client still runs, over TCP peers only. It also adds ~44 MB of unpacked
+  `node_modules` to the installer.
+- Bootstrap nodes are resolved to IPv4 in the engine rather than left to the
+  DHT. Two of the three defaults have been unreliable for years and the third
+  is IPv6-first; on a machine with no IPv6 route that leaves an empty routing
+  table, and a client with no peers looks broken rather than blocked.
 
 ## Known limits
 

@@ -15,6 +15,9 @@ export interface Theme {
   fg: string;
   gradFrom: string; // banner gradient ends
   gradTo: string;
+  codeFg: string; // fenced code foreground
+  panelBg: string; // code blocks / inline code background
+  border: string; // code panel and sidebar borders
 }
 
 export const THEMES: Record<string, Theme> = {
@@ -22,36 +25,43 @@ export const THEMES: Record<string, Theme> = {
     name: "wired", label: "Wired — Lain pink/cyan",
     primary: "#ff5fa0", secondary: "#5fd0ff", ok: "#5fffaf", warn: "#ffd86b", err: "#ff6b6b",
     muted: "#8a93a6", mutedDim: "#535b6e", fg: "#e8e8f2", gradFrom: "#ff5fa0", gradTo: "#5fd0ff",
+    codeFg: "#c8d0e6", panelBg: "#16131f", border: "#3a3550",
   },
   matrix: {
     name: "matrix", label: "Matrix — green phosphor",
     primary: "#39ff14", secondary: "#2bd46a", ok: "#8bff9e", warn: "#c8ff5f", err: "#ff5f5f",
     muted: "#4f9f6a", mutedDim: "#2c5d3f", fg: "#c8ffcf", gradFrom: "#064a25", gradTo: "#39ff14",
+    codeFg: "#b8ffc0", panelBg: "#06120a", border: "#1c4a2a",
   },
   synthwave: {
     name: "synthwave", label: "Synthwave — 80s neon",
     primary: "#ff2e97", secondary: "#00e5ff", ok: "#51f7c5", warn: "#ffd166", err: "#ff5d73",
     muted: "#9a8cc0", mutedDim: "#574a7a", fg: "#f3e9ff", gradFrom: "#ff2e97", gradTo: "#7a5cff",
+    codeFg: "#e6dcff", panelBg: "#1a0e33", border: "#4a2f77",
   },
   amber: {
     name: "amber", label: "Amber — CRT terminal",
     primary: "#ffb000", secondary: "#ffcf6b", ok: "#d6ff5f", warn: "#ffd000", err: "#ff6a00",
     muted: "#b07a2a", mutedDim: "#6e4d1a", fg: "#ffd591", gradFrom: "#6e3100", gradTo: "#ffb000",
+    codeFg: "#ffd591", panelBg: "#1c1204", border: "#6e4d1a",
   },
   ice: {
     name: "ice", label: "Ice — cold blue",
     primary: "#6fd3ff", secondary: "#aef0ff", ok: "#79ffd1", warn: "#ffe08a", err: "#ff8b94",
     muted: "#7e93b0", mutedDim: "#46566f", fg: "#e6f4ff", gradFrom: "#1f6feb", gradTo: "#aef0ff",
+    codeFg: "#dcebff", panelBg: "#0e1a2e", border: "#24405f",
   },
   crimson: {
     name: "crimson", label: "Crimson — blood red",
     primary: "#ff3b4e", secondary: "#ff8a5c", ok: "#6fffb0", warn: "#ffcf5f", err: "#ff2d2d",
     muted: "#b07a85", mutedDim: "#5e2b33", fg: "#ffd9de", gradFrom: "#4a0a12", gradTo: "#ff3b4e",
+    codeFg: "#ffd9de", panelBg: "#1d0a10", border: "#5e2b33",
   },
   mono: {
     name: "mono", label: "Mono — minimal monochrome",
     primary: "#ffffff", secondary: "#aab3c0", ok: "#a8e6a3", warn: "#e6d6a3", err: "#e6a3a3",
     muted: "#8a93a6", mutedDim: "#474e5c", fg: "#e8e8f2", gradFrom: "#6a7280", gradTo: "#ffffff",
+    codeFg: "#d6dae2", panelBg: "#15181f", border: "#3a404b",
   },
 };
 
@@ -60,6 +70,7 @@ export const DEFAULT_THEME = "wired";
 
 export const GLYPH = {
   you: "▸", lain: "◆", tool: "⚙", ok: "✓", fail: "✕", chain: "⛓", spark: "✶", dot: "·", swatch: "██",
+  expand: "▸", collapse: "▾", dots: "…",
 };
 
 export const VERSION = "0.1.0";

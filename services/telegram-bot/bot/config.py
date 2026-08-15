@@ -224,6 +224,36 @@ STAKING_MAX_BLOCK_RANGE = int(os.environ.get("STAKING_MAX_BLOCK_RANGE", str(SWAP
 # to tg_sol_wallets and this bot invites/kicks based on the threshold. Balance
 # re-checks here need no signature — ownership was already proven once.
 SOLANA_RPC_URL = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+# Every Solana read in this bot — the whales gate and the pump.fun buy bot —
+# goes through this list, tried in order until one answers. One URL is one
+# point of failure, and it failed: the keyed provider began answering 401 on
+# 2026-08-14 and both surfaces went quiet at once. SOLANA_RPC_FALLBACK_URL is
+# comma-separated and named after the variable Laravel's relay already reads
+# (config/solana.php), so one .env line configures both; the keyless public
+# cluster is always last, because it answers a server perfectly well and is
+# what makes a dead key latency instead of an outage.
+SOLANA_RPC_FALLBACK_URL = os.environ.get("SOLANA_RPC_FALLBACK_URL", "")
+_PUBLIC_SOLANA_RPC = "https://api.mainnet-beta.solana.com"
+
+
+def _ordered_urls(*values: str) -> list[str]:
+    """Trimmed, in order, no duplicates — pointing two variables at the same
+    host must not cost two timeouts."""
+    out: list[str] = []
+    for value in values:
+        url = (value or "").strip()
+        if url and url not in out:
+            out.append(url)
+    return out
+
+
+SOLANA_RPC_URLS = _ordered_urls(
+    SOLANA_RPC_URL, *SOLANA_RPC_FALLBACK_URL.split(","), _PUBLIC_SOLANA_RPC
+)
+SOLANA_RPC_TIMEOUT = float(os.environ.get("SOLANA_RPC_TIMEOUT", "15"))
+# How long an endpoint that refused is left alone. A dead key should cost one
+# call, not one call per request.
+SOLANA_RPC_COOLDOWN_SECONDS = float(os.environ.get("SOLANA_RPC_COOLDOWN_SECONDS", "300"))
 CYBER_SOL_MINT = os.environ.get("CYBER_SOL_MINT", "E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump")
 CYBER_SOL_DECIMALS = int(os.environ.get("CYBER_SOL_DECIMALS", "6"))
 WHALE_MIN_CYBER_SOL = int(os.environ.get("WHALE_MIN_CYBER_SOL", "10000000"))
@@ -250,11 +280,76 @@ PROJECT_WEBSITE_URL = os.environ.get("PROJECT_WEBSITE_URL", "https://cyberia.chu
 TELEGRAM_CHANNEL_URL = os.environ.get("TELEGRAM_CHANNEL_URL", "https://t.me/cyberia_network")
 TELEGRAM_CHAT_URL = os.environ.get("TELEGRAM_CHAT_URL", "https://t.me/cyberia_network_chat")
 
+# --- pump.fun buy bot ---------------------------------------------------------
+# Every CYBER.sol buy worth at least PUMPFUN_MIN_BUY_USD gets its own post. The
+# coin has graduated off the bonding curve, so buys settle on the PumpSwap AMM
+# pool its pump.fun page trades against; bot/pumpfun.py reads them off that
+# pool's balance deltas. Blank PUMPFUN_ANNOUNCE_CHAT disables the loop.
+PUMPFUN_ANNOUNCE_CHAT = os.environ.get("PUMPFUN_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
+PUMPFUN_MIN_BUY_USD = float(os.environ.get("PUMPFUN_MIN_BUY_USD", "5"))
+PUMPFUN_POLL_SECONDS = int(os.environ.get("PUMPFUN_POLL_SECONDS", "30"))
+# Pool override. Left blank, the pool is whichever SOL-quoted pair for
+# CYBER_SOL_MINT is deepest in the market feed, so a migration to another pool
+# is picked up without a redeploy.
+PUMPFUN_POOL_ADDRESS = (os.environ.get("PUMPFUN_POOL_ADDRESS", "") or "").strip()
+# Signatures per page and how many pages one tick may walk back. The product is
+# the burst a single tick can catch up on; anything older is left behind rather
+# than replayed into the chat minutes late.
+PUMPFUN_SIG_LIMIT = int(os.environ.get("PUMPFUN_SIG_LIMIT", "25"))
+PUMPFUN_MAX_PAGES = int(os.environ.get("PUMPFUN_MAX_PAGES", "4"))
+PUMPFUN_RPC_TIMEOUT = float(os.environ.get("PUMPFUN_RPC_TIMEOUT", "20"))
+# A buy older than this is recorded for the digest but never posted. The chat
+# gets news, not a backlog: when the watcher comes back from an outage its
+# cursor is hours behind, and the catch-up scan would otherwise announce
+# yesterday's trades one after another as if they had just happened.
+PUMPFUN_MAX_AGE_SECONDS = float(os.environ.get("PUMPFUN_MAX_AGE_SECONDS", "1800"))
+# How long one market quote (SOL/USD + market cap) is reused across ticks.
+PUMPFUN_MARKET_TTL_SECONDS = float(os.environ.get("PUMPFUN_MARKET_TTL_SECONDS", "60"))
+DEXSCREENER_API_URL = os.environ.get(
+    "DEXSCREENER_API_URL", "https://api.dexscreener.com"
+).rstrip("/")
+
+# Post cosmetics: the headline links the coin's name to the community chat, and
+# the emoji row's length is how the post shows size at a glance.
+PUMPFUN_TOKEN_LABEL = os.environ.get("PUMPFUN_TOKEN_LABEL", "cyber.sol")
+PUMPFUN_TOKEN_SYMBOL = os.environ.get("PUMPFUN_TOKEN_SYMBOL", "CYBER.sol")
+PUMPFUN_TOKEN_URL = os.environ.get("PUMPFUN_TOKEN_URL", TELEGRAM_CHAT_URL)
+PUMPFUN_BUY_EMOJI = os.environ.get("PUMPFUN_BUY_EMOJI", "⛓️‍💥🎲")
+PUMPFUN_EMOJI_USD = float(
+    os.environ.get("PUMPFUN_EMOJI_USD", str(PUMPFUN_MIN_BUY_USD or 5))
+)
+PUMPFUN_EMOJI_MAX = int(os.environ.get("PUMPFUN_EMOJI_MAX", "40"))
+# A returning buyer gets a "Position: N% Up!" line — how much the bag they
+# already held grew. Rounding makes anything under a percent read as "0% Up!",
+# so below this floor the line is left out rather than printed empty.
+PUMPFUN_MIN_POSITION_PCT = float(os.environ.get("PUMPFUN_MIN_POSITION_PCT", "1"))
+# Footer links, one blank line under the post. Blank turns a link off.
+PUMPFUN_CHART_URL = os.environ.get(
+    "PUMPFUN_CHART_URL", f"https://dexscreener.com/solana/{CYBER_SOL_MINT}"
+)
+PUMPFUN_TRADE_URL = os.environ.get(
+    "PUMPFUN_TRADE_URL", f"https://pump.fun/coin/{CYBER_SOL_MINT}"
+)
+
 # Ecosystem links surfaced as inline URL buttons under /start and /help.
 # Defaults derive the marketplace/pixel-battle pages from the project website.
 SWAP_URL = os.environ.get("SWAP_URL", "https://swap.cyberia.church")
 NFT_MARKET_URL = os.environ.get("NFT_MARKET_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/market")
 PIXEL_BATTLE_URL = os.environ.get("PIXEL_BATTLE_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/pixels")
+# The wallet app download page. /app answers with this instead of an APK file
+# passed around by hand, which is how the app used to reach people.
+APP_DOWNLOAD_URL = os.environ.get("APP_DOWNLOAD_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/download")
+
+# The Mini App: the wallet on the site, opened inside Telegram's web view.
+# Nothing is bundled here — the page is the same /wallet everyone else uses, so
+# a deploy updates the Mini App with it. Telegram requires HTTPS, and only that.
+WALLET_MINI_APP_URL = os.environ.get(
+    "WALLET_MINI_APP_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/wallet"
+)
+
+# Whether to put the Mini App behind the chat menu button (the ☰ beside the
+# input box) at startup. Off switches the bot back to the plain command menu.
+WALLET_MINI_APP_MENU = os.environ.get("WALLET_MINI_APP_MENU", "1") not in ("0", "false", "False")
 
 # --- AI assistant ------------------------------------------------------------
 # Master switch. The assistant stays fully off (no /ask, no DM/mention answers,

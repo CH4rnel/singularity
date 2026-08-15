@@ -12,6 +12,21 @@ files:
 
 asar: true
 
+# WebTorrent is ESM with a top-level await, so it can only be loaded through a
+# dynamic import — and Node's ESM loader cannot read an asar archive. The
+# engine and the modules it imports therefore live outside it; everything else
+# stays packed.
+asarUnpack:
+    - src/torrent-engine.js
+    - src/torrent-rules.js
+    - '**/node_modules/**'
+
+# Installer file names carry no version on purpose. The site links to
+# https://github.com/<repo>/releases/latest/download/<name>, which only stays a
+# permanent address while the name is stable; the version is shown on the page,
+# not spelled into the URL every release breaks.
+artifactName: Cyberia-${os}-${arch}.${ext}
+
 # Registers `cyberia://` so links from the site, Telegram, or the mobile app can
 # hand a route to an already running desktop window.
 protocols:
@@ -42,15 +57,30 @@ win:
         - portable
     executableName: Cyberia
 
+# Both Windows targets produce an .exe, so they need names of their own or the
+# second one overwrites the first.
 nsis:
     oneClick: false
     perMachine: false
     allowToChangeInstallationDirectory: true
     shortcutName: Cyberia
+    artifactName: Cyberia-Setup-${arch}.${ext}
+
+portable:
+    artifactName: Cyberia-portable-${arch}.${ext}
 
 mac:
+    # Apple Silicon and Intel are built separately rather than as one universal
+    # binary: two 100 MB downloads the site can label beat one 200 MB download
+    # every Mac pays for.
     target:
-        - dmg
-        - zip
+        - target: dmg
+          arch:
+              - arm64
+              - x64
+        - target: zip
+          arch:
+              - arm64
+              - x64
     category: public.app-category.finance
     darkModeSupport: true

@@ -52,10 +52,13 @@ const pct = (quest: Quest): number =>
                                     v-if="quest.completed"
                                     class="size-4 shrink-0 text-brand-cyan"
                                 />
-                                {{ quest.title[locale] }}
+                                {{ quest.title[locale] ?? quest.title.en }}
                             </p>
                             <p class="mt-0.5 text-sm text-muted-foreground">
-                                {{ quest.description[locale] }}
+                                {{
+                                    quest.description[locale] ??
+                                    quest.description.en
+                                }}
                             </p>
                         </div>
                         <span

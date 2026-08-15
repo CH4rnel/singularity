@@ -1,9 +1,9 @@
 """Background announcer loops and the periodic market snapshot."""
 import asyncio
-import json
+import html
+import re
 import time
 import logging
-import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from web3 import Web3
@@ -27,8 +27,10 @@ from bot.config import (
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, DIGEST_RETENTION_DAYS,
     DIGEST_PRICE_CHANGE_MIN_BPS, DIGEST_PRICE_TOKEN_LIMIT,
     MARKET_SNAPSHOT_SECONDS, CYBER_CA_EVM,
-    SOLANA_RPC_URL, CYBER_SOL_MINT, CYBER_SOL_DECIMALS, WHALE_MIN_RAW,
+    CYBER_SOL_MINT, CYBER_SOL_DECIMALS, WHALE_MIN_RAW,
     WHALE_CHAT_ID, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS, DB_PATH,
+    PUMPFUN_ANNOUNCE_CHAT, PUMPFUN_MIN_BUY_USD, PUMPFUN_POLL_SECONDS,
+    PUMPFUN_POOL_ADDRESS, PUMPFUN_TOKEN_SYMBOL, PUMPFUN_MAX_AGE_SECONDS,
 )
 from bot.db import (
     engine, _kv_get, _kv_set, _record_activity,
@@ -42,10 +44,12 @@ from bot.chain import (
     _get_token_usd_price, _swap_usd_volume, _liquidity_usd_volume,
     _get_lending_markets, _get_market_underlying,
 )
+from bot.solana import solana_rpc
 from bot.utils import (
     _short_addr, _format_decimal_amount, _format_token_amount, _fmt_usd,
-    _format_window,
+    _format_window, _fmt_amount, _fmt_price_usd, _plural,
 )
+from bot import pumpfun
 
 logger = logging.getLogger(__name__)
 
@@ -771,6 +775,107 @@ async def cybersol_swap_announcer_loop(application: Application) -> None:
         except Exception as e:
             logger.error(f"cybersol_swap_announcer_loop: {e}")
         await asyncio.sleep(CYBERSOL_SWAP_POLL_SECONDS)
+async def _announce_pumpfun_tick(bot) -> None:
+    """Post every CYBER.sol buy on the pump.fun pool worth at least
+    PUMPFUN_MIN_BUY_USD. The cursor is (slot, index-in-block), advanced only
+    past transactions that were read — and, for a posted buy, only once
+    Telegram accepted it, so a send failure retries instead of losing the buy.
+
+    Solana RPC and the market feed are blocking urllib calls, so both run off
+    the event loop.
+    """
+    if not PUMPFUN_ANNOUNCE_CHAT:
+        return
+
+    market = await asyncio.to_thread(pumpfun.market_snapshot, CYBER_SOL_MINT)
+    if not market:
+        # No SOL price means no way to size a buy against the threshold. Hold
+        # the cursor: the buys are still there on the next tick.
+        logger.warning("pumpfun_announcer: no market quote yet, deferring this tick")
+        return
+
+    pool = PUMPFUN_POOL_ADDRESS or market.get("pool")
+    if not pool:
+        logger.warning("pumpfun_announcer: no pool to watch")
+        return
+
+    cursor = _get_block_cursor("last_announced_pumpfun_cursor")
+    if cursor is None:
+        slot, index = await asyncio.to_thread(pumpfun.head_cursor, pool)
+        _set_block_cursor("last_announced_pumpfun_cursor", slot, index)
+        logger.info(
+            f"pumpfun_announcer: bootstrapped cursor to pool={pool} head slot={slot}"
+        )
+        return
+
+    buys, scanned = await asyncio.to_thread(
+        pumpfun.collect_buys, pool, CYBER_SOL_MINT, cursor
+    )
+
+    for buy in buys:
+        usd = buy["sol_amount"] * market["sol_usd"]
+        event_kwargs = dict(
+            kind="pumpfun_buy", usd=usd,
+            sym_in="SOL", amt_in=buy["sol_amount"],
+            sym_out=PUMPFUN_TOKEN_SYMBOL, amt_out=buy["token_amount"],
+            user_addr=buy["buyer"], tx_hash=buy["signature"], block=buy["slot"],
+            meta="new_holder" if buy["new_holder"] else None,
+        )
+
+        # Buys under the floor never get their own post; they are recorded and
+        # surface in the periodic digest instead of firehosing the chat.
+        if usd < PUMPFUN_MIN_BUY_USD:
+            _record_activity(**event_kwargs)
+            _set_block_cursor("last_announced_pumpfun_cursor", buy["slot"], buy["tx_index"])
+            logger.info(
+                f"pumpfun_announcer: digest-only tx={buy['signature']} "
+                f"usd={usd:.2f} < {PUMPFUN_MIN_BUY_USD:g}"
+            )
+            continue
+
+        # Same for a buy that is simply old. After an outage the cursor sits
+        # hours back, and posting that catch-up as it scrolls by would report
+        # yesterday's trades as news.
+        age = time.time() - float(buy.get("block_time") or 0)
+        if buy.get("block_time") and age > PUMPFUN_MAX_AGE_SECONDS:
+            _record_activity(**event_kwargs)
+            _set_block_cursor("last_announced_pumpfun_cursor", buy["slot"], buy["tx_index"])
+            logger.info(
+                f"pumpfun_announcer: digest-only (stale, {age / 60:.0f}m old) "
+                f"tx={buy['signature']}"
+            )
+            continue
+
+        try:
+            await bot.send_message(
+                chat_id=PUMPFUN_ANNOUNCE_CHAT,
+                text=pumpfun.format_buy(buy, usd, market.get("market_cap")),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except TelegramError as e:
+            logger.error(f"pumpfun_announcer: send failed for {buy['signature']}: {e}")
+            return  # cursor still before this buy; it retries next tick
+
+        # Record only after a successful send so a retry can't double-count it.
+        _record_activity(**event_kwargs)
+        _set_block_cursor("last_announced_pumpfun_cursor", buy["slot"], buy["tx_index"])
+        logger.info(
+            f"pumpfun_announcer: posted {buy['sol_amount']:.4f} SOL "
+            f"({_fmt_usd(usd)}) tx={buy['signature']}"
+        )
+
+    if scanned > cursor:
+        _set_block_cursor("last_announced_pumpfun_cursor", scanned[0], scanned[1])
+
+
+async def pumpfun_announcer_loop(application: Application) -> None:
+    while True:
+        try:
+            await _announce_pumpfun_tick(application.bot)
+        except Exception as e:
+            logger.error(f"pumpfun_announcer_loop: {e}")
+        await asyncio.sleep(PUMPFUN_POLL_SECONDS)
 # MasterChef staking events: Deposit/Withdraw/EmergencyWithdraw all carry
 # (address indexed user, uint256 indexed pid) with the amount as the only
 # data word.
@@ -963,14 +1068,23 @@ _PRICE_PRIORITY = {
 }
 
 
-def _fmt_price_usd(value: float) -> str:
-    if value >= 1:
-        return f"${value:,.4f}".rstrip("0").rstrip(".")
-    return f"${value:.8f}".rstrip("0").rstrip(".")
+def _plain(post: str) -> str:
+    """The same post with the markup taken out. Telegram rejecting one digest's
+    HTML must not mean no digest at all: a send that fails leaves the window
+    open, so the next tick would compose the same unsendable text and fail
+    again, every minute, forever."""
+    return html.unescape(re.sub(r"</?(?:b|pre)>", "", post))
+
+
+def _esc(value) -> str:
+    """Every dynamic string in the digest passes through here. A token symbol
+    comes off a pair that anyone may create, so `<b>` is a name someone can
+    pick — and the digest is posted as HTML."""
+    return html.escape(str(value if value is not None else ""))
 
 
 def _cyber_price_line(update_prev: bool = False, include_unchanged: bool = True) -> str | None:
-    """'💰 CYBER.sol: $… (+x% …)' line, or None when CYBER.sol can't be priced.
+    """'📈 CYBER.sol $… (+x% …)' line, or None when CYBER.sol can't be priced.
     `update_prev` stores the fresh price as the next digest's comparison base."""
     if not CYBER_CA_EVM:
         return None
@@ -982,7 +1096,7 @@ def _cyber_price_line(update_prev: bool = False, include_unchanged: bool = True)
         return None
     if price is None or price <= 0:
         return None
-    line = f"💰 CYBER.sol: ${price:.6f}"
+    line = f"💰 <b>CYBER.sol</b> {_fmt_price_usd(price)}"
     try:
         prev = float(_kv_get(_KV_PREV_CYBER_PRICE) or 0)
     except ValueError:
@@ -990,7 +1104,11 @@ def _cyber_price_line(update_prev: bool = False, include_unchanged: bool = True)
     if prev > 0:
         change_pct = (price - prev) / prev * 100
         if abs(change_pct) * 100 >= DIGEST_PRICE_CHANGE_MIN_BPS:
-            line += f" ({change_pct:+.1f}% since last digest)"
+            arrow = "📈" if change_pct >= 0 else "📉"
+            line = (
+                f"{arrow} <b>CYBER.sol</b> {_fmt_price_usd(price)} "
+                f"· {change_pct:+.1f}% since last digest"
+            )
         elif not include_unchanged:
             line = None
     elif not include_unchanged:
@@ -1000,10 +1118,26 @@ def _cyber_price_line(update_prev: bool = False, include_unchanged: bool = True)
     return line
 
 
-def _market_price_line() -> str | None:
-    """Compact list of the on-chain prices currently stored by the snapshotter."""
+def _price_block(pairs: list[tuple[str, float]]) -> list[str]:
+    """Prices as an aligned monospace table. Pure.
+
+    A run-on line of eight `SYM $price` pairs wraps at whatever width the
+    reader's phone happens to be and stops being a list of prices; in <pre> the
+    symbols line up under each other and the eye runs down the column.
+    """
+    if not pairs:
+        return []
+    width = max(len(label) for label, _ in pairs)
+    table = "\n".join(
+        f"{_esc(label.ljust(width))}  {_fmt_price_usd(price)}" for label, price in pairs
+    )
+    return ["💱 <b>Prices</b>", f"<pre>{table}</pre>"]
+
+
+def _market_price_block() -> list[str]:
+    """The prices the snapshotter currently holds, highest-priority first."""
     if DIGEST_PRICE_TOKEN_LIMIT <= 0:
-        return None
+        return []
     with engine.connect() as conn:
         rows = conn.execute(
             text("""
@@ -1013,13 +1147,13 @@ def _market_price_line() -> str | None:
             """),
         ).fetchall()
     if not rows:
-        return None
+        return []
 
     def sort_key(row) -> tuple[int, str]:
         sym = str(row[0] or "").upper()
         return (_PRICE_PRIORITY.get(sym, 100), sym)
 
-    parts = []
+    pairs: list[tuple[str, float]] = []
     seen: set[str] = set()
     for sym, price in sorted(rows, key=sort_key):
         label = str(sym or "?")
@@ -1027,12 +1161,10 @@ def _market_price_line() -> str | None:
         if key in seen:
             continue
         seen.add(key)
-        parts.append(f"{label} {_fmt_price_usd(float(price))}")
-        if len(parts) >= DIGEST_PRICE_TOKEN_LIMIT:
+        pairs.append((label, float(price)))
+        if len(pairs) >= DIGEST_PRICE_TOKEN_LIMIT:
             break
-    if not parts:
-        return None
-    return "💱 Prices: " + " · ".join(parts)
+    return _price_block(pairs)
 
 
 def _build_digest_text(since: str, window_label: str) -> str | None:
@@ -1120,6 +1252,15 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
             """),
             {"s": since},
         ).fetchone()
+        sol_buys = conn.execute(
+            text("""
+                SELECT COUNT(*), COALESCE(SUM(usd), 0), COUNT(DISTINCT user_addr),
+                       SUM(CASE WHEN meta = 'new_holder' THEN 1 ELSE 0 END)
+                FROM activity_events
+                WHERE kind = 'pumpfun_buy' AND created_at >= :s
+            """),
+            {"s": since},
+        ).fetchone()
 
     total = (
         swap_count
@@ -1128,70 +1269,103 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
         + sum(row[1] for row in lending)
         + sum(c for c, _v in staking.values())
         + (conversions[0] if conversions else 0)
+        + (sol_buys[0] if sol_buys else 0)
     )
     if total == 0:
         return None
 
-    lines = [f"📊 Cyberia activity — last {window_label}", ""]
+    # One block per kind of activity, blank line between them: Telegram sets
+    # every line at the same weight, so eight stacked lines read as one
+    # paragraph. The bold line of a block is its headline number; the bullets
+    # under it are the detail, and a block with no detail is one line.
+    blocks: list[list[str]] = []
 
     if swap_count:
-        swap_line = (
-            f"🔄 Swaps: {swap_count} · volume {_fmt_usd(swap_vol)} · {traders} traders"
-        )
+        head = f"🔄 <b>{_plural(swap_count, 'swap')}</b> · {_fmt_usd(swap_vol)} · {_plural(traders, 'trader')}"
         if unpriced:
-            swap_line += f" ({unpriced} unpriced)"
-        lines.append(swap_line)
+            head += f" · {unpriced} unpriced"
+        block = [head]
         if top_tokens:
-            lines.append(
-                "  Top: " + " · ".join(f"{sym} {_fmt_usd(vol)}" for sym, vol in top_tokens)
-            )
+            block.append("• Top: " + " · ".join(
+                f"{_esc(sym)} {_fmt_usd(vol)}" for sym, vol in top_tokens
+            ))
         if largest:
             l_sin, l_ain, l_sout, l_aout, l_usd, l_user = largest
-            lines.append(
-                f"  Largest: {l_ain:g} {l_sin} → {l_aout:g} {l_sout} "
-                f"({_fmt_usd(l_usd)}) by {_short_addr(l_user)}"
+            block.append(
+                f"• Largest: {_fmt_amount(l_ain)} {_esc(l_sin)} → "
+                f"{_fmt_amount(l_aout)} {_esc(l_sout)} "
+                f"({_fmt_usd(l_usd)}) by {_esc(_short_addr(l_user))}"
             )
+        blocks.append(block)
 
     if liq:
         add_c, add_v = liq.get("liq_add", (0, 0))
         rem_c, rem_v = liq.get("liq_remove", (0, 0))
-        lines.append(
-            f"💧 Liquidity: +{_fmt_usd(add_v)} added ({add_c}) / "
-            f"-{_fmt_usd(rem_v)} removed ({rem_c})"
-        )
+        # Only the side that happened: "-$0 removed (0)" is not information.
+        sides = []
+        if add_c:
+            sides.append(f"+{_fmt_usd(add_v)} in ({add_c})")
+        if rem_c:
+            sides.append(f"-{_fmt_usd(rem_v)} out ({rem_c})")
+        if sides:
+            blocks.append(["💧 <b>Liquidity</b> " + " · ".join(sides)])
 
     if bridges:
-        parts = [
-            f"{vol:g} {sym} {_direction_label(direction or '?')} ({cnt})"
-            for direction, sym, cnt, vol in bridges
-        ]
-        lines.append("🌉 Bridges: " + " · ".join(parts))
+        block = [f"🌉 <b>{_plural(sum(row[2] for row in bridges), 'bridge')}</b>"]
+        for direction, sym, cnt, vol in bridges:
+            suffix = f" ({cnt})" if cnt > 1 else ""
+            block.append(
+                f"• {_fmt_amount(vol)} {_esc(sym)} · "
+                f"{_esc(_direction_label(direction or '?'))}{suffix}"
+            )
+        blocks.append(block)
 
     if lending:
-        parts = [
-            f"{kind.removeprefix('lend_')} {_fmt_usd(vol)} ({cnt})"
-            for kind, cnt, vol in lending
-        ]
-        lines.append("🏦 Lending: " + ", ".join(parts))
+        block = ["🏦 <b>Lending</b>"]
+        for kind, cnt, vol in lending:
+            block.append(f"• {_esc(kind.removeprefix('lend_'))} {_fmt_usd(vol)} ({cnt})")
+        blocks.append(block)
 
     if staking:
         stake_c, stake_v = staking.get("stake", (0, 0))
         unstake_c, unstake_v = staking.get("unstake", (0, 0))
-        lines.append(
-            f"🔒 Staking: +{_fmt_usd(stake_v)} staked ({stake_c}) / "
-            f"-{_fmt_usd(unstake_v)} unstaked ({unstake_c})"
-        )
+        sides = []
+        if stake_c:
+            sides.append(f"+{_fmt_usd(stake_v)} staked ({stake_c})")
+        if unstake_c:
+            sides.append(f"-{_fmt_usd(unstake_v)} unstaked ({unstake_c})")
+        if sides:
+            blocks.append(["🔒 <b>Staking</b> " + " · ".join(sides)])
 
     if conversions and conversions[0]:
         c_cnt, c_usd, c_in, c_out = conversions
-        conv_line = f"🔁 CYBER.sol → CYBER: {c_in:g} → {c_out:g} CYBER ({c_cnt})"
+        line = (
+            f"🔁 <b>{_plural(c_cnt, 'conversion')}</b> · "
+            f"{_fmt_amount(c_in)} CYBER.sol → {_fmt_amount(c_out)} CYBER"
+        )
         if c_usd:
-            conv_line += f" · {_fmt_usd(c_usd)}"
-        lines.append(conv_line)
+            line += f" · {_fmt_usd(c_usd)}"
+        blocks.append([line])
 
-    price_line = _market_price_line()
-    if price_line:
-        lines.append(price_line)
+    if sol_buys and sol_buys[0]:
+        b_cnt, b_usd, b_buyers, b_new = sol_buys
+        line = (
+            f"🛒 <b>{b_cnt} {_esc(PUMPFUN_TOKEN_SYMBOL)} "
+            f"{'buy' if b_cnt == 1 else 'buys'}</b> · {_fmt_usd(b_usd)} · "
+            f"{_plural(b_buyers, 'buyer')}"
+        )
+        if b_new:
+            line += f" · {b_new} new"
+        blocks.append([line])
+
+    prices = _market_price_block()
+    if prices:
+        blocks.append(prices)
+
+    lines = [f"📊 <b>Cyberia · last {_esc(window_label)}</b>"]
+    for block in blocks:
+        lines.append("")
+        lines.extend(block)
 
     return "\n".join(lines)
 async def _digest_tick(bot) -> None:
@@ -1228,12 +1402,20 @@ async def _digest_tick(bot) -> None:
 
     try:
         await bot.send_message(
-            chat_id=DIGEST_ANNOUNCE_CHAT, text=digest, disable_web_page_preview=True
+            chat_id=DIGEST_ANNOUNCE_CHAT, text=digest,
+            parse_mode="HTML", disable_web_page_preview=True,
         )
     except TelegramError as e:
-        # Window stays open; the next tick retries with a slightly wider range.
-        logger.error(f"digest: send failed: {e}")
-        return
+        logger.warning(f"digest: HTML rejected ({e}); sending it as plain text")
+        try:
+            await bot.send_message(
+                chat_id=DIGEST_ANNOUNCE_CHAT, text=_plain(digest),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as plain_error:
+            # Window stays open; the next tick retries with a wider range.
+            logger.error(f"digest: send failed: {plain_error}")
+            return
 
     _kv_set(_KV_LAST_DIGEST_AT, now.strftime(_SQLITE_TS))
     await asyncio.to_thread(_cyber_price_line, True)
@@ -1387,25 +1569,13 @@ async def market_snapshot_loop(application: Application) -> None:
 def _read_cyber_sol_raw(address: str) -> int:
     """Sum the owner's CYBER.sol balance (base units) via Solana RPC. Blocking —
     call through asyncio.to_thread from the event loop."""
-    payload = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getTokenAccountsByOwner",
-        "params": [
-            address,
-            {"mint": CYBER_SOL_MINT},
-            {"encoding": "jsonParsed", "commitment": "confirmed"},
-        ],
-    }).encode()
-    req = urllib.request.Request(
-        SOLANA_RPC_URL, data=payload, headers={"Content-Type": "application/json"}
-    )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.loads(resp.read().decode())
-    if "error" in data:
-        raise RuntimeError(f"Solana RPC error: {data['error']}")
+    result = solana_rpc("getTokenAccountsByOwner", [
+        address,
+        {"mint": CYBER_SOL_MINT},
+        {"encoding": "jsonParsed", "commitment": "confirmed"},
+    ])
     total = 0
-    for acc in (data.get("result", {}).get("value") or []):
+    for acc in ((result or {}).get("value") or []):
         amount = acc["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"]
         total += int(amount)
     return total

@@ -1,0 +1,8 @@
+{
+  "chainId": 49406,
+  "rpc": "https://rpc.cyberia.church",
+  "_doc": "Gas station sponsoring wallet users' fees on Cyberia. Policy lives on-chain; who qualifies is decided by the Laravel backend (GasSponsorService).",
+  "address": "0xA2134C165737Eff0775b163b73377E394004E7b2",
+  "owner": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployedAt": "2026-08-14T13:04:40.137Z"
+}

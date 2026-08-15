@@ -14,40 +14,59 @@ import type {
 const log = createLogger("plugin:channel");
 
 /**
- * The channel plugin keeps a public Telegram channel alive. The Cyberia
- * channel's posts are cross-posted to Twitter, and Twitter moves the CYBER.sol
- * price — so a day without posts is a day of lost signal. A holder says
- * "следи, чтобы в канале каждый день были посты" — that becomes a *watch*: the
- * service reads the channel's public web preview (t.me/s/<name>, no admin
- * rights needed) and, past the reminder hour on a day with zero posts, nudges
- * the holder in Telegram. Days with posts pass in silence; a day is never
- * nudged twice.
+ * The channel plugin keeps the rooms Cyberia speaks in alive. Two kinds of
+ * room, and the whole design turns on whether Lain can actually see one:
  *
- * Watches persist in `data/channels.json`; reminders are pushed through
- * onEvent (Telegram chat of the requester) like sentinel alerts.
+ *  - **readable** — a public Telegram channel. Its web preview
+ *    (t.me/s/<name>, no admin rights needed) carries every post's timestamp,
+ *    so "did we post today" is ground truth: days with posts pass in silence.
+ *  - **blind** — a Discord behind an invite link, a group chat in X. Nothing
+ *    outside can read either: Discord would need a bot inside the guild, an X
+ *    chat would need the account's own session. There is no truth to check, so
+ *    the schedule is the entire signal. The nudge says so rather than
+ *    pretending it looked, and `mark_venue_posted` ("я уже написал в дискорд")
+ *    buys silence for the rest of the day.
+ *
+ * Past the reminder hour, every quiet room lands in **one** message per chat —
+ * three separate pings would be exactly the noise this is meant to cure. A day
+ * is never nudged twice. Watches persist in `data/channels.json`; records
+ * written before venues existed had no `kind` and read back as Telegram
+ * channels. Reminders are pushed through onEvent like sentinel alerts.
  */
+
+/** What a watched room is — which decides whether its activity can be read. */
+export type VenueKind = "telegram" | "discord" | "twitter" | "other";
 
 export interface ChannelWatch {
   id: string;
-  /** Public channel username, e.g. "cyberia_church" (t.me/<name>). */
+  /** Venue kind; absent in pre-venue records, where it means "telegram". */
+  kind: VenueKind;
+  /** Stable key: the Telegram username, or a slug for a blind venue. */
   channel: string;
+  /** Human name of a blind venue, e.g. "дискорд" or "чат в X". */
+  label?: string;
+  /** Invite/chat link, carried into the reminder so the nudge is one tap. */
+  url?: string;
   reporter: string;
   /** Telegram chat to deliver to, when known. */
   chatId?: number;
-  /** Host-local hour (0-23) after which a postless day triggers the nudge. */
+  /** Host-local hour (0-23) after which a silent day triggers the nudge. */
   remindHour: number;
   createdAt: number;
   lastCheckedAt?: number;
-  /** Unix ms of the newest post seen on the last check. */
+  /** Unix ms of the newest post seen on the last check (readable venues). */
   lastPostAt?: number;
   /** YYYY-MM-DD of the last day a reminder went out (max one per day). */
   lastRemindedDay?: string;
+  /** YYYY-MM-DD the operator said they had already written there. */
+  lastPostedDay?: string;
 }
 
 export interface ChannelEvent {
   kind: "reminder";
   text: string;
-  watch: ChannelWatch;
+  /** Every venue this one reminder covers. */
+  watches: ChannelWatch[];
   chatId?: number;
 }
 
@@ -82,6 +101,26 @@ export function normalizeChannel(raw: string): string {
     .replace(/[/?#].*$/, "");
 }
 
+/** Only a public Telegram channel exposes its posts to an outside reader. */
+export function isReadableVenue(watch: ChannelWatch): boolean {
+  return watch.kind === "telegram";
+}
+
+/** Display name: the t.me handle for channels, the given name for the rest. */
+export function venueLabel(watch: ChannelWatch): string {
+  if (watch.kind === "telegram") return `t.me/${watch.channel}`;
+  return watch.label ?? watch.channel;
+}
+
+/** Guess the venue from what the operator called it or linked to. */
+export function inferVenueKind(raw: string): VenueKind {
+  const s = raw.toLowerCase();
+  if (/discord|дискорд|диск\b/.test(s)) return "discord";
+  if (/twitter|x\.com|твит|тви́т/.test(s)) return "twitter";
+  if (/(^|[^a-z])t\.me|телеграм|telegram/.test(s)) return "telegram";
+  return "other";
+}
+
 /**
  * Parse the message timestamps out of a channel's public web preview
  * (https://t.me/s/<name>): every post carries a `<time datetime="…">` inside
@@ -98,6 +137,51 @@ export function parseChannelPosts(html: string, day: string): ChannelActivity {
     if (localDay(new Date(at)) === day) postsToday += 1;
   }
   return { lastPostAt, postsToday };
+}
+
+/**
+ * Does this venue owe a nudge right now? Pure, so the schedule is testable
+ * without a clock or a network. `activity` is the reading for a readable
+ * venue and is ignored for blind ones — a readable day that could not be read
+ * is never nudged (a blocked preview is not proof of silence), while a blind
+ * venue has nothing to read and rides on the schedule alone.
+ */
+export function isVenueDue(
+  watch: ChannelWatch,
+  now: Date,
+  activity: ChannelActivity | null,
+): boolean {
+  const day = localDay(now);
+  if (watch.lastRemindedDay === day) return false;
+  if (watch.lastPostedDay === day) return false;
+  if (now.getHours() < watch.remindHour) return false;
+  if (!isReadableVenue(watch)) return true;
+  return activity !== null && activity.postsToday === 0;
+}
+
+/** The evening message: every quiet room at once, in one nudge. */
+export function reminderText(watches: ChannelWatch[]): string {
+  const blind = watches.filter((w) => !isReadableVenue(w));
+  const lines = watches.map((w) => {
+    if (isReadableVenue(w)) {
+      const last = w.lastPostAt
+        ? ` (последний пост: ${new Date(w.lastPostAt).toLocaleString("ru-RU")})`
+        : "";
+      return `• ${venueLabel(w)} — сегодня ещё нет постов${last}`;
+    }
+    return `• ${venueLabel(w)}${w.url ? ` — ${w.url}` : ""}`;
+  });
+  const tail: string[] = [];
+  if (watches.some(isReadableVenue)) {
+    tail.push("посты из канала уходят в твиттер, который двигает курс CYBER.sol.");
+  }
+  if (blind.length) {
+    tail.push(
+      `${listRu(blind.map(venueLabel))} я изнутри не вижу — напоминаю по расписанию. ` +
+        `если уже написал туда, скажи, и я замолчу до завтра.`,
+    );
+  }
+  return ["📣 сегодня тихо:", ...lines, ...tail].join("\n");
 }
 
 export class ChannelWatchService implements Service {
@@ -117,7 +201,8 @@ export class ChannelWatchService implements Service {
     this.file = join(dataDir, "channels.json");
     try {
       const parsed = JSON.parse(await readFile(this.file, "utf8")) as ChannelFile;
-      this.watches = parsed.watches ?? [];
+      // Records predating venues carry no kind: they were all Telegram channels.
+      this.watches = (parsed.watches ?? []).map((w) => ({ ...w, kind: w.kind ?? "telegram" }));
       this.counter = parsed.counter ?? 0;
     } catch {
       // Fresh store.
@@ -141,7 +226,7 @@ export class ChannelWatchService implements Service {
     this.timer = setInterval(() => void this.tick(), Math.max(60_000, tick));
     this.timer.unref?.();
     log.info(
-      `channel watch online: ${this.watches.length} watch(es)` +
+      `channel watch online: ${this.watches.length} venue(s)` +
         `${proxy ? `, proxy ${proxy}` : ""}, tick every ${Math.max(60_000, tick) / 60_000}m`,
     );
   }
@@ -160,25 +245,59 @@ export class ChannelWatchService implements Service {
     return [...this.watches];
   }
 
+  /**
+   * Add or update a watched venue. A Telegram channel is keyed by its
+   * username and must look like one; a blind venue is keyed by a slug of its
+   * name, because there is no handle to validate against.
+   */
   async addWatch(input: {
     channel: string;
+    kind?: VenueKind;
+    label?: string;
+    url?: string;
     reporter: string;
     chatId?: number;
     remindHour?: number;
   }): Promise<ChannelWatch | null> {
-    const channel = normalizeChannel(input.channel);
-    if (!CHANNEL_RE.test(channel)) return null;
-    const existing = this.watches.find((w) => w.channel.toLowerCase() === channel.toLowerCase());
+    const raw = input.channel.trim();
+    if (!raw) return null;
+    const kind = input.kind ?? "telegram";
+
+    let key: string;
+    let label: string | undefined;
+    let url = input.url?.trim() || undefined;
+    if (kind === "telegram") {
+      key = normalizeChannel(raw);
+      if (!CHANNEL_RE.test(key)) return null;
+    } else {
+      label = (input.label ?? raw).trim();
+      if (isUrl(raw) && !url) {
+        url = raw;
+        if (label === raw) label = defaultLabelFor(kind, raw);
+      }
+      if (!label) return null;
+      key = slugify(label) || slugify(url ?? "") || kind;
+    }
+
+    const existing = this.watches.find(
+      (w) => w.kind === kind && w.channel.toLowerCase() === key.toLowerCase(),
+    );
     if (existing) {
       if (input.chatId !== undefined) existing.chatId = input.chatId;
       if (input.remindHour !== undefined) existing.remindHour = clampHour(input.remindHour);
+      if (label) existing.label = label;
+      if (url) existing.url = url;
       await this.persist();
       return existing;
     }
+
     this.counter += 1;
     const watch: ChannelWatch = {
       id: `ch${this.counter}`,
-      channel,
+      kind,
+      channel: key,
+      label,
+      url,
       reporter: input.reporter,
       chatId: input.chatId,
       remindHour:
@@ -187,21 +306,55 @@ export class ChannelWatchService implements Service {
     };
     this.watches.push(watch);
     await this.persist();
-    log.info(`watch added: [${watch.id}] t.me/${watch.channel} (remind after ${watch.remindHour}:00)`);
+    log.info(
+      `venue added: [${watch.id}] ${venueLabel(watch)} (${watch.kind}, ` +
+        `${isReadableVenue(watch) ? "readable" : "blind"}, remind after ${watch.remindHour}:00)`,
+    );
     return watch;
   }
 
-  async removeWatch(idOrChannel: string): Promise<boolean> {
-    const key = normalizeChannel(idOrChannel).toLowerCase();
-    const before = this.watches.length;
-    this.watches = this.watches.filter(
-      (w) => w.id.toLowerCase() !== key && w.channel.toLowerCase() !== key,
+  async removeWatch(idOrName: string): Promise<boolean> {
+    const target = this.match(idOrName);
+    if (!target) return false;
+    this.watches = this.watches.filter((w) => w !== target);
+    await this.persist();
+    return true;
+  }
+
+  /**
+   * "я уже написал туда" — silence a blind venue for the rest of the day.
+   * Without a name it covers every blind venue, since the readable ones answer
+   * that question themselves. Returns what it actually marked.
+   */
+  async markPosted(idOrName?: string, day = localDay()): Promise<ChannelWatch[]> {
+    const marked = idOrName?.trim()
+      ? [this.match(idOrName)].filter((w): w is ChannelWatch => Boolean(w))
+      : this.watches.filter((w) => !isReadableVenue(w));
+    if (!marked.length) return [];
+    for (const watch of marked) watch.lastPostedDay = day;
+    await this.persist();
+    return marked;
+  }
+
+  /** Find a venue by id, key, label, or — when unambiguous — by its kind. */
+  match(key: string): ChannelWatch | undefined {
+    const k = key.trim().toLowerCase();
+    if (!k) return undefined;
+    const bare = normalizeChannel(key).toLowerCase();
+    const direct = this.watches.find(
+      (w) =>
+        w.id.toLowerCase() === k ||
+        w.channel.toLowerCase() === k ||
+        w.channel.toLowerCase() === bare ||
+        (w.label ?? "").toLowerCase() === k ||
+        (w.url ?? "").toLowerCase() === k,
     );
-    if (this.watches.length !== before) {
-      await this.persist();
-      return true;
-    }
-    return false;
+    if (direct) return direct;
+    // "дискорд", "чат в твиттере" — a kind names a venue while it is the only one.
+    const kind = inferVenueKind(k);
+    const ofKind = this.watches.filter((w) => w.kind === kind);
+    if (kind !== "other" && ofKind.length === 1) return ofKind[0];
+    return this.watches.find((w) => (w.label ?? "").toLowerCase().includes(k));
   }
 
   /**
@@ -220,34 +373,37 @@ export class ChannelWatchService implements Service {
     }
   }
 
-  /** Scheduled sweep: nudge every due watch, at most once per day each. */
+  /** Scheduled sweep: one nudge per chat per day, covering every quiet venue. */
   private async tick(): Promise<void> {
     if (this.busy) return;
     this.busy = true;
     try {
       const now = new Date();
       const day = localDay(now);
+      const due: ChannelWatch[] = [];
+      let dirty = false;
       for (const watch of this.watches) {
-        if (watch.lastRemindedDay === day) continue;
+        if (watch.lastRemindedDay === day || watch.lastPostedDay === day) continue;
         if (now.getHours() < watch.remindHour) continue;
-        const activity = await this.activityToday(watch.channel);
-        watch.lastCheckedAt = Date.now();
-        if (activity?.lastPostAt) watch.lastPostAt = activity.lastPostAt;
-        if (!activity || activity.postsToday > 0) {
-          await this.persist();
-          continue;
+        let activity: ChannelActivity | null = null;
+        if (isReadableVenue(watch)) {
+          activity = await this.activityToday(watch.channel);
+          watch.lastCheckedAt = Date.now();
+          if (activity?.lastPostAt) watch.lastPostAt = activity.lastPostAt;
+          dirty = true;
         }
+        if (isVenueDue(watch, now, activity)) due.push(watch);
+      }
+      for (const watch of due) {
         watch.lastRemindedDay = day;
-        await this.persist();
-        const last = activity.lastPostAt
-          ? ` последний пост: ${new Date(activity.lastPostAt).toLocaleString("ru-RU")}.`
-          : "";
-        const text =
-          `📣 напоминание: сегодня в t.me/${watch.channel} ещё нет постов —` +
-          ` а посты уходят в твиттер, который двигает курс CYBER.sol.${last}`;
+        dirty = true;
+      }
+      if (dirty) await this.persist();
+      for (const [chatId, group] of groupByChat(due)) {
+        const text = reminderText(group);
         for (const fn of this.subscribers) {
           try {
-            fn({ kind: "reminder", text, watch, chatId: watch.chatId });
+            fn({ kind: "reminder", text, watches: group, chatId });
           } catch {
             /* a broken subscriber must never break the watcher */
           }
@@ -300,6 +456,46 @@ function clampHour(hour: number): number {
   return Number.isFinite(hour) ? Math.min(23, Math.max(0, Math.round(hour))) : DEFAULT_REMIND_HOUR;
 }
 
+function isUrl(raw: string): boolean {
+  return /^https?:\/\//i.test(raw.trim());
+}
+
+function defaultLabelFor(kind: VenueKind, raw: string): string {
+  if (kind === "discord") return "дискорд";
+  if (kind === "twitter") return "чат в X";
+  try {
+    return new URL(raw).host;
+  } catch {
+    return raw;
+  }
+}
+
+function slugify(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[^a-z0-9а-яё]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+/** "a, b и c" — the reminder reads as a sentence, not a CSV row. */
+function listRu(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} и ${items[items.length - 1]}`;
+}
+
+function groupByChat(watches: ChannelWatch[]): Map<number | undefined, ChannelWatch[]> {
+  const groups = new Map<number | undefined, ChannelWatch[]>();
+  for (const watch of watches) {
+    const group = groups.get(watch.chatId);
+    if (group) group.push(watch);
+    else groups.set(watch.chatId, [watch]);
+  }
+  return groups;
+}
+
 function getChannels(runtime: IAgentRuntime): ChannelWatchService {
   const svc = runtime.getService<ChannelWatchService>("channel-watch");
   if (!svc) throw new Error("channel-watch service not started");
@@ -318,7 +514,7 @@ const watchChannelPostsAction: Action = {
   name: "watch_channel_posts",
   similes: ["watch_telegram_channel", "channel_streak", "post_reminder", "watch_posts"],
   description:
-    "Remind the user every day when a public Telegram channel has no posts yet: watches the channel's public preview (t.me/s/<name>) and sends one reminder in the evening on days without posts (silence on days with them). Use when someone asks to make sure a channel posts daily — e.g. because its posts are mirrored to Twitter and move the token price.",
+    "Remind the user every day when a public Telegram channel has no posts yet: watches the channel's public preview (t.me/s/<name>) and sends one reminder in the evening on days without posts (silence on days with them). Use when someone asks to make sure a channel posts daily — e.g. because its posts are mirrored to Twitter and move the token price. For a Discord server or an X group chat, use watch_chat_silence instead — those cannot be read from outside.",
   parameters: {
     type: "object",
     properties: {
@@ -349,6 +545,7 @@ const watchChannelPostsAction: Action = {
     const hour = Number(params.remind_hour);
     const watch = await svc.addWatch({
       channel,
+      kind: "telegram",
       reporter: state.message.userId,
       chatId: chatIdFromState(state),
       remindHour: Number.isFinite(hour) ? hour : undefined,
@@ -366,11 +563,134 @@ const watchChannelPostsAction: Action = {
   },
 };
 
+const watchChatSilenceAction: Action = {
+  name: "watch_chat_silence",
+  similes: [
+    "watch_discord",
+    "watch_twitter_chat",
+    "remind_to_write",
+    "watch_chat",
+    "chat_reminder",
+  ],
+  description:
+    "Add a daily reminder to write somewhere that cannot be read from outside — a Discord server behind an invite, a group chat or DM in X, any other room. There is no way to check whether it is really quiet (Discord needs a bot inside the guild, an X chat needs the account's session), so the reminder fires on schedule and says so; the user silences it for a day with mark_venue_posted. Reminders for all watched places arrive as one evening message.",
+  parameters: {
+    type: "object",
+    properties: {
+      place: {
+        type: "string",
+        description: "What to nudge about: a name like 'дискорд' / 'чат в X', or a link to it.",
+      },
+      kind: {
+        type: "string",
+        description: "One of 'discord', 'twitter', 'other'. Inferred from the name when omitted.",
+      },
+      link: {
+        type: "string",
+        description: "Optional invite/chat URL, included in the reminder.",
+      },
+      remind_hour: {
+        type: "number",
+        description: "Hour of day (0-23) after which to nudge. Default 18.",
+      },
+    },
+    required: ["place"],
+  },
+  examples: [
+    {
+      user: "у меня ещё чат в твиттере и дискорд, там тишина — напоминай туда писать",
+      agent:
+        "буду напоминать про оба вечером вместе с каналом. заглянуть внутрь я не могу — если написал, скажи, и я замолчу до завтра.",
+    },
+  ],
+  async validate(runtime) {
+    return Boolean(runtime.getService("channel-watch"));
+  },
+  async handler(runtime, state, params) {
+    const svc = getChannels(runtime);
+    const place = String(params.place ?? "").trim();
+    if (!place) return { ok: false, text: "I need to know which chat to remind you about." };
+    const asked = String(params.kind ?? "").trim().toLowerCase();
+    const kind: VenueKind =
+      asked === "discord" || asked === "twitter" || asked === "telegram" || asked === "other"
+        ? (asked as VenueKind)
+        : inferVenueKind(`${place} ${params.link ?? ""}`);
+    if (kind === "telegram") {
+      return {
+        ok: false,
+        text: "That looks like a Telegram channel — watch_channel_posts reads it for real.",
+      };
+    }
+    const hour = Number(params.remind_hour);
+    const watch = await svc.addWatch({
+      channel: place,
+      kind,
+      url: params.link ? String(params.link) : undefined,
+      reporter: state.message.userId,
+      chatId: chatIdFromState(state),
+      remindHour: Number.isFinite(hour) ? hour : undefined,
+    });
+    if (!watch) return { ok: false, text: `I couldn't make a watch out of "${place}".` };
+    return {
+      ok: true,
+      text:
+        `Watching ${venueLabel(watch)} (${watch.id}): I'll nudge you here after ` +
+        `${watch.remindHour}:00 every day. I can't see inside it, so the nudge says so — ` +
+        `tell me you've written there and it stays quiet until tomorrow.`,
+      data: {
+        id: watch.id,
+        kind: watch.kind,
+        label: venueLabel(watch),
+        remindHour: watch.remindHour,
+        readable: false,
+      },
+    };
+  },
+};
+
+const markVenuePostedAction: Action = {
+  name: "mark_venue_posted",
+  similes: ["already_posted", "wrote_there", "silence_today", "posted_already"],
+  description:
+    "Record that the user has already written in a watched chat today, so its reminder stays quiet until tomorrow. Only meaningful for places that cannot be read (Discord, X chats) — a Telegram channel answers that question by itself. Without a name it covers every unreadable place at once.",
+  parameters: {
+    type: "object",
+    properties: {
+      id: {
+        type: "string",
+        description: "Watch id ('ch2'), name ('дискорд') or link. Omit for all blind venues.",
+      },
+    },
+  },
+  examples: [
+    { user: "я уже написал в дискорд", agent: "поняла, сегодня про дискорд не напоминаю." },
+  ],
+  async validate(runtime) {
+    return Boolean(runtime.getService("channel-watch"));
+  },
+  async handler(runtime, _state, params) {
+    const svc = getChannels(runtime);
+    const id = params.id ? String(params.id) : undefined;
+    const marked = await svc.markPosted(id);
+    if (!marked.length) {
+      return {
+        ok: false,
+        text: id ? `No watched chat matching ${id}.` : "No unreadable chats are being watched.",
+      };
+    }
+    return {
+      ok: true,
+      text: `Noted — no reminder today for ${marked.map(venueLabel).join(", ")}.`,
+      data: { marked: marked.map((w) => ({ id: w.id, label: venueLabel(w) })) },
+    };
+  },
+};
+
 const checkChannelPostsAction: Action = {
   name: "check_channel_posts",
   similes: ["channel_today", "posts_today", "last_post", "channel_status"],
   description:
-    "Check right now whether a public Telegram channel has posts today, and when the last post went out. Defaults to the watched channel when only one is watched.",
+    "Check right now whether a public Telegram channel has posts today, and when the last post went out. Defaults to the watched channel when only one is watched. Discord servers and X chats cannot be checked this way — it will say so.",
   parameters: {
     type: "object",
     properties: {
@@ -383,10 +703,25 @@ const checkChannelPostsAction: Action = {
   },
   async handler(runtime, _state, params) {
     const svc = getChannels(runtime);
-    const watches = svc.listWatches();
+    const asked = String(params.channel ?? "").trim();
+    const readable = svc.listWatches().filter(isReadableVenue);
+
+    if (asked) {
+      const watched = svc.match(asked);
+      if (watched && !isReadableVenue(watched)) {
+        const day = localDay();
+        return {
+          ok: true,
+          text:
+            `${venueLabel(watched)} can't be read from outside — I only know whether you told ` +
+            `me you wrote there today (${watched.lastPostedDay === day ? "you did" : "you haven't"}).`,
+          data: { id: watched.id, kind: watched.kind, readable: false },
+        };
+      }
+    }
+
     const channel =
-      normalizeChannel(String(params.channel ?? "")) ||
-      (watches.length === 1 ? watches[0].channel : "");
+      normalizeChannel(asked) || (readable.length === 1 ? readable[0].channel : "");
     if (!channel) {
       return { ok: false, text: "Which channel? I'm not watching exactly one." };
     }
@@ -413,12 +748,13 @@ const checkChannelPostsAction: Action = {
 
 const stopChannelWatchAction: Action = {
   name: "stop_channel_watch",
-  similes: ["unwatch_channel", "stop_post_reminder", "remove_channel_watch"],
-  description: "Stop the daily channel-post reminder, by watch id (ch1) or channel username.",
+  similes: ["unwatch_channel", "stop_post_reminder", "remove_channel_watch", "unwatch_chat"],
+  description:
+    "Stop a daily reminder, by watch id (ch1), channel username, or the name of a chat ('дискорд').",
   parameters: {
     type: "object",
     properties: {
-      id: { type: "string", description: "Watch id (e.g. 'ch1') or channel username." },
+      id: { type: "string", description: "Watch id (e.g. 'ch1'), channel username or chat name." },
     },
     required: ["id"],
   },
@@ -429,10 +765,11 @@ const stopChannelWatchAction: Action = {
   async handler(runtime, _state, params) {
     const svc = getChannels(runtime);
     const id = String(params.id ?? "").trim();
-    const removed = await svc.removeWatch(id);
+    const target = svc.match(id);
+    const removed = target ? await svc.removeWatch(id) : false;
     return removed
-      ? { ok: true, text: `Stopped watching ${id}.` }
-      : { ok: false, text: `No channel watch matching ${id}.` };
+      ? { ok: true, text: `Stopped watching ${target ? venueLabel(target) : id}.` }
+      : { ok: false, text: `No watch matching ${id}.` };
   },
 };
 
@@ -446,16 +783,29 @@ const channelProvider: Provider = {
     const watches = svc.listWatches();
     if (!watches.length) {
       return (
-        "You can keep a Telegram channel alive: watch_channel_posts sets a daily reminder " +
-        "that fires only on days the channel published nothing."
+        "You can keep the project's rooms alive: watch_channel_posts sets a daily reminder for " +
+        "a public Telegram channel that fires only on days it published nothing, and " +
+        "watch_chat_silence does the same on schedule for places you cannot read " +
+        "(a Discord behind an invite, a group chat in X)."
       );
     }
+    const listed = watches
+      .map(
+        (w) =>
+          `${w.id} ${venueLabel(w)} (${isReadableVenue(w) ? "readable" : "blind"}, ` +
+          `remind after ${w.remindHour}:00)`,
+      )
+      .join(", ");
+    const blind = watches.filter((w) => !isReadableVenue(w));
     return (
-      `You watch Telegram channels for daily posts: ` +
-      watches
-        .map((w) => `${w.id} t.me/${w.channel} (remind after ${w.remindHour}:00)`)
-        .join(", ") +
-      `. Reminders go out automatically; check_channel_posts answers "did the channel post today".`
+      `You watch these rooms for daily activity: ${listed}. All due reminders go out ` +
+      `automatically as one evening message. check_channel_posts answers "did the channel ` +
+      `post today" for Telegram.` +
+      (blind.length
+        ? ` ${listRu(blind.map(venueLabel))} cannot be read from outside — never claim to know ` +
+          `whether they are quiet; when the user says they have already written there, call ` +
+          `mark_venue_posted so today's nudge is dropped.`
+        : "")
     );
   },
 };
@@ -463,8 +813,14 @@ const channelProvider: Provider = {
 export const channelPlugin: Plugin = {
   name: "channel",
   description:
-    "Telegram channel keeper: watches public channels and reminds holders in the evening of days without posts (the posts feed Twitter, which moves CYBER.sol).",
+    "Keeper of the rooms Cyberia speaks in: reads a public Telegram channel's posts for real, nudges on schedule about the ones nothing can read (Discord, X chats), and delivers every due reminder as one evening message.",
   services: [new ChannelWatchService()],
   providers: [channelProvider],
-  actions: [watchChannelPostsAction, checkChannelPostsAction, stopChannelWatchAction],
+  actions: [
+    watchChannelPostsAction,
+    watchChatSilenceAction,
+    markVenuePostedAction,
+    checkChannelPostsAction,
+    stopChannelWatchAction,
+  ],
 };

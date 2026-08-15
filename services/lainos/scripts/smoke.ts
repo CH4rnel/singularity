@@ -13,9 +13,15 @@ import { splitMessage } from "../src/clients/telegram.js";
 import { stripReasoning, ThinkTagFilter } from "../src/models/openrouter.js";
 import { resolveChatProviderKind, SwitchableModelProvider } from "../src/models/routing.js";
 import {
+  inferVenueKind,
+  isVenueDue,
   localDay,
   normalizeChannel,
   parseChannelPosts,
+  reminderText,
+  venueLabel,
+  type ChannelActivity,
+  type ChannelWatch,
   type ChannelWatchService,
 } from "../src/plugins/channel/index.js";
 import type { CyberiaChainService } from "../src/plugins/cyberia/index.js";
@@ -266,7 +272,7 @@ async function main() {
   let forgeProviderSwitchOk = false;
   const switchDataDir = mkdtempSync(join(tmpdir(), "lainos-forge-provider-"));
   const fakeBinDir = mkdtempSync(join(tmpdir(), "lainos-forge-bin-"));
-  for (const bin of ["claude", "codex"]) {
+  for (const bin of ["claude", "codex", "opencode"]) {
     const path = join(fakeBinDir, bin);
     writeFileSync(path, "#!/bin/sh\nexit 0\n");
     chmodSync(path, 0o755);
@@ -620,6 +626,90 @@ async function main() {
     channelOk = Boolean(watch) && rejected === null && listed && removed && channelParseOk;
   }
 
+  // --- channel: blind venues (Discord, X chat) nudge on schedule alone ---
+  const evening = new Date(nowTs);
+  evening.setHours(20, 0, 0, 0);
+  const morning = new Date(nowTs);
+  morning.setHours(9, 0, 0, 0);
+  const eveningDay = localDay(evening);
+  const blindVenue = (over: Partial<ChannelWatch> = {}): ChannelWatch => ({
+    id: "ch9",
+    kind: "discord",
+    channel: "diskord",
+    label: "дискорд",
+    url: "https://discord.gg/example",
+    reporter: "tester",
+    remindHour: 18,
+    createdAt: nowTs,
+    ...over,
+  });
+  const tgVenue = (over: Partial<ChannelWatch> = {}): ChannelWatch => ({
+    id: "ch8",
+    kind: "telegram",
+    channel: "cyberia_church",
+    reporter: "tester",
+    remindHour: 18,
+    createdAt: nowTs,
+    ...over,
+  });
+  const quiet: ChannelActivity = { lastPostAt: nowTs - 86_400_000, postsToday: 0 };
+  const busy: ChannelActivity = { lastPostAt: nowTs, postsToday: 2 };
+  const dueOk =
+    // blind: no reading exists, so the hour is the whole signal
+    isVenueDue(blindVenue(), evening, null) &&
+    !isVenueDue(blindVenue(), morning, null) &&
+    // "я уже написал в дискорд" buys silence for the day, a nudge is never doubled
+    !isVenueDue(blindVenue({ lastPostedDay: eveningDay }), evening, null) &&
+    !isVenueDue(blindVenue({ lastRemindedDay: eveningDay }), evening, null) &&
+    // telegram: ground truth wins, and an unreadable preview is not proof of silence
+    isVenueDue(tgVenue(), evening, quiet) &&
+    !isVenueDue(tgVenue(), evening, busy) &&
+    !isVenueDue(tgVenue(), evening, null);
+  const combined = reminderText([tgVenue({ lastPostAt: nowTs - 86_400_000 }), blindVenue()]);
+  const textOk =
+    combined.includes("t.me/cyberia_church") &&
+    combined.includes("дискорд") &&
+    combined.includes("https://discord.gg/example") &&
+    combined.includes("не вижу") &&
+    combined.split("\n").length >= 4;
+  let blindOk = false;
+  if (channels) {
+    const discord = await channels.addWatch({
+      channel: "https://discord.gg/example",
+      kind: "discord",
+      reporter: "tester",
+    });
+    const xchat = await channels.addWatch({
+      channel: "чат в X",
+      kind: "twitter",
+      reporter: "tester",
+    });
+    // A kind names its venue while it is the only one of that kind.
+    const foundByName = channels.match("дискорд")?.id === discord?.id;
+    const marked = await channels.markPosted("твиттер");
+    const markedX = marked.length === 1 && marked[0].id === xchat?.id;
+    const markedAll = (await channels.markPosted()).length === 2;
+    const gone =
+      (await channels.removeWatch("дискорд")) && (await channels.removeWatch(xchat?.id ?? ""));
+    blindOk =
+      discord?.kind === "discord" &&
+      venueLabel(discord) === "дискорд" &&
+      discord.url === "https://discord.gg/example" &&
+      venueLabel(xchat!) === "чат в X" &&
+      foundByName &&
+      markedX &&
+      markedAll &&
+      gone &&
+      channels.listWatches().length === 0;
+  }
+  const venueOk =
+    dueOk &&
+    textOk &&
+    blindOk &&
+    inferVenueKind("наш дискорд") === "discord" &&
+    inferVenueKind("чат в твиттере") === "twitter" &&
+    inferVenueKind("https://t.me/cyberia_church") === "telegram";
+
   // --- telegram: operator chat resolution + token gating (no network) ---
   const tgDir = mkdtempSync(join(tmpdir(), "lainos-tg-"));
   const tgEmptyDir = mkdtempSync(join(tmpdir(), "lainos-tg-empty-"));
@@ -820,6 +910,7 @@ async function main() {
   console.log(`reasoning never leaks    : ${reasoningOk ? "PASS" : "FAIL"}`);
   console.log(`github streak watch      : ${githubOk ? "PASS" : "FAIL"}`);
   console.log(`channel post watch       : ${channelOk ? "PASS" : "FAIL"}`);
+  console.log(`blind venue reminders    : ${venueOk ? "PASS" : "FAIL"}`);
   console.log(`telegram send action     : ${telegramOk ? "PASS" : "FAIL"}`);
 
   await agent.stop();
@@ -829,7 +920,7 @@ async function main() {
     forgeJobsListed && forgeJobsScrubbed &&
     rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
     studyFindingOk && studySilenceOk && studySafetyOk &&
-    githubOk && channelOk && telegramOk;
+    githubOk && channelOk && venueOk && telegramOk;
   console.log(`\n${ok ? "✅ smoke OK" : "❌ smoke FAILED"}`);
   process.exit(ok ? 0 : 1);
 }

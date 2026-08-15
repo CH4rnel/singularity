@@ -565,7 +565,7 @@ onMounted(() => scrollToBottom(false));
                     <textarea
                         v-model="input"
                         rows="2"
-                        maxlength="2000"
+                        maxlength="12000"
                         :disabled="!canChat || !enabled || sending || switching"
                         placeholder="say something to lain…"
                         class="min-h-12 flex-1 resize-none rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-brand-cyan/50 disabled:cursor-not-allowed disabled:opacity-50"

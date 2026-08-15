@@ -1,4 +1,9 @@
 import {
+    CYBER_SOL_ADDRESS,
+    USDC_ADDRESS,
+    USDT_ADDRESS,
+} from '@/lib/cyberiaTokens';
+import {
     CYBERIA_CHAIN,
     CYBERIA_CHAIN_ID,
     cyberiaReadRpcUrl,
@@ -29,6 +34,14 @@ export type LiquidityChainConfig = {
      */
     tokens: { address: string; symbol: string }[];
     /**
+     * Tokens a route may hop through when the two ends share no pool. These
+     * are the assets everything else is actually paired against, so a path
+     * that fails through them fails everywhere — which is why the list is
+     * short and lives next to the router rather than in each screen that
+     * quotes one.
+     */
+    hubs: string[];
+    /**
      * Cyberia gets its pool list + APR from the server indexer; satellites are
      * client-only (pairs discovered on-chain, no APR snapshot).
      */
@@ -48,6 +61,12 @@ export const LIQUIDITY_CHAINS: readonly LiquidityChainConfig[] = [
         nativeSymbol: 'CYBER',
         explorer: 'https://explorer.cyberia.church',
         tokens: [],
+        hubs: [
+            '0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9', // WCYBER
+            CYBER_SOL_ADDRESS,
+            USDC_ADDRESS,
+            USDT_ADDRESS,
+        ],
         serverPools: true,
     },
     {
@@ -69,6 +88,9 @@ export const LIQUIDITY_CHAINS: readonly LiquidityChainConfig[] = [
                 symbol: 'ASH',
             },
         ],
+        // Everything here is paired against the wrapped native and nothing
+        // else, so it is the only hop worth trying.
+        hubs: ['0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73'],
         serverPools: false,
     },
 ];

@@ -1,8 +1,9 @@
 #!/usr/bin/env -S npx tsx
 /**
  * TUI smoke test: renders the ink App against fake stdio and drives the
- * keyboard — message round-trip, /copy (OSC 52), /clear, and the idle blink
- * pause that keeps terminal text selectable. Run: npm run tui:smoke
+ * keyboard — message round-trip, markdown-flat feed, /copy (OSC 52), /clear,
+ * the arrow-key pickers, in-app scrolling layout, and the idle blink pause
+ * that keeps terminal text selectable. Run: npm run tui:smoke
  */
 import { EventEmitter } from "node:events";
 import { mkdtempSync } from "node:fs";
@@ -58,6 +59,14 @@ class FakeStdin extends EventEmitter {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Without SGR/OSC, the raw chunks carry colour codes between word spans. */
+const stripAnsi = (s: string) =>
+  s
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b[()][0-9A-Za-z]/g, "")
+    .replace(/\x1b\]0;[^\x07]*\x07/g, "");
+
 async function main() {
   const model = {
     name: "stub",
@@ -85,11 +94,9 @@ async function main() {
     model: switchable as never,
     settings: {},
   });
-  // A fat skill list (the real daemon registers 30+ actions) once made the
-  // boot card wider than the terminal and shredded the <Static> frame.
   runtime.use({
     name: "smoke-skills",
-    description: "boot-card overflow probe",
+    description: "sidebar skill-count probe",
     actions: Array.from({ length: 24 }, (_, i) => ({
       name: `padded_out_probe_skill_${i}`,
       similes: [],
@@ -111,6 +118,8 @@ async function main() {
 
   const anyWrite = (needle: string, from = 0) =>
     stdout.writes.slice(from).some((w) => w.includes(needle));
+  const anyPlain = (needle: string, from = 0) =>
+    stdout.writes.slice(from).some((w) => stripAnsi(w).includes(needle));
   const type = async (s: string) => {
     for (const ch of s) {
       stdin.write(ch);
@@ -124,19 +133,17 @@ async function main() {
   // 0) the tab/window title is claimed via OSC 0
   results.push(["sets terminal title  ", anyWrite("\x1b]0;Lain OS")]);
 
-  // 1) a normal message round-trip lands in the transcript
+  // 1) a normal message round-trip lands in the flat feed
   await type("hi\r");
   await sleep(700);
-  results.push(["reply shows in feed  ", anyWrite(REPLY)]);
+  results.push(["reply shows in feed  ", anyPlain(REPLY)]);
   // …with the provenance marker (which model answered) in the turn header.
-  results.push(["reply names model    ", anyWrite("· stub")]);
+  results.push(["reply names model    ", anyPlain("· stub")]);
 
-  // The transcript is printed once into scrollback (<Static>): later repaints
-  // (cursor blink etc.) must never rewrite it — that is what lets the user
-  // select and copy text while the app is running.
-  const afterReply = stdout.writes.length;
+  // The feed is drawn in the app's own frame now (not terminal scrollback), so
+  // a blink repaint must keep the reply visible rather than drop it.
   await sleep(2000);
-  results.push(["transcript is static ", !anyWrite(REPLY, afterReply)]);
+  results.push(["reply persists       ", anyPlain(REPLY)]);
 
   // 1.5) the composer edits like a readline prompt: ink's own key parsing
   // drops home/end/delete/ctrl+←→ entirely, so we parse the raw sequences.
@@ -152,10 +159,10 @@ async function main() {
   await press("\x1b[3~"); // delete → eats the space, "Xhelloworld"
   await press("\x1b[F"); // end
   await type("!");
-  results.push(["home/end/del/ctrl+→  ", anyWrite("Xhelloworld!", beforeEdit)]);
+  results.push(["home/end/del/ctrl+→  ", anyPlain("Xhelloworld!", beforeEdit)]);
   await press("\x15"); // ctrl+u from the end wipes the line again
   await sleep(100);
-  results.push(["line cleared         ", anyWrite("ask lain…", beforeEdit)]);
+  results.push(["line cleared         ", anyPlain("ask lain…", beforeEdit)]);
 
   // 2) /copy emits OSC 52 with the reply, confirms in the feed
   const beforeCopy = stdout.writes.length;
@@ -170,61 +177,57 @@ async function main() {
     oscOk = Buffer.from(b64, "base64").toString("utf8") === REPLY;
   }
   results.push(["/copy OSC52 payload  ", oscOk]);
-  results.push(["/copy confirmation   ", anyWrite("copied lain's last reply", beforeCopy)]);
+  results.push(["/copy confirmation   ", anyPlain("copied lain's last reply", beforeCopy)]);
 
-  // 3) /clear wipes screen + scrollback and reprints the boot card
-  const beforeClear = stdout.writes.length;
+  // 3) /clear resets the feed but keeps the banner + boot line. The screen is
+  // rebuilt in the app's own frame, so check the LAST frame is clean.
   await type("/clear");
   await sleep(30);
   await type("\r");
   await sleep(300);
-  results.push(["/clear wipes screen  ", anyWrite("\x1b[3J", beforeClear)]);
-  results.push(["/clear shows boot    ", anyWrite("welcome to the wired", beforeClear)]);
-  results.push(["/clear drops history ", !anyWrite(REPLY, beforeClear)]);
+  const lastWrite = stdout.writes.at(-1) ?? "";
+  results.push(["/clear shows boot    ", stripAnsi(lastWrite).includes("welcome to the wired")]);
+  results.push(["/clear drops history ", !stripAnsi(lastWrite).includes(REPLY)]);
 
-  // 4) picking a new /skin wipes and reprints the transcript in the new theme
+  // 4) picking a new /skin recolours the whole frame in place
   await type("/skin");
   await sleep(30);
   await type("\r"); // menu narrowed to /skin; enter opens the picker
   await sleep(200);
-  stdin.write("\x1b[B"); // ↓ highlights "matrix" (preview recolors the bottom)
+  stdin.write("\x1b[B"); // ↓ highlights "matrix" (preview recolors the frame)
   await sleep(150);
   const beforePick = stdout.writes.length;
   stdin.write("\r"); // pick it
   await sleep(300);
   const matrixPrimary = "38;2;57;255;20"; // THEMES.matrix.primary #39ff14
-  const skinReprint = stdout.writes.slice(beforePick).find((w) => w.includes("welcome to the wired"));
-  results.push(["/skin wipes screen   ", anyWrite("\x1b[3J", beforePick)]);
-  results.push(["/skin reprints theme ", !!skinReprint && skinReprint.includes(matrixPrimary)]);
+  results.push(["/skin applies theme  ", anyWrite(matrixPrimary, beforePick)]);
+  results.push(["/skin reprints boot  ", anyPlain("welcome to the wired", beforePick)]);
 
   // 4.7) /model re-routes the replies in place, and a route that cannot be
   // built says so instead of silently dropping the chat on another model.
   const beforeModel = stdout.writes.length;
   await type("/model claude\r");
   await sleep(300);
-  results.push(["/model switches      ", anyWrite("replies now go through claude (cli)", beforeModel)]);
+  results.push(["/model switches      ", anyPlain("replies now go through claude", beforeModel)]);
   const beforeBadModel = stdout.writes.length;
   await type("/model claude-api\r");
   await sleep(300);
-  results.push(["/model failure loud  ", anyWrite("unavailable", beforeBadModel)]);
+  results.push(["/model failure loud  ", anyPlain("unavailable", beforeBadModel)]);
 
-  // 4.5) nothing ever draws wider than the terminal — an overflowing line is
-  // hard-wrapped by the terminal itself and shreds the static frames.
-  const stripAnsi = (s: string) =>
-    s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+  // 4.5) nothing ever draws wider than the terminal.
   const wideLine = stdout.writes
     .flatMap((w) => stripAnsi(w).split("\n"))
     .find((l) => [...l].length > stdout.columns);
   results.push(["fits terminal width  ", wideLine === undefined]);
 
-  // 5) a width change repaints the transcript once the resize settles
+  // 5) a width change drops the right sidebar (content goes full width)
   const beforeResize = stdout.writes.length;
   stdout.columns = 80;
   stdout.emit("resize");
-  await sleep(600); // repaint debounce is 200ms
+  await sleep(600);
   results.push([
-    "resize repaints      ",
-    anyWrite("\x1b[3J", beforeResize) && anyWrite("welcome to the wired", beforeResize),
+    "resize drops sidebar ",
+    !anyPlain("╭─ session", beforeResize) && anyPlain("welcome to the wired", beforeResize),
   ]);
 
   // 6) blink repaints happen right after typing…

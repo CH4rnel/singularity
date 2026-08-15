@@ -27,7 +27,7 @@ const log = createLogger("model:claude");
  * removes every built-in tool, `--safe-mode` drops CLAUDE.md/skills/hooks/MCP,
  * `--system-prompt` replaces the Claude Code persona with Lain's, and the
  * scratch cwd is never the repo. LainOS tools travel over the JSON-in-the-reply
- * protocol in cli-protocol.ts, exactly as with codex.
+ * protocol in cli-protocol.ts, exactly as with codex and opencode.
  */
 export interface ClaudeCliProviderOptions {
   /** Path to the claude binary (see {@link resolveClaudeBin}). */

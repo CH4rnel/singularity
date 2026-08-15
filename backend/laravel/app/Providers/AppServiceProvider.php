@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Ai\Providers\AiProviderRegistry;
 use App\Services\TonApiService;
 use App\Support\Environment;
 use Carbon\CarbonImmutable;
@@ -24,6 +25,12 @@ class AppServiceProvider extends ServiceProvider
             (string) (config('bridge.chains.ton.api_url') ?: 'https://tonapi.io'),
             config('bridge.chains.ton.api_key') ?: null,
         ));
+
+        // One registry per request, so the catalogue and the gateway ask the
+        // same instances about the same keys. Scoped rather than a singleton:
+        // providers read config when they are built, and a test that rewrites
+        // `ai.providers.*` must be able to see its own change.
+        $this->app->scoped(AiProviderRegistry::class);
     }
 
     /**

@@ -1,0 +1,10 @@
+node_modules/
+
+# `npm run build` writes the unpacked extensions here; `npm run zip` packs them.
+dist/
+dist-firefox/
+Cyberia-extension.zip
+Cyberia-extension-firefox.zip
+
+# `web-ext sign` leaves the signed .xpi and its state here.
+web-ext-artifacts/

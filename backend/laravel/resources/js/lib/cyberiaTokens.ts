@@ -11,6 +11,7 @@ export type KnownToken = { address: string; symbol: string };
 export const WCYBER_ADDRESS = '0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9';
 export const CYBER_SOL_ADDRESS = '0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA';
 export const USDC_ADDRESS = '0xdc25597B19799010047F17e9591EFE08EFd40077';
+export const USDT_ADDRESS = '0x94845aF24a3E431593A2b941b2b31836dE45185D';
 
 export const KNOWN_TOKENS: KnownToken[] = [
     { address: WCYBER_ADDRESS, symbol: 'WCYBER' },
@@ -19,7 +20,7 @@ export const KNOWN_TOKENS: KnownToken[] = [
     { address: '0x05cd1AFd5b2DF3CCA6cEAb80CbC21168ec981E8B', symbol: 'LAIN' },
     { address: '0xD8c1f812ADd03ccdE8D3c7F86FeAD181980CD7Ec', symbol: 'MINE' },
     { address: USDC_ADDRESS, symbol: 'USDC' },
-    { address: '0x94845aF24a3E431593A2b941b2b31836dE45185D', symbol: 'USDT' },
+    { address: USDT_ADDRESS, symbol: 'USDT' },
     { address: '0x9332081f308BC978fe259237850fA253131b46Fa', symbol: 'BTC' },
     { address: '0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986', symbol: 'ETH' },
     { address: '0xF7655664D5D4b0681fdD4529438A1b667bCDc7E5', symbol: 'BNB' },

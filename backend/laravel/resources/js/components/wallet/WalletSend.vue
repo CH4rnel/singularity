@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { CircleCheck, CircleX, Loader, RefreshCw } from 'lucide-vue-next';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import GasSponsor from '@/components/wallet/GasSponsor.vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import StatusPill from '@/components/wallet/StatusPill.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { formatUnits, parseUnits, walletChain } from '@/lib/wallet';
-import type { WalletChainId, WalletFeeTier } from '@/lib/wallet';
+import type {
+    WalletChainId,
+    WalletFeeTier,
+    WalletTokenBalance,
+} from '@/lib/wallet';
 import { formatUsd, shortAddress, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -28,12 +33,17 @@ const props = defineProps<{
     wallet: MultiWallet;
     chain: WalletChainId;
     prices: Record<string, number | null>;
+    /** Chain id → (lowercased contract → USD price). */
+    tokenPrices: Record<string, Record<string, number>>;
+    /** Asset to open on: a token held on this chain, or the native coin. */
+    token?: WalletTokenBalance | null;
 }>();
 
 const emit = defineEmits<{
     back: [];
     pick: [chain: WalletChainId];
     sent: [];
+    addNetwork: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
@@ -43,6 +53,8 @@ type Outcome = 'signing' | 'pending' | 'confirmed' | 'failed';
 
 const phase = ref<Phase>('compose');
 const outcome = ref<Outcome>('signing');
+/** null is the network's own coin; anything else is an ERC20 on it. */
+const asset = ref<WalletTokenBalance | null>(props.token ?? null);
 const to = ref('');
 const amount = ref('');
 const tier = ref<WalletFeeTier>('normal');
@@ -57,11 +69,49 @@ const account = computed(() =>
     ),
 );
 
-const balance = computed(
+/** Tokens on this chain, offered next to the coin as things to send. */
+const assets = computed(() =>
+    (props.wallet.tokens.value[props.chain]?.items ?? []).filter(
+        (token) => token.balance > 0n,
+    ),
+);
+
+/** What the amount field counts in — the token's units, or the chain's. */
+const decimals = computed(() => asset.value?.decimals ?? chain.value.decimals);
+
+const symbol = computed(() => asset.value?.symbol ?? chain.value.symbol);
+
+/**
+ * The balance being spent from. For a token this is the token's own balance —
+ * the gas that moves it is a *different* balance, checked separately below.
+ */
+const balance = computed(() =>
+    asset.value
+        ? asset.value.balance
+        : (props.wallet.balances.value[props.chain]?.value ?? null),
+);
+
+/** The coin the fee is paid in, always the network's own. */
+const gasBalance = computed(
     () => props.wallet.balances.value[props.chain]?.value ?? null,
 );
 
-const quotes = computed(() => props.wallet.fees.value[props.chain] ?? []);
+/**
+ * Whether the recipient has code behind it.
+ *
+ * It changes the fee, so it is part of the quote and not a detail: a coin sent
+ * to a contract runs that contract's code on this transaction's gas, and the
+ * 21000 that pays a plain address does not cover a single opcode of it.
+ */
+const toIsContract = ref(false);
+
+const quotes = computed(() =>
+    props.wallet.feesFor(
+        props.chain,
+        asset.value?.address ?? null,
+        toIsContract.value,
+    ),
+);
 
 const fee = computed(
     () => quotes.value.find((quote) => quote.tier === tier.value)?.fee ?? null,
@@ -74,7 +124,7 @@ const amountUnits = computed(() => {
     }
 
     try {
-        return parseUnits(amount.value, chain.value.decimals);
+        return parseUnits(amount.value, decimals.value);
     } catch {
         return null;
     }
@@ -86,24 +136,56 @@ const addressValid = computed(
         chain.value.isValidAddress(to.value.trim()),
 );
 
+/**
+ * How much of the asset itself is missing.
+ *
+ * For the native coin the fee comes out of the same balance, so it is part of
+ * the sum. For a token it does not — the fee is gas, and gas is a different
+ * asset entirely, which is what `gasShortfall` is for.
+ */
 const shortfall = computed(() => {
-    if (
-        amountUnits.value === null ||
-        fee.value === null ||
-        balance.value === null
-    ) {
+    if (amountUnits.value === null || balance.value === null) {
         return null;
     }
 
-    const needed = amountUnits.value + fee.value;
+    if (asset.value === null && fee.value === null) {
+        return null;
+    }
+
+    const needed =
+        amountUnits.value + (asset.value === null ? (fee.value ?? 0n) : 0n);
 
     return needed > balance.value ? needed - balance.value : null;
 });
 
+/**
+ * Missing gas: holding the token but not the coin that moves it.
+ *
+ * This is the failure people actually hit with tokens — a full USDC balance and
+ * no CYBER — and it deserves its own sentence rather than being folded into
+ * "insufficient balance", which would point at the wrong asset.
+ */
+const gasShortfall = computed(() => {
+    if (
+        asset.value === null ||
+        fee.value === null ||
+        gasBalance.value === null
+    ) {
+        return null;
+    }
+
+    return fee.value > gasBalance.value ? fee.value - gasBalance.value : null;
+});
+
+/** Total debited from the asset being sent — for a token, the amount alone. */
 const total = computed(() =>
-    amountUnits.value === null || fee.value === null
+    amountUnits.value === null
         ? null
-        : amountUnits.value + fee.value,
+        : asset.value === null
+          ? fee.value === null
+              ? null
+              : amountUnits.value + fee.value
+          : amountUnits.value,
 );
 
 const canReview = computed(
@@ -112,17 +194,30 @@ const canReview = computed(
         amountUnits.value !== null &&
         amountUnits.value > 0n &&
         fee.value !== null &&
-        shortfall.value === null,
+        shortfall.value === null &&
+        gasShortfall.value === null,
 );
 
 const setMax = (): void => {
-    if (balance.value === null || fee.value === null) {
+    if (balance.value === null) {
+        return;
+    }
+
+    // A token's whole balance is spendable: its fee is paid in the coin, not
+    // out of it. Only the coin has to keep enough back to pay for its own move.
+    if (asset.value !== null) {
+        amount.value = formatUnits(balance.value, decimals.value, 12);
+
+        return;
+    }
+
+    if (fee.value === null) {
         return;
     }
 
     const spendable = balance.value - fee.value;
     amount.value =
-        spendable > 0n ? formatUnits(spendable, chain.value.decimals, 12) : '0';
+        spendable > 0n ? formatUnits(spendable, decimals.value, 12) : '0';
 };
 
 const pasteTo = async (): Promise<void> => {
@@ -131,19 +226,22 @@ const pasteTo = async (): Promise<void> => {
 
 /** The one sentence shown before every signature. */
 const sentence = computed(() =>
-    t('signSentence', {
+    t(asset.value === null ? 'signSentence' : 'signSentenceToken', {
         amount:
             amountUnits.value === null
                 ? '0'
-                : formatUnits(amountUnits.value, chain.value.decimals, 8),
-        symbol: chain.value.symbol,
+                : formatUnits(amountUnits.value, decimals.value, 8),
+        symbol: symbol.value,
         chain: chain.value.label,
         to: to.value.trim() ? shortAddress(to.value.trim()) : '—',
         network: chain.value.label,
+        // The fee is always in the chain's coin and its own decimals, even
+        // when what is moving is a token that counts differently.
         fee:
             fee.value === null
                 ? '—'
                 : formatUnits(fee.value, chain.value.decimals, 8),
+        gas: chain.value.symbol,
     }),
 );
 
@@ -172,6 +270,7 @@ const sign = async (): Promise<void> => {
             to.value.trim(),
             amount.value,
             tier.value,
+            asset.value,
         );
         outcome.value = 'pending';
     } catch (error) {
@@ -198,6 +297,7 @@ const sign = async (): Promise<void> => {
 
     void props.wallet.refreshBalances();
     void props.wallet.refreshHistory(props.chain);
+    void props.wallet.refreshTokens(props.chain);
 };
 
 const reset = (): void => {
@@ -207,18 +307,103 @@ const reset = (): void => {
 };
 
 const loadFees = (): void => {
-    void props.wallet.refreshFees(props.chain);
+    void props.wallet.refreshFees(
+        props.chain,
+        asset.value?.address ?? null,
+        toIsContract.value,
+    );
 };
 
-onMounted(loadFees);
+/** Pending recipient lookup, so typing an address does not spray reads. */
+let codeCheck: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Ask what the recipient is, once they have typed enough to be asking about.
+ *
+ * A wrong answer here is the difference between a transfer and a transfer that
+ * reverts out of gas and keeps the fee, so an unreadable node is treated as
+ * "contract" — the expensive-but-working side of the guess.
+ */
+const checkRecipient = (): void => {
+    if (codeCheck !== null) {
+        clearTimeout(codeCheck);
+    }
+
+    if (!addressValid.value) {
+        if (toIsContract.value) {
+            toIsContract.value = false;
+            loadFees();
+        }
+
+        return;
+    }
+
+    const address = to.value.trim();
+
+    codeCheck = setTimeout(async () => {
+        const isContract = await props.wallet.recipientIsContract(
+            props.chain,
+            address,
+        );
+
+        // The field may have moved on while the node was answering.
+        if (address !== to.value.trim()) {
+            return;
+        }
+
+        toIsContract.value = isContract;
+        loadFees();
+    }, 400);
+};
+
+/**
+ * Gas arrived from the station. The balance that was too small to pay a fee is
+ * the one thing that changed, so it is the one thing re-read.
+ */
+const onFunded = (): void => {
+    void props.wallet.refreshBalances();
+};
+
+onMounted(() => {
+    loadFees();
+    void props.wallet.refreshTokens(props.chain);
+});
+
+onBeforeUnmount(() => {
+    if (codeCheck !== null) {
+        clearTimeout(codeCheck);
+    }
+});
+
 watch(
     () => props.chain,
     () => {
         to.value = '';
         amount.value = '';
+        // The asset belongs to the network it lives on: keeping a token
+        // selected across a network switch would price and sign it against a
+        // contract that is not there.
+        asset.value = null;
+        // And so does the answer about the recipient: the same address is a
+        // contract on one network and nothing at all on the next.
+        toIsContract.value = false;
         loadFees();
+        void props.wallet.refreshTokens(props.chain);
     },
 );
+
+watch(to, checkRecipient);
+
+// Each asset is priced separately, because moving a token costs several times
+// what moving the coin does.
+watch(asset, () => {
+    amount.value = '';
+    loadFees();
+});
+
+const pickAsset = (next: WalletTokenBalance | null): void => {
+    asset.value = next;
+};
 </script>
 
 <template>
@@ -250,7 +435,63 @@ watch(
                         :style="{
                             background:
                                 candidate.chain === chain.id
-                                    ? `var(--cw-net-${candidate.chain})`
+                                    ? candidate.mark.hue
+                                    : 'transparent',
+                        }"
+                    />
+                </button>
+                <button
+                    type="button"
+                    class="cw-seg-item"
+                    style="flex: 0 0 56px; color: var(--cw-muted)"
+                    :aria-label="t('addNetwork')"
+                    @click="emit('addNetwork')"
+                >
+                    +
+                    <span class="cw-seg-bar" />
+                </button>
+            </div>
+
+            <!--
+              What is being sent, when the network holds more than its own coin.
+              A token shares this address and this chain's gas, so it belongs in
+              a row inside the network rather than as a network of its own.
+            -->
+            <div
+                v-if="assets.length > 0 && account.capabilities.send"
+                class="cw-seg"
+                style="margin-bottom: 20px"
+            >
+                <button
+                    type="button"
+                    class="cw-seg-item"
+                    :aria-pressed="asset === null"
+                    @click="pickAsset(null)"
+                >
+                    {{ chain.symbol }}
+                    <span
+                        class="cw-seg-bar"
+                        :style="{
+                            background:
+                                asset === null ? chain.mark.hue : 'transparent',
+                        }"
+                    />
+                </button>
+                <button
+                    v-for="candidate in assets"
+                    :key="candidate.address"
+                    type="button"
+                    class="cw-seg-item"
+                    :aria-pressed="asset?.address === candidate.address"
+                    @click="pickAsset(candidate)"
+                >
+                    {{ candidate.symbol }}
+                    <span
+                        class="cw-seg-bar"
+                        :style="{
+                            background:
+                                asset?.address === candidate.address
+                                    ? chain.mark.hue
                                     : 'transparent',
                         }"
                     />
@@ -264,6 +505,20 @@ watch(
             </p>
 
             <template v-else>
+                <!--
+                  On a network the user added, the fee and the balance below are
+                  whatever its endpoint says they are. That belongs above the
+                  form rather than under it: it changes how the numbers should
+                  be read, and the signature it leads to cannot be undone.
+                -->
+                <p
+                    v-if="account.custom"
+                    class="cw-note"
+                    style="margin-bottom: 16px"
+                >
+                    <span>{{ t('warnCustom') }}</span>
+                </p>
+
                 <div class="cw-label" style="margin-bottom: 8px">
                     {{ t('recipient') }}
                 </div>
@@ -338,7 +593,7 @@ watch(
                                 font: 400 14px/1 var(--cw-mono);
                                 color: var(--cw-muted);
                             "
-                            >{{ account.symbol }}</span
+                            >{{ symbol }}</span
                         >
                         <button
                             type="button"
@@ -348,7 +603,10 @@ watch(
                                 border-color: var(--cw-accent);
                                 color: var(--cw-accent);
                             "
-                            :disabled="balance === null || fee === null"
+                            :disabled="
+                                balance === null ||
+                                (asset === null && fee === null)
+                            "
                             @click="setMax"
                         >
                             {{ t('max') }}
@@ -371,8 +629,12 @@ watch(
                                 formatUsd(
                                     usdValue(
                                         amountUnits,
-                                        account.decimals,
-                                        prices[chain.id] ?? null,
+                                        decimals,
+                                        asset === null
+                                            ? (prices[chain.id] ?? null)
+                                            : ((tokenPrices[chain.id] ?? {})[
+                                                  asset.address.toLowerCase()
+                                              ] ?? null),
                                     ),
                                     locale,
                                 )
@@ -387,8 +649,9 @@ watch(
                             {{
                                 balance === null
                                     ? '—'
-                                    : formatUnits(balance, account.decimals, 6)
-                            }}</span
+                                    : formatUnits(balance, decimals, 6)
+                            }}
+                            {{ symbol }}</span
                         >
                     </div>
                 </div>
@@ -404,15 +667,68 @@ watch(
                         }}</strong>
                         {{
                             t('insufficientBody', {
-                                amount: formatUnits(
-                                    shortfall,
-                                    account.decimals,
-                                    8,
-                                ),
-                                symbol: account.symbol,
+                                amount: formatUnits(shortfall, decimals, 8),
+                                symbol: symbol,
                             })
                         }}
                     </span>
+                </p>
+
+                <!--
+                  Holding the token but not the coin that moves it. Folding this
+                  into "insufficient balance" would point at the wrong asset and
+                  send someone looking for USDC they already have.
+                -->
+                <p
+                    v-if="gasShortfall !== null"
+                    class="cw-note cw-note-bad"
+                    style="margin-top: 10px"
+                >
+                    <span>
+                        <strong style="display: block">{{
+                            t('insufficientGasTitle', { gas: chain.symbol })
+                        }}</strong>
+                        {{
+                            t('insufficientGasBody', {
+                                amount: formatUnits(
+                                    gasShortfall,
+                                    chain.decimals,
+                                    8,
+                                ),
+                                gas: chain.symbol,
+                                symbol: symbol,
+                            })
+                        }}
+                    </span>
+                </p>
+
+                <!--
+                  On Cyberia there is something to be done about a fee that
+                  cannot be paid: ask the station for it. Renders nothing on any
+                  other chain, and nothing when this wallet can already pay.
+                -->
+                <GasSponsor
+                    :chain="props.chain"
+                    :address="account?.address"
+                    :fee="fee"
+                    :gas-balance="gasBalance"
+                    :symbol="chain.symbol"
+                    :decimals="chain.decimals"
+                    @funded="onFunded"
+                />
+
+                <!--
+                  Paying a contract is a contract call, and the fee above says
+                  so. Worth a sentence rather than a silently larger number:
+                  the same address pasted twice costs different amounts
+                  depending on what is behind it.
+                -->
+                <p
+                    v-if="toIsContract && asset === null"
+                    class="cw-note"
+                    style="margin-top: 10px"
+                >
+                    <span>{{ t('toContractNote') }}</span>
                 </p>
 
                 <div class="cw-label" style="margin: 22px 0 8px">
@@ -448,7 +764,7 @@ watch(
                         :style="{
                             border: `1px solid ${
                                 quote.tier === tier
-                                    ? `var(--cw-net-${chain.id})`
+                                    ? chain.mark.hue
                                     : 'var(--cw-border-soft)'
                             }`,
                             background:
@@ -467,7 +783,7 @@ watch(
                             :style="{
                                 color:
                                     quote.tier === tier
-                                        ? `var(--cw-net-${chain.id})`
+                                        ? chain.mark.hue
                                         : 'var(--cw-muted)',
                             }"
                             >{{
@@ -623,9 +939,7 @@ watch(
                 >
                     <div class="cw-kv">
                         <span class="cw-kv-key">{{ t('kAmount') }}</span>
-                        <span class="cw-kv-val"
-                            >{{ amount }} {{ account.symbol }}</span
-                        >
+                        <span class="cw-kv-val">{{ amount }} {{ symbol }}</span>
                     </div>
                     <div class="cw-kv">
                         <span class="cw-kv-key">{{ t('kTo') }}</span>
@@ -740,19 +1054,33 @@ watch(
                             >{{ to.trim() }}</span
                         >
                     </div>
+                    <!--
+                      Which asset, named by its contract. Two tokens can share a
+                      ticker; only the address says which one is about to move.
+                    -->
+                    <div v-if="asset" class="cw-kv">
+                        <span class="cw-kv-key">{{ t('kToken') }}</span>
+                        <span class="cw-kv-val" style="font-weight: 400"
+                            >{{ asset.symbol }} ·
+                            {{ shortAddress(asset.address) }}</span
+                        >
+                    </div>
                     <div class="cw-kv">
                         <span class="cw-kv-key">{{ t('kAmount') }}</span>
                         <span class="cw-kv-val" style="font-size: 14px"
-                            >{{ amount }} {{ account.symbol }}</span
+                            >{{ amount }} {{ symbol }}</span
                         >
                     </div>
                     <div class="cw-kv">
                         <span class="cw-kv-key">{{ t('kFee') }}</span>
-                        <span class="cw-kv-val" style="font-weight: 400">{{
-                            fee === null
-                                ? '—'
-                                : formatUnits(fee, account.decimals, 8)
-                        }}</span>
+                        <span class="cw-kv-val" style="font-weight: 400"
+                            >{{
+                                fee === null
+                                    ? '—'
+                                    : formatUnits(fee, chain.decimals, 8)
+                            }}
+                            {{ chain.symbol }}</span
+                        >
                     </div>
                     <div
                         class="cw-kv"
@@ -771,13 +1099,9 @@ watch(
                                 >{{
                                     total === null
                                         ? '—'
-                                        : formatUnits(
-                                              total,
-                                              account.decimals,
-                                              8,
-                                          )
+                                        : formatUnits(total, decimals, 8)
                                 }}
-                                {{ account.symbol }}</span
+                                {{ symbol }}</span
                             >
                             <span
                                 style="
@@ -790,8 +1114,13 @@ watch(
                                     formatUsd(
                                         usdValue(
                                             total,
-                                            account.decimals,
-                                            prices[chain.id] ?? null,
+                                            decimals,
+                                            asset === null
+                                                ? (prices[chain.id] ?? null)
+                                                : ((tokenPrices[chain.id] ??
+                                                      {})[
+                                                      asset.address.toLowerCase()
+                                                  ] ?? null),
                                         ),
                                         locale,
                                     )

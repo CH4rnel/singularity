@@ -1,4 +1,5 @@
 """Pure formatting / parsing helpers with no I/O."""
+import math
 import re
 
 from bot.config import MIN_REWARDS_INTERVAL_SECONDS, MAX_REWARDS_INTERVAL_SECONDS
@@ -96,12 +97,90 @@ def slugify_symbol(name: str, chat_id: int) -> str:
     if not cleaned:
         return f"CHAT{abs(chat_id)}"
     return cleaned[:16]
-def _fmt_usd(value: float) -> str:
-    if value >= 1000:
-        return f"${value:,.0f}"
-    if value >= 1:
-        return f"${value:,.2f}"
-    return f"${value:.4f}"
+def _trim_zeros(text: str) -> str:
+    """'0.3176000' → '0.3176'. Only touches a number that has a decimal point."""
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def _sig_decimals(size: float, digits: int) -> int:
+    """Decimal places that leave `digits` significant ones in a number below 1,
+    so a dust price keeps its meaning instead of rounding to $0.0000 — and is
+    capped, so it cannot print a screenful of zeros either."""
+    if size <= 0:
+        return 2
+    return min(18, max(2, digits - 1 - math.floor(math.log10(size))))
+
+
+def _as_number(value) -> float | None:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if num != num or num in (float("inf"), float("-inf")):
+        return None
+    return num
+
+
+def _fmt_amount(value) -> str:
+    """A token amount for a chat line: a compact suffix in the millions, grouped
+    digits below that, four significant figures under one — and never the
+    scientific notation `%g` falls back to, which is how a bridge of five
+    million CYBER.sol reached the digest as `5.14993e+06`."""
+    num = _as_number(value)
+    if num is None:
+        return "0"
+    size = abs(num)
+    if size == 0:
+        return "0"
+    for limit, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M")):
+        if size >= limit:
+            return _trim_zeros(f"{num / limit:,.2f}") + suffix
+    if size >= 1000:
+        return f"{num:,.0f}"
+    if size >= 1:
+        return _trim_zeros(f"{num:,.2f}")
+    return _trim_zeros(f"{num:.{_sig_decimals(size, 4)}f}")
+
+
+def _fmt_usd(value) -> str:
+    """Money in a chat line, rounded to what a reader can act on: cents where
+    cents matter, three significant figures below a cent (never `$0.0000`), a
+    compact suffix once the number stops being countable."""
+    num = _as_number(value)
+    if num is None:
+        return "$0"
+    size = abs(num)
+    sign = "-" if num < 0 else ""
+    if size == 0:
+        return "$0"
+    if size >= 1e9:
+        return f"{sign}${_trim_zeros(f'{size / 1e9:,.2f}')}B"
+    if size >= 1e6:
+        return f"{sign}${_trim_zeros(f'{size / 1e6:,.2f}')}M"
+    if size >= 1000:
+        return f"{sign}${size:,.0f}"
+    if size >= 1:
+        return f"{sign}${size:,.2f}"
+    return f"{sign}${_trim_zeros(f'{size:.{_sig_decimals(size, 3)}f}')}"
+
+
+def _fmt_price_usd(value) -> str:
+    """A quote, which needs one more significant figure than a total: four, so
+    a sub-cent coin still differs from the next one ($0.00000055), and no more
+    than two above a dollar (BTC is not news at four decimal places)."""
+    num = _as_number(value)
+    if num is None or num <= 0:
+        return "$0"
+    if num >= 1000:
+        return f"${num:,.0f}"
+    if num >= 1:
+        return f"${num:,.2f}"
+    return f"${_trim_zeros(f'{num:.{_sig_decimals(num, 4)}f}')}"
+
+
+def _plural(count: int, one: str, many: str | None = None) -> str:
+    """'1 trader' / '4 traders' — the digest used to say '1 traders'."""
+    return f"{count} {one if abs(count) == 1 else (many or one + 's')}"
 def _short_addr(addr: str | None) -> str:
     if not addr:
         return "?"

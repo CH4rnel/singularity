@@ -3,15 +3,17 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * USD prices for the assets the unified wallet holds.
  *
- * The wallet page shows one portfolio total across three chains, so it needs a
- * price per chain and not per DEX pool. CYBER reuses the DexScreener feed the
- * bridge already trusts; SOL and XMR come from CoinGecko, which is the only
- * public source here that covers Monero at all.
+ * The wallet page shows one portfolio total across every chain it derives, so it
+ * needs a price per chain and not per DEX pool. CYBER reuses the DexScreener
+ * feed the bridge already trusts; everything else comes from CoinGecko, which is
+ * the only public source here that covers Monero at all.
  *
  * A missing price is returned as null rather than zero: the UI renders "—" and
  * marks the total partial, because a silent zero would understate a balance the
@@ -22,7 +24,10 @@ class WalletPriceService
     /** Long enough that a page refresh is free, short enough to stay usable. */
     private const TTL_SECONDS = 300;
 
-    private const CACHE_KEY = 'wallet.prices.v1';
+    // Bumped with the payload shape: a cached v1 entry has no `tokens` key,
+    // and would serve a wallet that silently shows every token as unpriced
+    // for the first five minutes after a deploy.
+    private const CACHE_KEY = 'wallet.prices.v2';
 
     private const COINGECKO_URL = 'https://api.coingecko.com/api/v3/simple/price';
 
@@ -38,18 +43,23 @@ class WalletPriceService
         'base' => 'ethereum',
         'solana' => 'solana',
         'monero' => 'monero',
+        'bitcoin' => 'bitcoin',
+        'litecoin' => 'litecoin',
     ];
 
-    public function __construct(private CyberPriceService $cyberPrice) {}
+    public function __construct(
+        private CyberPriceService $cyberPrice,
+        private CyberiaPrices $tokenPrices,
+    ) {}
 
     /**
-     * USD price per wallet chain plus the moment the quote was taken.
+     * USD price per wallet chain and per token, plus when the quote was taken.
      *
-     * @return array{prices: array<string, float|null>, fetchedAt: string}
+     * @return array{prices: array<string, float|null>, tokens: array<string, array<string, float>>, fetchedAt: string}
      */
     public function quotes(): array
     {
-        /** @var array{prices: array<string, float|null>, fetchedAt: string} */
+        /** @var array{prices: array<string, float|null>, tokens: array<string, array<string, float>>, fetchedAt: string} */
         return Cache::remember(
             self::CACHE_KEY,
             self::TTL_SECONDS,
@@ -58,9 +68,33 @@ class WalletPriceService
                     'cyberia' => $this->cyberiaUsd(),
                     ...$this->coingeckoUsd(),
                 ],
+                'tokens' => $this->tokenUsd(),
                 'fetchedAt' => now()->toIso8601String(),
             ],
         );
+    }
+
+    /**
+     * USD prices for the ERC20s the wallet may hold, keyed by chain and then by
+     * lowercased contract address.
+     *
+     * Only Cyberia has an answer here, and it is the same one the token pages
+     * and the analytics dashboard give: prices walked outward from the USD
+     * anchors through the DEX pool graph. Tokens on chains with no such graph
+     * are simply absent, and the wallet renders them as unpriced rather than
+     * inventing a number for a balance someone is about to spend.
+     *
+     * @return array<string, array<string, float>>
+     */
+    private function tokenUsd(): array
+    {
+        if (! Schema::hasTable('dex_pools')) {
+            return [];
+        }
+
+        return ['cyberia' => $this->tokenPrices->priceFromPools(
+            DB::table('dex_pools')->get()
+        )];
     }
 
     /**

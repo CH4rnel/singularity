@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
+import { download } from '@/routes';
+
 const links = [
     { title: 'Swap', href: 'https://swap.cyberia.church/' },
     { title: 'Explorer', href: 'https://explorer.cyberia.church/' },
@@ -16,6 +19,9 @@ const links = [
                 Cyberia<span class="text-brand-cyan">_</span>
             </p>
             <div class="flex flex-wrap items-center justify-center gap-4">
+                <Link :href="download().url" class="hover:text-foreground">
+                    Get the app
+                </Link>
                 <a
                     v-for="link in links"
                     :key="link.title"

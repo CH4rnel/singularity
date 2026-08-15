@@ -14,6 +14,7 @@ import {
     TransactionInstruction,
 } from '@solana/web3.js';
 import { ref } from 'vue';
+import { confirmSignature } from '@/lib/solanaRpc';
 import type { SolanaTransactionProvider } from '@/lib/solanaWalletProvider';
 import { state as stakingState } from '@/routes/staking/solana';
 import { store as claimStore } from '@/routes/staking/solana/claims';
@@ -292,10 +293,9 @@ export const useSolanaStaking = () => {
                 PENDING_DEPOSIT_KEY,
                 JSON.stringify(pendingDeposit.value),
             );
-            await connection.confirmTransaction(
-                { signature, blockhash, lastValidBlockHeight },
-                'confirmed',
-            );
+            await confirmSignature(connection, signature, {
+                lastValidBlockHeight,
+            });
             await confirmPendingDeposit();
         } catch (cause) {
             error.value =

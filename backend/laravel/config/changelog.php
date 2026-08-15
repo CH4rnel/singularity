@@ -10,9 +10,121 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.8.0'),
+    'current_version' => env('APP_VERSION', 'v0.11.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.11.0',
+            'date' => '2026-08-12',
+            'title' => 'The wallet stops being only a place to keep things',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Swapping, inside the wallet. Trade one coin for another without leaving it and without connecting it to anything: the wallet finds the route itself, so a pair with no direct market still trades in one step, and you see the rate, the price impact and the fee before you sign.',
+                        'The price you agreed to is the price you are protected at. What you read on the screen goes into the transaction as a floor, so if the market moves while you are deciding, the trade simply does not happen — you are never quietly filled at a worse rate.',
+                        'Permission to spend a token is asked for the exact amount of the trade in front of you and nothing is left standing afterwards, so there is no open-ended approval sitting on your account waiting to be remembered.',
+                        'Wrapping, one for one, on the networks where a coin has to become a token before a pool will accept it. No route, no slippage and nothing to choose, because there is nothing to choose.',
+                        'NFTs in the wallet: what each of your accounts owns, and minting your own. What a token points at can be a picture, a page or a single line of text, and nothing here assumes it is an image.',
+                        'Publishing to IPFS from the wallet. Put up a file or a whole page and get a permanent address made out of the contents themselves — anyone who has that address can fetch it from any node that holds it. Up to 10 MB at a time.',
+                        'The wallet opens inside Telegram. @cyberia_bot has it behind the ☰ button and behind /open: the same wallet as the site, in the chat you were already in, and you can now create one there too. It carries the one warning that is only true inside Telegram — Telegram empties its own storage without asking, and your recovery phrase is what brings the wallet back.',
+                        'The wallet, the download page and the leaderboard now read in Simplified Chinese as well as English and Russian — 简体中文, every screen, including every warning about what nobody can undo for you.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'Prediction markets answer their own question where the question allows it. A market that names a price and where to read it settles from that source the moment it closes, without waiting on anybody. A market only a person can judge is refunded in full instead — every stake back, no fee — rather than expiring with the money still inside it, which is how two earlier markets ended.',
+                    ],
+                ],
+                [
+                    'label' => 'Fixed',
+                    'items' => [
+                        'The browser extension took new passwords backwards. Setting up an extension wallet, each character went in front of the one before it, so what was saved was your password reversed — invisibly, since the field only ever shows dots. The current build at cyberia.church/download is fixed. If a wallet you set up earlier will not unlock, try typing that password in reverse; your recovery phrase restores it either way.',
+                    ],
+                ],
+            ],
+        ],
+        [
+            'version' => 'v0.10.0',
+            'date' => '2026-08-12',
+            'title' => 'The wallet, next to the address bar',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'The Cyberia wallet as a browser extension, for Chrome, Brave, Edge and Firefox. It lives next to the address bar and signs for the sites you are already on, so the swap, the launchpad and the DAO stop asking you to bring a wallet from somewhere else.',
+                        'It is a wallet in its own right, not a window onto this site: the keys are made on your machine, encrypted with your password and never leave it. Enter the recovery phrase you already use and the same accounts are simply there.',
+                        'A site sees an account only when you hand it one, one site at a time, and you can take it back whenever you like. Where you have granted nothing, the wallet stays invisible to the page — it cannot even be asked whether it exists.',
+                        'Nothing is signed without being read first. Every request shows what leaves your account, which contract receives it, on which network and the most it can cost; a permission that would have no limit is named as unlimited instead of shown as a very long number.',
+                        'The wallet can send its own traffic through Tor, I2P or a proxy you run, and it says plainly which of the two things your browser allows: in Firefox only the wallet is routed and the rest of your browsing is untouched.',
+                        'Both builds are at cyberia.church/download, next to the desktop and Android apps.',
+                    ],
+                ],
+            ],
+        ],
+        [
+            'version' => 'v0.9.2',
+            'date' => '2026-08-09',
+            'title' => 'The wallet, installable',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'A download page at cyberia.church/download. The Cyberia wallet is now an app you can install on Windows, macOS, Linux and Android, and the page offers the right one for whatever you are reading it on.',
+                        'Every build comes from one published release with a version, a date and checksums, so what you install is something you can verify — instead of a file somebody sent you in a chat.',
+                        'A short link per platform, cyberia.church/download/android among them, that keeps pointing at the current build. One address to share, for good.',
+                        'The app is the same wallet as the site and updates when the site does; you only reinstall when the app itself changes.',
+                        'On iPhone and iPad there is nothing to install, and the page says so instead of pretending otherwise — it shows how to put the wallet on the home screen, which works today.',
+                    ],
+                ],
+            ],
+        ],
+        [
+            'version' => 'v0.9.1',
+            'date' => '2026-08-09',
+            'title' => 'Sealed mail between wallets',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Messages in the wallet, addressed by wallet address. There is no account to create, no name to claim and nobody to ask: if you know an address, you can write to whoever holds it.',
+                        'Nothing you write leaves your device readable. Cyberia carries your messages the way a post office carries sealed envelopes — it passes them along and cannot open them. What it can see is which addresses are talking and when, and the wallet tells you that on the screen instead of burying it in a policy.',
+                        'Nothing new to write down: the ability to read your messages comes back with the recovery phrase you already keep, and it is never the ability to spend your money.',
+                        'Every wallet you talk to is remembered. If what protects an address ever changes, the wallet stops and says so rather than quietly carrying on — that is what an attempt to listen in looks like from your side.',
+                        'The relay is a queue, not an archive: messages are handed over and then dropped after 30 days, and clearing your wallet from a device clears its conversations with it.',
+                    ],
+                ],
+            ],
+        ],
+        [
+            'version' => 'v0.9.0',
+            'date' => '2026-08-08',
+            'title' => 'One seed phrase, every chain',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'A wallet of your own at /wallet, built from nothing in this release: one recovery phrase and one password give you accounts on Cyberia, Robinhood Chain, BNB Smart Chain, Base, Solana, Bitcoin, Litecoin and Monero. The keys are created on your device and stay there — Cyberia never holds them, never sees them and cannot freeze what it does not have.',
+                        'Everything about your money in one place: a portfolio valued in dollars, balances and transaction history per network, receive screens with QR codes, and sending with a choice of fee.',
+                        'Your tokens show up on their own. On supported networks the wallet finds what you hold and prices it; where that is not possible, a token can be added by its address.',
+                        'Bitcoin and Litecoin are full accounts you can send from, not just addresses that receive.',
+                        'Any network you use can be added yourself — the wallet is not limited to the ones it ships with. Networks you add are marked as such, since their connection is one you chose and we cannot vouch for it.',
+                        'Every payment is spelled out in one plain sentence and signed by holding, because a payment on these networks cannot be recalled.',
+                        'The Cyberia desktop and mobile apps now open straight into the wallet and work the moment they are installed — no Cyberia account required.',
+                        'A launchpad token can now be launched on several networks at once, each with its own supply and liquidity, and an interrupted launch can be resumed without paying twice.',
+                        'Monero joins as a wallet in its own right rather than a bridged token, with its address usable as your bridge payout destination in one click. It receives today; balances are not yet shown, and the wallet tells you so.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'Values in the wallet are the ones we can actually stand behind: a price we cannot read is shown as unavailable rather than as zero, and a total that is missing something says it is partial.',
+                        'Lain can launch a token on the launchpad herself, but only after presenting the full plan — what it costs, what it opens at, and that it cannot be undone — and having that exact plan confirmed.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.8.0',
             'date' => '2026-07-30',

@@ -1,7 +1,11 @@
 import type { Locale } from '@/composables/useLocale';
 
-/** Bilingual copy shipped straight from config/gamification.php. */
-export type LocalizedText = Record<Locale, string>;
+/**
+ * Copy shipped straight from config/gamification.php. English is the only
+ * language promised: a quest added in one language still renders, and a
+ * language added here still renders before the config has caught up.
+ */
+export type LocalizedText = { en: string } & Partial<Record<Locale, string>>;
 
 export type Quest = {
     key: string;

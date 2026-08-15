@@ -11,12 +11,15 @@ const {
     DEFAULT_APP_PATH,
     DEFAULT_APP_URL,
     describeProxy,
+    hasProxyFlag,
     isExternallyOpenable,
     isNavigable,
+    normalizeProxySetting,
     parseProxyServer,
     resolveAppPath,
     resolveAppUrl,
     resolveProxy,
+    resolveProxyDecision,
     resolveStartUrl,
 } = require('../src/config');
 
@@ -167,6 +170,74 @@ test('turns NO_PROXY into bypass rules', () => {
         resolveProxy({ https_proxy: '127.0.0.1:10808', NO_PROXY: '*' }, []).proxyBypassRules,
         '*',
     );
+});
+
+test('reads back only settings the shell can act on', () => {
+    assert.deepEqual(normalizeProxySetting({ mode: 'manual', server: '127.0.0.1:10808' }), {
+        mode: 'manual',
+        server: 'http://127.0.0.1:10808',
+    });
+    assert.deepEqual(normalizeProxySetting({ mode: 'direct' }), { mode: 'direct', server: '' });
+
+    // A saved entry Chromium cannot use is not kept as a broken proxy.
+    const system = { mode: 'system', server: '' };
+
+    assert.deepEqual(normalizeProxySetting({ mode: 'manual', server: 'nonsense://x' }), system);
+    assert.deepEqual(normalizeProxySetting({ mode: 'manual' }), system);
+    assert.deepEqual(normalizeProxySetting({ mode: 'whatever' }), system);
+    assert.deepEqual(normalizeProxySetting(null), system);
+    assert.deepEqual(normalizeProxySetting('socks5://127.0.0.1:1080'), system);
+});
+
+test('what the user chose in the app outranks the ambient environment', () => {
+    const env = { https_proxy: 'http://127.0.0.1:10808', http_proxy: 'http://127.0.0.1:10808' };
+    const saved = { mode: 'manual', server: 'socks5://127.0.0.1:1080' };
+
+    assert.deepEqual(resolveProxyDecision(env, [], saved), {
+        source: 'saved',
+        proxy: { proxyRules: 'socks5://127.0.0.1:1080', proxyBypassRules: BYPASS },
+    });
+
+    // Including the choice to ignore a proxy the environment still exports.
+    assert.deepEqual(resolveProxyDecision({ ...env, CYBERIA_PROXY: '127.0.0.1:3128' }, [], {
+        mode: 'direct',
+    }), { source: 'saved', proxy: { mode: 'direct' } });
+
+    // "System" is not a choice to override anything: the environment takes over.
+    assert.deepEqual(resolveProxyDecision(env, [], { mode: 'system' }), {
+        source: 'env',
+        proxy: { proxyRules: 'http://127.0.0.1:10808', proxyBypassRules: BYPASS },
+    });
+});
+
+test('a launch flag still wins over the saved setting', () => {
+    const saved = { mode: 'manual', server: 'socks5://127.0.0.1:1080' };
+
+    assert.deepEqual(resolveProxyDecision({}, ['--no-proxy'], saved), {
+        source: 'flag',
+        proxy: { mode: 'direct' },
+    });
+    assert.equal(resolveProxyDecision({}, ['--proxy=127.0.0.1:3128'], saved).source, 'flag');
+    assert.equal(
+        resolveProxy({}, ['--proxy=127.0.0.1:3128'], saved).proxyRules,
+        'http://127.0.0.1:3128',
+    );
+
+    assert.ok(hasProxyFlag(['--no-proxy']));
+    assert.ok(hasProxyFlag(['--proxy=direct']));
+    assert.equal(hasProxyFlag(['--url=https://staging.test']), false);
+});
+
+test('an unusable value is reported as the system proxy, never invented', () => {
+    assert.deepEqual(resolveProxyDecision({ CYBERIA_PROXY: 'nonsense://x' }, []), {
+        source: 'system',
+        proxy: null,
+    });
+    assert.deepEqual(resolveProxyDecision({}, ['--proxy=ftp://proxy.test:21']), {
+        source: 'system',
+        proxy: null,
+    });
+    assert.deepEqual(resolveProxyDecision({}, []), { source: 'system', proxy: null });
 });
 
 test('never hands executable or local schemes to the operating system', () => {

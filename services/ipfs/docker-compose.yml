@@ -1,7 +1,13 @@
-# Kubo (go-ipfs) node backing the NFT marketplace metadata pinning.
+# Kubo (go-ipfs) node backing NFT metadata and Launchpad token sites.
 #
-# The Laravel backend (NFTController, driver `ipfs`) pins images + ERC-721
-# metadata JSON to the HTTP API on 5001 and returns `ipfs://CID`.
+# The Laravel backend pins to the HTTP API on 5001: NFTController (driver
+# `ipfs`) stores images + ERC-721 metadata JSON and returns `ipfs://CID`, and
+# LaunchpadSiteService pins every uploaded token page so its address survives
+# this host (`launchpad:pin-sites` catches up whatever was missed).
+#
+# Laravel runs in its own container, so `IPFS_API_URL` there must be an address
+# that resolves from inside it (e.g. host.docker.internal:5001), not the
+# localhost binding below.
 #
 #   docker compose up -d
 #   docker compose logs -f ipfs

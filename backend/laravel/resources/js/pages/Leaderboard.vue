@@ -14,7 +14,7 @@ const props = defineProps<{
     me: (PublicProgress & { user_id: number }) | null;
 }>();
 
-const { locale, toggleLocale, t } = useLocale(progressMessages);
+const { nextTag, toggleLocale, t } = useLocale(progressMessages);
 
 const displayName = (row: {
     name: string | null;
@@ -47,7 +47,7 @@ const showOwnRow = computed(
             <template #actions>
                 <Button variant="ghost" size="sm" @click="toggleLocale">
                     <Languages class="mr-1 size-4" />
-                    {{ locale === 'ru' ? 'EN' : 'RU' }}
+                    {{ nextTag }}
                 </Button>
             </template>
         </PageHero>

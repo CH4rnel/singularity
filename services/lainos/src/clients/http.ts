@@ -28,7 +28,7 @@ export interface HttpOptions {
  *   GET  /research          -> { topics } (the scout's subscriptions)
  *   POST /research/cyberia-study/run -> { topic, digest }
  *   GET  /provider          -> { provider, choices } (who writes the replies)
- *   POST /provider {provider} -> { provider } (switch claude/codex live)
+ *   POST /provider {provider} -> { provider } (switch claude/codex/opencode live)
  *   POST /chat {roomId,userId,text} -> { text, actions }
  */
 export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {}): Server {
@@ -81,8 +81,9 @@ export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {})
     }
 
     // Switching the live daemon (Telegram, sentinel, initiative) between
-    // claude and codex without a restart — the TUI runs its own process, so
-    // its /model only persists the choice for the daemon's next boot.
+    // claude, codex and opencode without a restart — the TUI runs its own
+    // process, so its /model only persists the choice for the daemon's next
+    // boot.
     if (req.url?.startsWith("/provider") && (req.method === "GET" || req.method === "POST")) {
       const model = runtime.model;
       if (!(model instanceof SwitchableModelProvider)) {

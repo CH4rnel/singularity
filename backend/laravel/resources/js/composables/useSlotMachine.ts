@@ -9,6 +9,8 @@ import {
 import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { ref } from 'vue';
 
+import { confirmSignature } from '@/lib/solanaRpc';
+
 export type SlotToken = {
     mint: string;
     symbol: string | null;
@@ -197,10 +199,9 @@ export const useSlotMachine = (rpcUrlOverride?: string) => {
             tx.feePayer = userPubkey;
 
             const { signature } = await wallet.signAndSendTransaction(tx);
-            await connection.confirmTransaction(
-                { signature, blockhash, lastValidBlockHeight },
-                'confirmed',
-            );
+            await confirmSignature(connection, signature, {
+                lastValidBlockHeight,
+            });
 
             const confirmRes = await fetch('/api/slots/spin/confirm', {
                 method: 'POST',

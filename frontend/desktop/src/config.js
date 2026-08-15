@@ -59,6 +59,9 @@ const DIRECT_VALUES = new Set(['direct', 'none', 'off', '0', 'false']);
 /** Hosts that must never go through a proxy, even when NO_PROXY is unset. */
 const DEFAULT_PROXY_BYPASS = ['localhost', '127.0.0.1', '::1', '<local>'];
 
+/** What a stored proxy setting can say. `system` is "nobody has chosen". */
+const PROXY_MODES = ['system', 'direct', 'manual'];
+
 function readFlag(argv, prefix) {
     const flag = argv.find((argument) => argument.startsWith(prefix));
 
@@ -232,29 +235,92 @@ function parseProxyBypass(value) {
 }
 
 /**
- * Resolves the proxy for the shell session.
+ * Whatever is on disk (or arrived from the settings window) as a setting the
+ * shell can act on: `{ mode: 'system' | 'direct' | 'manual', server }`.
  *
- * Returns an Electron proxy configuration, or `null` to leave Chromium on the
- * system configuration when nothing was asked for. `--no-proxy`,
- * `--proxy=direct` and `CYBERIA_PROXY=direct` return an explicit direct mode,
- * which is the only way to *override* a broken system entry.
+ * A manual entry that Chromium could not use is not kept as a broken proxy —
+ * it falls back to `system`, the same place the shell starts from when nobody
+ * has chosen anything. Callers that need to *tell the user* their entry was
+ * unusable check `parseProxyServer` themselves; this one only has to be safe.
  */
-function resolveProxy(env, argv) {
-    if (argv.includes('--no-proxy')) {
+function normalizeProxySetting(value) {
+    if (!value || typeof value !== 'object') {
+        return { mode: 'system', server: '' };
+    }
+
+    const mode = typeof value.mode === 'string' ? value.mode.trim().toLowerCase() : '';
+
+    if (!PROXY_MODES.includes(mode) || mode === 'system') {
+        return { mode: 'system', server: '' };
+    }
+
+    if (mode === 'direct') {
+        return { mode: 'direct', server: '' };
+    }
+
+    const server = parseProxyServer(value.server);
+
+    return server ? { mode: 'manual', server } : { mode: 'system', server: '' };
+}
+
+/** One value (a flag, or CYBERIA_PROXY) -> a proxy configuration or `null`. */
+function proxyFromValue(value, bypass) {
+    if (DIRECT_VALUES.has(value.toLowerCase())) {
         return { mode: 'direct' };
     }
 
+    const server = parseProxyServer(value);
+
+    return server ? { proxyRules: server, proxyBypassRules: bypass } : null;
+}
+
+/**
+ * Resolves the proxy for the shell session, and says where it came from.
+ *
+ * Order, most explicit first:
+ *
+ * 1. `--no-proxy` / `--proxy=<url>` — this run was launched with an
+ *    instruction, and it holds for this run.
+ * 2. The setting saved in the app's own proxy window. It outranks the
+ *    environment because it is the last thing a human chose *about this app*,
+ *    and because for someone who starts Cyberia from an icon it is the only
+ *    lever that exists — an ambient `http_proxy` they never typed must not
+ *    quietly win over the one they did.
+ * 3. `CYBERIA_PROXY`, then `https_proxy` / `http_proxy` / `all_proxy`.
+ * 4. Nothing set — Chromium keeps using the system configuration.
+ *
+ * A value nobody can use (`nonsense://x`) resolves to `null` like an unset one,
+ * which is reported as `system`: the shell never pins a proxy it invented.
+ */
+function resolveProxyDecision(env, argv, saved = null) {
     const bypass = parseProxyBypass(pickEnv(env, ['no_proxy', 'NO_PROXY']));
-    const explicit = readFlag(argv, '--proxy=') ?? pickEnv(env, ['CYBERIA_PROXY']);
 
-    if (explicit !== null) {
-        if (DIRECT_VALUES.has(explicit.toLowerCase())) {
-            return { mode: 'direct' };
-        }
+    const decide = (source, proxy) => (proxy ? { source, proxy } : { source: 'system', proxy: null });
 
-        const server = parseProxyServer(explicit);
+    if (argv.includes('--no-proxy')) {
+        return { source: 'flag', proxy: { mode: 'direct' } };
+    }
 
-        return server ? { proxyRules: server, proxyBypassRules: bypass } : null;
+    const flag = readFlag(argv, '--proxy=');
+
+    if (flag !== null) {
+        return decide('flag', proxyFromValue(flag, bypass));
+    }
+
+    const setting = normalizeProxySetting(saved);
+
+    if (setting.mode === 'direct') {
+        return { source: 'saved', proxy: { mode: 'direct' } };
+    }
+
+    if (setting.mode === 'manual') {
+        return { source: 'saved', proxy: { proxyRules: setting.server, proxyBypassRules: bypass } };
+    }
+
+    const configured = pickEnv(env, ['CYBERIA_PROXY']);
+
+    if (configured !== null) {
+        return decide('env', proxyFromValue(configured, bypass));
     }
 
     const fallback = parseProxyServer(pickEnv(env, ['all_proxy', 'ALL_PROXY']));
@@ -262,7 +328,7 @@ function resolveProxy(env, argv) {
     const https = parseProxyServer(pickEnv(env, ['https_proxy', 'HTTPS_PROXY'])) ?? fallback;
 
     if (!http && !https) {
-        return null;
+        return { source: 'system', proxy: null };
     }
 
     // One server for everything when both schemes agree; otherwise the
@@ -271,7 +337,20 @@ function resolveProxy(env, argv) {
         ? http
         : [http ? `http=${http}` : null, https ? `https=${https}` : null].filter(Boolean).join(';');
 
-    return { proxyRules: rules, proxyBypassRules: bypass };
+    return { source: 'env', proxy: { proxyRules: rules, proxyBypassRules: bypass } };
+}
+
+/**
+ * The proxy configuration to pin onto the session, or `null` to leave Chromium
+ * on the system one.
+ */
+function resolveProxy(env, argv, saved = null) {
+    return resolveProxyDecision(env, argv, saved).proxy;
+}
+
+/** Whether this run was launched with a proxy instruction of its own. */
+function hasProxyFlag(argv) {
+    return argv.includes('--no-proxy') || readFlag(argv, '--proxy=') !== null;
 }
 
 /** Short human-readable form of a resolved proxy, for logs and the offline page. */
@@ -291,14 +370,18 @@ module.exports = {
     NAVIGABLE_HOSTS,
     PARTITION,
     PROTOCOL,
+    PROXY_MODES,
     describeProxy,
+    hasProxyFlag,
     isAppHost,
     isExternallyOpenable,
     isNavigable,
+    normalizeProxySetting,
     parseProxyBypass,
     parseProxyServer,
     resolveAppPath,
     resolveAppUrl,
     resolveProxy,
+    resolveProxyDecision,
     resolveStartUrl,
 };

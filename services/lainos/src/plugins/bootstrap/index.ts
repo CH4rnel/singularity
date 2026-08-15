@@ -127,17 +127,24 @@ function switchableModel(runtime: IAgentRuntime): SwitchableModelProvider | unde
 }
 
 /**
- * Re-route the live replies between Claude and Codex on operator request
- * ("отвечай с помощью Claude"). Forge coding jobs have their own switch
- * (set_forge_provider); this one only touches the chat model.
+ * Re-route the live replies between Claude, Codex and OpenCode on operator
+ * request ("отвечай с помощью Claude"). Forge coding jobs have their own
+ * switch (set_forge_provider); this one only touches the chat model.
  */
 const setChatProviderAction: Action = {
   name: "set_chat_provider",
-  similes: ["switch_chat_provider", "set_reply_provider", "reply_via_claude", "reply_via_codex"],
+  similes: [
+    "switch_chat_provider",
+    "set_reply_provider",
+    "reply_via_claude",
+    "reply_via_codex",
+    "reply_via_opencode",
+  ],
   description:
     "Switch which model writes the live replies in this chat: claude (Claude CLI subscription), " +
-    "claude-api (Anthropic API key), or codex (Codex CLI). Takes effect immediately and survives " +
-    "restarts. Forge coding jobs are separate — use set_forge_provider for those.",
+    "claude-api (Anthropic API key), codex (Codex CLI), or opencode (OpenCode CLI). " +
+    "Takes effect immediately and survives restarts. Forge coding jobs are separate — " +
+    "use set_forge_provider for those.",
   parameters: {
     type: "object",
     properties: {

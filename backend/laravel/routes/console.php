@@ -22,3 +22,23 @@ Schedule::command('gamification:sync')->everyTenMinutes()->withoutOverlapping();
 // backed bridged ASH (unified ASH emission, Path A). Buffers days ahead, so
 // hourly keeps balances and reward rates in sync without racing.
 Schedule::command('farm:fund-satellites')->hourly()->withoutOverlapping();
+// Token sites are pinned when they are uploaded; this only catches the ones
+// that missed it because the IPFS node was down at that moment, so it is a
+// no-op on a healthy host.
+Schedule::command('launchpad:pin-sites')->hourly()->withoutOverlapping();
+// The prediction oracle. Frequent because a price market is settled from the
+// first reading taken after it closes, and every minute of lag is a minute the
+// answer can drift from the question; cheap because a run with nothing to
+// settle is one eth_call and a cached quote, and signs nothing.
+Schedule::command('predictions:resolve')->everyFiveMinutes()->withoutOverlapping();
+// The wallet chat relay is a queue, not an archive: drop delivered and
+// undelivered envelopes alike once they are past the retention window, so the
+// server stops holding a record of who talked to whom.
+Schedule::command('wallet:chat-prune')->daily()->withoutOverlapping();
+// The inference API's metering log is a quota and an invoice, not an archive
+// of who asked what — drop rows once they are past the retention window.
+Schedule::command('ai:prune-usage')->daily()->withoutOverlapping();
+// Sponsored fees fail silently: when the tank or the operator key runs dry the
+// button simply stops working, and nobody reports a wallet that never offered
+// them anything. Reads only, and it shouts at most once every six hours.
+Schedule::command('gas:station --alert')->hourly()->withoutOverlapping();

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from web3 import Web3
 from sqlalchemy import text
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 
@@ -19,7 +19,8 @@ from bot.config import (
     PROJECT_X_URL, PROJECT_WEBSITE_URL, TELEGRAM_CHANNEL_URL, TELEGRAM_CHAT_URL,
     CYBER_CA_SOLANA, CYBER_CA_EVM,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_VERIFY_URL, WHALE_LINK_TTL_MINUTES,
-    SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL,
+    SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL, APP_DOWNLOAD_URL,
+    WALLET_MINI_APP_URL,
     CYBER_SOL_DECIMALS,
     AI_ENABLED,
 )
@@ -40,6 +41,7 @@ def _main_menu_kb() -> InlineKeyboardMarkup:
     flow. Blank URLs are skipped (Telegram rejects empty url buttons).
     """
     pairs = [
+        ("📱 Wallet app", APP_DOWNLOAD_URL),
         ("🎨 Pixel Battle", PIXEL_BATTLE_URL),
         ("🖼 NFT Market", NFT_MARKET_URL),
         ("💱 Swap", SWAP_URL),
@@ -171,6 +173,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/stats [window] - on-chain activity digest (default 24h, e.g. /stats 6h)\n"
         + ai_lines +
         "/set_channel_wallet <@channel> <0x..> - (channel admins) wallet that receives post NFTs\n"
+        "/app - download the Cyberia wallet app\n"
         "/website - project website\n\n"
         + ai_hint +
         "You can chat in groups without a wallet -- rewards will be saved as "
@@ -181,6 +184,74 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def website_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(PROJECT_WEBSITE_URL)
+
+
+def mini_app_markup(is_private: bool) -> InlineKeyboardMarkup:
+    """The button that opens the wallet inside Telegram.
+
+    A `web_app` button is only allowed in private chats — Telegram rejects the
+    message otherwise — so in a group the same wallet is offered as an ordinary
+    link, which opens in the browser instead of in the frame. Both lead to the
+    same page; only the chrome around it differs.
+    """
+    if is_private:
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton("👛 Open wallet", web_app=WebAppInfo(url=WALLET_MINI_APP_URL))]]
+        )
+
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("👛 Open wallet", url=WALLET_MINI_APP_URL)]]
+    )
+
+
+def _is_private(update: Update) -> bool:
+    chat = update.effective_chat
+    return chat is not None and chat.type == "private"
+
+
+async def open_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Open the wallet as a Mini App, without leaving Telegram.
+
+    The keys are made and kept by the page itself, in this device's storage;
+    the bot hands out a URL and learns nothing about what happens inside it.
+    That is worth saying here, because a wallet opened from a chat is exactly
+    where someone will assume the chat can see it.
+    """
+    await update.message.reply_text(
+        "Cyberia Wallet — one recovery phrase, every chain.\n\n"
+        "It opens inside Telegram, but the keys are created and encrypted on "
+        "your device. Telegram never receives your recovery phrase or your "
+        "password, and neither does this bot.\n\n"
+        "You can create a wallet here or import one you already have. Write "
+        "the recovery phrase down either way: the wallet lives in Telegram's "
+        "own storage, and clearing Telegram's cache clears it — the phrase is "
+        "what brings it back.",
+        reply_markup=mini_app_markup(_is_private(update)),
+    )
+
+
+async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Where to get the wallet app.
+
+    The per-platform links are permanent redirects on the site, so this answer
+    never goes stale between releases — which is the whole point of not sending
+    the APK as a file.
+    """
+    base = APP_DOWNLOAD_URL.rstrip("/")
+    await update.message.reply_text(
+        "Cyberia Wallet — one recovery phrase, every chain.\n\n"
+        f"All platforms: {base}\n"
+        f"Android APK: {base}/android\n"
+        f"Windows: {base}/windows\n"
+        f"macOS: {base}/macos\n"
+        f"Linux: {base}/linux\n"
+        f"Browser extension: {base}/extension\n\n"
+        "On iPhone open the site in Safari and add it to the home screen. "
+        "The app is the site in a window — your keys stay on your device.",
+        # The same wallet without installing anything, for whoever is reading
+        # this on a phone in a chat.
+        reply_markup=mini_app_markup(_is_private(update)),
+    )
 
 
 def _build_x_reply() -> str:
@@ -1718,7 +1789,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_line = await asyncio.to_thread(_cyber_price_line)
     if price_line:
         digest += "\n\n" + price_line
-    await update.message.reply_text(digest, disable_web_page_preview=True)
+    await update.message.reply_text(
+        digest, parse_mode="HTML", disable_web_page_preview=True
+    )
 async def whale_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/whale — DM only. Hand out a one-time link to prove CYBER.sol holdings via
     Phantom and (if above the threshold) get invited to the whales chat."""

@@ -17,7 +17,7 @@ import {
   loadInputHistory,
   saveInputHistory,
 } from "../src/clients/tui/history.js";
-import { transcriptLines } from "../src/clients/tui/transcript.js";
+import { transcriptLines, wrapIndices } from "../src/clients/tui/transcript.js";
 
 // A throwaway state dir: the history probe writes a real file.
 process.env.LAINOS_DATA_DIR = mkdtempSync(join(tmpdir(), "lainos-keys-"));
@@ -76,6 +76,7 @@ check(
     flags("\t", { tab: true }) &&
     flags("\x1b", { escape: true, meta: true }),
 );
+check("ctrl+enter is newline ", flags("\n", { return: true, shift: true }));
 check(
   "typing and paste     ",
   flags("x", {}, "x") && flags("A", { shift: true }, "A") && flags("hello", {}, "hello"),
@@ -112,12 +113,12 @@ check(
 // ------------------------------------------------------- editor wiring
 
 /** Feed a whole terminal transcript through reader → editor, as the TUI does. */
-const drive = (start: string, chunks: string[]): LineState => {
+const drive = (start: string, chunks: string[], width?: number): LineState => {
   const r = new KeyReader();
   let state: LineState = { value: start, cursor: start.length };
   for (const chunk of chunks) {
     for (const { input, key } of r.feed(chunk)) {
-      const next = editLine(state, input, key);
+      const next = editLine(state, input, key, width);
       if (next) state = next;
     }
   }
@@ -150,6 +151,48 @@ check(
 check(
   "unknown seq is inert ",
   drive("hello", ["\x1b[200~", "\x1bOP"]).value === "hello",
+);
+
+// ------------------------------------------------- multi-line composer
+
+const shifted = drive("ab", ["\x1b[13;2u", "c"]);
+check("shift+enter newline  ", shifted.value === "ab\nc" && shifted.cursor === 4);
+check("lf types a newline   ", drive("ab", ["\n"]).value === "ab\n");
+check(
+  "hard newline wraps    ",
+  (() => {
+    const lines = wrapIndices("hello\nworld", 20);
+    return lines.length === 2 && lines[0].text === "hello" && lines[1].text === "world";
+  })(),
+);
+check(
+  "newline breaks fold   ",
+  (() => {
+    // without the newline the two words would share one row at width 20.
+    const joined = wrapIndices("hello world", 20);
+    return joined.length === 1 && wrapIndices("hello\nworld", 20).length === 2;
+  })(),
+);
+check(
+  "↑ walks over the newline",
+  (() => {
+    const s = drive("a\nbc", ["\x1b[A"], 20);
+    return s.value === "a\nbc" && s.cursor === 1;
+  })(),
+);
+check(
+  "backspace joins lines ",
+  (() => {
+    const s = drive("a\nb", ["\x1b[D", "\x7f"]);
+    return s.value === "ab" && s.cursor === 1;
+  })(),
+);
+check(
+  "cursor maps past newline",
+  (() => {
+    const w = wrapIndices("ab\ncd", 20);
+    return w[1].start === 3 && w[1].end === 5;
+  })(),
 );
 
 // ------------------------------------------------------- input history
@@ -191,6 +234,23 @@ check(
     return reloaded.entries.join() === "one,two,three" && reloaded.prev("") === "three";
   })(),
 );
+
+// --------------------------------------------------------- mouse parsing
+
+const mouse = (seq: string) => parseKey(seq).key.mouse;
+const mouseOk = (m: { x: number; y: number; action: string; wheel: string | null } | undefined, want: { x: number; y: number; action: "press" | "release"; wheel: "up" | "down" | null }) =>
+  !!m && m.x === want.x && m.y === want.y && m.action === want.action && m.wheel === want.wheel;
+
+check("sgr click decodes    ", mouseOk(mouse("\x1b[<0;10;20M"), { x: 10, y: 20, action: "press", wheel: null }));
+check("sgr release decodes  ", mouseOk(mouse("\x1b[<0;10;20m"), { x: 10, y: 20, action: "release", wheel: null }));
+check("sgr wheel up         ", mouseOk(mouse("\x1b[<64;10;20M"), { x: 10, y: 20, action: "press", wheel: "up" }));
+check("sgr wheel down       ", mouseOk(mouse("\x1b[<65;10;20M"), { x: 10, y: 20, action: "press", wheel: "down" }));
+// Legacy xterm: each byte is (32 + coord). "0" = 48 → x 16, "4" = 52 → y 20.
+check("legacy click decodes ", mouseOk(mouse("\x1b[M0\x30\x34"), { x: 16, y: 20, action: "press", wheel: null }));
+check("mouse is inert text  ", (() => {
+  const { key } = parseKey("\x1b[<0;10;20M");
+  return key.mouse !== undefined && !key.return && !key.leftArrow;
+})());
 
 // --------------------------------------------------- transcript pager
 

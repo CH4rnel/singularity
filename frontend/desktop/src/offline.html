@@ -75,6 +75,13 @@
                 word-break: break-all;
             }
 
+            .actions {
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+
             button {
                 display: inline-flex;
                 min-height: 44px;
@@ -92,6 +99,19 @@
 
             button:hover {
                 background: #4af4e6;
+            }
+
+            button.secondary {
+                border: 1px solid #24403f;
+                background: transparent;
+                color: #a7b8b6;
+                font-weight: 600;
+            }
+
+            button.secondary:hover {
+                border-color: #2f4746;
+                background: transparent;
+                color: #eef7f6;
             }
         </style>
     </head>
@@ -124,7 +144,12 @@
                 connection — the app retries by itself once you are back online.
                 <code id="target"></code>
             </p>
-            <button type="button" id="retry">Try again</button>
+            <div class="actions">
+                <button type="button" id="retry">Try again</button>
+                <button type="button" class="secondary" id="proxy" hidden>
+                    Proxy settings
+                </button>
+            </div>
         </main>
         <script>
             (function () {
@@ -135,16 +160,18 @@
                     en: {
                         title: 'You are outside the Wired.',
                         network:
-                            'Cyberia cannot reach the network right now. Check your connection — the app retries by itself once you are back online.',
-                        proxy: 'The proxy the app was told to use did not answer. Start it, or run Cyberia with CYBERIA_PROXY=<host:port> — or with --no-proxy to connect directly.',
+                            'Cyberia cannot reach the network right now. Check your connection — the app retries by itself once you are back online. If this network blocks the site, reach it through a proxy.',
+                        proxy: 'The proxy the app was told to use did not answer. Start it, or set another one in the proxy settings — connecting directly is a choice there too.',
                         retry: 'Try again',
+                        settings: 'Proxy settings',
                     },
                     ru: {
                         title: 'Ты вне Провода.',
                         network:
-                            'Cyberia сейчас не достаёт до сети. Проверь соединение — приложение повторит попытку само, как только связь вернётся.',
-                        proxy: 'Прокси, который задан приложению, не ответил. Подними его или запусти Cyberia с CYBERIA_PROXY=<host:port> — либо с --no-proxy, чтобы идти напрямую.',
+                            'Cyberia сейчас не достаёт до сети. Проверь соединение — приложение повторит попытку само, как только связь вернётся. Если эта сеть блокирует сайт, зайди через прокси.',
+                        proxy: 'Прокси, который задан приложению, не ответил. Подними его или укажи другой в настройках прокси — подключиться напрямую тоже можно оттуда.',
                         retry: 'Повторить',
+                        settings: 'Настройки прокси',
                     },
                 };
 
@@ -189,6 +216,21 @@
                     .getElementById('retry')
                     .addEventListener('click', retry);
                 window.addEventListener('online', retry);
+
+                /*
+                 * The way out of a network that blocks Cyberia. Shown only when
+                 * the shell is new enough to have the window — an older bridge
+                 * would give a button that does nothing.
+                 */
+                const settings = document.getElementById('proxy');
+
+                if (native && native.openProxySettings) {
+                    settings.textContent = dictionary.settings;
+                    settings.hidden = false;
+                    settings.addEventListener('click', function () {
+                        native.openProxySettings();
+                    });
+                }
             })();
         </script>
     </body>

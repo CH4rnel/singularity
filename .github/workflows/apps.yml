@@ -1,11 +1,19 @@
 name: Apps
 
-# Builds the native shells that wrap cyberia.church: the desktop app
-# (frontend/desktop) for Linux, Windows, and macOS, and the Android app
-# (frontend/mobile). Windows and macOS installers cannot be produced from a
-# Linux workstation, which is what this workflow is for.
+# Builds and *publishes* the native shells that wrap cyberia.church: the desktop
+# app (frontend/desktop) for Linux, Windows, and macOS, and the Android app
+# (frontend/mobile). Windows and macOS installers cannot be produced from a Linux
+# workstation, which is what this workflow is for.
 #
-# Run it from the Actions tab, or push a tag: `git tag app-v1.0.0 && git push --tags`.
+# Push a tag and the installers land on a public GitHub release, which is what
+# https://cyberia.church/download links to:
+#
+#   git tag app-v1.0.0 && git push origin app-v1.0.0
+#
+# A manual run (Actions tab) builds the same artifacts but publishes nothing;
+# they stay as workflow artifacts, which only signed-in GitHub users can fetch.
+# File names carry no version — the release page moves, the URL does not:
+#   https://github.com/<owner>/<repo>/releases/latest/download/Cyberia-Setup-x64.exe
 
 on:
   workflow_dispatch:
@@ -40,6 +48,7 @@ jobs:
 
     defaults:
       run:
+        shell: bash
         working-directory: frontend/desktop
 
     steps:
@@ -59,13 +68,19 @@ jobs:
       - name: Tests
         run: npm test
 
+      # The tag is the version. Without this the installers would announce
+      # whatever was last committed to package.json.
+      - name: Version from tag
+        if: github.ref_type == 'tag'
+        run: npm version "${GITHUB_REF_NAME#app-v}" --no-git-tag-version --allow-same-version
+
       - name: Build installers
         run: npm run ${{ matrix.script }}
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
-          name: cyberia-desktop-${{ matrix.os }}
+          name: release-desktop-${{ matrix.os }}
           path: ${{ matrix.artifacts }}
           if-no-files-found: error
 
@@ -75,6 +90,13 @@ jobs:
     defaults:
       run:
         working-directory: frontend/mobile
+
+    # The release notes need to know which of the two APKs this run produced.
+    # Reading it back off the file does not work — a modern APK carries only a
+    # v2/v3 signature, which `keytool -jarfile` cannot see — so the job that
+    # knows says so.
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
 
     steps:
       - name: Checkout
@@ -105,15 +127,216 @@ jobs:
       - name: Sync web assets
         run: npm run sync:android
 
-      # Unsigned: publishing to Play additionally needs a keystore and the
-      # signingConfigs block described in frontend/mobile/README.md.
+      # An APK is only installable if it is signed, and Android ties updates to
+      # the signature: the same key has to sign every release forever.
+      # `frontend/mobile/scripts/make-keystore.sh` creates it and uploads these
+      # four secrets. Without them the job falls back to a debug APK, which is
+      # published too but announced as such on the release page: it is signed
+      # with the well-known Android debug key, it is `debuggable`, and the runner
+      # generates that key afresh every run — so no debug APK can ever update
+      # another, signed or not. Set the secrets and the signed path takes over
+      # with no further changes here.
+      - name: Signing material
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Unsigned Android build::ANDROID_KEYSTORE_BASE64 is not set, so this release ships a debuggable APK signed with a throwaway debug key. Run frontend/mobile/scripts/make-keystore.sh to fix that."
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/cyberia-release.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=cyberia-release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      # versionCode has to grow with every release or Android treats the new APK
+      # as a downgrade and refuses to install it over the old one.
+      - name: Version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#app-v}"
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          IFS=. read -r MAJOR MINOR PATCH <<< "${VERSION%%-*}"
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$(( ${MAJOR:-0} * 10000 + ${MINOR:-0} * 100 + ${PATCH:-0} ))" >> "$GITHUB_OUTPUT"
+
       - name: Build APK
-        run: ./gradlew assembleDebug --no-daemon
+        env:
+          CYBERIA_VERSION_NAME: ${{ steps.version.outputs.name }}
+          CYBERIA_VERSION_CODE: ${{ steps.version.outputs.code }}
         working-directory: frontend/mobile/android
+        run: |
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            ./gradlew assembleRelease --no-daemon
+          else
+            ./gradlew assembleDebug --no-daemon
+          fi
+
+      # Either way the asset is `Cyberia.apk`, because that is the name
+      # config/downloads.php looks for — an APK under any other name is an APK
+      # /download will not offer. Which of the two it is travels to the release
+      # notes as this job's `signed` output.
+      - name: Name the APK
+        id: apk
+        run: |
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk Cyberia.apk
+          else
+            cp android/app/build/outputs/apk/debug/app-debug.apk Cyberia.apk
+          fi
+          echo "artifact=release-android" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: cyberia-android
-          path: frontend/mobile/android/app/build/outputs/apk/debug/*.apk
+          name: ${{ steps.apk.outputs.artifact }}
+          path: frontend/mobile/Cyberia*.apk
           if-no-files-found: error
+
+  extension:
+    name: Browser extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/extension
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The wallet's own rules — derivation paths, what a page may call without
+      # a human, what the manifest may ask for — are what these pin.
+      - name: Tests
+        run: npm test
+
+      - name: Version from tag
+        if: github.ref_type == 'tag'
+        run: npm version "${GITHUB_REF_NAME#app-v}" --no-git-tag-version --allow-same-version
+
+      # `npm run zip` writes the manifest version from package.json and packs
+      # both engines' directories deterministically, so the checksums on the
+      # release are reproducible from this tag.
+      - name: Build and pack
+        run: npm run zip
+
+      - name: Upload extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-extension
+          # Two files: the Chromium zip and the Gecko one.
+          path: frontend/extension/Cyberia-extension*.zip
+          if-no-files-found: error
+
+  # One public release per tag, holding every installer the site links to.
+  # Android is allowed to be missing (see above) — a broken Android job must not
+  # keep the desktop builds off the download page.
+  publish:
+    name: Publish release
+    needs: [desktop, android, extension]
+    if: ${{ always() && github.ref_type == 'tag' && needs.desktop.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Collect installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: installers
+
+      - name: Checksums
+        working-directory: installers
+        run: |
+          sha256sum -- * > ../SHA256SUMS.txt
+          mv ../SHA256SUMS.txt .
+          cat SHA256SUMS.txt
+
+      - name: Release notes
+        run: |
+          APK_NOTE="_This release has no Android APK._"
+          if [ -f installers/Cyberia.apk ]; then
+            APK_NOTE="**Android** — \`Cyberia.apk\`. Android asks you to allow installs from your browser or file manager the first time."
+            # One line, because it changes what someone has to do at the next
+            # release: a debug APK installs fine, but nothing lands on top of it.
+            if [ "${{ needs.android.outputs.signed }}" != "true" ]; then
+              APK_NOTE="**Android** — \`Cyberia.apk\`, a debug build. It installs the same way (allow installs from your browser or file manager the first time). A later release cannot update it in place: uninstall this one first, then restore from your seed phrase."
+            fi
+          fi
+          cat > notes.md <<EOF
+          The Cyberia wallet as a native app. It is a shell around
+          https://cyberia.church, so it updates with the site — you only reinstall
+          when the shell itself changes.
+
+          **Windows** — \`Cyberia-Setup-x64.exe\` to install, \`Cyberia-portable-x64.exe\`
+          to run without installing. Unsigned, so SmartScreen shows "Windows protected
+          your PC": *More info* → *Run anyway*.
+
+          **macOS** — \`Cyberia-mac-arm64.dmg\` for Apple Silicon, \`Cyberia-mac-x64.dmg\`
+          for Intel. Unsigned, so the first launch is right-click → *Open* → *Open*.
+
+          **Linux** — \`Cyberia-linux-x86_64.AppImage\` (\`chmod +x\`, then run) or
+          \`Cyberia-linux-amd64.deb\`.
+
+          $APK_NOTE
+
+          **Browser** — \`Cyberia-extension.zip\` for Chrome, Brave and Edge: unzip,
+          open \`chrome://extensions\`, turn on Developer mode, *Load unpacked*.
+          \`Cyberia-extension-firefox.zip\` is the same wallet for Firefox 128+:
+          unzip, open \`about:debugging#/runtime/this-firefox\` and *Load Temporary
+          Add-on* on its \`manifest.json\` — Firefox keeps unsigned add-ons only
+          until you close it. On Firefox the relay routes the wallet's own
+          requests and leaves the rest of the browser alone; Chromium has no
+          per-extension proxy, so there it is all tabs or none.
+
+          Unlike the apps above, the extension is not a shell around the site: it
+          holds its own encrypted vault and signs for dapps, so it updates only
+          when you install a new release.
+
+          Verify what you downloaded against \`SHA256SUMS.txt\`.
+
+          https://cyberia.church/download
+          EOF
+
+      # --latest is explicit because /releases/latest/download/<file> — the
+      # address the site falls back to — follows GitHub's "latest" flag, which is
+      # repository-wide and would otherwise drift to any other release published
+      # from this monorepo.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Re-run of a tag that already published: replace the files rather
+            # than failing on the existing release.
+            gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber installers/*
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Cyberia ${GITHUB_REF_NAME#app-v}" \
+              --notes-file notes.md \
+              --latest \
+              installers/*
+          fi

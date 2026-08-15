@@ -3,16 +3,29 @@
  *
  * `frontend/desktop` (Electron) exposes `window.cyberiaNative` and appends
  * `CyberiaDesktop/<version>` to the user agent; `frontend/mobile` (Capacitor)
- * appends `CyberiaMobile/<version>`. Everything else — browsers and the
- * installed PWA — is not a native shell.
+ * appends `CyberiaMobile/<version>`. Telegram opens the same pages in its own
+ * web view as a Mini App, which is a shell in every way that matters here: it
+ * owns the frame, so the site header and footer would be a second chrome
+ * inside someone's chat. Everything else — browsers and the installed PWA — is
+ * not a native shell.
  */
+import { isTelegramMiniApp } from '@/lib/telegram';
+import type { TorrentBridge } from '@/lib/wallet/torrent';
 
-export type NativeShell = 'desktop' | 'mobile' | null;
+export type NativeShell = 'desktop' | 'mobile' | 'telegram' | null;
 
 interface DesktopBridge {
     shell?: string;
     version?: string;
+    /** The proxy in force for this window, as the shell describes it. */
+    proxy?: string;
     openExternal?: (url: string) => void;
+    openProxySettings?: () => void;
+    /**
+     * A real BitTorrent client, which only the desktop shell can host — the
+     * DHT is UDP and peers are TCP, neither of which a web view has.
+     */
+    torrent?: TorrentBridge;
 }
 
 declare global {
@@ -31,7 +44,10 @@ function detect(): NativeShell {
 
     const userAgent = window.navigator.userAgent;
 
-    if (window.cyberiaNative?.shell === 'desktop' || /\bCyberiaDesktop\//.test(userAgent)) {
+    if (
+        window.cyberiaNative?.shell === 'desktop' ||
+        /\bCyberiaDesktop\//.test(userAgent)
+    ) {
         return 'desktop';
     }
 
@@ -39,7 +55,10 @@ function detect(): NativeShell {
         return 'mobile';
     }
 
-    return null;
+    // Read off the launch parameters in the URL rather than off the SDK: the
+    // layout is chosen before any script has loaded, and a wallet that flashes
+    // a site header inside a chat looks like the wrong page opened.
+    return isTelegramMiniApp() ? 'telegram' : null;
 }
 
 /**
@@ -62,4 +81,43 @@ export function nativeShell(): NativeShell {
 
 export function isNativeShell(): boolean {
     return detected !== null;
+}
+
+/**
+ * Whether the shell has network settings of its own to open.
+ *
+ * Only the desktop app does: a browser tab cannot choose a proxy, and on a
+ * phone that choice belongs to the system. Feature-detected rather than
+ * inferred from the shell name, because an older desktop build has no such
+ * window and would give the user a button that does nothing.
+ */
+export function canOpenProxySettings(): boolean {
+    return (
+        typeof window !== 'undefined' &&
+        typeof window.cyberiaNative?.openProxySettings === 'function'
+    );
+}
+
+/** Raises the shell's proxy window. No-op anywhere else. */
+export function openProxySettings(): void {
+    window.cyberiaNative?.openProxySettings?.();
+}
+
+/**
+ * What the shell says is carrying this window's requests: `direct`, `system`,
+ * or the proxy rules in force (`socks5://host:port`). Null everywhere else,
+ * which is the honest answer — a browser tab is not told.
+ *
+ * Read at page load and never after: the shell only reapplies a proxy by
+ * restarting its sessions, so a value that changed since would mean the page
+ * had been reloaded anyway.
+ */
+export function nativeProxy(): string | null {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    const described = window.cyberiaNative?.proxy;
+
+    return typeof described === 'string' && described !== '' ? described : null;
 }

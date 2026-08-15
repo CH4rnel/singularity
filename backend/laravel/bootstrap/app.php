@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\AiApiException;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetTeamUrlDefaults;
@@ -32,5 +33,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // The inference API answers in OpenAI's error envelope, including when
+        // it is the one refusing: a client pointed at this host should never
+        // have to parse two error shapes depending on who said no.
+        $exceptions->render(fn (AiApiException $e) => $e->toResponse());
     })->create();
