@@ -152,6 +152,15 @@ class DigestTextTest(unittest.TestCase):
         self.assertIn("&lt;b&gt;PWN", text)
 
 
+class PlainFallbackTest(unittest.TestCase):
+    def test_markup_comes_out_and_the_text_stays(self):
+        post = "📊 <b>Cyberia · last 6h</b>\n\n<pre>BTC  $83,848</pre>\n&lt;b&gt;PWN"
+        self.assertEqual(
+            announcers._plain(post),
+            "📊 Cyberia · last 6h\n\nBTC  $83,848\n<b>PWN",
+        )
+
+
 class PriceBlockTest(unittest.TestCase):
     def test_prices_are_an_aligned_table(self):
         block = announcers._price_block([

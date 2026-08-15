@@ -1,6 +1,7 @@
 """Background announcer loops and the periodic market snapshot."""
 import asyncio
 import html
+import re
 import time
 import logging
 from datetime import datetime, timedelta, timezone
@@ -1067,6 +1068,14 @@ _PRICE_PRIORITY = {
 }
 
 
+def _plain(post: str) -> str:
+    """The same post with the markup taken out. Telegram rejecting one digest's
+    HTML must not mean no digest at all: a send that fails leaves the window
+    open, so the next tick would compose the same unsendable text and fail
+    again, every minute, forever."""
+    return html.unescape(re.sub(r"</?(?:b|pre)>", "", post))
+
+
 def _esc(value) -> str:
     """Every dynamic string in the digest passes through here. A token symbol
     comes off a pair that anyone may create, so `<b>` is a name someone can
@@ -1397,9 +1406,16 @@ async def _digest_tick(bot) -> None:
             parse_mode="HTML", disable_web_page_preview=True,
         )
     except TelegramError as e:
-        # Window stays open; the next tick retries with a slightly wider range.
-        logger.error(f"digest: send failed: {e}")
-        return
+        logger.warning(f"digest: HTML rejected ({e}); sending it as plain text")
+        try:
+            await bot.send_message(
+                chat_id=DIGEST_ANNOUNCE_CHAT, text=_plain(digest),
+                disable_web_page_preview=True,
+            )
+        except TelegramError as plain_error:
+            # Window stays open; the next tick retries with a wider range.
+            logger.error(f"digest: send failed: {plain_error}")
+            return
 
     _kv_set(_KV_LAST_DIGEST_AT, now.strftime(_SQLITE_TS))
     await asyncio.to_thread(_cyber_price_line, True)
