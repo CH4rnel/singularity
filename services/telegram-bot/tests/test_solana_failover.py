@@ -8,6 +8,7 @@ answered a server the whole time.
 Env is pinned before bot.* imports because bot.config reads it at import time.
 """
 import json
+import logging
 import os
 import tempfile
 import unittest
@@ -47,6 +48,11 @@ def _http_error(code):
 
 class FailoverTest(unittest.TestCase):
     def setUp(self):
+        # bot.config attaches a FileHandler to bot.log, so a test run on the
+        # prod host would otherwise leave "keyed.example refused" in the live
+        # log, where it reads like a real endpoint.
+        logging.disable(logging.WARNING)
+        self.addCleanup(logging.disable, logging.NOTSET)
         solana._parked.clear()
         self.calls: list[str] = []
         self.addCleanup(setattr, solana, "SOLANA_RPC_URLS", solana.SOLANA_RPC_URLS)
