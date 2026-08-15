@@ -112,12 +112,48 @@ never replayed into the chat.
 The loop polls Solana every `PUMPFUN_POLL_SECONDS` (default 30) and makes one
 `getTransaction` call per new pool transaction. The default public RPC is enough
 at current volume; point `SOLANA_RPC_URL` at a dedicated endpoint if posts start
-arriving late.
+arriving late. A buy older than `PUMPFUN_MAX_AGE_SECONDS` (default 30 min) is
+recorded for the digest but not posted: when the watcher returns from an outage
+its cursor is hours behind, and the catch-up scan would otherwise announce
+yesterday's trades one after another as if they had just happened.
 
-The periodic activity digest can be muted with `DIGEST_INTERVAL_SECONDS=0`.
-Small price changes are hidden by default (`DIGEST_PRICE_CHANGE_MIN_BPS=100`),
-and the digest includes a compact `Prices` line from the bot's `token_prices`
-snapshot so the chat can see which on-chain token prices are being used.
+### Solana RPC failover
+
+Every Solana read in the bot — the buy bot and the whales gate — goes through
+`bot/solana.py`, which tries endpoints in order until one answers:
+`SOLANA_RPC_URL`, then the comma-separated `SOLANA_RPC_FALLBACK_URL`, then the
+keyless public cluster, always last. One URL is one point of failure and it
+failed: on 2026-08-14 the keyed provider began answering `401 Unauthorized`, and
+because both surfaces called the same URL, buy posts and balance re-checks went
+silent together for a day. The public cluster answers a *server* perfectly well
+(it is browsers it refuses, over the `Origin` header), so it is the floor under
+every key rather than a plan.
+
+An endpoint that refuses — a status about the endpoint rather than the request,
+a transport error, or a rate-limit JSON-RPC code — is parked for
+`SOLANA_RPC_COOLDOWN_SECONDS` (default 300), so a dead key costs one call and
+not one per request; when everything is parked the parks are dropped and the
+list is walked again. A method error (bad params, unknown signature) is raised
+as it arrives, since the next endpoint would answer the same. Only hosts are
+logged: these URLs carry api keys. `tests/test_solana_failover.py` pins it.
+
+### Activity digest
+
+Posted every `DIGEST_INTERVAL_SECONDS` (`0` mutes it), and on demand via
+`/stats [window]`. Sent as Telegram HTML in blocks separated by blank lines —
+Telegram gives every line the same weight, so eight stacked lines read as one
+grey paragraph. Each block leads with its headline number in bold and carries
+its detail as `•` bullets under it; prices are an aligned `<pre>` table rather
+than a run-on line of `SYM $price` pairs that wraps differently on every phone.
+
+Numbers are formatted for a reader, not for `%g`: `_fmt_amount` never emits
+scientific notation (a five-million-CYBER.sol bridge used to arrive as
+`5.14993e+06`), `_fmt_usd` keeps three significant figures below a cent instead
+of rounding to `$0.0000`, and `_fmt_price_usd` keeps four so a sub-cent coin
+still differs from the next one. Token symbols come off pairs anyone may
+create, so every dynamic string is HTML-escaped. Small price changes are hidden
+by default (`DIGEST_PRICE_CHANGE_MIN_BPS=100`) and `DIGEST_PRICE_TOKEN_LIMIT`
+caps the price table. `tests/test_digest_format.py` pins the formatting.
 
 ### AI assistant
 

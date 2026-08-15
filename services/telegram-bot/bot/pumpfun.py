@@ -20,7 +20,7 @@ import time
 import urllib.request
 
 from bot.config import (
-    SOLANA_RPC_URL, SOLSCAN_URL, CYBER_SOL_MINT,
+    SOLSCAN_URL, CYBER_SOL_MINT,
     DEXSCREENER_API_URL,
     PUMPFUN_RPC_TIMEOUT, PUMPFUN_SIG_LIMIT, PUMPFUN_MAX_PAGES,
     PUMPFUN_MARKET_TTL_SECONDS,
@@ -28,6 +28,7 @@ from bot.config import (
     PUMPFUN_BUY_EMOJI, PUMPFUN_EMOJI_USD, PUMPFUN_EMOJI_MAX,
     PUMPFUN_MIN_POSITION_PCT, PUMPFUN_CHART_URL, PUMPFUN_TRADE_URL,
 )
+from bot.solana import solana_rpc
 from bot.utils import _short_addr
 
 logger = logging.getLogger(__name__)
@@ -56,18 +57,9 @@ def _http_json(url: str, timeout: float = 15.0):
 
 
 def _rpc(method: str, params: list):
-    """One blocking Solana JSON-RPC call. Call through asyncio.to_thread."""
-    payload = json.dumps(
-        {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    ).encode()
-    req = urllib.request.Request(
-        SOLANA_RPC_URL, data=payload, headers={"Content-Type": "application/json"}
-    )
-    with urllib.request.urlopen(req, timeout=PUMPFUN_RPC_TIMEOUT) as resp:
-        data = json.loads(resp.read().decode())
-    if "error" in data:
-        raise RuntimeError(f"Solana RPC error: {data['error']}")
-    return data.get("result")
+    """One blocking Solana JSON-RPC call, across the endpoint chain in
+    bot.solana. Call through asyncio.to_thread."""
+    return solana_rpc(method, params, PUMPFUN_RPC_TIMEOUT)
 
 
 def _as_float(value) -> float | None:

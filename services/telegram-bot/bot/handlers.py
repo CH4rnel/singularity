@@ -1789,7 +1789,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     price_line = await asyncio.to_thread(_cyber_price_line)
     if price_line:
         digest += "\n\n" + price_line
-    await update.message.reply_text(digest, disable_web_page_preview=True)
+    await update.message.reply_text(
+        digest, parse_mode="HTML", disable_web_page_preview=True
+    )
 async def whale_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/whale — DM only. Hand out a one-time link to prove CYBER.sol holdings via
     Phantom and (if above the threshold) get invited to the whales chat."""
