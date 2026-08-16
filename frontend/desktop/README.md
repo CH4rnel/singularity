@@ -6,7 +6,10 @@ application for Linux, Windows, and macOS.
 The site is a server-driven Inertia app, so the shell does not bundle a copy of
 it: it renders `https://cyberia.church` in a persistent session. That keeps the
 app permanently in sync with production — a deploy is a shipped update — and
-means the whole shell is three small files in `src/`.
+means the whole shell is a handful of small files in `src/`.
+
+The window is the app's own, VSCode-style: a frameless window with the title
+bar drawn in it — see [The window](#the-window).
 
 **The app is the Cyberia wallet.** The window opens on `/wallet`, which renders
 without the site header and footer inside a native shell and fills the frame
@@ -64,6 +67,8 @@ notes, and `config/downloads.php` in the Laravel app.
 | `CYBERIA_PROXY`    | —                        | Proxy for the shell, wins over `*_proxy` |
 | `--proxy=<url>`    | —                        | Same, as a command-line switch, and pins this run |
 | `--no-proxy`       | —                        | Ignore every proxy, connect directly |
+| `CYBERIA_NATIVE_FRAME` | —                    | `1` gives the window back to the desktop's own frame |
+| `--native-frame`   | —                        | Same, as a command-line switch        |
 
 The proxy is also settable inside the app (_File → Proxy…_), which is what a
 packaged install has instead of a command line — see [Proxies](#proxies).
@@ -135,6 +140,45 @@ Reading or changing the proxy lives behind that window's own preload
 (`src/preload-proxy.js`), which no remote page is ever loaded into. All the site
 can do is ask for the window to be raised.
 
+## The window
+
+The app draws its own title bar the way VSCode does, because a wallet that opens
+in a stock desktop window announces itself as a browser wrapped in a frame. It is
+one frameless window holding **two views**: `src/titlebar.html` across the top and
+the site underneath it (`src/frame.js`, laid out in `src/main.js`). The site is
+remote, so the bar cannot live in the page — as a view of its own it also stays
+standing while the page is an OAuth redirect, a token subdomain or the offline
+notice.
+
+The bar carries the mark, the menus, the page's title and the window buttons; the
+whole strip drags the window and a double click maximises it. Windows and Linux
+get the buttons drawn in the bar; macOS keeps the system's traffic lights over it
+(`titleBarStyle: 'hiddenInset'`) and its real menu bar at the top of the screen.
+Full screen hides the bar and gives the whole window to the site.
+
+Two consequences worth knowing before touching `src/main.js`:
+
+- **The window is a `BaseWindow`, not a `BrowserWindow`** — it has no web
+  contents of its own, and Electron's menu **roles** that reach for the focused
+  `BrowserWindow` (`reload`, `zoomIn`, `toggleDevTools`, `minimize`) would find
+  nothing. Every menu item that touches the page is a `click` naming the site's
+  own contents instead, through one command table shared by the menus, the bar's
+  buttons and the keys.
+- **Nothing has keyboard focus until something is given it.** A window holding
+  views focuses none of them, so the shell focuses the site on show and on every
+  window focus — otherwise the app opens with a password field that ignores
+  typing until it is clicked.
+
+On Windows and Linux there is no application menu attached to the window: it
+would be drawn *inside* a frameless one, over the bar. The bar opens the same
+menus as popups, and `commandForInput` in `src/frame.js` answers the accelerators
+they print — matched on the physical key as well as the letter, so Ctrl+R still
+reloads on a Cyrillic layout.
+
+`--native-frame` (or `CYBERIA_NATIVE_FRAME=1`) hands the window back to the
+desktop: the frame, the menu bar and its accelerators all become the system's
+again. It is there for a window manager that decorates windows its own way.
+
 ## What the shell adds over a browser tab
 
 - **Persistent session** — cookies and local storage live in the `persist:cyberia`
@@ -153,6 +197,8 @@ can do is ask for the window to be raised.
 - **`cyberia://` deep links** — `cyberia://profile?tab=xp` focuses the running
   window and navigates it. Registered by the installers; `npm start` registers
   the dev binary.
+- **A window of its own** — the title bar is drawn by the app, with the menus,
+  the page title and the window buttons in it. See [The window](#the-window).
 - **Remembered geometry** — window size and position are restored, and revalidated
   against the displays that currently exist.
 - **A real BitTorrent client** — see below. This is the one capability the site
@@ -206,3 +252,6 @@ that finds nobody.
   `src/main.js`. Hardware wallets therefore need the WalletConnect route too.
 - Installers are unsigned. macOS Gatekeeper and Windows SmartScreen will warn
   until a Developer ID / Authenticode certificate is wired into the build.
+- The drawn menu bar is opened with the pointer: there is no Alt to walk it from
+  the keyboard, the way there would be with a native one. Every command in it
+  has a working accelerator, and `--native-frame` brings the native bar back.

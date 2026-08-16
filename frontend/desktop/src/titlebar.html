@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+        />
+        <title>Cyberia</title>
+        <style>
+            :root {
+                color-scheme: dark;
+                font-family:
+                    Manrope, ui-sans-serif, system-ui, -apple-system,
+                    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                font-size: 13px;
+                color: #a7b8b6;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                height: 100%;
+                margin: 0;
+                overflow: hidden;
+                background: #0b0f10;
+                -webkit-user-select: none;
+                user-select: none;
+                cursor: default;
+            }
+
+            /*
+             * The whole strip drags the window; everything clickable inside it
+             * opts back out. That is the entire contract of a custom frame.
+             */
+            #bar {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                align-items: center;
+                height: 100%;
+                padding-left: 8px;
+                border-bottom: 1px solid #16211f;
+                background: #0b0f10;
+                -webkit-app-region: drag;
+            }
+
+            body.mac #bar {
+                /* Cleared for the traffic lights the system draws over us. */
+                padding-left: 78px;
+            }
+
+            .side {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                min-width: 0;
+            }
+
+            .icon {
+                display: flex;
+                flex: none;
+                margin-right: 4px;
+                color: #00e5d1;
+            }
+
+            body.mac .icon {
+                display: none;
+            }
+
+            .icon svg {
+                width: 16px;
+                height: 16px;
+            }
+
+            .menubar {
+                display: flex;
+                align-items: center;
+                gap: 1px;
+                min-width: 0;
+            }
+
+            .menubar button {
+                flex: none;
+                height: 22px;
+                padding: 0 8px;
+                border: 0;
+                border-radius: 5px;
+                background: transparent;
+                color: inherit;
+                font: inherit;
+                line-height: 22px;
+                white-space: nowrap;
+                cursor: default;
+                -webkit-app-region: no-drag;
+            }
+
+            .menubar button:hover {
+                background: rgb(255 255 255 / 8%);
+                color: #eef7f6;
+            }
+
+            .menubar button.open {
+                background: rgb(0 229 209 / 16%);
+                color: #eef7f6;
+            }
+
+            .title {
+                overflow: hidden;
+                padding: 0 12px;
+                color: #7f918f;
+                font-size: 12px;
+                letter-spacing: 0.01em;
+                text-align: center;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .controls {
+                display: flex;
+                align-self: stretch;
+                margin-left: 8px;
+            }
+
+            .controls button {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 46px;
+                border: 0;
+                background: transparent;
+                color: #a7b8b6;
+                cursor: default;
+                -webkit-app-region: no-drag;
+            }
+
+            .controls button:hover {
+                background: rgb(255 255 255 / 9%);
+                color: #eef7f6;
+            }
+
+            .controls button.close:hover {
+                background: #e81123;
+                color: #fff;
+            }
+
+            .controls svg {
+                width: 10px;
+                height: 10px;
+                stroke: currentColor;
+                stroke-width: 1;
+                fill: none;
+            }
+
+            /* An inactive window says so, the way every other window does. */
+            body.blurred .side,
+            body.blurred .title,
+            body.blurred .controls {
+                opacity: 0.55;
+            }
+
+            [hidden] {
+                display: none !important;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="bar">
+            <div class="side">
+                <span class="icon" aria-hidden="true">
+                    <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                        <g
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="4"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path d="M32 10 51 20.75v21.5L32 53 13 42.25v-21.5L32 10Z" />
+                            <path d="M13 20.75 32 31.5l19-10.75" />
+                            <path d="M32 31.5V53" />
+                        </g>
+                    </svg>
+                </span>
+                <nav class="menubar" id="menubar" aria-label="Menu"></nav>
+            </div>
+            <div class="title" id="title">Cyberia</div>
+            <div class="controls" id="controls" hidden>
+                <button type="button" id="minimize" title="Minimize" aria-label="Minimize">
+                    <svg viewBox="0 0 10 10" aria-hidden="true">
+                        <path d="M0 5.5h10" />
+                    </svg>
+                </button>
+                <button type="button" id="maximize" title="Maximize" aria-label="Maximize">
+                    <svg viewBox="0 0 10 10" aria-hidden="true" id="maximize-glyph">
+                        <rect x="0.5" y="0.5" width="9" height="9" />
+                    </svg>
+                </button>
+                <button type="button" id="close" class="close" title="Close" aria-label="Close">
+                    <svg viewBox="0 0 10 10" aria-hidden="true">
+                        <path d="M0.5 0.5l9 9M9.5 0.5l-9 9" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <script>
+            (function () {
+                const frame = window.cyberiaFrame;
+
+                if (!frame) {
+                    return;
+                }
+
+                const bar = document.getElementById('bar');
+                const menubar = document.getElementById('menubar');
+                const title = document.getElementById('title');
+                const controls = document.getElementById('controls');
+                const maximize = document.getElementById('maximize');
+                const glyph = document.getElementById('maximize-glyph');
+
+                const MAXIMIZE = '<rect x="0.5" y="0.5" width="9" height="9" />';
+                const RESTORE =
+                    '<path d="M2.5 2.5V0.5h7v7h-2" /><rect x="0.5" y="2.5" width="7" height="7" />';
+
+                let platform = '';
+
+                function drawMenus(menus) {
+                    menubar.textContent = '';
+
+                    menus.forEach(function (menu) {
+                        const button = document.createElement('button');
+
+                        button.type = 'button';
+                        button.textContent = menu.label;
+                        button.dataset.index = String(menu.index);
+
+                        /*
+                         * The native popup takes the pointer as it opens, so
+                         * the menu has to be asked for on mousedown: a click
+                         * fires after a button release the popup never sees.
+                         */
+                        button.addEventListener('mousedown', function (event) {
+                            event.preventDefault();
+
+                            const rect = button.getBoundingClientRect();
+
+                            frame.menu(
+                                menu.index,
+                                Math.round(rect.left),
+                                Math.round(rect.bottom),
+                            );
+                        });
+
+                        button.addEventListener('keydown', function (event) {
+                            if (event.key !== 'Enter' && event.key !== ' ') {
+                                return;
+                            }
+
+                            event.preventDefault();
+
+                            const rect = button.getBoundingClientRect();
+
+                            frame.menu(
+                                menu.index,
+                                Math.round(rect.left),
+                                Math.round(rect.bottom),
+                            );
+                        });
+
+                        menubar.appendChild(button);
+                    });
+                }
+
+                function markOpenMenu(index) {
+                    const buttons = menubar.querySelectorAll('button');
+
+                    buttons.forEach(function (button) {
+                        button.classList.toggle(
+                            'open',
+                            index !== null && Number(button.dataset.index) === index,
+                        );
+                    });
+                }
+
+                function apply(state) {
+                    if (typeof state.platform === 'string') {
+                        platform = state.platform;
+                        document.body.classList.toggle('mac', platform === 'darwin');
+                    }
+
+                    if (Array.isArray(state.menus)) {
+                        drawMenus(state.menus);
+                    }
+
+                    if (typeof state.controls === 'boolean') {
+                        controls.hidden = !state.controls;
+                    }
+
+                    if (typeof state.title === 'string') {
+                        title.textContent = state.title || 'Cyberia';
+                    }
+
+                    if (typeof state.focused === 'boolean') {
+                        document.body.classList.toggle('blurred', !state.focused);
+                    }
+
+                    if (typeof state.maximized === 'boolean') {
+                        glyph.innerHTML = state.maximized ? RESTORE : MAXIMIZE;
+                        maximize.title = state.maximized ? 'Restore' : 'Maximize';
+                        maximize.setAttribute(
+                            'aria-label',
+                            state.maximized ? 'Restore' : 'Maximize',
+                        );
+                    }
+
+                    if (state.menu !== undefined) {
+                        markOpenMenu(
+                            typeof state.menu === 'number' ? state.menu : null,
+                        );
+                    }
+                }
+
+                document
+                    .getElementById('minimize')
+                    .addEventListener('click', function () {
+                        frame.command('minimize');
+                    });
+
+                maximize.addEventListener('click', function () {
+                    frame.command('maximize');
+                });
+
+                document
+                    .getElementById('close')
+                    .addEventListener('click', function () {
+                        frame.command('close');
+                    });
+
+                /*
+                 * Windows and macOS answer a double click on a drag region
+                 * themselves; on Linux nothing does, and a title bar that
+                 * cannot be double-clicked reads as broken.
+                 */
+                bar.addEventListener('dblclick', function (event) {
+                    if (platform !== 'linux' || event.target.closest('button')) {
+                        return;
+                    }
+
+                    frame.command('maximize');
+                });
+
+                window.addEventListener('contextmenu', function (event) {
+                    event.preventDefault();
+                });
+
+                frame.subscribe(apply);
+                frame.state().then(apply);
+            })();
+        </script>
+    </body>
+</html>

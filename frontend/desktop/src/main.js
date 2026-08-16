@@ -11,10 +11,27 @@
  * Anything that is not Cyberia (wallet deep links, explorer links,
  * `target="_blank"`) is handed to the system browser instead of being opened
  * inside the app frame.
+ *
+ * The window itself is drawn by the app, VSCode-style: one frameless window
+ * holding two views — the title bar (`titlebar.html`, local) above the site.
+ * The site is remote, so the frame cannot be part of the page; it is a view of
+ * its own, which is also what keeps it standing while the page is an OAuth
+ * redirect or the offline notice. See `frame.js`.
  */
 
 const path = require('node:path');
-const { app, BrowserWindow, Menu, dialog, ipcMain, net, session, shell } = require('electron');
+const {
+    BaseWindow,
+    BrowserWindow,
+    Menu,
+    WebContentsView,
+    app,
+    dialog,
+    ipcMain,
+    net,
+    session,
+    shell,
+} = require('electron');
 const {
     PARTITION,
     PROTOCOL,
@@ -27,6 +44,15 @@ const {
     resolveProxyDecision,
     resolveStartUrl,
 } = require('./config');
+const {
+    MAC_TRAFFIC_LIGHTS,
+    TITLEBAR_HEIGHT,
+    commandForInput,
+    frameLayout,
+    menuBarItems,
+    usesCustomFrame,
+    zoomLevel,
+} = require('./frame');
 const { loadProxySetting, saveProxySetting } = require('./proxy-settings');
 const torrent = require('./torrent');
 const { loadWindowState, trackWindowState } = require('./window-state');
@@ -36,6 +62,12 @@ const START_URL = resolveStartUrl(process.env, process.argv);
 const APP_HOST = new URL(APP_URL).hostname;
 const OFFLINE_PAGE = path.join(__dirname, 'offline.html');
 const PROXY_PAGE = path.join(__dirname, 'proxy.html');
+const TITLEBAR_PAGE = path.join(__dirname, 'titlebar.html');
+
+const IS_MAC = process.platform === 'darwin';
+
+/** Whether this run draws its own title bar; `--native-frame` opts out. */
+const CUSTOM_FRAME = usesCustomFrame(process.env, process.argv);
 
 /** A launch flag pins the proxy for this run, so the window cannot change it. */
 const PROXY_LOCKED = hasProxyFlag(process.argv);
@@ -46,6 +78,12 @@ const PROXY_LOCKED = hasProxyFlag(process.argv);
  * not look like a frozen window.
  */
 const PROBE_TIMEOUT_MS = 12000;
+
+/** A site that never finishes loading must not leave the app with no window. */
+const REVEAL_TIMEOUT_MS = 2500;
+
+/** How long the window manager gets to settle before the views are laid out again. */
+const SETTLE_MS = 150;
 
 /** Permissions the site legitimately needs; everything else is refused. */
 const ALLOWED_PERMISSIONS = new Set([
@@ -59,13 +97,37 @@ const ALLOWED_PERMISSIONS = new Set([
 const ERR_ABORTED = -3;
 
 let mainWindow = null;
+let contentView = null;
+let chromeView = null;
+let appMenu = null;
 let proxyWindow = null;
 let shellSession = null;
+let settleTimer = null;
 
 /** The proxy in force right now, what the user saved, and where it came from. */
 let activeProxy = null;
 let proxySetting = { mode: 'system', server: '' };
 let proxySource = 'system';
+
+/** The site's own web contents — the window has none of its own any more. */
+function pageContents() {
+    if (!contentView || contentView.webContents.isDestroyed()) {
+        return null;
+    }
+
+    return contentView.webContents;
+}
+
+/**
+ * Puts the keyboard on the page.
+ *
+ * A window holding views focuses none of them by itself, so without this the
+ * app opens with a password field that ignores typing until it is clicked —
+ * the one screen where that is least forgivable.
+ */
+function focusPage() {
+    pageContents()?.focus();
+}
 
 function buildUserAgent() {
     return `${app.userAgentFallback}`
@@ -86,19 +148,11 @@ function openExternal(target) {
 }
 
 function loadApp(target = START_URL) {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-        return;
-    }
-
-    void mainWindow.loadURL(target);
+    void pageContents()?.loadURL(target);
 }
 
 function showOffline(error = '') {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-        return;
-    }
-
-    void mainWindow.loadFile(OFFLINE_PAGE, {
+    void pageContents()?.loadFile(OFFLINE_PAGE, {
         query: { url: START_URL, error, proxy: describeProxy(activeProxy) },
     });
 }
@@ -266,6 +320,202 @@ function openProxyWindow() {
     void proxyWindow.loadFile(PROXY_PAGE);
 }
 
+function showAbout() {
+    void dialog.showMessageBox(mainWindow ?? undefined, {
+        type: 'info',
+        title: 'Cyberia',
+        message: `Cyberia ${app.getVersion()}`,
+        detail: `Electron ${process.versions.electron}\n${START_URL}`,
+        buttons: ['OK'],
+    });
+}
+
+function toggleMaximize() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
+    }
+
+    if (mainWindow.isMaximized()) {
+        mainWindow.unmaximize();
+
+        return;
+    }
+
+    mainWindow.maximize();
+}
+
+function zoomPage(command) {
+    const contents = pageContents();
+
+    if (!contents) {
+        return;
+    }
+
+    contents.setZoomLevel(zoomLevel(contents.getZoomLevel(), command));
+}
+
+/**
+ * Everything the frame can be asked to do, under one name each.
+ *
+ * The menus, the title bar's buttons and the key strokes all come through here,
+ * which is why a command that touches the page names the page's own contents:
+ * the window is a `BaseWindow` holding two views, so Electron's built-in menu
+ * roles — which reach for the focused *BrowserWindow* — would find nothing.
+ */
+const COMMANDS = {
+    wallet: () => loadApp(),
+    site: () => loadApp(APP_URL),
+    browser: () => openExternal(pageContents()?.getURL() || START_URL),
+    proxy: () => openProxyWindow(),
+    back: () => pageContents()?.navigationHistory.goBack(),
+    forward: () => pageContents()?.navigationHistory.goForward(),
+    reload: () => pageContents()?.reload(),
+    'force-reload': () => pageContents()?.reloadIgnoringCache(),
+    devtools: () => pageContents()?.toggleDevTools(),
+    'zoom-in': () => zoomPage('zoom-in'),
+    'zoom-out': () => zoomPage('zoom-out'),
+    'zoom-reset': () => zoomPage('zoom-reset'),
+    undo: () => pageContents()?.undo(),
+    redo: () => pageContents()?.redo(),
+    cut: () => pageContents()?.cut(),
+    copy: () => pageContents()?.copy(),
+    paste: () => pageContents()?.paste(),
+    'select-all': () => pageContents()?.selectAll(),
+    fullscreen: () => mainWindow?.setFullScreen(!mainWindow.isFullScreen()),
+    minimize: () => mainWindow?.minimize(),
+    maximize: () => toggleMaximize(),
+    close: () => mainWindow?.close(),
+    quit: () => app.quit(),
+    about: () => showAbout(),
+};
+
+/** Runs a command by name. An unknown name is ignored, never guessed at. */
+function run(command) {
+    if (!Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
+        return;
+    }
+
+    COMMANDS[command]();
+}
+
+/** Whether the title bar is on screen right now (it is not in full screen). */
+function chromeVisible() {
+    return Boolean(chromeView) && !(mainWindow?.isFullScreen() ?? false);
+}
+
+function layoutViews() {
+    if (!mainWindow || mainWindow.isDestroyed() || !contentView) {
+        return;
+    }
+
+    const visible = chromeVisible();
+    const { width, height } = mainWindow.getContentBounds();
+    const layout = frameLayout({
+        width,
+        height,
+        titlebar: visible ? TITLEBAR_HEIGHT : 0,
+    });
+
+    if (chromeView) {
+        chromeView.setVisible(visible);
+        chromeView.setBounds(layout.chrome);
+    }
+
+    contentView.setBounds(layout.content);
+}
+
+/**
+ * Lays the views out now, and again once the window manager has settled.
+ *
+ * Both passes are needed on Linux: `unmaximize` is emitted with no `resize`
+ * behind it, and around a maximise the sizes that do arrive can be transient
+ * ones the window never keeps. A frame left sized for the window's previous
+ * shape has its buttons off the edge, so the late pass is worth its 150ms.
+ */
+function relayout() {
+    layoutViews();
+
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(layoutViews, SETTLE_MS);
+}
+
+function sendFrame(patch) {
+    if (!chromeView || chromeView.webContents.isDestroyed()) {
+        return;
+    }
+
+    chromeView.webContents.send('frame:update', patch);
+}
+
+/** Everything the title bar needs to draw itself from cold. */
+function frameState() {
+    const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+
+    return {
+        platform: process.platform,
+        // macOS draws its own window buttons over our bar and keeps the menu
+        // bar at the top of the screen, so the bar there is a title and a drag
+        // region and nothing else.
+        controls: !IS_MAC,
+        menus: IS_MAC ? [] : menuBarItems(appMenu),
+        title: window ? window.getTitle() : 'Cyberia',
+        maximized: window ? window.isMaximized() : false,
+        focused: window ? window.isFocused() : true,
+        menu: null,
+    };
+}
+
+/** Opens one of the application menus under the bar's button. */
+function popupMenu(index, x, y) {
+    const item = Number.isInteger(index) ? appMenu?.items?.[index] : null;
+
+    if (!item?.submenu || !mainWindow || mainWindow.isDestroyed()) {
+        return;
+    }
+
+    sendFrame({ menu: index });
+
+    item.submenu.popup({
+        window: mainWindow,
+        x: Math.round(Number.isFinite(x) ? x : 0),
+        y: Math.round(Number.isFinite(y) ? y : TITLEBAR_HEIGHT),
+        callback: () => sendFrame({ menu: null }),
+    });
+}
+
+function setWindowTitle(title) {
+    const text = typeof title === 'string' && title.trim() !== '' ? title : 'Cyberia';
+
+    mainWindow?.setTitle(text);
+    sendFrame({ title: text });
+}
+
+/**
+ * The key strokes the menu bar used to answer.
+ *
+ * Only where the shell drew the frame itself and there is no native menu bar
+ * attached to the window: macOS has a real one at the top of the screen, and a
+ * `--native-frame` run gets the application menu back, so in both of those the
+ * strokes are already spoken for and answering them again would run every
+ * command twice.
+ */
+function watchKeys(contents) {
+    if (!CUSTOM_FRAME || IS_MAC) {
+        return;
+    }
+
+    contents.on('before-input-event', (event, input) => {
+        const command = commandForInput(input);
+
+        if (!command) {
+            return;
+        }
+
+        event.preventDefault();
+        run(command);
+    });
+}
+
 async function configureSession() {
     shellSession = session.fromPartition(PARTITION);
 
@@ -297,7 +547,7 @@ async function configureSession() {
 function createWindow() {
     const state = loadWindowState();
 
-    mainWindow = new BrowserWindow({
+    mainWindow = new BaseWindow({
         x: state.x,
         y: state.y,
         width: state.width,
@@ -307,10 +557,21 @@ function createWindow() {
         show: false,
         backgroundColor: '#0b0f10',
         title: 'Cyberia',
+        // Frameless is how the app gets to draw the bar itself. macOS is the
+        // exception on purpose: `hiddenInset` keeps the system's window
+        // buttons and the window's rounded corners, and the bar is worn under
+        // them — which is exactly what VSCode does on each platform.
+        frame: !CUSTOM_FRAME || IS_MAC,
+        ...(CUSTOM_FRAME && IS_MAC
+            ? { titleBarStyle: 'hiddenInset', trafficLightPosition: MAC_TRAFFIC_LIGHTS }
+            : {}),
         autoHideMenuBar: true,
         icon: process.platform === 'linux'
             ? path.join(__dirname, '..', 'build', 'icon.png')
             : undefined,
+    });
+
+    contentView = new WebContentsView({
         webPreferences: {
             partition: PARTITION,
             preload: path.join(__dirname, 'preload.js'),
@@ -321,15 +582,54 @@ function createWindow() {
         },
     });
 
+    contentView.setBackgroundColor('#0b0f10');
+    mainWindow.contentView.addChildView(contentView);
+
+    if (CUSTOM_FRAME) {
+        chromeView = new WebContentsView({
+            webPreferences: {
+                // Its own preload again: the window's buttons and menus are not
+                // something the remote page below may reach.
+                preload: path.join(__dirname, 'preload-frame.js'),
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true,
+            },
+        });
+
+        chromeView.setBackgroundColor('#0b0f10');
+        mainWindow.contentView.addChildView(chromeView);
+        chromeView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+        watchKeys(chromeView.webContents);
+
+        void chromeView.webContents.loadFile(TITLEBAR_PAGE);
+    }
+
+    layoutViews();
+
     if (state.maximized) {
         mainWindow.maximize();
     }
 
     trackWindowState(mainWindow);
 
-    mainWindow.once('ready-to-show', () => mainWindow.show());
+    // The frame is local and paints at once, so the window is on screen while
+    // the site is still arriving — with the bar already usable. The timer is
+    // for the run where nothing loads at all.
+    const reveal = () => {
+        if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+            mainWindow.show();
+            focusPage();
+        }
+    };
 
-    const contents = mainWindow.webContents;
+    chromeView?.webContents.once('did-finish-load', reveal);
+    contentView.webContents.once('did-stop-loading', reveal);
+    setTimeout(reveal, REVEAL_TIMEOUT_MS);
+
+    const contents = contentView.webContents;
+
+    watchKeys(contents);
 
     contents.setWindowOpenHandler(({ url }) => {
         openExternal(url);
@@ -358,8 +658,31 @@ function createWindow() {
         }
     });
 
+    // A window with no page of its own has no title of its own either.
+    contents.on('page-title-updated', (_event, title) => setWindowTitle(title));
+
+    mainWindow.on('resize', relayout);
+    mainWindow.on('restore', relayout);
+    mainWindow.on('maximize', () => {
+        relayout();
+        sendFrame({ maximized: true });
+    });
+    mainWindow.on('unmaximize', () => {
+        relayout();
+        sendFrame({ maximized: false });
+    });
+    mainWindow.on('enter-full-screen', relayout);
+    mainWindow.on('leave-full-screen', relayout);
+    mainWindow.on('focus', () => {
+        focusPage();
+        sendFrame({ focused: true });
+    });
+    mainWindow.on('blur', () => sendFrame({ focused: false }));
+
     mainWindow.on('closed', () => {
         mainWindow = null;
+        contentView = null;
+        chromeView = null;
     });
 
     loadApp();
@@ -403,83 +726,152 @@ function deepLinkFrom(argv) {
     return argv.find((argument) => argument.startsWith(`${PROTOCOL}://`)) ?? null;
 }
 
-function buildMenu() {
-    const isMac = process.platform === 'darwin';
+/**
+ * The application menu — also the menu the drawn bar opens.
+ *
+ * Every item that touches the page has a `click` of its own rather than a role:
+ * roles that reload, zoom or toggle the tools ask Electron for the focused
+ * BrowserWindow, and this window is a frame holding views instead. The two
+ * roles that stay are macOS-only and act on the app or the first responder,
+ * which is exactly what they should do.
+ */
+function menuTemplate() {
+    const editItems = [
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => run('undo') },
+        { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => run('redo') },
+        { type: 'separator' },
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', click: () => run('cut') },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: () => run('copy') },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', click: () => run('paste') },
+        { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => run('select-all') },
+    ];
 
-    const template = [
-        ...(isMac ? [{ role: 'appMenu' }] : []),
+    return [
+        ...(IS_MAC ? [{ role: 'appMenu' }] : []),
         {
             label: 'File',
             submenu: [
                 {
                     label: 'Wallet',
                     accelerator: 'CmdOrCtrl+Shift+H',
-                    click: () => loadApp(),
+                    click: () => run('wallet'),
                 },
                 {
                     label: 'Cyberia Site',
                     accelerator: 'CmdOrCtrl+Shift+S',
-                    click: () => loadApp(APP_URL),
+                    click: () => run('site'),
                 },
                 {
                     label: 'Open in Browser',
-                    click: () => openExternal(mainWindow?.webContents.getURL() ?? START_URL),
+                    click: () => run('browser'),
                 },
                 { type: 'separator' },
                 {
                     label: 'Proxy…',
-                    click: () => openProxyWindow(),
+                    click: () => run('proxy'),
                 },
                 { type: 'separator' },
-                isMac ? { role: 'close' } : { role: 'quit' },
+                IS_MAC
+                    ? { label: 'Close Window', accelerator: 'Command+W', click: () => run('close') }
+                    : { label: 'Quit', accelerator: 'Ctrl+Q', click: () => run('quit') },
             ],
         },
-        { role: 'editMenu' },
+        IS_MAC ? { role: 'editMenu' } : { label: 'Edit', submenu: editItems },
         {
             label: 'View',
             submenu: [
                 {
                     label: 'Back',
                     accelerator: 'Alt+Left',
-                    click: () => mainWindow?.webContents.navigationHistory.goBack(),
+                    click: () => run('back'),
                 },
                 {
                     label: 'Forward',
                     accelerator: 'Alt+Right',
-                    click: () => mainWindow?.webContents.navigationHistory.goForward(),
+                    click: () => run('forward'),
                 },
-                { role: 'reload' },
-                { role: 'forceReload' },
+                {
+                    label: 'Reload',
+                    accelerator: 'CmdOrCtrl+R',
+                    click: () => run('reload'),
+                },
+                {
+                    label: 'Force Reload',
+                    accelerator: 'CmdOrCtrl+Shift+R',
+                    click: () => run('force-reload'),
+                },
                 { type: 'separator' },
-                { role: 'resetZoom' },
-                { role: 'zoomIn' },
-                { role: 'zoomOut' },
+                {
+                    label: 'Actual Size',
+                    accelerator: 'CmdOrCtrl+0',
+                    click: () => run('zoom-reset'),
+                },
+                {
+                    label: 'Zoom In',
+                    accelerator: 'CmdOrCtrl+=',
+                    click: () => run('zoom-in'),
+                },
+                {
+                    label: 'Zoom Out',
+                    accelerator: 'CmdOrCtrl+-',
+                    click: () => run('zoom-out'),
+                },
                 { type: 'separator' },
-                { role: 'togglefullscreen' },
-                { role: 'toggleDevTools' },
+                {
+                    label: 'Toggle Full Screen',
+                    accelerator: IS_MAC ? 'Control+Command+F' : 'F11',
+                    click: () => run('fullscreen'),
+                },
+                {
+                    label: 'Toggle Developer Tools',
+                    accelerator: IS_MAC ? 'Alt+Command+I' : 'Ctrl+Shift+I',
+                    click: () => run('devtools'),
+                },
             ],
         },
-        { role: 'windowMenu' },
         {
-            role: 'help',
+            label: 'Window',
+            submenu: [
+                {
+                    label: 'Minimize',
+                    // Only where a menu bar is attached to answer it: an
+                    // accelerator printed under a custom frame and answered by
+                    // nobody is worse than none at all.
+                    ...(IS_MAC ? { accelerator: 'Command+M' } : {}),
+                    click: () => run('minimize'),
+                },
+                {
+                    label: 'Zoom',
+                    click: () => run('maximize'),
+                },
+                ...(IS_MAC ? [{ type: 'separator' }, { role: 'front' }] : []),
+            ],
+        },
+        {
+            label: 'Help',
             submenu: [
                 {
                     label: 'About Cyberia',
-                    click: () => {
-                        void dialog.showMessageBox(mainWindow ?? undefined, {
-                            type: 'info',
-                            title: 'Cyberia',
-                            message: `Cyberia ${app.getVersion()}`,
-                            detail: `Electron ${process.versions.electron}\n${START_URL}`,
-                            buttons: ['OK'],
-                        });
-                    },
+                    click: () => run('about'),
                 },
             ],
         },
     ];
+}
 
-    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+/**
+ * Builds the menu, and attaches it only where a window may wear one.
+ *
+ * On Windows and Linux a menu attached to a frameless window is drawn *inside*
+ * it, over the bar the shell draws itself — so under a custom frame there is no
+ * application menu at all: the bar opens the same menus as popups, and
+ * `watchKeys` answers the strokes they print. macOS keeps its real menu bar,
+ * and so does a `--native-frame` run.
+ */
+function buildMenu() {
+    appMenu = Menu.buildFromTemplate(menuTemplate());
+
+    Menu.setApplicationMenu(IS_MAC || !CUSTOM_FRAME ? appMenu : null);
 }
 
 function registerProtocol() {
@@ -540,8 +932,14 @@ if (!app.requestSingleInstanceLock()) {
         // can draw.
         torrent.register({
             getWindow: () => mainWindow,
+            getContents: () => pageContents(),
             isTrusted: (url) => isNavigable(url, APP_HOST),
         });
+
+        // The title bar. Its own channels, reachable only from its own preload.
+        ipcMain.handle('frame:state', () => frameState());
+        ipcMain.on('frame:command', (_event, command) => run(String(command)));
+        ipcMain.on('frame:menu', (_event, index, x, y) => popupMenu(index, x, y));
 
         ipcMain.handle('proxy:state', () => proxyState());
         ipcMain.handle('proxy:apply', (_event, setting) => applyProxySetting(setting));
@@ -555,7 +953,7 @@ if (!app.requestSingleInstanceLock()) {
         handleDeepLink(deepLinkFrom(process.argv));
 
         app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) {
+            if (!mainWindow || mainWindow.isDestroyed()) {
                 createWindow();
             }
         });
