@@ -12,6 +12,7 @@ import {
     writeLainChat,
 } from '@/lib/wallet';
 import type { LainTurn } from '@/lib/wallet';
+import { growComposer } from '@/lib/wallet/composer';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -307,6 +308,9 @@ const forget = (): void => {
     error.value = null;
 };
 
+/** The field itself, so the draft can size it. */
+const composer = ref<HTMLTextAreaElement | null>(null);
+
 /** Enter sends; Shift+Enter is a newline, as in every chat ever written. */
 const onKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -314,6 +318,9 @@ const onKeydown = (event: KeyboardEvent): void => {
         void send();
     }
 };
+
+// A sent message empties the field, and an empty field is one line tall again.
+watch(draft, () => void nextTick(() => growComposer(composer.value)));
 
 watch(
     address,
@@ -503,21 +510,30 @@ onMounted(() => {
 
             <form class="cw-chat-form" @submit.prevent="send()">
                 <textarea
+                    ref="composer"
                     v-model="draft"
                     class="cw-textarea"
-                    rows="2"
+                    rows="1"
                     maxlength="12000"
                     :placeholder="t('lainPlaceholder')"
                     :aria-label="t('lainPlaceholder')"
                     @keydown="onKeydown"
                 />
+                <!-- Square, like the wire's: the field is what needs width. -->
                 <button
                     type="submit"
-                    class="cw-btn cw-btn-primary"
+                    class="cw-btn cw-btn-primary cw-chat-send"
                     :disabled="sending || draft.trim() === ''"
+                    :title="t('lainSend')"
+                    :aria-label="t('lainSend')"
                 >
-                    <Send :size="13" aria-hidden="true" />
-                    {{ t('lainSend') }}
+                    <Loader2
+                        v-if="sending"
+                        :size="15"
+                        class="cw-spin"
+                        aria-hidden="true"
+                    />
+                    <Send v-else :size="15" aria-hidden="true" />
                 </button>
             </form>
 

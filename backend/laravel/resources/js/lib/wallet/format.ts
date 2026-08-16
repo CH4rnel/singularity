@@ -71,12 +71,46 @@ export const usdValue = (
     return Number(formatUnits(value, decimals, 12)) * price;
 };
 
-export const formatUsd = (value: number | null, locale: string): string =>
+/**
+ * A USD amount.
+ *
+ * Two decimals for anything a cent can express, and significant digits below
+ * that. CYBER trades in the tens of microdollars, so a fixed two decimals
+ * printed every Cyberia balance in this wallet — the coin card, the network
+ * screen, the portfolio total — as "$0.00", which reads as an empty wallet
+ * rather than as a cheap coin. Zero itself is still "$0.00": that one is a
+ * fact about the balance.
+ */
+export const formatUsd = (value: number | null, locale: string): string => {
+    if (value === null) {
+        return '—';
+    }
+
+    const magnitude = Math.abs(value);
+
+    return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: 'USD',
+        ...(magnitude > 0 && magnitude < 0.01
+            ? { maximumSignificantDigits: 3 }
+            : { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    }).format(value);
+};
+
+/**
+ * What one unit costs — a rate rather than a holding.
+ *
+ * Same rule as above at the bottom of the range, and four decimals rather than
+ * two in the middle of it: a price is the number people compare between
+ * screens, and $1.0000 against $1.0004 is a difference worth seeing.
+ */
+export const formatUsdPrice = (value: number | null, locale: string): string =>
     value === null
         ? '—'
         : new Intl.NumberFormat(locale, {
               style: 'currency',
               currency: 'USD',
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
+              ...(Math.abs(value) < 0.01
+                  ? { maximumSignificantDigits: 4 }
+                  : { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
           }).format(value);

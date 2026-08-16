@@ -6,7 +6,7 @@ import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
 import { formatUnits, hasSwap, sameToken, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
-import { formatUsd, usdValue } from '@/lib/wallet/format';
+import { formatUsd, formatUsdPrice, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -75,22 +75,7 @@ const tag = computed(() =>
     ).toUpperCase(),
 );
 
-/**
- * A pool price can be far below a cent, and rounding it to two decimals would
- * print $0.00 for a balance that is worth something. Significant digits keep
- * the number honest at both ends of the range.
- */
-const priceLabel = computed(() =>
-    price.value === null
-        ? '—'
-        : new Intl.NumberFormat(locale.value, {
-              style: 'currency',
-              currency: 'USD',
-              ...(price.value < 0.01
-                  ? { maximumSignificantDigits: 4 }
-                  : { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-          }).format(price.value),
-);
+const priceLabel = computed(() => formatUsdPrice(price.value, locale.value));
 
 const explorerUrl = computed(() =>
     chain.value.explorerAddressUrl(props.address),

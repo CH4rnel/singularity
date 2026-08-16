@@ -10,6 +10,7 @@ import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
 import WalletBridge from '@/components/wallet/WalletBridge.vue';
 import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
 import WalletChat from '@/components/wallet/WalletChat.vue';
+import WalletContextBar from '@/components/wallet/WalletContextBar.vue';
 import WalletDao from '@/components/wallet/WalletDao.vue';
 import WalletEarn from '@/components/wallet/WalletEarn.vue';
 import WalletFeed from '@/components/wallet/WalletFeed.vue';
@@ -852,40 +853,22 @@ watch(
             </nav>
 
             <div class="cw-main">
-                <!-- Context bar: which network the current screen is about. -->
-                <div
-                    v-if="stage === 'app' && showNetworkBar"
-                    class="cw-row"
-                    style="
-                        flex: none;
-                        height: 46px;
-                        padding: 0 20px;
-                        border-bottom: 1px solid var(--cw-line);
-                    "
-                >
-                    <span style="display: flex; align-items: center; gap: 8px">
-                        <NetworkMark :chain="chain" dot :size="6" />
-                        <span
-                            style="
-                                font: 500 11px/1 var(--cw-mono);
-                                letter-spacing: 0.1em;
-                            "
-                            >{{
-                                wallet.accounts.value.find(
-                                    (account) => account.chain === chain,
-                                )?.label
-                            }}</span
-                        >
-                    </span>
-                    <button
-                        type="button"
-                        class="cw-back"
-                        style="letter-spacing: 0.12em"
-                        @click="load()"
-                    >
-                        {{ t('refresh') }}
-                    </button>
-                </div>
+                <!--
+                  Context bar: whose money this is, on which network, at what
+                  price — and both of the first two changed from here rather
+                  than from a screen you have to leave this one to reach.
+                -->
+                <WalletContextBar
+                    v-if="stage === 'app'"
+                    :wallet="wallet"
+                    :chain="chain"
+                    :prices="prices"
+                    :show-network="showNetworkBar"
+                    @pick="chain = $event"
+                    @accounts="openSection('accounts')"
+                    @add-network="overlay = 'addNetwork'"
+                    @refresh="load()"
+                />
 
                 <div class="cw-body">
                     <div v-if="stage !== 'app'" class="cw-column">

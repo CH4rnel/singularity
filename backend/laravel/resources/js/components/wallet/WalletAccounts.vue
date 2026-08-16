@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
-import { deriveAccounts, walletChain } from '@/lib/wallet';
+import { accountDisplayName, deriveAccounts, walletChain } from '@/lib/wallet';
 import type { WalletAccountRecord } from '@/lib/wallet';
 import { shortAddress } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
@@ -37,23 +37,6 @@ const busy = ref(false);
 const renaming = ref<string | null>(null);
 const draftName = ref('');
 const confirmingRemoval = ref<string | null>(null);
-
-/** The generated name of an account, when the user has not given it one. */
-const fallbackName = (record: WalletAccountRecord): string => {
-    if (record.kind === 'seed') {
-        return record.index === 0
-            ? t('accountPrimaryName')
-            : t('accountSeedName', { index: record.index + 1 });
-    }
-
-    if (record.kind === 'phrase') {
-        return t('accountPhraseName');
-    }
-
-    return record.kind === 'key'
-        ? t('accountKeyName', { chain: walletChain(record.chain).label })
-        : t('accountWatchName', { chain: walletChain(record.chain).label });
-};
 
 /**
  * Addresses of accounts that are not the active one, derived at most once each.
@@ -119,7 +102,7 @@ const rows = computed(() =>
         return {
             record,
             active,
-            name: record.label?.trim() || fallbackName(record),
+            name: accountDisplayName(record, t),
             address: primary?.address ?? own?.address ?? null,
             chain: primary?.chain ?? own?.chain ?? null,
             path:
