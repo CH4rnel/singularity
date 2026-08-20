@@ -250,87 +250,6 @@ const TAB_OF: Record<Section, Section> = {
 
 const activeTab = computed(() => TAB_OF[section.value]);
 
-/* ------------------------------------------------------- telegram mini app --- */
-
-/**
- * Inside Telegram the frame is not ours: the header carries a back arrow and
- * the bottom carries one main button, and an app that leaves those two wired to
- * nothing is an app that closes itself when someone tries to go back.
- */
-const telegram = nativeShell() === 'telegram';
-
-/** Where "back" goes, or null on a screen that is already the top of the app. */
-const telegramBack = computed<(() => void) | null>(() => {
-    if (overlay.value !== null) {
-        return () => {
-            overlay.value = null;
-        };
-    }
-
-    // A screen that was opened from another one goes back to that one, which
-    // is the only answer that matches what the user did to get here.
-    const parent = PARENTS[section.value];
-
-    if (parent) {
-        return () => openSection(parent);
-    }
-
-    if (section.value !== 'portfolio' && activeTab.value === 'portfolio') {
-        return () => openSection('portfolio');
-    }
-
-    return null;
-});
-
-if (telegram) {
-    let releaseMain = (): void => {};
-    let releaseBack = (): void => {};
-
-    watch(
-        // The main button mirrors the screen's primary action, and *only*
-        // where that action is a tap. Signing is a hold in this wallet — a
-        // gesture a page cannot perform and a thumb cannot perform by accident
-        // — so the signing screens leave Telegram's button hidden rather than
-        // quietly demoting a hold to a tap.
-        () => [stage.value, section.value, overlay.value] as const,
-        () => {
-            releaseMain();
-
-            if (
-                stage.value === 'app' &&
-                section.value === 'portfolio' &&
-                overlay.value === null
-            ) {
-                releaseMain = setMainButton({
-                    text: t('send').toUpperCase(),
-                    onClick: () => {
-                        telegramHaptic();
-                        openSend();
-                    },
-                });
-            } else {
-                hideMainButton();
-                releaseMain = () => {};
-            }
-        },
-        { immediate: true },
-    );
-
-    watch(
-        telegramBack,
-        (handler) => {
-            releaseBack();
-            releaseBack = setBackButton(handler);
-        },
-        { immediate: true },
-    );
-
-    onBeforeUnmount(() => {
-        releaseMain();
-        releaseBack();
-    });
-}
-
 /**
  * Messages waiting, for the badge on the tab bar and the rail.
  *
@@ -478,6 +397,94 @@ const sendChainToken = (
     chain.value = next;
     openSend(token);
 };
+
+/* ------------------------------------------------------- telegram mini app --- */
+
+/**
+ * Inside Telegram the frame is not ours: the header carries a back arrow and
+ * the bottom carries one main button, and an app that leaves those two wired to
+ * nothing is an app that closes itself when someone tries to go back.
+ *
+ * This section has to sit *below* the navigation it reads. Its watches are
+ * `immediate`, so they run while `setup` is still executing: reading
+ * `telegramBack` there evaluates `PARENTS` and the openers, and a `const`
+ * declared further down the file is not yet initialised. Higher up, the whole
+ * page threw `ReferenceError` before its first paint and the Mini App opened
+ * on a black screen — and only inside Telegram, since nothing else runs this.
+ */
+const telegram = nativeShell() === 'telegram';
+
+/** Where "back" goes, or null on a screen that is already the top of the app. */
+const telegramBack = computed<(() => void) | null>(() => {
+    if (overlay.value !== null) {
+        return () => {
+            overlay.value = null;
+        };
+    }
+
+    // A screen that was opened from another one goes back to that one, which
+    // is the only answer that matches what the user did to get here.
+    const parent = PARENTS[section.value];
+
+    if (parent) {
+        return () => openSection(parent);
+    }
+
+    if (section.value !== 'portfolio' && activeTab.value === 'portfolio') {
+        return () => openSection('portfolio');
+    }
+
+    return null;
+});
+
+if (telegram) {
+    let releaseMain = (): void => {};
+    let releaseBack = (): void => {};
+
+    watch(
+        // The main button mirrors the screen's primary action, and *only*
+        // where that action is a tap. Signing is a hold in this wallet — a
+        // gesture a page cannot perform and a thumb cannot perform by accident
+        // — so the signing screens leave Telegram's button hidden rather than
+        // quietly demoting a hold to a tap.
+        () => [stage.value, section.value, overlay.value] as const,
+        () => {
+            releaseMain();
+
+            if (
+                stage.value === 'app' &&
+                section.value === 'portfolio' &&
+                overlay.value === null
+            ) {
+                releaseMain = setMainButton({
+                    text: t('send').toUpperCase(),
+                    onClick: () => {
+                        telegramHaptic();
+                        openSend();
+                    },
+                });
+            } else {
+                hideMainButton();
+                releaseMain = () => {};
+            }
+        },
+        { immediate: true },
+    );
+
+    watch(
+        telegramBack,
+        (handler) => {
+            releaseBack();
+            releaseBack = setBackButton(handler);
+        },
+        { immediate: true },
+    );
+
+    onBeforeUnmount(() => {
+        releaseMain();
+        releaseBack();
+    });
+}
 
 const refreshPrices = async (): Promise<void> => {
     try {
