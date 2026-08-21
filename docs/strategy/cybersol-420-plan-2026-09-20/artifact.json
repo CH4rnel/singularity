@@ -1,0 +1,487 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "CYBER.sol: план до 20 сентября",
+    "description": "Исполнимый план разработки и маркетинга без внешнего бюджета: рост финансируется только реализованными creator fees.",
+    "generatedAt": "2026-08-20T08:10:08Z",
+    "charts": [
+      {
+        "id": "market_cap_thresholds",
+        "title": "Капитализация и рабочие пороги",
+        "subtitle": "SOL-denominated market cap; снимок 20 августа 2026, 08:10 UTC",
+        "headerMarkdown": "Текущая точка требует роста примерно на **51%** до границы комиссии; рабочая цель 500 SOL оставляет запас от обычной волатильности.",
+        "intent": "comparison",
+        "question": "Насколько текущая капитализация далека от границы 420 SOL и рабочего запаса?",
+        "rationale": "Вертикальные бары дают честное сравнение четырёх дискретных уровней на общей шкале от нуля.",
+        "comparisonContext": {
+          "baseline": "Текущий market cap pump.fun",
+          "denominator": "1 млрд токенов",
+          "grain": "Уровень капитализации",
+          "normalization": "Цена токена в SOL × 1 млрд",
+          "semanticFamily": "current-vs-target",
+          "unit": "SOL"
+        },
+        "type": "bar",
+        "dataset": "market_levels",
+        "sourceId": "analysis_calculations",
+        "encodings": {
+          "x": { "field": "level", "type": "ordinal", "label": "Уровень" },
+          "y": { "field": "market_cap_sol", "type": "quantitative", "label": "Market cap", "format": "number", "unit": "SOL" },
+          "tooltip": [
+            { "field": "market_cap_sol", "type": "quantitative", "label": "Market cap, SOL", "format": "number" },
+            { "field": "implied_usd", "type": "quantitative", "label": "Эквивалент, $", "format": "currency" },
+            { "field": "gap_from_current_sol", "type": "quantitative", "label": "Разница, SOL", "format": "number" }
+          ]
+        },
+        "xAxisTitle": "Уровень",
+        "yAxisTitle": "Market cap, SOL",
+        "valueFormat": "number",
+        "unit": "SOL",
+        "layout": "half",
+        "labels": { "values": "none" },
+        "palette": { "kind": "sequential", "name": "blue" },
+        "settings": { "orientation": "vertical", "categoryLabelPolicy": "wrap", "showValues": false, "sort": "none" },
+        "surface": { "surface": "card", "interactiveLegend": false, "showControls": false, "viewMode": "visualization" }
+      }
+    ],
+    "tables": [
+      {
+        "id": "fee_economics",
+        "title": "Комиссионный runway при ставке 0.3%",
+        "subtitle": "Сколько creator fee даёт устойчивый дневной объём до 20 сентября",
+        "dataset": "fee_economics",
+        "sourceId": "analysis_calculations",
+        "defaultSort": { "field": "metric", "direction": "asc" },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          { "field": "metric", "label": "Показатель", "type": "text" },
+          { "field": "value", "label": "Значение", "type": "text" },
+          { "field": "meaning", "label": "Практический смысл", "type": "text" }
+        ]
+      },
+      {
+        "id": "asset_base",
+        "title": "Что уже можно превратить в дистрибуцию",
+        "subtitle": "Публичные продуктовые и аудиторные сигналы на 20 августа 2026",
+        "dataset": "asset_base",
+        "sourceId": "analysis_calculations",
+        "defaultSort": { "field": "asset", "direction": "asc" },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          { "field": "asset", "label": "Актив", "type": "text" },
+          { "field": "evidence", "label": "Сигнал", "type": "text" },
+          { "field": "use", "label": "Как использовать", "type": "text" }
+        ]
+      },
+      {
+        "id": "development_backlog",
+        "title": "Приоритеты разработки",
+        "subtitle": "Только работа, которая сокращает путь от внимания до повторного использования",
+        "dataset": "development_backlog",
+        "sourceId": "plan_assumptions",
+        "defaultSort": { "field": "priority", "direction": "asc" },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          { "field": "priority", "label": "Приоритет", "type": "text" },
+          { "field": "deliverable", "label": "Результат", "type": "text" },
+          { "field": "reuse", "label": "Что уже есть", "type": "text" },
+          { "field": "done", "label": "Готово, когда", "type": "text" }
+        ]
+      },
+      {
+        "id": "budget_gates",
+        "title": "Расходуются только уже полученные комиссии",
+        "subtitle": "Ноль внешнего бюджета; недельный лимит рассчитывается от фактически полученных fees",
+        "dataset": "budget_gates",
+        "sourceId": "plan_assumptions",
+        "defaultSort": { "field": "stage", "direction": "asc" },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          { "field": "stage", "label": "Этап", "type": "text" },
+          { "field": "budget", "label": "Лимит", "type": "text" },
+          { "field": "use", "label": "На что", "type": "text" },
+          { "field": "unlock", "label": "Условие следующего этапа", "type": "text" }
+        ]
+      },
+      {
+        "id": "execution_calendar",
+        "title": "Календарь исполнения",
+        "subtitle": "20 августа — 20 сентября 2026; шесть рабочих дней и один лёгкий день ревью в неделю",
+        "dataset": "execution_calendar",
+        "sourceId": "plan_assumptions",
+        "defaultSort": { "field": "dates", "direction": "asc" },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          { "field": "dates", "label": "Даты", "type": "text" },
+          { "field": "development", "label": "Разработка", "type": "text" },
+          { "field": "distribution", "label": "Маркетинг", "type": "text" },
+          { "field": "exit", "label": "Контрольная точка", "type": "text" }
+        ]
+      },
+      {
+        "id": "scoreboard",
+        "title": "Еженедельный scoreboard",
+        "subtitle": "Цели provisional до выгрузки полного baseline 20–22 августа",
+        "dataset": "scoreboard",
+        "sourceId": "plan_assumptions",
+        "defaultSort": { "field": "metric", "direction": "asc" },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          { "field": "metric", "label": "Метрика", "type": "text" },
+          { "field": "baseline", "label": "Сейчас", "type": "text" },
+          { "field": "milestones", "label": "6 → 13 → 20 сентября", "type": "text" },
+          { "field": "decision", "label": "Какое решение меняет", "type": "text" }
+        ]
+      },
+      {
+        "id": "roles",
+        "title": "Распределение работы на двоих",
+        "subtitle": "Базовое предположение: основатель сильнее в продукте и публичной коммуникации, второй человек — в операционке",
+        "dataset": "roles",
+        "sourceId": "plan_assumptions",
+        "defaultSort": { "field": "person", "direction": "asc" },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          { "field": "person", "label": "Роль", "type": "text" },
+          { "field": "daily", "label": "Ежедневный блок", "type": "text" },
+          { "field": "owns", "label": "Личная ответственность", "type": "text" }
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "pump_fees",
+        "label": "Pump.fun fees",
+        "href": "https://pump.fun/docs/fees",
+        "query": {
+          "engine": "document",
+          "url": "https://pump.fun/docs/fees",
+          "description": "Официальная формула market cap и шкала creator/protocol/LP fees.",
+          "executed_at": "2026-08-20T08:00:00Z",
+          "filters": ["SOL-denominated canonical PumpSwap pool", "420 SOL boundary"]
+        }
+      },
+      {
+        "id": "pump_snapshot",
+        "label": "Pump.fun CYBER.sol coin snapshot",
+        "href": "https://frontend-api-v3.pump.fun/coins/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+        "path": "docs/strategy/cybersol-420-plan-2026-09-20/market-snapshot.json",
+        "query": {
+          "engine": "duckdb",
+          "sql": "SELECT pump.market_cap_sol, pump.market_cap_usd, pump.complete FROM read_json_auto('docs/strategy/cybersol-420-plan-2026-09-20/market-snapshot.json')",
+          "description": "Read the reviewed Pump snapshot used by the report.",
+          "executed_at": "2026-08-20T08:10:08Z",
+          "language": "sql",
+          "tables_used": ["docs/strategy/cybersol-420-plan-2026-09-20/market-snapshot.json"],
+          "filters": ["mint = E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump"],
+          "metric_definitions": ["market cap SOL = current token price in SOL × 1,000,000,000"]
+        }
+      },
+      {
+        "id": "dex_snapshot",
+        "label": "DexScreener CYBER.sol PumpSwap snapshot",
+        "href": "https://dexscreener.com/solana/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+        "path": "docs/strategy/cybersol-420-plan-2026-09-20/market-snapshot.json",
+        "query": {
+          "engine": "duckdb",
+          "sql": "SELECT dexscreener.* FROM read_json_auto('docs/strategy/cybersol-420-plan-2026-09-20/market-snapshot.json')",
+          "description": "Read the reviewed canonical PumpSwap pool snapshot used by the report.",
+          "executed_at": "2026-08-20T08:10:08Z",
+          "language": "sql",
+          "tables_used": ["docs/strategy/cybersol-420-plan-2026-09-20/market-snapshot.json"],
+          "filters": ["pair_address = Dk19ZrUAJLW2e6Ra1qkaZk1pwb48y5cwQu6xfcFXYtEg"],
+          "metric_definitions": ["24-hour transactions = buys_24h + sells_24h"]
+        }
+      },
+      {
+        "id": "analysis_calculations",
+        "label": "CYBER.sol plan calculation notes",
+        "path": "docs/strategy/cybersol-420-plan-2026-09-20/source-notes.md",
+        "query": {
+          "engine": "duckdb",
+          "sql": "SELECT snapshot.datasets.market_levels, snapshot.datasets.fee_economics, snapshot.datasets.asset_base FROM read_json_auto('docs/strategy/cybersol-420-plan-2026-09-20/artifact.json')",
+          "description": "Read the reviewed market levels, fee economics and public-signal inventory used in the report.",
+          "executed_at": "2026-08-20T08:10:08Z",
+          "language": "sql",
+          "tables_used": ["docs/strategy/cybersol-420-plan-2026-09-20/artifact.json"],
+          "metric_definitions": ["gap = 420/current - 1", "gross input scenario = reserveSOL × (sqrt(target/current)-1) / (1-total fee)"]
+        }
+      },
+      {
+        "id": "plan_assumptions",
+        "label": "Operating plan assumptions",
+        "path": "docs/strategy/cybersol-420-plan-2026-09-20/source-notes.md",
+        "query": {
+          "engine": "duckdb",
+          "sql": "SELECT snapshot.datasets.development_backlog, snapshot.datasets.budget_gates, snapshot.datasets.execution_calendar, snapshot.datasets.scoreboard, snapshot.datasets.roles FROM read_json_auto('docs/strategy/cybersol-420-plan-2026-09-20/artifact.json')",
+          "description": "Read the dated operating-plan datasets used in the report.",
+          "executed_at": "2026-08-20T08:10:08Z",
+          "language": "sql",
+          "tables_used": ["docs/strategy/cybersol-420-plan-2026-09-20/artifact.json"],
+          "filters": ["deadline = 2026-09-20", "team size = 2", "no market manipulation"],
+          "metric_definitions": ["Qualified holder = voluntarily verified non-dust holder plus one real product action", "Organic volume excludes project-controlled, circular and self-trading activity"]
+        }
+      },
+      {
+        "id": "github_repo",
+        "label": "Cyberia Singularity repository",
+        "href": "https://github.com/cyberia-temple/singularity",
+        "query": {
+          "engine": "GitHub public repository and local checkout",
+          "url": "https://github.com/cyberia-temple/singularity",
+          "description": "Публичные продуктовые активы, commits, stars, forks и открытые issues.",
+          "executed_at": "2026-08-20T08:10:08Z",
+          "tables_used": ["README.md", "backend/laravel/resources/js/pages/Growth/PioneerSeason.vue", "backend/laravel/config/gamification.php", "services/telegram-bot/README.md"]
+        }
+      },
+      {
+        "id": "community_surfaces",
+        "label": "Public Cyberia community surfaces",
+        "href": "https://t.me/cyberia_network_chat",
+        "query": {
+          "engine": "public web snapshots",
+          "description": "Telegram member count, X follower snapshot and DexScreener holder count.",
+          "executed_at": "2026-08-20T08:10:08Z",
+          "filters": ["latest discoverable public snapshots; freshness differs by surface"]
+        }
+      },
+      {
+        "id": "pump_terms",
+        "label": "Pump Terms of Use",
+        "href": "https://pump.fun/docs/terms-and-conditions",
+        "query": {
+          "engine": "document",
+          "url": "https://pump.fun/docs/terms-and-conditions",
+          "description": "Официальные ограничения и риски использования платформы, включая market manipulation.",
+          "executed_at": "2026-08-20T08:00:00Z"
+        }
+      }
+    ],
+    "blocks": [
+      { "id": "title", "type": "markdown", "body": "# CYBER.sol: план до 20 сентября" },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n- **Вам не нужно вложить 420 SOL.** Это граница *расчётной капитализации*: цена CYBER.sol в SOL × 1 млрд токенов. На снимке 20 августа текущая точка — **278 SOL / $24.2k**, поэтому до границы нужен рост цены примерно на **51%**; при текущем курсе SOL сама граница равна примерно **$36.6k**.\n\n- **Переход через 420 SOL не является одноразовым unlock.** Ставка creator fee меняется динамически вместе с ценой: ниже границы — 0.30%, выше — 0.95%. Продажа может сразу вернуть токен в нижний tier. Рабочая цель поэтому — **500 SOL close + 7-дневная медиана не ниже 450 SOL**, а не случайный принт 420.\n\n- **План не предполагает внешнего маркетингового бюджета.** Расходуются только уже полученные creator fees. При текущем объёме ≈2.54 SOL/день ставка 0.3% даёт лишь ≈0.053 SOL/неделю; при 10 / 25 / 50 SOL в день — ≈0.21 / 0.525 / 1.05 SOL в неделю. Поэтому сначала растёт owned distribution, а не платные размещения.\n\n- **Рекомендация — запустить Pioneer Season как проверяемый продуктовый цикл:** увидел proof-of-work → открыл campaign page → добровольно подтвердил холдинг → сделал реальное действие → вернулся в другой день. Работающий продукт становится контентом, а неиспользованные комиссии накапливаются до измеримого эксперимента. Никаких wash trades, fake holders, скрытых shills или обещаний доходности."
+      },
+      {
+        "id": "threshold_finding",
+        "type": "markdown",
+        "sourceId": "pump_fees",
+        "body": "## 420 SOL — это граница комиссии, а не требуемый капитал\n\nОфициальная таблица pump.fun задаёт для канонического SOL-пула creator fee **0.30%** при market cap до 420 SOL и **0.95%** от 420 до 1,470 SOL. Market cap считается как текущая цена токена в SOL, умноженная на 1 млрд. Поэтому разница между 278 и 420 SOL — это разница в отображаемой оценке предложения, а не сумма, которую надо внести в пул.\n\n**Что это меняет:** техническая цель достижима по масштабу, но экономически бессмысленно покупать границу ради самой комиссии. Ценность появляется только тогда, когда одновременно растут независимые держатели, повторная активность и двусторонний органический объём."
+      },
+      {
+        "id": "amm_interpretation",
+        "type": "markdown",
+        "sourceId": "analysis_calculations",
+        "body": "## Неглубокий пул помогает подняться — и так же быстро позволяет откатиться\n\nВ каноническом пуле на снимке было около **76.8 SOL** на quote-стороне. Направленная constant-product оценка даёт около **17.8 SOL** gross buy input для принта 420 SOL и около **26.5 SOL** для 500 SOL, если больше никто не торгует. Это не котировка и не рекомендация: реальные fees, routing, arbitrage и продажи изменят результат.\n\nПри текущем объёме около **2.54 SOL в сутки** переход в высокий tier добавил бы лишь примерно **0.0165 SOL creator fee в сутки**. Чтобы только дополнительными 0.65 п.п. комиссии сопоставить 18 SOL, понадобилось бы около **2,769 SOL** торгового объёма выше границы. **Следствие:** не выделять treasury на price push; направлять бюджет в измеряемую дистрибуцию и продуктовую конверсию."
+      },
+      { "id": "market_cap_chart", "type": "chart", "chartId": "market_cap_thresholds", "layout": "half" },
+      { "id": "fee_economics_table", "type": "table", "tableId": "fee_economics", "layout": "full" },
+      {
+        "id": "distribution_finding",
+        "type": "markdown",
+        "sourceId": "analysis_calculations",
+        "body": "## У Cyberia уже достаточно продукта; рынку не хватает одного понятного действия\n\nПубличные сигналы показывают редкую для micro-cap ситуацию: **412 commits и много работающих поверхностей**, но только **10 GitHub stars, около 575 X followers, 229 Telegram members и 187 holders**. Это не доказательство будущего роста, но сильное доказательство разрыва между объёмом созданного продукта и его дистрибуцией.\n\nПоказывать весь монорепозиторий сразу — значит заставить нового человека разбираться в L1, CYBER, CYBER.sol, wrapped CYBER.sol, bridge, converter, DEX, wallet и AI до первого полезного действия. **Кампания должна продавать один маршрут, а глубина экосистемы служить доказательством, а не меню.**"
+      },
+      { "id": "asset_base_table", "type": "table", "tableId": "asset_base", "layout": "full" },
+      {
+        "id": "campaign_strategy",
+        "type": "markdown",
+        "body": "## Одна кампания: Verify → Cross → Use → Return\n\n**Позиционирование:** `CYBER.sol — вход в работающую open-source сеть; Pioneer Season превращает держателя в проверяемого участника.`\n\n### Путь пользователя\n\n1. Один canonical URL `/cyber-sol` объясняет CA, риски, отличие CYBER / CYBER.sol / wrapped CYBER.sol и фиксированный conversion path без двусмысленного слова «peg».\n2. Пользователь открывает Pump, wallet или Telegram Mini App с размеченного CTA.\n3. По желанию подписывает одноразовый Solana challenge и подтверждает non-dust balance; seed/private key никогда не уходят на сервер.\n4. Делает одно проверяемое действие: bridge/convert или swap на Cyberia.\n5. Возвращается в другой UTC-день и получает Pioneer status/XP/badge — не обещание токенов или доходности.\n\n### Основное сообщение контента\n\nКаждый материал должен доказывать ровно одну вещь: **«это уже работает»**. Форматы: 30–60-секундный demo, tx/explorer proof, короткий changelog, разбор одного пользовательского маршрута, публичный разбор ошибки и её исправления. Цена и прогнозы не являются контент-пилларом."
+      },
+      {
+        "id": "development_priorities",
+        "type": "markdown",
+        "body": "## Разработка: четыре P0/P1 результата вместо новых вертикалей\n\n**До 5 сентября заморозить новые крупные поверхности.** Не запускать ещё одну сеть, игру, токен, DEX-модуль или AI-функцию, если она не сокращает campaign funnel. В существующем коде уже есть Solana signature verification, balance reads, bridge ground truth, XP ledger, funnel analytics и preview Pioneer Season; MVP должен переиспользовать их.\n\nКритическая последовательность: canonical story → measurement → verified mission → retention loop. Если bridge/convert completion error выше 2%, платный трафик останавливается до исправления — маркетинг не должен масштабировать поломку."
+      },
+      { "id": "development_backlog_table", "type": "table", "tableId": "development_backlog", "layout": "full" },
+      {
+        "id": "marketing_motion",
+        "type": "markdown",
+        "body": "## Маркетинг: сначала founder-led proof, затем fee-funded эксперименты\n\n### Owned media — основной двигатель\n\n- Три build streams в неделю по 45–60 минут, каждый заканчивается работающим user flow и одним CTA.\n- Ежедневно: один ship log, один короткий clip/demo, 30–45 минут ответов в X и Telegram.\n- Раз в неделю: публичный onboarding call/Space с живым bridge/mission walkthrough.\n- Один прозрачный creator-fee ledger: сколько получено, сколько зарезервировано, на какой deliverable потрачено. Никаких импровизированных buyback promises.\n\n### Earned и partner distribution\n\n- За первые семь дней собрать список из 40 целей: 10 Solana/Pump micro-creators, 10 open-source/AI builders, 10 wallet/infra communities, 10 текущих Cyberia partners/advocates.\n- Основатель делает 10 персональных outreach в день; предложение — demo, AMA, co-build, взаимный контент или технический разбор, а не платный «call the token».\n- Первые партнёрства делаются без оплаты. Когда накопится минимум 0.10 SOL реализованных fees, можно купить один небольшой, заранее описанный deliverable. Оплата раскрывается и не зависит от price, volume или buys.\n- Из каждого партнёрства вести на отдельный tagged landing и считать verified pioneers, а не impressions. Повторное финансирование получает только канал, давший проверяемые product actions.\n\n### Community loop\n\n- Ежедневный 30-минутный onboarding window в Telegram.\n- Награды — status, badge, XP и небольшие fee-funded contributor bounties за документацию, issue reproduction, translation и integration work; не за покупку, shill или искусственный объём.\n- Публиковать weekly scoreboard: verified pioneers, D7 return, product actions, organic volume, полученные fees и расходы."
+      },
+      { "id": "budget_gates_table", "type": "table", "tableId": "budget_gates", "layout": "full" },
+      {
+        "id": "execution_plan",
+        "type": "markdown",
+        "body": "## 32 дня: сначала доверие и измерение, потом масштаб\n\nПлан рассчитан на 20 августа — 20 сентября включительно. Первые три дня не должны давать красивый price chart; они должны дать контроль fee wallet, baseline, единый текст и работающую атрибуцию. После этого каждый недельный блок обязан завершаться не количеством выпущенных постов, а измеримой частью user journey."
+      },
+      { "id": "execution_calendar_table", "type": "table", "tableId": "execution_calendar", "layout": "full" },
+      {
+        "id": "operating_cadence",
+        "type": "markdown",
+        "body": "## Ритм команды: основатель строит и продаёт, оператор превращает это в повторяемую систему\n\nНе планируйте 12-часовой героизм как норму. Базовый режим — **8 часов, шесть полноценных дней и один лёгкий день review/community**. Ежедневный stand-up — 15 минут; вечерний scoreboard — 20 минут. В среду и воскресенье пересматриваются только три решения: что остановить, что удвоить, что чинить.\n\nЕсли второй человек — сильный разработчик, он забирает instrumentation/Pioneer backend, а основатель сохраняет founder content и partnerships; если это growth-оператор, применяется распределение ниже."
+      },
+      { "id": "roles_table", "type": "table", "tableId": "roles", "layout": "full" },
+      {
+        "id": "scoreboard_section",
+        "type": "markdown",
+        "body": "## Управлять надо устойчивым спросом, а не одной свечой\n\nГлавный outcome — SOL-denominated market cap, но ежедневные решения принимаются по drivers: новые независимые holders, 7-day active traders, organic volume, verified pioneers и D7 return. USD market cap остаётся вторичным — курс SOL может сдвинуть долларовый эквивалент без изменения tier.\n\n**Финальный критерий:** 20 сентября daily close не ниже 500 SOL, 7-day median не ниже 450 SOL и ни одного наблюдаемого daily close ниже 420 SOL с 17 по 20 сентября. Это амбициозный operating target, не обещание результата."
+      },
+      { "id": "scoreboard_table", "type": "table", "tableId": "scoreboard", "layout": "full" },
+      {
+        "id": "stop_rules",
+        "type": "markdown",
+        "body": "## Стоп-условия защищают капитал и репутацию\n\n- **Ноль project-funded price support.** Не использовать fees/treasury/подчинённого/ботов для пересечения 420 SOL; не делать self-trades, circular routes, bundled wallets или fake holders.\n- **Fee-funded канал выключается**, если первые потраченные 0.10 SOL не дали ни одного qualified product action или после накопления когорты D7 return ниже 20%; сначала чинится сообщение или onboarding.\n- **Один партнёр не получает больше 50% недельного growth envelope** и не больше 0.25 SOL до первого измеренного tagged conversion; компенсация раскрывается публично.\n- **Трафик останавливается**, если bridge/convert completion error выше 2%, RPC/indexer нечитабелен или балансы показываются как нули вместо unknown.\n- **Price claims запрещены:** никаких guaranteed returns, target price, «last chance», обещанного buyback или скрытой заинтересованности.\n- **Концентрация проверяется до кампании:** известные team/treasury wallets публикуются; никакие campaign allocations не раздаются за торговый объём."
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## Следующие 48 часов\n\n1. Подтвердить контроль creator/fee wallet, текущий claimable balance и комиссии за последние 30 дней; экспортировать историю без приватных ключей.\n2. Ввести простое правило: до накопления **0.10 SOL** комиссии не тратятся; затем каждую неделю 60% реализованных fees можно направить на измеряемый growth experiment, 20% — на инфраструктуру, 20% — в резерв. Неиспользованная инфраструктурная доля остаётся в резерве.\n3. Выгрузить из CRM 30 дней: landing sessions, wallet connects, buy clicks, bridge starts/completions, swaps, returning users; отдельно выгрузить 30 дней PumpSwap traders и holder distribution.\n4. Назначить одного владельца `/cyber-sol` + Pioneer MVP и одного владельца content/outreach/fee scoreboard.\n5. Опубликовать единый asset map и исправить ссылки Dex/profile: сейчас публичный Dex profile ведёт «Website» на GitHub, а не на короткий onboarding path.\n6. Провести пять 20-минутных разговоров с текущими holders: где они впервые увидели проект, что не поняли, какое действие сделали после покупки и почему вернулись/не вернулись."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## Further Questions\n\n- Каковы текущий claimable balance и фактически полученные creator fees за последние 7 и 30 дней?\n- Кто второй человек по профилю: разработчик, дизайнер/монтажёр, community manager или sales/outreach?\n- Какие кошельки принадлежат команде/treasury и как выглядит top-20 holder distribution без LP?\n- Каковы 30-day funnel baseline и D7 retention из CRM?\n- Какие текущие партнёры готовы провести бесплатный co-demo до 5 сентября?\n\nОтветы не блокируют первые 48 часов, но реальная fee history заменит сценарный runway и покажет, когда можно открыть первый платный эксперимент."
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats and Assumptions\n\n- Market cap, SOL/USD, reserves, volume и holders меняются непрерывно; все числа — снимок 20 августа 2026, 08:10 UTC.\n- Fee runway предполагает постоянный дневной объём и ставку 0.3% до 20 сентября. Реальная ставка динамична, объём неравномерен, а полученные fees могут отличаться от расчёта; фактическая история кошелька является источником истины.\n- Оценка SOL input основана на constant-product приближении и публичных резервах; это не execution quote и не финансовая рекомендация.\n- Pump может менять fees; применяемую комиссию определяют smart contracts.\n- План не гарантирует 420 SOL. Криптоактивы высокорисковы, а маркетинговые и creator-fee действия могут иметь юридические, налоговые и platform-policy последствия. Нужна проверка применимого права и доступности сервиса в вашей юрисдикции.\n- Публичные counts X/Telegram/GitHub/Dex имеют разную свежесть; private CRM и полная on-chain holder history не были доступны. KPI targets provisional до baseline audit.\n- Любая деятельность, предназначенная искусственно влиять на цену, включая wash trading и pump-and-dump, исключена из плана и противоречит условиям Pump."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-20T08:10:08Z",
+    "status": "ready",
+    "datasets": {
+      "summary": [
+        {
+          "market_cap_sol": 278.07065613066027,
+          "fee_boundary_sol": 420,
+          "gap_rate": 0.5104,
+          "market_cap_usd": 24217.27407085178,
+          "holders": 187,
+          "holder_target": 300,
+          "volume_24h_usd": 220.93,
+          "transactions_24h": 6,
+          "liquidity_usd": 12926.73,
+          "quote_reserve_sol": 76.8043
+        }
+      ],
+      "market_levels": [
+        { "level": "Сейчас", "market_cap_sol": 278.07065613066027, "implied_usd": 24217.27407085178, "gap_from_current_sol": 0, "price_sol": 0.0000002780706561, "role": "actual", "as_of": "2026-08-20T08:10:08Z" },
+        { "level": "Порог", "market_cap_sol": 420, "implied_usd": 36577.95135993763, "gap_from_current_sol": 141.92934386933973, "price_sol": 0.00000042, "role": "threshold", "as_of": "2026-08-20T08:10:08Z" },
+        { "level": "Запас", "market_cap_sol": 450, "implied_usd": 39190.66217136174, "gap_from_current_sol": 171.92934386933973, "price_sol": 0.00000045, "role": "buffer", "as_of": "2026-08-20T08:10:08Z" },
+        { "level": "Цель", "market_cap_sol": 500, "implied_usd": 43545.18094040194, "gap_from_current_sol": 221.92934386933973, "price_sol": 0.0000005, "role": "target", "as_of": "2026-08-20T08:10:08Z" }
+      ],
+      "fee_economics": [
+        { "order": 1, "metric": "Текущие ≈2.54 SOL/день", "value": "0.0076 SOL/день · 0.053/нед · 0.24 до 20.09", "meaning": "Накапливать; платный канал пока слишком мал" },
+        { "order": 2, "metric": "10 SOL/день", "value": "0.030 SOL/день · 0.210/нед · 0.96 до 20.09", "meaning": "Один маленький эксперимент в неделю" },
+        { "order": 3, "metric": "25 SOL/день", "value": "0.075 SOL/день · 0.525/нед · 2.40 до 20.09", "meaning": "Регулярные micro-creator или contributor bounties" },
+        { "order": 4, "metric": "50 SOL/день", "value": "0.150 SOL/день · 1.050/нед · 4.80 до 20.09", "meaning": "Можно повторять только доказавшие конверсию форматы" },
+        { "order": 5, "metric": "100 SOL/день", "value": "0.300 SOL/день · 2.100/нед · 9.60 до 20.09", "meaning": "Существенный runway, но объём должен быть органическим" }
+      ],
+      "asset_base": [
+        { "order": 1, "asset": "Работающий продукт", "evidence": "L1, bridge, DEX, wallet, Telegram Mini App, analytics", "use": "Один живой demo в каждом контенте" },
+        { "order": 2, "asset": "Скорость разработки", "evidence": "412 commits; v0.12.0; частые публичные releases", "use": "Founder-led build stream и ежедневный ship log" },
+        { "order": 3, "asset": "Начальная аудитория", "evidence": "≈575 X followers; 229 Telegram members", "use": "Первые interviews, beta cohort и referrals без buy rewards" },
+        { "order": 4, "asset": "Начальный рынок", "evidence": "187 holders; $12.9k liquidity", "use": "Достаточная база для D7 cohort и holder distribution audit" },
+        { "order": 5, "asset": "Готовые growth rails", "evidence": "Funnel events, XP ledger, Solana signatures, balance gate", "use": "Pioneer MVP без нового custodial/auth стека" },
+        { "order": 6, "asset": "Проблема доверия", "evidence": "Много типов CYBER и trust-sensitive relayer model", "use": "Canonical asset map, fee wallet и bridge status до paid traffic" }
+      ],
+      "development_backlog": [
+        { "priority": "P0.1", "deliverable": "/cyber-sol canonical landing", "reuse": "Landing components, token constants, wallet and bridge routes", "done": "Один URL, один CTA, CA/risk/asset map, en/ru/zh, mobile pass" },
+        { "priority": "P0.2", "deliverable": "Campaign attribution + scoreboard", "reuse": "site_events, CRM analytics, Pump buy watcher", "done": "UTM/referrer → CTA → verified holder → product action → D7 return" },
+        { "priority": "P0.3", "deliverable": "Public trust panel", "reuse": "Analytics snapshots, explorer links, bridge config", "done": "Fee owner/status, known wallets, reserves, wrapped supply, relayer and error states" },
+        { "priority": "P1.1", "deliverable": "Pioneer Season 3-mission MVP", "reuse": "VerifySolanaOwnership, ReadCyberSolBalance, bridge/indexer ground truth, XP ledger", "done": "Verify holder; complete bridge/convert/swap; return another UTC day" },
+        { "priority": "P1.2", "deliverable": "Guided holder-to-user flow", "reuse": "Telegram Mini App and unified wallet", "done": "Median first verified action <10 minutes; errors and fees stated before signing" },
+        { "priority": "P2", "deliverable": "Partner landing variants", "reuse": "/partners/{partner}, campaign metadata", "done": "Tagged conversion and weekly cohort per partner; no price/volume rewards" }
+      ],
+      "budget_gates": [
+        { "order": 1, "stage": "1 · Accumulate", "budget": "0 SOL spend while balance <0.10 SOL", "use": "Owned content, direct outreach, product fixes", "unlock": "Fee wallet controlled; attribution works; ≥0.10 SOL realized" },
+        { "order": 2, "stage": "2 · First experiment", "budget": "≤60% of realized fee balance", "use": "One disclosed creator deliverable or contributor bounty", "unlock": "Tagged landing; qualified holder/action is measurable" },
+        { "order": 3, "stage": "3 · Weekly reinvestment", "budget": "60% growth · ≤20% infra · ≥20% reserve", "use": "Only the best measured cohort; unused infra rolls to reserve", "unlock": "Repeat only when cost/action improves and D7 ≥20%" },
+        { "order": 4, "stage": "4 · Freeze", "budget": "0 SOL until fixed", "use": "No paid traffic, trading incentives or token support", "unlock": "Freeze if no conversion, error rate >2%, or disclosure is missing" }
+      ],
+      "execution_calendar": [
+        { "order": 1, "dates": "1 · 20–22 авг", "development": "Fee-owner audit; baseline export; /cyber-sol spec; asset-language reconciliation", "distribution": "5 holder interviews; 40-target outreach list; publish campaign thesis", "exit": "Known fee control, known funnel baseline, one approved message" },
+        { "order": 2, "dates": "2 · 23–29 авг", "development": "Ship canonical landing, attribution and public trust panel", "distribution": "3 streams; daily demo clips; 50 personalized outreaches; 2 partner calls", "exit": "300 measured visits; ≥8% CTA; bridge/convert error <2%" },
+        { "order": 3, "dates": "3 · 30 авг–5 сен", "development": "Ship Pioneer MVP and Telegram deep link; close onboarding friction", "distribution": "Beta with current holders; weekly demo; 5 disclosed creators", "exit": "30 verified pioneers; ≥20% complete real action; first D7 cohort" },
+        { "order": 4, "dates": "4 · 6–12 сен", "development": "Fix top two funnel leaks; partner cohort view; reliability hardening", "distribution": "Double winning channel; 3 co-demos/AMAs; publish fee/usage ledger", "exit": "250 holders; 7d volume ≥70 SOL; D7 return ≥25%" },
+        { "order": 5, "dates": "5 · 13–19 сен", "development": "Only bugs, speed, conversion and retention; no new scope", "distribution": "Scale proven cohort; daily proof; onboarding windows; retarget visitors", "exit": "Run-rate toward 300 holders; 7d volume ≥100 SOL; market cap median ≥450 SOL" },
+        { "order": 6, "dates": "6 · 20 сен", "development": "Snapshot, incident watch, transparent results page", "distribution": "Publish outcome and next 30-day plan without victory/price claims", "exit": "Close ≥500 SOL; 7d median ≥450; final four days not below 420" }
+      ],
+      "scoreboard": [
+        { "order": 1, "metric": "SOL market cap", "baseline": "278", "sep6": "350", "sep13": "420", "sep20": "close 500; 7d median 450", "milestones": "350 → 420 → close 500 / median 450", "decision": "Outcome; не оптимизировать одной покупкой" },
+        { "order": 2, "metric": "Holders", "baseline": "187", "sep6": "220", "sep13": "250", "sep20": "300", "milestones": "220 → 250 → 300", "decision": "Ширина спроса; сверять с концентрацией" },
+        { "order": 3, "metric": "7d organic volume", "baseline": "измерить; 24ч ≈2.54 SOL", "sep6": "35 SOL", "sep13": "70 SOL", "sep20": "100 SOL", "milestones": "35 → 70 → 100 SOL", "decision": "Имеет ли высокий fee tier экономический смысл" },
+        { "order": 4, "metric": "7d active traders", "baseline": "измерить", "sep6": "35", "sep13": "50", "sep20": "75", "milestones": "35 → 50 → 75", "decision": "Объём распределён или держится на китах" },
+        { "order": 5, "metric": "Verified pioneers", "baseline": "0", "sep6": "30", "sep13": "75", "sep20": "150", "milestones": "30 → 75 → 150", "decision": "Внимание превратилось в product identity" },
+        { "order": 6, "metric": "Verified → real action", "baseline": "измерить", "sep6": "20%", "sep13": "25%", "sep20": "30%", "milestones": "20% → 25% → 30%", "decision": "Чинить onboarding или масштабировать трафик" },
+        { "order": 7, "metric": "D7 return", "baseline": "измерить", "sep6": "20%", "sep13": "25%", "sep20": "30%", "milestones": "20% → 25% → 30%", "decision": "Есть ли удержание вне торгового нарратива" }
+      ],
+      "roles": [
+        { "order": 1, "person": "Основатель", "daily": "4ч build; 1ч QA/metrics; 1ч demo/content; 2ч partnerships/community", "owns": "P0 scope, public trust, live demos, 10 personalized outreaches/day" },
+        { "order": 2, "person": "Growth-оператор", "daily": "2ч edit/publish; 2ч outreach; 2ч onboarding; 1ч analytics; 1ч QA/admin", "owns": "Content calendar, tagged links, partner follow-up, daily scoreboard" },
+        { "order": 3, "person": "Оба", "daily": "15m stand-up; 20m evening review; Wed/Sun stop-double-fix review", "owns": "One backlog, one dashboard, no unmeasured side quests" }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "pump_fees",
+      "label": "Pump.fun fees",
+      "href": "https://pump.fun/docs/fees",
+      "query": { "engine": "document", "url": "https://pump.fun/docs/fees", "description": "Official fee schedule and market-cap definition.", "executed_at": "2026-08-20T08:00:00Z" }
+    },
+    {
+      "id": "pump_snapshot",
+      "label": "Pump.fun CYBER.sol coin snapshot",
+      "href": "https://frontend-api-v3.pump.fun/coins/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+      "query": { "engine": "Pump frontend API", "url": "https://frontend-api-v3.pump.fun/coins/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump", "description": "Current SOL and USD market cap.", "executed_at": "2026-08-20T08:10:08Z" }
+    },
+    {
+      "id": "dex_snapshot",
+      "label": "DexScreener CYBER.sol PumpSwap snapshot",
+      "href": "https://dexscreener.com/solana/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+      "query": { "engine": "DexScreener API", "url": "https://api.dexscreener.com/latest/dex/tokens/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump", "description": "Canonical pool reserves, liquidity and activity.", "executed_at": "2026-08-20T08:10:08Z" }
+    },
+    {
+      "id": "analysis_calculations",
+      "label": "CYBER.sol plan calculation notes",
+      "path": "docs/strategy/cybersol-420-plan-2026-09-20/source-notes.md",
+      "query": { "engine": "reviewed calculation", "description": "Threshold, AMM scenario, fee economics and public-signal inventory.", "executed_at": "2026-08-20T08:10:08Z", "language": "javascript", "query": "gap = 420/current - 1; grossInput = reserveSOL*(sqrt(target/current)-1)/(1-totalFee)" }
+    },
+    {
+      "id": "plan_assumptions",
+      "label": "Operating plan assumptions",
+      "path": "docs/strategy/cybersol-420-plan-2026-09-20/source-notes.md",
+      "query": { "engine": "planning model", "description": "Dated backlog, budget gates, KPI targets and stop conditions.", "executed_at": "2026-08-20T08:10:08Z" }
+    },
+    {
+      "id": "github_repo",
+      "label": "Cyberia Singularity repository",
+      "href": "https://github.com/cyberia-temple/singularity",
+      "query": { "engine": "GitHub public repository and local checkout", "url": "https://github.com/cyberia-temple/singularity", "description": "Public product and repository health signals.", "executed_at": "2026-08-20T08:10:08Z" }
+    },
+    {
+      "id": "community_surfaces",
+      "label": "Public Cyberia community surfaces",
+      "href": "https://t.me/cyberia_network_chat",
+      "query": { "engine": "public web snapshots", "description": "Latest discoverable Telegram, X and holder counts.", "executed_at": "2026-08-20T08:10:08Z" }
+    },
+    {
+      "id": "pump_terms",
+      "label": "Pump Terms of Use",
+      "href": "https://pump.fun/docs/terms-and-conditions",
+      "query": { "engine": "document", "url": "https://pump.fun/docs/terms-and-conditions", "description": "Platform restrictions and risk terms.", "executed_at": "2026-08-20T08:00:00Z" }
+    }
+  ],
+  "package_info": {
+    "root": "docs/strategy/cybersol-420-plan-2026-09-20",
+    "manifestPath": "artifact.json",
+    "snapshotPath": "artifact.json"
+  }
+}
