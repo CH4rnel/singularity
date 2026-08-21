@@ -159,6 +159,7 @@ async function main() {
   await press("\x1b[3~"); // delete → eats the space, "Xhelloworld"
   await press("\x1b[F"); // end
   await type("!");
+  await sleep(120); // ink throttles renders — wait for the trailing frame
   results.push(["home/end/del/ctrl+→  ", anyPlain("Xhelloworld!", beforeEdit)]);
   await press("\x15"); // ctrl+u from the end wipes the line again
   await sleep(100);
@@ -203,6 +204,51 @@ async function main() {
   results.push(["/skin applies theme  ", anyWrite(matrixPrimary, beforePick)]);
   results.push(["/skin reprints boot  ", anyPlain("welcome to the wired", beforePick)]);
 
+  // 4.6) a picker is a mouse target too: clicking a row picks it. Arrow keys
+  // alone are not an answer when the same list opens by clicking the sidebar.
+  const rowOf = (needle: string): number =>
+    stripAnsi(stdout.writes.at(-1) ?? "")
+      .split("\n")
+      .findIndex((l) => l.includes(needle));
+  await type("/skin");
+  await sleep(30);
+  await type("\r");
+  await sleep(250);
+  const crimsonRow = rowOf("crimson");
+  const beforeClick = stdout.writes.length;
+  stdin.write(`\x1b[<0;6;${crimsonRow + 1}M`); // press on the row
+  await sleep(60);
+  stdin.write(`\x1b[<0;6;${crimsonRow + 1}m`); // release: picks it
+  await sleep(300);
+  const crimsonPrimary = "38;2;255;59;78"; // THEMES.crimson.primary #ff3b4e
+  results.push(["click picks in picker", crimsonRow > 0 && anyWrite(crimsonPrimary, beforeClick)]);
+  results.push(["picker closes on pick", !stripAnsi(stdout.writes.at(-1) ?? "").includes("↑↓ or click")]);
+
+  // 4.65) dragging selects text and the release copies it. The terminal cannot
+  // do this while the app reads the mouse, so the app has to.
+  const beforeDrag = stdout.writes.length;
+  stdin.write("\x1b[<0;1;1M"); // press, top-left
+  await sleep(40);
+  stdin.write("\x1b[<32;50;20M"); // drag (button held: 0 + motion bit)
+  await sleep(40);
+  stdin.write(`\x1b[<32;${stdout.columns};${stdout.rows - 1}M`);
+  await sleep(40);
+  stdin.write(`\x1b[<0;${stdout.columns};${stdout.rows - 1}m`); // release
+  await sleep(300);
+  const dragOsc = stdout.writes
+    .slice(beforeDrag)
+    .filter((w) => w.includes("\x1b]52;c;"))
+    .at(-1);
+  const dragged = dragOsc
+    ? Buffer.from(dragOsc.split("\x1b]52;c;")[1]?.split("\x07")[0] ?? "", "base64").toString("utf8")
+    : "";
+  // (the feed was emptied by /clear above, so the boot line is what is on screen)
+  results.push([
+    "drag selects + copies",
+    dragged.includes("welcome to the wired") && dragged.includes("\n"),
+  ]);
+  results.push(["drag says what it did", anyPlain("chars copied", beforeDrag)]);
+
   // 4.7) /model re-routes the replies in place, and a route that cannot be
   // built says so instead of silently dropping the chat on another model.
   const beforeModel = stdout.writes.length;
@@ -220,6 +266,63 @@ async function main() {
     .find((l) => [...l].length > stdout.columns);
   results.push(["fits terminal width  ", wideLine === undefined]);
 
+  // 4.8) the composer holds more than one line, and the ways of saying so that
+  // do not need a terminal protocol: alt+enter, ctrl+j, and a trailing "\".
+  const beforeMulti = stdout.writes.length;
+  await type("first");
+  stdin.write("\x1b\r"); // alt+enter
+  await sleep(60);
+  await type("second");
+  stdin.write("\n"); // ctrl+j
+  await sleep(60);
+  await type("third\\");
+  stdin.write("\r"); // a trailing backslash breaks the line instead of sending
+  await sleep(120);
+  await type("fourth");
+  await sleep(150);
+  const multi = stripAnsi(stdout.writes.at(-1) ?? "");
+  results.push([
+    "composer holds lines ",
+    ["first", "second", "third", "fourth"].every((l) => multi.includes(l)) && multi.includes("4 lines"),
+  ]);
+
+  // …and a paste keeps its line breaks instead of firing a message per line.
+  const beforePaste = stdout.writes.length;
+  stdin.write("\x15"); // ctrl+u — wipe the composer
+  await sleep(60);
+  stdin.write("\x1b[200~pasted one\npasted two\x1b[201~");
+  await sleep(200);
+  const pasted = stripAnsi(stdout.writes.at(-1) ?? "");
+  results.push([
+    "paste stays in composer",
+    pasted.includes("pasted one") && pasted.includes("pasted two") && pasted.includes("2 lines"),
+  ]);
+  results.push(["paste sends nothing  ", !anyPlain("▸ you", beforePaste)]);
+  stdin.write("\x15");
+  await sleep(60);
+
+  // 4.9) ctrl+y copies the last reply without a command…
+  await type("say something\r"); // /clear left no reply to copy
+  await sleep(700);
+  const beforeYank = stdout.writes.length;
+  stdin.write("\x19");
+  await sleep(200);
+  results.push(["ctrl+y copies reply  ", anyPlain("copied lain's last reply", beforeYank)]);
+
+  // …and ctrl+s freezes the frame and hands the mouse back to the terminal, so
+  // a selection can survive: nothing may be written while it holds.
+  const beforeSelect = stdout.writes.length;
+  stdin.write("\x13");
+  await sleep(250);
+  results.push(["ctrl+s says it froze ", anyPlain("selection", beforeSelect) && anyPlain("esc back", beforeSelect)]);
+  results.push(["ctrl+s releases mouse", anyWrite("\x1b[?1000l", beforeSelect)]);
+  const frozenAt = stdout.writes.length;
+  await sleep(2500); // blink + chain poll would both have repainted by now
+  results.push(["frozen frame is quiet", stdout.writes.length === frozenAt]);
+  stdin.write("\x1b"); // esc leaves selection mode
+  await sleep(200);
+  results.push(["esc restores the app ", stdout.writes.length > frozenAt]);
+
   // 5) a width change drops the right sidebar (content goes full width)
   const beforeResize = stdout.writes.length;
   stdout.columns = 80;
@@ -227,7 +330,7 @@ async function main() {
   await sleep(600);
   results.push([
     "resize drops sidebar ",
-    !anyPlain("╭─ session", beforeResize) && anyPlain("welcome to the wired", beforeResize),
+    !anyPlain("╭─ session", beforeResize) && anyPlain("LAIN OS", beforeResize),
   ]);
 
   // 6) blink repaints happen right after typing…
@@ -242,6 +345,35 @@ async function main() {
   await sleep(3000);
   const idleFrames = stdout.writes.length - n2;
   results.push([`idle stops repaints  `, idleFrames === 0]);
+
+  // 6.5) ctrl+c: once asks, twice leaves. Both encodings drive it — a terminal
+  // speaking the kitty protocol (which this app asks for) never sends \x03.
+  const beforeQuit = stdout.writes.length;
+  stdin.write("\x03");
+  await sleep(200);
+  results.push(["ctrl+c asks first    ", anyPlain("again to leave the wired", beforeQuit)]);
+  const beforeDisarm = stdout.writes.length;
+  await type("x"); // any other key answers "no"
+  await sleep(200);
+  results.push(["another key disarms  ", !anyPlain("again to leave", beforeDisarm)]);
+  let exited = false;
+  void app.waitUntilExit().then(() => {
+    exited = true;
+  });
+  stdin.write("\x03");
+  await sleep(150);
+  stdin.write("\x1b[99;5u"); // the kitty spelling of ctrl+c
+  await sleep(400);
+  results.push(["ctrl+c twice leaves  ", exited]);
+
+  // 7) never clear the terminal. ink does exactly that — erasing the scrollback
+  // with it — whenever a frame is as tall as the window, which is why the frame
+  // stops one row short. A screen wiped several times a second cannot be read
+  // back, scrolled back, or copied out of.
+  results.push(["never wipes the screen", !anyWrite("\x1b[2J")]);
+  // …and every frame stays inside the window, or ink wraps a line and clears.
+  const tallest = Math.max(...stdout.writes.map((w) => stripAnsi(w).split("\n").length));
+  results.push(["frame fits the window ", tallest <= stdout.rows]);
 
   app.unmount();
   let ok = true;

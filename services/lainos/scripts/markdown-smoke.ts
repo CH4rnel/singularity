@@ -6,7 +6,17 @@
  * Run: npm run markdown:smoke
  */
 import { THEMES } from "../src/clients/tui/theme.js";
-import { mdToLines, hasOpenFence, highlightCode, lineWidth } from "../src/clients/tui/markdown.js";
+import stringWidth from "string-width";
+import {
+  fitToWidth,
+  hasOpenFence,
+  highlightCode,
+  lineWidth,
+  mdToLines,
+  textWidth,
+  truncateLine,
+  wrapSpans,
+} from "../src/clients/tui/markdown.js";
 
 const results: [string, boolean][] = [];
 const check = (name: string, pass: boolean) => results.push([name, pass]);
@@ -57,6 +67,30 @@ check(
     const l = mdToLines(`\`\`\`\n${"a".repeat(200)}\n\`\`\``, theme, 30);
     return l.length >= 3 && l.every((x) => lineWidth(x) <= 30);
   })(),
+);
+
+// ------------------------------------------------- columns, not characters
+// ⚙ ⛓ ⚠ and every emoji take two cells. Counting them as one makes the line a
+// column too long, ink truncates the frame's right edge, and a line that wraps
+// instead makes ink clear the terminal — scrollback and all — on every repaint.
+check("wide glyphs cost two   ", textWidth("⚙") === 2 && textWidth("⛓ 49406") === 8);
+check(
+  "agrees with ink's ruler",
+  ["⚙ tool", "◆ lain · opencode", "цепь бьётся", "🌐 ok", "plain ascii"].every(
+    (t) => textWidth(t) === stringWidth(t),
+  ),
+);
+check(
+  "truncate counts columns",
+  (() => {
+    const line = truncateLine([{ t: "⚙⚙⚙⚙" }], 5);
+    return lineWidth(line) === 4 && line[0].t === "⚙⚙";
+  })(),
+);
+check("emoji never split      ", fitToWidth("👩‍💻x", 2).text === "👩‍💻");
+check(
+  "wrap counts columns    ",
+  wrapSpans([{ t: "⚙⚙ ⚙⚙ ⚙⚙" }], 5).every((l) => lineWidth(l) <= 5),
 );
 
 let ok = true;

@@ -12,7 +12,12 @@ async function main() {
   setLogMuted(true);
   const agent = await createAgent({ character: lain });
 
-  const { waitUntilExit } = render(React.createElement(App, { runtime: agent }));
+  // ctrl+c belongs to the app: one press asks, two leave. ink's own handler
+  // would end the session on the first — and only ever sees the bare \x03 byte,
+  // which a terminal speaking the kitty keyboard protocol never sends.
+  const { waitUntilExit } = render(React.createElement(App, { runtime: agent }), {
+    exitOnCtrlC: false,
+  });
   await waitUntilExit();
 
   await agent.stop();
