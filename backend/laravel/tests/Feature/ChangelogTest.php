@@ -12,15 +12,17 @@ it('renders the changelog page', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Changelog')
-            ->where('currentVersion', 'v0.12.0')
-            ->has('releases', 14)
-            ->where('releases.0.version', 'v0.12.0')
-            ->where('releases.0.date', '2026-08-16')
-            ->where('releases.0.title', 'The wallet stops sending you elsewhere')
+            ->where('currentVersion', 'v0.13.0')
+            ->has('releases', 15)
+            ->where('releases.0.version', 'v0.13.0')
+            ->where('releases.0.date', '2026-08-21')
+            ->where('releases.0.title', 'From first open to a funded wallet')
             ->has('releases.0.sections', 2)
             ->where('releases.0.sections.0.label', 'Added')
-            ->has('releases.0.sections.0.items', 8)
-            ->where('release.current.version', 'v0.12.0')
+            ->has('releases.0.sections.0.items', 1)
+            ->where('releases.0.sections.1.label', 'Fixed')
+            ->has('releases.0.sections.1.items', 1)
+            ->where('release.current.version', 'v0.13.0')
             ->where('release.changelogUrl', route('changelog')));
 });
 

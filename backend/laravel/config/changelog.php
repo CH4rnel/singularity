@@ -10,9 +10,28 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.12.0'),
+    'current_version' => env('APP_VERSION', 'v0.13.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.13.0',
+            'date' => '2026-08-21',
+            'title' => 'From first open to a funded wallet',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'A product analytics view follows the path from a first open to a wallet that has actually received funds. Operators can see where people stop, compare platforms, versions and campaigns, and inspect one anonymous journey without collecting a seed phrase, private key or transaction contents.',
+                    ],
+                ],
+                [
+                    'label' => 'Fixed',
+                    'items' => [
+                        'Installing Cyberia from an iPhone now opens the wallet from its home-screen icon. Safari used to install the whole site with the landing page as its start screen, even when the icon was added from the wallet.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.12.0',
             'date' => '2026-08-16',
