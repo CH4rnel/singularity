@@ -12,6 +12,7 @@ import HoldButton from '@/components/wallet/HoldButton.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { analytics, errorCode } from '@/lib/analytics';
 import { KNOWN_TOKENS } from '@/lib/cyberiaTokens';
 import { CYBERIA_CHAIN_ID } from '@/lib/evmChains';
 import {
@@ -551,6 +552,35 @@ const loadGasPrice = async (): Promise<bigint | null> => {
     return gasPrice.value;
 };
 
+/**
+ * What a trade looks like to analytics: the network, the pair by symbol, what
+ * it was worth and how it was priced.
+ *
+ * Symbols and USD, never contracts and never units — a contract address plus
+ * an exact amount identifies one trade on a public chain, and a symbol plus a
+ * rounded dollar figure is a row in a total. The slippage is the setting the
+ * user chose, which is the number worth knowing when failures cluster.
+ */
+const traits = () => ({
+    chain: props.chain,
+    token_in: payAsset.value.symbol,
+    token_out: receiveAsset.value?.symbol,
+    transaction_type: (mode.value === 'wrap' ? 'wrap' : 'swap') as
+        | 'wrap'
+        | 'swap',
+    slippage: mode.value === 'wrap' ? undefined : slippageBps.value / 100,
+    amount_usd:
+        usdValue(
+            amountUnits.value,
+            payAsset.value.decimals,
+            payAsset.value.address === null
+                ? (props.prices[props.chain] ?? null)
+                : (props.tokenPrices[props.chain]?.[
+                      payAsset.value.address.toLowerCase()
+                  ] ?? null),
+        ) ?? undefined,
+});
+
 const refreshQuote = async (): Promise<void> => {
     quote.value = null;
     wrapQuote.value = null;
@@ -572,6 +602,13 @@ const refreshQuote = async (): Promise<void> => {
 
     quoting.value = true;
 
+    const askedAt = Date.now();
+
+    // A quote is where a swap either becomes possible or quietly does not:
+    // "requested but never received" is a missing route or an unreachable
+    // node, and it is invisible in any funnel that starts at the signature.
+    analytics.track('swap_quote_requested', traits());
+
     try {
         const price = gasPrice.value ?? (await loadGasPrice());
 
@@ -590,6 +627,11 @@ const refreshQuote = async (): Promise<void> => {
 
             if (mine === sequence) {
                 wrapQuote.value = next;
+
+                analytics.track('swap_quote_received', {
+                    ...traits(),
+                    duration_ms: Date.now() - askedAt,
+                });
             }
         } else {
             const next = await quoteSwap({
@@ -604,12 +646,28 @@ const refreshQuote = async (): Promise<void> => {
 
             if (mine === sequence) {
                 quote.value = next;
+
+                analytics.track('swap_quote_received', {
+                    ...traits(),
+                    // The route as symbols would need a token lookup per hop;
+                    // the hop count is the part a dashboard can act on — a
+                    // three-hop route is a pair with no direct pool.
+                    hops: Math.max(0, next.path.length - 1),
+                    price_impact: next.impactPct ?? undefined,
+                    duration_ms: Date.now() - askedAt,
+                });
             }
         }
     } catch (error) {
         if (mine === sequence) {
             failure.value =
                 error instanceof Error ? error.message : String(error);
+
+            analytics.track('swap_quote_failed', {
+                ...traits(),
+                error_code: errorCode(error),
+                duration_ms: Date.now() - askedAt,
+            });
         }
     } finally {
         if (mine === sequence) {
@@ -690,12 +748,34 @@ const OUTCOMES: Record<Outcome, { icon: typeof Loader }> = {
     failed: { icon: CircleX },
 };
 
+/** The quote was accepted and the review screen opened. */
+const review = (): void => {
+    analytics.track('swap_started', {
+        ...traits(),
+        price_impact: quote.value?.impactPct ?? undefined,
+        fee_usd:
+            usdValue(
+                quote.value?.fee ?? wrapQuote.value?.fee ?? null,
+                chain.value.decimals,
+                props.prices[props.chain] ?? null,
+            ) ?? undefined,
+    });
+    phase.value = 'review';
+};
+
 const sign = async (): Promise<void> => {
     phase.value = 'status';
     outcome.value = 'signing';
     failure.value = null;
     hash.value = null;
     approvalHash.value = null;
+
+    const startedAt = Date.now();
+
+    analytics.track('swap_signed', {
+        ...traits(),
+        price_impact: quote.value?.impactPct ?? undefined,
+    });
 
     try {
         if (mode.value === 'wrap') {
@@ -731,6 +811,12 @@ const sign = async (): Promise<void> => {
         outcome.value = 'failed';
         failure.value = error instanceof Error ? error.message : String(error);
 
+        analytics.track('swap_failed', {
+            ...traits(),
+            error_code: errorCode(error),
+            duration_ms: Date.now() - startedAt,
+        });
+
         return;
     }
 
@@ -745,8 +831,23 @@ const sign = async (): Promise<void> => {
 
     try {
         outcome.value = await chain.value.awaitOutcome(hash.value);
+
+        analytics.track(
+            outcome.value === 'confirmed' ? 'swap_completed' : 'swap_failed',
+            {
+                ...traits(),
+                price_impact: quote.value?.impactPct ?? undefined,
+                duration_ms: Date.now() - startedAt,
+                ...(outcome.value === 'confirmed'
+                    ? {}
+                    : { error_code: 'reverted' as const }),
+            },
+        );
     } catch (error) {
         failure.value = error instanceof Error ? error.message : String(error);
+
+        // A watch that timed out has not failed the trade, and the screen says
+        // so — nothing is recorded either way.
     }
 
     void props.wallet.refreshBalances();
@@ -1457,7 +1558,7 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                     class="cw-btn cw-btn-primary"
                     style="margin-top: 18px"
                     :disabled="!ready || quoting"
-                    @click="phase = 'review'"
+                    @click="review()"
                 >
                     {{ quoting ? t('swapQuoting') : t('swapReview') }}
                 </button>

@@ -54,6 +54,18 @@ class HandleInertiaRequests extends Middleware
             'notifications' => [
                 'unread' => fn () => $user ? $user->unreadNotifications()->count() : 0,
             ],
+            /*
+             * What the analytics client is allowed to do, read at every
+             * navigation rather than baked into the bundle — switching
+             * collection off on the server switches it off in tabs that are
+             * already open, instead of at the next deploy.
+             */
+            'analytics' => [
+                'enabled' => (bool) config('analytics.enabled'),
+                'respectDnt' => (bool) config('analytics.respect_dnt'),
+                'sessionTimeoutMinutes' => (int) config('analytics.session_timeout_minutes'),
+                'appVersion' => Changelog::currentVersion(),
+            ],
             'vapidPublicKey' => config('webpush.vapid.public_key'),
             'flash' => [
                 'status' => fn () => $request->session()->get('status'),

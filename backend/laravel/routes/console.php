@@ -42,3 +42,8 @@ Schedule::command('ai:prune-usage')->daily()->withoutOverlapping();
 // button simply stops working, and nobody reports a wallet that never offered
 // them anything. Reads only, and it shouts at most once every six hours.
 Schedule::command('gas:station --alert')->hourly()->withoutOverlapping();
+// Funding that the browser never got to report: a wallet funded while closed,
+// a deposit that confirmed after the tab was gone. The activation funnel wants
+// those users most, because a wallet that was funded and never came back is
+// the drop-off worth fixing. Bounded per run and reads only.
+Schedule::command('analytics:verify-funding')->everyThirtyMinutes()->withoutOverlapping();

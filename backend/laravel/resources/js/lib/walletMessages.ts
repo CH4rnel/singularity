@@ -625,6 +625,10 @@ export const walletMessages: Messages = {
         autoLockHint: 'locks after inactivity',
         clipboardRow: 'Clear clipboard after copy',
         clipboardHint: '30 seconds, while this tab keeps focus',
+        analyticsRow: 'Anonymous usage statistics',
+        analyticsHint:
+            'Which screens are used and whether actions succeed. Never your seed phrase, keys, password, addresses or amounts.',
+        analyticsBlocked: 'Off — your browser asks sites not to track you',
         networksSection: 'Networks',
         builtinNetworks: 'Built-in networks',
         verified: 'Verified',
@@ -1707,6 +1711,10 @@ export const walletMessages: Messages = {
         autoLockHint: 'блокируется после простоя',
         clipboardRow: 'Очищать буфер после копирования',
         clipboardHint: '30 секунд, пока вкладка остаётся активной',
+        analyticsRow: 'Анонимная статистика использования',
+        analyticsHint:
+            'Какими экранами пользуются и удаются ли действия. Никогда — сид-фраза, ключи, пароль, адреса и суммы.',
+        analyticsBlocked: 'Выключено — браузер просит сайты не отслеживать вас',
         networksSection: 'Сети',
         builtinNetworks: 'Встроенные сети',
         verified: 'Проверено',
@@ -2763,6 +2771,10 @@ export const walletMessages: Messages = {
         autoLockHint: '闲置一段时间后锁定',
         clipboardRow: '复制后清空剪贴板',
         clipboardHint: '30 秒，前提是这个标签页保持在前台',
+        analyticsRow: '匿名使用统计',
+        analyticsHint:
+            '记录使用了哪些界面以及操作是否成功。绝不包含助记词、私钥、密码、地址或金额。',
+        analyticsBlocked: '已关闭 — 你的浏览器要求网站不要追踪你',
         networksSection: '网络',
         builtinNetworks: '内置网络',
         verified: '已验证',

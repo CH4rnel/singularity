@@ -2,6 +2,7 @@
 import { CircleCheck, Fuel, Loader } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { useLocale } from '@/composables/useLocale';
+import { analytics } from '@/lib/analytics';
 import { formatUnits } from '@/lib/wallet';
 import type { WalletChainId } from '@/lib/wallet';
 import {
@@ -140,6 +141,27 @@ const ask = async (): Promise<void> => {
     phase.value = 'asking';
     refusal.value = null;
 
+    const startedAt = Date.now();
+
+    /*
+     * The sponsorship funnel — asked, granted, refused and why.
+     *
+     * What a drip *cost* is deliberately absent from these events: the server
+     * that signed it writes the amount the contract actually released into
+     * `gas_sponsorships`, which is the only number a spend report may be built
+     * on. A browser could neither know that figure nor be trusted with it, and
+     * a resent event must never be able to add a cent to it.
+     */
+    analytics.track('gas_sponsorship_requested', {
+        chain: props.chain,
+        grounds: eligibility.value?.grounds as
+            | 'tokens'
+            | 'nft'
+            | 'account'
+            | 'open'
+            | undefined,
+    });
+
     const outcome = await requestGas(props.address);
 
     if (!outcome.ok) {
@@ -148,10 +170,27 @@ const ask = async (): Promise<void> => {
         refusal.value = outcome.reason;
         phase.value = 'idle';
 
+        // The station's own vocabulary, reused verbatim as the error code, so
+        // a refusal reads the same on the dashboard as it does on this screen
+        // and in the server log.
+        analytics.track('gas_sponsorship_failed', {
+            chain: props.chain,
+            // 'ok' is not a refusal the station can actually return here,
+            // but the type allows it — an unexplained failure is `unknown`.
+            error_code: outcome.reason === 'ok' ? 'unknown' : outcome.reason,
+            duration_ms: Date.now() - startedAt,
+        });
+
         return;
     }
 
     phase.value = 'sent';
+
+    analytics.track('gas_sponsorship_completed', {
+        chain: props.chain,
+        duration_ms: Date.now() - startedAt,
+    });
+
     emit('funded');
 };
 </script>

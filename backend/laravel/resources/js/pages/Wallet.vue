@@ -37,6 +37,7 @@ import WalletTorrent from '@/components/wallet/WalletTorrent.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
+import { analytics } from '@/lib/analytics';
 import { isNativeShell, nativeShell } from '@/lib/native';
 import {
     hideMainButton,
@@ -377,6 +378,37 @@ const openChain = (next: WalletChainId): void => {
     overlay.value = null;
 };
 
+/*
+ * The top of three funnels, and the only screen-view events in this wallet.
+ *
+ * Nothing else is counted for being looked at: a taxonomy that recorded every
+ * tap would answer no question anybody asks and would make the interesting
+ * events harder to find. These three are here because each is the denominator
+ * of a conversion that matters — how many of the people who opened the swap
+ * screen ever completed a swap is the whole reason to instrument a swap.
+ *
+ * Watched rather than wired into each caller because every one of these
+ * screens is reachable from several places, and an event that depends on
+ * which button you pressed is an event that will be missing from one of them.
+ */
+const OPENED = {
+    swap: 'swap_opened',
+    bridge: 'bridge_opened',
+    earn: 'staking_opened',
+} as const;
+
+watch(overlay, (next) => {
+    if (next === 'swap') {
+        analytics.track(OPENED.swap, { chain: chain.value });
+    }
+});
+
+watch(section, (next) => {
+    if (next === 'bridge' || next === 'earn') {
+        analytics.track(OPENED[next], { chain: chain.value });
+    }
+});
+
 /**
  * One token, from wherever it was tapped. A token is only ever reached through
  * a network — its own or the list's — so the chain moves with it and the send
@@ -506,6 +538,45 @@ const refreshPrices = async (): Promise<void> => {
     }
 };
 
+/**
+ * Has anything landed here yet?
+ *
+ * Funding is the step between "installed a wallet" and "has a wallet", and it
+ * is the one the browser notices first — it is looking at the balance anyway.
+ * What it reports is a *candidate*: the server confirms it against the chain
+ * where it can, and stamps the milestone once, so a balance that goes up and
+ * down cannot re-fire it and a claim nobody checked never becomes a number.
+ *
+ * The address travels only for the networks that server can actually read
+ * (Cyberia, Robinhood, Solana); everywhere else this says which chain and
+ * stops there. `reportFunding` keeps its own local mark, so the usual case is
+ * one request in the lifetime of an installation.
+ */
+const reportFunding = (): void => {
+    for (const entry of wallet.chains.value) {
+        const coin = wallet.balances.value[entry.id]?.value ?? null;
+        // A wallet holding USDC and no coin is funded, and is in fact the
+        // exact wallet the gas station exists for — so tokens count too.
+        const held =
+            (coin !== null && coin > 0n) ||
+            (wallet.tokens.value[entry.id]?.items ?? []).some(
+                (token) => token.balance > 0n,
+            );
+
+        if (!held) {
+            continue;
+        }
+
+        analytics.reportFunding(
+            entry.id,
+            wallet.accounts.value.find((account) => account.chain === entry.id)
+                ?.address ?? null,
+        );
+
+        return;
+    }
+};
+
 /** Everything the unlocked app reads from chains, in one pass. */
 const load = async (): Promise<void> => {
     if (!wallet.unlocked.value) {
@@ -522,6 +593,8 @@ const load = async (): Promise<void> => {
             .map((entry) => wallet.refreshTokens(entry.id)),
         refreshPrices(),
     ]);
+
+    reportFunding();
 };
 
 /** A network the user just derived opens on its own detail screen. */
@@ -531,13 +604,34 @@ const networkAdded = (added: WalletChainId): void => {
     void load();
 };
 
-const adopt = async (phrase: string, password: string): Promise<void> => {
+const adopt = async (
+    phrase: string,
+    password: string,
+    origin: 'created' | 'imported' = 'created',
+): Promise<void> => {
     error.value = null;
 
     try {
         await wallet.adopt(phrase, password);
         restoring.value = false;
         section.value = 'portfolio';
+
+        /*
+         * The onboarding milestone, recorded at the only point where it is
+         * unambiguously true: the vault is sealed and open. Both branches end
+         * here — a phrase this device generated and one the user typed in are
+         * the same thing by now — so the branch travels with the event rather
+         * than being guessed from it later.
+         *
+         * Neither the phrase, the password nor anything derived from them is
+         * involved; there is no field in the taxonomy that could hold one.
+         */
+        analytics.track(
+            origin === 'imported' ? 'wallet_imported' : 'wallet_created',
+            { origin },
+        );
+        analytics.track('onboarding_completed', { origin });
+
         await load();
     } catch (failure) {
         error.value =

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Ai\AiKeyController;
 use App\Http\Controllers\Api\Ai\ChatCompletionsController;
 use App\Http\Controllers\Api\Ai\ModelsController;
+use App\Http\Controllers\Api\AnalyticsIngestController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
 use App\Http\Controllers\Api\LaunchpadController;
@@ -40,6 +41,23 @@ Route::prefix('wallet')->group(function () {
     // can only ever arrive at the address that was named. See GasSponsorService.
     Route::get('gas', [WalletGasController::class, 'status'])->middleware('throttle:60,1');
     Route::post('gas/claim', [WalletGasController::class, 'claim'])->middleware('throttle:10,1');
+});
+
+/*
+ * Product analytics for the wallet: acquisition, onboarding, funding,
+ * activation, retention. Stateless like everything else under /api — no
+ * session, no cookie, and the client omits credentials, so this endpoint never
+ * learns which account the browser is signed into.
+ *
+ * The throttle is generous because the client batches and because being
+ * dropped here must never be something a wallet notices: analytics is not a
+ * dependency of sending, swapping or bridging. See AnalyticsIngestService.
+ */
+Route::prefix('analytics')->group(function () {
+    Route::post('events', [AnalyticsIngestController::class, 'store'])->middleware('throttle:120,1');
+    // The one call that carries an address, kept apart from the event stream
+    // so no ordinary event can ever be the thing that leaked one.
+    Route::post('funding', [AnalyticsIngestController::class, 'funding'])->middleware('throttle:20,1');
 });
 
 // Solana JSON-RPC relay. Solana's public cluster refuses any request carrying

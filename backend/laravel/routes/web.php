@@ -32,6 +32,7 @@ use App\Http\Controllers\LinkController;
 use App\Http\Controllers\LiquidityController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PostController;
+use App\Http\Controllers\ProductAnalyticsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
@@ -432,6 +433,11 @@ Route::middleware(['auth'])->group(function () {
         Route::post('sync', [CrmController::class, 'sync'])->name('sync');
         Route::get('export', [CrmController::class, 'export'])->name('export');
         Route::get('analytics', [CrmAnalyticsController::class, 'index'])->name('analytics');
+        // The wallet's own funnel: acquisition → onboarding → funding →
+        // activation → retention, keyed on anonymous installations rather than
+        // on site sessions. Declared before the {contact} wildcard below.
+        Route::get('product', [ProductAnalyticsController::class, 'index'])->name('product');
+        Route::get('product/users/{user}', [ProductAnalyticsController::class, 'show'])->name('product.user');
         Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
         Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');
         Route::put('tasks/{task}', [CrmTaskController::class, 'update'])->name('tasks.update');

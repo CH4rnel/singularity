@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
+import { analytics } from '@/lib/analytics';
 import { createMnemonic, isValidMnemonic, walletChains } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -16,8 +17,12 @@ import { walletMessages } from '@/lib/walletMessages';
  */
 
 const emit = defineEmits<{
-    /** A phrase the user has backed up, ready to be sealed with a password. */
-    adopt: [phrase: string, password: string];
+    /**
+     * A phrase the user has backed up, ready to be sealed with a password.
+     * The third argument says which branch produced it — the two are the same
+     * thing by the time they are stored, and completely different funnels.
+     */
+    adopt: [phrase: string, password: string, origin: 'created' | 'imported'];
     /** Left the flow without adopting anything — the vault is untouched. */
     cancel: [];
 }>();
@@ -110,6 +115,25 @@ const leaveImport = (): void => {
 const goSeed = (): void => {
     generate();
     step.value = 'seed';
+};
+
+/*
+ * Onboarding funnel. The two branches are counted separately from the first
+ * tap, because they answer different questions: creations are new users this
+ * product made, imports are users it took from somewhere else, and a number
+ * that added them together would flatter whichever one is failing.
+ *
+ * Nothing here reports what was typed, generated or chosen — only that a
+ * branch was entered.
+ */
+const startCreate = (): void => {
+    analytics.track('wallet_creation_started');
+    step.value = 'risk';
+};
+
+const startImport = (): void => {
+    analytics.track('wallet_import_started');
+    step.value = 'import';
 };
 
 const setWords = (next: 12 | 24): void => {
@@ -208,6 +232,7 @@ const submit = (): void => {
         'adopt',
         importing.value ? importText.value.trim() : phrase.value,
         password.value,
+        importing.value ? 'imported' : 'created',
     );
 };
 
@@ -344,14 +369,14 @@ onBeforeUnmount(() => {
             <button
                 type="button"
                 class="cw-btn cw-btn-primary"
-                @click="step = 'risk'"
+                @click="startCreate()"
             >
                 {{ t('createWallet') }}
             </button>
             <button
                 type="button"
                 class="cw-btn cw-btn-secondary"
-                @click="step = 'import'"
+                @click="startImport()"
             >
                 {{ t('importWallet') }}
             </button>

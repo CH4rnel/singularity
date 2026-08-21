@@ -7,6 +7,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import StatusPill from '@/components/wallet/StatusPill.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { analytics, errorCode } from '@/lib/analytics';
 import { formatUnits, parseUnits, walletChain } from '@/lib/wallet';
 import type {
     WalletChainId,
@@ -258,11 +259,58 @@ const OUTCOMES: Record<
     failed: { icon: CircleX, status: 'failed' },
 };
 
+/**
+ * What a transfer looks like to analytics: which network, which kind of asset,
+ * roughly how much it was worth, and what the fee tier was.
+ *
+ * Never the recipient, never the exact units, never the hash. The amount goes
+ * in USD because that is the only figure a dashboard can add across assets,
+ * and because it is coarser than a balance — an amount in units plus a symbol
+ * is a fingerprint of one transfer, and a USD figure is a row in a total.
+ */
+const traits = () => ({
+    chain: props.chain,
+    asset: symbol.value,
+    token_type: (asset.value === null ? 'coin' : 'token') as 'coin' | 'token',
+    transaction_type: (asset.value === null ? 'send' : 'token_transfer') as
+        | 'send'
+        | 'token_transfer',
+    tier: tier.value,
+    amount_usd:
+        usdValue(
+            amountUnits.value,
+            decimals.value,
+            asset.value === null
+                ? (props.prices[props.chain] ?? null)
+                : (props.tokenPrices[props.chain]?.[
+                      asset.value.address.toLowerCase()
+                  ] ?? null),
+        ) ?? undefined,
+    fee_usd:
+        usdValue(fee.value, chain.value.decimals, props.prices[props.chain] ?? null) ??
+        undefined,
+});
+
+/**
+ * The user has a complete transfer and asked to see it. This is the top of the
+ * transaction funnel — the point where they committed to an intention, rather
+ * than the point where they opened the screen — so the drop-off between it and
+ * a signature is a review step people abandon, which is a thing worth knowing.
+ */
+const review = (): void => {
+    analytics.track('transaction_started', traits());
+    phase.value = 'review';
+};
+
 const sign = async (): Promise<void> => {
     phase.value = 'status';
     outcome.value = 'signing';
     failure.value = null;
     txHash.value = null;
+
+    const startedAt = Date.now();
+
+    analytics.track('transaction_signed', traits());
 
     try {
         txHash.value = await props.wallet.send(
@@ -277,8 +325,31 @@ const sign = async (): Promise<void> => {
         outcome.value = 'failed';
         failure.value = error instanceof Error ? error.message : String(error);
 
+        // The normalised code, never the message: the message names an
+        // address and an amount, and no two RPC providers phrase the same
+        // failure alike, so grouping by it would report six problems where
+        // there is one.
+        analytics.track('transaction_failed', {
+            ...traits(),
+            error_code: errorCode(error),
+            duration_ms: Date.now() - startedAt,
+        });
+
         return;
     }
+
+    /*
+     * Broadcast, and `watchable` says whether anything will ever confirm it.
+     * A chain whose adapter cannot watch for a receipt — a user-added network,
+     * a Bitcoin fork with no Esplora endpoint — never produces a
+     * `transaction_confirmed`, and that is a fact about our instrumentation
+     * rather than about the user, so the activation rule reads this flag.
+     */
+    analytics.track('transaction_submitted', {
+        ...traits(),
+        watchable: !!chain.value.awaitOutcome,
+        duration_ms: Date.now() - startedAt,
+    });
 
     void props.wallet.refreshBalances();
     emit('sent');
@@ -291,8 +362,24 @@ const sign = async (): Promise<void> => {
 
     try {
         outcome.value = await chain.value.awaitOutcome(txHash.value);
+
+        analytics.track(
+            outcome.value === 'confirmed'
+                ? 'transaction_confirmed'
+                : 'transaction_failed',
+            {
+                ...traits(),
+                duration_ms: Date.now() - startedAt,
+                ...(outcome.value === 'confirmed'
+                    ? {}
+                    : { error_code: 'reverted' as const }),
+            },
+        );
     } catch (error) {
         failure.value = error instanceof Error ? error.message : String(error);
+
+        // A watch that timed out is not a transfer that failed, and the row
+        // stays pending on screen — so nothing is recorded as either.
     }
 
     void props.wallet.refreshBalances();
@@ -845,7 +932,7 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                     class="cw-btn cw-btn-primary"
                     style="margin-top: 18px"
                     :disabled="!canReview"
-                    @click="phase = 'review'"
+                    @click="review()"
                 >
                     {{ t('reviewTransaction') }}
                 </button>

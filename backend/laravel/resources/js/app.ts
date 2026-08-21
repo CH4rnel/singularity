@@ -11,6 +11,10 @@ import AuthLayout from '@/layouts/AuthLayout.vue';
 import NativeShellLayout from '@/layouts/NativeShellLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import Web3Layout from '@/layouts/Web3Layout.vue';
+import {
+    configureAnalytics,
+    initializeAnalytics,
+} from '@/lib/analytics';
 import { initializeNativeShell, isNativeShell } from '@/lib/native';
 import { initializeTelegram } from '@/lib/telegram';
 import { track } from '@/lib/track';
@@ -84,4 +88,21 @@ router.on('navigate', (event) => {
     track('page_view', {
         page: new URL(event.detail.page.url, window.location.origin).pathname,
     });
+
+    /*
+     * Product analytics is a different subject from the site funnel above —
+     * an installation of the wallet rather than a browser reading pages — so
+     * it gets its own client and its own tables. Configured from the shared
+     * props on every navigation (including the first, which is why it sits
+     * here) and started exactly once.
+     */
+    const settings = event.detail.page.props.analytics as
+        | Parameters<typeof configureAnalytics>[0]
+        | undefined;
+
+    if (settings) {
+        configureAnalytics(settings);
+    }
+
+    initializeAnalytics();
 });

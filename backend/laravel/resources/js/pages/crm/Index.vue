@@ -9,6 +9,7 @@ import {
     RefreshCw,
     Trash2,
     Users,
+    Wallet,
 } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 import Heading from '@/components/Heading.vue';
@@ -185,6 +186,16 @@ defineOptions({
                 <Link href="/crm/analytics">
                     <Button variant="outline">
                         <BarChart3 class="h-4 w-4" /> {{ t('analytics') }}
+                    </Button>
+                </Link>
+                <!--
+                  A different subject from the site funnel next to it: that one
+                  counts browser sessions on cyberia.church, this one counts
+                  installations of the wallet.
+                -->
+                <Link href="/crm/product">
+                    <Button variant="outline">
+                        <Wallet class="h-4 w-4" /> {{ t('walletAnalytics') }}
                     </Button>
                 </Link>
                 <Button variant="outline" :disabled="syncing" @click="syncNow">

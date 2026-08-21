@@ -7,6 +7,7 @@ import {
     clipboardAutoClear,
     useSecureClipboard,
 } from '@/composables/useSecureClipboard';
+import { analytics } from '@/lib/analytics';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -38,6 +39,29 @@ const deleting = ref(false);
 const deleteConfirmation = ref('');
 
 const LOCK_OPTIONS = [5, 15, 60];
+
+/**
+ * Anonymous usage statistics, and the switch for them.
+ *
+ * It belongs on this screen rather than in a settings menu somewhere: this is
+ * where the wallet already tells the truth about what leaves the device, and
+ * a wallet that collects anything at all owes the person holding it a place to
+ * say no. Turning it off drops the local queue and forgets the installation
+ * id, so opting back in starts a new anonymous user rather than resuming a
+ * profile.
+ *
+ * When the refusal came from the browser (Do Not Track, Global Privacy
+ * Control) the row says so and the switch is left alone — overriding a browser
+ * setting from a page would be exactly the behaviour that signal exists to
+ * prevent.
+ */
+const analyticsOn = ref(analytics.enabled());
+const analyticsBlocked = analytics.blockedByBrowser();
+
+const setAnalytics = (on: boolean): void => {
+    analytics.setEnabled(on);
+    analyticsOn.value = analytics.enabled();
+};
 
 /** The networks that ship with the wallet, named so "verified" means something. */
 const builtin = computed(() =>
@@ -260,6 +284,60 @@ onBeforeUnmount(() => {
                         height: 20px;
                         flex: none;
                         accent-color: var(--cw-accent);
+                    "
+                />
+            </label>
+
+            <!--
+              Anonymous usage statistics. Named here, with what is never sent,
+              because a wallet that says "keys never leave this device" has to
+              be equally specific about what does.
+            -->
+            <label
+                class="cw-row"
+                style="
+                    padding: 16px;
+                    border-top: 1px solid var(--cw-line);
+                    cursor: pointer;
+                "
+            >
+                <span style="flex: 1">
+                    <span
+                        style="
+                            display: block;
+                            font: 400 14px/1.3 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                        >{{ t('analyticsRow') }}</span
+                    >
+                    <span
+                        style="
+                            display: block;
+                            margin-top: 3px;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                        "
+                        >{{
+                            analyticsBlocked
+                                ? t('analyticsBlocked')
+                                : t('analyticsHint')
+                        }}</span
+                    >
+                </span>
+                <input
+                    :checked="analyticsOn"
+                    :disabled="analyticsBlocked"
+                    type="checkbox"
+                    style="
+                        width: 20px;
+                        height: 20px;
+                        flex: none;
+                        accent-color: var(--cw-accent);
+                    "
+                    @change="
+                        setAnalytics(
+                            ($event.target as HTMLInputElement).checked,
+                        )
                     "
                 />
             </label>
