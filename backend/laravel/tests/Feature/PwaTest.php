@@ -17,6 +17,14 @@ it('links the PWA metadata from the application shell', function () {
         );
 });
 
+/**
+ * iOS does not ask where the home screen icon should point: Safari takes the
+ * manifest's `start_url` and discards whatever page the icon was added from.
+ * With `/` there, an iPhone that installed the wallet got the landing page.
+ *
+ * `id` stays `/` even so — it is the app's identity, and moving it would make
+ * every existing install look like a second, different app.
+ */
 it('publishes a valid installable web app manifest', function () {
     $manifest = json_decode(
         file_get_contents(public_path('manifest.webmanifest')),
@@ -29,7 +37,7 @@ it('publishes a valid installable web app manifest', function () {
             'id' => '/',
             'name' => 'Cyberia',
             'short_name' => 'Cyberia',
-            'start_url' => '/',
+            'start_url' => '/wallet',
             'scope' => '/',
             'display' => 'standalone',
             'background_color' => '#0b0f10',

@@ -13,7 +13,49 @@
  */
 import { marked, type Token } from "marked";
 import hljs from "highlight.js/lib/common";
+import stringWidth from "string-width";
 import type { Theme } from "./theme.js";
+
+// ------------------------------------------------------------ measurement
+
+/**
+ * Columns, not characters. `⚙`, `⛓`, `⚠` and every emoji occupy two cells, and
+ * ink measures the frame with this same library — count them as one and every
+ * line holding one is a column too long, which ink then truncates: the frame
+ * loses its right edge, and a line that wraps instead makes ink clear the whole
+ * screen. So all of the layout maths goes through here.
+ */
+const ASCII = /^[\x20-\x7e]*$/;
+
+export function textWidth(t: string): number {
+  return ASCII.test(t) ? t.length : stringWidth(t);
+}
+
+const segmenter =
+  typeof Intl !== "undefined" && "Segmenter" in Intl
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+
+/** Split into grapheme clusters, so an emoji is never cut in half. */
+function graphemes(t: string): string[] {
+  if (!segmenter) return [...t];
+  return [...segmenter.segment(t)].map((s) => s.segment);
+}
+
+/** The longest prefix of `t` that fits in `n` columns, and its width. */
+export function fitToWidth(t: string, n: number): { text: string; width: number } {
+  if (n <= 0) return { text: "", width: 0 };
+  if (ASCII.test(t)) return t.length <= n ? { text: t, width: t.length } : { text: t.slice(0, n), width: n };
+  let out = "";
+  let w = 0;
+  for (const g of graphemes(t)) {
+    const gw = stringWidth(g);
+    if (w + gw > n) break;
+    out += g;
+    w += gw;
+  }
+  return { text: out, width: w };
+}
 
 // --------------------------------------------------------------- span model
 
@@ -39,10 +81,10 @@ export function blank(n: number): Line {
   return [{ t: " ".repeat(Math.max(0, n)) }];
 }
 
-/** Visible width in columns of a line (code points — good enough for this UI). */
+/** Visible width of a line, in terminal columns. */
 export function lineWidth(l: Line): number {
   let w = 0;
-  for (const s of l) w += s.t.length;
+  for (const s of l) w += textWidth(s.t);
   return w;
 }
 
@@ -52,15 +94,42 @@ export function truncateLine(l: Line, n: number): Line {
   let left = n;
   for (const s of l) {
     if (left <= 0) break;
-    if (s.t.length <= left) {
+    const w = textWidth(s.t);
+    if (w <= left) {
       out.push(s);
-      left -= s.t.length;
+      left -= w;
     } else {
-      out.push({ ...s, t: s.t.slice(0, left) });
+      const cut = fitToWidth(s.t, left);
+      if (cut.text) out.push({ ...s, t: cut.text });
       break;
     }
   }
   return out;
+}
+
+/** Cut a line at column `at`, splitting the span that straddles it. */
+export function splitLine(l: Line, at: number): [Line, Line] {
+  const head: Line = [];
+  const tail: Line = [];
+  let used = 0;
+  for (const s of l) {
+    if (used >= at) {
+      tail.push(s);
+      continue;
+    }
+    const w = textWidth(s.t);
+    if (used + w <= at) {
+      head.push(s);
+      used += w;
+      continue;
+    }
+    const cut = fitToWidth(s.t, at - used);
+    if (cut.text) head.push({ ...s, t: cut.text });
+    const rest = s.t.slice(cut.text.length);
+    if (rest) tail.push({ ...s, t: rest });
+    used = at;
+  }
+  return [head, tail];
 }
 
 /** Right-pad a line with spaces out to `n` columns (never truncates). */
@@ -193,20 +262,27 @@ export function wrapSpans(spans: Span[], width: number): Line[] {
     pendingSpace = false;
   };
   const addWord = (s: Span) => {
+    const sw = textWidth(s.t);
     // A single monster token (an address, a base64 blob) is cut to fit.
-    if (s.t.length > w) {
+    if (sw > w) {
       flush();
-      for (let i = 0; i < s.t.length; i += w) out.push([{ ...s, t: s.t.slice(i, i + w) }]);
+      let rest = s.t;
+      while (rest) {
+        const cut = fitToWidth(rest, w);
+        if (!cut.text) break;
+        out.push([{ ...s, t: cut.text }]);
+        rest = rest.slice(cut.text.length);
+      }
       return;
     }
-    let need = s.t.length + (pendingSpace || used > 0 ? 1 : 0);
+    const need = sw + (pendingSpace || used > 0 ? 1 : 0);
     if (used > 0 && used + need > w) flush();
     if (used > 0) {
       line.push(span(" "));
       used += 1;
     }
     line.push(s);
-    used += s.t.length;
+    used += sw;
     pendingSpace = false;
   };
   for (const s of spans) {
@@ -365,12 +441,16 @@ function headingToLines(tok: BlockTok, theme: Theme, width: number): Line[] {
   return wrapSpans(spans, width);
 }
 
-/** Render block tokens (from marked.lexer) into styled lines. */
-function tokensToLines(tokens: Token[], theme: Theme, width: number): Line[] {
+/** Render block tokens (from marked.lexer) into styled lines. `marks`, when
+ *  given, is filled in lockstep with the lines: the source text of the code
+ *  block a line belongs to, or undefined. That is what makes a fenced block
+ *  clickable — the click lands on a row, and the row knows its code. */
+function tokensToLines(tokens: Token[], theme: Theme, width: number, marks?: (string | undefined)[]): Line[] {
   const w = Math.max(8, width);
   const c = theme;
   const out: Line[] = [];
   for (const tok of tokens) {
+    const before = out.length;
     switch (tok.type) {
       case "space":
         break;
@@ -401,8 +481,13 @@ function tokensToLines(tokens: Token[], theme: Theme, width: number): Line[] {
       default:
         out.push(...wrapSpans([span(tok.raw, { c: c.fg })], w));
     }
+    if (marks) {
+      const code = tok.type === "code" ? ((tok as { text?: string }).text ?? "") : undefined;
+      for (let i = before; i < out.length; i++) marks.push(code);
+    }
   }
   if (!out.length) out.push(blank(w));
+  if (marks) while (marks.length < out.length) marks.push(undefined);
   return out;
 }
 
@@ -434,13 +519,15 @@ export function stableMarkdown(md: string): boolean {
  * Line counts are theme-independent (only colours vary), so measurement can
  * use any skin.
  */
-export function mdToLines(md: string, theme: Theme, width: number): Line[] {
+export function mdToLines(md: string, theme: Theme, width: number, marks?: (string | undefined)[]): Line[] {
   const c = theme;
   let toks: Token[];
   try {
     toks = marked.lexer(md, { gfm: true });
   } catch {
-    return wrapSpans([span(md, { c: c.fg })], width);
+    const lines = wrapSpans([span(md, { c: c.fg })], width);
+    if (marks) for (const _ of lines) marks.push(undefined);
+    return lines;
   }
-  return tokensToLines(toks, theme, width);
+  return tokensToLines(toks, theme, width, marks);
 }

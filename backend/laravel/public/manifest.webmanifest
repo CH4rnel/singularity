@@ -3,7 +3,7 @@
     "name": "Cyberia",
     "short_name": "Cyberia",
     "description": "Cyberia social, governance, bridge, and on-chain tools.",
-    "start_url": "/",
+    "start_url": "/wallet",
     "scope": "/",
     "display": "standalone",
     "background_color": "#0b0f10",

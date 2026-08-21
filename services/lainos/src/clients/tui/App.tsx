@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useApp, useStdin, useStdout } from "ink";
 import { ModelTier, type AgentEvent, type IAgentRuntime } from "../../types.js";
 import {
@@ -20,20 +20,27 @@ import {
   saveEffort,
   savePulse,
   saveSkin,
-  type Theme,
 } from "./theme.js";
-import { blank, concat, fitLine, padLine, sp, truncateLine, type Line, type Span } from "./markdown.js";
-import { editLine } from "./editor.js";
+import { blank, concat, fitLine, sp, type Line } from "./markdown.js";
+import { chromeLines, menuLines, pickerLines } from "./chrome.js";
+import { runCommand as dispatchCommand, suggestionsFor } from "./commands.js";
+import { composeFrame, type ComposerWrap } from "./frame.js";
+import { useChainHeight, usePersistedPref, useSpin, useStdoutDimensions } from "./hooks.js";
+import { handleKey, type KeyCtx, type PickerState } from "./keymap.js";
+import { handleMouse as handleMouse_, type Drag, type MouseCtx } from "./mouse.js";
+import { localClipboard, osc52 } from "./clipboard.js";
+import { highlightSelection, selectionText, type BoundedRange } from "./selection.js";
+import { cursorToWrap, wrapIndices } from "./editor.js";
 import { InputHistory, loadInputHistory, saveInputHistory } from "./history.js";
 import { ESC_TIMEOUT_MS, KeyReader, type KeyPress, type MouseInfo, type TuiKey } from "./keys.js";
 import { ChainPulse } from "./pulse.js";
-import { cursorToWrap, wrapIndices } from "./transcript.js";
 import {
   bannerLines,
   bootLines,
   sidebarLines,
   spinnerChar,
   turnLines,
+  turnText,
   type FeedRegion,
   type SidebarRegion,
   type Turn,
@@ -43,46 +50,6 @@ import type { ScoutService } from "../../plugins/scout/index.js";
 import type { SentinelService } from "../../plugins/sentinel/index.js";
 
 // ------------------------------------------------------------------ model
-
-type PickerOption = { value: string; label: string; hint?: string };
-type PickerState = {
-  title: string;
-  kind: "skin" | "plain";
-  options: PickerOption[];
-  index: number;
-  onPick: (value: string) => void;
-  onHighlight?: (value: string) => void;
-  onCancel?: () => void;
-};
-
-const COMMANDS = [
-  { name: "/help", desc: "show commands" },
-  { name: "/skills", desc: "list chain skills" },
-  { name: "/facts", desc: "durable facts lain remembers" },
-  { name: "/watches", desc: "active background watches" },
-  { name: "/wishes", desc: "the forge wishboard" },
-  { name: "/research", desc: "scout research topics" },
-  { name: "/pulse", desc: "toggle whale transfer notices" },
-  { name: "/skin", desc: "pick a colour skin (arrows)" },
-  { name: "/effort", desc: "set reply depth (arrows)" },
-  { name: "/cursor", desc: "cursor style + blink (arrows)" },
-  { name: "/clear", desc: "clear the screen (memory intact)" },
-  { name: "/copy", desc: "copy lain's last reply to the clipboard" },
-  { name: "/reset", desc: "fresh memory room" },
-  { name: "/model", desc: "switch claude/codex/opencode (arrows)" },
-  { name: "/exit", desc: "leave the wired" },
-];
-
-/** Bucket a skill (action) name into a stylish category. */
-function skillCategory(name: string): "wallet" | "tx" | "memory" | "system" | "chain" {
-  if (/balance|overview|token/.test(name)) return "wallet";
-  if (/send|transfer/.test(name)) return "tx";
-  if (/remember|recall|memor/.test(name)) return "memory";
-  if (/shell|exec|file|dir|^ls$|read|write|list/.test(name)) return "system";
-  if (/tx/.test(name)) return "tx";
-  return "chain";
-}
-const SKILL_ORDER = ["chain", "wallet", "tx", "memory", "system"] as const;
 
 const EFFORTS = [
   { value: "low", label: "low", tokens: 512, desc: "terse · fast" },
@@ -101,12 +68,21 @@ const CURSORS = [
 
 let _seq = 0;
 const nextId = () => `t${++_seq}`;
-const sysTurn = (text: string): Turn => ({ id: nextId(), role: "sys", parts: [{ kind: "text", text }] });
+const sysTurn = (text: string): Turn => ({
+  id: nextId(),
+  role: "sys",
+  parts: [{ kind: "text", text }],
+  at: Date.now(),
+});
+/** A notice from something running in the background, not from Lain. */
+const pulseTurn = (text: string): Turn => ({
+  id: nextId(),
+  role: "pulse",
+  parts: [{ kind: "text", text }],
+  at: Date.now(),
+});
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
-function fmtTokens(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
 function estimateTokens(history: Turn[], live: Turn | null): number {
   let chars = 0;
   const add = (t: Turn) => {
@@ -118,77 +94,6 @@ function estimateTokens(history: Turn[], live: Turn | null): number {
   history.forEach(add);
   if (live) add(live);
   return Math.round(chars / 4);
-}
-function suggestionsFor(value: string): typeof COMMANDS {
-  if (!value.startsWith("/") || value.includes(" ")) return [];
-  return COMMANDS.filter((c) => c.name.startsWith(value.toLowerCase()));
-}
-
-// ------------------------------------------------------------ live chain
-
-function useChainHeight(rpc: string): number | null {
-  const [block, setBlock] = useState<number | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        const res = await fetch(rpc, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
-        });
-        const j = (await res.json()) as { result?: string };
-        if (alive && typeof j.result === "string") setBlock(parseInt(j.result, 16));
-      } catch {
-        /* offline — keep last height */
-      }
-    };
-    void poll();
-    const t = setInterval(() => void poll(), 5000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [rpc]);
-  return block;
-}
-
-/** Terminal size that tracks window resizes. */
-function useStdoutDimensions(): { width: number; rows: number } {
-  const { stdout } = useStdout();
-  const [size, setSize] = useState(() => ({
-    width: stdout?.columns ?? 80,
-    rows: stdout?.rows ?? 24,
-  }));
-  useEffect(() => {
-    if (!stdout) return;
-    const onResize = () => setSize({ width: stdout.columns ?? 80, rows: stdout.rows ?? 24 });
-    stdout.on("resize", onResize);
-    return () => {
-      stdout.off("resize", onResize);
-    };
-  }, [stdout]);
-  return size;
-}
-
-/** Advance a frame counter while `active` — drives spinner glyphs. */
-function useSpin(active: boolean): number {
-  const [frame, setFrame] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    const id = setInterval(() => setFrame((f) => f + 1), 90);
-    return () => clearInterval(id);
-  }, [active]);
-  return frame;
-}
-
-/** One vertical strip of the feed's scrollbar thumb (empty when not needed). */
-function scrollbarChar(i: number, viewport: number, maxScroll: number, scrollTop: number): string {
-  if (maxScroll <= 0) return " ";
-  const thumb = Math.max(1, Math.round((viewport * viewport) / (viewport + maxScroll)));
-  const track = viewport - thumb;
-  const pos = maxScroll ? Math.round((track * scrollTop) / maxScroll) : 0;
-  return i >= pos && i < pos + thumb ? "█" : "░";
 }
 
 // ------------------------------------------------------------ components
@@ -206,146 +111,8 @@ function LineView({ line }: { line: Line }) {
   );
 }
 
-/** The bottom widget: status divider, status line, thinking row, menus and
- *  the multi-line composer, flattened to exactly `chromeRows` lines. */
-function chromeLines(args: {
-  theme: Theme;
-  width: number;
-  status: "idle" | "thinking" | "streaming";
-  thinkingOn: boolean;
-  spin: number;
-  provider: string;
-  model: string;
-  block: number | null;
-  tokens: number;
-  room: string;
-  effort: string;
-  statusLines: number;
-  thinkingLines: number;
-  menuLines: Line[];
-  pickerLines: Line[];
-  composerWrap: { text: string; start: number; end: number }[];
-  cursorLine: number;
-  cursorCol: number;
-  blinkOn: boolean;
-  blinkEnabled: boolean;
-  cursorStyle: "block" | "line";
-  busy: boolean;
-  showHint: boolean;
-}): Line[] {
-  const c = args.theme;
-  const out: Line[] = [];
 
-  out.push([{ t: "─".repeat(args.width), c: c.mutedDim }]);
-  out.push(
-    truncateLine(
-      padLine(
-        concat(
-          [sp(args.status === "idle" ? "● " : "◐ ", args.status === "idle" ? c.ok : c.warn)],
-          [sp(args.provider, c.primary)],
-          [sp(` ${GLYPH.dot} `, c.mutedDim)],
-          [sp(args.model, c.secondary)],
-          [sp(`   ${GLYPH.chain} `, c.mutedDim)],
-          [sp(args.block === null ? "—" : args.block.toLocaleString("en-US"), c.fg)],
-          [sp("   ◷ ", c.mutedDim)],
-          [sp(fmtTokens(args.tokens), c.fg)],
-          [sp(" tok", c.mutedDim)],
-          [sp("   effort:", c.mutedDim)],
-          [sp(args.effort, c.secondary)],
-          [sp("   skin:", c.mutedDim)],
-          [sp(c.name, c.primary)],
-          [sp("   room:", c.mutedDim)],
-          [sp(args.room, c.fg)],
-        ),
-        args.width,
-      ),
-      args.width,
-    ),
-  );
 
-  if (args.thinkingOn) {
-    out.push(concat([sp(`${spinnerChar(args.spin)} `, c.warn)], [sp("reaching into the wired…", c.mutedDim)]));
-  }
-
-  if (args.menuLines.length) out.push(...args.menuLines);
-  if (args.pickerLines.length) out.push(...args.pickerLines);
-
-  const prefix = (busy: boolean, first: boolean): Span => sp(first ? `${GLYPH.you} ` : "  ", busy ? c.mutedDim : c.primary);
-  out.push(blank(args.width)); // margin above the composer
-  args.composerWrap.forEach((wl, li) => {
-    const first = li === 0;
-    const row: Span[] = [prefix(args.busy, first)];
-    if (li === args.cursorLine) {
-      const before = wl.text.slice(0, args.cursorCol);
-      const at = wl.text.slice(args.cursorCol, args.cursorCol + 1) || " ";
-      const after = wl.text.slice(args.cursorCol + 1);
-      const show = !args.blinkEnabled || args.blinkOn;
-      const cursor: Span =
-        args.cursorStyle === "line"
-          ? { t: at, c: show ? c.primary : c.fg, u: show }
-          : show
-            ? { t: at, c: "#0b0b12", bg: c.primary }
-            : { t: at, c: c.fg };
-      row.push(sp(before, c.fg), cursor, sp(after, c.fg));
-    } else {
-      row.push(sp(wl.text, c.fg));
-    }
-    if (first && args.cursorLine === 0 && wl.text.length === 0 && !args.busy) {
-      row.push(sp("  ask lain…", c.mutedDim));
-    }
-    out.push(padLine(truncateLine(row, args.width), args.width));
-  });
-
-  if (args.showHint) {
-    out.push(concat([sp("  ", c.mutedDim)], [sp("↑↓ history · wheel scroll · / commands · Tab complete · shift/ctrl+enter newline", c.mutedDim)]));
-  }
-
-  return out;
-}
-
-/** The slash-command autocomplete menu, margin + one row per command. */
-function menuLines(items: typeof COMMANDS, index: number, theme: Theme, width: number): Line[] {
-  const c = theme;
-  const out: Line[] = [blank(width)];
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i];
-    const on = i === index;
-    out.push(
-      concat(
-        [sp(on ? "❯ " : "  ", on ? c.primary : c.mutedDim)],
-        [{ t: it.name.padEnd(10), c: on ? c.primary : c.secondary, b: on }],
-        [sp(it.desc, c.mutedDim)],
-      ),
-    );
-  }
-  return out;
-}
-
-/** The bordered arrow-key picker (skin/effort/cursor/model). */
-function pickerLines(state: PickerState, theme: Theme, width: number): Line[] {
-  const c = theme;
-  const out: Line[] = [blank(width)];
-  const title = ` ${state.title}  ↑↓ move · enter select · esc cancel `;
-  out.push(truncateLine([{ t: `╭─${title}${"─".repeat(Math.max(0, width - title.length - 3))}╮`, c: c.border }], width));
-  for (let i = 0; i < state.options.length; i++) {
-    const opt = state.options[i];
-    const on = i === state.index;
-    const th = state.kind === "skin" ? THEMES[opt.value] : undefined;
-    const row: Span[] = [
-      sp(on ? " ❯ " : "   ", on ? c.primary : c.mutedDim),
-      { t: opt.label.padEnd(11), c: on ? c.primary : c.fg, b: on },
-    ];
-    if (th) {
-      for (const col of [th.primary, th.secondary, th.ok, th.warn, th.err]) row.push(sp(GLYPH.swatch, col));
-      row.push(sp(`  ${th.label}`, c.mutedDim));
-    } else if (opt.hint) {
-      row.push(sp(opt.hint, c.mutedDim));
-    }
-    out.push(truncateLine(concat(row), width));
-  }
-  out.push([{ t: `╰${"─".repeat(Math.max(1, width - 2))}╯`, c: c.border }]);
-  return out;
-}
 
 /**
  * Single keyboard sink, mounted only when raw mode is available (a real TTY).
@@ -357,13 +124,28 @@ function pickerLines(state: PickerState, theme: Theme, width: number): Line[] {
  * reporting is enabled here too: wheel events scroll the feed, and clicks
  * toggle tools / sidebar rows.
  */
-function InputCapture({ onKey }: { onKey: (input: string, key: TuiKey) => void }) {
+function InputCapture({ onKey, mouse }: { onKey: (input: string, key: TuiKey) => void; mouse: boolean }) {
   const { setRawMode, internal_eventEmitter, internal_exitOnCtrlC } = useStdin();
   const { stdout } = useStdout();
   const sink = useRef(onKey);
   useEffect(() => {
     sink.current = onKey;
   });
+
+  // Mouse reporting is what makes the wheel scroll and tool rows clickable —
+  // and it is also what stops the terminal from selecting text, because the
+  // drag is delivered here instead. So it is a switch, not a setting: select
+  // mode hands the mouse back to the terminal for as long as it is on.
+  useEffect(() => {
+    if (!mouse) return;
+    // xterm buttons (1000) + motion while a button is held (1002) + SGR
+    // coordinates (1006): the wheel, exact click cells, and the drag that the
+    // terminal can no longer make into a selection — so the app makes it.
+    stdout?.write("\x1b[?1000h\x1b[?1002h\x1b[?1006h");
+    return () => {
+      stdout?.write("\x1b[?1006l\x1b[?1002l\x1b[?1000l");
+    };
+  }, [mouse, stdout]);
 
   useEffect(() => {
     setRawMode(true);
@@ -383,15 +165,16 @@ function InputCapture({ onKey }: { onKey: (input: string, key: TuiKey) => void }
       // Escape key) looks exactly like such a head, so it fires on a timer.
       if (reader.partial) escTimer = setTimeout(() => emit(reader.flush()), ESC_TIMEOUT_MS);
     };
-    // xterm buttons + SGR coordinates: gives the wheel and exact click cells.
     // Kitty keyboard protocol (level 1, progressive): terminals that support it
-    // send shift+enter as \x1b[13;2u instead of an ordinary \r.
-    stdout?.write("\x1b[?1000h\x1b[?1006h\x1b[>1u");
+    // send shift+enter as \x1b[13;2u instead of an ordinary \r. Bracketed paste
+    // (?2004) fences pasted text, so a pasted paragraph is text and not a burst
+    // of Enter presses that would fire it off line by line.
+    stdout?.write("\x1b[>1u\x1b[?2004h");
     internal_eventEmitter.on("input", onData);
     return () => {
       if (escTimer) clearTimeout(escTimer);
       internal_eventEmitter.removeListener("input", onData);
-      stdout?.write("\x1b[<1u\x1b[?1006l\x1b[?1000l");
+      stdout?.write("\x1b[?2004l\x1b[<1u");
       setRawMode(false);
     };
   }, [internal_eventEmitter, internal_exitOnCtrlC, setRawMode, stdout]);
@@ -400,52 +183,6 @@ function InputCapture({ onKey }: { onKey: (input: string, key: TuiKey) => void }
 }
 
 // ------------------------------------------------------------------ app
-
-const HELP = [
-  "commands:",
-  "  /help          this list",
-  "  /skills        list the chain skills Lain can use",
-  "  /facts         durable facts Lain has learned",
-  "  /watches       active background balance watches",
-  "  /wishes        the forge wishboard (holder requests → branches)",
-  "  /research      topics the scout researches (digests on schedule)",
-  "  /pulse         toggle whale transfer notices",
-  "  /skin          pick a colour skin with the arrow keys",
-  "  /effort        set reply depth (low … max) with the arrow keys",
-  "  /cursor        cursor style — block/line, blink/steady",
-  "  /clear         clear the screen (conversation memory stays)",
-  "  /copy          copy lain's last reply to the clipboard (OSC 52)",
-  "  /reset         start a fresh memory room",
-  "  /model         switch the chat model (arrows) — or /model claude|codex|opencode",
-  "  /exit /quit    leave the wired",
-  "",
-  "editing: ← → move · home/end (or ctrl+a/ctrl+e) · ctrl+←/→ word",
-  "         ⌫ delete back · del delete forward · alt+b/alt+f word",
-  "         ctrl+w / alt+⌫ del word · alt+d del word fwd · ctrl+u/ctrl+k kill line",
-  "         ↑ ↓ recall history (kept between runs) · type / for autocomplete",
-  "         shift+enter (or ctrl+enter) starts a new line — the composer wraps like a chat app",
-  "",
-  "scrollback: the transcript scrolls inside the app — PgUp/PgDn page,",
-  "            ctrl+↑/↓ one line, or just roll the mouse wheel.",
-  "            click a ⚙ tool row to expand/collapse it.",
-].join("\n");
-
-/** Render the registered skills grouped by category, with descriptions. */
-function skillsList(actions: readonly { name: string; description: string }[]): string {
-  if (!actions.length) return "no chain skills are registered.";
-  const groups: Record<string, { name: string; description: string }[]> = {};
-  for (const a of actions) (groups[skillCategory(a.name)] ??= []).push(a);
-  const pad = Math.min(22, Math.max(...actions.map((a) => a.name.length)));
-  const lines: string[] = [`skills · ${actions.length} chain abilities`, ""];
-  for (const cat of SKILL_ORDER) {
-    const items = groups[cat];
-    if (!items) continue;
-    lines.push(cat);
-    for (const a of items) lines.push(`  ${a.name.padEnd(pad)}  ${a.description}`);
-    lines.push("");
-  }
-  return lines.join("\n").trimEnd();
-}
 
 export function App({ runtime }: { runtime: IAgentRuntime }) {
   const { exit } = useApp();
@@ -459,25 +196,18 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const rpc = process.env.CYBERIA_RPC_URL ?? "https://rpc.cyberia.church";
   const block = useChainHeight(rpc);
 
-  const [skin, setSkin] = useState<string>(() => loadSkin());
+  const [skin, setSkin] = usePersistedPref(loadSkin, saveSkin);
   const [previewSkin, setPreviewSkin] = useState<string | null>(null);
   const theme = THEMES[previewSkin ?? skin] ?? THEMES[DEFAULT_THEME];
-  useEffect(() => {
-    saveSkin(skin);
-  }, [skin]);
 
-  const [effort, setEffort] = useState<string>(() => loadEffort());
+  const [effort, setEffort] = usePersistedPref(loadEffort, saveEffort);
   useEffect(() => {
     runtime.maxTokens = effortTokens(effort);
-    saveEffort(effort);
   }, [effort, runtime]);
 
-  const [cursorPref, setCursorPref] = useState<string>(() => loadCursor());
+  const [cursorPref, setCursorPref] = usePersistedPref(loadCursor, saveCursor);
   const cursorStyle: "block" | "line" = cursorPref.startsWith("line") ? "line" : "block";
   const blinkEnabled = cursorPref.endsWith("blink");
-  useEffect(() => {
-    saveCursor(cursorPref);
-  }, [cursorPref]);
 
   const [room, setRoom] = useState("tui");
   const [history, setHistory] = useState<Turn[]>(() => []);
@@ -488,8 +218,8 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   }, []);
   const [live, setLive] = useState<Turn | null>(null);
   const [status, setStatus] = useState<"idle" | "thinking" | "streaming">("idle");
+  const [startedAt, setStartedAt] = useState<number | null>(null);
   const busy = status !== "idle";
-  const thinkingOn = status === "thinking";
 
   // Terminal/window title (OSC 0) — without it the tab shows the launcher
   // command ("npm lainos"). Tracks activity so the tab shows when she is busy.
@@ -507,6 +237,24 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const [browsing, setBrowsing] = useState(false);
   // which tool calls are expanded in the feed (click to toggle)
   const [expandedTools, setExpandedTools] = useState<ReadonlySet<string>>(new Set());
+  // selection mode: the frame is frozen and the mouse belongs to the terminal
+  const [selectMode, setSelectMode] = useState(false);
+  const frozenRef = useRef<Line[] | null>(null);
+  // a message typed while she was still answering, waiting for its turn
+  const [queued, setQueued] = useState<string | null>(null);
+  // ctrl+c once asks, twice leaves — a stray ctrl+c should not end the session
+  const [quitArmed, setQuitArmed] = useState(false);
+  const quitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // the mouse selection drawn over the frame, and the drag that is making it
+  // `left`/`right` pin it to the pane the drag began in — transcript or sidebar
+  type Selection = BoundedRange;
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const selectionRef = useRef<Selection | null>(null);
+  selectionRef.current = selection;
+  const dragRef = useRef<Drag | null>(null);
+  const [copiedNote, setCopiedNote] = useState<string | null>(null);
+  // the frame as it was last painted — what a selection is read out of
+  const displayRef = useRef<Line[]>([]);
 
   // input history (shell-style ↑/↓), remembered across runs
   const histRef = useRef<InputHistory | null>(null);
@@ -514,15 +262,41 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const hist = histRef.current;
 
   const tokens = useMemo(() => estimateTokens(history, live), [history, live]);
-  const [pulseOn, setPulseOn] = useState<boolean>(() => loadPulse());
-  useEffect(() => {
-    savePulse(pulseOn);
-  }, [pulseOn]);
+  const [pulseOn, setPulseOn] = usePersistedPref(loadPulse, savePulse);
 
   const suggestions = useMemo(() => suggestionsFor(value), [value]);
   const menuItems = browsing ? [] : suggestions;
   const acIdx = menuItems.length ? Math.min(acIndex, menuItems.length - 1) : 0;
   const pushHistory = useCallback((t: Turn) => setHistory((h) => [...h, t]), []);
+
+  /**
+   * Put `text` on the clipboard and say so. OSC 52 goes out immediately (it is
+   * the only route that survives ssh and tmux); a local helper is tried in the
+   * background for the terminals that refuse OSC 52 without telling anyone.
+   */
+  const copyOut = useCallback(
+    (text: string, what: string) => {
+      const body = text.trim();
+      if (!body) {
+        pushHistory(sysTurn(`nothing to copy — ${what} is empty.`));
+        return;
+      }
+      osc52(body, (s) => void stdout?.write(s));
+      void localClipboard(body);
+      pushHistory(
+        sysTurn(
+          `copied ${what} (${body.length} chars).` +
+            " if your terminal blocks OSC 52, drag over the text instead — or ctrl+s to freeze the frame.",
+        ),
+      );
+    },
+    [pushHistory, stdout],
+  );
+
+  const lastReply = useCallback((): string => {
+    const turn = [...history].reverse().find((t) => t.role === "lain");
+    return turn ? turnText(turn) : "";
+  }, [history]);
 
   // Blink only around actual typing. A permanent 530ms repaint wipes mouse
   // selection in the terminal, making copy/paste impossible; once the keyboard
@@ -530,13 +304,13 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const [blinkAlive, setBlinkAlive] = useState(true);
   const blinkIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!blinkEnabled || !blinkAlive) {
+    if (!blinkEnabled || !blinkAlive || selectMode) {
       setBlink(true);
       return;
     }
     const id = setInterval(() => setBlink((b) => !b), 530);
     return () => clearInterval(id);
-  }, [blinkEnabled, blinkAlive]);
+  }, [blinkEnabled, blinkAlive, selectMode]);
   useEffect(() => {
     blinkIdleRef.current = setTimeout(() => setBlinkAlive(false), 10_000);
     return () => {
@@ -544,12 +318,17 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     };
   }, []);
 
+  useEffect(
+    () => () => {
+      if (quitTimerRef.current) clearTimeout(quitTimerRef.current);
+    },
+    [],
+  );
+
   // Chain watcher — Lain notices whale transfers and otherwise stays silent.
   useEffect(() => {
     if (!pulseOn) return;
-    const pulse = new ChainPulse(rpc, (ev) => {
-      pushHistory({ id: nextId(), role: "pulse", parts: [{ kind: "text", text: ev.text }] });
-    });
+    const pulse = new ChainPulse(rpc, (ev) => pushHistory(pulseTurn(ev.text)));
     pulse.start();
     return () => pulse.stop();
   }, [pulseOn, pushHistory, rpc]);
@@ -558,27 +337,21 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   useEffect(() => {
     const sentinel = runtime.getService<SentinelService>("sentinel");
     if (!sentinel?.onAlert) return;
-    return sentinel.onAlert((alert) => {
-      pushHistory({ id: nextId(), role: "pulse", parts: [{ kind: "text", text: `⚠ ${alert.text}` }] });
-    });
+    return sentinel.onAlert((alert) => pushHistory(pulseTurn(`⚠ ${alert.text}`)));
   }, [pushHistory, runtime]);
 
   // Forge progress (wishes being built) appears live too.
   useEffect(() => {
     const forge = runtime.getService<ForgeService>("forge");
     if (!forge?.onEvent) return;
-    return forge.onEvent((ev) => {
-      pushHistory({ id: nextId(), role: "pulse", parts: [{ kind: "text", text: ev.text }] });
-    });
+    return forge.onEvent((ev) => pushHistory(pulseTurn(ev.text)));
   }, [pushHistory, runtime]);
 
   // Research digests from the scout land in the feed as well.
   useEffect(() => {
     const scout = runtime.getService<ScoutService>("scout");
     if (!scout?.onEvent) return;
-    return scout.onEvent((ev) => {
-      pushHistory({ id: nextId(), role: "pulse", parts: [{ kind: "text", text: ev.text }] });
-    });
+    return scout.onEvent((ev) => pushHistory(pulseTurn(ev.text)));
   }, [pushHistory, runtime]);
 
   const openSkinPicker = useCallback(() => {
@@ -670,166 +443,78 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     });
   }, [switchable, switchProvider]);
 
-  const command = useCallback(
-    (text: string): void => {
-      const cmd = text.slice(1).split(/\s+/)[0]?.toLowerCase();
-      switch (cmd) {
-        case "help":
-          pushHistory(sysTurn(HELP));
-          break;
-        case "clear":
-          // The flat feed is rebuilt from history, so a clear is just state.
-          setLive(null);
-          setHistory([]);
-          break;
-        case "copy": {
-          const lastLain = [...history].reverse().find((t) => t.role === "lain");
-          const reply = (lastLain?.parts ?? [])
-            .flatMap((p) => (p.kind === "text" ? [p.text] : []))
-            .join("\n")
-            .trim();
-          if (!reply) {
-            pushHistory(sysTurn("nothing to copy yet — ask lain something first."));
-            break;
-          }
-          // OSC 52 sets the system clipboard through the terminal itself, so
-          // it survives SSH. Terminals cap the payload, so trim huge replies.
-          const b64 = Buffer.from(reply.slice(0, 65536), "utf8").toString("base64");
-          stdout?.write(`\x1b]52;c;${b64}\x07`);
-          pushHistory(
-            sysTurn(
-              `copied lain's last reply (${reply.length} chars) to the clipboard.` +
-                ` if it didn't land, your terminal blocks OSC 52 (tmux needs "set -g set-clipboard on").`,
-            ),
-          );
-          break;
-        }
-        case "skills":
-          pushHistory(sysTurn(skillsList(runtime.actions)));
-          break;
-        case "facts":
-          void runtime.memory.facts(30).then((facts) => {
-            pushHistory(
-              sysTurn(
-                facts.length
-                  ? `durable facts (${facts.length}):\n${facts.map((f) => `  · ${f}`).join("\n")}`
-                  : "no durable facts yet — say “remember that …” to teach me.",
-              ),
-            );
-          });
-          break;
-        case "watches": {
-          const sentinel = runtime.getService<SentinelService>("sentinel");
-          const watches = sentinel?.listWatches() ?? [];
-          pushHistory(
-            sysTurn(
-              watches.length
-                ? `active watches (${watches.length}):\n${watches
-                    .map(
-                      (w) =>
-                        `  ${w.id}  ${w.token ? w.token.toUpperCase() : "CYBER"} of ${w.address}` +
-                        `  ${w.kind === "change" ? "on change" : `${w.kind} ${w.threshold}`}` +
-                        `${w.note ? `  — ${w.note}` : ""}${w.lastValue !== undefined ? `  (last ${w.lastValue})` : ""}`,
-                    )
-                    .join("\n")}`
-                : "no background watches. ask lain: “watch 0x… and warn me below 5 CYBER”.",
-            ),
-          );
-          break;
-        }
-        case "wishes": {
-          const forge = runtime.getService<ForgeService>("forge");
-          const wishes = forge?.listWishes() ?? [];
-          const fprovider = forge?.forgeProvider();
-          const providerLine = fprovider
-            ? `forge provider: ${fprovider.selected} (${fprovider.available ? "ready" : "unavailable"})\n`
-            : "";
-          pushHistory(
-            sysTurn(
-              wishes.length
-                ? `${providerLine}wishboard (${wishes.length}):\n${wishes
-                    .map((w) => `  ${w.id} [${w.status}] ${w.title} — ${w.reporter}${w.branch ? `, ${w.branch}` : ""}`)
-                    .join("\n")}`
-                : `${providerLine}the wishboard is empty — tell lain what you wish for.`,
-            ),
-          );
-          break;
-        }
-        case "research": {
-          const scout = runtime.getService<ScoutService>("scout");
-          const topics = scout?.listTopics() ?? [];
-          pushHistory(
-            sysTurn(
-              topics.length
-                ? `research topics (${topics.length}):\n${topics
-                    .map(
-                      (t) =>
-                        `  ${t.id} "${t.query}" every ${Math.round(t.intervalMs / 3_600_000)}h` +
-                        `${t.note ? ` — ${t.note}` : ""}`,
-                    )
-                    .join("\n")}`
-                : "no research topics — try: “следи за Solana и сообщай только важное”.",
-            ),
-          );
-          break;
-        }
-        case "pulse": {
-          const next = !pulseOn;
-          setPulseOn(next);
-          pushHistory(
-            sysTurn(next ? "pulse on — i'll murmur when the chain moves." : "pulse off — the wired goes quiet."),
-          );
-          break;
-        }
-        case "skin":
-        case "theme":
-          openSkinPicker();
-          break;
-        case "effort":
-          openEffortPicker();
-          break;
-        case "cursor":
-          openCursorPicker();
-          break;
-        case "reset": {
-          const r = `tui-${Date.now().toString(36)}`;
-          setRoom(r);
-          pushHistory(sysTurn(`new room: ${r} — short-term memory is fresh here.`));
-          break;
-        }
-        case "model": {
-          // "/model" opens the picker; "/model codex" switches straight away.
-          const arg = text.trim().split(/\s+/)[1];
-          if (arg) switchProvider(arg);
-          else if (switchable) openModelPicker();
-          else pushHistory(sysTurn(`provider ${provider} ${GLYPH.dot} model ${model}`));
-          break;
-        }
-        case "exit":
-        case "quit":
-          exit();
-          break;
-        default:
-          pushHistory(sysTurn(`unknown command: /${cmd}  (try /help)`));
-      }
+  /** What a slash command may reach — see ./commands.ts, where the bodies live. */
+  const commandCtx = useMemo(
+    () => ({
+      runtime,
+      history,
+      provider,
+      model,
+      switchable: Boolean(switchable),
+      say: (text: string) => pushHistory(sysTurn(text)),
+      copyOut,
+      lastReply,
+      // The flat feed is rebuilt from history, so a clear is just state.
+      clear: () => {
+        setLive(null);
+        setHistory([]);
+      },
+      freeze: () => setSelectMode(true),
+      togglePulse: () => {
+        const next = !pulseOn;
+        setPulseOn(next);
+        pushHistory(
+          sysTurn(next ? "pulse on — i'll murmur when the chain moves." : "pulse off — the wired goes quiet."),
+        );
+      },
+      openPicker: (which: "skin" | "effort" | "cursor" | "model") => {
+        if (which === "skin") openSkinPicker();
+        else if (which === "effort") openEffortPicker();
+        else if (which === "cursor") openCursorPicker();
+        else openModelPicker();
+      },
+      switchProvider,
+      newRoom: () => {
+        const r = `tui-${Date.now().toString(36)}`;
+        setRoom(r);
+        pushHistory(sysTurn(`new room: ${r} — short-term memory is fresh here.`));
+      },
+      exit,
+    }),
+    [copyOut, exit, history, lastReply, model, openCursorPicker, openEffortPicker, openModelPicker, openSkinPicker, provider, pulseOn, pushHistory, runtime, switchProvider, switchable],
+  );
+
+  const command = useCallback((text: string) => dispatchCommand(text, commandCtx), [commandCtx]);
+
+  /** Run a slash command as if it had been typed and entered. */
+  const runCommand = useCallback(
+    (name: string) => {
+      if (hist.push(name)) saveInputHistory(hist.entries);
+      setBrowsing(false);
+      setValue("");
+      setCursor(0);
+      setAcIndex(0);
+      command(name);
     },
-    [exit, history, model, openCursorPicker, openEffortPicker, openModelPicker, openSkinPicker, provider, pulseOn, pushHistory, runtime, stdout, switchProvider, switchable],
+    [command, hist],
   );
 
   const send = useCallback(
     async (text: string) => {
-      pushHistory({ id: nextId(), role: "you", parts: [{ kind: "text", text }] });
-      const acc: Turn = { id: nextId(), role: "lain", parts: [] };
+      pushHistory({ id: nextId(), role: "you", parts: [{ kind: "text", text }], at: Date.now() });
+      const acc: Turn = { id: nextId(), role: "lain", parts: [], at: Date.now() };
       const flush = () =>
         setLive({
           id: acc.id,
           role: acc.role,
+          at: acc.at,
           parts: acc.parts.map((p) =>
             p.kind === "tool" ? { kind: "tool", tool: { ...p.tool } } : { kind: "text", text: p.text },
           ),
         });
 
       setStatus("thinking");
+      setStartedAt(Date.now());
       flush();
       try {
         const result = await runtime.handleMessageStream({ roomId: room, userId: "user", text }, (ev: AgentEvent) => {
@@ -861,46 +546,66 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         pushHistory(acc);
         setLive(null);
         setStatus("idle");
+        setStartedAt(null);
       }
     },
     [pushHistory, room, runtime],
   );
+
+  // The queued message goes out the moment she finishes, in the order it was
+  // typed — nothing is dropped just because she was mid-sentence.
+  useEffect(() => {
+    if (busy || !queued) return;
+    const text = queued;
+    setQueued(null);
+    void send(text);
+  }, [busy, queued, send]);
 
   // ---------------------------------------------------------- layout math
 
   const sidebarOn = width >= 100;
   const sidebarW = sidebarOn ? 28 : 0;
   const contentW = sidebarOn ? width - sidebarW : width;
-  const composerWidth = Math.max(4, contentW - 2);
+  // the composer's text area: the gutter, the panel's two borders, its padding
+  // and the prompt
+  const composerWidth = Math.max(4, contentW - 7);
+  // One row is deliberately left to the terminal. ink clears the whole screen —
+  // scrollback included — whenever a frame is as tall as the window, and a
+  // screen that is wiped several times a second cannot be selected or copied.
+  const frameRows = Math.max(8, rows - 1);
 
   const spin = useSpin(busy);
+  const feedW = Math.max(8, contentW - 1);
   const feed = useMemo(() => {
-    const bn = bannerLines(theme, contentW);
+    // The masthead shrinks to one line once there is a conversation to read.
+    const bn = bannerLines(theme, feedW, history.length > 0 || live !== null);
     const lines: Line[] = [...bn];
     const regions: (FeedRegion | undefined)[] = bn.map(() => undefined);
     const push = (ls: Line[], rs: (FeedRegion | undefined)[]) => {
       lines.push(...ls);
       regions.push(...rs);
     };
-    const bt = bootLines(theme, contentW);
-    push(bt, bt.map(() => undefined));
+    if (!history.length && !live) {
+      const bt = bootLines(theme, feedW);
+      push(bt, bt.map(() => undefined));
+    }
     for (const t of history) {
-      const tl = turnLines(t, expandedTools, theme, contentW, spinnerChar(spin));
+      const tl = turnLines(t, expandedTools, theme, feedW, spinnerChar(spin));
       push(tl.lines, tl.regions);
     }
     if (live) {
-      const tl = turnLines(live, expandedTools, theme, contentW, spinnerChar(spin));
+      const tl = turnLines(live, expandedTools, theme, feedW, spinnerChar(spin));
       push(tl.lines, tl.regions);
     }
     return { lines, regions };
-  }, [contentW, expandedTools, history, live, spin, theme]);
+  }, [expandedTools, feedW, history, live, spin, theme]);
 
   const watches = runtime.getService<SentinelService>("sentinel")?.listWatches()?.length ?? 0;
   const wishes = runtime.getService<ForgeService>("forge")?.listWishes()?.length ?? 0;
   const topics = runtime.getService<ScoutService>("scout")?.listTopics()?.length ?? 0;
   const skills = runtime.actions.length;
   const sidebar = sidebarOn
-    ? sidebarLines(theme, sidebarW, rows, {
+    ? sidebarLines(theme, sidebarW, frameRows, {
         provider,
         model,
         block,
@@ -913,26 +618,71 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         topics,
         skills,
       })
-    : { lines: Array.from({ length: rows }, () => blank(sidebarW)), regions: [] as (SidebarRegion | undefined)[] };
+    : { lines: Array.from({ length: frameRows }, () => blank(sidebarW)), regions: [] as (SidebarRegion | undefined)[] };
 
-  // ---- chrome (status bar + thinking + menus + picker + composer)
-  const showHint = value.length === 0 && !busy && !picker;
+  // ---- chrome (state line + menus/picker + framed composer + key hints)
   const composerWrap = useMemo(() => wrapIndices(value, composerWidth), [value, composerWidth]);
   const cursorPos = useMemo(() => cursorToWrap(value, cursor, composerWidth), [value, cursor, composerWidth]);
-  const menu = !picker && menuItems.length ? menuLines(menuItems, acIdx, theme, contentW) : [];
-  const pickerRows = picker ? pickerLines(picker, theme, contentW) : [];
-  const statusLines = 2;
-  const thinkingLines = thinkingOn ? 1 : 0;
-  const menuRows = menu.length;
-  const pickerRowsN = pickerRows.length;
-  const composerRows = picker ? 0 : 1 + Math.max(1, composerWrap.length);
-  const hintRows = showHint && !picker ? 1 : 0;
-  const chromeRows = statusLines + thinkingLines + menuRows + pickerRowsN + composerRows + hintRows;
-  const viewportRows = Math.max(1, rows - chromeRows);
-  const composerTop = viewportRows + statusLines + thinkingLines + menuRows + pickerRowsN;
+  const menu = !picker && menuItems.length ? menuLines(menuItems, acIdx, theme, feedW) : [];
+  const pickerRows = picker ? pickerLines(picker, theme, feedW) : [];
+  const hint = copiedNote
+    ? `✓ ${copiedNote} — drag anywhere to select, click to clear`
+    : picker
+      ? ""
+      : menuItems.length
+        ? "↑↓ or click · tab next · enter run · esc keep typing"
+        : busy
+          ? "type ahead — she answers first · drag to select · ctrl+y copy her last reply"
+          : value.includes("\n")
+            ? "↵ send · alt+↵ another line · ctrl+u wipe · drag to select"
+            : "↵ send · alt+↵ new line · ↑ history · / commands · drag to select · ctrl+y copy";
+
+  const chrome = chromeLines({
+    theme,
+    // the same right-hand gutter the transcript keeps, so no panel border ever
+    // sits flush against the sidebar's
+    width: feedW,
+    status,
+    spin,
+    elapsed: startedAt ? Date.now() - startedAt : 0,
+    provider,
+    model,
+    block,
+    tokens,
+    room,
+    effort,
+    sidebarOn,
+    queued,
+    quitArmed,
+    menuLines: menu,
+    pickerLines: pickerRows,
+    composerWrap: composerWrap as { text: string; start: number; end: number }[],
+    cursorLine: cursorPos.line,
+    cursorCol: cursorPos.col,
+    blinkOn: blink,
+    blinkEnabled,
+    cursorStyle,
+    busy,
+    hint,
+  });
+
+  const viewportRows = Math.max(1, frameRows - chrome.lines.length);
+
+  // ---- the transcript sits at the *bottom* of its viewport: a short
+  // conversation belongs next to the composer, not stranded under the banner.
+  const topPad = Math.max(0, viewportRows - feed.lines.length);
+  const view = useMemo(
+    () => ({
+      lines: topPad ? [...Array.from({ length: topPad }, () => blank(feedW)), ...feed.lines] : feed.lines,
+      regions: topPad
+        ? [...Array.from({ length: topPad }, () => undefined as FeedRegion | undefined), ...feed.regions]
+        : feed.regions,
+    }),
+    [feedW, feed, topPad],
+  );
 
   // ---- scrolling (in-app; the terminal's own scrollback is not used)
-  const maxScroll = Math.max(0, feed.lines.length - viewportRows);
+  const maxScroll = Math.max(0, view.lines.length - viewportRows);
   const [scrollTop, setScrollTop] = useState(0);
   const atBottomRef = useRef(true);
   const feedLenRef = useRef(0);
@@ -944,22 +694,30 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
       atBottomRef.current = true;
     }
     if (atBottomRef.current) {
-      setScrollTop(Math.max(0, feed.lines.length - viewportRows));
+      setScrollTop(Math.max(0, view.lines.length - viewportRows));
     }
-  }, [feed.lines.length, viewportRows, history.length, live]);
+  }, [view.lines.length, viewportRows, history.length, live]);
 
   // ---- assemble the frame: feed slice + scrollbar, chrome, sidebar merge
-  const feedRef = useRef(feed);
-  const layoutRef = useRef({
-    viewportRows,
-    composerTop,
-    composerWrap,
+  const composed = composeFrame({
+    theme,
+    width,
     contentW,
+    sidebarW,
     sidebarOn,
-    rows,
-    feedRegions: [] as (FeedRegion | undefined)[],
-    sidebarRegions: [] as (SidebarRegion | undefined)[],
+    frameRows,
+    viewportRows,
+    scrollTop,
+    maxScroll,
+    view,
+    chrome,
+    sidebar,
+    composerWrap: composerWrap as ComposerWrap,
+    menuItems,
   });
+
+  const feedRef = useRef(view);
+  const layoutRef = useRef(composed.hit);
 
   const scrollBy = useCallback((delta: number) => {
     setScrollTop((prev) => {
@@ -970,68 +728,33 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     });
   }, []);
 
-  const slice = feed.lines.slice(scrollTop, scrollTop + viewportRows);
-  const sliceRegions = feed.regions.slice(scrollTop, scrollTop + viewportRows);
-  const hasScrollbar = feed.lines.length > viewportRows;
-  const trackW = hasScrollbar ? contentW - 1 : contentW;
-  const screenLines: Line[] = [];
-  const feedRegions: (FeedRegion | undefined)[] = [];
-  for (let i = 0; i < viewportRows; i++) {
-    let l = slice[i] ?? blank(contentW);
-    l = truncateLine(l, trackW);
-    l = padLine(l, trackW);
-    if (hasScrollbar) l = concat(l, [sp(scrollbarChar(i, viewportRows, maxScroll, scrollTop), theme.mutedDim)]);
-    screenLines.push(l);
-    feedRegions.push(sliceRegions[i]);
-  }
+  feedRef.current = view;
+  layoutRef.current = composed.hit;
+  const all = composed.lines;
 
-  const chrome = chromeLines({
-    theme,
-    width: contentW,
-    status,
-    thinkingOn,
-    spin,
-    provider,
-    model,
-    block,
-    tokens,
-    room,
-    effort,
-    statusLines,
-    thinkingLines,
-    menuLines: menu,
-    pickerLines: pickerRows,
-    composerWrap: composerWrap as { text: string; start: number; end: number }[],
-    cursorLine: cursorPos.line,
-    cursorCol: cursorPos.col,
-    blinkOn: blink,
-    blinkEnabled,
-    cursorStyle,
-    busy,
-    showHint,
-  });
-
-  feedRef.current = feed;
-  layoutRef.current = {
-    viewportRows,
-    composerTop,
-    composerWrap,
-    contentW,
-    sidebarOn,
-    rows,
-    feedRegions,
-    sidebarRegions: sidebar.regions,
-  };
-
-  const all: Line[] = [];
-  for (let i = 0; i < rows; i++) {
-    const l = i < viewportRows ? screenLines[i] : chrome[i - viewportRows];
-    if (!l) {
-      all.push(blank(width));
-      continue;
-    }
-    all.push(sidebarOn ? concat(fitLine(l, contentW), sidebar.lines[i] ?? blank(sidebarW)) : fitLine(l, width));
-  }
+  // ---- selection mode: the frame stops moving, so the terminal's own mouse
+  // selection has something stable to grab. Nothing is written while it holds
+  // (ink skips a frame identical to the last one), which is the whole point —
+  // a repaint under a drag is what made copying impossible.
+  if (selectMode && !frozenRef.current) frozenRef.current = all;
+  if (!selectMode && frozenRef.current) frozenRef.current = null;
+  const selectBar = fitLine(
+    concat(
+      [sp("◼ selection", theme.warn)],
+      [sp("  esc back · drag to select · copy with the terminal (ctrl+shift+c)", theme.mutedDim)],
+    ),
+    width,
+  );
+  const frame =
+    selectMode && frozenRef.current
+      ? [...frozenRef.current.slice(0, Math.max(0, frameRows - 1)), selectBar]
+      : all;
+  // The drag is read back off the painted frame, so remember it unhighlighted.
+  displayRef.current = frame;
+  const display =
+    selection && !selectMode
+      ? highlightSelection(frame, selection, theme.border, selection.right, selection.left)
+      : frame;
 
   // ------------------------------------------------------------- handlers
 
@@ -1044,177 +767,139 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     });
   }, []);
 
-  const openPickerBy = useCallback(
-    (action: "model" | "effort" | "skin") => {
-      if (action === "skin") openSkinPicker();
-      else if (action === "effort") openEffortPicker();
-      else openModelPicker();
+  /** Copy whatever the drag covered, straight off the painted frame. */
+  const copySelection = useCallback(
+    (range: Selection) => {
+      const text = selectionText(displayRef.current, range, range.right, range.left);
+      if (!text.trim()) return;
+      osc52(text, (s) => void stdout?.write(s));
+      void localClipboard(text);
+      setCopiedNote(`${text.length} chars copied`);
     },
-    [openEffortPicker, openModelPicker, openSkinPicker],
+    [stdout],
   );
 
-  const handleMouse = useCallback(
-    (m: MouseInfo) => {
-      if (picker) return;
-      const L = layoutRef.current;
-      if (m.wheel) {
-        scrollBy(m.wheel === "down" ? 3 : -3);
-        return;
-      }
-      if (m.action !== "press") return;
-      const col = m.x - 1;
-      const row = m.y - 1;
-      if (row < 0 || row >= L.rows || col < 0) return;
-      if (L.sidebarOn && col >= L.contentW) {
-        const sr = L.sidebarRegions[row];
-        if (sr?.kind === "pick") openPickerBy(sr.action);
-        return;
-      }
-      if (col >= L.contentW) return;
-      if (row < L.viewportRows) {
-        const r = L.feedRegions[row];
-        if (r?.kind === "tool") toggleTool(r.toolId);
-        return;
-      }
-      const local = row - L.composerTop;
-      const lineIdx = local - 1;
-      const wl = L.composerWrap[lineIdx];
-      if (wl) {
-        const colIn = clamp(col - 2, 0, wl.text.length);
-        setCursor(wl.start + colIn);
-        setBrowsing(false);
-      }
+  /** The same latest-ref shape as the keyboard's context, for the same reason. */
+  const mouseCtxRef = useRef<MouseCtx | null>(null);
+  mouseCtxRef.current = {
+    hit: layoutRef.current,
+    picker,
+    drag: dragRef,
+    selection: selectionRef.current,
+    hasNote: Boolean(copiedNote),
+    setPicker,
+    setSelection,
+    clearNote: () => setCopiedNote(null),
+    scrollBy,
+    copySelection,
+    openPicker: (which) => {
+      if (which === "skin") openSkinPicker();
+      else if (which === "effort") openEffortPicker();
+      else openModelPicker();
     },
-    [openPickerBy, picker, scrollBy, toggleTool],
-  );
+    freeze: () => setSelectMode(true),
+    copyLastReply: () => copyOut(lastReply(), "lain's last reply"),
+    toggleTool,
+    copyText: copyOut,
+    runCommand,
+    moveCursorTo: (index) => {
+      setCursor(index);
+      setBrowsing(false);
+    },
+  };
+
+  const handleMouse = useCallback((m: MouseInfo) => handleMouse_(m, mouseCtxRef.current!), []);
+
+  /** The newest state, read fresh on every keypress. `InputCapture` already
+   *  keeps the handler in a ref, so a dependency array here would only be a
+   *  hand-maintained way to go stale. */
+  const keyCtxRef = useRef<KeyCtx | null>(null);
+  keyCtxRef.current = {
+    value,
+    cursor,
+    acIndex,
+    browsing,
+    composerWidth,
+    viewportRows,
+    picker,
+    selectMode,
+    quitArmed,
+    hist,
+    edit: (v, c) => {
+      setBrowsing(false);
+      setValue(v);
+      setCursor(c);
+      setAcIndex(0);
+    },
+    recall: (v) => {
+      setBrowsing(true);
+      setValue(v);
+      setCursor(v.length);
+    },
+    commit: (text) => {
+      // Remembered for the next ↑ — and for the next run of the TUI.
+      if (hist.push(text)) saveInputHistory(hist.entries);
+      setBrowsing(false);
+      setValue("");
+      setCursor(0);
+      setAcIndex(0);
+      if (text.startsWith("/")) command(text);
+      // A message sent while she is still answering waits its turn instead of
+      // vanishing — the line clears, so it has to go somewhere real.
+      else if (text && busy) setQueued(text);
+      else if (text) send(text);
+    },
+    clearComposer: () => {
+      setValue("");
+      setCursor(0);
+      setBrowsing(false);
+      setAcIndex(0);
+    },
+    setMenuIndex: setAcIndex,
+    setPicker,
+    setSelectMode,
+    armQuit: () => {
+      if (quitTimerRef.current) clearTimeout(quitTimerRef.current);
+      setQuitArmed(true);
+      quitTimerRef.current = setTimeout(() => setQuitArmed(false), 3000);
+    },
+    disarmQuit: () => {
+      if (quitTimerRef.current) clearTimeout(quitTimerRef.current);
+      setQuitArmed(false);
+    },
+    exit,
+    copyLastReply: () => copyOut(lastReply(), "lain's last reply"),
+    scrollBy,
+  };
 
   const onKey = useCallback(
     (input: string, key: TuiKey) => {
+      if (!key.mouse) {
+        // The frame is about to change under it, so a keypress ends the drag's
+        // selection rather than leaving a stale highlight behind.
+        if (selectionRef.current) setSelection(null);
+        if (copiedNote) setCopiedNote(null);
+      }
       setBlink(true);
       setBlinkAlive(true);
       if (blinkIdleRef.current) clearTimeout(blinkIdleRef.current);
       blinkIdleRef.current = setTimeout(() => setBlinkAlive(false), 10_000);
 
       if (key.mouse) {
-        handleMouse(key.mouse);
+        if (!selectMode) handleMouse(key.mouse);
         return;
       }
-
-      // 1) picker captures everything
-      if (picker) {
-        if (key.upArrow || key.downArrow) {
-          const n = picker.options.length;
-          const ni = key.upArrow ? (picker.index - 1 + n) % n : (picker.index + 1) % n;
-          picker.onHighlight?.(picker.options[ni].value);
-          setPicker({ ...picker, index: ni });
-        } else if (key.return) {
-          picker.onPick(picker.options[picker.index].value);
-          setPicker(null);
-        } else if (key.escape) {
-          picker.onCancel?.();
-          setPicker(null);
-        }
-        return;
-      }
-
-      // 2) scroll the feed with the keyboard.
-      const page = Math.max(1, layoutRef.current.viewportRows - 2);
-      if (key.pageUp) {
-        scrollBy(page);
-        return;
-      }
-      if (key.pageDown) {
-        scrollBy(-page);
-        return;
-      }
-      if (key.ctrl && key.upArrow) {
-        scrollBy(1);
-        return;
-      }
-      if (key.ctrl && key.downArrow) {
-        scrollBy(-1);
-        return;
-      }
-
-      // The slash menu is "open" only while actively typing a command — not when
-      // a command was just recalled from history (browsing).
-      const items = browsing ? [] : suggestionsFor(value);
-      const open = items.length > 0;
-      const idx = open ? Math.min(acIndex, items.length - 1) : 0;
-
-      const commit = (text: string) => {
-        // Remembered for the next ↑ — and for the next run of the TUI.
-        if (hist.push(text)) saveInputHistory(hist.entries);
-        setBrowsing(false);
-        setValue("");
-        setCursor(0);
-        setAcIndex(0);
-        if (text.startsWith("/")) command(text);
-        else if (text) send(text);
-      };
-
-      // 3a) menu open → arrows (and Tab) pick a command, Enter runs it
-      if (open) {
-        if (key.upArrow) {
-          setAcIndex((idx - 1 + items.length) % items.length);
-          return;
-        }
-        if (key.downArrow || key.tab) {
-          setAcIndex((idx + (key.shift ? items.length - 1 : 1)) % items.length);
-          return;
-        }
-        if (key.return && !key.shift) {
-          commit(items[idx].name);
-          return;
-        }
-        // other keys (incl. shift+enter) fall through to editing
-      } else {
-        // 3b) menu closed → ↑/↓ move a visual line first, then history.
-        if (key.upArrow || key.downArrow) {
-          if (!browsing) {
-            const edited = editLine({ value, cursor }, input, key, composerWidth);
-            if (edited) {
-              setBrowsing(false);
-              setValue(edited.value);
-              setCursor(edited.cursor);
-              setAcIndex(0);
-              return;
-            }
-          }
-          const v = key.upArrow ? hist.prev(value) : hist.next();
-          if (v === null) return;
-          setBrowsing(true);
-          setValue(v);
-          setCursor(v.length);
-          return;
-        }
-        if (key.return) {
-          if (!key.shift && !busy) {
-            commit(value.trim());
-            return;
-          }
-          // shift+enter / ctrl+enter falls through to editLine → new line.
-        }
-      }
-
-      // 4) line editing — any edit exits history-browsing (re-arms the menu)
-      const edited = editLine({ value, cursor }, input, key, composerWidth);
-      if (edited) {
-        setBrowsing(false);
-        setValue(edited.value);
-        setCursor(edited.cursor);
-        setAcIndex(0);
-      }
+      handleKey({ input, key }, keyCtxRef.current!);
     },
-    [acIndex, browsing, busy, command, composerWidth, cursor, handleMouse, hist, picker, scrollBy, send, value],
+    [copiedNote, handleMouse, selectMode],
   );
 
   return (
     <Box flexDirection="column">
-      {all.map((line, i) => (
+      {display.map((line, i) => (
         <LineView key={i} line={line} />
       ))}
-      {isRawModeSupported ? <InputCapture onKey={onKey} /> : null}
+      {isRawModeSupported ? <InputCapture onKey={onKey} mouse={!selectMode} /> : null}
     </Box>
   );
 }
