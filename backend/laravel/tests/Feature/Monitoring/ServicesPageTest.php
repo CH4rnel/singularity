@@ -7,12 +7,12 @@ use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /**
- * /crm/services — the operator's board.
+ * /crm/machines — the console's machine lens.
  *
- * Behind the same wallet allowlist as the rest of the CRM, and for a sharper
- * reason than the contact list: this page names every internal daemon, every
- * container and every dormant product on the host, which is a map of where to
- * push if you wanted to break something.
+ * Behind the same wallet allowlist as the rest of the console, and for a
+ * sharper reason than the contact list: this page names every internal daemon,
+ * every container and every dormant product on the host, which is a map of
+ * where to push if you wanted to break something.
  */
 beforeEach(function () {
     $this->withoutVite();
@@ -37,10 +37,10 @@ function crmAdmin(): User
 }
 
 it('is a 404 for everyone who is not an operator', function () {
-    $this->get('/crm/services')->assertRedirect();
+    $this->get('/crm/machines')->assertRedirect();
 
     $this->actingAs(User::factory()->create())
-        ->get('/crm/services')
+        ->get('/crm/machines')
         ->assertNotFound();
 });
 
@@ -64,10 +64,10 @@ it('renders the last sweep without probing anything', function () {
     // reached the network at all, the test suite would have to fake the
     // internet to render a dashboard.
     $this->actingAs(crmAdmin())
-        ->get('/crm/services')
+        ->get('/crm/machines')
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('crm/Services')
+            ->component('crm/Machines')
             ->where('services.0.key', 'demo')
             ->where('services.0.status', 'down')
             ->where('services.0.reason', 'bad-status')
@@ -75,12 +75,15 @@ it('renders the last sweep without probing anything', function () {
             ->where('summary.counts.down', 1)
             ->where('summary.critical_down', 1)
             ->where('incidents.0.label', 'Demo')
+            // A day per service, one cell an hour: the last sweep says what is
+            // true now, the strip says whether it has been true all night.
+            ->has('strips.demo', 24)
         );
 });
 
 it('says nothing about hosts when no heartbeat has arrived', function () {
     $this->actingAs(crmAdmin())
-        ->get('/crm/services')
+        ->get('/crm/machines')
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->where('hosts', []));
 });
@@ -98,7 +101,7 @@ it('reports each machine that starts talking', function () {
     ]);
 
     $this->actingAs(crmAdmin())
-        ->get('/crm/services')
+        ->get('/crm/machines')
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('hosts.0.host', 'cyber.main')
@@ -113,6 +116,6 @@ it('tells the operator when the ingest token is unset', function () {
     // Without it two thirds of the board reads `unknown`, so the page says so
     // once at the top instead of leaving it to be inferred from grey rows.
     $this->actingAs(crmAdmin())
-        ->get('/crm/services')
+        ->get('/crm/machines')
         ->assertInertia(fn (Assert $page) => $page->where('settings.heartbeat_configured', false));
 });

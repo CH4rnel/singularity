@@ -3,51 +3,22 @@
 namespace App\Http\Controllers;
 
 use App\Models\AnalyticsUser;
-use App\Services\Analytics\AnalyticsFilters;
 use App\Services\Analytics\EventTaxonomy;
-use App\Services\Analytics\ProductMetricsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The wallet's product dashboard, inside the CRM the operator already uses.
+ * One installation of the wallet, in full.
  *
- * Deliberately not a second admin app: it renders through Inertia with the
- * same components, sits behind the same `EnsureCrmAdmin` wallet allowlist, and
- * answers the same way to anyone else — 404, so its existence is not
- * discoverable by an ordinary signed-in user.
- *
- * `/crm/analytics` answers "did visitors to the site convert". This answers
- * the question one product further in: of the people who installed the wallet,
- * who funded it, who used it, and who came back.
+ * The aggregate half of this used to be a page of its own; it is one of the
+ * six questions on "Числа" now. What stayed is the thing an aggregate cannot
+ * do — reading a single drop-off instead of inferring it from a percentage —
+ * and it sits behind the same `EnsureCrmAdmin` wallet allowlist as the rest of
+ * the console, answering 404 to everyone else.
  */
 class ProductAnalyticsController extends Controller
 {
-    public function __construct(private ProductMetricsService $metrics) {}
-
-    public function index(Request $request): Response
-    {
-        $filters = AnalyticsFilters::fromRequest($request);
-
-        return Inertia::render('crm/Product', [
-            'filters' => $filters->toArray(),
-            'options' => $this->metrics->filterOptions(),
-            'overview' => $this->metrics->overview($filters),
-            'series' => $this->metrics->activeOverTime($filters),
-            'mainFunnel' => $this->metrics->mainFunnel($filters),
-            'productFunnels' => $this->metrics->productFunnels($filters),
-            'activation' => $this->metrics->activation($filters),
-            'cohorts' => $this->metrics->retentionCohorts($filters),
-            'acquisition' => $this->metrics->acquisition($filters),
-            'usage' => $this->metrics->productUsage($filters),
-            'errors' => $this->metrics->errors($filters),
-            'gas' => $this->metrics->gasSponsorship($filters),
-            'recent' => $this->recentUsers($filters),
-            'meaningful' => EventTaxonomy::MEANINGFUL,
-        ]);
-    }
-
     /**
      * One anonymous installation, as a timeline.
      *
@@ -73,7 +44,7 @@ class ProductAnalyticsController extends Controller
             ->limit(20)
             ->get(['id', 'started_at', 'last_activity_at', 'ended_at', 'platform', 'app_version']);
 
-        return Inertia::render('crm/ProductUser', [
+        return Inertia::render('crm/Install', [
             'user' => [
                 'id' => $record->id,
                 'first_seen_at' => $record->first_seen_at?->toIso8601String(),
@@ -101,40 +72,43 @@ class ProductAnalyticsController extends Controller
             'timeline' => $timeline,
             'sessions' => $sessions,
             'meaningful' => EventTaxonomy::MEANINGFUL,
+            /*
+             * How many installations are stuck at the same step this month.
+             * One person stuck is an anecdote; six hundred of them is the one
+             * place in this funnel where a product decision can still be made,
+             * so the number travels with the dossier rather than being looked
+             * up separately.
+             */
+            'peers' => $this->peers($record),
         ]);
     }
 
     /**
-     * The newest installations, as a way into the explorer.
+     * The cohort this installation is an example of.
      *
-     * @return array<int, array<string, mixed>>
+     * @return array{step: string, count: int, days: int}
      */
-    private function recentUsers(AnalyticsFilters $filters): array
+    private function peers(AnalyticsUser $record): array
     {
-        return AnalyticsUser::query()
-            ->whereBetween('created_at', [$filters->from, $filters->to])
-            ->when($filters->platform, fn ($query, $value) => $query->where('platform', $value))
-            ->when($filters->appVersion, fn ($query, $value) => $query->where('app_version', $value))
-            ->when($filters->source, fn ($query, $value) => $query->where('source', $value))
-            ->when($filters->campaign, fn ($query, $value) => $query->where('campaign', $value))
-            ->orderByDesc('created_at')
-            ->limit(30)
-            ->get([
-                'id', 'created_at', 'last_seen_at', 'platform', 'app_version',
-                'source', 'campaign', 'wallet_created_at', 'funded_at', 'activated_at',
-            ])
-            ->map(fn (AnalyticsUser $user) => [
-                'id' => $user->id,
-                'created_at' => $user->created_at?->toIso8601String(),
-                'last_seen_at' => $user->last_seen_at?->toIso8601String(),
-                'platform' => $user->platform,
-                'app_version' => $user->app_version,
-                'source' => $user->source,
-                'campaign' => $user->campaign,
-                'wallet' => $user->wallet_created_at !== null,
-                'funded' => $user->funded_at !== null,
-                'activated' => $user->activated_at !== null,
-            ])
-            ->all();
+        $days = 30;
+        $since = now()->subDays($days);
+
+        $step = match (true) {
+            $record->activated_at !== null => 'activated',
+            $record->funded_at !== null => 'funded',
+            $record->wallet_created_at !== null => 'wallet',
+            default => 'opened',
+        };
+
+        $query = AnalyticsUser::query()->where('created_at', '>=', $since);
+
+        match ($step) {
+            'activated' => $query->whereNotNull('activated_at'),
+            'funded' => $query->whereNotNull('funded_at')->whereNull('activated_at'),
+            'wallet' => $query->whereNotNull('wallet_created_at')->whereNull('funded_at'),
+            default => $query->whereNull('wallet_created_at'),
+        };
+
+        return ['step' => $step, 'count' => $query->count(), 'days' => $days];
     }
 }

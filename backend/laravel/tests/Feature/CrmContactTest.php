@@ -13,8 +13,10 @@ test('authenticated users outside the allow list get a 404 everywhere in the crm
     $contact = CrmContact::factory()->create();
 
     $this->actingAs($stranger)->get(route('crm.index'))->assertNotFound();
+    $this->actingAs($stranger)->get(route('crm.people'))->assertNotFound();
     $this->actingAs($stranger)->get(route('crm.show', $contact))->assertNotFound();
-    $this->actingAs($stranger)->get(route('crm.analytics'))->assertNotFound();
+    $this->actingAs($stranger)->get(route('crm.numbers'))->assertNotFound();
+    $this->actingAs($stranger)->get(route('crm.machines'))->assertNotFound();
     $this->actingAs($stranger)->get(route('crm.export'))->assertNotFound();
     $this->actingAs($stranger)->post(route('crm.sync'))->assertNotFound();
     $this->actingAs($stranger)->delete(route('crm.destroy', $contact))->assertNotFound();
@@ -49,63 +51,78 @@ test('both operator wallets are allowed', function () {
     ]);
 });
 
-test('the index lists contacts with stats', function () {
+test('the people lens lists every segment with its count', function () {
     $user = User::factory()->crmAdmin()->create();
     CrmContact::factory()->create(['name' => 'Alice']);
     CrmContact::factory()->whale()->create(['name' => 'Bob']);
 
     $this->actingAs($user)
-        ->get(route('crm.index'))
+        ->get(route('crm.people'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('crm/Index')
-            ->where('stats.total', 2)
-            ->where('stats.whales', 1)
-            ->has('contacts.data', 2)
+            ->component('crm/People')
+            ->where('segment', 'all')
+            ->where('total', 2)
+            ->has('rows', 2)
+            // A segment is a saved question, so the whole list travels with
+            // its counts — an operator picks a question, not a filter.
+            ->has('segments', 8)
+            ->where('segments.0.key', 'all')
+            ->where('segments.0.count', 2)
+            ->where('segments.1.key', 'whales')
+            ->where('segments.1.count', 1)
         );
 });
 
-test('the search filter narrows the list', function () {
+test('a segment narrows the rows to the people its rule names', function () {
+    $user = User::factory()->crmAdmin()->create();
+    CrmContact::factory()->create(['name' => 'Alice']);
+    CrmContact::factory()->whale()->create(['name' => 'Bob']);
+
+    $this->actingAs($user)
+        ->get(route('crm.people', ['segment' => 'whales']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('segment', 'whales')
+            ->has('rows', 1)
+            ->where('rows.0.name', 'Bob')
+        );
+
+    // An unknown segment is the whole base rather than an error: a stale
+    // bookmark should open the lens, not a 404.
+    $this->actingAs($user)
+        ->get(route('crm.people', ['segment' => 'nonsense']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('segment', 'all'));
+});
+
+test('every row carries the freshest thing that happened to that person', function () {
+    $user = User::factory()->crmAdmin()->create();
+    $contact = CrmContact::factory()->create(['name' => 'Alice']);
+    $contact->notes()->create([
+        'user_id' => $user->id,
+        'type' => 'note',
+        'body' => 'Asked about bridge limits',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('crm.people'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('rows.0.signal.key', 'signal.note')
+            ->where('rows.0.signal.params.body', 'Asked about bridge limits')
+        );
+});
+
+test('the search narrows the rows inside a segment', function () {
     $user = User::factory()->crmAdmin()->create();
     CrmContact::factory()->create(['name' => 'Alice', 'email' => 'alice@example.com']);
     CrmContact::factory()->create(['name' => 'Bob', 'email' => 'bob@example.com']);
 
     $this->actingAs($user)
-        ->get(route('crm.index', ['q' => 'alice']))
+        ->get(route('crm.people', ['q' => 'alice']))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->has('contacts.data', 1));
-});
-
-test('the chain filter narrows the list and stats break down by chain', function () {
-    $user = User::factory()->crmAdmin()->create();
-    CrmContact::factory()->create(['name' => 'EvmOnly', 'solana_address' => null]);
-    CrmContact::factory()->create(['name' => 'SolOnly', 'evm_address' => null]);
-    CrmContact::factory()->create(['name' => 'BothChains']);
-
-    $this->actingAs($user)
-        ->get(route('crm.index', ['chain' => 'evm']))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->has('contacts.data', 2)
-            ->where('stats.evm', 2)
-            ->where('stats.solana', 2)
-            ->where('stats.both', 1)
-        );
-
-    $this->actingAs($user)
-        ->get(route('crm.index', ['chain' => 'solana']))
-        ->assertInertia(fn (Assert $page) => $page->has('contacts.data', 2));
-
-    $this->actingAs($user)
-        ->get(route('crm.index', ['chain' => 'both']))
-        ->assertInertia(fn (Assert $page) => $page
-            ->has('contacts.data', 1)
-            ->where('contacts.data.0.name', 'BothChains')
-        );
-
-    $this->actingAs($user)
-        ->get(route('crm.index', ['chain' => 'none']))
-        ->assertInertia(fn (Assert $page) => $page->has('contacts.data', 0));
+        ->assertInertia(fn (Assert $page) => $page->has('rows', 1)->where('total', 1));
 });
 
 test('a contact can be created', function () {
@@ -151,7 +168,7 @@ test('a contact can be soft deleted', function () {
 
     $this->actingAs($user)
         ->delete(route('crm.destroy', $contact))
-        ->assertRedirect(route('crm.index'));
+        ->assertRedirect(route('crm.people'));
 
     $this->assertSoftDeleted($contact);
 });

@@ -214,8 +214,9 @@ Two usage sources were deliberately removed after they proved misleading:
 | `app/Services/Monitoring/ScheduledTaskLog.php` | scheduler freshness |
 | `app/Services/Monitoring/HeartbeatFleet.php` | which machine a service lives on |
 | `app/Http/Controllers/Api/OpsHeartbeatController.php` | host ingest |
-| `app/Http/Controllers/ServiceMonitorController.php` | `/crm/services` |
-| `resources/js/pages/crm/Services.vue` | the board (en/ru) |
+| `app/Http/Controllers/ServiceMonitorController.php` | `/crm/machines` (`/crm/services` redirects) |
+| `app/Services/Console/ServiceStrips.php` | a day per service, one cell an hour |
+| `resources/js/pages/crm/Machines.vue` | the machine lens of the console (en/ru) |
 | `scripts/ops/heartbeat.sh` | the host reporter |
 
 Nothing in `ServiceProbe` signs, writes, funds, restarts or repairs anything.

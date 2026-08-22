@@ -27,15 +27,20 @@ test('guests and non-operators cannot reach tasks', function () {
     expect($task->fresh()->status)->toBe('open');
 });
 
-test('the task list shows tasks with their contact, assignee and stats', function () {
+test('the board sorts tasks into late, now and later, and lifts out the unowned', function () {
     $operator = User::factory()->crmAdmin()->create();
     $contact = CrmContact::factory()->create(['name' => 'Alice']);
 
     CrmTask::factory()->assignedTo($operator)->create([
         'crm_contact_id' => $contact->id,
         'title' => 'Call Alice back',
+        'due_at' => now()->addHours(3),
     ]);
     CrmTask::factory()->standalone()->overdue()->create(['title' => 'Rotate relayer key']);
+    CrmTask::factory()->standalone()->create([
+        'title' => 'Write the release post',
+        'due_at' => now()->addWeek(),
+    ]);
     CrmTask::factory()->standalone()->done()->create();
 
     $this->actingAs($operator)
@@ -43,14 +48,58 @@ test('the task list shows tasks with their contact, assignee and stats', functio
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('crm/Tasks')
-            ->has('tasks.data', 3)
-            ->where('stats.open', 2)
+            ->has('columns.overdue', 1)
+            ->where('columns.overdue.0.title', 'Rotate relayer key')
+            ->has('columns.soon', 1)
+            ->where('columns.soon.0.contact.name', 'Alice')
+            ->has('columns.later', 1)
+            // Work nobody owns is a state, not a row with an empty column.
+            ->has('unowned', 2)
+            ->where('stats.open', 3)
             ->where('stats.overdue', 1)
-            ->where('stats.unassigned', 1)
-            ->where('stats.mine', 1)
-            ->where('stats.done', 1)
+            ->where('stats.unowned', 2)
             ->where('options.assignees.0.id', $operator->id)
         );
+});
+
+test('an unowned task is taken with one button', function () {
+    $operator = User::factory()->crmAdmin()->create();
+    $task = CrmTask::factory()->standalone()->create();
+
+    $this->actingAs($operator)
+        ->post(route('crm.tasks.claim', $task))
+        ->assertRedirect();
+
+    expect($task->refresh()->assigned_to_user_id)->toBe($operator->id);
+});
+
+test('one typed line becomes a task with its assignee, date and person', function () {
+    $operator = User::factory()->crmAdmin()->create(['name' => 'lain']);
+    $contact = CrmContact::factory()->create(['name' => 'Nakamoto Ghost']);
+
+    $this->actingAs($operator)
+        ->post(route('crm.tasks.store'), [
+            'title' => 'написать киту про лимиты моста @lain !завтра #Nakamoto',
+        ])
+        ->assertRedirect();
+
+    $task = CrmTask::query()->latest('id')->first();
+
+    expect($task->title)->toBe('написать киту про лимиты моста')
+        ->and($task->assigned_to_user_id)->toBe($operator->id)
+        ->and($task->crm_contact_id)->toBe($contact->id)
+        ->and($task->due_at)->not->toBeNull();
+});
+
+test('a token that matches nothing stays in the title rather than being thrown away', function () {
+    $operator = User::factory()->crmAdmin()->create(['name' => 'lain']);
+
+    $this->actingAs($operator)
+        ->post(route('crm.tasks.store'), ['title' => 'проверить #несуществующего @никого'])
+        ->assertRedirect();
+
+    expect(CrmTask::query()->latest('id')->first()->title)
+        ->toBe('проверить #несуществующего @никого');
 });
 
 test('a task is created and assigned to an operator', function () {
@@ -149,26 +198,21 @@ test('completing a task stamps completed_at and reopening clears it', function (
     expect($task->fresh()->completed_at)->toBeNull();
 });
 
-test('the list filters by assignee, status and overdue', function () {
+test('a closed task leaves the board and lands in the week is numbers', function () {
     $operator = User::factory()->crmAdmin()->create();
     $other = secondOperator();
 
     CrmTask::factory()->standalone()->assignedTo($operator)->overdue()->create();
     CrmTask::factory()->standalone()->assignedTo($other)->create();
-    CrmTask::factory()->standalone()->create(); // unassigned
-    CrmTask::factory()->standalone()->done()->create();
+    CrmTask::factory()->standalone()->create();
+    CrmTask::factory()->standalone()->done()->create(['completed_at' => now()->subDay()]);
 
-    $assertCount = function (array $query, int $expected) use ($operator) {
-        $this->actingAs($operator)
-            ->get(route('crm.tasks.index', $query))
-            ->assertInertia(fn (Assert $page) => $page->has('tasks.data', $expected));
-    };
-
-    $assertCount(['assignee' => 'me'], 1);
-    $assertCount(['assignee' => (string) $other->id], 1);
-    $assertCount(['assignee' => 'unassigned'], 2);
-    $assertCount(['status' => 'done'], 1);
-    $assertCount(['overdue' => 1], 1);
+    $this->actingAs($operator)
+        ->get(route('crm.tasks.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('stats.open', 3)
+            ->where('stats.closed_7d', 1)
+        );
 });
 
 test('tasks are deleted and contact deletion takes its tasks with it', function () {
@@ -205,11 +249,10 @@ test('the contact page carries its tasks and the assignee options', function () 
         ->get(route('crm.show', $contact))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('crm/Show')
-            ->has('contact.tasks', 1)
-            ->where('contact.tasks.0.title', 'Follow up')
-            ->where('contact.tasks.0.assignee.name', $operator->name)
+            ->component('crm/Person')
+            ->has('tasks', 1)
+            ->where('tasks.0.title', 'Follow up')
+            ->where('tasks.0.assignee', $operator->name)
             ->has('options.assignees', 1)
-            ->has('options.taskStatuses', 4)
         );
 });

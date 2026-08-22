@@ -58,10 +58,11 @@ other.
 | `app/Services/Analytics/ProductMetricsService.php` | Every dashboard number |
 | `app/Services/Analytics/AnalyticsFilters.php` | The filter value object |
 | `app/Http/Controllers/Api/AnalyticsIngestController.php` | `POST /api/analytics/{events,funding}` |
-| `app/Http/Controllers/ProductAnalyticsController.php` | `/crm/product`, `/crm/product/users/{id}` |
+| `app/Http/Controllers/ProductAnalyticsController.php` | `/crm/installs/{id}` (one installation) |
+| `app/Services/Console/NumbersReport.php` | the six questions on `/crm/numbers` |
 | `app/Console/Commands/AnalyticsVerifyFundingCommand.php` | `analytics:verify-funding`, every 30 min |
 | `resources/js/lib/analytics/*` | The client |
-| `resources/js/pages/crm/Product.vue`, `ProductUser.vue` | Dashboard and explorer |
+| `resources/js/pages/crm/Numbers.vue`, `Install.vue` | The numbers lens and one installation |
 
 ---
 
@@ -640,25 +641,31 @@ heaviest thing on the page and the first candidate for a rollup.
 
 ## 18. Dashboard
 
-**`/crm/product`** — behind `EnsureCrmAdmin` (the CRM operator wallet
-allowlist); anyone else gets a 404, so it is not discoverable.
+**`/crm/numbers`** — the console's numbers lens, behind `EnsureCrmAdmin` (the
+operator wallet allowlist); anyone else gets a 404, so it is not discoverable.
+`/crm/product` redirects here.
 
-Headline: Weekly Active Funded Users · New Users · Activated · WAU · D7
-Retention · Activation Rate · Transaction Success · Swap Volume · Bridge Volume
-· Sponsored Gas.
+Six questions, each with an answer, its evidence and one line of what follows
+from it: are we growing · do they reach money · do they come back · where do
+the ones who stay come from · what breaks · what does an activated user cost.
+A tile is a number without a question, and a number without a question is read
+as whatever the reader already believed.
 
-Then: active users over time · main funnel · activation · retention cohorts ·
-acquisition · product usage · errors · product funnels · sponsored gas · recent
-installations.
+`?subject=installs` (default) counts installations; `?subject=sessions` counts
+browsers reading the site, out of `site_events`. One switch rather than two
+pages, because the confusion between the two subjects is the expensive one —
+and a question this subject cannot answer says so instead of borrowing the
+other one's number.
 
 Filters: date range (7/30/90 days or explicit `from`/`to`), platform, app
 version, source, campaign, chain. Platform/version/source/campaign narrow the
 **population** and everything is then measured inside it; chain narrows the
 **activity** without changing the denominator.
 
-**`/crm/product/users/{uuid}`** — one installation: attribution, milestones,
-sessions and a 200-row timeline with meaningful actions marked. Linked addresses
-are shown as a count only.
+**`/crm/installs/{uuid}`** — one installation: attribution, milestones,
+sessions and a 200-row timeline with meaningful actions marked, plus how many
+installations are stuck at the same step this month. Linked addresses are shown
+as a count only. `/crm/product/users/{uuid}` redirects here.
 
 ---
 

@@ -18,7 +18,8 @@ use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChangelogController;
-use App\Http\Controllers\CrmAnalyticsController;
+use App\Http\Controllers\ConsoleController;
+use App\Http\Controllers\ConsoleNumbersController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmNoteController;
@@ -426,28 +427,53 @@ Route::middleware(['auth'])->group(function () {
     Route::post('push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
 
-    // CRM — contacts, notes and data-source sync. Restricted to the operator
-    // wallets in config/crm.php; everyone else gets a 404. Static routes
-    // (sync/export) are declared before the {contact} wildcard so they take
-    // precedence.
+    /*
+     * The console ("Мостик") — five lenses on one stream, behind the operator
+     * wallet allowlist in config/crm.php; everyone else gets a 404.
+     *
+     * `/crm` is the queue rather than a list of contacts, because the question
+     * an operator arrives with is "what requires me now" and never "what do I
+     * want to look at". The five old pages are lenses on the same material:
+     * people, tasks, numbers, machines. Static routes are declared before the
+     * {contact} wildcard so they take precedence.
+     */
     Route::prefix('crm')->name('crm.')->middleware(EnsureCrmAdmin::class)->group(function () {
+        Route::get('/', [ConsoleController::class, 'index'])->name('index');
+        Route::post('snooze', [ConsoleController::class, 'snooze'])->name('snooze');
+        Route::delete('snooze', [ConsoleController::class, 'wake'])->name('snooze.wake');
+
         Route::post('sync', [CrmController::class, 'sync'])->name('sync');
         Route::get('export', [CrmController::class, 'export'])->name('export');
-        Route::get('analytics', [CrmAnalyticsController::class, 'index'])->name('analytics');
-        // The wallet's own funnel: acquisition → onboarding → funding →
-        // activation → retention, keyed on anonymous installations rather than
-        // on site sessions. Declared before the {contact} wildcard below.
-        Route::get('product', [ProductAnalyticsController::class, 'index'])->name('product');
-        Route::get('product/users/{user}', [ProductAnalyticsController::class, 'show'])->name('product.user');
+
+        Route::get('people', [CrmContactController::class, 'index'])->name('people');
+        Route::post('people', [CrmContactController::class, 'store'])->name('store');
+
+        // One subject switch instead of two analytics pages: installations of
+        // the wallet, or browsers reading the site.
+        Route::get('numbers', [ConsoleNumbersController::class, 'index'])->name('numbers');
+        Route::get('installs/{user}', [ProductAnalyticsController::class, 'show'])->name('installs.show');
+
         // Is everything running, and is anyone using it. Renders the last
         // sweep; the probing itself is `services:check` on the scheduler.
-        Route::get('services', [ServiceMonitorController::class, 'index'])->name('services');
+        Route::get('machines', [ServiceMonitorController::class, 'index'])->name('machines');
+
         Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
         Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');
         Route::put('tasks/{task}', [CrmTaskController::class, 'update'])->name('tasks.update');
+        Route::post('tasks/{task}/claim', [CrmTaskController::class, 'claim'])->name('tasks.claim');
         Route::delete('tasks/{task}', [CrmTaskController::class, 'destroy'])->name('tasks.destroy');
-        Route::get('/', [CrmContactController::class, 'index'])->name('index');
-        Route::post('/', [CrmContactController::class, 'store'])->name('store');
+
+        /*
+         * The addresses the old five pages had. They are in messages, in
+         * bookmarks and in the Telegram ops channel, so they keep working and
+         * land on the lens that answers the same question.
+         */
+        Route::redirect('analytics', '/crm/numbers?subject=sessions')->name('analytics');
+        Route::redirect('product', '/crm/numbers')->name('product');
+        Route::redirect('services', '/crm/machines')->name('services');
+        Route::get('product/users/{user}', fn (string $user) => redirect()->route('crm.installs.show', $user))
+            ->name('product.user');
+
         Route::get('{contact}', [CrmContactController::class, 'show'])->name('show');
         Route::put('{contact}', [CrmContactController::class, 'update'])->name('update');
         Route::delete('{contact}', [CrmContactController::class, 'destroy'])->name('destroy');

@@ -88,7 +88,7 @@ test('site events reject metadata outside the safe attribution vocabulary', func
     expect(SiteEvent::count())->toBe(0);
 });
 
-test('the analytics page builds the funnel from unique sessions', function () {
+test('the numbers lens builds the session funnel from unique sessions', function () {
     $user = User::factory()->crmAdmin()->create();
 
     $visitorA = (string) Str::uuid();
@@ -118,20 +118,35 @@ test('the analytics page builds the funnel from unique sessions', function () {
     ]);
 
     $this->actingAs($user)
-        ->get('/crm/analytics')
+        ->get('/crm/numbers?subject=sessions')
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('crm/Analytics')
-            ->where('funnel.visitors', 2)
-            ->where('funnel.wallets', 1)
-            ->where('funnel.liquidity', 1)
-            ->where('funnel.swaps', 1)
-            ->where('funnel.bridge', 1)
-            ->has('daily', 1)
-            ->has('recent', 6)
+            ->component('crm/Numbers')
+            ->where('subject', 'sessions')
+            // Six questions, always the same six, so a subject that cannot
+            // answer one says so instead of dropping the block.
+            ->has('questions', 6)
+            ->where('questions.0.key', 'growth')
+            ->where('questions.0.answer.value', 2)
+            ->where('questions.1.evidence.steps.1.value', 1)
+            ->where('questions.1.evidence.steps.3.value', 1)
+            ->where('questions.1.evidence.steps.4.value', 1)
+            ->where('questions.3.evidence.type', 'unmeasured')
+            ->where('questions.5.evidence.type', 'unmeasured')
         );
 });
 
-test('guests cannot open the analytics page', function () {
-    $this->get('/crm/analytics')->assertRedirect(route('login'));
+test('the old analytics address still opens the lens that answers it', function () {
+    $user = User::factory()->crmAdmin()->create();
+
+    $this->actingAs($user)
+        ->get('/crm/analytics')
+        ->assertRedirect('/crm/numbers?subject=sessions');
+
+    $this->actingAs($user)->get('/crm/product')->assertRedirect('/crm/numbers');
+    $this->actingAs($user)->get('/crm/services')->assertRedirect('/crm/machines');
+});
+
+test('guests cannot open the numbers lens', function () {
+    $this->get('/crm/numbers')->assertRedirect(route('login'));
 });

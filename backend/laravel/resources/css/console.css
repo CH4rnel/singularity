@@ -1,0 +1,531 @@
+/*
+ * "Мостик" — the operator console.
+ *
+ * A control room, not a website: dark in either site theme, hairlines instead
+ * of cards, and colour spent only on anomaly. If forty services glow green,
+ * the forty-first one glowing red is invisible — so anything working is
+ * neutral grey and there are exactly four signals:
+ *
+ *   red      — down, critical, overdue
+ *   amber    — degrading, running out, gone quiet
+ *   magenta  — a person and money (a whale, a large withdrawal)
+ *   cyan     — action and interaction, and nothing else
+ *
+ * "No data" is hatched rather than coloured: not knowing must not look like a
+ * state of the service. It does not take part in the arithmetic either —
+ * neither in the numerator of uptime nor in its denominator.
+ *
+ * Type: Archivo for sentences, IBM Plex Mono for anything the eye compares —
+ * numbers, times, codes, addresses — with tabular figures, because a column
+ * whose digits do not line up stops reading as a column.
+ *
+ * Everything is namespaced `mk-` under `.mostik` and loaded with the console
+ * only.
+ */
+
+.mostik {
+    --mk-bg: #07090a;
+    --mk-panel: #0b0e0f;
+    --mk-hair: rgba(232, 236, 236, 0.07);
+    --mk-hair-strong: rgba(232, 236, 236, 0.14);
+    --mk-text: #e8ecec;
+    --mk-body: #cdd6d7;
+    --mk-dim: #8d9a9d;
+    --mk-faint: #5a686c;
+    --mk-fainter: #3d494c;
+    --mk-flat: #2a3436;
+
+    --mk-accent: #00e5d1;
+    --mk-accent-soft: rgba(0, 229, 209, 0.06);
+    --mk-critical: #ff4d4d;
+    --mk-critical-soft: rgba(255, 77, 77, 0.1);
+    --mk-warning: #e0a516;
+    --mk-warning-soft: rgba(224, 165, 22, 0.05);
+    --mk-money: #ff2bd6;
+    --mk-money-soft: rgba(255, 43, 214, 0.05);
+    --mk-calm: #3d6e5c;
+
+    --mk-mono:
+        'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--mk-bg);
+    color: var(--mk-text);
+    font-family: 'Archivo', Manrope, ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+.mostik * {
+    box-sizing: border-box;
+}
+
+.mostik a {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* ------------------------------------------------------------- primitives */
+
+.mk-m {
+    font-family: var(--mk-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.mk-num {
+    font-family: var(--mk-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+/* Micro-caption. The only way a block is named here: a line above it and a
+   small caps label — a heading in body size would out-shout the data. */
+.mk-k {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mk-faint);
+}
+
+.mk-t2 {
+    color: var(--mk-dim);
+}
+
+.mk-t3 {
+    color: var(--mk-faint);
+}
+
+/* Section divider: label on the left, hairline to the edge. */
+.mk-rule {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mk-rule::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(232, 236, 236, 0.09);
+}
+
+.mk-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex: 0 0 7px;
+}
+
+/* "No data": hatching, never a colour. */
+.mk-hatch {
+    background-image: repeating-linear-gradient(
+        135deg,
+        rgba(141, 154, 157, 0.5) 0 1px,
+        transparent 1px 4px
+    );
+    background-color: transparent;
+    border: 1px solid rgba(141, 154, 157, 0.35);
+}
+
+.mk-hair {
+    border-top: 1px solid var(--mk-hair);
+}
+
+.mk-panel {
+    background: var(--mk-panel);
+    border: 1px solid var(--mk-hair);
+}
+
+.mk-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 30px;
+    padding: 0 13px;
+    border: 1px solid var(--mk-hair-strong);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--mk-body);
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.mk-btn:hover {
+    border-color: rgba(232, 236, 236, 0.3);
+    color: var(--mk-text);
+}
+
+/* The one action on a row. Cyan is interaction and nothing else, which is why
+   there is never a second cyan button beside it. */
+.mk-btn.mk-act {
+    border-color: rgba(0, 229, 209, 0.55);
+    color: var(--mk-accent);
+}
+
+.mk-btn.mk-act:hover {
+    background: var(--mk-accent-soft);
+    border-color: var(--mk-accent);
+}
+
+.mk-btn.mk-ghost {
+    border-color: transparent;
+    color: var(--mk-faint);
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+}
+
+.mk-btn.mk-ghost:hover {
+    color: var(--mk-dim);
+    border-color: transparent;
+}
+
+.mk-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.mk-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 18px;
+    padding: 0 7px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid var(--mk-hair-strong);
+    color: var(--mk-dim);
+}
+
+.mk-input {
+    height: 30px;
+    padding: 0 11px;
+    background: transparent;
+    border: 1px solid var(--mk-hair-strong);
+    color: var(--mk-text);
+    font-family: var(--mk-mono);
+    font-size: 12.5px;
+    outline: none;
+}
+
+.mk-input:focus {
+    border-color: rgba(0, 229, 209, 0.5);
+}
+
+.mk-input::placeholder {
+    color: var(--mk-fainter);
+}
+
+/* ------------------------------------------------------------ the chrome */
+
+.mk-top {
+    height: 46px;
+    flex: 0 0 46px;
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--mk-hair);
+    overflow: hidden;
+}
+
+.mk-top-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 15px;
+    border-left: 1px solid var(--mk-hair);
+    white-space: nowrap;
+}
+
+.mk-banner {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 0 16px;
+    border-left: 2px solid var(--mk-flat);
+    white-space: nowrap;
+}
+
+.mk-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
+.mk-rail {
+    width: 76px;
+    flex: 0 0 76px;
+    border-right: 1px solid var(--mk-hair);
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0;
+}
+
+.mk-rail-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 11px 0;
+    color: var(--mk-faint);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.mk-rail-item:hover {
+    color: var(--mk-dim);
+}
+
+.mk-rail-item.mk-on {
+    color: var(--mk-text);
+    background: var(--mk-accent-soft);
+}
+
+.mk-rail-item.mk-on::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--mk-accent);
+}
+
+.mk-badge {
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mk-mono);
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--mk-bg);
+    background: var(--mk-accent);
+}
+
+.mk-main {
+    flex: 1;
+    min-width: 0;
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--mk-flat) transparent;
+}
+
+.mk-main::-webkit-scrollbar {
+    width: 8px;
+}
+
+.mk-main::-webkit-scrollbar-thumb {
+    background: var(--mk-flat);
+}
+
+.mk-h1 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------- feed and rows */
+
+/* The duration column is the priority: twelve minutes and three hours ask for
+   different things and look identical on a status board. */
+.mk-age {
+    width: 116px;
+    flex: 0 0 116px;
+    text-align: right;
+}
+
+.mk-feed-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 15px 4px 15px 0;
+}
+
+.mk-tile-row {
+    display: flex;
+    gap: 1px;
+    background: var(--mk-hair);
+    border: 1px solid var(--mk-hair);
+}
+
+.mk-tile {
+    flex: 1;
+    min-width: 0;
+    background: var(--mk-panel);
+    padding: 13px 15px 14px;
+}
+
+.mk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+    gap: 10px;
+}
+
+.mk-card {
+    border: 1px solid var(--mk-hair);
+    background: var(--mk-panel);
+    padding: 10px 11px 11px;
+}
+
+.mk-card.mk-warn {
+    border-color: rgba(224, 165, 22, 0.35);
+}
+
+.mk-card.mk-bad {
+    border-color: rgba(255, 77, 77, 0.4);
+}
+
+.mk-clip {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mk-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.mk-table th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mk-faint);
+    padding: 0 14px 9px;
+}
+
+.mk-table td {
+    padding: 9px 14px;
+    border-top: 1px solid var(--mk-hair);
+    font-size: 13px;
+}
+
+.mk-scroll-x {
+    overflow-x: auto;
+}
+
+/* ------------------------------------------------------------ the phone */
+
+.mk-bottom {
+    display: none;
+}
+
+@media (max-width: 900px) {
+    .mk-rail {
+        display: none;
+    }
+
+    /* On a phone the top strip is the alarm and nothing else: the counters
+       are unreadable at that width and the alarm is the only reason the
+       console is open on a phone at all. */
+    .mk-top-cell {
+        display: none;
+    }
+
+    .mk-main {
+        padding: 16px 16px 0;
+        gap: 16px;
+    }
+
+    .mk-age {
+        width: 52px;
+        flex: 0 0 52px;
+    }
+
+    /* On a phone the row is: how long, what it is, one button. The sentence
+       is clamped rather than dropped — it is the half that says whether this
+       is worth opening — and "snooze" goes away, because a thumb reaching for
+       a 44px target next to it will hit the wrong one. */
+    .mk-feed-row {
+        gap: 13px;
+        padding: 13px 0;
+        align-items: center;
+    }
+
+    .mk-feed-row p {
+        margin-left: 0 !important;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .mk-feed-actions {
+        flex: 0 0 auto;
+    }
+
+    .mk-feed-actions .mk-ghost {
+        display: none;
+    }
+
+    .mk-tile-row {
+        flex-wrap: wrap;
+    }
+
+    .mk-bottom {
+        display: flex;
+        height: 60px;
+        flex: 0 0 60px;
+        align-items: stretch;
+        border-top: 1px solid var(--mk-hair);
+    }
+
+    .mk-bottom-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        color: var(--mk-faint);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .mk-bottom-item.mk-on {
+        color: var(--mk-accent);
+        box-shadow: inset 0 2px 0 var(--mk-accent);
+    }
+
+    /* Touch targets on the one screen that is read while walking. */
+    .mk-btn {
+        height: 44px;
+        padding: 0 14px;
+    }
+}
+
+/* Hide-on-narrow helper for the parts of a row that stop fitting. */
+@media (max-width: 1180px) {
+    .mk-wide {
+        display: none;
+    }
+}
