@@ -87,6 +87,7 @@ Everything lives in `resources/css/console.css`, namespaced `mk-` under
 | `/crm/numbers` | Числа | `crm/Numbers.vue` — six questions, subject switch |
 | `/crm/installs/{uuid}` | Досье установки | `crm/Install.vue` — one anonymous installation |
 | `/crm/machines` | Машины | `crm/Machines.vue` — the registry as tiles, hosts, idle, incidents |
+| `/crm/mockup` | Макет | `crm/Mockup.vue` — the design this console was built from, artboards and all |
 
 `/crm/analytics`, `/crm/product`, `/crm/services` and `/crm/product/users/{id}`
 redirect to the lens that answers the same question — they are in messages, in
@@ -107,9 +108,43 @@ bookmarks and in the ops channel.
 | `app/Services/Console/NumbersReport.php` | The six questions, per subject |
 | `app/Services/Console/TaskLine.php` | `@who !when #whom` out of one typed line |
 | `app/Services/Console/ServiceStrips.php` | A day per service, one cell an hour |
+| `app/Services/Console/Mockup.php` | The canvas manifest: nine artboards and three annotations out of `resources/console-mockup/` |
 | `resources/js/lib/consoleMessages.ts` | Every word, en/ru |
 | `resources/js/lib/console.ts` | Durations, plurals, money, the four tones |
 | `resources/js/layouts/ConsoleLayout.vue` | The shell: alarm strip, rail, phone bar |
+
+---
+
+## 5a. The design, kept inside the thing it describes
+
+`/crm/mockup` serves the nine artboards the console was drawn as, straight out
+of `resources/console-mockup/` (`Mockup.php`, `ConsoleMockupController`). They
+are frozen source: nothing imports them, Vite never sees them, and where the
+running console differs from the drawing the console is the newer answer.
+
+The reason they live in the repository rather than behind a link is that a
+canvas link rots and an exported picture drops the text — and the text is the
+argument. `canvas.json` carries it: three annotations that say why the home is
+a queue, why colour is spent only on anomaly, and what the five old pages lost.
+
+A screen key never reaches the filesystem: the manifest maps a key it already
+knows to a file, everything else is a 404. Each artboard is a full page of its
+own CSS, so the lens frames it (`sandbox=""`, `default-src 'none'`) instead of
+inlining it — inlined, the design would restyle the console around it.
+
+---
+
+## 5b. Who may open any of this
+
+Two accounts, named twice in `config/crm.php`: `admin_wallets` (the key that
+proves the session) and `admin_user_ids` (the person, which survives that key
+being re-attached; env-only and empty by default, because an id means nothing
+in a database it was not written for). Either name is enough, and anyone else —
+including a signed-in user — gets a **404 rather than a 403**, so the console is
+not discoverable by trying the address.
+
+`User::scopeCrmOperators` asks both halves in the same order, so a task can
+never be assigned to somebody who cannot open the page it is on.
 
 ---
 

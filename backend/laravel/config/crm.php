@@ -4,11 +4,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | EVM wallets allowed to access the CRM (/crm and everything under it).
+    | Who may open the CRM (/crm and everything under it).
     |--------------------------------------------------------------------------
-    | Comma-separated list of 0x addresses. Matching is case-insensitive; the
-    | users table stores wallet_address lowercased. Anyone else gets a 404, so
-    | the CRM is not discoverable by ordinary authenticated users.
+    | A closed room, and deliberately a small one: the console shows other
+    | people's money, addresses and records, so everyone who is not on this
+    | list gets a 404 rather than a 403 — including signed-in users, so the
+    | console is not discoverable by trying the address.
+    |
+    | Two operators, named two ways. The wallet is the key that proves the
+    | session; the account id is the person, and it survives that key being
+    | re-attached. Ids are deliberately env-only and empty by default: an id
+    | means nothing in a database it was not written for, and a fresh copy
+    | must not hand the console to whoever the factories numbered eighth.
+    */
+
+    'admin_user_ids' => array_values(array_filter(array_map(
+        fn (string $id) => (int) trim($id),
+        explode(',', (string) env('CRM_ADMIN_USER_IDS', '')),
+    ))),
+
+    /*
+    | Comma-separated 0x addresses. Matching is case-insensitive; the users
+    | table stores wallet_address lowercased.
     */
 
     'admin_wallets' => array_values(array_filter(array_map(
@@ -59,6 +76,14 @@ return [
         // A D7 retention drop of this many points against the previous mature
         // cohort is a finding rather than noise.
         'retention_drop_points' => 3.0,
+
+        // Where the design of this console still lives and can be edited.
+        // The artboards themselves are in resources/console-mockup/, which is
+        // what /crm/mockup serves; this is only the link back to the canvas.
+        'mockup_url' => (string) env(
+            'CRM_CONSOLE_MOCKUP_URL',
+            'https://claude.ai/code/artifact/97d94821-0cac-490a-89cb-59083edd6701',
+        ),
     ],
 
 ];

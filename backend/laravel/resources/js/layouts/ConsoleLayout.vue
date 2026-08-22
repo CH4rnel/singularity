@@ -59,12 +59,54 @@ const console_ = computed(() => page.props.console as Console | null);
 const current = computed(() => page.url.split('?')[0]);
 
 const LENSES = [
-    { key: 'now', href: '/crm', label: 'nav.now', badge: 'attention' },
-    { key: 'people', href: '/crm/people', label: 'nav.people', badge: null },
-    { key: 'tasks', href: '/crm/tasks', label: 'nav.tasks', badge: 'tasks' },
-    { key: 'numbers', href: '/crm/numbers', label: 'nav.numbers', badge: null },
-    { key: 'machines', href: '/crm/machines', label: 'nav.machines', badge: null },
+    {
+        key: 'now',
+        href: '/crm',
+        label: 'nav.now',
+        badge: 'attention',
+        phone: true,
+    },
+    {
+        key: 'people',
+        href: '/crm/people',
+        label: 'nav.people',
+        badge: null,
+        phone: true,
+    },
+    {
+        key: 'tasks',
+        href: '/crm/tasks',
+        label: 'nav.tasks',
+        badge: 'tasks',
+        phone: true,
+    },
+    {
+        key: 'numbers',
+        href: '/crm/numbers',
+        label: 'nav.numbers',
+        badge: null,
+        phone: true,
+    },
+    {
+        key: 'machines',
+        href: '/crm/machines',
+        label: 'nav.machines',
+        badge: null,
+        phone: true,
+    },
+    // The design the console was built from. A desk lens: nobody opens a
+    // mockup on a phone at three in the morning, and the phone bar is for
+    // what is on fire.
+    {
+        key: 'mockup',
+        href: '/crm/mockup',
+        label: 'nav.mockup',
+        badge: null,
+        phone: false,
+    },
 ] as const;
+
+const PHONE_LENSES = LENSES.filter((lens) => lens.phone);
 
 /**
  * Which lens is lit. `/crm/{id}` is a person's dossier and `/crm/installs/…`
@@ -83,7 +125,9 @@ function active(key: string): boolean {
     }
 
     if (key === 'numbers') {
-        return url.startsWith('/crm/numbers') || url.startsWith('/crm/installs');
+        return (
+            url.startsWith('/crm/numbers') || url.startsWith('/crm/installs')
+        );
     }
 
     return url.startsWith(`/crm/${key}`);
@@ -110,7 +154,9 @@ const bannerColor = computed(() =>
 );
 
 const operator = computed(
-    () => (page.props.auth as { user?: { name?: string } } | undefined)?.user?.name ?? '—',
+    () =>
+        (page.props.auth as { user?: { name?: string } } | undefined)?.user
+            ?.name ?? '—',
 );
 
 const initials = computed(() =>
@@ -168,7 +214,12 @@ const initials = computed(() =>
                         "
                         :style="{ color: bannerColor }"
                     >
-                        {{ t(console_.banner.title, grouped(console_.banner.params)) }}
+                        {{
+                            t(
+                                console_.banner.title,
+                                grouped(console_.banner.params),
+                            )
+                        }}
                     </span>
                 </template>
                 <span
@@ -286,17 +337,45 @@ const initials = computed(() =>
                             <path d="M16.5 14.2a5.4 5.4 0 0 1 4.6 5" />
                         </template>
                         <template v-else-if="lens.key === 'tasks'">
-                            <rect x="3.5" y="4.5" width="16" height="16" rx="2" />
+                            <rect
+                                x="3.5"
+                                y="4.5"
+                                width="16"
+                                height="16"
+                                rx="2"
+                            />
                             <path d="M8 12.2l2.6 2.6L16 9.5" />
                         </template>
                         <path
                             v-else-if="lens.key === 'numbers'"
                             d="M5 19.5V12M10.5 19.5V5M16 19.5v-5.5M21 19.5V9"
                         />
-                        <template v-else>
-                            <rect x="3.5" y="4.5" width="17" height="6" rx="1.5" />
-                            <rect x="3.5" y="13.5" width="17" height="6" rx="1.5" />
+                        <template v-else-if="lens.key === 'machines'">
+                            <rect
+                                x="3.5"
+                                y="4.5"
+                                width="17"
+                                height="6"
+                                rx="1.5"
+                            />
+                            <rect
+                                x="3.5"
+                                y="13.5"
+                                width="17"
+                                height="6"
+                                rx="1.5"
+                            />
                             <path d="M7 7.5h.01M7 16.5h.01" />
+                        </template>
+                        <template v-else>
+                            <rect
+                                x="3.5"
+                                y="4.5"
+                                width="17"
+                                height="15"
+                                rx="1.5"
+                            />
+                            <path d="M3.5 9h17M9 9v10.5" />
                         </template>
                     </svg>
                     <span>{{ t(lens.label) }}</span>
@@ -363,7 +442,7 @@ const initials = computed(() =>
         <!-- The phone. Four lenses fit; the dossiers are reached from them. -->
         <nav class="mk-bottom">
             <Link
-                v-for="lens in LENSES"
+                v-for="lens in PHONE_LENSES"
                 :key="lens.key"
                 :href="lens.href"
                 class="mk-bottom-item"

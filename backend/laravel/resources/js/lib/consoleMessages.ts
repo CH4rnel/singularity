@@ -22,6 +22,7 @@ export const consoleMessages: Messages = {
         'nav.tasks': 'Tasks',
         'nav.numbers': 'Numbers',
         'nav.machines': 'Machines',
+        'nav.mockup': 'Design',
         'group.chain': 'Chain',
         'group.web': 'Web',
         'group.infra': 'Infra',
@@ -422,6 +423,22 @@ export const consoleMessages: Messages = {
             'Meaningful means settled on chain; broadcasting is not settlement. That is why an unfinished row is empty rather than optimistically filled.',
         'install.noEvents': 'nothing recorded yet',
 
+        /* the design this console was built from */
+        'mockup.title': 'Design',
+        'mockup.lead': 'The nine artboards this console was drawn as.',
+        'mockup.frozen':
+            'Frozen as it was published. Where the running console differs, the console is the newer answer — a drawing has no data to be wrong about.',
+        'mockup.russian': 'The design is written in Russian, the language it was argued in.',
+        'mockup.screens': 'Artboards',
+        'mockup.why': 'Why it is shaped this way',
+        'mockup.canvas': 'Open the canvas',
+        'mockup.separately': 'Open separately',
+        'mockup.fit': 'Fit width',
+        'mockup.actual': 'Actual size',
+        'mockup.size': '{width}×{height}',
+        'mockup.scale': '{percent}% of actual size',
+        'mockup.empty': 'The artboards are not on this server.',
+
         /* units */
         'unit.minute': 'minute|minutes|minutes',
         'unit.hour': 'hour|hours|hours',
@@ -439,6 +456,7 @@ export const consoleMessages: Messages = {
         'nav.tasks': 'Задачи',
         'nav.numbers': 'Числа',
         'nav.machines': 'Машины',
+        'nav.mockup': 'Макет',
         'group.chain': 'Цепь',
         'group.web': 'Веб',
         'group.infra': 'Инфра',
@@ -836,6 +854,22 @@ export const consoleMessages: Messages = {
         'install.meaningfulNote':
             'Значимое — это подтверждённое сетью, а отправка в сеть подтверждением не считается. Поэтому незавершённая строка пуста, а не заполнена оптимистично.',
         'install.noEvents': 'событий пока нет',
+
+        /* макет, из которого вырос этот пульт */
+        'mockup.title': 'Макет',
+        'mockup.lead': 'Девять экранов, которыми этот пульт был нарисован.',
+        'mockup.frozen':
+            'Заморожен на момент публикации. Там, где живая консоль расходится с макетом, права консоль: у рисунка нет данных, в которых можно ошибиться.',
+        'mockup.russian': 'Макет написан по-русски — на языке, на котором его обсуждали.',
+        'mockup.screens': 'Экраны',
+        'mockup.why': 'Почему так',
+        'mockup.canvas': 'Открыть холст',
+        'mockup.separately': 'Открыть отдельно',
+        'mockup.fit': 'По ширине',
+        'mockup.actual': 'В натуральную величину',
+        'mockup.size': '{width}×{height}',
+        'mockup.scale': '{percent}% натуральной величины',
+        'mockup.empty': 'Экранов макета нет на этом сервере.',
 
         /* units */
         'unit.minute': 'минута|минуты|минут',
