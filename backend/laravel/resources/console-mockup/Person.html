@@ -1,0 +1,328 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>x-dc{display:block}helmet{display:none}</style>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #07090a; color: #e8ecec;
+      font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    a { color: #00e5d1; text-decoration: none; }
+    a:hover { color: #6cf3e6; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-variant-numeric: tabular-nums; }
+    /* Микро-подпись. Единственный способ назвать блок: линия сверху и малый кегль. */
+    .k { font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #5a686c; }
+    .t2 { color: #8d9a9d; }
+    .t3 { color: #5a686c; }
+    /* Полоса-разделитель раздела: подпись слева, волосяная линия до края. */
+    .rule { display: flex; align-items: center; gap: 12px; }
+    .rule::after { content: ""; flex: 1; height: 1px; background: rgba(232,236,236,.09); }
+    .dot { width: 7px; height: 7px; border-radius: 999px; flex: 0 0 7px; }
+    /* «Нет данных» — штриховка, а не цвет: неизвестность не должна выглядеть как состояние. */
+    .hatch { background-image: repeating-linear-gradient(135deg, rgba(141,154,157,.5) 0 1px, transparent 1px 4px);
+      background-color: transparent; border: 1px solid rgba(141,154,157,.35); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 30px;
+      padding: 0 13px; border: 1px solid rgba(232,236,236,.14); font-size: 12px; font-weight: 600;
+      letter-spacing: .04em; text-transform: uppercase; color: #cdd6d7; background: transparent; }
+    .btn.act { border-color: rgba(0,229,209,.55); color: #00e5d1; }
+    .btn.g { border-color: transparent; color: #5a686c; text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .panel { background: #0b0e0f; border: 1px solid rgba(232,236,236,.07); }
+    .hair { border-top: 1px solid rgba(232,236,236,.07); }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums;
+      font-weight: 600; letter-spacing: -.02em; }
+    table { border-collapse: collapse; width: 100%; }
+    th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+      color: #5a686c; padding: 0 14px 9px; }
+    td { padding: 9px 14px; border-top: 1px solid rgba(232,236,236,.07); font-size: 13px; }
+    .tag { display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 7px;
+      font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+      border: 1px solid rgba(232,236,236,.14); color: #8d9a9d; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 1120px; display: flex; flex-direction: column; background: #07090a; color: #e8ecec; font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif; overflow: hidden">
+    <div style="height: 46px; flex: 0 0 46px; display: flex; align-items: stretch; border-bottom: 1px solid rgba(232,236,236,.07)">
+      <div style="display: flex; align-items: center; gap: 11px; padding: 0 16px; background: rgba(255,77,77,.10); border-left: 2px solid #ff4d4d">
+        <span class="dot" style="background: #ff4d4d"></span>
+        <span class="m" style="font-size: 13px; font-weight: 600; color: #ff4d4d">12 МИН</span>
+        <span style="font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #ffb3b3">Очередь упала</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Цепь</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #e0a516">2/3</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Веб</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #8d9a9d">5/5</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Инфра</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #ff4d4d">20/21</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Демоны</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #8d9a9d">3/5</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Продукт</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #e0a516">8/9</span>
+      </div>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Активные с деньгами</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">268</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Установки 30 д</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">1 942</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Мост 30 д</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">$1.2M</span>
+      </div>
+      <div style="display: flex; align-items: center; padding: 0 16px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="m" style="font-size: 11px; color: #5a686c">обход 14:20:11</span>
+      </div>
+    </div>
+  <div style="flex: 1; min-height: 0; display: flex">
+    <nav style="width: 76px; flex: 0 0 76px; border-right: 1px solid rgba(232,236,236,.07); display: flex; flex-direction: column; align-items: stretch; padding: 12px 0">
+      <div style="display: flex; align-items: center; justify-content: center; height: 34px; margin-bottom: 14px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00e5d1" stroke-width="1.7" stroke-linecap="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="4.5"/></svg>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h4l3-7.5 4.5 15 3-7.5h5.5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Сейчас</span>
+        <span class="m" style="position: absolute; top: 8px; right: 14px; min-width: 15px; height: 15px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: #07090a; background: #00e5d1">5</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #e8ecec; background: rgba(0,229,209,.05)">
+        <span style="position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: #00e5d1"></span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5a6 6 0 0 1 12 0"/><circle cx="17" cy="8.5" r="2.6"/><path d="M16.5 14.2a5.4 5.4 0 0 1 4.6 5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Люди</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="16" height="16" rx="2"/><path d="M8 12.2l2.6 2.6L16 9.5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Задачи</span>
+        <span class="m" style="position: absolute; top: 8px; right: 14px; min-width: 15px; height: 15px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: #07090a; background: #e0a516">3</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5V12M10.5 19.5V5M16 19.5v-5.5M21 19.5V9"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Числа</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Машины</span>
+      </div>
+      <div style="margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px">
+        <span class="m" style="font-size: 10px; color: #5a686c">RU</span>
+        <div style="width: 26px; height: 26px; border: 1px solid rgba(232,236,236,.14); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #8d9a9d">ЛА</div>
+      </div>
+    </nav>
+    <main style="flex: 1; min-width: 0; padding: 22px 24px; display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; align-items: center; gap: 14px">
+        <span class="btn g" style="padding: 0 8px">← Киты</span>
+        <h1 style="margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.01em">Nakamoto Ghost</h1>
+        <span class="m" style="font-size: 12px; color: #5a686c">@ghost_nkm · с 12 июня · пришёл из китобота</span>
+        <span class="tag" style="border-color: rgba(255,43,214,.4); color: #ff2bd6">кит</span>
+        <span class="tag">клиент</span>
+        <div style="margin-left: auto; display: flex; gap: 8px">
+          <span class="btn act">Написать</span>
+          <span class="btn">+ Задача</span>
+          <span class="btn g">Удалить</span>
+        </div>
+      </div>
+
+      <div style="padding: 14px 18px; border-left: 2px solid #ff2bd6; background: rgba(255,43,214,.05)">
+        <p style="margin: 0; font-size: 13.5px; line-height: 1.6; color: #cdd6d7">Держит с июня и почти ничего не делал — а сегодня, через 41 минуту после первой в жизни транзакции, вывел через мост 40 000 USDC. На письма отвечает в течение часа. Открытых обещаний с нашей стороны: одно, просрочено на два дня.</p>
+      </div>
+
+      <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 322px minmax(0, 1fr); gap: 24px">
+        <div style="display: flex; flex-direction: column; gap: 18px">
+          <div>
+            <div class="rule"><span class="k">Деньги</span></div>
+            <div style="margin-top: 12px; display: flex; gap: 1px; background: rgba(232,236,236,.07); border: 1px solid rgba(232,236,236,.07)">
+              <div style="flex: 1; background: #0b0e0f; padding: 12px 14px">
+                <p class="k" style="margin: 0">CYBER</p>
+                <p class="num" style="margin: 6px 0 0; font-size: 19px">148 320</p>
+                <p style="margin: 2px 0 0; font-size: 11px; color: #5a686c">$17 798</p>
+              </div>
+              <div style="flex: 1; background: #0b0e0f; padding: 12px 14px">
+                <p class="k" style="margin: 0">CYBER.sol</p>
+                <p class="num" style="margin: 6px 0 0; font-size: 19px">12 004</p>
+                <p style="margin: 2px 0 0; font-size: 11px; color: #5a686c">$1 440</p>
+              </div>
+            </div>
+            <div style="margin-top: 12px; border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 12px 14px">
+              <div style="display: flex; align-items: baseline">
+                <p class="k" style="margin: 0">Позиция за год</p>
+                <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">пик 21.07</span>
+              </div>
+              <div style="margin-top: 8px"><svg width="290" height="54" viewBox="0 0 290 54" fill="none"><polygon points="1,54 1.0,51.0 25.0,47.2 49.0,42.2 73.0,38.4 97.0,33.3 121.0,30.8 145.0,25.7 169.0,22.3 193.0,16.9 217.0,15.6 241.0,16.9 265.0,3.0 289.0,11.8 289,54" fill="#ff2bd6" opacity=".12"/><polyline points="1.0,51.0 25.0,47.2 49.0,42.2 73.0,38.4 97.0,33.3 121.0,30.8 145.0,25.7 169.0,22.3 193.0,16.9 217.0,15.6 241.0,16.9 265.0,3.0 289.0,11.8" stroke="#ff2bd6" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="rule"><span class="k">Кто это</span></div>
+            <div style="margin-top: 10px">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0" class="hair">
+                <span style="font-size: 12px; color: #5a686c">EVM</span>
+                <span class="m" style="margin-left: auto; font-size: 12px; color: #cdd6d7">0x7f3a…9c21</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0" class="hair">
+                <span style="font-size: 12px; color: #5a686c">Solana</span>
+                <span class="m" style="margin-left: auto; font-size: 12px; color: #cdd6d7">8k2P…mQ7v</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0" class="hair">
+                <span style="font-size: 12px; color: #5a686c">Телеграм</span>
+                <span class="m" style="margin-left: auto; font-size: 12px; color: #cdd6d7">@ghost_nkm</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0" class="hair">
+                <span style="font-size: 12px; color: #5a686c">Почта</span>
+                <span class="m" style="margin-left: auto; font-size: 12px; color: #cdd6d7">не оставил</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0" class="hair">
+                <span style="font-size: 12px; color: #5a686c">Метки</span>
+                <span class="m" style="margin-left: auto; font-size: 12px; color: #cdd6d7">ранний · лп</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0" class="hair">
+                <span style="font-size: 12px; color: #5a686c">Последний контакт</span>
+                <span class="m" style="margin-left: auto; font-size: 12px; color: #cdd6d7">21.08, наш</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0" class="hair">
+                <span style="font-size: 12px; color: #5a686c">Отвечает</span>
+                <span class="m" style="margin-left: auto; font-size: 12px; color: #cdd6d7">в среднем за 48 минут</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="rule"><span class="k">Что дальше</span><span class="k" style="margin-left: 12px; color: #ff4d4d">1 просрочена</span></div>
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px">
+              <div style="display: flex; gap: 11px; background: #0b0e0f; border: 1px solid rgba(232,236,236,.07); padding: 11px 13px 11px 0">
+                <span style="width: 2px; flex: 0 0 2px; background: #ff4d4d"></span>
+                <div>
+                  <p style="margin: 0; font-size: 12.5px; font-weight: 500">Согласовать лимит вывода на BNB</p>
+                  <p class="m" style="margin: 5px 0 0; font-size: 11px; color: #ff4d4d">lain · срок был 20.08</p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 11px; background: #0b0e0f; border: 1px solid rgba(232,236,236,.07); padding: 11px 13px 11px 0">
+                <span style="width: 2px; flex: 0 0 2px; background: #e0a516"></span>
+                <div>
+                  <p style="margin: 0; font-size: 12.5px; font-weight: 500">Ответить про корпоративный тариф</p>
+                  <p class="m" style="margin: 5px 0 0; font-size: 11px; color: #5a686c">lain · сегодня</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; min-width: 0">
+          <div class="rule"><span class="k">Всё, что было</span><span class="k" style="margin-left: 12px; color: #5a686c">визиты, сделки, мосты, наши письма и заметки — одной лентой</span></div>
+          <div style="margin-top: 12px">
+            <div style="display: flex; align-items: flex-start; gap: 14px; padding: 12px 2px" class="hair">
+              <span class="m" style="width: 108px; flex: 0 0 108px; font-size: 11.5px; color: #5a686c; padding-top: 2px">сегодня 14:30</span>
+              <span style="width: 26px; flex: 0 0 26px; height: 26px; border: 1px solid rgba(232,236,236,.1); display: flex; align-items: center; justify-content: center; color: #e0a516">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18V9M21 18V9M3 13c5-4.5 13-4.5 18 0"/></svg>
+              </span>
+              <div style="flex: 1; min-width: 0">
+                <div style="font-size: 13px; font-weight: 500">Вывод через мост</div>
+                <div style="margin-top: 3px; font-size: 11.5px; color: #5a686c">40 000 USDC · cyberia → bsc · выполнен за 3 минуты</div>
+              </div>
+              <span class="num" style="font-size: 13px; color: #e0a516">−$40 000</span>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 14px; padding: 12px 2px" class="hair">
+              <span class="m" style="width: 108px; flex: 0 0 108px; font-size: 11.5px; color: #5a686c; padding-top: 2px">сегодня 13:49</span>
+              <span style="width: 26px; flex: 0 0 26px; height: 26px; border: 1px solid rgba(232,236,236,.1); display: flex; align-items: center; justify-content: center; color: #ff2bd6">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
+              </span>
+              <div style="flex: 1; min-width: 0">
+                <div style="font-size: 13px; font-weight: 500">Первая транзакция за всё время</div>
+                <div style="margin-top: 3px; font-size: 11.5px; color: #5a686c">CYBER → USDC · проскальзывание 0.4%</div>
+              </div>
+              <span class="num" style="font-size: 13px; color: #ff2bd6">$40 120</span>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 14px; padding: 12px 2px" class="hair">
+              <span class="m" style="width: 108px; flex: 0 0 108px; font-size: 11.5px; color: #5a686c; padding-top: 2px">сегодня 13:41</span>
+              <span style="width: 26px; flex: 0 0 26px; height: 26px; border: 1px solid rgba(232,236,236,.1); display: flex; align-items: center; justify-content: center; color: #5a686c">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+              </span>
+              <div style="flex: 1; min-width: 0">
+                <div style="font-size: 13px; font-weight: 500">Открыл кошелёк с телефона</div>
+                <div style="margin-top: 3px; font-size: 11.5px; color: #5a686c">android 1.1.0 · сессия 22 минуты</div>
+              </div>
+              
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 14px; padding: 12px 2px" class="hair">
+              <span class="m" style="width: 108px; flex: 0 0 108px; font-size: 11.5px; color: #5a686c; padding-top: 2px">21.08 18:04</span>
+              <span style="width: 26px; flex: 0 0 26px; height: 26px; border: 1px solid rgba(232,236,236,.1); display: flex; align-items: center; justify-content: center; color: #00e5d1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h5"/></svg>
+              </span>
+              <div style="flex: 1; min-width: 0">
+                <div style="font-size: 13px; font-weight: 500">Просил корпоративный тариф на мост</div>
+                <div style="margin-top: 3px; font-size: 11.5px; color: #5a686c">объёмы 30–50k USDC в неделю, обещал вернуться после релиза</div>
+              </div>
+              
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 14px; padding: 12px 2px" class="hair">
+              <span class="m" style="width: 108px; flex: 0 0 108px; font-size: 11.5px; color: #5a686c; padding-top: 2px">21.08 17:32</span>
+              <span style="width: 26px; flex: 0 0 26px; height: 26px; border: 1px solid rgba(232,236,236,.1); display: flex; align-items: center; justify-content: center; color: #00e5d1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h5"/></svg>
+              </span>
+              <div style="flex: 1; min-width: 0">
+                <div style="font-size: 13px; font-weight: 500">Написали первыми</div>
+                <div style="margin-top: 3px; font-size: 11.5px; color: #5a686c">lain · ответил через 40 минут</div>
+              </div>
+              
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 14px; padding: 12px 2px" class="hair">
+              <span class="m" style="width: 108px; flex: 0 0 108px; font-size: 11.5px; color: #5a686c; padding-top: 2px">12.08 03:10</span>
+              <span style="width: 26px; flex: 0 0 26px; height: 26px; border: 1px solid rgba(232,236,236,.1); display: flex; align-items: center; justify-content: center; color: #5a686c">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l3 3 5-6"/></svg>
+              </span>
+              <div style="flex: 1; min-width: 0">
+                <div style="font-size: 13px; font-weight: 500">Синк поднял тип до «кита»</div>
+                <div style="margin-top: 3px; font-size: 11.5px; color: #5a686c">порог CYBER.sol пройден</div>
+              </div>
+              
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 14px; padding: 12px 2px" class="hair">
+              <span class="m" style="width: 108px; flex: 0 0 108px; font-size: 11.5px; color: #5a686c; padding-top: 2px">02.07 11:20</span>
+              <span style="width: 26px; flex: 0 0 26px; height: 26px; border: 1px solid rgba(232,236,236,.1); display: flex; align-items: center; justify-content: center; color: #5a686c">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18V9M21 18V9M3 13c5-4.5 13-4.5 18 0"/></svg>
+              </span>
+              <div style="flex: 1; min-width: 0">
+                <div style="font-size: 13px; font-weight: 500">Ввод через мост</div>
+                <div style="margin-top: 3px; font-size: 11.5px; color: #5a686c">12 000 CYBER · cyberia → sol</div>
+              </div>
+              <span class="num" style="font-size: 13px; color: #5a686c">+$1 440</span>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 14px; padding: 12px 2px" class="hair">
+              <span class="m" style="width: 108px; flex: 0 0 108px; font-size: 11.5px; color: #5a686c; padding-top: 2px">12.06 11:22</span>
+              <span style="width: 26px; flex: 0 0 26px; height: 26px; border: 1px solid rgba(232,236,236,.1); display: flex; align-items: center; justify-content: center; color: #5a686c">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h5"/></svg>
+              </span>
+              <div style="flex: 1; min-width: 0">
+                <div style="font-size: 13px; font-weight: 500">Первый контакт в телеграме</div>
+                <div style="margin-top: 3px; font-size: 11.5px; color: #5a686c">ответил за час</div>
+              </div>
+              
+            </div>
+          </div>
+          <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px">
+            <span class="m" style="font-size: 11px; color: #5a686c">дальше 24 события с июня</span>
+            <span class="btn g" style="margin-left: auto">Только наши касания</span>
+            <span class="btn g">Только деньги</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

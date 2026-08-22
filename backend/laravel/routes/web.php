@@ -19,6 +19,7 @@ use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\ConsoleController;
+use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
@@ -456,6 +457,14 @@ Route::middleware(['auth'])->group(function () {
         // Is everything running, and is anyone using it. Renders the last
         // sweep; the probing itself is `services:check` on the scheduler.
         Route::get('machines', [ServiceMonitorController::class, 'index'])->name('machines');
+
+        // The design this console was built from, kept where the console is.
+        // A canvas link rots and an exported picture loses its text; the
+        // artboards themselves outlive both.
+        Route::get('mockup', [ConsoleMockupController::class, 'index'])->name('mockup');
+        Route::get('mockup/{screen}', [ConsoleMockupController::class, 'screen'])
+            ->where('screen', '[a-z]+')
+            ->name('mockup.screen');
 
         Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
         Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');
