@@ -111,8 +111,8 @@ server {
     listen 443 ssl http2;
     server_name swap.cyberia.church;
 
-    ssl_certificate /etc/letsencrypt/live/cyberia.church/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/cyberia.church/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/swap.cyberia.church/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/swap.cyberia.church/privkey.pem;
 
     root /usr/share/nginx/dex;
     index index.html;
