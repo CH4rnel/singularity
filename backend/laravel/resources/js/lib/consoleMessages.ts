@@ -22,6 +22,7 @@ export const consoleMessages: Messages = {
         'nav.tasks': 'Tasks',
         'nav.numbers': 'Numbers',
         'nav.machines': 'Machines',
+        'nav.keys': 'API keys',
         'nav.mockup': 'Design',
         'group.chain': 'Chain',
         'group.web': 'Web',
@@ -421,6 +422,36 @@ export const consoleMessages: Messages = {
         'status.off': 'off',
         'machines.critical': 'crit',
 
+        /* LainOS API keys */
+        'keys.title': 'LainOS API keys',
+        'keys.subtitle':
+            'OpenAI-compatible access issued to installed LainOS instances.',
+        'keys.total': 'All instances',
+        'keys.active': 'Used',
+        'keys.waiting': 'Waiting for first request',
+        'keys.revoked': 'Revoked',
+        'keys.today': 'Today',
+        'keys.instances': 'instances',
+        'keys.requests': 'requests',
+        'keys.tokens': 'tokens',
+        'keys.secretNote':
+            'Only the visible prefix is stored here; a full key cannot be recovered.',
+        'keys.instancesNote':
+            'newest {limit}; revoked keys remain attributable',
+        'keys.age': 'State age',
+        'keys.owner': 'Owner',
+        'keys.instance': 'LainOS instance',
+        'keys.key': 'Key',
+        'keys.state': 'State',
+        'keys.todayUsage': 'Today req / tok',
+        'keys.lifetime': 'Lifetime req / tok',
+        'keys.lastUsed': 'Last use',
+        'keys.empty': 'No LainOS instances have authorised an API key yet.',
+        'keys.unknownOwner': 'No site account',
+        'keys.state.active': 'active',
+        'keys.state.waiting': 'waiting',
+        'keys.state.revoked': 'revoked',
+
         /* install dossier */
         'install.back': 'Numbers',
         'install.internal.tag': 'ours',
@@ -496,6 +527,7 @@ export const consoleMessages: Messages = {
         'nav.tasks': 'Задачи',
         'nav.numbers': 'Числа',
         'nav.machines': 'Машины',
+        'nav.keys': 'API-ключи',
         'nav.mockup': 'Макет',
         'group.chain': 'Цепь',
         'group.web': 'Веб',
@@ -893,6 +925,36 @@ export const consoleMessages: Messages = {
         'status.unknown': 'неизвестно',
         'status.off': 'выключен',
         'machines.critical': 'крит',
+
+        /* LainOS API keys */
+        'keys.title': 'API-ключи LainOS',
+        'keys.subtitle':
+            'OpenAI-совместимый доступ, выданный установленным инстансам LainOS.',
+        'keys.total': 'Все инстансы',
+        'keys.active': 'Использовались',
+        'keys.waiting': 'Ждут первого запроса',
+        'keys.revoked': 'Отозваны',
+        'keys.today': 'Сегодня',
+        'keys.instances': 'инстансов',
+        'keys.requests': 'запросов',
+        'keys.tokens': 'токенов',
+        'keys.secretNote':
+            'Здесь хранится только видимый префикс; полный ключ восстановить нельзя.',
+        'keys.instancesNote':
+            'последние {limit}; отозванные ключи остаются в истории',
+        'keys.age': 'В состоянии',
+        'keys.owner': 'Владелец',
+        'keys.instance': 'Инстанс LainOS',
+        'keys.key': 'Ключ',
+        'keys.state': 'Состояние',
+        'keys.todayUsage': 'Сегодня запр / ток',
+        'keys.lifetime': 'Всего запр / ток',
+        'keys.lastUsed': 'Последний запрос',
+        'keys.empty': 'Ни один инстанс LainOS ещё не авторизовал API-ключ.',
+        'keys.unknownOwner': 'Нет аккаунта на сайте',
+        'keys.state.active': 'работает',
+        'keys.state.waiting': 'ожидает',
+        'keys.state.revoked': 'отозван',
 
         /* install dossier */
         'install.back': 'Числа',

@@ -94,6 +94,13 @@ const LENSES = [
         badge: null,
         phone: true,
     },
+    {
+        key: 'keys',
+        href: '/crm/api-keys',
+        label: 'nav.keys',
+        badge: null,
+        phone: false,
+    },
     // The design the console was built from. A desk lens: nobody opens a
     // mockup on a phone at three in the morning, and the phone bar is for
     // what is on fire.
@@ -128,6 +135,10 @@ function active(key: string): boolean {
         return (
             url.startsWith('/crm/numbers') || url.startsWith('/crm/installs')
         );
+    }
+
+    if (key === 'keys') {
+        return url.startsWith('/crm/api-keys');
     }
 
     return url.startsWith(`/crm/${key}`);
@@ -366,6 +377,10 @@ const initials = computed(() =>
                                 rx="1.5"
                             />
                             <path d="M7 7.5h.01M7 16.5h.01" />
+                        </template>
+                        <template v-else-if="lens.key === 'keys'">
+                            <circle cx="8" cy="12" r="3.5" />
+                            <path d="M11.5 12H21M17 12v3M20 12v2" />
                         </template>
                         <template v-else>
                             <rect

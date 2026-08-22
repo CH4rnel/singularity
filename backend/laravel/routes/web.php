@@ -18,6 +18,7 @@ use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChangelogController;
+use App\Http\Controllers\ConsoleAiKeysController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
@@ -429,13 +430,13 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
 
     /*
-     * The console ("Пульт") — five lenses on one stream, behind the operator
+     * The console ("Пульт") — operational lenses on one stream, behind the operator
      * wallet allowlist in config/crm.php; everyone else gets a 404.
      *
      * `/crm` is the queue rather than a list of contacts, because the question
      * an operator arrives with is "what requires me now" and never "what do I
-     * want to look at". The five old pages are lenses on the same material:
-     * people, tasks, numbers, machines. Static routes are declared before the
+     * want to look at". The original pages are lenses on the same material;
+     * API keys adds a read-only inventory. Static routes are declared before the
      * {contact} wildcard so they take precedence.
      */
     Route::prefix('crm')->name('crm.')->middleware(EnsureCrmAdmin::class)->group(function () {
@@ -461,6 +462,11 @@ Route::middleware(['auth'])->group(function () {
         // Is everything running, and is anyone using it. Renders the last
         // sweep; the probing itself is `services:check` on the scheduler.
         Route::get('machines', [ServiceMonitorController::class, 'index'])->name('machines');
+
+        // OpenAI-compatible grants bound to user-installed LainOS instances.
+        // This is an inventory and usage view; it never receives a plaintext
+        // key and performs no key-management writes.
+        Route::get('api-keys', [ConsoleAiKeysController::class, 'index'])->name('ai-keys');
 
         // The design this console was built from, kept where the console is.
         // A canvas link rots and an exported picture loses its text; the

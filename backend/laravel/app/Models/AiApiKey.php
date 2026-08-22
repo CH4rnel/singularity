@@ -18,6 +18,8 @@ use Illuminate\Support\Carbon;
  *
  * @property string $address
  * @property ?string $name
+ * @property string $client
+ * @property ?string $instance_id
  * @property string $prefix
  * @property string $token_hash
  * @property ?Carbon $last_used_at
@@ -25,9 +27,17 @@ use Illuminate\Support\Carbon;
  */
 class AiApiKey extends Model
 {
+    public const CLIENT_API = 'api';
+
+    public const CLIENT_LAINOS = 'lainos';
+
+    public const CLIENTS = [self::CLIENT_API, self::CLIENT_LAINOS];
+
     protected $fillable = [
         'address',
         'name',
+        'client',
+        'instance_id',
         'prefix',
         'token_hash',
         'gate_exempt',
@@ -63,6 +73,8 @@ class AiApiKey extends Model
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'client' => $this->client,
+            'instance_id' => $this->instance_id,
             'prefix' => $this->prefix,
             'gate_exempt' => (bool) $this->gate_exempt,
             'created_at' => $this->created_at?->toIso8601String(),

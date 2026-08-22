@@ -14,10 +14,9 @@ use Throwable;
 /**
  * Everything shared by providers that speak OpenAI's chat-completions dialect.
  *
- * Which is, so far, all of them: OpenRouter and Groq differ in a base URL, an
- * API key and a couple of attribution headers, and in nothing else that this
- * API exercises. A provider that needed a different wire format would
- * implement AiProvider directly rather than bend this one.
+ * Providers in this family differ in their base URL, authentication header
+ * and a small request policy. A provider that needs a different wire format
+ * implements AiProvider directly rather than bending this one.
  */
 abstract class OpenAiCompatibleProvider implements AiProvider
 {
@@ -28,6 +27,14 @@ abstract class OpenAiCompatibleProvider implements AiProvider
         private readonly string $name,
         private readonly ?string $apiKey,
         private readonly string $baseUrl,
+        private readonly bool $enabled = true,
+        private readonly bool $requiresApiKey = true,
+        private readonly string $authHeader = 'Authorization',
+        private readonly string $authPrefix = 'Bearer ',
+        private readonly array $providerHeaders = [],
+        private readonly string $maxTokensField = 'max_tokens',
+        private readonly array $dropFields = [],
+        private readonly bool $stripMessageNames = false,
     ) {}
 
     public function key(): string
@@ -37,13 +44,15 @@ abstract class OpenAiCompatibleProvider implements AiProvider
 
     public function configured(): bool
     {
-        return is_string($this->apiKey) && trim($this->apiKey) !== '';
+        return $this->enabled
+            && trim($this->baseUrl) !== ''
+            && (! $this->requiresApiKey || (is_string($this->apiKey) && trim($this->apiKey) !== ''));
     }
 
     /** Attribution and other per-provider headers. */
     protected function headers(): array
     {
-        return [];
+        return $this->providerHeaders;
     }
 
     public function chat(string $upstreamModel, array $payload): array
@@ -56,7 +65,7 @@ abstract class OpenAiCompatibleProvider implements AiProvider
             )
             // `+` keeps the left-hand keys, so neither the model nor the
             // streaming decision can be overridden by what the caller sent.
-            ->post($this->endpoint(), ['model' => $upstreamModel, 'stream' => false] + $payload);
+            ->post($this->endpoint(), ['model' => $upstreamModel, 'stream' => false] + $this->payload($payload));
 
         if (! $response->successful()) {
             throw $this->failure($response, $upstreamModel);
@@ -97,7 +106,7 @@ abstract class OpenAiCompatibleProvider implements AiProvider
         try {
             $response = $this->request()
                 ->withOptions(['stream' => true])
-                ->post($this->endpoint(), ['model' => $upstreamModel, 'stream' => true] + $payload);
+                ->post($this->endpoint(), ['model' => $upstreamModel, 'stream' => true] + $this->payload($payload));
         } catch (ConnectionException $e) {
             throw $this->unreachable($upstreamModel, $e);
         }
@@ -172,15 +181,50 @@ abstract class OpenAiCompatibleProvider implements AiProvider
 
     private function request(): PendingRequest
     {
-        return Http::withToken((string) $this->apiKey)
-            ->withHeaders($this->headers())
+        $request = Http::withHeaders($this->headers())
             ->connectTimeout(10)
             ->timeout((int) config('ai.timeout_seconds', 120));
+
+        if (is_string($this->apiKey) && trim($this->apiKey) !== '') {
+            $request = $request->withHeader($this->authHeader, $this->authPrefix.$this->apiKey);
+        }
+
+        return $request;
     }
 
     private function endpoint(): string
     {
         return rtrim($this->baseUrl, '/').'/chat/completions';
+    }
+
+    /**
+     * Apply the small transport differences exposed by OpenAI-compatible APIs.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function payload(array $payload): array
+    {
+        foreach ($this->dropFields as $field) {
+            unset($payload[$field]);
+        }
+
+        if ($this->stripMessageNames && is_array($payload['messages'] ?? null)) {
+            $payload['messages'] = array_map(function ($message) {
+                if (is_array($message)) {
+                    unset($message['name']);
+                }
+
+                return $message;
+            }, $payload['messages']);
+        }
+
+        if ($this->maxTokensField === 'max_completion_tokens' && array_key_exists('max_tokens', $payload)) {
+            $payload['max_completion_tokens'] = $payload['max_tokens'];
+            unset($payload['max_tokens']);
+        }
+
+        return $payload;
     }
 
     private function transient(Throwable $e): bool
