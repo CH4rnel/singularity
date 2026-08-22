@@ -10,7 +10,13 @@ Artisan::command('inspire', function () {
 
 Schedule::command('slots:expire-prepares')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('slots:import-pumpfun')->hourly()->withoutOverlapping();
+// The full import discovers new platform, bridge, CYBER.sol holder and whale
+// wallets. It includes a getProgramAccounts scan, so keep it off the hot path.
 Schedule::command('crm:sync')->daily()->withoutOverlapping();
+// Cached balances are much cheaper to read one wallet at a time. Refresh the
+// oldest batch so every known EVM/Solana wallet eventually cycles through,
+// even when the CRM grows beyond one batch.
+Schedule::command('crm:sync --balances-only --limit=100')->everyThirtyMinutes()->withoutOverlapping();
 // ~87 chunked eth_getLogs calls per run (1000-block node cap) — keep the
 // interval well above the runtime and never overlap.
 Schedule::command('dex:apr')->everyFifteenMinutes()->withoutOverlapping();
