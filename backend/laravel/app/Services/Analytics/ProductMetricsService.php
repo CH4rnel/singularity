@@ -43,6 +43,10 @@ class ProductMetricsService
     {
         $query = DB::table('analytics_users');
 
+        if (! $filters->includeInternal) {
+            $query->whereNull('internal_at');
+        }
+
         if ($filters->platform !== null) {
             $query->where('platform', $filters->platform);
         }
@@ -72,7 +76,12 @@ class ProductMetricsService
     {
         $query = DB::table('analytics_events');
 
-        if ($filters->narrowsUsers()) {
+        /*
+         * The population narrows the event stream whenever it is narrower than
+         * everything — which, now that internal installations are excluded by
+         * default, is the ordinary case rather than the filtered one.
+         */
+        if ($filters->narrowsUsers() || ! $filters->includeInternal) {
             $query->whereIn('user_id', $this->users($filters)->select('id'));
         }
 
@@ -116,6 +125,9 @@ class ProductMetricsService
 
         $transactions = $this->outcomeRate($filters, 'transaction');
 
+        $swapVolume = $this->volumeBreakdown($filters, 'swap_completed');
+        $bridgeVolume = $this->volumeBreakdown($filters, 'bridge_completed');
+
         return [
             // The one number this whole system exists to produce.
             'north_star' => $this->weeklyActiveFundedUsers($filters),
@@ -131,8 +143,22 @@ class ProductMetricsService
             'funded_rate' => $this->rate($funded, $newUsers),
             'transaction_success_rate' => $transactions['rate'],
             'error_rate' => $transactions['rate'] === null ? null : round(100 - $transactions['rate'], 1),
-            'swap_volume_usd' => $this->volume($filters, 'swap_completed'),
-            'bridge_volume_usd' => $this->volume($filters, 'bridge_completed'),
+            'swap_volume_usd' => $swapVolume['total_usd'],
+            'bridge_volume_usd' => $bridgeVolume['total_usd'],
+            /*
+             * What the two numbers above are not telling you. Trades whose own
+             * price impact says their notional is fiction, and installations
+             * that are ours. Both are reported rather than silently applied:
+             * an exclusion nobody can see is the second way to lie with a
+             * dashboard, after not excluding anything at all.
+             */
+            'volume_excluded' => $swapVolume['excluded'] + $bridgeVolume['excluded'],
+            'volume_excluded_usd' => round(
+                $swapVolume['excluded_usd'] + $bridgeVolume['excluded_usd'],
+                2,
+            ),
+            'internal_users' => $this->internalUsers($filters),
+            'internal_included' => $filters->includeInternal,
             'sponsored_gas_usd' => $this->gasSponsorship($filters)['total_usd'],
             'd7_retention' => $this->headlineRetention($filters),
         ];
@@ -655,13 +681,83 @@ class ProductMetricsService
     /** USD moved by one event type, over the rows that carried a price. */
     private function volume(AnalyticsFilters $filters, string $event): float
     {
-        $sum = $this->events($filters)
+        return $this->volumeBreakdown($filters, $event)['total_usd'];
+    }
+
+    /**
+     * How many installations this report is leaving out for being ours.
+     *
+     * Counted over the same window the headline is about, so the line under a
+     * funnel reads "4 of our own installations are not in this" rather than
+     * quoting a lifetime total nobody asked about.
+     */
+    private function internalUsers(AnalyticsFilters $filters): int
+    {
+        return DB::table('analytics_users')
+            ->whereNotNull('internal_at')
+            ->whereBetween('created_at', [$filters->from, $filters->to])
+            ->count();
+    }
+
+    /**
+     * Volume, and what was left out of it.
+     *
+     * `amount_usd` is the input priced at the quote that existed *before* the
+     * trade. Through a pool deep enough to absorb the trade that is very
+     * nearly what changed hands; through a pool that is not, it is a number
+     * the trade itself refutes — the first swap this system ever recorded
+     * reported $67,548 at 99.98% price impact, which is a dust pool being
+     * drained, and it was the entire volume figure on the dashboard.
+     *
+     * Price impact is the trade's own testimony about its own notional, so it
+     * is what decides. Above the bound the dollar figure is dropped and the
+     * trade is still counted everywhere else — it activated its user, it is in
+     * the funnel, it is a real thing that happened. What is not real is its
+     * price, and a total is reported beside a count of what it excluded so the
+     * smaller number cannot be mistaken for a quieter week.
+     *
+     * @return array{total_usd: float, excluded: int, excluded_usd: float}
+     */
+    private function volumeBreakdown(AnalyticsFilters $filters, string $event): array
+    {
+        $bound = (float) config('analytics.notional_max_price_impact', 25.0);
+
+        $rows = $this->events($filters)
             ->where('event', $event)
             ->whereBetween('created_at', [$filters->from, $filters->to])
-            ->selectRaw("COALESCE(SUM(CAST(json_extract(properties, '$.amount_usd') AS REAL)), 0) as total")
-            ->value('total');
+            ->selectRaw("
+                COALESCE(CAST(json_extract(properties, '$.amount_usd') AS REAL), 0) as amount,
+                CAST(json_extract(properties, '$.price_impact') AS REAL) as impact
+            ")
+            ->get();
 
-        return round((float) $sum, 2);
+        $total = 0.0;
+        $excluded = 0;
+        $excludedUsd = 0.0;
+
+        foreach ($rows as $row) {
+            $amount = (float) $row->amount;
+            $impact = $row->impact === null ? null : (float) $row->impact;
+
+            // No impact recorded is not the same as no impact: a wrap, a
+            // bridge and a plain transfer never had one, and their notional is
+            // the amount itself. Only a trade that measured its impact and
+            // measured it high is disbelieved.
+            if ($impact !== null && $impact > $bound) {
+                $excluded++;
+                $excludedUsd += $amount;
+
+                continue;
+            }
+
+            $total += $amount;
+        }
+
+        return [
+            'total_usd' => round($total, 2),
+            'excluded' => $excluded,
+            'excluded_usd' => round($excludedUsd, 2),
+        ];
     }
 
     /**

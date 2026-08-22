@@ -1,12 +1,9 @@
 <?php
 
 use App\Models\AnalyticsAddress;
-use App\Models\AnalyticsUser;
 use App\Services\Analytics\AnalyticsFilters;
 use App\Services\Analytics\ProductMetricsService;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * The definitions, tested as definitions.
@@ -29,37 +26,6 @@ function lastDays(int $days = 30): AnalyticsFilters
         from: Carbon::now('UTC')->subDays($days)->startOfDay(),
         to: Carbon::now('UTC'),
     );
-}
-
-/**
- * One installation, with whatever milestones the test needs.
- */
-function installation(array $attributes = []): AnalyticsUser
-{
-    $now = Carbon::now('UTC');
-
-    return tap(new AnalyticsUser, fn (AnalyticsUser $user) => $user->forceFill([
-        'id' => (string) Str::uuid(),
-        'created_at' => $now,
-        'first_seen_at' => $now,
-        'last_seen_at' => $now,
-        'platform' => 'web',
-        'app_version' => 'v0.12.0',
-        ...$attributes,
-    ])->save());
-}
-
-function logEvent(AnalyticsUser $user, string $name, ?Carbon $at = null, array $properties = []): void
-{
-    DB::table('analytics_events')->insert([
-        'event_id' => (string) Str::uuid(),
-        'user_id' => $user->id,
-        'session_id' => null,
-        'event' => $name,
-        'chain' => $properties['chain'] ?? null,
-        'properties' => $properties === [] ? null : json_encode($properties),
-        'created_at' => $at ?? Carbon::now('UTC'),
-    ]);
 }
 
 /* ----------------------------------------------------------- north star -- */

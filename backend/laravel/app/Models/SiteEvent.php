@@ -23,8 +23,23 @@ class SiteEvent extends Model
         'staking_started',
         'staking_completed',
         'partner_cta_clicked',
-        'swap_executed',
         'liquidity_added',
+    ];
+
+    /**
+     * Names this ingest no longer accepts, which reports still have to read.
+     *
+     * `swap_executed` was the first name for a completed swap and stopped
+     * being emitted on 2026-07-27, when `swap_completed` replaced it. Thirty-
+     * one rows carry it, inside the window a ninety-day report asks about, so
+     * a lens that read only the new name would show the swap step collapsing
+     * on a date nothing happened. Accepting it again would be worse: two names
+     * for one act is how a funnel quietly starts double-counting.
+     *
+     * @var array<int, string>
+     */
+    public const RETIRED_EVENTS = [
+        'swap_executed',
     ];
 
     protected $fillable = [

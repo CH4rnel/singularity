@@ -14,6 +14,12 @@ use Illuminate\Support\Carbon;
  * measured inside it — a funnel filtered by campaign is that campaign's own
  * funnel. Chain is a property of an *event*, so it narrows what counts as
  * activity without changing who is in the denominator.
+ *
+ * `includeInternal` is neither: it is the default population itself. Our own
+ * installations are left out of every report unless it is set, because the
+ * operators use this wallet more than anyone and a rate computed over them is
+ * a description of testing. `?internal=1` puts them back for the times that
+ * question is the one being asked.
  */
 readonly class AnalyticsFilters
 {
@@ -25,6 +31,7 @@ readonly class AnalyticsFilters
         public ?string $source = null,
         public ?string $campaign = null,
         public ?string $chain = null,
+        public bool $includeInternal = false,
     ) {}
 
     public static function fromRequest(Request $request): self
@@ -53,6 +60,11 @@ readonly class AnalyticsFilters
             source: $clean('source'),
             campaign: $clean('campaign'),
             chain: $clean('chain'),
+            includeInternal: in_array(
+                (string) $request->query('internal', ''),
+                ['1', 'true', 'on'],
+                true,
+            ),
         );
     }
 
@@ -82,6 +94,7 @@ readonly class AnalyticsFilters
             'source' => $this->source,
             'campaign' => $this->campaign,
             'chain' => $this->chain,
+            'internal' => $this->includeInternal,
         ];
     }
 }

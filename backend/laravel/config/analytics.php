@@ -139,4 +139,69 @@ return [
 
     'north_star_days' => 7,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Internal traffic
+    |--------------------------------------------------------------------------
+    |
+    | The two people who build this product also use it, and on a chain this
+    | young they use it more than anyone: as of this writing 68 of 70 recorded
+    | swaps on the site were theirs. Left in, every conversion rate on the
+    | console is a self-portrait — it says the funnel converts, because the
+    | operator converts every time they test the thing they just deployed.
+    |
+    | So internal installations and internal sessions are excluded from the
+    | product numbers by default. Two rules, because there are two ways an
+    | operator is recognisable:
+    |
+    |   - `wallets` — an address seen on an installation. Defaults to the two
+    |     console keys, and takes more from the environment, because a wallet
+    |     used for testing is not necessarily the one that opens /crm.
+    |   - `user_ids` — accounts on this site, for `site_events`, which has a
+    |     user id where the product tables deliberately do not.
+    |
+    | Excluding is not hiding: every report that drops internal rows also says
+    | how many it dropped, and `?internal=1` puts them back. A number that got
+    | quietly smaller is the other way a dashboard lies.
+    */
+
+    'internal' => [
+
+        'wallets' => array_values(array_unique(array_filter(array_map(
+            fn (string $address) => strtolower(trim($address)),
+            array_merge(
+                explode(',', (string) env('ANALYTICS_INTERNAL_WALLETS', '')),
+                config('crm.admin_wallets', []),
+            ),
+        )))),
+
+        'user_ids' => array_values(array_unique(array_filter(array_map(
+            fn ($id) => (int) trim((string) $id),
+            array_merge(
+                explode(',', (string) env('ANALYTICS_INTERNAL_USER_IDS', '')),
+                config('crm.admin_user_ids', []),
+            ),
+        )))),
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | The bound past which a trade's own notional is not evidence
+    |--------------------------------------------------------------------------
+    |
+    | `amount_usd` is what the input was worth at the quoted price *before* the
+    | trade. A swap through a pool too thin to absorb it moves that price so
+    | far that the notional describes nothing that happened: the first swap
+    | ever recorded here reported $67,548 at 99.98% price impact, which is a
+    | dust pool being emptied, not five figures of volume.
+    |
+    | A trade whose price impact is above this is still a real trade and still
+    | counts as an action — it is only its *dollar figure* that is thrown away,
+    | and reported separately so the exclusion is visible rather than a total
+    | that quietly shrank.
+    */
+
+    'notional_max_price_impact' => (float) env('ANALYTICS_NOTIONAL_MAX_IMPACT', 25.0),
+
 ];

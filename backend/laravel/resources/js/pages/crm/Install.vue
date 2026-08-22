@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import Rule from '@/components/console/Rule.vue';
 import { useLocale } from '@/composables/useLocale';
@@ -39,6 +39,8 @@ const props = defineProps<{
         activated_at: string | null;
         first_transaction_at: string | null;
         linked_addresses: number;
+        internal_at: string | null;
+        internal_reason: string | null;
     };
     timeline: Event[];
     sessions: { id: string }[];
@@ -128,6 +130,22 @@ const facts = computed(() => [
 function isMeaningful(event: string): boolean {
     return props.meaningful.includes(event);
 }
+
+/**
+ * Recognising one of our own afternoons.
+ *
+ * The address lists catch the wallets we wrote down; this catches the ones we
+ * did not, which on this product is most of them. It flips both ways from the
+ * same button, because a judgement nobody can withdraw is a judgement people
+ * stop making.
+ */
+function toggleInternal() {
+    router.post(
+        `/crm/installs/${props.user.id}/internal`,
+        { internal: props.user.internal_at === null },
+        { preserveScroll: true },
+    );
+}
 </script>
 
 <template>
@@ -141,13 +159,38 @@ function isMeaningful(event: string): boolean {
         <span class="mk-m" style="font-size: 11.5px; color: var(--mk-fainter)">{{
             user.id
         }}</span>
-        <div style="margin-left: auto; display: flex; gap: 8px">
+        <div
+            style="
+                margin-left: auto;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+            "
+        >
+            <span
+                v-if="user.internal_at"
+                class="mk-tag"
+                style="color: var(--mk-cyan); border-color: var(--mk-cyan)"
+                >{{ t('install.internal.tag') }}</span
+            >
             <span class="mk-tag"
                 >{{ user.platform ?? '—' }} {{ user.app_version ?? '' }}</span
             >
             <span class="mk-tag"
                 >{{ user.source ?? '—' }} · {{ user.campaign ?? '—' }}</span
             >
+            <button
+                type="button"
+                class="mk-btn mk-ghost"
+                style="padding: 0 10px"
+                @click="toggleInternal"
+            >
+                {{
+                    user.internal_at
+                        ? t('install.internal.unmark')
+                        : t('install.internal.mark')
+                }}
+            </button>
         </div>
     </div>
 

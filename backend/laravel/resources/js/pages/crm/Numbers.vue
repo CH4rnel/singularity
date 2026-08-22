@@ -27,6 +27,15 @@ type Question = {
         before?: number | null;
     };
     conclusion: { key: string; params: Record<string, string | number> };
+    /*
+     * What this number is not counting, and why.
+     *
+     * Every exclusion on this page — our own sessions, a trade whose notional
+     * its own price impact refutes — prints here. A dashboard that quietly
+     * drops rows is as wrong as one that counts everything: the reader has no
+     * way to tell a corrected total from a quiet week.
+     */
+    caveat?: { key: string; params: Record<string, string | number> } | null;
     evidence: Record<string, unknown>;
 };
 
@@ -305,6 +314,13 @@ const answerTone = computed(
                 style="margin: 11px 0 0; font-size: 12.5px; line-height: 1.55"
             >
                 {{ t(question.conclusion.key, question.conclusion.params) }}
+            </p>
+            <p
+                v-if="question.caveat"
+                class="mk-t3"
+                style="margin: 8px 0 0; font-size: 11.5px; line-height: 1.5"
+            >
+                {{ t(question.caveat.key, question.caveat.params) }}
             </p>
         </div>
 

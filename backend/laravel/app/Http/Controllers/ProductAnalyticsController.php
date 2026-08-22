@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\AnalyticsUser;
 use App\Services\Analytics\EventTaxonomy;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -59,6 +61,8 @@ class ProductAnalyticsController extends Controller
                 'referrer' => $record->referrer,
                 'landing_path' => $record->landing_path,
                 'wallet_created_at' => $record->wallet_created_at?->toIso8601String(),
+                'internal_at' => $record->internal_at?->toIso8601String(),
+                'internal_reason' => $record->internal_reason,
                 'wallet_origin' => $record->wallet_origin,
                 'funded_at' => $record->funded_at?->toIso8601String(),
                 'funded_chain' => $record->funded_chain,
@@ -81,6 +85,34 @@ class ProductAnalyticsController extends Controller
              */
             'peers' => $this->peers($record),
         ]);
+    }
+
+    /**
+     * Say that this installation is one of ours, or that it is not.
+     *
+     * A configured address list catches the wallets we remembered to write
+     * down, which is not the same set as the wallets we test from — the first
+     * install this system ever recorded was an operator on an address that
+     * appears on no list anywhere. Somebody has to be able to look at a
+     * timeline, recognise their own afternoon in it, and say so.
+     *
+     * Reversible on purpose, and reversible by the same one click: this is a
+     * judgement, and a judgement that cannot be withdrawn is one people stop
+     * making. The mark changes no event and deletes nothing — it only decides
+     * which side of the default filter the installation falls on.
+     */
+    public function internal(Request $request, string $user): RedirectResponse
+    {
+        $record = AnalyticsUser::query()->findOrFail($user);
+
+        $mark = $request->boolean('internal');
+
+        $record->forceFill([
+            'internal_at' => $mark ? Carbon::now('UTC') : null,
+            'internal_reason' => $mark ? 'manual' : null,
+        ])->save();
+
+        return back();
     }
 
     /**

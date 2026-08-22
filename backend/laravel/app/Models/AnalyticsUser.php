@@ -40,6 +40,7 @@ class AnalyticsUser extends Model
             'funded_at' => 'datetime',
             'activated_at' => 'datetime',
             'first_transaction_at' => 'datetime',
+            'internal_at' => 'datetime',
         ];
     }
 

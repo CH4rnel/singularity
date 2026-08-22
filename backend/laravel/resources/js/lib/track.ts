@@ -18,7 +18,6 @@ export type SiteEventName =
     | 'staking_started'
     | 'staking_completed'
     | 'partner_cta_clicked'
-    | 'swap_executed'
     | 'liquidity_added';
 
 const SESSION_KEY = 'site.session_id';

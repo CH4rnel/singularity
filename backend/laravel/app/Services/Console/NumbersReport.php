@@ -6,6 +6,7 @@ use App\Models\BridgeEvent;
 use App\Models\BridgeRequest;
 use App\Models\SiteEvent;
 use App\Services\Analytics\AnalyticsFilters;
+use App\Services\Analytics\InternalTraffic;
 use App\Services\Analytics\ProductMetricsService;
 use App\Services\UserAnalyticsService;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,7 @@ class NumbersReport
     public function __construct(
         private ProductMetricsService $metrics,
         private UserAnalyticsService $site,
+        private InternalTraffic $internal,
     ) {}
 
     /**
@@ -56,6 +58,29 @@ class NumbersReport
         $errors = $this->metrics->errors($filters, 8);
         $gas = $this->metrics->gasSponsorship($filters);
         $series = $this->metrics->activeOverTime($filters);
+
+        $overview = $this->metrics->overview($filters);
+
+        /*
+         * The two exclusions this subject applies, said out loud on the two
+         * questions they change: how many installations are ours and left out,
+         * and how many trades had their dollar figure thrown away for being
+         * contradicted by their own price impact.
+         */
+        $ours = $this->internalCaveat(
+            (int) ($overview['internal_users'] ?? 0),
+            (bool) ($overview['internal_included'] ?? false),
+        );
+
+        $notional = (int) ($overview['volume_excluded'] ?? 0) > 0
+            ? [
+                'key' => 'numbers.caveat.notional',
+                'params' => [
+                    'trades' => (int) $overview['volume_excluded'],
+                    'usd' => (float) ($overview['volume_excluded_usd'] ?? 0),
+                ],
+            ]
+            : null;
 
         $installs = $funnel[0]['value'] ?? 0;
         $previousInstalls = $this->previousInstalls($filters);
@@ -96,6 +121,7 @@ class NumbersReport
                     ], $series),
                     'legend' => ['total' => 'numbers.growth.opened', 'part' => 'numbers.growth.acted'],
                 ],
+                'caveat' => $ours,
             ],
             [
                 'key' => 'money',
@@ -115,6 +141,7 @@ class NumbersReport
                     ],
                 ],
                 'evidence' => ['type' => 'funnel', 'steps' => $funnel],
+                'caveat' => $notional ?? $ours,
             ],
             [
                 'key' => 'return',
@@ -189,6 +216,29 @@ class NumbersReport
         ];
     }
 
+    /**
+     * One line saying what was left out for being ours, or nothing to say.
+     *
+     * Returns null when the exclusion changed no rows — a caveat about zero
+     * excluded sessions is noise, and noise is what makes a reader stop
+     * reading the line that matters. When internal rows were deliberately put
+     * back, that is also worth a line: the numbers on screen then include
+     * testing, and nobody should have to remember which switch is on.
+     *
+     * @return array{key: string, params: array<string, mixed>}|null
+     */
+    private function internalCaveat(
+        int $count,
+        bool $included,
+        string $key = 'numbers.caveat.internal',
+    ): ?array {
+        if ($included) {
+            return ['key' => 'numbers.caveat.internalIncluded', 'params' => []];
+        }
+
+        return $count > 0 ? ['key' => $key, 'params' => ['count' => $count]] : null;
+    }
+
     /* ------------------------------------------------ the site, in a tab -- */
 
     /** @return array<int, array<string, mixed>> */
@@ -197,32 +247,56 @@ class NumbersReport
         $days = $filters->days();
         $since = $filters->from;
 
-        $sessions = fn (array $events): int => SiteEvent::query()
-            ->whereIn('event', $events)
-            ->where('created_at', '>=', $since)
+        /*
+         * Ours, left out of all of it unless asked for.
+         *
+         * This funnel used to say the site converts visitors into swappers at
+         * a rate no exchange achieves, because two of its four converting
+         * sessions were the operators testing a deploy. The same exclusion the
+         * install subject applies to `analytics_users` applies here, through
+         * whole sessions rather than single rows — see InternalTraffic.
+         */
+        $outside = fn ($query) => $filters->includeInternal
+            ? $query
+            : $this->internal->excludeFrom($query);
+
+        $sessions = fn (array $events): int => $outside(
+            SiteEvent::query()
+                ->whereIn('event', $events)
+                ->where('created_at', '>=', $since)
+        )
             ->distinct()
             ->count('session_id');
 
         $visitors = $sessions(['landing_view', 'page_view']);
         $wallets = $sessions(['wallet_connected']);
-        $swaps = $sessions(['swap_completed', 'swap_executed']);
+        // The retired names are still in rows this window can reach. They are
+        // read here and refused at ingest — see SiteEvent::RETIRED_EVENTS.
+        $swaps = $sessions(['swap_completed', ...SiteEvent::RETIRED_EVENTS]);
         $liquidity = $sessions(['liquidity_added']);
 
+        // Bridge events are their own store with their own session ids, which
+        // no site session id can be matched against — so this one number keeps
+        // the operators in it, and the report says so rather than pretending.
         $bridged = BridgeEvent::query()
             ->where('event_type', 'bridge_submitted')
             ->where('created_at', '>=', $since)
             ->distinct()
             ->count('session_id');
 
-        $previous = SiteEvent::query()
-            ->whereIn('event', ['landing_view', 'page_view'])
-            ->whereBetween('created_at', [$since->copy()->subDays($days), $since])
+        $previous = $outside(
+            SiteEvent::query()
+                ->whereIn('event', ['landing_view', 'page_view'])
+                ->whereBetween('created_at', [$since->copy()->subDays($days), $since])
+        )
             ->distinct()
             ->count('session_id');
 
-        $daily = SiteEvent::query()
-            ->whereIn('event', ['landing_view', 'page_view'])
-            ->where('created_at', '>=', $since)
+        $daily = $outside(
+            SiteEvent::query()
+                ->whereIn('event', ['landing_view', 'page_view'])
+                ->where('created_at', '>=', $since)
+        )
             ->selectRaw('DATE(created_at) as day, COUNT(DISTINCT session_id) as total')
             ->groupBy('day')
             ->orderBy('day')
@@ -249,6 +323,12 @@ class NumbersReport
         $failed = (int) ($requests['failed'] ?? 0) + (int) ($requests['expired'] ?? 0);
         $finished = $completed + $failed;
 
+        $ours = $this->internalCaveat(
+            $filters->includeInternal ? 0 : $this->internal->sessionCount(),
+            $filters->includeInternal,
+            'numbers.caveat.internalSessions',
+        );
+
         return [
             [
                 'key' => 'growth',
@@ -266,6 +346,7 @@ class NumbersReport
                     ])->all(),
                     'legend' => ['total' => 'numbers.growth.sessions', 'part' => null],
                 ],
+                'caveat' => $ours,
             ],
             [
                 'key' => 'money',
@@ -279,6 +360,12 @@ class NumbersReport
                     'params' => ['visitors' => $visitors, 'wallets' => $wallets],
                 ],
                 'evidence' => ['type' => 'funnel', 'steps' => $funnel],
+                // The bridge step is the one number here the exclusion cannot
+                // reach: bridge_events keeps its own session ids, and no site
+                // session can be matched to one.
+                'caveat' => $ours === null
+                    ? ['key' => 'numbers.caveat.bridgeUnfiltered', 'params' => []]
+                    : $ours,
             ],
             [
                 'key' => 'return',

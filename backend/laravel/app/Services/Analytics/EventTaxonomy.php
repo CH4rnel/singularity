@@ -159,6 +159,67 @@ class EventTaxonomy
             && ($properties['watchable'] ?? true) === false;
     }
 
+    /**
+     * Events that could not have happened without an open vault.
+     *
+     * Onboarding is the one milestone the client can only report *forwards*:
+     * `wallet_created` fires while a phrase is being sealed, so an
+     * installation that already had a wallet when this instrumentation shipped
+     * never emits it and never will. Its funnel then shows a person who funded
+     * and swapped without ever having a wallet, and `wallets` — the
+     * denominator of the funding rate — stays at zero while the steps after it
+     * fill up.
+     *
+     * These are the events that settle the question in retrospect. Every one
+     * of them requires a key this wallet holds: signing, receiving into a
+     * derived address, asking for a drip to one. Opening a screen is not here,
+     * because a screen opens for a visitor who has nothing.
+     *
+     * @var array<int, string>
+     */
+    public const PROVES_WALLET = [
+        'wallet_funded',
+        'first_transaction',
+        'transaction_started',
+        'transaction_signed',
+        'transaction_submitted',
+        'transaction_confirmed',
+        'transaction_failed',
+        'swap_started',
+        'swap_signed',
+        'swap_completed',
+        'swap_failed',
+        'bridge_started',
+        'bridge_deposit_confirmed',
+        'bridge_completed',
+        'bridge_failed',
+        'staking_started',
+        'staking_completed',
+        'staking_withdrawn',
+        'staking_failed',
+        'reward_claimed',
+        'liquidity_added',
+        'liquidity_removed',
+        'nft_mint_started',
+        'nft_minted',
+        'nft_mint_failed',
+        'gas_sponsorship_requested',
+        'gas_sponsorship_completed',
+        'gas_sponsorship_failed',
+    ];
+
+    /**
+     * Whether this event is proof that a vault existed by the time it happened.
+     *
+     * Used to repair `wallet_created_at` rather than to set it honestly: the
+     * origin recorded alongside is `existing`, never `created`, because the
+     * only thing established here is that the wallet was already there.
+     */
+    public static function provesWallet(string $event): bool
+    {
+        return in_array($event, self::PROVES_WALLET, true);
+    }
+
     /** Whether this event is one whose settlement counts as a transaction. */
     public static function isTransactional(string $event, array $properties = []): bool
     {

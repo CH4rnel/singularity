@@ -47,6 +47,18 @@ export { errorCode } from '@/lib/analytics/errors';
 
 const UID_KEY = 'cyberia.analytics.uid';
 const SESSION_KEY = 'cyberia.analytics.session';
+/*
+ * When this browser last reported an open.
+ *
+ * `app_opened` is guarded within a page load by a module flag, which says
+ * nothing about the next page load — and a full reload three seconds after the
+ * first one is not a person opening the app twice. Seen in the data: two opens
+ * four seconds apart in the same session, on installations that did nothing
+ * else, which is the exact shape that inflates "opens per session" and every
+ * engagement number derived from it.
+ */
+const OPENED_KEY = 'cyberia.analytics.opened';
+const REOPEN_GRACE_MS = 30_000;
 const ATTRIBUTION_KEY = 'cyberia.analytics.attribution';
 const OUTBOX_KEY = 'cyberia.analytics.outbox';
 const OPTOUT_KEY = 'cyberia.analytics.optout';
@@ -267,6 +279,37 @@ const attribution = (): Attribution => {
     }
 
     return resolved;
+};
+
+/**
+ * Remember where this visit came from, without becoming a visit.
+ *
+ * The product client no longer starts on every page of the site — an
+ * installation of a wallet and a browser reading the blog are different
+ * subjects, and merging them put `/farm` and `/login` in the denominator of a
+ * wallet funnel. But first-touch attribution has to be captured on the page
+ * the campaign link actually lands on, which is almost never the wallet.
+ *
+ * So this is the one thing that runs everywhere: a single localStorage write,
+ * the first time this browser is seen, of where it came from. It creates no
+ * user, sends no request and enqueues no event. By the time somebody opens the
+ * wallet, the answer to "which campaign brought them" is already sitting here
+ * — captured weeks earlier, on the landing page, by four lines that never
+ * spoke to the server.
+ */
+export const rememberAttribution = (): void => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    try {
+        if (readJson<Attribution>(ATTRIBUTION_KEY) === null) {
+            attribution();
+        }
+    } catch {
+        /* Storage denied. Attribution is the first thing to lose, not a
+           reason for a page to fail. */
+    }
 };
 
 /**
@@ -601,7 +644,13 @@ export const analytics = {
             queue = [];
             write(OPTOUT_KEY, '1');
 
-            for (const key of [UID_KEY, SESSION_KEY, OUTBOX_KEY, FUNDED_KEY]) {
+            for (const key of [
+                UID_KEY,
+                SESSION_KEY,
+                OUTBOX_KEY,
+                FUNDED_KEY,
+                OPENED_KEY,
+            ]) {
                 window.localStorage.removeItem(key);
             }
 
@@ -626,6 +675,30 @@ export const configureAnalytics = (next: Partial<AnalyticsConfig>): void => {
     config = { ...config, ...next };
 };
 
+/**
+ * Whether this browser already said it opened, moments ago.
+ *
+ * A reload, a redirect into the wallet and a shell restoring its window all
+ * produce a second page load that no person would call a second open. Thirty
+ * seconds is short enough that genuinely reopening the app after reading
+ * something else still counts, and long enough to absorb every automatic
+ * reload observed here.
+ */
+const recentlyOpened = (): boolean => {
+    const now = Date.now();
+
+    try {
+        const previous = Number(window.localStorage.getItem(OPENED_KEY) ?? 0);
+
+        window.localStorage.setItem(OPENED_KEY, String(now));
+
+        return Number.isFinite(previous) && now - previous < REOPEN_GRACE_MS;
+    } catch {
+        // No storage means no way to tell, and an event is better than a hole.
+        return false;
+    }
+};
+
 export const initializeAnalytics = (): void => {
     if (started || typeof window === 'undefined') {
         return;
@@ -641,7 +714,9 @@ export const initializeAnalytics = (): void => {
         queue = [...stored, ...queue].slice(-MAX_OUTBOX);
     }
 
-    analytics.track('app_opened');
+    if (!recentlyOpened()) {
+        analytics.track('app_opened');
+    }
 
     // Two listeners, because they catch different departures: a tab switched
     // away on a phone (which may never fire `pagehide`) and a page actually

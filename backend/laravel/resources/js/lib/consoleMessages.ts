@@ -279,6 +279,16 @@ export const consoleMessages: Messages = {
             '{wallets} of {visitors} sessions connected a wallet at all.',
         'numbers.money.note':
             'On the right — share of the previous step: it says where we lose people, not how bad things are overall.',
+        'numbers.caveat.internal':
+            'Not counted: {count} of our own installations. We use this wallet more than anyone, and a rate that includes us describes our testing.',
+        'numbers.caveat.internalSessions':
+            'Not counted: {count} of our own sessions. Two operators produced most of the conversions ever recorded here.',
+        'numbers.caveat.internalIncluded':
+            'Our own installations and sessions are included in these numbers.',
+        'numbers.caveat.notional':
+            '{trades} trade(s) worth a nominal ${usd} left out of volume: their own price impact says the figure describes a pool being drained, not money changing hands.',
+        'numbers.caveat.bridgeUnfiltered':
+            'The bridge step still counts our own sessions — bridge events keep their own session ids, which no site session can be matched against.',
         'numbers.return.title': 'Do they come back?',
         'numbers.return.suffix': '% D7, was {before}',
         'numbers.return.drop': 'D7 fell from {before}% to {now}%.',
@@ -399,6 +409,9 @@ export const consoleMessages: Messages = {
 
         /* install dossier */
         'install.back': 'Numbers',
+        'install.internal.tag': 'ours',
+        'install.internal.mark': 'This one is ours',
+        'install.internal.unmark': 'Not ours after all',
         'install.title': 'Installation {short}',
         'install.whereFrom': 'Where it came from',
         'install.firstRun': 'First run',
@@ -725,6 +738,16 @@ export const consoleMessages: Messages = {
             'Кошелёк подключили {wallets} сессий из {visitors}.',
         'numbers.money.note':
             'Справа — доля от предыдущего шага: она показывает, где именно теряем, а не насколько всё плохо в целом.',
+        'numbers.caveat.internal':
+            'Не учтено: {count} наших собственных установок. Мы пользуемся этим кошельком больше всех, и доля, включающая нас, описывает наше тестирование.',
+        'numbers.caveat.internalSessions':
+            'Не учтено: {count} наших собственных сессий. Двое операторов дали большую часть всех записанных здесь конверсий.',
+        'numbers.caveat.internalIncluded':
+            'Наши собственные установки и сессии включены в эти числа.',
+        'numbers.caveat.notional':
+            'Сделок вне объёма: {trades} на номинальные ${usd}. Их собственное влияние на цену говорит, что это опустошение пула, а не оборот.',
+        'numbers.caveat.bridgeUnfiltered':
+            'Шаг моста всё ещё считает наши сессии: у событий моста свои идентификаторы сессий, сопоставить их с сайтовыми нельзя.',
         'numbers.return.title': 'Возвращаются ли?',
         'numbers.return.suffix': '% D7, было {before}',
         'numbers.return.drop': 'D7 упал с {before}% до {now}%.',
@@ -845,6 +868,9 @@ export const consoleMessages: Messages = {
 
         /* install dossier */
         'install.back': 'Числа',
+        'install.internal.tag': 'наша',
+        'install.internal.mark': 'Это наша установка',
+        'install.internal.unmark': 'Всё-таки не наша',
         'install.title': 'Установка {short}',
         'install.whereFrom': 'Откуда пришла',
         'install.firstRun': 'Первый запуск',

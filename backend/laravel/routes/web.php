@@ -453,6 +453,10 @@ Route::middleware(['auth'])->group(function () {
         // the wallet, or browsers reading the site.
         Route::get('numbers', [ConsoleNumbersController::class, 'index'])->name('numbers');
         Route::get('installs/{user}', [ProductAnalyticsController::class, 'show'])->name('installs.show');
+        // Marking an installation as ours, or taking the mark back. A POST
+        // because it changes what every number on the console means.
+        Route::post('installs/{user}/internal', [ProductAnalyticsController::class, 'internal'])
+            ->name('installs.internal');
 
         // Is everything running, and is anyone using it. Renders the last
         // sweep; the probing itself is `services:check` on the scheduler.

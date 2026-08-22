@@ -242,6 +242,39 @@ class AnalyticsIngestService
             'address' => $normalized,
             'created_at' => Carbon::now('UTC'),
         ]);
+
+        $this->markInternalByAddress($user, $normalized);
+    }
+
+    /**
+     * Recognise one of our own installations.
+     *
+     * An address is the only handle these tables have on who a person is, and
+     * it is used here for the one purpose that improves the numbers rather
+     * than identifying anybody: keeping the operators out of the rates that
+     * are supposed to describe strangers. The mark is stamped once and never
+     * cleared automatically — an install that tested from a listed address
+     * stays an internal install, because its whole history was testing.
+     */
+    private function markInternalByAddress(AnalyticsUser $user, string $address): void
+    {
+        if ($user->internal_at !== null) {
+            return;
+        }
+
+        $internal = array_map(
+            fn ($value) => strtolower((string) $value),
+            (array) config('analytics.internal.wallets', []),
+        );
+
+        if (! in_array(strtolower($address), $internal, true)) {
+            return;
+        }
+
+        $user->forceFill([
+            'internal_at' => Carbon::now('UTC'),
+            'internal_reason' => 'address',
+        ])->save();
     }
 
     /* ------------------------------------------------------------- users -- */
@@ -385,15 +418,25 @@ class AnalyticsIngestService
             'app_version' => $user->app_version,
         ]);
 
-        $previous = $session['previous_id'] ?? null;
-
-        if (is_string($previous) && $previous !== '') {
-            AnalyticsSession::query()
-                ->whereKey($previous)
-                ->where('user_id', $user->id)
-                ->whereNull('ended_at')
-                ->update(['ended_at' => DB::raw('last_activity_at')]);
-        }
+        /*
+         * Close what this session replaced.
+         *
+         * The client names the session it succeeded, which covers the ordinary
+         * case exactly. It does not cover a browser whose storage was cleared
+         * between visits, or a second device that never knew about the first —
+         * both leave a session open forever, and "open" is indistinguishable
+         * from "still going" on the installation page.
+         *
+         * So the successor closes *every* older open session of the same
+         * installation, dated to its own last activity, which is the last
+         * moment anything is known to have happened in it. The named previous
+         * id is now belt and braces rather than the mechanism.
+         */
+        AnalyticsSession::query()
+            ->where('user_id', $user->id)
+            ->whereKeyNot($id)
+            ->whereNull('ended_at')
+            ->update(['ended_at' => DB::raw('last_activity_at')]);
     }
 
     /* -------------------------------------------------------- milestones -- */
@@ -413,6 +456,28 @@ class AnalyticsIngestService
         if (in_array($event, ['wallet_created', 'wallet_imported'], true) && $user->wallet_created_at === null) {
             $changes['wallet_created_at'] = $at;
             $changes['wallet_origin'] = $event === 'wallet_created' ? 'created' : 'imported';
+        }
+
+        /*
+         * A vault that existed before this client did.
+         *
+         * `wallet_created` is emitted at the one moment it is unambiguously
+         * true — the phrase is sealed and the vault opens — which means it is
+         * emitted for nobody who already had a wallet when the analytics
+         * client shipped. Those installations then fund, swap and bridge while
+         * the onboarding step stays empty, and the console draws a funnel
+         * whose second bar is shorter than its third. That is not a small
+         * cosmetic wrong: `wallets` is the denominator of the funding rate.
+         *
+         * So any event that could only have come from an open vault stamps the
+         * milestone too, dated to that event and marked `existing` — the
+         * wallet is not claimed to have been created then, only proved to have
+         * existed by then. Later steps can no longer overtake earlier ones,
+         * which is the invariant a funnel is.
+         */
+        if ($user->wallet_created_at === null && EventTaxonomy::provesWallet($event)) {
+            $changes['wallet_created_at'] = $at;
+            $changes['wallet_origin'] = 'existing';
         }
 
         if (EventTaxonomy::isMeaningful($event, $properties) && $user->activated_at === null) {

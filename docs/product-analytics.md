@@ -421,7 +421,7 @@ produces conversions above 100%.
 | Step | Condition on the cohort |
 |---|---|
 | First open | `created_at` in range |
-| Wallet created or imported | `wallet_created_at IS NOT NULL` |
+| Wallet created or imported | `wallet_created_at IS NOT NULL` — stamped by `wallet_created`/`wallet_imported`, or repaired from any event that proves a vault existed (`wallet_origin = 'existing'`) |
 | Funded | `funded_at IS NOT NULL` |
 | Activated | `activated_at IS NOT NULL` |
 | Retained | a meaningful action **≥ 1 day after** `activated_at` |
@@ -591,6 +591,11 @@ Rules the existing methods follow:
 | Clock skew | Server time is the truth. A client time is honoured only if it is in the past and within 48 h — enough to file a late flush on the right day, not enough to let a wrong clock move a cohort |
 | Old app versions | An unknown event name is dropped and the rest of the batch is kept; an unknown property key is dropped and the event is kept |
 | Analytics outage | The client never awaits, never throws, and the endpoint always answers 202. Sending, swapping and bridging do not depend on it |
+| **Our own traffic** | Internal installations are marked (`internal_at`) and excluded from every metric by default. See §20 |
+| **A notional the trade refutes** | `amount_usd` above `notional_max_price_impact` is dropped from volume and reported separately. See §20 |
+| **A funnel step overtaking the one before it** | Any event that could only come from an open vault stamps `wallet_created_at` if nothing else did (`EventTaxonomy::PROVES_WALLET`), with `wallet_origin = 'existing'` |
+| **A page that is not the wallet** | The product client starts only on a wallet surface — see §21. `site_events` keeps counting everything, because that is its subject |
+| **A reload counted as an open** | `app_opened` is suppressed within 30 s of the previous one in the same browser |
 
 The five events that must never inflate — `wallet_funded`, `first_transaction`,
 activation, `transaction_confirmed`, `gas_sponsorship_completed` — are covered
@@ -674,6 +679,11 @@ as a count only. `/crm/product/users/{uuid}` redirects here.
 ```bash
 # Confirm funding the browser never got to report (scheduled every 30 min)
 php artisan analytics:verify-funding --limit=200 --days=14
+
+# Repair milestones and mark our own installations. Idempotent; --dry-run
+# prints every row it would touch and writes nothing.
+php artisan analytics:repair --dry-run
+php artisan analytics:repair
 ```
 
 Environment:
@@ -686,7 +696,93 @@ Environment:
 | `ANALYTICS_FUNDING_CACHE` | `10` | Minutes a positive balance answer is reused |
 | `ANALYTICS_FUNDING_SWEEP_LIMIT` | `200` | Addresses per sweep |
 | `ANALYTICS_FUNDING_SWEEP_DAYS` | `14` | Only users seen this recently |
+| `ANALYTICS_INTERNAL_WALLETS` | — | Extra addresses that mark an installation as ours; added to `crm.admin_wallets` |
+| `ANALYTICS_INTERNAL_USER_IDS` | — | Extra site accounts that mark a session as ours; added to `crm.admin_user_ids` |
+| `ANALYTICS_NOTIONAL_MAX_IMPACT` | `25.0` | Price impact (%) above which a trade's `amount_usd` is not summed into volume |
 
 There is no retention/pruning job yet. `analytics_events` holds no personal
 data, so nothing forces one; add a `analytics:prune` on the `ai:prune-usage`
 model if the table's size ever becomes the problem.
+
+---
+
+## 20. What the numbers leave out, and why they say so
+
+Two exclusions are applied to every product number by default. Both were found
+in live data, not reasoned about in advance, and both are **reported on screen**
+rather than silently applied — a total that quietly got smaller is as misleading
+as one that counts everything.
+
+### Our own traffic
+
+The two people who build this wallet are also its heaviest users. In the first
+five weeks of `site_events`, **68 of the 70 recorded swaps belonged to the two
+console operators**, and 4 sessions produced every conversion in the funnel. A
+conversion rate computed over that population is a description of testing.
+
+- `analytics_users.internal_at` marks an installation as ours, with
+  `internal_reason` recording how it was recognised: `address` (an address on
+  `analytics.internal.wallets` was linked to it) or `manual` (an operator said
+  so on `/crm/installs/{uuid}`). The manual route exists because the address
+  lists catch the wallets we wrote down, which is not the set we test from —
+  the first installation this system ever recorded was an operator on an
+  address that appears on no list anywhere.
+- `ProductMetricsService` excludes them from **both** the population and the
+  event stream. Narrowing only the population would leave their swaps counting
+  against a denominator they are not in.
+- `site_events` has no `internal_at`, but it does have a user id, so
+  `InternalTraffic` excludes **whole sessions** that ever carried an internal
+  user id or wallet address. Whole sessions, because an operator browses signed
+  in and some of their rows are attributed while others are not: dropping only
+  the attributed half would remove the conversions and keep the visits, making
+  the funnel look *worse* than reality.
+- `?internal=1` on any console lens puts them back, and the page says so.
+- Bridge events are the one place the exclusion cannot reach — `bridge_events`
+  keeps its own session ids, which no site session can be matched against. The
+  funnel prints that caveat rather than implying the step is filtered.
+
+### A notional the trade itself refutes
+
+`amount_usd` is the input priced at the quote that existed *before* the trade.
+Through a deep pool that is very nearly what changed hands. Through a pool too
+thin to absorb it, it describes nothing: **the first swap this system recorded
+reported $67,548.63 at 99.98% price impact** — a dust pool being drained — and
+it was the entire swap volume figure on the dashboard.
+
+Price impact is the trade's own testimony about its own notional, so it decides.
+Above `analytics.notional_max_price_impact` (default 25%) the dollar figure is
+dropped from `swap_volume_usd` / `bridge_volume_usd` and reported as
+`volume_excluded` / `volume_excluded_usd`. The trade still counts everywhere
+else — it activated its user, it is in the funnel, it settled on a chain. Only
+its price is disbelieved. An event that never reported a price impact (a bridge,
+a wrap, a plain transfer) keeps its amount: not reporting one is not the same as
+reporting a high one.
+
+---
+
+## 21. What counts as an installation
+
+`analytics_users` is defined as *one installation of the wallet*, and the North
+Star counts funded installations. Until 2026-08-22 the client was started from
+`app.ts` on every Inertia navigation, so every reader of `/farm`, `/login` and
+`/download` became one: **of the first eight rows the table ever held, seven
+were people who never opened a wallet**, and they were diluting the funnel the
+product is steered by.
+
+The client now starts only on a wallet surface — `isWalletSurface()` in
+`app.ts`. Three ways to qualify, and one is enough:
+
+1. the page is a wallet screen (`Wallet`);
+2. the app is running inside a shell — desktop, phone, Mini App — where the
+   wallet is the whole product;
+3. a vault exists in this browser's `localStorage`, so whoever is reading this
+   page has a wallet here and their return visit is retention.
+
+**Attribution is not gated.** `rememberAttribution()` runs on every navigation
+everywhere: one `localStorage` write, no user row, no request. Campaign links
+land on the landing page, not on `/wallet`, so first touch has to be captured
+where it happens — and by the time someone opens the wallet weeks later, the
+answer is already sitting in storage.
+
+`site_events` still counts every page on the site. Nothing was lost; two
+questions stopped sharing one denominator.
