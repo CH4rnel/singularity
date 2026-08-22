@@ -239,7 +239,7 @@ export const consoleMessages: Messages = {
         'tasks.title': 'Tasks',
         'tasks.stats':
             '{open} open · {overdue} overdue · {unowned} with no owner',
-        'tasks.done': 'Closed',
+        'tasks.done': 'Completed',
         'tasks.quickAdd':
             'write to the whale about bridge limits @lain !tomorrow #Nakamoto',
         'tasks.quickAddHint':
@@ -251,6 +251,8 @@ export const consoleMessages: Messages = {
         'tasks.overdue': 'Overdue',
         'tasks.soon': 'Today and tomorrow',
         'tasks.later': 'Later',
+        'tasks.create': 'Create task',
+        'tasks.reopen': 'Reopen',
         'tasks.noDue': 'no date',
         'tasks.today': 'today',
         'tasks.tomorrow': 'tomorrow',
@@ -260,9 +262,6 @@ export const consoleMessages: Messages = {
         'tasks.footerEmpty': 'nothing closed this week',
         'tasks.empty': 'empty',
         'tasks.done.action': 'Done',
-        'tasks.journal.open': 'Open completed task journal',
-        'tasks.journal.title': 'Completed tasks',
-        'tasks.journal.empty': 'No completed tasks yet',
         'priority.low': 'low',
         'priority.normal': 'normal',
         'priority.high': 'high',
@@ -713,7 +712,7 @@ export const consoleMessages: Messages = {
         'tasks.title': 'Задачи',
         'tasks.stats':
             '{open} открытых · {overdue} просрочены · {unowned} без исполнителя',
-        'tasks.done': 'Сделанные',
+        'tasks.done': 'Готовые',
         'tasks.quickAdd':
             'написать киту про лимиты моста @lain !завтра #Nakamoto',
         'tasks.quickAddHint':
@@ -725,6 +724,8 @@ export const consoleMessages: Messages = {
         'tasks.overdue': 'Просрочено',
         'tasks.soon': 'Сегодня и завтра',
         'tasks.later': 'Дальше',
+        'tasks.create': 'Создать задачу',
+        'tasks.reopen': 'Вернуть',
         'tasks.noDue': 'без срока',
         'tasks.today': 'сегодня',
         'tasks.tomorrow': 'завтра',
@@ -734,9 +735,6 @@ export const consoleMessages: Messages = {
         'tasks.footerEmpty': 'за неделю ничего не закрыто',
         'tasks.empty': 'пусто',
         'tasks.done.action': 'Готово',
-        'tasks.journal.open': 'Открыть журнал закрытых задач',
-        'tasks.journal.title': 'Закрытые задачи',
-        'tasks.journal.empty': 'Закрытых задач пока нет',
         'priority.low': 'низкий',
         'priority.normal': 'обычный',
         'priority.high': 'высокий',

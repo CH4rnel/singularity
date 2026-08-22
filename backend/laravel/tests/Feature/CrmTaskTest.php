@@ -53,6 +53,7 @@ test('the board sorts tasks into late, now and later, and lifts out the unowned'
             ->has('columns.soon', 1)
             ->where('columns.soon.0.contact.name', 'Alice')
             ->has('columns.later', 1)
+            ->has('columns.done', 1)
             // Work nobody owns is a state, not a row with an empty column.
             ->has('unowned', 2)
             ->where('stats.open', 3)
@@ -215,7 +216,7 @@ test('a closed task leaves the board and lands in the week is numbers', function
         );
 });
 
-test('the completed task journal is ordered from newest to oldest', function () {
+test('the completed task column is ordered from newest to oldest', function () {
     $operator = User::factory()->crmAdmin()->create();
     $contact = CrmContact::factory()->create(['name' => 'Alice']);
 
@@ -233,11 +234,11 @@ test('the completed task journal is ordered from newest to oldest', function () 
         ->get(route('crm.tasks.index'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->has('closed', 2)
-            ->where('closed.0.title', 'Newest task')
-            ->where('closed.0.contact.name', 'Alice')
-            ->where('closed.1.title', 'Older task')
-            ->where('closed.1.assignee', $operator->name)
+            ->has('columns.done', 2)
+            ->where('columns.done.0.title', 'Newest task')
+            ->where('columns.done.0.contact.name', 'Alice')
+            ->where('columns.done.1.title', 'Older task')
+            ->where('columns.done.1.assignee', $operator->name)
         );
 });
 

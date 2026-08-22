@@ -5,9 +5,10 @@ import Rule from '@/components/console/Rule.vue';
 import { useLocale } from '@/composables/useLocale';
 import { num, shortDate } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
+import tasks from '@/routes/crm/tasks';
 
 /**
- * "Задачи" — three columns and one line to type into.
+ * "Задачи" — four columns and one line to type into.
  *
  * A task list has exactly three states worth separating (late, now, later) and
  * one thing that is not a state at all: work nobody owns. Unowned work never
@@ -23,6 +24,7 @@ type Task = {
     description: string | null;
     priority: string;
     due_at: string | null;
+    completed_at: string | null;
     overdue: boolean;
     overdue_days: number | null;
     assignee: string | null;
@@ -30,13 +32,8 @@ type Task = {
     contact: { id: number; name: string } | null;
 };
 
-type ClosedTask = Pick<Task, 'id' | 'title' | 'description' | 'assignee' | 'contact'> & {
-    completed_at: string | null;
-};
-
 const props = defineProps<{
-    columns: { overdue: Task[]; soon: Task[]; later: Task[] };
-    closed: ClosedTask[];
+    columns: { overdue: Task[]; soon: Task[]; later: Task[]; done: Task[] };
     unowned: Task[];
     stats: {
         open: number;
@@ -55,27 +52,40 @@ const COLUMNS = [
     { key: 'overdue', tone: 'critical' },
     { key: 'soon', tone: 'warning' },
     { key: 'later', tone: 'plain' },
+    { key: 'done', tone: 'plain' },
 ] as const;
 
-function tasksOf(key: 'overdue' | 'soon' | 'later'): Task[] {
+function tasksOf(key: 'overdue' | 'soon' | 'later' | 'done'): Task[] {
     return props.columns[key] ?? [];
 }
 
 function submit() {
-    compose.post('/crm/tasks', {
+    if (!compose.title.trim() || compose.processing) {
+        return;
+    }
+
+    compose.post(tasks.store.url(), {
         preserveScroll: true,
         onSuccess: () => compose.reset(),
     });
 }
 
 function claim(task: Task) {
-    router.post(`/crm/tasks/${task.id}/claim`, {}, { preserveScroll: true });
+    router.post(tasks.claim.url(task.id), {}, { preserveScroll: true });
 }
 
 function done(task: Task) {
     router.put(
-        `/crm/tasks/${task.id}`,
+        tasks.update.url(task.id),
         { status: 'done' },
+        { preserveScroll: true },
+    );
+}
+
+function reopen(task: Task) {
+    router.put(
+        tasks.update.url(task.id),
+        { status: 'open' },
         { preserveScroll: true },
     );
 }
@@ -114,7 +124,7 @@ function bar(task: Task): string {
           : 'var(--mk-fainter)';
 }
 
-function completedAt(task: ClosedTask): string {
+function completedAt(task: Task): string {
     if (!task.completed_at) {
         return '—';
     }
@@ -164,17 +174,24 @@ const footer = computed(() =>
         "
         @submit.prevent="submit"
     >
-        <svg
-            width="17"
-            height="17"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--mk-accent)"
-            stroke-width="1.8"
-            stroke-linecap="round"
+        <button
+            type="submit"
+            class="task-compose__submit"
+            :disabled="compose.processing || !compose.title.trim()"
+            :aria-label="t('tasks.create')"
         >
-            <path d="M12 5v14M5 12h14" />
-        </svg>
+            <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+            >
+                <path d="M12 5v14M5 12h14" />
+            </svg>
+        </button>
         <input
             v-model="compose.title"
             class="mk-m"
@@ -190,6 +207,9 @@ const footer = computed(() =>
         />
         <span class="mk-t3 mk-wide" style="font-size: 11.5px">{{
             t('tasks.quickAddHint')
+        }}</span>
+        <span v-if="compose.errors.title" class="task-compose__error">{{
+            compose.errors.title
         }}</span>
     </form>
 
@@ -233,7 +253,9 @@ const footer = computed(() =>
                     <span class="mk-m mk-t3" style="font-size: 11px">{{
                         due(task)
                     }}</span>
-                    <span class="mk-k">{{ t(`priority.${task.priority}`) }}</span>
+                    <span class="mk-k">{{
+                        t(`priority.${task.priority}`)
+                    }}</span>
                     <button
                         type="button"
                         class="mk-btn mk-act"
@@ -272,7 +294,9 @@ const footer = computed(() =>
             >
                 <span
                     class="mk-dot"
-                    :style="{ background: `var(--mk-${column.tone === 'plain' ? 'faint' : column.tone})` }"
+                    :style="{
+                        background: `var(--mk-${column.tone === 'plain' ? 'faint' : column.tone})`,
+                    }"
                 />
                 <span class="mk-k" style="color: var(--mk-body)">{{
                     t(`tasks.${column.key}`)
@@ -282,64 +306,6 @@ const footer = computed(() =>
                     style="margin-left: auto; font-size: 11px"
                     >{{ num(tasksOf(column.key).length) }}</span
                 >
-                <details
-                    v-if="column.key === 'later'"
-                    class="task-journal"
-                >
-                    <summary
-                        class="mk-btn mk-ghost task-journal__trigger"
-                        :aria-label="t('tasks.journal.open')"
-                        :title="t('tasks.journal.open')"
-                    >
-                        <svg
-                            width="15"
-                            height="15"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.7"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            aria-hidden="true"
-                        >
-                            <path d="M3 6h18" />
-                            <path d="M8 6V4h8v2" />
-                            <path d="m19 6-1 14H6L5 6" />
-                            <path d="M10 10v6M14 10v6" />
-                        </svg>
-                        <span class="mk-m">{{ num(closed.length) }}</span>
-                    </summary>
-
-                    <div class="task-journal__panel">
-                        <div class="task-journal__heading">
-                            <span class="mk-k">{{ t('tasks.journal.title') }}</span>
-                            <span class="mk-m mk-t3">{{ num(closed.length) }}</span>
-                        </div>
-
-                        <div v-if="closed.length" class="task-journal__list">
-                            <article
-                                v-for="task in closed"
-                                :key="task.id"
-                                class="task-journal__item"
-                            >
-                                <p>{{ task.title }}</p>
-                                <p v-if="task.description" class="mk-t3">
-                                    {{ task.description }}
-                                </p>
-                                <div class="task-journal__meta mk-m mk-t3">
-                                    <time :datetime="task.completed_at ?? undefined">
-                                        {{ completedAt(task) }}
-                                    </time>
-                                    <span v-if="task.assignee">{{ task.assignee }}</span>
-                                    <span v-if="task.contact">{{ task.contact.name }}</span>
-                                </div>
-                            </article>
-                        </div>
-                        <p v-else class="task-journal__empty mk-t3">
-                            {{ t('tasks.journal.empty') }}
-                        </p>
-                    </div>
-                </details>
             </div>
 
             <div
@@ -392,6 +358,13 @@ const footer = computed(() =>
                             "
                         >
                             <span
+                                v-if="column.key === 'done'"
+                                class="mk-m mk-t3"
+                                style="font-size: 11px"
+                                >{{ completedAt(task) }}</span
+                            >
+                            <span
+                                v-else
                                 class="mk-m"
                                 style="font-size: 11px"
                                 :style="{
@@ -402,6 +375,7 @@ const footer = computed(() =>
                                 >{{ task.assignee ?? t('tasks.nobody') }}</span
                             >
                             <span
+                                v-if="column.key !== 'done'"
                                 class="mk-m"
                                 style="font-size: 11px"
                                 :style="{
@@ -416,6 +390,16 @@ const footer = computed(() =>
                                 >
                             </span>
                             <button
+                                v-if="column.key === 'done'"
+                                type="button"
+                                class="mk-btn mk-ghost"
+                                style="margin-left: auto; height: 22px"
+                                @click="reopen(task)"
+                            >
+                                {{ t('tasks.reopen') }}
+                            </button>
+                            <button
+                                v-else
                                 type="button"
                                 class="mk-btn mk-ghost"
                                 style="margin-left: auto; height: 22px"
@@ -443,103 +427,23 @@ const footer = computed(() =>
 </template>
 
 <style scoped>
-.task-journal {
-    position: relative;
-    flex: 0 0 auto;
-}
-
-.task-journal > summary {
-    list-style: none;
-}
-
-.task-journal > summary::-webkit-details-marker {
-    display: none;
-}
-
-.task-journal__trigger {
+.task-compose__submit {
     display: flex;
-    height: 26px;
     align-items: center;
-    gap: 6px;
-    padding: 0 7px;
-    color: var(--mk-faint);
+    padding: 0;
+    border: 0;
+    color: var(--mk-accent);
+    background: transparent;
     cursor: pointer;
 }
 
-.task-journal:hover .task-journal__trigger,
-.task-journal[open] .task-journal__trigger,
-.task-journal__trigger:focus-visible {
-    color: var(--mk-body);
+.task-compose__submit:disabled {
+    opacity: 0.35;
+    cursor: default;
 }
 
-.task-journal__panel {
-    position: absolute;
-    z-index: 30;
-    top: calc(100% + 8px);
-    right: 0;
-    display: none;
-    width: min(390px, calc(100vw - 40px));
-    max-height: min(520px, 70vh);
-    overflow: auto;
-    border: 1px solid rgba(232, 236, 236, 0.16);
-    background: var(--mk-bg);
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
-}
-
-.task-journal:hover .task-journal__panel,
-.task-journal:focus-within .task-journal__panel,
-.task-journal[open] .task-journal__panel {
-    display: block;
-}
-
-.task-journal__heading {
-    position: sticky;
-    z-index: 1;
-    top: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(232, 236, 236, 0.09);
-    background: var(--mk-bg);
-}
-
-.task-journal__list {
-    display: flex;
-    flex-direction: column;
-}
-
-.task-journal__item {
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(232, 236, 236, 0.07);
-}
-
-.task-journal__item:last-child {
-    border-bottom: 0;
-}
-
-.task-journal__item p {
-    margin: 0;
-    font-size: 12.5px;
-    line-height: 1.45;
-}
-
-.task-journal__item p + p {
-    margin-top: 4px;
-    font-size: 11.5px;
-}
-
-.task-journal__meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px 10px;
-    margin-top: 8px;
-    font-size: 10.5px;
-}
-
-.task-journal__empty {
-    margin: 0;
-    padding: 20px 14px;
-    font-size: 12px;
+.task-compose__error {
+    color: var(--mk-critical);
+    font-size: 11px;
 }
 </style>
