@@ -3,11 +3,16 @@
 namespace App\Providers;
 
 use App\Services\Ai\Providers\AiProviderRegistry;
+use App\Services\Monitoring\ScheduledTaskLog;
 use App\Services\TonApiService;
 use App\Support\Environment;
 use Carbon\CarbonImmutable;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use URL;
@@ -43,6 +48,41 @@ class AppServiceProvider extends ServiceProvider
         }
 
         $this->configureDefaults();
+        $this->recordScheduledTasks();
+    }
+
+    /**
+     * Remember when each scheduled command last finished.
+     *
+     * Listening to the scheduler's own events rather than annotating every
+     * entry in routes/console.php: a command scheduled tomorrow is monitored
+     * the moment it is added, and nobody has to remember a second file.
+     *
+     * This is the check that would have caught the scheduler never running
+     * at all — the host cron called a php that only existed inside the
+     * container, and every scheduled command on this project lay dormant for
+     * months with nothing anywhere reporting it.
+     */
+    protected function recordScheduledTasks(): void
+    {
+        Event::listen(ScheduledTaskFinished::class, function (ScheduledTaskFinished $event): void {
+            ScheduledTaskLog::record(
+                (string) $event->task->command,
+                $event->task->exitCode === 0,
+                $event->runtime * 1000,
+            );
+        });
+
+        Event::listen(ScheduledTaskFailed::class, function (ScheduledTaskFailed $event): void {
+            ScheduledTaskLog::record((string) $event->task->command, false);
+        });
+
+        // A task skipped by withoutOverlapping is still evidence that the
+        // scheduler itself is alive, which is a different question from
+        // whether that particular command got its work done.
+        Event::listen(ScheduledTaskSkipped::class, function (): void {
+            ScheduledTaskLog::touchScheduler();
+        });
     }
 
     /**

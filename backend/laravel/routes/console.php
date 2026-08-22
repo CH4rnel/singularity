@@ -47,3 +47,11 @@ Schedule::command('gas:station --alert')->hourly()->withoutOverlapping();
 // those users most, because a wallet that was funded and never came back is
 // the drop-off worth fixing. Bounded per run and reads only.
 Schedule::command('analytics:verify-funding')->everyThirtyMinutes()->withoutOverlapping();
+// Is everything running. Reads only — it probes, records and reports, and can
+// restart nothing, which is what makes it safe to run unattended. Alerts fire
+// on state changes only, so a service that has been down for a week is
+// mentioned once a day rather than every five minutes.
+Schedule::command('services:check --alert')->everyFiveMinutes()->withoutOverlapping();
+// Thirty services swept every five minutes is ten thousand rows a day: a
+// rolling uptime window, never an archive.
+Schedule::command('services:prune')->dailyAt('04:10')->withoutOverlapping();

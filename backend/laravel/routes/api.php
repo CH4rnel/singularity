@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\NFTController;
+use App\Http\Controllers\Api\OpsHeartbeatController;
 use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaRpcController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
@@ -139,3 +140,10 @@ Route::post('rpc/cyberia', function (Request $request) {
     return response($response->body(), $response->status())
         ->header('Content-Type', 'application/json');
 });
+
+// Host heartbeat. Laravel runs inside a container and cannot see the docker
+// daemon, the tmux sessions or the disk that everything else on the box lives
+// on, so the host pushes those facts here once a minute. Gated on a shared
+// token — with none configured the route 404s, because an open heartbeat lets
+// anyone declare a dead host healthy.
+Route::post('ops/heartbeat', OpsHeartbeatController::class)->middleware('throttle:120,1');
