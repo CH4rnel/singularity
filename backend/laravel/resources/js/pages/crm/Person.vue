@@ -62,11 +62,73 @@ const props = defineProps<{
         assignee: string | null;
     }[];
     timeline: Timeline[];
+    /*
+     * The same human, filed more than once.
+     *
+     * `same` are records joined by evidence that stands on its own — a key
+     * attached to an account, an address that signed a deposit under it.
+     * `links` includes the guesses too, each with what justified it, so a
+     * surprising join can be argued with instead of merely believed.
+     */
+    identity: {
+        nodes: string[];
+        same: {
+            id: number;
+            name: string;
+            source: string;
+            evm_address: string | null;
+            solana_address: string | null;
+            user_id: number | null;
+        }[];
+        links: {
+            id: number;
+            left: string;
+            right: string;
+            source: string;
+            confidence: string;
+            evidence: string | null;
+            created_at: string | null;
+        }[];
+    };
 }>();
 
 const { t, tag } = useLocale(consoleMessages);
 
 const note = useForm({ body: '' });
+
+/** Linking by hand: an account id, an EVM address, a Solana address. */
+const identityForm = useForm({ target: '' });
+
+const suggestions = computed(() =>
+    props.identity.links.filter((link) => link.confidence !== 'strong'),
+);
+
+const confirmed = computed(() =>
+    props.identity.links.filter((link) => link.confidence === 'strong'),
+);
+
+/** `evm:0x89bb…` reads better than the forty characters it stands for. */
+function nodeLabel(node: string): string {
+    const [kind, ...rest] = node.split(':');
+    const value = rest.join(':');
+
+    return `${kind} ${value.length > 18 ? short(value) : value}`;
+}
+
+function linkIdentity() {
+    identityForm.post(`/crm/${props.contact.id}/identity`, {
+        preserveScroll: true,
+        onSuccess: () => identityForm.reset(),
+    });
+}
+
+function confirmLink(id: number) {
+    router.post(`/crm/identity-links/${id}/confirm`, {}, { preserveScroll: true });
+}
+
+function withdrawLink(id: number) {
+    router.delete(`/crm/identity-links/${id}`, { preserveScroll: true });
+}
 
 const overdue = computed(() => props.tasks.filter((task) => task.overdue).length);
 
@@ -294,6 +356,158 @@ function remove() {
                         >
                     </div>
                 </div>
+            </div>
+
+            <!-- The same human, filed more than once. Records stay separate;
+                 what is asserted here is only that they are one person, and
+                 every assertion says what justified it. -->
+            <div style="margin-top: 22px">
+                <Rule :label="t('person.identity')" />
+
+                <p
+                    v-if="!identity.same.length && !suggestions.length"
+                    class="mk-t3"
+                    style="margin: 10px 0 0; font-size: 11.5px"
+                >
+                    {{ t('person.identityNone') }}
+                </p>
+
+                <Link
+                    v-for="other in identity.same"
+                    :key="other.id"
+                    :href="`/crm/${other.id}`"
+                    class="mk-hair"
+                    style="
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        padding: 8px 0;
+                        text-decoration: none;
+                    "
+                >
+                    <span
+                        class="mk-tag"
+                        style="color: var(--mk-cyan); border-color: var(--mk-cyan)"
+                        >{{ t('person.identitySame') }}</span
+                    >
+                    <span
+                        class="mk-clip"
+                        style="font-size: 12px; color: var(--mk-body)"
+                        >{{ other.name }}</span
+                    >
+                    <span
+                        class="mk-m mk-t3"
+                        style="margin-left: auto; font-size: 11px"
+                        >{{ other.source }}</span
+                    >
+                </Link>
+
+                <!-- Guesses. A bridge pays out to whatever address it was
+                     given, and people pay their friends — so these wait for
+                     somebody to look rather than joining on their own. -->
+                <div
+                    v-for="link in suggestions"
+                    :key="link.id"
+                    class="mk-hair"
+                    style="
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        padding: 8px 0;
+                    "
+                >
+                    <span class="mk-tag">{{ t('person.identityMaybe') }}</span>
+                    <span
+                        class="mk-m mk-clip"
+                        style="font-size: 11.5px; color: var(--mk-body)"
+                        >{{ nodeLabel(link.left) }} ↔ {{ nodeLabel(link.right) }}</span
+                    >
+                    <span style="margin-left: auto; display: flex; gap: 6px">
+                        <button
+                            type="button"
+                            class="mk-btn mk-ghost"
+                            style="padding: 0 8px"
+                            @click="confirmLink(link.id)"
+                        >
+                            {{ t('person.identityConfirm') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="mk-btn mk-ghost"
+                            style="padding: 0 8px"
+                            @click="withdrawLink(link.id)"
+                        >
+                            {{ t('person.identityDrop') }}
+                        </button>
+                    </span>
+                </div>
+
+                <!-- Why, for each link that is holding. -->
+                <details v-if="confirmed.length" style="margin-top: 10px">
+                    <summary
+                        class="mk-t3"
+                        style="cursor: pointer; font-size: 11px"
+                    >
+                        {{ t('person.identityWhy', { count: confirmed.length }) }}
+                    </summary>
+                    <div
+                        v-for="link in confirmed"
+                        :key="link.id"
+                        class="mk-hair"
+                        style="
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            padding: 6px 0;
+                        "
+                    >
+                        <span
+                            class="mk-m mk-clip mk-t3"
+                            style="font-size: 11px"
+                            >{{ nodeLabel(link.left) }} ↔ {{ nodeLabel(link.right) }}</span
+                        >
+                        <span
+                            class="mk-m mk-t3"
+                            style="margin-left: auto; font-size: 10.5px"
+                            >{{ link.evidence ?? link.source }}</span
+                        >
+                        <button
+                            type="button"
+                            class="mk-btn mk-ghost"
+                            style="padding: 0 6px"
+                            @click="withdrawLink(link.id)"
+                        >
+                            {{ t('person.identityDrop') }}
+                        </button>
+                    </div>
+                </details>
+
+                <form
+                    style="display: flex; gap: 6px; margin-top: 12px"
+                    @submit.prevent="linkIdentity"
+                >
+                    <input
+                        v-model="identityForm.target"
+                        class="mk-input mk-m"
+                        style="flex: 1; min-width: 0; font-size: 11.5px"
+                        :placeholder="t('person.identityPlaceholder')"
+                    />
+                    <button
+                        type="submit"
+                        class="mk-btn mk-ghost"
+                        style="padding: 0 10px"
+                        :disabled="identityForm.processing || !identityForm.target"
+                    >
+                        {{ t('person.identityAdd') }}
+                    </button>
+                </form>
+                <p
+                    v-if="identityForm.errors.target"
+                    class="mk-t3"
+                    style="margin: 6px 0 0; font-size: 11px; color: var(--mk-red)"
+                >
+                    {{ identityForm.errors.target }}
+                </p>
             </div>
 
             <div>

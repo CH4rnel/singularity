@@ -27,7 +27,10 @@ class PersonDossier
 {
     private const WEEKS = 12;
 
-    public function __construct(private WalletPriceService $prices) {}
+    public function __construct(
+        private WalletPriceService $prices,
+        private IdentityGraph $identities,
+    ) {}
 
     /** @return array<string, mixed> */
     public function build(CrmContact $contact): array
@@ -76,6 +79,54 @@ class PersonDossier
                 'assignee' => $task->assignee?->name,
             ])->all(),
             'timeline' => $this->timeline($contact, $addresses),
+            /*
+             * The same person, filed twice.
+             *
+             * One visitor arrives under an account, an EVM address and a
+             * Solana address and leaves a record under each; the console used
+             * to show three strangers. Everything here is an assertion
+             * somebody or something made, so each row carries what justified
+             * it — a link nobody can question is a link nobody trusts the
+             * first time it surprises them.
+             */
+            'identity' => $this->identity($contact),
+        ];
+    }
+
+    /**
+     * Who else is this person, and on what grounds.
+     *
+     * `same` are the records that join this one through evidence strong enough
+     * to stand alone. `suggested` are the guesses — an address a bridge paid
+     * out to, which may just as easily be a friend — offered for somebody to
+     * confirm rather than applied quietly. The distinction is the whole point:
+     * merging two customers on a guess is worse than showing one twice.
+     *
+     * @return array<string, mixed>
+     */
+    private function identity(CrmContact $contact): array
+    {
+        $same = $this->identities->contactsWith($contact);
+
+        return [
+            'nodes' => IdentityGraph::nodesOf($contact),
+            'same' => $same->map(fn (CrmContact $other) => [
+                'id' => $other->id,
+                'name' => $other->name ?: ($other->telegram ?: ($other->evm_address ?: '#'.$other->id)),
+                'source' => $other->source,
+                'evm_address' => $other->evm_address,
+                'solana_address' => $other->solana_address,
+                'user_id' => $other->user_id,
+            ])->all(),
+            'links' => $this->identities->edgesFor($contact)->map(fn ($link) => [
+                'id' => $link->id,
+                'left' => $link->left_kind.':'.$link->left_value,
+                'right' => $link->right_kind.':'.$link->right_value,
+                'source' => $link->source,
+                'confidence' => $link->confidence,
+                'evidence' => $link->evidence,
+                'created_at' => $link->created_at?->toIso8601String(),
+            ])->all(),
         ];
     }
 

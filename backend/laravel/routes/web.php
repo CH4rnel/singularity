@@ -491,6 +491,15 @@ Route::middleware(['auth'])->group(function () {
         Route::put('{contact}', [CrmContactController::class, 'update'])->name('update');
         Route::delete('{contact}', [CrmContactController::class, 'destroy'])->name('destroy');
         Route::post('{contact}/notes', [CrmNoteController::class, 'store'])->name('notes.store');
+        /*
+         * Same-person links. A person arrives under an account, an EVM address
+         * and a Solana address, and the console used to file three strangers;
+         * these say which records are one human. Never a merge — the claim is
+         * a row, and withdrawing it is a delete.
+         */
+        Route::post('{contact}/identity', [CrmContactController::class, 'link'])->name('identity.link');
+        Route::post('identity-links/{link}/confirm', [CrmContactController::class, 'confirmLink'])->name('identity.confirm');
+        Route::delete('identity-links/{link}', [CrmContactController::class, 'unlink'])->name('identity.unlink');
         Route::delete('notes/{note}', [CrmNoteController::class, 'destroy'])->name('notes.destroy');
         Route::post('{contact}/tasks', [CrmTaskController::class, 'store'])->name('tasks.storeForContact');
     });

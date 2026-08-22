@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreCrmContactRequest;
 use App\Http\Requests\UpdateCrmContactRequest;
 use App\Models\CrmContact;
+use App\Models\CrmIdentityLink;
 use App\Models\CrmTask;
 use App\Models\User;
+use App\Services\Console\IdentityGraph;
 use App\Services\Console\PeopleLens;
 use App\Services\Console\PersonDossier;
 use Illuminate\Http\RedirectResponse;
@@ -26,7 +28,116 @@ class CrmContactController extends Controller
     public function __construct(
         private PeopleLens $lens,
         private PersonDossier $dossier,
+        private IdentityGraph $identities,
     ) {}
+
+    /**
+     * Say that this record and another identity are one person.
+     *
+     * The console can already see the evidence — a bridge request naming an
+     * account and the address that signed its deposit — but evidence is not
+     * every case: an operator recognising a customer from a conversation is
+     * the case no derivation will ever cover, and it is why this is a button
+     * rather than only a command.
+     *
+     * The target is given as `kind:value` (`user:38`, `evm:0x…`, `solana:…`)
+     * or as a bare address, whose shape decides the kind. Linking to a contact
+     * record is deliberately not offered: a record is not an identity, and the
+     * link has to survive the sync rebuilding it.
+     */
+    public function link(Request $request, CrmContact $contact): RedirectResponse
+    {
+        $target = trim((string) $request->string('target'));
+        $parsed = $this->parseIdentity($target);
+
+        if ($parsed === null) {
+            return back()->withErrors(['target' => 'Not an account id, an EVM address or a Solana address.']);
+        }
+
+        $mine = IdentityGraph::nodesOf($contact);
+
+        if ($mine === []) {
+            return back()->withErrors(['target' => 'This record carries no identity to link from.']);
+        }
+
+        // Anchored on this record's strongest identity: its account if it has
+        // one, otherwise the first address it carries. Linking every node
+        // would assert edges nobody claimed.
+        [$kind, $value] = explode(':', $mine[0], 2);
+
+        $this->identities->link(
+            $kind,
+            $value,
+            $parsed[0],
+            $parsed[1],
+            'manual',
+            'operator',
+            'strong',
+            $request->user()?->id,
+        );
+
+        return back();
+    }
+
+    /**
+     * Promote a suggestion, or withdraw a link entirely.
+     *
+     * Both directions exist because a judgement that cannot be taken back is a
+     * judgement people stop making. Nothing is deleted but the claim itself —
+     * the records at either end are untouched.
+     */
+    public function unlink(CrmIdentityLink $link): RedirectResponse
+    {
+        $link->delete();
+        $this->identities->forget();
+
+        return back();
+    }
+
+    public function confirmLink(CrmIdentityLink $link): RedirectResponse
+    {
+        $link->forceFill(['confidence' => 'strong', 'source' => 'manual'])->save();
+        $this->identities->forget();
+
+        return back();
+    }
+
+    /**
+     * Read an identity out of what an operator typed.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    private function parseIdentity(string $value): ?array
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        if (str_contains($value, ':')) {
+            [$kind, $rest] = explode(':', $value, 2);
+            $kind = strtolower(trim($kind));
+
+            if (in_array($kind, ['user', 'evm', 'solana'], true) && trim($rest) !== '') {
+                return [$kind, trim($rest)];
+            }
+
+            return null;
+        }
+
+        if (preg_match('/^0x[0-9a-fA-F]{40}$/', $value) === 1) {
+            return ['evm', $value];
+        }
+
+        if (preg_match('/^[1-9A-HJ-NP-Za-km-z]{32,44}$/', $value) === 1) {
+            return ['solana', $value];
+        }
+
+        if (ctype_digit($value)) {
+            return ['user', $value];
+        }
+
+        return null;
+    }
 
     public function index(Request $request): Response
     {

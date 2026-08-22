@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Notifications\FeedbackRequestNotification;
+use App\Services\Console\IdentityGraph;
 use Illuminate\Console\Command;
 
 /**
@@ -21,7 +22,7 @@ use Illuminate\Console\Command;
 class UserFeedbackAskCommand extends Command
 {
     protected $signature = 'user:ask-feedback
-        {user : The users.id to notify}
+        {user : A users.id, an EVM address or a Solana address}
         {--title= : Headline shown in the bell}
         {--body= : The sentence under it}
         {--url= : Where the notice links (an external URL is fine)}
@@ -29,12 +30,12 @@ class UserFeedbackAskCommand extends Command
 
     protected $description = 'Send one user an in-app request for feedback';
 
-    public function handle(): int
+    public function handle(IdentityGraph $identities): int
     {
-        $user = User::find((int) $this->argument('user'));
+        $user = $this->resolve((string) $this->argument('user'), $identities);
 
         if ($user === null) {
-            $this->error('No such user.');
+            $this->error('Nobody to notify: no account, and no link from that address to one. Try `crm:link-identities`, or link it by hand on the person\'s page.');
 
             return self::FAILURE;
         }
@@ -61,5 +62,40 @@ class UserFeedbackAskCommand extends Command
         $this->info('Sent.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Find the person behind whatever was typed.
+     *
+     * An address is how an operator knows somebody — it is what the explorer
+     * shows and what a bridge row holds — but a notification has to land on an
+     * account, and a wallet address is not one. So an address is resolved
+     * through the same-person graph, which is exactly the case this was built
+     * for: a visitor who signed in with Solana and bridged from an EVM key is
+     * one person the console used to file as two.
+     */
+    private function resolve(string $who, IdentityGraph $identities): ?User
+    {
+        if (ctype_digit($who)) {
+            return User::find((int) $who);
+        }
+
+        $kind = match (true) {
+            preg_match('/^0x[0-9a-fA-F]{40}$/', $who) === 1 => 'evm',
+            preg_match('/^[1-9A-HJ-NP-Za-km-z]{32,44}$/', $who) === 1 => 'solana',
+            default => null,
+        };
+
+        if ($kind === null) {
+            return null;
+        }
+
+        $user = $identities->userForAddress($kind, $who);
+
+        if ($user !== null) {
+            $this->line("  resolved {$kind} {$who} → account #{$user->id}");
+        }
+
+        return $user;
     }
 }
