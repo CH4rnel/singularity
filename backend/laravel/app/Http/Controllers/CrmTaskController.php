@@ -7,58 +7,89 @@ use App\Http\Requests\UpdateCrmTaskRequest;
 use App\Models\CrmContact;
 use App\Models\CrmTask;
 use App\Models\User;
+use App\Services\Console\ConsoleFeed;
+use App\Services\Console\TaskLine;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * "Задачи" — three columns and one line to type into.
+ *
+ * The filters are gone. A task list has exactly three states worth separating
+ * — late, now, later — and the fourth thing that matters is not a state at
+ * all: a task nobody owns. Unowned work never gets picked up by itself, so it
+ * stands above the columns as its own band instead of being sorted into them
+ * with an empty assignee column.
+ */
 class CrmTaskController extends Controller
 {
     public function index(Request $request): Response
     {
-        $filters = [
-            'q' => $request->string('q')->value() ?: null,
-            'status' => $request->string('status')->value() ?: null,
-            'assignee' => $request->string('assignee')->value() ?: null,
-            'priority' => $request->string('priority')->value() ?: null,
-            // "1" narrows to active tasks past their due date.
-            'overdue' => $request->boolean('overdue') ?: null,
-        ];
-
         $tasks = CrmTask::query()
-            ->when($filters['q'], fn ($q, $term) => $q->where('title', 'like', '%'.$term.'%'))
-            ->when($filters['status'], fn ($q, $status) => $q->where('status', $status))
-            ->when($filters['priority'], fn ($q, $priority) => $q->where('priority', $priority))
-            ->when($filters['overdue'], fn ($q) => $q->overdue())
-            ->assignee($filters['assignee'], $request->user()?->id)
-            ->with(['assignee:id,name', 'contact:id,name,email'])
+            ->active()
+            ->with(['assignee:id,name', 'contact:id,name,telegram'])
             ->byDueDate()
-            ->paginate(25)
-            ->withQueryString();
+            ->get();
+
+        $done = CrmTask::query()
+            ->where('status', 'done')
+            ->where('completed_at', '>=', now()->subDays(7))
+            ->get(['id', 'created_at', 'completed_at']);
 
         return Inertia::render('crm/Tasks', [
-            'tasks' => $tasks,
-            'filters' => $filters,
-            'stats' => $this->stats($request->user()?->id),
+            'columns' => $this->columns($tasks),
+            'unowned' => $tasks
+                ->filter(fn (CrmTask $task) => $task->assigned_to_user_id === null)
+                ->map(fn (CrmTask $task) => $this->row($task))
+                ->values()
+                ->all(),
+            'stats' => [
+                'open' => $tasks->count(),
+                'overdue' => $tasks->filter(fn (CrmTask $task) => $task->isOverdue())->count(),
+                'unowned' => $tasks->filter(fn (CrmTask $task) => $task->assigned_to_user_id === null)->count(),
+                'closed_7d' => $done->count(),
+                // How long a task lives, which is the only number that says
+                // whether the board is a plan or a graveyard.
+                'median_days' => $this->medianDays($done),
+            ],
             'options' => [
-                'statuses' => CrmTask::STATUSES,
                 'priorities' => CrmTask::PRIORITIES,
-                'assignees' => $this->assignees(),
+                'assignees' => User::crmOperators()
+                    ->get(['id', 'name'])
+                    ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name])
+                    ->all(),
             ],
         ]);
     }
 
     /**
-     * Create a task. Reached both standalone (POST /crm/tasks) and nested
-     * under a contact (POST /crm/{contact}/tasks), which binds $contact.
+     * Create a task, from a form or from one typed line.
+     *
+     * Reached standalone (POST /crm/tasks) and nested under a contact
+     * (POST /crm/{contact}/tasks), which binds $contact.
      */
     public function store(StoreCrmTaskRequest $request, ?CrmContact $contact = null): RedirectResponse
     {
+        $data = $request->validated();
+
+        // One typed line beats four fields: `@who !when #whom` is parsed out
+        // of the title, and anything that matches nothing stays in the title.
+        $parsed = TaskLine::parse($data['title']);
+
         CrmTask::create([
-            ...$request->validated(),
-            'crm_contact_id' => $contact?->id,
+            ...$data,
+            'title' => $parsed['title'],
+            'assigned_to_user_id' => $data['assigned_to_user_id'] ?? $parsed['assigned_to_user_id'],
+            'due_at' => $data['due_at'] ?? $parsed['due_at'],
+            'crm_contact_id' => $contact?->id ?? $parsed['crm_contact_id'],
             'created_by_user_id' => $request->user()?->id,
         ]);
+
+        ConsoleFeed::forget();
 
         return back()->with('success', 'Task created');
     }
@@ -67,50 +98,104 @@ class CrmTaskController extends Controller
     {
         $task->update($request->validated());
 
+        ConsoleFeed::forget();
+
         return back()->with('success', 'Task updated');
+    }
+
+    /**
+     * Take an unowned task.
+     *
+     * One button, because that is the whole interaction: the band exists to
+     * be emptied, and choosing an assignee from a dropdown to put your own
+     * name in it is a form standing in the way of a decision already made.
+     */
+    public function claim(Request $request, CrmTask $task): RedirectResponse
+    {
+        $task->update(['assigned_to_user_id' => $request->user()?->id]);
+
+        ConsoleFeed::forget();
+
+        return back()->with('success', 'Task claimed');
     }
 
     public function destroy(CrmTask $task): RedirectResponse
     {
         $task->delete();
 
+        ConsoleFeed::forget();
+
         return back()->with('success', 'Task deleted');
     }
 
     /**
-     * Operators a task can be assigned to — the CRM allow list, resolved to
-     * real accounts. A wallet that never logged in has no row and is absent.
+     * Late, now, later.
      *
-     * @return array<int, array{id: int, name: string, wallet_address: string|null}>
+     * A task with no due date is "later" rather than a fourth column: undated
+     * work is not a category, it is work somebody has not decided about yet.
+     *
+     * @param  Collection<int, CrmTask>  $tasks
+     * @return array<string, array<int, array<string, mixed>>>
      */
-    private function assignees(): array
+    private function columns(Collection $tasks): array
     {
-        return User::crmOperators()
-            ->get(['id', 'name', 'wallet_address'])
-            ->map(fn (User $user) => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'wallet_address' => $user->wallet_address,
-            ])
-            ->all();
+        $tomorrow = CarbonImmutable::now()->addDay()->endOfDay();
+
+        $columns = ['overdue' => [], 'soon' => [], 'later' => []];
+
+        foreach ($tasks as $task) {
+            $column = match (true) {
+                $task->isOverdue() => 'overdue',
+                $task->due_at !== null && $task->due_at->lessThanOrEqualTo($tomorrow) => 'soon',
+                default => 'later',
+            };
+
+            $columns[$column][] = $this->row($task);
+        }
+
+        return $columns;
     }
 
-    /**
-     * Counters for the cards above the list.
-     *
-     * @return array<string, int>
-     */
-    private function stats(?int $currentUserId): array
+    /** @return array<string, mixed> */
+    private function row(CrmTask $task): array
     {
         return [
-            'open' => CrmTask::where('status', 'open')->count(),
-            'in_progress' => CrmTask::where('status', 'in_progress')->count(),
-            'overdue' => CrmTask::query()->overdue()->count(),
-            'unassigned' => CrmTask::query()->active()->whereNull('assigned_to_user_id')->count(),
-            'mine' => $currentUserId
-                ? CrmTask::query()->active()->where('assigned_to_user_id', $currentUserId)->count()
-                : 0,
-            'done' => CrmTask::where('status', 'done')->count(),
+            'id' => $task->id,
+            'title' => $task->title,
+            'description' => $task->description,
+            'status' => $task->status,
+            'priority' => $task->priority,
+            'due_at' => $task->due_at?->toIso8601String(),
+            'overdue' => $task->isOverdue(),
+            'overdue_days' => $task->isOverdue()
+                ? (int) $task->due_at->diffInDays(now())
+                : null,
+            'assignee' => $task->assignee?->name,
+            'assignee_id' => $task->assigned_to_user_id,
+            'contact' => $task->contact === null ? null : [
+                'id' => $task->contact->id,
+                'name' => $task->contact->name ?: $task->contact->telegram,
+            ],
         ];
+    }
+
+    /** @param Collection<int, CrmTask> $done */
+    private function medianDays(Collection $done): ?float
+    {
+        $lives = $done
+            ->filter(fn (CrmTask $task) => $task->completed_at !== null && $task->created_at !== null)
+            ->map(fn (CrmTask $task) => (float) $task->created_at->diffInDays($task->completed_at, true))
+            ->sort()
+            ->values();
+
+        if ($lives->isEmpty()) {
+            return null;
+        }
+
+        $middle = (int) floor($lives->count() / 2);
+
+        return round($lives->count() % 2 === 0
+            ? ($lives[$middle - 1] + $lives[$middle]) / 2
+            : $lives[$middle], 1);
     }
 }

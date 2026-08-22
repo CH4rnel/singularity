@@ -36,19 +36,19 @@ function anonymousUser(array $attributes = []): AnalyticsUser
     ])->save());
 }
 
-test('the dashboard is invisible to everyone but a CRM operator', function () {
-    $this->get('/crm/product')->assertRedirect();
+test('the lens is invisible to everyone but a CRM operator', function () {
+    $this->get('/crm/numbers')->assertRedirect();
 
     $this->actingAs(User::factory()->create())
-        ->get('/crm/product')
-        // 404 rather than 403: the CRM is not discoverable by an ordinary
+        ->get('/crm/numbers')
+        // 404 rather than 403: the console is not discoverable by an ordinary
         // signed-in user, and neither is this.
         ->assertNotFound();
 
-    $this->actingAs(operator())->get('/crm/product')->assertOk();
+    $this->actingAs(operator())->get('/crm/numbers')->assertOk();
 });
 
-test('the dashboard renders every section it promises', function () {
+test('the six questions each carry an answer, a conclusion and its evidence', function () {
     $user = anonymousUser([
         'source' => 'twitter',
         'campaign' => 'launch',
@@ -67,23 +67,24 @@ test('the dashboard renders every section it promises', function () {
     ]);
 
     $this->actingAs(operator())
-        ->get('/crm/product')
+        ->get('/crm/numbers')
         ->assertInertia(fn (Assert $page) => $page
-            ->component('crm/Product')
-            ->has('overview.north_star')
-            ->where('overview.new_users', 1)
-            // JSON has one number type; 25.0 arrives as 25.
-            ->where('overview.swap_volume_usd', 25)
-            ->has('series')
-            ->has('mainFunnel', 5)
-            ->has('productFunnels.swap')
-            ->has('activation')
-            ->has('cohorts')
-            ->has('acquisition')
-            ->has('usage')
-            ->has('errors')
-            ->has('gas')
-            ->has('recent', 1)
+            ->component('crm/Numbers')
+            ->where('subject', 'installs')
+            ->has('questions', 6)
+            // A question is only worth the space if it carries all three: the
+            // number, what it means and the evidence to argue with.
+            ->where('questions.0.key', 'growth')
+            ->where('questions.0.answer.value', 1)
+            ->has('questions.0.conclusion.key')
+            ->where('questions.0.evidence.type', 'bars')
+            ->where('questions.1.key', 'money')
+            ->has('questions.1.evidence.steps', 5)
+            ->where('questions.2.key', 'return')
+            ->where('questions.3.key', 'sources')
+            ->where('questions.4.key', 'breaks')
+            ->where('questions.5.key', 'cost')
+            ->has('questions.5.evidence.rows', 5)
         );
 });
 
@@ -104,11 +105,14 @@ test('the explorer shows a timeline and never an address', function () {
         'created_at' => now(),
     ]);
 
-    $response = $this->actingAs(operator())->get("/crm/product/users/{$user->id}");
+    $response = $this->actingAs(operator())->get("/crm/installs/{$user->id}");
 
     $response->assertInertia(fn (Assert $page) => $page
-        ->component('crm/ProductUser')
+        ->component('crm/Install')
         ->where('user.id', $user->id)
+        // The cohort this one is an example of: one stuck installation is an
+        // anecdote, six hundred of them is a product decision.
+        ->has('peers.count')
         // A count, because the addresses are held to read a balance and to
         // price a drip — neither of which anybody does by eye — and printing
         // them would turn this into a way of matching a wallet to a visitor.
@@ -119,18 +123,26 @@ test('the explorer shows a timeline and never an address', function () {
     expect($response->content())->not->toContain('0xaaf26832db3557daf540b0b09dee06c24b8a38bb');
 });
 
-test('filters narrow what the dashboard reports', function () {
+test('filters narrow what the lens reports', function () {
     anonymousUser(['source' => 'twitter', 'campaign' => 'launch']);
     anonymousUser(['source' => 'podcast', 'campaign' => 'ep12']);
 
     $this->actingAs(operator())
-        ->get('/crm/product?source=twitter')
+        ->get('/crm/numbers?source=twitter')
         ->assertInertia(fn (Assert $page) => $page
             ->where('filters.source', 'twitter')
-            ->where('overview.new_users', 1)
+            ->where('questions.0.answer.value', 1)
         );
 
     $this->actingAs(operator())
-        ->get('/crm/product')
-        ->assertInertia(fn (Assert $page) => $page->where('overview.new_users', 2));
+        ->get('/crm/numbers')
+        ->assertInertia(fn (Assert $page) => $page->where('questions.0.answer.value', 2));
+});
+
+test('the old dossier address still opens the dossier', function () {
+    $user = anonymousUser();
+
+    $this->actingAs(operator())
+        ->get("/crm/product/users/{$user->id}")
+        ->assertRedirect("/crm/installs/{$user->id}");
 });

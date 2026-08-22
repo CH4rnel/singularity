@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Console\ConsoleHeader;
 use App\Support\Changelog;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -66,6 +67,16 @@ class HandleInertiaRequests extends Middleware
                 'sessionTimeoutMinutes' => (int) config('analytics.session_timeout_minutes'),
                 'appVersion' => Changelog::currentVersion(),
             ],
+            /*
+             * The console's top bar, on every one of its lenses and nowhere
+             * else. It is one state — the banner, the group counters and the
+             * rail's badge are three renderings of one cached queue — so it is
+             * shared rather than assembled per page, and the closure means an
+             * ordinary page never pays for it.
+             */
+            'console' => fn () => $request->routeIs('crm.*') && EnsureCrmAdmin::allows($user)
+                ? app(ConsoleHeader::class)->build()
+                : null,
             'vapidPublicKey' => config('webpush.vapid.public_key'),
             'flash' => [
                 'status' => fn () => $request->session()->get('status'),

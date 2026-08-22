@@ -49,14 +49,17 @@
 
         <link rel="preconnect" href="https://fonts.bunny.net">
         {{-- Manrope is the site face; Space Grotesk and IBM Plex Mono are the
-             wallet's. Space Grotesk has no Cyrillic, so Russian copy falls back
-             to Manrope by design — the mono face carries both alphabets.
+             wallet's; Archivo is the operator console's, where dense rows of
+             labels need a narrower grotesque and it carries Cyrillic, which
+             the console is mostly read in. Space Grotesk has no Cyrillic, so
+             Russian copy falls back to Manrope by design — the mono face
+             carries both alphabets.
 
              display=swap matters more here than it looks: without it the
              browser hides text for up to three seconds while the font loads,
              which on a slow phone means a wallet whose buttons and balances
              are blank. Fallback text now paints immediately and swaps. --}}
-        <link href="https://fonts.bunny.net/css?family=manrope:300,400,500,600,700,800|space-grotesk:400,500,600,700|ibm-plex-mono:400,500,600&display=swap" rel="stylesheet" />
+        <link href="https://fonts.bunny.net/css?family=manrope:300,400,500,600,700,800|space-grotesk:400,500,600,700|archivo:400,500,600,700|ibm-plex-mono:400,500,600&display=swap" rel="stylesheet" />
 
         @vite(['resources/css/app.css', 'resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
         @if (is_array($seo))

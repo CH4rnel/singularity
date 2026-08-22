@@ -1,542 +1,369 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import {
-    ArrowLeft,
-    CheckSquare,
-    Languages,
-    Plus,
-    Trash2,
-} from 'lucide-vue-next';
-import { ref, watch } from 'vue';
-import Heading from '@/components/Heading.vue';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Head, router, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import Rule from '@/components/console/Rule.vue';
 import { useLocale } from '@/composables/useLocale';
-import { crmMessages } from '@/lib/crmMessages';
-import type {
-    CrmAssignee,
-    CrmTask,
-    CrmTaskPriority,
-    CrmTaskStatus,
-    Paginated,
-} from '@/types';
+import { num, shortDate } from '@/lib/console';
+import { consoleMessages } from '@/lib/consoleMessages';
 
-type Filters = {
-    q: string | null;
-    status: string | null;
+/**
+ * "Задачи" — three columns and one line to type into.
+ *
+ * A task list has exactly three states worth separating (late, now, later) and
+ * one thing that is not a state at all: work nobody owns. Unowned work never
+ * gets picked up by itself, so it stands above the columns in its own band
+ * with a single button, instead of hiding inside them behind an empty column.
+ *
+ * The composer is one line because four fields are four decisions before the
+ * thought is written down, and the thought is the part that gets lost.
+ */
+type Task = {
+    id: number;
+    title: string;
+    description: string | null;
+    priority: string;
+    due_at: string | null;
+    overdue: boolean;
+    overdue_days: number | null;
     assignee: string | null;
-    priority: string | null;
-    overdue: boolean | null;
+    assignee_id: number | null;
+    contact: { id: number; name: string } | null;
 };
 
-type Props = {
-    tasks: Paginated<CrmTask>;
-    filters: Filters;
+const props = defineProps<{
+    columns: { overdue: Task[]; soon: Task[]; later: Task[] };
+    unowned: Task[];
     stats: {
         open: number;
-        in_progress: number;
         overdue: number;
-        unassigned: number;
-        mine: number;
-        done: number;
+        unowned: number;
+        closed_7d: number;
+        median_days: number | null;
     };
-    options: {
-        statuses: CrmTaskStatus[];
-        priorities: CrmTaskPriority[];
-        assignees: CrmAssignee[];
-    };
-};
+}>();
 
-const props = defineProps<Props>();
+const { t, tag } = useLocale(consoleMessages);
 
-const { nextTag, toggleLocale, t } = useLocale(crmMessages);
+const compose = useForm({ title: '' });
 
-const page = usePage();
-const currentUserId = (page.props.auth?.user?.id as number | undefined) ?? null;
+const COLUMNS = [
+    { key: 'overdue', tone: 'critical' },
+    { key: 'soon', tone: 'warning' },
+    { key: 'later', tone: 'plain' },
+] as const;
 
-const priorityVariant: Record<CrmTaskPriority, string> = {
-    low: 'outline',
-    normal: 'secondary',
-    high: 'destructive',
-};
+function tasksOf(key: 'overdue' | 'soon' | 'later'): Task[] {
+    return props.columns[key] ?? [];
+}
 
-const search = ref(props.filters.q ?? '');
-const status = ref(props.filters.status ?? '');
-const assignee = ref(props.filters.assignee ?? '');
-const priority = ref(props.filters.priority ?? '');
-const overdueOnly = ref(props.filters.overdue === true);
+function submit() {
+    compose.post('/crm/tasks', {
+        preserveScroll: true,
+        onSuccess: () => compose.reset(),
+    });
+}
 
-let searchTimer: ReturnType<typeof setTimeout> | undefined;
+function claim(task: Task) {
+    router.post(`/crm/tasks/${task.id}/claim`, {}, { preserveScroll: true });
+}
 
-function applyFilters() {
-    router.get(
-        '/crm/tasks',
-        {
-            q: search.value || undefined,
-            status: status.value || undefined,
-            assignee: assignee.value || undefined,
-            priority: priority.value || undefined,
-            overdue: overdueOnly.value ? 1 : undefined,
-        },
-        { preserveState: true, replace: true, preserveScroll: true },
+function done(task: Task) {
+    router.put(
+        `/crm/tasks/${task.id}`,
+        { status: 'done' },
+        { preserveScroll: true },
     );
 }
 
-watch(search, () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(applyFilters, 300);
-});
-watch([status, assignee, priority, overdueOnly], applyFilters);
-
-const showForm = ref(false);
-const createForm = useForm<{
-    title: string;
-    description: string;
-    assigned_to_user_id: number | null;
-    priority: CrmTaskPriority;
-    due_at: string;
-}>({
-    title: '',
-    description: '',
-    assigned_to_user_id: null,
-    priority: 'normal',
-    due_at: '',
-});
-
-function submitCreate() {
-    createForm
-        .transform((data) => ({ ...data, due_at: data.due_at || null }))
-        .post('/crm/tasks', {
-            preserveScroll: true,
-            onSuccess: () => {
-                showForm.value = false;
-                createForm.reset();
-            },
-        });
-}
-
-/** Inline edits: one field at a time, straight to PUT /crm/tasks/{id}. */
-function patch(task: CrmTask, payload: Record<string, string | number | null>) {
-    router.put(`/crm/tasks/${task.id}`, payload, { preserveScroll: true });
-}
-
-function reassign(task: CrmTask, value: string) {
-    patch(task, { assigned_to_user_id: value === '' ? null : Number(value) });
-}
-
-function deleteTask(task: CrmTask) {
-    if (confirm(`${t('confirmDeleteTask')} (${task.title})`)) {
-        router.delete(`/crm/tasks/${task.id}`, { preserveScroll: true });
+function due(task: Task): string {
+    if (!task.due_at) {
+        return t('tasks.noDue');
     }
+
+    const date = new Date(task.due_at);
+    const today = new Date();
+    const sameDay = date.toDateString() === today.toDateString();
+
+    if (sameDay) {
+        return t('tasks.today');
+    }
+
+    const tomorrow = new Date(today.getTime() + 86_400_000);
+
+    if (date.toDateString() === tomorrow.toDateString()) {
+        return t('tasks.tomorrow');
+    }
+
+    return shortDate(task.due_at, tag.value);
 }
 
-function isOverdue(task: CrmTask): boolean {
-    return (
-        task.due_at !== null &&
-        (task.status === 'open' || task.status === 'in_progress') &&
-        new Date(task.due_at) < new Date()
-    );
+function bar(task: Task): string {
+    if (task.overdue) {
+        return 'var(--mk-critical)';
+    }
+
+    return task.priority === 'high'
+        ? 'var(--mk-critical)'
+        : task.priority === 'normal'
+          ? 'var(--mk-warning)'
+          : 'var(--mk-fainter)';
 }
 
-function formatDue(value: string | null): string {
-    return value ? value.slice(0, 10) : '—';
-}
-
-defineOptions({
-    layout: () => ({
-        breadcrumbs: [
-            { title: 'CRM', href: '/crm' },
-            { title: 'Tasks', href: '/crm/tasks' },
-        ],
-    }),
-});
+const footer = computed(() =>
+    props.stats.closed_7d > 0
+        ? t('tasks.footer', {
+              closed: props.stats.closed_7d,
+              median: props.stats.median_days ?? '—',
+          })
+        : t('tasks.footerEmpty'),
+);
 </script>
 
 <template>
-    <Head :title="`${t('tasks')} — CRM`" />
+    <Head title="Мостик · Задачи" />
 
-    <div class="m-2 flex flex-col space-y-6">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <Link href="/crm">
-                    <Button variant="ghost" size="sm">
-                        <ArrowLeft class="h-4 w-4" />
-                    </Button>
-                </Link>
-                <Heading
-                    variant="small"
-                    :title="t('tasks')"
-                    :description="t('tasksDescription')"
-                />
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-                <Button variant="ghost" size="sm" @click="toggleLocale">
-                    <Languages class="h-4 w-4" />
-                    {{ nextTag }}
-                </Button>
-                <Button @click="showForm = !showForm">
-                    <Plus class="h-4 w-4" /> {{ t('addTask') }}
-                </Button>
-            </div>
-        </div>
+    <div style="display: flex; align-items: baseline; gap: 12px">
+        <h1 class="mk-h1">{{ t('tasks.title') }}</h1>
+        <span class="mk-m mk-t3" style="font-size: 12px">
+            {{
+                t('tasks.stats', {
+                    open: stats.open,
+                    overdue: stats.overdue,
+                    unowned: stats.unowned,
+                })
+            }}
+        </span>
+    </div>
 
-        <!-- Stat cards -->
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-6">
-            <Card
-                v-for="card in [
-                    { label: t('statOpen'), value: stats.open },
-                    { label: t('statInProgress'), value: stats.in_progress },
-                    { label: t('statOverdue'), value: stats.overdue },
-                    { label: t('statUnassigned'), value: stats.unassigned },
-                    { label: t('statMine'), value: stats.mine },
-                    { label: t('statDone'), value: stats.done },
-                ]"
-                :key="card.label"
+    <!-- One line, parsed as it is typed: @who !when #whom. -->
+    <form
+        style="
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0 16px;
+            height: 52px;
+            border: 1px solid rgba(0, 229, 209, 0.25);
+            background: rgba(0, 229, 209, 0.04);
+        "
+        @submit.prevent="submit"
+    >
+        <svg
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--mk-accent)"
+            stroke-width="1.8"
+            stroke-linecap="round"
+        >
+            <path d="M12 5v14M5 12h14" />
+        </svg>
+        <input
+            v-model="compose.title"
+            class="mk-m"
+            style="
+                flex: 1;
+                background: none;
+                border: 0;
+                outline: none;
+                color: var(--mk-body);
+                font-size: 13.5px;
+            "
+            :placeholder="t('tasks.quickAdd')"
+        />
+        <span class="mk-t3 mk-wide" style="font-size: 11.5px">{{
+            t('tasks.quickAddHint')
+        }}</span>
+    </form>
+
+    <!-- Unowned work: a state, not a line in a list. -->
+    <div v-if="unowned.length">
+        <Rule :label="t('tasks.unowned')" :note="t('tasks.unownedNote')" />
+        <div
+            style="
+                margin-top: 12px;
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+                gap: 12px;
+            "
+        >
+            <div
+                v-for="task in unowned"
+                :key="task.id"
+                style="
+                    border: 1px dashed rgba(232, 236, 236, 0.16);
+                    padding: 12px 14px;
+                "
             >
-                <CardHeader class="pb-2">
-                    <CardTitle
-                        class="text-xs font-medium text-muted-foreground"
-                    >
-                        {{ card.label }}
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div class="text-2xl font-semibold">{{ card.value }}</div>
-                </CardContent>
-            </Card>
-        </div>
-
-        <!-- Create form -->
-        <div v-if="showForm" class="rounded-lg border p-4">
-            <h3 class="mb-4 text-lg font-medium">{{ t('newTask') }}</h3>
-            <form @submit.prevent="submitCreate" class="space-y-4">
-                <div>
-                    <label class="text-sm font-medium">
-                        {{ t('taskTitle') }}
-                    </label>
-                    <Input
-                        v-model="createForm.title"
-                        class="mt-1"
-                        :placeholder="t('taskTitlePlaceholder')"
-                    />
-                    <p
-                        v-if="createForm.errors.title"
-                        class="mt-1 text-xs text-destructive"
-                    >
-                        {{ createForm.errors.title }}
-                    </p>
-                </div>
-                <div>
-                    <label class="text-sm font-medium">
-                        {{ t('taskDescription') }}
-                    </label>
-                    <textarea
-                        v-model="createForm.description"
-                        rows="3"
-                        class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    ></textarea>
-                </div>
-                <div class="grid gap-4 md:grid-cols-3">
-                    <div>
-                        <label class="text-sm font-medium">
-                            {{ t('assignee') }}
-                        </label>
-                        <select
-                            v-model="createForm.assigned_to_user_id"
-                            class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                            <option :value="null">{{ t('unassigned') }}</option>
-                            <option
-                                v-for="operator in options.assignees"
-                                :key="operator.id"
-                                :value="operator.id"
-                            >
-                                {{ operator.name }}
-                            </option>
-                        </select>
-                        <p
-                            v-if="options.assignees.length === 0"
-                            class="mt-1 text-xs text-muted-foreground"
-                        >
-                            {{ t('noOperators') }}
-                        </p>
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">
-                            {{ t('priority') }}
-                        </label>
-                        <select
-                            v-model="createForm.priority"
-                            class="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                            <option
-                                v-for="option in options.priorities"
-                                :key="option"
-                                :value="option"
-                            >
-                                {{ t(`priority.${option}`) }}
-                            </option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">
-                            {{ t('dueDate') }}
-                        </label>
-                        <Input
-                            v-model="createForm.due_at"
-                            type="date"
-                            class="mt-1"
-                        />
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <Button
-                        type="submit"
-                        :disabled="createForm.processing || !createForm.title"
-                    >
-                        {{ t('create') }}
-                    </Button>
-                    <Button
+                <p
+                    style="
+                        margin: 0;
+                        font-size: 13px;
+                        font-weight: 500;
+                        line-height: 1.4;
+                    "
+                >
+                    {{ task.title }}
+                </p>
+                <div
+                    style="
+                        margin-top: 10px;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    "
+                >
+                    <span class="mk-m mk-t3" style="font-size: 11px">{{
+                        due(task)
+                    }}</span>
+                    <span class="mk-k">{{ t(`priority.${task.priority}`) }}</span>
+                    <button
                         type="button"
-                        variant="outline"
-                        @click="showForm = false"
+                        class="mk-btn mk-act"
+                        style="margin-left: auto; height: 26px; padding: 0 10px"
+                        @click="claim(task)"
                     >
-                        {{ t('cancel') }}
-                    </Button>
+                        {{ t('tasks.claim') }}
+                    </button>
                 </div>
-            </form>
+            </div>
         </div>
+    </div>
 
-        <!-- Filters -->
-        <div class="flex flex-wrap items-center gap-2">
-            <Input
-                v-model="search"
-                :placeholder="t('taskTitlePlaceholder')"
-                class="max-w-xs"
-            />
-            <select
-                v-model="status"
-                class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+    <div
+        style="
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        "
+    >
+        <div
+            v-for="column in COLUMNS"
+            :key="column.key"
+            style="display: flex; flex-direction: column; min-width: 0"
+        >
+            <div
+                style="
+                    display: flex;
+                    align-items: center;
+                    gap: 9px;
+                    padding-bottom: 10px;
+                    border-bottom: 1px solid rgba(232, 236, 236, 0.09);
+                "
             >
-                <option value="">{{ t('allStatuses') }}</option>
-                <option
-                    v-for="option in options.statuses"
-                    :key="option"
-                    :value="option"
+                <span
+                    class="mk-dot"
+                    :style="{ background: `var(--mk-${column.tone === 'plain' ? 'faint' : column.tone})` }"
+                />
+                <span class="mk-k" style="color: var(--mk-body)">{{
+                    t(`tasks.${column.key}`)
+                }}</span>
+                <span
+                    class="mk-m mk-t3"
+                    style="margin-left: auto; font-size: 11px"
+                    >{{ num(tasksOf(column.key).length) }}</span
                 >
-                    {{ t(`taskStatus.${option}`) }}
-                </option>
-            </select>
-            <select
-                v-model="assignee"
-                class="rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-                <option value="">{{ t('allAssignees') }}</option>
-                <option v-if="currentUserId" value="me">{{ t('mine') }}</option>
-                <option value="unassigned">{{ t('unassigned') }}</option>
-                <option
-                    v-for="operator in options.assignees"
-                    :key="operator.id"
-                    :value="String(operator.id)"
-                >
-                    {{ operator.name }}
-                </option>
-            </select>
-            <select
-                v-model="priority"
-                class="rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-                <option value="">{{ t('allPriorities') }}</option>
-                <option
-                    v-for="option in options.priorities"
-                    :key="option"
-                    :value="option"
-                >
-                    {{ t(`priority.${option}`) }}
-                </option>
-            </select>
-            <label class="flex items-center gap-2 text-sm">
-                <input v-model="overdueOnly" type="checkbox" class="h-4 w-4" />
-                {{ t('onlyOverdue') }}
-            </label>
-        </div>
-
-        <!-- Table -->
-        <div class="overflow-x-auto rounded-lg border">
-            <table class="w-full text-sm">
-                <thead
-                    class="border-b bg-muted/50 text-left text-muted-foreground"
-                >
-                    <tr>
-                        <th class="px-4 py-2 font-medium">
-                            {{ t('colTask') }}
-                        </th>
-                        <th class="px-4 py-2 font-medium">
-                            {{ t('colContact') }}
-                        </th>
-                        <th class="px-4 py-2 font-medium">
-                            {{ t('assignee') }}
-                        </th>
-                        <th class="px-4 py-2 font-medium">{{ t('status') }}</th>
-                        <th class="px-4 py-2 font-medium">
-                            {{ t('priority') }}
-                        </th>
-                        <th class="px-4 py-2 font-medium">
-                            {{ t('dueDate') }}
-                        </th>
-                        <th class="px-4 py-2"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="task in tasks.data"
-                        :key="task.id"
-                        class="border-b last:border-0 hover:bg-muted/30"
-                    >
-                        <td class="px-4 py-2">
-                            <div
-                                class="font-medium"
-                                :class="
-                                    task.status === 'done' ||
-                                    task.status === 'cancelled'
-                                        ? 'text-muted-foreground line-through'
-                                        : ''
-                                "
-                            >
-                                {{ task.title }}
-                            </div>
-                            <div
-                                v-if="task.description"
-                                class="text-xs text-muted-foreground"
-                            >
-                                {{ task.description }}
-                            </div>
-                        </td>
-                        <td class="px-4 py-2">
-                            <Link
-                                v-if="task.contact"
-                                :href="`/crm/${task.contact.id}`"
-                                class="text-blue-500 hover:underline"
-                            >
-                                {{
-                                    task.contact.name ||
-                                    task.contact.email ||
-                                    `#${task.contact.id}`
-                                }}
-                            </Link>
-                            <span v-else class="text-muted-foreground">—</span>
-                        </td>
-                        <td class="px-4 py-2">
-                            <select
-                                :value="task.assigned_to_user_id ?? ''"
-                                class="rounded-md border border-input bg-background px-2 py-1 text-xs"
-                                @change="
-                                    reassign(
-                                        task,
-                                        ($event.target as HTMLSelectElement)
-                                            .value,
-                                    )
-                                "
-                            >
-                                <option value="">{{ t('unassigned') }}</option>
-                                <option
-                                    v-for="operator in options.assignees"
-                                    :key="operator.id"
-                                    :value="operator.id"
-                                >
-                                    {{ operator.name }}
-                                </option>
-                            </select>
-                        </td>
-                        <td class="px-4 py-2">
-                            <select
-                                :value="task.status"
-                                class="rounded-md border border-input bg-background px-2 py-1 text-xs"
-                                @change="
-                                    patch(task, {
-                                        status: (
-                                            $event.target as HTMLSelectElement
-                                        ).value,
-                                    })
-                                "
-                            >
-                                <option
-                                    v-for="option in options.statuses"
-                                    :key="option"
-                                    :value="option"
-                                >
-                                    {{ t(`taskStatus.${option}`) }}
-                                </option>
-                            </select>
-                        </td>
-                        <td class="px-4 py-2">
-                            <Badge
-                                :variant="
-                                    priorityVariant[task.priority] as never
-                                "
-                            >
-                                {{ t(`priority.${task.priority}`) }}
-                            </Badge>
-                        </td>
-                        <td class="px-4 py-2">
-                            <span
-                                :class="
-                                    isOverdue(task)
-                                        ? 'font-medium text-destructive'
-                                        : 'text-muted-foreground'
-                                "
-                            >
-                                {{ formatDue(task.due_at) }}
-                            </span>
-                        </td>
-                        <td class="px-4 py-2 text-right">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                @click="deleteTask(task)"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                            </Button>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            </div>
 
             <div
-                v-if="tasks.data.length === 0"
-                class="flex flex-col items-center gap-2 py-12 text-muted-foreground"
+                style="
+                    margin-top: 12px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                "
             >
-                <CheckSquare class="h-8 w-8" />
-                <p>{{ t('noTasks') }}</p>
-            </div>
-        </div>
-
-        <!-- Pagination -->
-        <div
-            v-if="tasks.last_page > 1"
-            class="flex flex-wrap items-center justify-between gap-2"
-        >
-            <span class="text-xs text-muted-foreground">
-                {{ tasks.from }}–{{ tasks.to }} {{ t('of') }}
-                {{ tasks.total }}
-            </span>
-            <div class="flex flex-wrap gap-1">
-                <Link
-                    v-for="link in tasks.links"
-                    :key="link.label"
-                    :href="link.url ?? ''"
-                    preserve-scroll
-                    :class="[
-                        'rounded border px-2 py-1 text-xs',
-                        link.active ? 'bg-primary text-primary-foreground' : '',
-                        !link.url ? 'pointer-events-none opacity-50' : '',
-                    ]"
+                <div
+                    v-for="task in tasksOf(column.key)"
+                    :id="`task-${task.id}`"
+                    :key="task.id"
+                    class="mk-panel"
+                    style="display: flex; gap: 12px; padding: 12px 14px 12px 0"
                 >
-                    <span v-html="link.label" />
-                </Link>
+                    <span
+                        style="width: 2px; flex: 0 0 2px"
+                        :style="{ background: bar(task) }"
+                    />
+                    <div style="min-width: 0; flex: 1">
+                        <p
+                            style="
+                                margin: 0;
+                                font-size: 13px;
+                                font-weight: 500;
+                                line-height: 1.4;
+                            "
+                        >
+                            {{ task.title }}
+                        </p>
+                        <p
+                            v-if="task.description"
+                            class="mk-t3"
+                            style="
+                                margin: 5px 0 0;
+                                font-size: 11.5px;
+                                line-height: 1.45;
+                            "
+                        >
+                            {{ task.description }}
+                        </p>
+                        <div
+                            style="
+                                margin-top: 9px;
+                                display: flex;
+                                align-items: center;
+                                gap: 10px;
+                            "
+                        >
+                            <span
+                                class="mk-m"
+                                style="font-size: 11px"
+                                :style="{
+                                    color: task.assignee
+                                        ? 'var(--mk-dim)'
+                                        : 'var(--mk-warning)',
+                                }"
+                                >{{ task.assignee ?? t('tasks.nobody') }}</span
+                            >
+                            <span
+                                class="mk-m"
+                                style="font-size: 11px"
+                                :style="{
+                                    color: task.overdue
+                                        ? 'var(--mk-critical)'
+                                        : 'var(--mk-faint)',
+                                }"
+                            >
+                                {{ due(task)
+                                }}<template v-if="task.overdue_days">
+                                    · {{ task.overdue_days }}</template
+                                >
+                            </span>
+                            <button
+                                type="button"
+                                class="mk-btn mk-ghost"
+                                style="margin-left: auto; height: 22px"
+                                @click="done(task)"
+                            >
+                                {{ t('tasks.done.action') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <p
+                    v-if="!tasksOf(column.key).length"
+                    class="mk-t3"
+                    style="font-size: 12px"
+                >
+                    {{ t('tasks.empty') }}
+                </p>
             </div>
         </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px">
+        <span class="mk-m mk-t3" style="font-size: 11px">{{ footer }}</span>
     </div>
 </template>

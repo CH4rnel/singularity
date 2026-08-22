@@ -8,6 +8,7 @@ import { initializeTheme } from '@/composables/useAppearance';
 import { initializePwa } from '@/composables/usePwaInstall';
 import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
+import ConsoleLayout from '@/layouts/ConsoleLayout.vue';
 import NativeShellLayout from '@/layouts/NativeShellLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import Web3Layout from '@/layouts/Web3Layout.vue';
@@ -66,6 +67,11 @@ createInertiaApp({
             case name.startsWith('proposals/'):
             case name.startsWith('users/'):
                 return Web3Layout;
+            // The operator console owns the viewport: a fixed alarm strip, a
+            // rail of lenses and one scrolling lens. The site's sidebar and
+            // breadcrumbs would be a second navigation over the top of it.
+            case name.startsWith('crm/'):
+                return ConsoleLayout;
             case name.startsWith('auth/'):
                 return AuthLayout;
             case name.startsWith('settings/'):

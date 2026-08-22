@@ -1,0 +1,384 @@
+<script setup lang="ts">
+import { Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { useLocale } from '@/composables/useLocale';
+import {
+    age,
+    grouped,
+    num,
+    plural,
+    shortTime,
+    toneColor,
+    usd,
+} from '@/lib/console';
+import { consoleMessages } from '@/lib/consoleMessages';
+
+/**
+ * "Мостик" — the shell every lens is drawn inside.
+ *
+ * A control room rather than a page: it owns the viewport, keeps the alarm
+ * strip and the rail fixed, and scrolls only the lens. The header is shared
+ * because the console has one state — the banner, the group counters and the
+ * rail's badge are three renderings of one cached queue, and a header
+ * assembled per page would be five headers that disagree by a sweep.
+ *
+ * On a phone the counters go away and the alarm stays: the only reason this
+ * is open on a phone is that something is on fire.
+ */
+type Group = {
+    group: string;
+    total: number;
+    healthy: number;
+    tone: string;
+    counts: Record<string, number>;
+};
+
+type Banner = {
+    severity: string;
+    title: string;
+    params: Record<string, string | number>;
+    duration_seconds: number | null;
+};
+
+type Console = {
+    groups: Group[];
+    background: {
+        funded_active: number;
+        installs_30d: number;
+        bridge_30d_usd: number;
+    };
+    sweep: { at: string | null };
+    banner: Banner | null;
+    counts: { attention: number; tasks: number };
+};
+
+const page = usePage();
+const { locale, t, tag, toggleLocale, nextTag } = useLocale(consoleMessages);
+
+const console_ = computed(() => page.props.console as Console | null);
+const current = computed(() => page.url.split('?')[0]);
+
+const LENSES = [
+    { key: 'now', href: '/crm', label: 'nav.now', badge: 'attention' },
+    { key: 'people', href: '/crm/people', label: 'nav.people', badge: null },
+    { key: 'tasks', href: '/crm/tasks', label: 'nav.tasks', badge: 'tasks' },
+    { key: 'numbers', href: '/crm/numbers', label: 'nav.numbers', badge: null },
+    { key: 'machines', href: '/crm/machines', label: 'nav.machines', badge: null },
+] as const;
+
+/**
+ * Which lens is lit. `/crm/{id}` is a person's dossier and `/crm/installs/…`
+ * came from the numbers, so both light the lens they belong to rather than
+ * lighting nothing.
+ */
+function active(key: string): boolean {
+    const url = current.value;
+
+    if (key === 'now') {
+        return url === '/crm';
+    }
+
+    if (key === 'people') {
+        return url.startsWith('/crm/people') || /^\/crm\/\d+$/.test(url);
+    }
+
+    if (key === 'numbers') {
+        return url.startsWith('/crm/numbers') || url.startsWith('/crm/installs');
+    }
+
+    return url.startsWith(`/crm/${key}`);
+}
+
+function badgeCount(badge: string | null): number {
+    if (!badge || !console_.value) {
+        return 0;
+    }
+
+    return badge === 'attention'
+        ? console_.value.counts.attention
+        : console_.value.counts.tasks;
+}
+
+const bannerAge = computed(() => age(console_.value?.banner?.duration_seconds));
+const bannerUnit = computed(() =>
+    bannerAge.value
+        ? plural(locale.value, bannerAge.value.count, t(bannerAge.value.unit))
+        : '',
+);
+const bannerColor = computed(() =>
+    toneColor(console_.value?.banner?.severity ?? 'calm'),
+);
+
+const operator = computed(
+    () => (page.props.auth as { user?: { name?: string } } | undefined)?.user?.name ?? '—',
+);
+
+const initials = computed(() =>
+    operator.value
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join(''),
+);
+</script>
+
+<template>
+    <div class="mostik">
+        <header class="mk-top">
+            <!-- The alarm. Quiet is a state with its own look, not an absence
+                 of the banner: an empty strip is indistinguishable from a
+                 strip that failed to render. -->
+            <div
+                class="mk-banner"
+                :style="
+                    console_?.banner
+                        ? {
+                              background: `color-mix(in srgb, ${bannerColor} 10%, transparent)`,
+                              borderLeftColor: bannerColor,
+                          }
+                        : { borderLeftColor: 'rgba(141,154,157,.4)' }
+                "
+            >
+                <span
+                    class="mk-dot"
+                    :style="{
+                        background: console_?.banner
+                            ? bannerColor
+                            : 'var(--mk-calm)',
+                    }"
+                />
+                <template v-if="console_?.banner">
+                    <span
+                        v-if="bannerAge"
+                        class="mk-m"
+                        :style="{
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: bannerColor,
+                        }"
+                    >
+                        {{ bannerAge.value }} {{ bannerUnit.toUpperCase() }}
+                    </span>
+                    <span
+                        style="
+                            font-size: 12px;
+                            font-weight: 700;
+                            letter-spacing: 0.06em;
+                            text-transform: uppercase;
+                        "
+                        :style="{ color: bannerColor }"
+                    >
+                        {{ t(console_.banner.title, grouped(console_.banner.params)) }}
+                    </span>
+                </template>
+                <span
+                    v-else
+                    class="mk-t2"
+                    style="
+                        font-size: 12px;
+                        font-weight: 700;
+                        letter-spacing: 0.06em;
+                        text-transform: uppercase;
+                    "
+                >
+                    {{ t('top.allGood') }}
+                </span>
+            </div>
+
+            <div
+                v-for="group in console_?.groups ?? []"
+                :key="group.group"
+                class="mk-top-cell"
+            >
+                <span class="mk-k">{{ t(`group.${group.group}`) }}</span>
+                <span
+                    class="mk-m"
+                    style="font-size: 12px; font-weight: 600"
+                    :style="{ color: toneColor(group.tone) }"
+                >
+                    {{ group.healthy }}/{{ group.total }}
+                </span>
+            </div>
+
+            <div style="flex: 1" />
+
+            <div class="mk-top-cell">
+                <span class="mk-k">{{ t('top.fundedActive') }}</span>
+                <span class="mk-m" style="font-size: 12px; font-weight: 600">{{
+                    num(console_?.background.funded_active ?? null)
+                }}</span>
+            </div>
+            <div class="mk-top-cell">
+                <span class="mk-k">{{ t('top.installs') }}</span>
+                <span class="mk-m" style="font-size: 12px; font-weight: 600">{{
+                    num(console_?.background.installs_30d ?? null)
+                }}</span>
+            </div>
+            <div class="mk-top-cell">
+                <span class="mk-k">{{ t('top.bridge') }}</span>
+                <span class="mk-m" style="font-size: 12px; font-weight: 600">{{
+                    usd(console_?.background.bridge_30d_usd ?? null)
+                }}</span>
+            </div>
+            <div class="mk-top-cell" style="padding: 0 16px">
+                <span class="mk-m mk-t3" style="font-size: 11px">
+                    {{
+                        console_?.sweep.at
+                            ? t('top.sweep', {
+                                  time: shortTime(console_.sweep.at, tag),
+                              })
+                            : t('top.noSweep')
+                    }}
+                </span>
+            </div>
+        </header>
+
+        <div class="mk-body">
+            <nav class="mk-rail">
+                <div
+                    style="
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        height: 34px;
+                        margin-bottom: 14px;
+                    "
+                >
+                    <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="var(--mk-accent)"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                    >
+                        <path d="M12 3v18M3 12h18" />
+                        <circle cx="12" cy="12" r="4.5" />
+                    </svg>
+                </div>
+
+                <Link
+                    v-for="lens in LENSES"
+                    :key="lens.key"
+                    :href="lens.href"
+                    class="mk-rail-item"
+                    :class="{ 'mk-on': active(lens.key) }"
+                >
+                    <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path
+                            v-if="lens.key === 'now'"
+                            d="M2.5 12h4l3-7.5 4.5 15 3-7.5h5.5"
+                        />
+                        <template v-else-if="lens.key === 'people'">
+                            <circle cx="9" cy="8" r="3.2" />
+                            <path d="M3 19.5a6 6 0 0 1 12 0" />
+                            <circle cx="17" cy="8.5" r="2.6" />
+                            <path d="M16.5 14.2a5.4 5.4 0 0 1 4.6 5" />
+                        </template>
+                        <template v-else-if="lens.key === 'tasks'">
+                            <rect x="3.5" y="4.5" width="16" height="16" rx="2" />
+                            <path d="M8 12.2l2.6 2.6L16 9.5" />
+                        </template>
+                        <path
+                            v-else-if="lens.key === 'numbers'"
+                            d="M5 19.5V12M10.5 19.5V5M16 19.5v-5.5M21 19.5V9"
+                        />
+                        <template v-else>
+                            <rect x="3.5" y="4.5" width="17" height="6" rx="1.5" />
+                            <rect x="3.5" y="13.5" width="17" height="6" rx="1.5" />
+                            <path d="M7 7.5h.01M7 16.5h.01" />
+                        </template>
+                    </svg>
+                    <span>{{ t(lens.label) }}</span>
+                    <span
+                        v-if="badgeCount(lens.badge) > 0"
+                        class="mk-badge"
+                        :style="
+                            lens.badge === 'tasks'
+                                ? { background: 'var(--mk-warning)' }
+                                : {}
+                        "
+                    >
+                        {{ badgeCount(lens.badge) }}
+                    </span>
+                </Link>
+
+                <div
+                    style="
+                        margin-top: auto;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 10px;
+                        padding-top: 12px;
+                    "
+                >
+                    <button
+                        type="button"
+                        class="mk-m mk-t3"
+                        style="
+                            font-size: 10px;
+                            background: none;
+                            border: 0;
+                            cursor: pointer;
+                        "
+                        @click="toggleLocale"
+                    >
+                        {{ nextTag }}
+                    </button>
+                    <div
+                        :title="operator"
+                        style="
+                            width: 26px;
+                            height: 26px;
+                            border: 1px solid var(--mk-hair-strong);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 10px;
+                            font-weight: 700;
+                            color: var(--mk-dim);
+                        "
+                    >
+                        {{ initials }}
+                    </div>
+                </div>
+            </nav>
+
+            <main class="mk-main">
+                <slot />
+            </main>
+        </div>
+
+        <!-- The phone. Four lenses fit; the dossiers are reached from them. -->
+        <nav class="mk-bottom">
+            <Link
+                v-for="lens in LENSES"
+                :key="lens.key"
+                :href="lens.href"
+                class="mk-bottom-item"
+                :class="{ 'mk-on': active(lens.key) }"
+            >
+                <span>{{ t(lens.label) }}</span>
+                <span
+                    v-if="badgeCount(lens.badge) > 0"
+                    class="mk-m"
+                    style="font-size: 10px"
+                    >{{ badgeCount(lens.badge) }}</span
+                >
+            </Link>
+        </nav>
+    </div>
+</template>
+
+<style src="../../css/console.css"></style>
