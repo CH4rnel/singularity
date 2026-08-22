@@ -7,9 +7,12 @@ use Illuminate\Support\Facades\File;
 /**
  * The design the console was built from, kept inside the console.
  *
- * `resources/console-mockup/` holds the nine artboards of the "Мостик" canvas
- * exactly as they were drawn, plus the three annotations that argue for the
- * decisions. It is frozen source, not a build artifact: nothing imports it,
+ * `resources/console-mockup/` holds the nine artboards exactly as they were
+ * drawn, plus the three annotations that argue for the decisions. They still
+ * say "Мостик" — the name the console carried until it was pointed out that
+ * this site already has a bridge — and they are not edited to agree with the
+ * running console, because a design is a record of a decision and a record
+ * that is kept current is not a record. It is frozen source, not a build artifact: nothing imports it,
  * Vite never sees it, and it is served only to an operator, because a design
  * shows numbers, names and thresholds that the public console does not.
  *

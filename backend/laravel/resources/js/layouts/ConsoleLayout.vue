@@ -14,7 +14,7 @@ import {
 import { consoleMessages } from '@/lib/consoleMessages';
 
 /**
- * "Мостик" — the shell every lens is drawn inside.
+ * "Пульт" — the shell every lens is drawn inside.
  *
  * A control room rather than a page: it owns the viewport, keeps the alarm
  * strip and the rail fixed, and scrolls only the lens. The header is shared

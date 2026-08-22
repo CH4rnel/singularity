@@ -120,7 +120,7 @@ const footer = computed(() =>
 </script>
 
 <template>
-    <Head title="Мостик · Задачи" />
+    <Head title="Пульт · Задачи" />
 
     <div style="display: flex; align-items: baseline; gap: 12px">
         <h1 class="mk-h1">{{ t('tasks.title') }}</h1>

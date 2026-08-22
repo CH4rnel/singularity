@@ -96,7 +96,7 @@ function argument(text: string): string {
 </script>
 
 <template>
-    <Head title="Мостик · Макет" />
+    <Head title="Пульт · Макет" />
 
     <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap">
         <h1 class="mk-h1">{{ t('mockup.title') }}</h1>
@@ -140,6 +140,9 @@ function argument(text: string): string {
 
     <p class="mk-t3" style="margin: 6px 0 0; font-size: 12px; max-width: 74ch">
         {{ t('mockup.frozen') }}
+    </p>
+    <p class="mk-t3" style="margin: 4px 0 0; font-size: 12px; max-width: 74ch">
+        {{ t('mockup.oldName') }}
     </p>
 
     <template v-if="screens.length">

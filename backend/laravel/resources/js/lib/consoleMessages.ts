@@ -89,7 +89,8 @@ export const consoleMessages: Messages = {
         'watch.host.body':
             '— everything it reports on stands in "unknown": that is the reporter’s state, not the services’',
         'watch.campaign.title': 'Best source this week: {source}',
-        'watch.campaign.body': '— {campaign} · {users} installs · {rate}% activated',
+        'watch.campaign.body':
+            '— {campaign} · {users} installs · {rate}% activated',
         'watch.snoozed.title': 'Snoozed: {count}',
         'watch.snoozed.body': '— {items}',
 
@@ -113,7 +114,8 @@ export const consoleMessages: Messages = {
         'tiles.swaps.chain': '{swaps} swaps on chain',
         'tiles.swaps.wallet': 'from the wallet’s own events',
         'tiles.bridge.note': 'completed · {failed} failed',
-        'tiles.services.note': '{down} down · {degraded} degraded · {unknown} unknown',
+        'tiles.services.note':
+            '{down} down · {degraded} degraded · {unknown} unknown',
         'tiles.tasks.note': '{overdue} overdue · {unassigned} unowned',
 
         /* people */
@@ -145,7 +147,8 @@ export const consoleMessages: Messages = {
         'rule.awaiting': 'has an open task on our side',
         'rule.silent_customers':
             'customer with nothing on record for {days} days',
-        'rule.one_and_done': 'qualified or customer, no note ever, older than {days} days',
+        'rule.one_and_done':
+            'qualified or customer, no note ever, older than {days} days',
         'rule.cold_leads': 'lead, status new, no note ever',
         'rule.solana_only': 'has a Solana address and no EVM address',
         'crm.type.lead': 'lead',
@@ -180,7 +183,8 @@ export const consoleMessages: Messages = {
         'person.delete': 'Delete',
         'person.money': 'Money',
         'person.activity': 'Activity, 12 weeks',
-        'person.activityNote': 'transfers per week — this app keeps no balance history',
+        'person.activityNote':
+            'transfers per week — this app keeps no balance history',
         'person.noActivity': 'no transfers on record in twelve weeks',
         'person.who': 'Who this is',
         'person.next': 'What next',
@@ -265,7 +269,8 @@ export const consoleMessages: Messages = {
         'numbers.growth.delta':
             '{delta}% against the previous window. Biggest source: {source} / {campaign} with {sourceUsers}; without it the window is {without}.',
         'numbers.growth.deltaSessions': '{delta}% against the previous window.',
-        'numbers.growth.first': 'First window on record — nothing to compare against yet.',
+        'numbers.growth.first':
+            'First window on record — nothing to compare against yet.',
         'numbers.money.title': 'Do they reach money?',
         'numbers.money.suffix': '% reached the first transaction',
         'numbers.money.conclusion':
@@ -289,10 +294,12 @@ export const consoleMessages: Messages = {
         'numbers.sources.title': 'Where do the ones who stay come from?',
         'numbers.sources.conclusion':
             'Sorted by D7, not by installs. {source} gives {d7}% from only {users} installations.',
-        'numbers.sources.empty': 'No source has enough installations to rank yet.',
+        'numbers.sources.empty':
+            'No source has enough installations to rank yet.',
         'numbers.sources.unmeasured':
             'Not measured for sessions: the site does not record where a visit came from, and borrowing the installations’ answer here would be a different subject under this label.',
-        'numbers.sources.unmeasuredNote': 'no source recorded for site sessions',
+        'numbers.sources.unmeasuredNote':
+            'no source recorded for site sessions',
         'numbers.breaks.title': 'What breaks?',
         'numbers.breaks.suffix': '% of transactions land',
         'numbers.breaks.conclusion':
@@ -306,7 +313,8 @@ export const consoleMessages: Messages = {
         'numbers.cost.idle': 'The station has not paid out in this window.',
         'numbers.cost.unmeasured':
             'Not measured for sessions: sponsorship is paid per installation, and per-session cost would be an invented number.',
-        'numbers.cost.unmeasuredNote': 'the ledger records installations, not sessions',
+        'numbers.cost.unmeasuredNote':
+            'the ledger records installations, not sessions',
         'numbers.cost.drips': 'Drips',
         'numbers.cost.spent': 'Total spent',
         'numbers.cost.perAddress': 'Per address',
@@ -376,7 +384,8 @@ export const consoleMessages: Messages = {
         'machines.idleNever': 'never opened',
         'machines.idleDays': 'nobody for {days} days',
         'machines.incidents': 'What broke',
-        'machines.incidentsNote': 'opened after two failures in a row, closes itself',
+        'machines.incidentsNote':
+            'opened after two failures in a row, closes itself',
         'machines.ongoing': 'ongoing',
         'machines.noIncidents': 'nothing has broken in the retention window',
         'machines.notMeasured': 'not measured',
@@ -417,7 +426,8 @@ export const consoleMessages: Messages = {
         'install.peers':
             '{count} installations are at the same step this month. Whatever is done for them is done for this one.',
         'install.timeline': 'Timeline',
-        'install.timelineNote': 'only what the allow list names is ever written down',
+        'install.timelineNote':
+            'only what the allow list names is ever written down',
         'install.milestoneTag': 'milestone',
         'install.meaningfulNote':
             'Meaningful means settled on chain; broadcasting is not settlement. That is why an unfinished row is empty rather than optimistically filled.',
@@ -428,7 +438,10 @@ export const consoleMessages: Messages = {
         'mockup.lead': 'The nine artboards this console was drawn as.',
         'mockup.frozen':
             'Frozen as it was published. Where the running console differs, the console is the newer answer — a drawing has no data to be wrong about.',
-        'mockup.russian': 'The design is written in Russian, the language it was argued in.',
+        'mockup.russian':
+            'The design is written in Russian, the language it was argued in.',
+        'mockup.oldName':
+            'The artboards still say “Мостик” — the name this console carried until it was pointed out that the site already has a bridge. A design is a record of a decision; a record kept current is not a record.',
         'mockup.screens': 'Artboards',
         'mockup.why': 'Why it is shaped this way',
         'mockup.canvas': 'Open the canvas',
@@ -523,7 +536,8 @@ export const consoleMessages: Messages = {
         'watch.host.body':
             '— всё, о чём он отчитывался, встало в «неизвестно»: это состояние отчётчика, а не сервисов',
         'watch.campaign.title': 'Лучший источник недели: {source}',
-        'watch.campaign.body': '— {campaign} · {users} установок · в активацию {rate}%',
+        'watch.campaign.body':
+            '— {campaign} · {users} установок · в активацию {rate}%',
         'watch.snoozed.title': 'Отложено: {count}',
         'watch.snoozed.body': '— {items}',
 
@@ -547,7 +561,8 @@ export const consoleMessages: Messages = {
         'tiles.swaps.chain': '{swaps} свопов на цепи',
         'tiles.swaps.wallet': 'по событиям кошелька',
         'tiles.bridge.note': 'выполнено · {failed} не прошли',
-        'tiles.services.note': '{down} упало · {degraded} деградируют · {unknown} молчат',
+        'tiles.services.note':
+            '{down} упало · {degraded} деградируют · {unknown} молчат',
         'tiles.tasks.note': '{overdue} просрочены · {unassigned} ничьи',
 
         /* people */
@@ -578,7 +593,8 @@ export const consoleMessages: Messages = {
         'rule.new_whales': 'тип = кит, появился за последние 30 дней',
         'rule.awaiting': 'есть незакрытая задача с нашей стороны',
         'rule.silent_customers': 'клиент без единой записи {days} дней',
-        'rule.one_and_done': 'квалифицирован или клиент, ни одной заметки, старше {days} дней',
+        'rule.one_and_done':
+            'квалифицирован или клиент, ни одной заметки, старше {days} дней',
         'rule.cold_leads': 'лид со статусом «новый» и без единой заметки',
         'rule.solana_only': 'есть адрес Solana и нет адреса EVM',
         'crm.type.lead': 'лид',
@@ -613,7 +629,8 @@ export const consoleMessages: Messages = {
         'person.delete': 'Удалить',
         'person.money': 'Деньги',
         'person.activity': 'Активность, 12 недель',
-        'person.activityNote': 'переводы по неделям — истории балансов это приложение не хранит',
+        'person.activityNote':
+            'переводы по неделям — истории балансов это приложение не хранит',
         'person.noActivity': 'за двенадцать недель переводов не записано',
         'person.who': 'Кто это',
         'person.next': 'Что дальше',
@@ -656,7 +673,8 @@ export const consoleMessages: Messages = {
 
         /* tasks */
         'tasks.title': 'Задачи',
-        'tasks.stats': '{open} открытых · {overdue} просрочены · {unowned} без исполнителя',
+        'tasks.stats':
+            '{open} открытых · {overdue} просрочены · {unowned} без исполнителя',
         'tasks.done': 'Сделанные',
         'tasks.quickAdd':
             'написать киту про лимиты моста @lain !завтра #Nakamoto',
@@ -697,7 +715,8 @@ export const consoleMessages: Messages = {
         'numbers.growth.delta':
             '{delta}% к прошлому окну. Крупнейший источник: {source} / {campaign}, {sourceUsers} установок; без него окно — {without}.',
         'numbers.growth.deltaSessions': '{delta}% к прошлому окну.',
-        'numbers.growth.first': 'Первое окно в записи — сравнивать пока не с чем.',
+        'numbers.growth.first':
+            'Первое окно в записи — сравнивать пока не с чем.',
         'numbers.money.title': 'Доходят ли до денег?',
         'numbers.money.suffix': '% дошли до первой транзакции',
         'numbers.money.conclusion':
@@ -721,10 +740,12 @@ export const consoleMessages: Messages = {
         'numbers.sources.title': 'Откуда приходят те, кто остаётся?',
         'numbers.sources.conclusion':
             'Сортировка по D7, а не по числу установок. {source} даёт {d7}% всего с {users} установок.',
-        'numbers.sources.empty': 'Ни у одного источника пока не хватает установок для сравнения.',
+        'numbers.sources.empty':
+            'Ни у одного источника пока не хватает установок для сравнения.',
         'numbers.sources.unmeasured':
             'Для сессий не измеряется: сайт не записывает, откуда пришёл визит, а взять сюда ответ установок — значит подставить другой субъект под эту подпись.',
-        'numbers.sources.unmeasuredNote': 'источник визита на сайте не записывается',
+        'numbers.sources.unmeasuredNote':
+            'источник визита на сайте не записывается',
         'numbers.breaks.title': 'Что ломается?',
         'numbers.breaks.suffix': '% транзакций доходят',
         'numbers.breaks.conclusion':
@@ -738,7 +759,8 @@ export const consoleMessages: Messages = {
         'numbers.cost.idle': 'В этом окне станция ничего не выдавала.',
         'numbers.cost.unmeasured':
             'Для сессий не измеряется: спонсирование платится за установку, и цена сессии была бы выдуманным числом.',
-        'numbers.cost.unmeasuredNote': 'в журнале выплат установки, а не сессии',
+        'numbers.cost.unmeasuredNote':
+            'в журнале выплат установки, а не сессии',
         'numbers.cost.drips': 'Выдач',
         'numbers.cost.spent': 'Всего потрачено',
         'numbers.cost.perAddress': 'На адрес',
@@ -808,7 +830,8 @@ export const consoleMessages: Messages = {
         'machines.idleNever': 'не открывали ни разу',
         'machines.idleDays': 'никто {days} дней',
         'machines.incidents': 'Что ломалось',
-        'machines.incidentsNote': 'открывается после двух неудач подряд, закрывается само',
+        'machines.incidentsNote':
+            'открывается после двух неудач подряд, закрывается само',
         'machines.ongoing': 'идёт',
         'machines.noIncidents': 'за окно хранения ничего не ломалось',
         'machines.notMeasured': 'не измеряется',
@@ -849,7 +872,8 @@ export const consoleMessages: Messages = {
         'install.peers':
             'Таких установок за месяц — {count}. Что сделано для них, сделано и для этой.',
         'install.timeline': 'Хронология',
-        'install.timelineNote': 'пишется только то, что перечислено в разрешённом списке',
+        'install.timelineNote':
+            'пишется только то, что перечислено в разрешённом списке',
         'install.milestoneTag': 'веха',
         'install.meaningfulNote':
             'Значимое — это подтверждённое сетью, а отправка в сеть подтверждением не считается. Поэтому незавершённая строка пуста, а не заполнена оптимистично.',
@@ -860,7 +884,10 @@ export const consoleMessages: Messages = {
         'mockup.lead': 'Девять экранов, которыми этот пульт был нарисован.',
         'mockup.frozen':
             'Заморожен на момент публикации. Там, где живая консоль расходится с макетом, права консоль: у рисунка нет данных, в которых можно ошибиться.',
-        'mockup.russian': 'Макет написан по-русски — на языке, на котором его обсуждали.',
+        'mockup.russian':
+            'Макет написан по-русски — на языке, на котором его обсуждали.',
+        'mockup.oldName':
+            'На экранах ещё написано «Мостик» — так консоль называлась, пока не выяснилось, что мост на сайте уже есть. Макет — запись принятого решения, а запись, которую подправляют, записью быть перестаёт.',
         'mockup.screens': 'Экраны',
         'mockup.why': 'Почему так',
         'mockup.canvas': 'Открыть холст',

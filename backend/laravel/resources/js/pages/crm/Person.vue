@@ -124,7 +124,7 @@ function remove() {
 </script>
 
 <template>
-    <Head :title="`Мостик · ${contact.name}`" />
+    <Head :title="`Пульт · ${contact.name}`" />
 
     <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap">
         <Link href="/crm/people" class="mk-btn mk-ghost" style="padding: 0 8px"

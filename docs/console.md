@@ -1,8 +1,15 @@
-# Мостик — the operator console
+# Пульт — the operator console
 
-`/crm` and everything under it. Behind the wallet allowlist in
-`config/crm.php`; everyone else gets a 404, so it is not discoverable by an
-ordinary signed-in user.
+`/crm` and everything under it. Behind the allow list in `config/crm.php`;
+everyone else gets a 404, so it is not discoverable by an ordinary signed-in
+user.
+
+It was called "Мостик" for one release — the ship's bridge you steer from,
+which is where the console's whole vocabulary comes from: смена, дежурный,
+обход, тишина. The name was dropped because this site already ships a bridge
+at `/bridge`, and two words of one root for two different things is a support
+conversation waiting to happen. The artboards under `/crm/mockup` still carry
+the old name and are deliberately left alone.
 
 ---
 

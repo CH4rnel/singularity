@@ -159,7 +159,7 @@ function tileValue(tile: Tile): string {
 </script>
 
 <template>
-    <Head title="Мостик · Сейчас" />
+    <Head title="Пульт · Сейчас" />
 
     <div style="display: flex; align-items: baseline; gap: 12px">
         <h1 class="mk-h1">{{ t('nav.now') }}</h1>

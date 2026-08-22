@@ -119,7 +119,7 @@ const currentSegment = computed(
 </script>
 
 <template>
-    <Head title="Мостик · Люди" />
+    <Head title="Пульт · Люди" />
 
     <div
         style="

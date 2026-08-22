@@ -190,7 +190,7 @@ const answerTone = computed(
 </script>
 
 <template>
-    <Head title="Мостик · Числа" />
+    <Head title="Пульт · Числа" />
 
     <div
         style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap"

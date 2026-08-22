@@ -131,7 +131,7 @@ function isMeaningful(event: string): boolean {
 </script>
 
 <template>
-    <Head :title="`Мостик · ${short}`" />
+    <Head :title="`Пульт · ${short}`" />
 
     <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap">
         <Link href="/crm/numbers" class="mk-btn mk-ghost" style="padding: 0 8px"

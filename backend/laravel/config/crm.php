@@ -38,7 +38,7 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | The console ("Мостик") — one queue instead of five dashboards.
+    | The console ("Пульт") — one queue instead of five dashboards.
     |--------------------------------------------------------------------------
     | Every threshold that decides whether something reaches a person lives
     | here rather than inside a query, because these are judgements about how

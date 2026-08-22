@@ -429,7 +429,7 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
 
     /*
-     * The console ("Мостик") — five lenses on one stream, behind the operator
+     * The console ("Пульт") — five lenses on one stream, behind the operator
      * wallet allowlist in config/crm.php; everyone else gets a 404.
      *
      * `/crm` is the queue rather than a list of contacts, because the question

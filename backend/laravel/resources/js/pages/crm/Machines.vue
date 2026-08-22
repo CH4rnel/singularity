@@ -174,7 +174,7 @@ function tone(status: string): string {
 </script>
 
 <template>
-    <Head title="Мостик · Машины" />
+    <Head title="Пульт · Машины" />
 
     <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap">
         <h1 class="mk-h1">{{ t('machines.title') }}</h1>
