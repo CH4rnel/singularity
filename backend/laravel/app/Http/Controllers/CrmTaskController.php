@@ -40,8 +40,18 @@ class CrmTaskController extends Controller
             ->where('completed_at', '>=', now()->subDays(7))
             ->get(['id', 'created_at', 'completed_at']);
 
+        $closed = CrmTask::query()
+            ->where('status', 'done')
+            ->with(['assignee:id,name', 'contact:id,name,telegram'])
+            ->orderByDesc('completed_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (CrmTask $task) => $this->closedRow($task))
+            ->all();
+
         return Inertia::render('crm/Tasks', [
             'columns' => $this->columns($tasks),
+            'closed' => $closed,
             'unowned' => $tasks
                 ->filter(fn (CrmTask $task) => $task->assigned_to_user_id === null)
                 ->map(fn (CrmTask $task) => $this->row($task))
@@ -172,6 +182,22 @@ class CrmTaskController extends Controller
                 : null,
             'assignee' => $task->assignee?->name,
             'assignee_id' => $task->assigned_to_user_id,
+            'contact' => $task->contact === null ? null : [
+                'id' => $task->contact->id,
+                'name' => $task->contact->name ?: $task->contact->telegram,
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function closedRow(CrmTask $task): array
+    {
+        return [
+            'id' => $task->id,
+            'title' => $task->title,
+            'description' => $task->description,
+            'completed_at' => $task->completed_at?->toIso8601String(),
+            'assignee' => $task->assignee?->name,
             'contact' => $task->contact === null ? null : [
                 'id' => $task->contact->id,
                 'name' => $task->contact->name ?: $task->contact->telegram,

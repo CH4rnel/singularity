@@ -30,8 +30,13 @@ type Task = {
     contact: { id: number; name: string } | null;
 };
 
+type ClosedTask = Pick<Task, 'id' | 'title' | 'description' | 'assignee' | 'contact'> & {
+    completed_at: string | null;
+};
+
 const props = defineProps<{
     columns: { overdue: Task[]; soon: Task[]; later: Task[] };
+    closed: ClosedTask[];
     unowned: Task[];
     stats: {
         open: number;
@@ -107,6 +112,17 @@ function bar(task: Task): string {
         : task.priority === 'normal'
           ? 'var(--mk-warning)'
           : 'var(--mk-fainter)';
+}
+
+function completedAt(task: ClosedTask): string {
+    if (!task.completed_at) {
+        return '—';
+    }
+
+    return new Intl.DateTimeFormat(tag.value, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    }).format(new Date(task.completed_at));
 }
 
 const footer = computed(() =>
@@ -266,6 +282,64 @@ const footer = computed(() =>
                     style="margin-left: auto; font-size: 11px"
                     >{{ num(tasksOf(column.key).length) }}</span
                 >
+                <details
+                    v-if="column.key === 'later'"
+                    class="task-journal"
+                >
+                    <summary
+                        class="mk-btn mk-ghost task-journal__trigger"
+                        :aria-label="t('tasks.journal.open')"
+                        :title="t('tasks.journal.open')"
+                    >
+                        <svg
+                            width="15"
+                            height="15"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="m19 6-1 14H6L5 6" />
+                            <path d="M10 10v6M14 10v6" />
+                        </svg>
+                        <span class="mk-m">{{ num(closed.length) }}</span>
+                    </summary>
+
+                    <div class="task-journal__panel">
+                        <div class="task-journal__heading">
+                            <span class="mk-k">{{ t('tasks.journal.title') }}</span>
+                            <span class="mk-m mk-t3">{{ num(closed.length) }}</span>
+                        </div>
+
+                        <div v-if="closed.length" class="task-journal__list">
+                            <article
+                                v-for="task in closed"
+                                :key="task.id"
+                                class="task-journal__item"
+                            >
+                                <p>{{ task.title }}</p>
+                                <p v-if="task.description" class="mk-t3">
+                                    {{ task.description }}
+                                </p>
+                                <div class="task-journal__meta mk-m mk-t3">
+                                    <time :datetime="task.completed_at ?? undefined">
+                                        {{ completedAt(task) }}
+                                    </time>
+                                    <span v-if="task.assignee">{{ task.assignee }}</span>
+                                    <span v-if="task.contact">{{ task.contact.name }}</span>
+                                </div>
+                            </article>
+                        </div>
+                        <p v-else class="task-journal__empty mk-t3">
+                            {{ t('tasks.journal.empty') }}
+                        </p>
+                    </div>
+                </details>
             </div>
 
             <div
@@ -367,3 +441,105 @@ const footer = computed(() =>
         <span class="mk-m mk-t3" style="font-size: 11px">{{ footer }}</span>
     </div>
 </template>
+
+<style scoped>
+.task-journal {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.task-journal > summary {
+    list-style: none;
+}
+
+.task-journal > summary::-webkit-details-marker {
+    display: none;
+}
+
+.task-journal__trigger {
+    display: flex;
+    height: 26px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 7px;
+    color: var(--mk-faint);
+    cursor: pointer;
+}
+
+.task-journal:hover .task-journal__trigger,
+.task-journal[open] .task-journal__trigger,
+.task-journal__trigger:focus-visible {
+    color: var(--mk-body);
+}
+
+.task-journal__panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 8px);
+    right: 0;
+    display: none;
+    width: min(390px, calc(100vw - 40px));
+    max-height: min(520px, 70vh);
+    overflow: auto;
+    border: 1px solid rgba(232, 236, 236, 0.16);
+    background: var(--mk-bg);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
+}
+
+.task-journal:hover .task-journal__panel,
+.task-journal:focus-within .task-journal__panel,
+.task-journal[open] .task-journal__panel {
+    display: block;
+}
+
+.task-journal__heading {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(232, 236, 236, 0.09);
+    background: var(--mk-bg);
+}
+
+.task-journal__list {
+    display: flex;
+    flex-direction: column;
+}
+
+.task-journal__item {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(232, 236, 236, 0.07);
+}
+
+.task-journal__item:last-child {
+    border-bottom: 0;
+}
+
+.task-journal__item p {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.task-journal__item p + p {
+    margin-top: 4px;
+    font-size: 11.5px;
+}
+
+.task-journal__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 10px;
+    margin-top: 8px;
+    font-size: 10.5px;
+}
+
+.task-journal__empty {
+    margin: 0;
+    padding: 20px 14px;
+    font-size: 12px;
+}
+</style>

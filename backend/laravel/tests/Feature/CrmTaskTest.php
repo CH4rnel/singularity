@@ -215,6 +215,32 @@ test('a closed task leaves the board and lands in the week is numbers', function
         );
 });
 
+test('the completed task journal is ordered from newest to oldest', function () {
+    $operator = User::factory()->crmAdmin()->create();
+    $contact = CrmContact::factory()->create(['name' => 'Alice']);
+
+    CrmTask::factory()->assignedTo($operator)->done()->create([
+        'title' => 'Older task',
+        'completed_at' => now()->subDays(3),
+    ]);
+    CrmTask::factory()->done()->create([
+        'crm_contact_id' => $contact->id,
+        'title' => 'Newest task',
+        'completed_at' => now()->subHour(),
+    ]);
+
+    $this->actingAs($operator)
+        ->get(route('crm.tasks.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('closed', 2)
+            ->where('closed.0.title', 'Newest task')
+            ->where('closed.0.contact.name', 'Alice')
+            ->where('closed.1.title', 'Older task')
+            ->where('closed.1.assignee', $operator->name)
+        );
+});
+
 test('tasks are deleted and contact deletion takes its tasks with it', function () {
     $operator = User::factory()->crmAdmin()->create();
     $task = CrmTask::factory()->standalone()->create();
