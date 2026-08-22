@@ -254,6 +254,8 @@ export const consoleMessages: Messages = {
         'tasks.later': 'Later',
         'tasks.create': 'Create task',
         'tasks.reopen': 'Reopen',
+        'tasks.journal.title': 'Completed tasks',
+        'tasks.journal.empty': 'No completed tasks yet',
         'tasks.noDue': 'no date',
         'tasks.today': 'today',
         'tasks.tomorrow': 'tomorrow',
@@ -744,7 +746,7 @@ export const consoleMessages: Messages = {
         'tasks.title': 'Задачи',
         'tasks.stats':
             '{open} открытых · {overdue} просрочены · {unowned} без исполнителя',
-        'tasks.done': 'Готовые',
+        'tasks.done': 'Сделанные',
         'tasks.quickAdd':
             'написать киту про лимиты моста @lain !завтра #Nakamoto',
         'tasks.quickAddHint':
@@ -758,6 +760,8 @@ export const consoleMessages: Messages = {
         'tasks.later': 'Дальше',
         'tasks.create': 'Создать задачу',
         'tasks.reopen': 'Вернуть',
+        'tasks.journal.title': 'Сделанные задачи',
+        'tasks.journal.empty': 'Сделанных задач пока нет',
         'tasks.noDue': 'без срока',
         'tasks.today': 'сегодня',
         'tasks.tomorrow': 'завтра',
