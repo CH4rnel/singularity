@@ -40,13 +40,19 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  nft_media_handler:
-    depends_on:
-      - backend
-    extends:
-      file: ./services/nft_media_handler.yml
-      service: nft_media_handler
-    image: ghcr.io/blockscout/blockscout:11.0.0
+  # nft_media_handler: removed 2026-08-22.
+  #
+  # It never started once. It needs NFT_MEDIA_HANDLER_NODES_MAP, which was
+  # never set, and object storage for the thumbnails, which was never
+  # provisioned (every NFT_MEDIA_HANDLER_AWS_* is still commented out in
+  # envs/common-blockscout.env). So it crashed on boot and `restart: always`
+  # started it again, 4,710 times, each one a fresh BEAM VM burning ~85% of a
+  # core on a four-core host.
+  #
+  # Nothing depended on it: the explorer's NFT pages and the wallet's NFT tab
+  # read image URLs straight from the v2 API, and thumbnails were the only
+  # thing this produced. Bringing it back means provisioning a bucket first,
+  # then NFT_MEDIA_HANDLER_NODES_MAP, and only then this service.
 
   visualizer:
     extends:
@@ -86,13 +92,17 @@ services:
       file: ./services/stats.yml
       service: stats
 
-  user-ops-indexer:
-    depends_on:
-      - db
-      - backend
-    extends:
-      file: ./services/user-ops-indexer.yml
-      service: user-ops-indexer
+  # user-ops-indexer: removed 2026-08-22.
+  #
+  # An ERC-4337 indexer on a chain with no account abstraction. eth_getCode on
+  # the canonical v0.6 EntryPoint (0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789)
+  # returns 0x on Cyberia — the contract is not deployed, so there has never
+  # been a user operation to index.
+  #
+  # It could not have connected even if there were. It wants a WebSocket
+  # (ws://host.docker.internal:8545/) and polygon-edge answers the upgrade with
+  # a plain 200 instead of 101, which is the literal text of its crash:
+  # `Error: HTTP error: 200 OK`. 1,088 restarts.
 
   proxy:
     depends_on:

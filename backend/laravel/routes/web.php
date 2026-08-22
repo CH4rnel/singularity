@@ -39,6 +39,7 @@ use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReactionController;
+use App\Http\Controllers\ServiceMonitorController;
 use App\Http\Controllers\StakingController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
@@ -438,6 +439,9 @@ Route::middleware(['auth'])->group(function () {
         // on site sessions. Declared before the {contact} wildcard below.
         Route::get('product', [ProductAnalyticsController::class, 'index'])->name('product');
         Route::get('product/users/{user}', [ProductAnalyticsController::class, 'show'])->name('product.user');
+        // Is everything running, and is anyone using it. Renders the last
+        // sweep; the probing itself is `services:check` on the scheduler.
+        Route::get('services', [ServiceMonitorController::class, 'index'])->name('services');
         Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
         Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');
         Route::put('tasks/{task}', [CrmTaskController::class, 'update'])->name('tasks.update');

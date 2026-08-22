@@ -110,6 +110,7 @@ export const crmMessages: Messages = {
         'priority.high': 'high',
         analytics: 'Analytics',
         walletAnalytics: 'Wallet analytics',
+        services: 'Services',
         analyticsDescription:
             'Where users drop off: visits → wallet → money moving',
         funnelTitle: 'Funnel — unique sessions',
@@ -286,6 +287,7 @@ export const crmMessages: Messages = {
         'priority.high': 'высокий',
         analytics: 'Аналитика',
         walletAnalytics: 'Аналитика кошелька',
+        services: 'Сервисы',
         analyticsDescription:
             'Где отваливаются юзеры: визиты → кошелёк → движение денег',
         funnelTitle: 'Воронка — уникальные сессии',

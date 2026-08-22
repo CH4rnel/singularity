@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { downloadMessages } from '@/lib/downloadMessages';
 import { progressMessages } from '@/lib/progressMessages';
+import { servicesMessages } from '@/lib/servicesMessages';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -19,6 +20,9 @@ const DICTS = {
     walletMessages,
     downloadMessages,
     progressMessages,
+    // Operator-facing and therefore en/ru only, but the failure mode is the
+    // same one: a Russian board with an English cell in the middle of it.
+    servicesMessages,
 };
 
 const placeholders = (message) =>

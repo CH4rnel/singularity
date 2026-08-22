@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import {
+    Activity,
     BarChart3,
     CheckSquare,
     Download,
@@ -196,6 +197,16 @@ defineOptions({
                 <Link href="/crm/product">
                     <Button variant="outline">
                         <Wallet class="h-4 w-4" /> {{ t('walletAnalytics') }}
+                    </Button>
+                </Link>
+                <!--
+                  Neither of the two above: not who visited and not who
+                  installed, but whether the things they visited and installed
+                  are actually running, and which of them nobody touches.
+                -->
+                <Link href="/crm/services">
+                    <Button variant="outline">
+                        <Activity class="h-4 w-4" /> {{ t('services') }}
                     </Button>
                 </Link>
                 <Button variant="outline" :disabled="syncing" @click="syncNow">
