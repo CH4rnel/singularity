@@ -1,6 +1,9 @@
 logs/
 scripts/python/.env
 
+# JavaScript dependencies
+**/node_modules/
+
 # Local environment files
 .env
 .env.*

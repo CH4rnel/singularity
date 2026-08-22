@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+dist/
+build/
+coverage/
+
+# Hardhat
+artifacts/
+cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
