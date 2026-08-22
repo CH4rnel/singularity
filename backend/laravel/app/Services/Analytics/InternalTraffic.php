@@ -34,21 +34,45 @@ class InternalTraffic
 
     private const CACHE_SECONDS = 60;
 
-    /** @return array<int, int> */
+    /**
+     * The site accounts that are ours.
+     *
+     * Two sources, merged here rather than in `config/analytics.php`: config
+     * files load alphabetically, `analytics` comes before `crm`, and a
+     * `config('crm.…')` call from inside that file returns an empty array
+     * without complaining — an exclusion that looks configured and excludes
+     * nobody. Pinned by a test for exactly that reason.
+     *
+     * @return array<int, int>
+     */
     public function userIds(): array
     {
-        return array_values(array_filter(
-            array_map(intval(...), (array) config('analytics.internal.user_ids', [])),
-        ));
+        return array_values(array_unique(array_filter(array_map(
+            fn ($value) => (int) trim((string) $value),
+            [
+                ...(array) config('analytics.internal.user_ids', []),
+                ...(array) config('crm.admin_user_ids', []),
+            ],
+        ))));
     }
 
-    /** @return array<int, string> */
+    /**
+     * The addresses that mark an installation as ours.
+     *
+     * The console's own keys, plus whatever the environment adds — the wallet
+     * somebody tests from is very often not the one that opens /crm.
+     *
+     * @return array<int, string>
+     */
     public function wallets(): array
     {
-        return array_values(array_filter(array_map(
+        return array_values(array_unique(array_filter(array_map(
             fn ($value) => strtolower(trim((string) $value)),
-            (array) config('analytics.internal.wallets', []),
-        )));
+            [
+                ...(array) config('analytics.internal.wallets', []),
+                ...(array) config('crm.admin_wallets', []),
+            ],
+        ))));
     }
 
     /**

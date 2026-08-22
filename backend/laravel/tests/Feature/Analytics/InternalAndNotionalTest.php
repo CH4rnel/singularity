@@ -1,9 +1,13 @@
 <?php
 
+use App\Models\User;
 use App\Services\Analytics\AnalyticsFilters;
 use App\Services\Analytics\EventTaxonomy;
+use App\Services\Analytics\InternalTraffic;
 use App\Services\Analytics\ProductMetricsService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * The two ways this dashboard was lying to the people reading it.
@@ -171,4 +175,55 @@ test('opening a screen does not prove a wallet', function () {
             "{$event} must not stamp the onboarding milestone",
         );
     }
+});
+
+/* ------------------------------------------------------------ config -- */
+
+test('the console operators count as ours without any environment set', function () {
+    /*
+     * The failure this pins is silent and total. `config/analytics.php` used
+     * to merge `config('crm.admin_wallets')` into its own list — but config
+     * files load alphabetically, `analytics` sorts before `crm`, and the call
+     * returned an empty array without a warning. Everything looked configured
+     * and nothing was ever excluded. The merge now happens in InternalTraffic,
+     * at use, and this is the test that says so.
+     */
+    $internal = app(InternalTraffic::class);
+
+    expect($internal->wallets())->not->toBeEmpty()
+        ->and($internal->wallets())->toEqualCanonicalizing(config('crm.admin_wallets'));
+});
+
+test('a session is ours whenever any of its rows is', function () {
+    // Set explicitly rather than read from the environment: these ids are
+    // env-only by design (an id means nothing in a database it was not
+    // written for), so a test that read them would skip on every fresh copy.
+    $operator = User::factory()->create();
+    config()->set('analytics.internal.user_ids', [$operator->id]);
+
+    $ours = (string) Str::uuid();
+    $stranger = (string) Str::uuid();
+
+    // An operator browses signed in, so some rows carry the user id and some
+    // do not. Excluding only the attributed half would drop the conversion and
+    // keep the visit, which makes the funnel look worse than reality.
+    DB::table('site_events')->insert([
+        ['session_id' => $ours, 'user_id' => null, 'event' => 'page_view', 'created_at' => now()],
+        ['session_id' => $ours, 'user_id' => $operator->id, 'event' => 'swap_completed', 'created_at' => now()],
+        ['session_id' => $stranger, 'user_id' => null, 'event' => 'page_view', 'created_at' => now()],
+    ]);
+
+    $internal = app(InternalTraffic::class);
+    $internal->forget();
+
+    expect($internal->sessionIds())->toContain($ours)
+        ->and($internal->sessionIds())->not->toContain($stranger);
+
+    $remaining = $internal
+        ->excludeFrom(DB::table('site_events'))
+        ->distinct()
+        ->pluck('session_id')
+        ->all();
+
+    expect($remaining)->toBe([$stranger]);
 });

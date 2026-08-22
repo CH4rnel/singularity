@@ -262,12 +262,7 @@ class AnalyticsIngestService
             return;
         }
 
-        $internal = array_map(
-            fn ($value) => strtolower((string) $value),
-            (array) config('analytics.internal.wallets', []),
-        );
-
-        if (! in_array(strtolower($address), $internal, true)) {
+        if (! in_array(strtolower($address), app(InternalTraffic::class)->wallets(), true)) {
             return;
         }
 

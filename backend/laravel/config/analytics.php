@@ -154,11 +154,12 @@ return [
     | product numbers by default. Two rules, because there are two ways an
     | operator is recognisable:
     |
-    |   - `wallets` — an address seen on an installation. Defaults to the two
-    |     console keys, and takes more from the environment, because a wallet
-    |     used for testing is not necessarily the one that opens /crm.
+    |   - `wallets` — an address seen on an installation. The two console keys
+    |     always count; these are the extras, because a wallet used for testing
+    |     is not necessarily the one that opens /crm.
     |   - `user_ids` — accounts on this site, for `site_events`, which has a
-    |     user id where the product tables deliberately do not.
+    |     user id where the product tables deliberately do not. The console's
+    |     own admin ids always count; these are the extras.
     |
     | Excluding is not hiding: every report that drops internal rows also says
     | how many it dropped, and `?internal=1` puts them back. A number that got
@@ -167,21 +168,24 @@ return [
 
     'internal' => [
 
-        'wallets' => array_values(array_unique(array_filter(array_map(
-            fn (string $address) => strtolower(trim($address)),
-            array_merge(
-                explode(',', (string) env('ANALYTICS_INTERNAL_WALLETS', '')),
-                config('crm.admin_wallets', []),
-            ),
-        )))),
+        /*
+         * Only this file's own environment. The console's two operators are
+         * merged in by `InternalTraffic`, at use rather than here: config
+         * files are loaded alphabetically, `analytics` comes before `crm`, and
+         * a `config('crm.…')` call from this file returns an empty array —
+         * silently, leaving an exclusion that appears configured and excludes
+         * nobody.
+         */
 
-        'user_ids' => array_values(array_unique(array_filter(array_map(
-            fn ($id) => (int) trim((string) $id),
-            array_merge(
-                explode(',', (string) env('ANALYTICS_INTERNAL_USER_IDS', '')),
-                config('crm.admin_user_ids', []),
-            ),
-        )))),
+        'wallets' => array_values(array_filter(array_map(
+            fn (string $address) => strtolower(trim($address)),
+            explode(',', (string) env('ANALYTICS_INTERNAL_WALLETS', '')),
+        ))),
+
+        'user_ids' => array_values(array_filter(array_map(
+            fn (string $id) => (int) trim($id),
+            explode(',', (string) env('ANALYTICS_INTERNAL_USER_IDS', '')),
+        ))),
 
     ],
 
