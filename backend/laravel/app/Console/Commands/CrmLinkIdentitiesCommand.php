@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\BridgeRequest;
 use App\Models\CrmContact;
+use App\Models\CrmIdentityLink;
 use App\Models\User;
 use App\Services\Console\IdentityGraph;
 use Illuminate\Console\Command;
@@ -45,24 +46,48 @@ class CrmLinkIdentitiesCommand extends Command
     public function handle(IdentityGraph $graph): int
     {
         $dry = (bool) $this->option('dry-run');
-        $made = 0;
+        $counts = ['created' => 0, 'upgraded' => 0, 'kept' => 0];
 
-        $link = function (array $a, array $b, string $source, ?string $evidence, string $confidence) use ($graph, $dry, &$made): void {
+        /*
+         * Dry runs need the same answer as real ones without writing, so the
+         * outcome is decided here from what is already stored rather than by
+         * asking the graph to imagine it. Only what actually changes is
+         * printed: a derivation that lists every bridge request it re-read is
+         * a wall of text nobody checks.
+         */
+        $link = function (array $a, array $b, string $source, ?string $evidence, string $confidence) use ($graph, $dry, &$counts): void {
             if ($a[1] === null || $b[1] === null || trim((string) $a[1]) === '' || trim((string) $b[1]) === '') {
                 return;
             }
 
-            $exists = $graph->samePerson(
-                IdentityGraph::node($a[0], (string) $a[1]),
-                IdentityGraph::node($b[0], (string) $b[1]),
-            );
+            if ($dry) {
+                [$lk, $lv, $rk, $rv] = CrmIdentityLink::order($a[0], (string) $a[1], $b[0], (string) $b[1]);
 
-            if ($exists && $confidence === 'strong') {
+                $existing = CrmIdentityLink::query()
+                    ->where('left_kind', $lk)->where('left_value', $lv)
+                    ->where('right_kind', $rk)->where('right_value', $rv)
+                    ->first();
+
+                $outcome = match (true) {
+                    $existing === null => 'created',
+                    $confidence === 'strong' && $existing->confidence !== 'strong' => 'upgraded',
+                    default => 'kept',
+                };
+            } else {
+                [, $outcome] = $graph->linkWithOutcome(
+                    $a[0], (string) $a[1], $b[0], (string) $b[1], $source, $evidence, $confidence,
+                );
+            }
+
+            $counts[$outcome]++;
+
+            if ($outcome === 'kept') {
                 return;
             }
 
             $this->line(sprintf(
-                '  %-9s %-8s %s  ↔  %-8s %s   (%s)',
+                '  %-8s %-6s %-8s %s  <->  %-8s %s   (%s)',
+                $outcome,
                 $confidence,
                 $a[0],
                 $this->shorten((string) $a[1]),
@@ -70,12 +95,6 @@ class CrmLinkIdentitiesCommand extends Command
                 $this->shorten((string) $b[1]),
                 $evidence ?? $source,
             ));
-
-            if (! $dry) {
-                $graph->link($a[0], (string) $a[1], $b[0], (string) $b[1], $source, $evidence, $confidence);
-            }
-
-            $made++;
         };
 
         $this->line('accounts:');
@@ -122,7 +141,13 @@ class CrmLinkIdentitiesCommand extends Command
         }
 
         $this->newLine();
-        $this->line($dry ? "Would write {$made} link(s)." : "Wrote {$made} link(s).");
+        $this->line(sprintf(
+            '%s %d new, %d upgraded, %d already known.',
+            $dry ? 'Would write:' : 'Wrote:',
+            $counts['created'],
+            $counts['upgraded'],
+            $counts['kept'],
+        ));
 
         return self::SUCCESS;
     }

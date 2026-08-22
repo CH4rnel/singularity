@@ -221,14 +221,26 @@ class IdentityGraph
     /* ----------------------------------------------------------- writes -- */
 
     /**
-     * Assert a link, or leave the existing one alone.
+     * Assert a link.
      *
-     * Idempotent by the unique index on the ordered pair, so every derivation
-     * can be re-run. A link never overwrites one that is already there: the
-     * first claim keeps its evidence, and a re-derivation cannot quietly
-     * downgrade something an operator confirmed by hand.
+     * Idempotent by the ordered pair, so every derivation can be re-run. The
+     * rule on a claim that is already recorded is asymmetric, and the asymmetry
+     * is the point:
+     *
+     *   A **stronger** claim upgrades what is there. The same two identities
+     *   turn up in several rows — an address is a bridge's recipient in one
+     *   request and its signing sender in the next — and which of those was
+     *   seen first is an accident of the id order. Refusing to upgrade would
+     *   file a signed fact as a guess forever, purely because a weaker row
+     *   about the same pair happened to be read earlier.
+     *
+     *   A **weaker or equal** claim changes nothing, so a re-derivation can
+     *   never undo an operator who confirmed something by hand.
+     *
+     * @return array{0: ?CrmIdentityLink, 1: string} the link, and what happened
+     *                                               to it: created|upgraded|kept
      */
-    public function link(
+    public function linkWithOutcome(
         string $aKind,
         string $aValue,
         string $bKind,
@@ -237,11 +249,11 @@ class IdentityGraph
         ?string $evidence = null,
         string $confidence = 'strong',
         ?int $createdBy = null,
-    ): ?CrmIdentityLink {
+    ): array {
         [$lk, $lv, $rk, $rv] = CrmIdentityLink::order($aKind, $aValue, $bKind, $bValue);
 
         if ($lk === $rk && $lv === $rv) {
-            return null;
+            return [null, 'kept'];
         }
 
         $existing = CrmIdentityLink::query()
@@ -252,13 +264,24 @@ class IdentityGraph
             ->first();
 
         if ($existing !== null) {
-            return $existing;
+            if ($confidence === 'strong' && $existing->confidence !== 'strong') {
+                $existing->forceFill([
+                    'confidence' => 'strong',
+                    'source' => $source,
+                    'evidence' => $evidence,
+                ])->save();
+
+                $this->forget();
+
+                return [$existing, 'upgraded'];
+            }
+
+            return [$existing, 'kept'];
         }
 
-        $this->built = false;
-        $this->parent = [];
+        $this->forget();
 
-        return CrmIdentityLink::create([
+        $created = CrmIdentityLink::create([
             'left_kind' => $lk,
             'left_value' => $lv,
             'right_kind' => $rk,
@@ -269,6 +292,22 @@ class IdentityGraph
             'created_by' => $createdBy,
             'created_at' => Carbon::now('UTC'),
         ]);
+
+        return [$created, 'created'];
+    }
+
+    /** The same assertion, for callers that only want the row. */
+    public function link(
+        string $aKind,
+        string $aValue,
+        string $bKind,
+        string $bValue,
+        string $source,
+        ?string $evidence = null,
+        string $confidence = 'strong',
+        ?int $createdBy = null,
+    ): ?CrmIdentityLink {
+        return $this->linkWithOutcome($aKind, $aValue, $bKind, $bValue, $source, $evidence, $confidence, $createdBy)[0];
     }
 
     public function forget(): void

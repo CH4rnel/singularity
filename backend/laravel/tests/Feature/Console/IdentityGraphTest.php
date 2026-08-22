@@ -141,3 +141,32 @@ test('a record cannot be linked to itself', function () {
     expect($graph->link('user', '9', 'user', '9', 'manual', null))->toBeNull()
         ->and(CrmIdentityLink::count())->toBe(0);
 });
+
+test('a signed fact upgrades a guess about the same pair', function () {
+    $graph = graph();
+
+    // The order these arrive in is an accident of row ids: the same address is
+    // a bridge's recipient in one request and its signing sender in the next.
+    // Read the guess first, on purpose.
+    $graph->link('user', '5', 'evm', '0x4444444444444444444444444444444444444444', 'bridge_recipient', 'bridge_requests #49', 'weak');
+
+    [$link, $outcome] = $graph->linkWithOutcome('user', '5', 'evm', '0x4444444444444444444444444444444444444444', 'bridge_sender', 'bridge_requests #50', 'strong');
+
+    expect($outcome)->toBe('upgraded')
+        ->and($link->confidence)->toBe('strong')
+        ->and($link->evidence)->toBe('bridge_requests #50')
+        ->and(CrmIdentityLink::count())->toBe(1);
+});
+
+test('a guess never downgrades what is already established', function () {
+    $graph = graph();
+
+    $graph->link('user', '6', 'evm', '0x5555555555555555555555555555555555555555', 'manual', 'operator', 'strong');
+
+    [$link, $outcome] = $graph->linkWithOutcome('user', '6', 'evm', '0x5555555555555555555555555555555555555555', 'bridge_recipient', 'bridge_requests #9', 'weak');
+
+    // A re-derivation must not undo somebody who looked and decided.
+    expect($outcome)->toBe('kept')
+        ->and($link->confidence)->toBe('strong')
+        ->and($link->source)->toBe('manual');
+});
