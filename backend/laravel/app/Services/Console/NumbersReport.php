@@ -360,12 +360,23 @@ class NumbersReport
                     'params' => ['visitors' => $visitors, 'wallets' => $wallets],
                 ],
                 'evidence' => ['type' => 'funnel', 'steps' => $funnel],
-                // The bridge step is the one number here the exclusion cannot
-                // reach: bridge_events keeps its own session ids, and no site
-                // session can be matched to one.
-                'caveat' => $ours === null
-                    ? ['key' => 'numbers.caveat.bridgeUnfiltered', 'params' => []]
-                    : $ours,
+                /*
+                 * This question's headline *is* the bridge step, which is the
+                 * one number the exclusion cannot reach — `bridge_events`
+                 * keeps its own session ids and no site session can be matched
+                 * against one. So the bridge caveat is the one that qualifies
+                 * the number on screen, and when our sessions were also
+                 * dropped from the steps below it, both facts go on one line
+                 * rather than the wrong one going on its own.
+                 */
+                'caveat' => match (true) {
+                    $filters->includeInternal => $ours,
+                    $ours !== null => [
+                        'key' => 'numbers.caveat.bridgeAndInternal',
+                        'params' => ['count' => $this->internal->sessionCount()],
+                    ],
+                    default => ['key' => 'numbers.caveat.bridgeUnfiltered', 'params' => []],
+                },
             ],
             [
                 'key' => 'return',

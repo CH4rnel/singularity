@@ -289,6 +289,8 @@ export const consoleMessages: Messages = {
             '{trades} trade(s) worth a nominal ${usd} left out of volume: their own price impact says the figure describes a pool being drained, not money changing hands.',
         'numbers.caveat.bridgeUnfiltered':
             'The bridge step still counts our own sessions — bridge events keep their own session ids, which no site session can be matched against.',
+        'numbers.caveat.bridgeAndInternal':
+            '{count} of our own sessions are out of the steps above — but not out of the bridge step, which is the number on the left: bridge events keep their own session ids, which no site session can be matched against.',
         'numbers.return.title': 'Do they come back?',
         'numbers.return.suffix': '% D7, was {before}',
         'numbers.return.drop': 'D7 fell from {before}% to {now}%.',
@@ -748,6 +750,8 @@ export const consoleMessages: Messages = {
             'Сделок вне объёма: {trades} на номинальные ${usd}. Их собственное влияние на цену говорит, что это опустошение пула, а не оборот.',
         'numbers.caveat.bridgeUnfiltered':
             'Шаг моста всё ещё считает наши сессии: у событий моста свои идентификаторы сессий, сопоставить их с сайтовыми нельзя.',
+        'numbers.caveat.bridgeAndInternal':
+            'Наших сессий не учтено в шагах выше: {count}. Но они учтены в шаге моста — а это и есть число слева: у событий моста свои идентификаторы сессий, сопоставить их с сайтовыми нельзя.',
         'numbers.return.title': 'Возвращаются ли?',
         'numbers.return.suffix': '% D7, было {before}',
         'numbers.return.drop': 'D7 упал с {before}% до {now}%.',
