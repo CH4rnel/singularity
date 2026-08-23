@@ -49,7 +49,7 @@ type Console = {
     };
     sweep: { at: string | null };
     banner: Banner | null;
-    counts: { attention: number; tasks: number };
+    counts: { attention: number; tasks: number; chat: number };
 };
 
 const page = usePage();
@@ -80,12 +80,23 @@ const LENSES = [
         badge: 'tasks',
         phone: true,
     },
+    // The room sits with the work (queue, people, tasks) rather than with
+    // the state (numbers, machines): it is where the work gets decided.
+    {
+        key: 'chat',
+        href: '/crm/chat',
+        label: 'nav.chat',
+        badge: 'chat',
+        phone: true,
+    },
+    // Not on the phone. At three in the morning people answer each other;
+    // nobody reads retention cohorts, so the room takes this slot there.
     {
         key: 'numbers',
         href: '/crm/numbers',
         label: 'nav.numbers',
         badge: null,
-        phone: true,
+        phone: false,
     },
     {
         key: 'machines',
@@ -149,8 +160,12 @@ function badgeCount(badge: string | null): number {
         return 0;
     }
 
-    return badge === 'attention'
-        ? console_.value.counts.attention
+    if (badge === 'attention') {
+        return console_.value.counts.attention;
+    }
+
+    return badge === 'chat'
+        ? console_.value.counts.chat
         : console_.value.counts.tasks;
 }
 
@@ -378,6 +393,12 @@ const initials = computed(() =>
                             />
                             <path d="M7 7.5h.01M7 16.5h.01" />
                         </template>
+                        <template v-else-if="lens.key === 'chat'">
+                            <path
+                                d="M3.5 4.5h17v11h-9.8L6 19.5V15.5H3.5z"
+                            />
+                            <path d="M7.5 8.5h9M7.5 11.5h5.5" />
+                        </template>
                         <template v-else-if="lens.key === 'keys'">
                             <circle cx="8" cy="12" r="3.5" />
                             <path d="M11.5 12H21M17 12v3M20 12v2" />
@@ -454,7 +475,7 @@ const initials = computed(() =>
             </main>
         </div>
 
-        <!-- The phone. Four lenses fit; the dossiers are reached from them. -->
+        <!-- The phone. Five lenses fit; the dossiers are reached from them. -->
         <nav class="mk-bottom">
             <Link
                 v-for="lens in PHONE_LENSES"

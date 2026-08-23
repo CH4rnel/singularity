@@ -19,6 +19,7 @@ use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\ConsoleAiKeysController;
+use App\Http\Controllers\ConsoleChatController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
@@ -476,6 +477,21 @@ Route::middleware(['auth'])->group(function () {
         Route::get('mockup/{screen}', [ConsoleMockupController::class, 'screen'])
             ->where('screen', '[a-z]+')
             ->name('mockup.screen');
+
+        /*
+         * The room. Static addresses first: `chat/files` is the same stream
+         * read as a pile of files, and `chat/{message}` must not swallow it.
+         */
+        Route::get('chat', [ConsoleChatController::class, 'index'])->name('chat.index');
+        Route::get('chat/since', [ConsoleChatController::class, 'since'])->name('chat.since');
+        Route::get('chat/files', [ConsoleChatController::class, 'files'])->name('chat.files');
+        // A file has no address of its own: the private disk is not served,
+        // and this is the only way back out of it.
+        Route::get('chat/files/{file}', [ConsoleChatController::class, 'download'])->name('chat.download');
+        Route::post('chat', [ConsoleChatController::class, 'store'])->name('chat.store');
+        Route::post('chat/{message}/answer', [ConsoleChatController::class, 'answer'])->name('chat.answer');
+        Route::post('chat/{message}/task', [ConsoleChatController::class, 'task'])->name('chat.task');
+        Route::delete('chat/{message}', [ConsoleChatController::class, 'destroy'])->name('chat.destroy');
 
         Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
         Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');

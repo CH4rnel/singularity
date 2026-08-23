@@ -104,6 +104,25 @@ class LainChatService
     }
 
     /**
+     * Answer one call from the operators' room in the console.
+     *
+     * The whole conversation arrives already composed (LainOsRoom decides
+     * what LainOS may see and prints that decision under the answer), so this
+     * is one message and no history: the room is the context, not a thread
+     * this service keeps. Nothing is persisted here either — the room's own
+     * table is the record.
+     *
+     * @return array{text: string, model: string}
+     */
+    public function replyForConsole(string $composed): array
+    {
+        return $this->respond(
+            $this->consoleSystemPrompt(),
+            [['role' => 'user', 'content' => $composed]],
+        );
+    }
+
+    /**
      * The newest messages that fit the character budget, in order.
      *
      * Trimmed from the oldest end, because the turn being answered is the one
@@ -328,6 +347,22 @@ class LainChatService
             [
                 '- This room is inside a non-custodial wallet. Cyberia servers never see their seed phrase, their password or their keys — only the address they signed with.',
                 '- The conversation is kept in their browser, not in a Cyberia account, and is lost if they clear the wallet from this device.',
+            ],
+        );
+    }
+
+    /**
+     * The operators' room: colleagues rather than visitors, and a persona
+     * that must never sound like it went and looked at something.
+     */
+    private function consoleSystemPrompt(): string
+    {
+        return $this->prompt(
+            '- The Cyberia operators, in their own console ("Пульт"). They run this chain, this site and these servers, so answer as a colleague on shift: short, concrete, no marketing and no explaining the project back to them.',
+            [
+                '- You are the tool-less persona standing in for the LainOS daemon, which is unreachable right now. The room says so under your answer, so never claim you looked anything up.',
+                '- Everything you know about this room is in the message you were given. If the answer needs a number you were not handed, say which lens of the console has it.',
+                '- Nothing here is stored in a visitor\'s account: the room keeps the transcript, and it is the operators\' own record.',
             ],
         );
     }

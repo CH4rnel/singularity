@@ -23,6 +23,9 @@ type Screen = {
     title: string;
     width: number;
     height: number;
+    // The canvas this artboard was drawn on: the console's first nine were
+    // frozen before the room existed, so the sixth lens has its own.
+    source: string | null;
 };
 
 const props = defineProps<{
@@ -128,9 +131,9 @@ function argument(text: string): string {
                 >{{ t('mockup.separately') }}</a
             >
             <a
-                v-if="source"
+                v-if="screen?.source || source"
                 class="mk-btn mk-ghost mk-wide"
-                :href="source"
+                :href="screen?.source || source"
                 target="_blank"
                 rel="noopener"
                 >{{ t('mockup.canvas') }}</a

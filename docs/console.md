@@ -91,6 +91,8 @@ Everything lives in `resources/css/console.css`, namespaced `mk-` under
 | `/crm/people` | Люди | `crm/People.vue` — segments and what happened to each person |
 | `/crm/{contact}` | Досье | `crm/Person.vue` — one person, one timeline |
 | `/crm/tasks` | Задачи | `crm/Tasks.vue` — late / now / later, plus the unowned band |
+| `/crm/chat` | Чат | `crm/Chat.vue` — one room: operators, their files, and LainOS |
+| `/crm/chat/files` | Чат · файлы | `crm/ChatFiles.vue` — the same stream read as the pile it collected |
 | `/crm/numbers` | Числа | `crm/Numbers.vue` — six questions, subject switch |
 | `/crm/installs/{uuid}` | Досье установки | `crm/Install.vue` — one anonymous installation |
 | `/crm/machines` | Машины | `crm/Machines.vue` — the registry as tiles, hosts, idle, incidents |
@@ -100,6 +102,61 @@ Everything lives in `resources/css/console.css`, namespaced `mk-` under
 `/crm/analytics`, `/crm/product`, `/crm/services` and `/crm/product/users/{id}`
 redirect to the lens that answers the same question — they are in messages, in
 bookmarks and in the ops channel.
+
+---
+
+## 4a. The room, and why the file dump is not a folder
+
+The ask was a place to drop files plus a chat between the operators. They are
+one thing here: **a file cannot exist without the message that brought it**
+(`crm_chat_messages` → `crm_chat_files`), so it always carries who brought it
+and what for. `/crm/chat/files` is that stream read a second way — segments
+with their rule on screen, exactly like Люди — and the table's last column is
+the sentence the file arrived with. A folder is a place where a file is put
+silently; a month later it holds five files named `final2.log` and nobody can
+account for any of them.
+
+Four decisions the room stands on:
+
+1. **One room, not a messenger.** There are three operators. Channels, threads
+   and DMs are four decisions before the thought is written down, and the
+   thought is the part that gets lost. What separates one conversation from
+   another is the object a line is attached to — `#name` resolves a person
+   through the same `TaskLine` grammar the task composer uses.
+2. **The left column is time of day, not time in state.** In the queue the
+   duration *is* the priority; a room is a log, and a log's spine is when.
+3. **One action on a line: "В задачу".** A pinned message is one nobody does;
+   a task with an owner and a date is one somebody does. The line keeps the
+   task's number (`crm_task_id`), so the evening view can say what the day
+   produced.
+4. **LainOS is a participant with a visible boundary.** It answers when it is
+   called by name (`@lainos` — never `@lain`, which is an operator) and stays
+   quiet otherwise: a correspondent that replies to every line turns a working
+   log into a chat with a bot.
+
+**Two correspondents answer to that name and they are not interchangeable.**
+The daemon (`services/lainos`, `POST /chat` on the host's loopback,
+`LAINOS_HTTP_URL`) has tools, memory and a wallet — it can go and look. The
+persona (`LainChatService`, straight to OpenRouter) can only reason about what
+it was handed. Every answer is stamped with which one gave it and with what it
+was allowed to see, and when neither can be reached the room prints a hatched
+"LainOS не отвечает" with a retry rather than a sentence nobody stands behind.
+
+What goes up is narrow and is printed under the answer: the last
+`crm.chat.lainos.context_messages` lines, the names and sizes of their files,
+and the text of a file **only when it is attached to the line that called**.
+The call runs in a request of its own (`POST /crm/chat/{message}/answer`,
+behind a cache lock) rather than on the queue: this host is not guaranteed a
+worker, and an answer that silently never arrives is worse than one an
+operator can press again.
+
+Files are written to the **private** disk and handed back only through
+`/crm/chat/files/{file}` — the console is a 404 for everyone else, and a file
+served from `/storage` would be the one door left open. Executables are
+refused by extension, size is capped (`crm.chat.files.max_mb`), and
+`crm:chat-prune` drops a message and its bytes together after
+`crm.chat.files.retention_days`, because a file whose reason has been deleted
+is the orphan this whole design exists to avoid.
 
 ---
 
@@ -115,8 +172,10 @@ bookmarks and in the ops channel.
 | `app/Services/Console/PersonDossier.php` | One person as one stream |
 | `app/Services/Console/NumbersReport.php` | The six questions, per subject |
 | `app/Services/Console/TaskLine.php` | `@who !when #whom` out of one typed line |
+| `app/Services/Console/ChatRoom.php` | The room, its people and its files — both lenses on one stream |
+| `app/Services/Console/LainOsRoom.php` | One call to LainOS: which backend answered, and what it was allowed to see |
 | `app/Services/Console/ServiceStrips.php` | A day per service, one cell an hour |
-| `app/Services/Console/Mockup.php` | The canvas manifest: nine artboards and three annotations out of `resources/console-mockup/` |
+| `app/Services/Console/Mockup.php` | The canvas manifest: fourteen artboards and four annotations out of `resources/console-mockup/` |
 | `resources/js/lib/consoleMessages.ts` | Every word, en/ru |
 | `resources/js/lib/console.ts` | Durations, plurals, money, the four tones |
 | `resources/js/layouts/ConsoleLayout.vue` | The shell: alarm strip, rail, phone bar |
@@ -125,15 +184,19 @@ bookmarks and in the ops channel.
 
 ## 5a. The design, kept inside the thing it describes
 
-`/crm/mockup` serves the nine artboards the console was drawn as, straight out
-of `resources/console-mockup/` (`Mockup.php`, `ConsoleMockupController`). They
+`/crm/mockup` serves the fourteen artboards the console was drawn as, straight
+out of `resources/console-mockup/` (`Mockup.php`, `ConsoleMockupController`). They
 are frozen source: nothing imports them, Vite never sees them, and where the
 running console differs from the drawing the console is the newer answer.
 
 The reason they live in the repository rather than behind a link is that a
 canvas link rots and an exported picture drops the text — and the text is the
-argument. `canvas.json` carries it: three annotations that say why the home is
-a queue, why colour is spent only on anomaly, and what the five old pages lost.
+argument. `canvas.json` carries it: four annotations that say why the home is a
+queue, why colour is spent only on anomaly, what the five old pages lost, and
+why the file dump and the chat are the same room. The first nine artboards were
+frozen before the room existed, so the sixth lens was drawn on a **second**
+canvas rather than by editing a record — each artboard carries the canvas it
+came from, and the lens links to that one.
 
 A screen key never reaches the filesystem: the manifest maps a key it already
 knows to a file, everything else is a 404. Each artboard is a full page of its
@@ -174,6 +237,9 @@ never be assigned to somebody who cannot open the page it is on.
 - **`unknown` is not a failure.** A dead heartbeat says the reporter died and
   nothing about what it reported on: hatched, no incident, out of both halves
   of the uptime fraction.
+- **The room never invents an answer.** An unreachable LainOS is a hatched
+  stripe with a retry; a swapped backend is named under the answer. "LainOS
+  said so" has to keep meaning something.
 - **Both languages, always.** The server sends keys and parameters, the
   browser holds the dictionary (`tests/Frontend/LocaleMessagesTest.mjs` pins
   the key sets and the `{placeholders}`).

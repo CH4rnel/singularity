@@ -26,7 +26,7 @@ class Mockup
      * The canvas as it was published: artboards in reading order, and the
      * annotations that sit beside them.
      *
-     * @return array{screens: list<array{key: string, title: string, width: int, height: int}>, notes: list<array{key: string, text: string}>, source: string}
+     * @return array{screens: list<array{key: string, title: string, width: int, height: int, source: string|null}>, notes: list<array{key: string, text: string}>, source: string}
      */
     public function manifest(): array
     {
@@ -46,6 +46,10 @@ class Mockup
                 'title' => (string) ($artboard['title'] ?? $key),
                 'width' => (int) ($artboard['w'] ?? 1440),
                 'height' => (int) ($artboard['h'] ?? 1010),
+                // Which canvas this artboard was drawn on. The first nine
+                // were frozen before the room existed, so the sixth lens was
+                // drawn on a second canvas rather than by editing a record.
+                'source' => $this->sourceFor($artboard['source'] ?? null),
             ];
         }
 
@@ -59,6 +63,18 @@ class Mockup
             'notes' => array_values($notes),
             'source' => (string) config('crm.console.mockup_url', ''),
         ];
+    }
+
+    /** The canvas an artboard belongs to, by the name canvas.json uses. */
+    protected function sourceFor(?string $canvas): ?string
+    {
+        $url = match ($canvas) {
+            'chat' => (string) config('crm.console.chat_mockup_url', ''),
+            null => (string) config('crm.console.mockup_url', ''),
+            default => '',
+        };
+
+        return $url === '' ? null : $url;
     }
 
     /**

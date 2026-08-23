@@ -32,8 +32,8 @@ it('lists every artboard of the canvas with its annotations', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('crm/Mockup')
-            ->has('screens', 9)
-            ->has('notes', 3)
+            ->has('screens', 14)
+            ->has('notes', 4)
             ->where('screens.0.key', 'main')
             ->where('screens.0.width', 1440)
             ->where('source', fn (string $url) => str_starts_with($url, 'https://'))

@@ -84,6 +84,72 @@ return [
             'CRM_CONSOLE_MOCKUP_URL',
             'https://claude.ai/code/artifact/97d94821-0cac-490a-89cb-59083edd6701',
         ),
+
+        // The chat lens was drawn on its own canvas, after the first nine
+        // artboards were already frozen. Two links rather than one edited
+        // link: a design is a record of a decision, and the record of the
+        // sixth lens is not the record of the first five.
+        'chat_mockup_url' => (string) env(
+            'CRM_CONSOLE_CHAT_MOCKUP_URL',
+            'https://claude.ai/code/artifact/c8545ac1-fec6-4dbe-9da1-830b502fac68',
+        ),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | The room ("Чат") — one conversation, and the files that came with it.
+    |--------------------------------------------------------------------------
+    | Everything here is a limit on what an operator may drop into a shared
+    | room and how long it stays. Files live on the private disk and are only
+    | ever handed back through the console's own gate, so these numbers are
+    | about disk and attention rather than about access.
+    */
+
+    'chat' => [
+        // How many messages one page of the room carries. Older ones are
+        // fetched by pressing for them, because a room that loads a year of
+        // history to show today's three lines is a room nobody opens twice.
+        'page_size' => (int) env('CRM_CHAT_PAGE_SIZE', 60),
+
+        // Longest single message. Generous: people paste stack traces in.
+        'max_chars' => (int) env('CRM_CHAT_MAX_CHARS', 8000),
+
+        'files' => [
+            'max_mb' => (int) env('CRM_CHAT_FILE_MAX_MB', 25),
+            'max_per_message' => (int) env('CRM_CHAT_FILES_PER_MESSAGE', 5),
+
+            // Refused outright. Not a virus policy — a room where one drag
+            // can leave a runnable file on the server is a room with a
+            // different threat model than the one it was designed for.
+            'blocked_extensions' => [
+                'exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'ps1', 'psm1',
+                'sh', 'bash', 'zsh', 'php', 'phar', 'jar', 'apk', 'deb',
+                'rpm', 'dmg', 'app', 'so', 'dll', 'py', 'rb', 'pl',
+            ],
+
+            // A file goes when its message goes. Both are dropped after this,
+            // because a room is a working record and not an archive.
+            'retention_days' => (int) env('CRM_CHAT_RETENTION_DAYS', 180),
+        ],
+
+        'lainos' => [
+            // How many recent messages are replayed as context. The room
+            // prints this number under every answer, so changing it changes
+            // what the room promises.
+            'context_messages' => (int) env('CRM_CHAT_LAINOS_CONTEXT', 20),
+
+            // How much of an attached text file is quoted into the question.
+            // Names and sizes always go up; contents only when the file is
+            // attached to the line that called LainOS.
+            'file_bytes' => (int) env('CRM_CHAT_LAINOS_FILE_BYTES', 8000),
+
+            // Answering with the tool-less persona when the daemon is
+            // unreachable. Off means an unreachable daemon is reported as
+            // exactly that: two correspondents are not interchangeable, and
+            // silently swapping them is how "LainOS said so" stops meaning
+            // anything.
+            'fallback' => (bool) env('CRM_CHAT_LAINOS_FALLBACK', true),
+        ],
     ],
 
 ];

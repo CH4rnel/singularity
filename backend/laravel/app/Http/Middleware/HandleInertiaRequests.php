@@ -75,7 +75,7 @@ class HandleInertiaRequests extends Middleware
              * ordinary page never pays for it.
              */
             'console' => fn () => $request->routeIs('crm.*') && EnsureCrmAdmin::allows($user)
-                ? app(ConsoleHeader::class)->build()
+                ? app(ConsoleHeader::class)->build($user)
                 : null,
             'vapidPublicKey' => config('webpush.vapid.public_key'),
             'flash' => [

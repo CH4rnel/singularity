@@ -55,6 +55,19 @@ return [
         'minimum_share_bps' => (int) env('LAIN_MINIMUM_SHARE_BPS', 1000),
     ],
 
+    // The LainOS daemon itself (services/lainos), which is a different
+    // correspondent from the persona above: it has tools, memory and a
+    // wallet. It listens on the host's loopback, so the URL is only ever
+    // reachable from this machine — unset means the console's room falls back
+    // to the tool-less persona and says which one answered.
+    'lainos' => [
+        'url' => env('LAINOS_HTTP_URL'),
+        'timeout_seconds' => (int) env('LAINOS_HTTP_TIMEOUT', 60),
+        // The room id the daemon files this conversation under, so the
+        // console's room is not mixed into Telegram's or the game's.
+        'room' => env('LAINOS_CONSOLE_ROOM', 'cyberia-console'),
+    ],
+
     'cyberia' => [
         'explorer_url' => env('CYBERIA_EXPLORER_URL', 'https://explorer.cyberia.church'),
         // Analytics token-price walker (AnalyticsController). $1-pegged anchor

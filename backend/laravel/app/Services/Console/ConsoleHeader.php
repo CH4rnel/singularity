@@ -4,6 +4,7 @@ namespace App\Services\Console;
 
 use App\Models\CrmTask;
 use App\Models\ServiceCheck;
+use App\Models\User;
 use App\Services\Analytics\AnalyticsFilters;
 use App\Services\Analytics\ProductMetricsService;
 use App\Services\Monitoring\ServiceRegistry;
@@ -30,10 +31,15 @@ class ConsoleHeader
         private ServiceRegistry $registry,
         private ProductMetricsService $metrics,
         private ConsoleFeed $feed,
+        private ChatRoom $chat,
     ) {}
 
-    /** @return array<string, mixed> */
-    public function build(): array
+    /**
+     * @param  User|null  $viewer  Whose unread count the chat badge carries;
+     *                             the rest of the strip is the same for all.
+     * @return array<string, mixed>
+     */
+    public function build(?User $viewer = null): array
     {
         $queue = $this->feed->cached();
         $attention = $queue['attention'] ?? [];
@@ -48,6 +54,9 @@ class ConsoleHeader
             'counts' => [
                 'attention' => count($attention),
                 'tasks' => CrmTask::query()->overdue()->count(),
+                // Per-viewer, unlike everything else here: what nobody has
+                // read is a fact about a person and not about the console.
+                'chat' => $this->chat->unreadFor($viewer),
             ],
             'quiet' => $queue['quiet'] ?? null,
         ];

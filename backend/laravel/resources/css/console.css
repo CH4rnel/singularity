@@ -523,6 +523,229 @@
     }
 }
 
+/* ------------------------------------------------------------- the room */
+
+/*
+ * "Чат" is the one lens two people read at the same moment, so it is the one
+ * that scrolls inside itself: the composer stays where the hand is and the
+ * transcript moves under it. Everything else here is the console's own
+ * vocabulary — hairline rows, a mono left column, one action per row that
+ * appears when the pointer is on it.
+ */
+
+.mk-chat {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    margin-bottom: 18px;
+}
+
+.mk-chat-stream {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.mk-chat-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--mk-flat) transparent;
+}
+
+.mk-chat-side {
+    width: 300px;
+    flex: 0 0 300px;
+    margin-left: 22px;
+    padding-left: 20px;
+    border-left: 1px solid var(--mk-hair);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow-y: auto;
+}
+
+.mk-msg {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 11px 4px 11px 0;
+    border-top: 1px solid var(--mk-hair);
+}
+
+/* Time of day, not time in state: the queue's left column is a duration
+   because there duration is the priority; a room is a log, and a log's
+   spine is when. */
+.mk-msg-time {
+    width: 46px;
+    flex: 0 0 46px;
+    padding-top: 2px;
+    text-align: right;
+    font-family: var(--mk-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11.5px;
+    color: var(--mk-faint);
+}
+
+.mk-msg-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.mk-msg-main.mk-lainos {
+    border-left: 2px solid rgba(0, 229, 209, 0.35);
+    padding-left: 14px;
+    margin-left: -16px;
+}
+
+.mk-msg p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--mk-body);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.mk-msg-act {
+    width: 132px;
+    flex: 0 0 132px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.mk-msg:hover .mk-msg-act,
+.mk-msg:focus-within .mk-msg-act {
+    opacity: 1;
+}
+
+.mk-who {
+    font-family: var(--mk-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mk-body);
+}
+
+/* A file is a row on a hairline, never a card: in this room it is the same
+   kind of object as a service in "Машины". */
+.mk-att {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+    margin-top: 9px;
+    padding: 6px 12px;
+    border: 1px solid rgba(232, 236, 236, 0.1);
+    background: var(--mk-panel);
+}
+
+.mk-ext {
+    font-family: var(--mk-mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 3px 6px;
+    border: 1px solid var(--mk-hair-strong);
+    color: var(--mk-dim);
+    white-space: nowrap;
+}
+
+.mk-thumb {
+    max-height: 120px;
+    max-width: 220px;
+    border: 1px solid var(--mk-hair);
+    display: block;
+}
+
+.mk-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    min-height: 52px;
+    margin-top: 14px;
+    padding: 10px 14px;
+    border: 1px solid rgba(0, 229, 209, 0.25);
+    background: rgba(0, 229, 209, 0.04);
+}
+
+.mk-composer textarea {
+    flex: 1;
+    min-width: 0;
+    max-height: 160px;
+    padding: 0;
+    border: 0;
+    outline: none;
+    resize: none;
+    background: transparent;
+    color: var(--mk-text);
+    font-family: var(--mk-mono);
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+
+.mk-composer textarea::placeholder {
+    color: var(--mk-faint);
+}
+
+/* The drop target is the whole room, because that is where a file is being
+   thrown; the panel only says so. */
+.mk-drop {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px dashed rgba(0, 229, 209, 0.5);
+    background: rgba(7, 9, 10, 0.88);
+    pointer-events: none;
+}
+
+/* "No data" stays a stripe rather than a fill: hatching under a sentence is
+   hatching nobody can read. */
+.mk-stripe {
+    display: flex;
+    align-items: stretch;
+    margin-top: 9px;
+    border: 1px solid rgba(141, 154, 157, 0.35);
+    background: var(--mk-panel);
+}
+
+.mk-stripe > .mk-hatch {
+    width: 8px;
+    flex: 0 0 8px;
+    border: 0;
+}
+
+@media (max-width: 900px) {
+    /* The phone keeps the conversation and drops the room's furniture: the
+       side rail is three lists nobody reads while walking. */
+    .mk-chat-side {
+        display: none;
+    }
+
+    .mk-msg-act {
+        opacity: 1;
+        width: auto;
+        flex: 0 0 auto;
+    }
+
+    .mk-chat {
+        margin-bottom: 12px;
+    }
+}
+
 /* Hide-on-narrow helper for the parts of a row that stop fitting. */
 @media (max-width: 1180px) {
     .mk-wide {
