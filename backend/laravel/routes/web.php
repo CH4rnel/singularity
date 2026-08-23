@@ -464,9 +464,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('machines', [ServiceMonitorController::class, 'index'])->name('machines');
 
         // OpenAI-compatible grants bound to user-installed LainOS instances.
-        // This is an inventory and usage view; it never receives a plaintext
-        // key and performs no key-management writes.
+        // A full secret leaves the issue response once; the inventory stores
+        // and renders only its hash and visible prefix.
         Route::get('api-keys', [ConsoleAiKeysController::class, 'index'])->name('ai-keys');
+        Route::post('api-keys', [ConsoleAiKeysController::class, 'store'])->name('ai-keys.store');
 
         // The design this console was built from, kept where the console is.
         // A canvas link rots and an exported picture loses its text; the

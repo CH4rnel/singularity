@@ -28,15 +28,16 @@ and repeat-protected.
 
 ### Model providers
 
-LainOS speaks to six backends through one `ModelProvider` interface, selected
+LainOS speaks to seven backends through one `ModelProvider` interface, selected
 from the environment:
 
-1. `LAINOS_MODEL_PROVIDER` if set (`codex` | `claude` | `opencode` | `openrouter` |
-   `anthropic` | `mock`)
-2. else `OPENROUTER_API_KEY` present → **OpenRouter**
-3. else `ANTHROPIC_API_KEY` present → **Anthropic** (direct)
-4. else a `claude` CLI on the machine → **Claude CLI** (subscription)
-5. else → **offline mock** (deterministic; the whole pipeline still runs — this
+1. `LAINOS_MODEL_PROVIDER` if set (`cyberia` | `codex` | `claude` | `opencode` |
+   `openrouter` | `anthropic` | `mock`)
+2. else `CYBERIA_AI_KEY` present → **Cyberia (free)**
+3. else `OPENROUTER_API_KEY` present → **OpenRouter**
+4. else `ANTHROPIC_API_KEY` present → **Anthropic** (direct)
+5. else a `claude` CLI on the machine → **Claude CLI** (subscription)
+6. else → **offline mock** (deterministic; the whole pipeline still runs — this
    is what the smoke test exercises)
 
 **Codex CLI** (`codex`), **Claude CLI** (`claude`) and **OpenCode CLI**
@@ -59,11 +60,11 @@ vs. API key), so each falls back to the other when its own route is missing —
 asking Lain for Claude works with either one configured.
 
 The live chat routing is switchable at runtime — same switch behind three
-surfaces, all taking `claude` | `codex` | `opencode` | `claude-api`:
+surfaces, all taking `cyberia` | `claude` | `codex` | `opencode` | `claude-api`:
 
 ```bash
 /model                      # in the TUI: pick with the arrows (/model codex switches straight away)
-npm run provider claude     # from a shell, against the running daemon
+npm run provider cyberia    # from a shell, against the running daemon
 curl -s localhost:7777/provider                                    # who answers now
 curl -sX POST localhost:7777/provider -d '{"provider":"codex"}'    # switch it
 ```
@@ -90,7 +91,20 @@ that traffic through a proxy: `LAINOS_MODEL_PROXY` for model APIs,
 `TELEGRAM_PROXY` for the bot (both fall back to `HTTPS_PROXY`). Cyberia RPC
 traffic is never proxied.
 
-**OpenRouter** is the easiest path — one key, OpenAI-compatible, and you can
+**Cyberia (free)** is the installation path: an operator creates a LainOS grant
+at <https://cyberia.church/crm/api-keys> and the page shows its secret once.
+Copy the ready-made setup into `.env`; the key is sent as an OpenAI-compatible
+Bearer token and LainOS selects Cyberia automatically:
+
+```bash
+LAINOS_MODEL_PROVIDER=cyberia
+CYBERIA_AI_KEY=sk-cyb-…
+```
+
+You can also switch a running session with `/model cyberia`. The choice fails
+loudly when `CYBERIA_AI_KEY` is missing, so it cannot silently use a paid route.
+
+**OpenRouter** remains an alternative — one key, OpenAI-compatible, and you can
 point any tier at any OpenRouter model via `OPENROUTER_MODEL_SMALL/MEDIUM/LARGE`
 (e.g. a free model for `SMALL`). Get a key at <https://openrouter.ai/keys>:
 
@@ -104,12 +118,12 @@ npm run chat
 
 ```bash
 npm install
-cp .env.example .env        # optional: add ANTHROPIC_API_KEY + CYBERIA_AGENT_PK
+cp .env.example .env        # add the CYBERIA_AI_KEY issued for this installation
 npm run smoke               # end-to-end check (uses a real Cyberia chain read)
 npm run chat                # interactive REPL with Lain
 npm run tui                 # full-screen terminal UI (skins, live chain pulse)
 npm run serve               # daemon: HTTP bridge on :7777 + Telegram bot (if token set)
-npm run provider [claude|codex|opencode]  # who writes the daemon's replies (no arg = show)
+npm run provider [cyberia|claude|codex|opencode]  # who writes the daemon's replies (no arg = show)
 ```
 
 ## The terminal UI
@@ -501,7 +515,7 @@ GET  /wishes                          -> { wishes } (the forge wishboard)
 GET  /research                        -> { topics } (the scout's subscriptions)
 POST /research/cyberia-study/run      -> { topic, digest, message }
 GET  /provider                        -> { provider, choices } (who answers)
-POST /provider { provider }           -> { provider } (switch claude/codex/opencode live)
+POST /provider { provider }           -> { provider } (switch cyberia/claude/codex/opencode live)
 POST /chat { roomId, userId, text }   -> { text, actions }
 ```
 

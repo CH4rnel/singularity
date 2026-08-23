@@ -2,14 +2,30 @@
 
 OpenAI-compatible inference at `https://cyberia.church/api/ai/v1`, in front of
 the provider accounts that already live on the Cyberia host. There is no
-signup: a key is issued to an EVM address that holds its share of the gate
-token, and it keeps working for exactly as long as that holding does.
+signup: a holder may self-issue a key tied to its position, while an operator
+may issue a quota-limited free grant to an installed LainOS instance.
 
 Implementation: `backend/laravel/config/ai.php`, `app/Services/Ai/`,
 `app/Http/Controllers/Api/Ai/`, `app/Http/Middleware/AuthenticateAiApiKey.php`,
 tests in `tests/Feature/Ai/AiApiTest.php`.
 
 ## Getting a key
+
+There are two issuance paths. For a free user-installed LainOS grant, an
+operator opens `/crm/api-keys`, enters the owner's EVM address and an optional
+instance label, then presses **Create API key**. The page creates the instance
+UUID and shows this setup exactly once:
+
+```dotenv
+LAINOS_MODEL_PROVIDER=cyberia
+CYBERIA_AI_KEY=sk-cyb-…
+```
+
+That grant is `client=lainos` and skips the holding gate, but keeps the normal
+per-minute and per-day quotas. Only its SHA-256 and visible prefix remain after
+the response.
+
+The second path is self-service access for a `$LAIN` holder:
 
 Three calls, all unauthenticated, all signed with the wallet that holds the
 token. The signature is EIP-191 (`personal_sign`) over the exact message the
@@ -41,17 +57,15 @@ still be able to see and kill what they left behind:
 
 Each challenge answers exactly once; ask for a new nonce per call.
 
-A user-installed LainOS sends its stable installation UUID while the owner is
-authorising it on the site:
+A holder-authorised LainOS may instead send its stable installation UUID in
+the signed self-service request:
 
 ```json
 {"client":"lainos","instance_id":"9cc28b0c-20a5-4d67-9faa-5a72507b2192"}
 ```
 
-That makes the grant attributable to one installation in `/crm/api-keys`; it
-does not make the key gate-exempt. The response token is placed into LainOS as
-the Bearer credential for `https://cyberia.church/api/ai/v1`. The database and
-CRM retain only its SHA-256 and visible prefix.
+That grant remains subject to the holding gate. In both paths the token becomes
+LainOS's Bearer credential for `https://cyberia.church/api/ai/v1`.
 
 ## Calling it
 
@@ -156,8 +170,8 @@ revoke or reissue either way. The gate fails closed — if the Cyberia RPC canno
 be read the answer is `503 gate_unreadable`, because an unreadable balance is
 not a passing balance.
 
-Cyberia's own server-side daemons (the hosted LainOS, the Telegram bot) cannot hold a position, so
-they get service keys issued at the console:
+Cyberia's own server-side daemons (the hosted LainOS, the Telegram bot) cannot
+hold a position, so they get service keys issued through the CLI:
 
 ```bash
 php artisan ai:key issue 0x… --service --name=lainos

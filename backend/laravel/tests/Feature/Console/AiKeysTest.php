@@ -95,3 +95,41 @@ it('keeps the LainOS key table inside the hidden operator console', function () 
     $this->get('/crm/api-keys')->assertRedirect();
     $this->actingAs(User::factory()->create())->get('/crm/api-keys')->assertNotFound();
 });
+
+it('issues a free LainOS key once from the operator console', function () {
+    $address = '0x00000000000000000000000000000000000000bb';
+
+    $response = $this->actingAs(lainosConsoleOperator())
+        ->postJson('/crm/api-keys', [
+            'address' => $address,
+            'name' => 'Alice bedroom node',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('key.address', $address)
+        ->assertJsonPath('key.name', 'Alice bedroom node')
+        ->assertJsonMissingPath('key.token_hash');
+
+    $token = $response->json('token');
+    $key = AiApiKey::query()->sole();
+
+    expect($token)
+        ->toStartWith(AiKeyService::PREFIX)
+        ->and($key->client)->toBe(AiApiKey::CLIENT_LAINOS)
+        ->and($key->gate_exempt)->toBeTrue()
+        ->and(Str::isUuid($key->instance_id))->toBeTrue()
+        ->and($key->token_hash)->toBe(hash('sha256', $token))
+        ->and($key->token_hash)->not->toBe($token);
+});
+
+it('validates and protects LainOS key issuance', function () {
+    $this->actingAs(lainosConsoleOperator())
+        ->postJson('/crm/api-keys', ['address' => 'not-an-address'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('address');
+
+    $this->actingAs(User::factory()->create())
+        ->postJson('/crm/api-keys', [
+            'address' => '0x00000000000000000000000000000000000000bb',
+        ])
+        ->assertNotFound();
+});

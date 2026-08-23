@@ -5,6 +5,7 @@ import { ModelTier, type ModelProvider } from "../types.js";
 import { AnthropicModelProvider } from "./anthropic.js";
 import { ClaudeCliModelProvider, resolveClaudeBin } from "./claude-cli.js";
 import { CodexModelProvider, resolveCodexBin } from "./codex.js";
+import { CyberiaModelProvider } from "./cyberia.js";
 import { MockModelProvider } from "./mock.js";
 import { OpenRouterModelProvider } from "./openrouter.js";
 import { OpencodeModelProvider, resolveOpenCodeBin } from "./opencode.js";
@@ -16,7 +17,7 @@ import {
 
 const log = createLogger("model");
 
-export { AnthropicModelProvider, MockModelProvider, OpenRouterModelProvider };
+export { AnthropicModelProvider, CyberiaModelProvider, MockModelProvider, OpenRouterModelProvider };
 export { ClaudeCliModelProvider, resolveClaudeBin } from "./claude-cli.js";
 export { CodexModelProvider, resolveCodexBin } from "./codex.js";
 export { OpencodeModelProvider, resolveOpenCodeBin } from "./opencode.js";
@@ -46,7 +47,6 @@ function tierOverrides(
   }
   return out;
 }
-
 function splitArgs(raw?: string): string[] {
   return (raw ?? "").split(/\s+/).filter(Boolean);
 }
@@ -55,11 +55,12 @@ function splitArgs(raw?: string): string[] {
  * Pick a model provider from the environment.
  *
  * Base selection order:
- *   1. LAINOS_MODEL_PROVIDER, if set (codex | claude | opencode | openrouter | anthropic | mock)
- *   2. OPENROUTER_API_KEY present  -> openrouter
- *   3. ANTHROPIC_API_KEY present   -> anthropic
- *   4. claude CLI on the machine   -> claude
- *   5. otherwise                   -> offline mock
+ *   1. LAINOS_MODEL_PROVIDER, if set (cyberia | codex | claude | opencode | openrouter | anthropic | mock)
+ *   2. CYBERIA_AI_KEY present      -> cyberia (free)
+ *   3. OPENROUTER_API_KEY present  -> openrouter
+ *   4. ANTHROPIC_API_KEY present   -> anthropic
+ *   5. claude CLI on the machine   -> claude
+ *   6. otherwise                   -> offline mock
  *
  * `codex`, `claude` and `opencode` run completions through a coding-agent CLI
  * on the machine (ChatGPT / Claude subscription / OpenCode config, no LainOS
@@ -84,6 +85,7 @@ export function createModelProvider(
   getSetting: (key: string) => string | undefined,
 ): ModelProvider {
   const explicit = getSetting("LAINOS_MODEL_PROVIDER")?.toLowerCase();
+  const cyberiaKey = getSetting("CYBERIA_AI_KEY");
   const openrouterKey = getSetting("OPENROUTER_API_KEY");
   const anthropicKey = getSetting("ANTHROPIC_API_KEY");
   // Proxy for model API traffic only (hosts where the provider is blocked).
@@ -115,6 +117,18 @@ export function createModelProvider(
     switch (kind) {
       case "mock":
         return new MockModelProvider();
+      case "cyberia": {
+        if (!cyberiaKey) {
+          log.warn("Cyberia (free) selected but CYBERIA_AI_KEY is missing.");
+          return undefined;
+        }
+        return new CyberiaModelProvider({
+          apiKey: cyberiaKey,
+          baseUrl: getSetting("CYBERIA_AI_BASE_URL"),
+          models: tierOverrides(getSetting, "CYBERIA_AI_MODEL"),
+          proxy,
+        });
+      }
       case "openrouter": {
         if (!openrouterKey) {
           log.warn("OpenRouter selected but OPENROUTER_API_KEY is missing.");
@@ -257,13 +271,15 @@ export function createModelProvider(
 
   const envKind =
     explicit ||
-    (openrouterKey
-      ? "openrouter"
-      : anthropicKey
-        ? "anthropic"
-        : claudeBin()
-          ? "claude"
-          : "mock");
+    (cyberiaKey
+      ? "cyberia"
+      : openrouterKey
+        ? "openrouter"
+        : anthropicKey
+          ? "anthropic"
+          : claudeBin()
+            ? "claude"
+            : "mock");
   const overrideFile = chatProviderFile(getSetting);
   const stored = loadStoredChatProvider(overrideFile);
   if (stored && stored !== envKind) {
@@ -272,6 +288,11 @@ export function createModelProvider(
 
   let baseKind = stored ?? envKind;
   let assembled = assemble(baseKind);
+  if (!assembled && baseKind === "cyberia") {
+    throw new Error(
+      "Cyberia (free) requires CYBERIA_AI_KEY. Ask an operator to issue one in /crm/api-keys.",
+    );
+  }
   if (!assembled && stored) {
     log.warn(`stored chat provider "${stored}" unavailable — using env default "${envKind}".`);
     baseKind = envKind;

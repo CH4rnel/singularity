@@ -438,6 +438,18 @@ export const consoleMessages: Messages = {
         'keys.tokens': 'tokens',
         'keys.secretNote':
             'Only the visible prefix is stored here; a full key cannot be recovered.',
+        'keys.issueTitle': 'Issue Cyberia (free)',
+        'keys.issueNote':
+            'Creates a free LainOS grant. The full key is shown only once.',
+        'keys.addressPlaceholder': 'Owner EVM address · 0x…',
+        'keys.namePlaceholder': 'Instance label · optional',
+        'keys.issueAction': 'Create API key',
+        'keys.issuing': 'Creating…',
+        'keys.issueFailed': 'The key could not be created. Try again.',
+        'keys.issuedOnce': 'Copy these two lines into LainOS .env now',
+        'keys.copySetup': 'Copy LainOS setup',
+        'keys.copied': 'Copied',
+        'keys.instanceCreated': 'Instance UUID: {id}',
         'keys.instancesNote':
             'newest {limit}; revoked keys remain attributable',
         'keys.age': 'State age',
@@ -944,6 +956,18 @@ export const consoleMessages: Messages = {
         'keys.tokens': 'токенов',
         'keys.secretNote':
             'Здесь хранится только видимый префикс; полный ключ восстановить нельзя.',
+        'keys.issueTitle': 'Выдать Cyberia (free)',
+        'keys.issueNote':
+            'Создаёт бесплатный grant для LainOS. Полный ключ показывается один раз.',
+        'keys.addressPlaceholder': 'EVM-адрес владельца · 0x…',
+        'keys.namePlaceholder': 'Название инстанса · необязательно',
+        'keys.issueAction': 'Создать API-ключ',
+        'keys.issuing': 'Создаём…',
+        'keys.issueFailed': 'Не удалось создать ключ. Попробуйте ещё раз.',
+        'keys.issuedOnce': 'Сейчас скопируйте эти две строки в .env LainOS',
+        'keys.copySetup': 'Скопировать настройку',
+        'keys.copied': 'Скопировано',
+        'keys.instanceCreated': 'UUID инстанса: {id}',
         'keys.instancesNote':
             'последние {limit}; отозванные ключи остаются в истории',
         'keys.age': 'В состоянии',

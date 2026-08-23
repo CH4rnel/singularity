@@ -6,13 +6,16 @@ use App\Models\AiApiKey;
 use App\Models\AiApiRequest;
 use App\Models\CrmContact;
 use App\Models\User;
+use App\Services\Ai\AiKeyService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Read-only operator view of OpenAI-compatible keys issued to LainOS. */
+/** Operator inventory and one-time issuance of free LainOS API grants. */
 class ConsoleAiKeysController extends Controller
 {
     private const ROW_LIMIT = 200;
@@ -92,6 +95,38 @@ class ConsoleAiKeysController extends Controller
             })->values(),
             'row_limit' => self::ROW_LIMIT,
         ]);
+    }
+
+    public function store(Request $request, AiKeyService $keys): JsonResponse
+    {
+        $validated = $request->validate([
+            'address' => ['required', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
+            'name' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $instanceId = (string) Str::uuid();
+        $issued = $keys->issue(
+            $validated['address'],
+            $validated['name'] ?? 'LainOS free instance',
+            gateExempt: true,
+            client: AiApiKey::CLIENT_LAINOS,
+            instanceId: $instanceId,
+        );
+
+        /** @var AiApiKey $key */
+        $key = $issued['key'];
+
+        return response()->json([
+            'token' => $issued['token'],
+            'key' => [
+                'id' => $key->id,
+                'name' => $key->name,
+                'prefix' => $key->prefix,
+                'address' => $key->address,
+                'instance_id' => $key->instance_id,
+                'created_at' => $key->created_at?->toIso8601String(),
+            ],
+        ], 201);
     }
 
     /**

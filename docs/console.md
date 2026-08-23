@@ -94,6 +94,7 @@ Everything lives in `resources/css/console.css`, namespaced `mk-` under
 | `/crm/numbers` | Числа | `crm/Numbers.vue` — six questions, subject switch |
 | `/crm/installs/{uuid}` | Досье установки | `crm/Install.vue` — one anonymous installation |
 | `/crm/machines` | Машины | `crm/Machines.vue` — the registry as tiles, hosts, idle, incidents |
+| `/crm/api-keys` | API-ключи | `crm/AiKeys.vue` — LainOS grants, usage and one-time free-key issuance |
 | `/crm/mockup` | Макет | `crm/Mockup.vue` — the design this console was built from, artboards and all |
 
 `/crm/analytics`, `/crm/product`, `/crm/services` and `/crm/product/users/{id}`

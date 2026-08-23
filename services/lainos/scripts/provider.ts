@@ -4,6 +4,7 @@
  * writes Lain's live replies (Telegram, HTTP, sentinel follow-ups):
  *
  *   npm run provider           # who is answering right now
+ *   npm run provider cyberia   # switch to Cyberia's free inference grant
  *   npm run provider claude    # switch to the Claude CLI subscription
  *   npm run provider codex     # switch back to the Codex CLI
  *   npm run provider opencode  # switch to the OpenCode CLI

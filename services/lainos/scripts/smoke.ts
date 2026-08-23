@@ -7,7 +7,7 @@ import { chmodSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { AgentRuntime, createAgent, FileMemoryStore, type ModelProvider, type ModelRequest } from "../src/index.js";
+import { AgentRuntime, createAgent, createModelProvider, FileMemoryStore, type ModelProvider, type ModelRequest } from "../src/index.js";
 import { lain } from "../src/characters/lain.js";
 import { splitMessage } from "../src/clients/telegram.js";
 import { stripReasoning, ThinkTagFilter } from "../src/models/openrouter.js";
@@ -861,6 +861,7 @@ async function main() {
   const stayedPut = typeof failedSwitch === "string" && switchable.state().kind === "claude";
   const backToCodex = switchable.switchTo(resolveChatProviderKind("codex") ?? "?");
   const chatProviderSwitchOk =
+    resolveChatProviderKind("cyberia") === "cyberia" &&
     resolveChatProviderKind("claude") === "claude" &&
     resolveChatProviderKind("claude-api") === "anthropic" &&
     resolveChatProviderKind("gpt-5") === undefined &&
@@ -874,6 +875,26 @@ async function main() {
     persistedProviders.length === 2 &&
     persistedProviders[0] === "claude" &&
     persistedProviders[1] === null;
+  const cyberiaRequiresKey = (() => {
+    const dataDir = mkdtempSync(join(tmpdir(), "lainos-cyberia-provider-"));
+    try {
+      const settings: Record<string, string> = {
+        LAINOS_MODEL_PROVIDER: "cyberia",
+        LAINOS_DATA_DIR: dataDir,
+      };
+      createModelProvider((key) => settings[key]);
+      return false;
+    } catch (error) {
+      return error instanceof Error && error.message.includes("CYBERIA_AI_KEY");
+    }
+  })();
+  const cyberiaAutoSelects = (() => {
+    const settings: Record<string, string> = {
+      CYBERIA_AI_KEY: "sk-cyb-smoke-only",
+      LAINOS_DATA_DIR: mkdtempSync(join(tmpdir(), "lainos-cyberia-auto-")),
+    };
+    return createModelProvider((key) => settings[key]).name === "cyberia";
+  })();
 
   console.log("\n=== assertions ===");
   console.log(`fact 'operator' learned : ${learnedName ? "PASS" : "FAIL"}`);
@@ -896,6 +917,8 @@ async function main() {
   console.log(`forge jobs scrub secrets : ${forgeJobsScrubbed ? "PASS" : "FAIL"}`);
   console.log(`forge provider switch    : ${forgeProviderSwitchOk ? "PASS" : "FAIL"}`);
   console.log(`chat provider switch     : ${chatProviderSwitchOk ? "PASS" : "FAIL"}`);
+  console.log(`cyberia requires key     : ${cyberiaRequiresKey ? "PASS" : "FAIL"}`);
+  console.log(`cyberia key auto-selects : ${cyberiaAutoSelects ? "PASS" : "FAIL"}`);
   console.log(`skills hot self-extend   : ${skillsOk ? "PASS" : "FAIL"}`);
   console.log(`launch needs confirmation: ${launchOk ? "PASS" : "FAIL"}`);
   console.log(`trade journal cost basis : ${journalOk ? "PASS" : "FAIL"}`);
@@ -916,7 +939,7 @@ async function main() {
   await agent.stop();
   const ok =
     learnedName && learnedRussianName && ranBalance && nullIsZero && forcedPnl && toolResultContractOk && autoLearnOk && transcriptOk && sentinelFired && alertDelivered && splitOk &&
-    walletOk && lainTokenKnown && wishLogged && wishEdited && wishForged && forgeProviderSwitchOk && chatProviderSwitchOk && skillsOk && launchOk && journalOk && quietOk &&
+    walletOk && lainTokenKnown && wishLogged && wishEdited && wishForged && forgeProviderSwitchOk && chatProviderSwitchOk && cyberiaRequiresKey && cyberiaAutoSelects && skillsOk && launchOk && journalOk && quietOk &&
     forgeJobsListed && forgeJobsScrubbed &&
     rssOk && scoutOk && nothingOk && presenceQuietOk && reasoningOk &&
     studyFindingOk && studySilenceOk && studySafetyOk &&
