@@ -143,6 +143,124 @@ test('a contact can be created', function () {
     ]);
 });
 
+test('a pasted profile link is stored as a bare handle', function () {
+    $user = User::factory()->crmAdmin()->create();
+
+    // Nobody transcribes a handle out of a profile they are looking at; they
+    // copy the address bar. Three spellings of one handle in a column is a
+    // link that works two times in three.
+    $this->actingAs($user)
+        ->post(route('crm.store'), [
+            'name' => 'Carol',
+            'telegram' => 'https://t.me/carol_here',
+            'x_handle' => 'https://x.com/carol?s=20',
+            'type' => 'lead',
+            'status' => 'new',
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('crm_contacts', [
+        'name' => 'Carol',
+        'telegram' => 'carol_here',
+        'x_handle' => 'carol',
+    ]);
+});
+
+test('a person already on the books is not added twice', function () {
+    $user = User::factory()->crmAdmin()->create();
+    CrmContact::factory()->create(['x_handle' => 'fomo_person']);
+
+    // The whole point of the composer is entering people in handfuls, which
+    // is exactly when the same account gets typed twice.
+    $this->actingAs($user)
+        ->post(route('crm.store'), [
+            'name' => 'Same person again',
+            'x_handle' => 'https://x.com/fomo_person',
+            'type' => 'lead',
+            'status' => 'new',
+        ])
+        ->assertSessionHasErrors('x_handle');
+
+    expect(CrmContact::count())->toBe(1);
+});
+
+test('a record keeps its own handle when it is edited', function () {
+    $user = User::factory()->crmAdmin()->create();
+    $contact = CrmContact::factory()->create(['x_handle' => 'fomo_person']);
+
+    $this->actingAs($user)
+        ->put(route('crm.update', $contact), [
+            'name' => 'Renamed',
+            'x_handle' => 'fomo_person',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($contact->refresh()->name)->toBe('Renamed');
+});
+
+test('an X handle that could not have been one is refused', function () {
+    $user = User::factory()->crmAdmin()->create();
+
+    $this->actingAs($user)
+        ->post(route('crm.store'), [
+            'x_handle' => 'not a handle at all',
+            'type' => 'lead',
+            'status' => 'new',
+        ])
+        ->assertSessionHasErrors('x_handle');
+});
+
+test('a person found only on X is reachable from their row and their dossier', function () {
+    $user = User::factory()->crmAdmin()->create();
+    $contact = CrmContact::factory()->create([
+        'name' => 'Dave',
+        'telegram' => null,
+        'x_handle' => 'dave',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('crm.people'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('rows.0.write', 'https://x.com/dave')
+            ->where('rows.0.action', 'write')
+        );
+
+    $this->actingAs($user)
+        ->get(route('crm.show', $contact))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('contact.x_handle', 'dave')
+            ->where('contact.x_url', 'https://x.com/dave')
+            ->where('contact.telegram_url', null)
+        );
+});
+
+test('a numeric telegram id is never offered as a way of writing', function () {
+    $user = User::factory()->crmAdmin()->create();
+
+    // What the sync knows about somebody who never set a username. `t.me/812…`
+    // opens nothing, so the row's one action must not point at it.
+    $contact = CrmContact::factory()->create([
+        'telegram' => '819914001',
+        'x_handle' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('crm.people'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('rows.0.write', null)
+            ->where('rows.0.action', 'dossier')
+        );
+
+    $this->actingAs($user)
+        ->get(route('crm.show', $contact))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('contact.telegram_url', null));
+});
+
 test('an invalid type is rejected', function () {
     $user = User::factory()->crmAdmin()->create();
 
@@ -160,6 +278,49 @@ test('a contact can be updated', function () {
         ->assertRedirect();
 
     expect($contact->refresh()->status)->toBe('customer');
+});
+
+test('editing the record corrects every field the operator was told', function () {
+    $user = User::factory()->crmAdmin()->create();
+    $contact = CrmContact::factory()->create([
+        'name' => 'Old name',
+        'x_handle' => null,
+        'tags' => ['fomo'],
+    ]);
+
+    $this->actingAs($user)
+        ->put(route('crm.update', $contact), [
+            'name' => 'New name',
+            'telegram' => '@new_handle',
+            'x_handle' => '@newname',
+            'email' => '',
+            'type' => 'holder',
+            'status' => 'qualified',
+            'tags' => ['fomo', 'wallet'],
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $contact->refresh();
+
+    expect($contact->name)->toBe('New name')
+        ->and($contact->telegram)->toBe('new_handle')
+        ->and($contact->x_handle)->toBe('newname')
+        // A field cleared in the form is empty, not the string "".
+        ->and($contact->email)->toBeNull()
+        ->and($contact->type)->toBe('holder')
+        ->and($contact->tags)->toBe(['fomo', 'wallet']);
+});
+
+test('the search finds a person by their X handle', function () {
+    $user = User::factory()->crmAdmin()->create();
+    CrmContact::factory()->create(['name' => 'Alice', 'x_handle' => 'alice_x']);
+    CrmContact::factory()->create(['name' => 'Bob', 'x_handle' => null]);
+
+    $this->actingAs($user)
+        ->get(route('crm.people', ['q' => 'alice_x']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->has('rows', 1)->where('total', 1));
 });
 
 test('a contact can be soft deleted', function () {

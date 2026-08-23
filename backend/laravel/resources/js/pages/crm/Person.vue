@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import Rule from '@/components/console/Rule.vue';
 import { useLocale } from '@/composables/useLocale';
 import { dateTime, num, shortDate, toneColor, usd } from '@/lib/console';
@@ -29,6 +29,10 @@ const props = defineProps<{
         id: number;
         name: string;
         telegram: string | null;
+        x_handle: string | null;
+        /* Built by the server: a stored handle is not always an address. */
+        telegram_url: string | null;
+        x_url: string | null;
         email: string | null;
         evm_address: string | null;
         solana_address: string | null;
@@ -90,11 +94,112 @@ const props = defineProps<{
             created_at: string | null;
         }[];
     };
+    options: {
+        types: string[];
+        statuses: string[];
+    };
 }>();
 
 const { t, tag } = useLocale(consoleMessages);
 
 const note = useForm({ body: '' });
+
+/*
+ * Correcting the record.
+ *
+ * Half of a dossier is what happened — visits, transfers, notes — and none of
+ * that is editable, because it is a log. The other half is what somebody told
+ * us: a name, a handle, which pile this person belongs in. That half is
+ * always slightly wrong (a handle changes, a lead becomes a customer), and a
+ * console that can only read it makes the operator keep the correction in
+ * their head. So exactly the told half opens for editing, in place, and the
+ * log underneath stays a log.
+ */
+const editing = ref(false);
+
+const edit = useForm({
+    name: '',
+    telegram: '',
+    x_handle: '',
+    email: '',
+    evm_address: '',
+    solana_address: '',
+    tags: '',
+    type: props.contact.type,
+    status: props.contact.status,
+});
+
+/* The told half of the record, in the order the read view lists it. */
+type EditField =
+    | 'name'
+    | 'evm_address'
+    | 'solana_address'
+    | 'telegram'
+    | 'x_handle'
+    | 'email'
+    | 'tags';
+
+const editFields = computed<{ key: EditField; label: string; hint: string }[]>(
+    () => [
+        {
+            key: 'name',
+            label: t('person.name'),
+            hint: t('person.namePlaceholder'),
+        },
+        { key: 'evm_address', label: t('person.evm'), hint: '0x…' },
+        { key: 'solana_address', label: t('person.solana'), hint: '' },
+        {
+            key: 'telegram',
+            label: t('person.telegram'),
+            hint: t('person.handlePlaceholder'),
+        },
+        { key: 'x_handle', label: 'X', hint: t('person.handlePlaceholder') },
+        { key: 'email', label: t('person.email'), hint: '' },
+        {
+            key: 'tags',
+            label: t('person.tags'),
+            hint: t('person.tagsPlaceholder'),
+        },
+    ],
+);
+
+function startEditing() {
+    // Read from the record every time it is opened: another operator may have
+    // changed it since this page was rendered.
+    edit.defaults({
+        name: props.contact.name,
+        telegram: props.contact.telegram ?? '',
+        x_handle: props.contact.x_handle ?? '',
+        email: props.contact.email ?? '',
+        evm_address: props.contact.evm_address ?? '',
+        solana_address: props.contact.solana_address ?? '',
+        tags: props.contact.tags.join(', '),
+        type: props.contact.type,
+        status: props.contact.status,
+    });
+    edit.reset();
+    edit.clearErrors();
+    editing.value = true;
+}
+
+function saveEdit() {
+    if (edit.processing) {
+        return;
+    }
+
+    edit.transform((data) => ({
+        ...data,
+        tags: data.tags
+            .split(',')
+            .map((value) => value.trim())
+            .filter((value) => value !== ''),
+    })).put(`/crm/${props.contact.id}`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            editing.value = false;
+        },
+    });
+}
 
 /** Linking by hand: an account id, an EVM address, a Solana address. */
 const identityForm = useForm({ target: '' });
@@ -123,14 +228,20 @@ function linkIdentity() {
 }
 
 function confirmLink(id: number) {
-    router.post(`/crm/identity-links/${id}/confirm`, {}, { preserveScroll: true });
+    router.post(
+        `/crm/identity-links/${id}/confirm`,
+        {},
+        { preserveScroll: true },
+    );
 }
 
 function withdrawLink(id: number) {
     router.delete(`/crm/identity-links/${id}`, { preserveScroll: true });
 }
 
-const overdue = computed(() => props.tasks.filter((task) => task.overdue).length);
+const overdue = computed(
+    () => props.tasks.filter((task) => task.overdue).length,
+);
 
 const summaryText = computed(() => {
     const params = { ...props.summary.params };
@@ -194,7 +305,13 @@ function remove() {
         >
         <h1 class="mk-h1">{{ contact.name }}</h1>
         <span class="mk-m mk-t3" style="font-size: 12px">
-            {{ contact.telegram ?? short(contact.evm_address) }} ·
+            {{
+                contact.telegram ??
+                (contact.x_handle
+                    ? `@${contact.x_handle}`
+                    : short(contact.evm_address))
+            }}
+            ·
             {{ t('person.since') }} {{ shortDate(contact.created_at, tag) }} ·
             {{ t('person.source').toLowerCase() }}
             {{ t('crm.source.' + contact.source) }}
@@ -214,12 +331,21 @@ function remove() {
         <span class="mk-tag">{{ t(`crm.status.${contact.status}`) }}</span>
         <div style="margin-left: auto; display: flex; gap: 8px">
             <a
-                v-if="contact.telegram"
-                :href="`https://t.me/${contact.telegram.replace('@', '')}`"
+                v-if="contact.telegram_url"
+                :href="contact.telegram_url"
                 target="_blank"
                 rel="noreferrer"
                 class="mk-btn mk-act"
                 >{{ t('person.write') }}</a
+            >
+            <a
+                v-if="contact.x_url"
+                :href="contact.x_url"
+                target="_blank"
+                rel="noreferrer"
+                class="mk-btn"
+                :class="{ 'mk-act': !contact.telegram_url }"
+                >{{ t('person.writeX') }}</a
             >
             <button type="button" class="mk-btn mk-ghost" @click="remove">
                 {{ t('person.delete') }}
@@ -263,25 +389,40 @@ function remove() {
                 <div class="mk-tile-row" style="margin-top: 12px">
                     <div class="mk-tile" style="padding: 12px 14px">
                         <p class="mk-k" style="margin: 0">CYBER</p>
-                        <p class="mk-num" style="margin: 6px 0 0; font-size: 19px">
+                        <p
+                            class="mk-num"
+                            style="margin: 6px 0 0; font-size: 19px"
+                        >
                             {{ num(money.cyber) }}
                         </p>
-                        <p class="mk-t3" style="margin: 2px 0 0; font-size: 11px">
+                        <p
+                            class="mk-t3"
+                            style="margin: 2px 0 0; font-size: 11px"
+                        >
                             {{ usd(money.cyber_usd) }}
                         </p>
                     </div>
                     <div class="mk-tile" style="padding: 12px 14px">
                         <p class="mk-k" style="margin: 0">CYBER.sol</p>
-                        <p class="mk-num" style="margin: 6px 0 0; font-size: 19px">
+                        <p
+                            class="mk-num"
+                            style="margin: 6px 0 0; font-size: 19px"
+                        >
                             {{ num(money.cyber_sol) }}
                         </p>
-                        <p class="mk-t3" style="margin: 2px 0 0; font-size: 11px">
+                        <p
+                            class="mk-t3"
+                            style="margin: 2px 0 0; font-size: 11px"
+                        >
                             {{ usd(money.cyber_sol_usd) }}
                         </p>
                     </div>
                 </div>
 
-                <div class="mk-panel" style="margin-top: 12px; padding: 12px 14px">
+                <div
+                    class="mk-panel"
+                    style="margin-top: 12px; padding: 12px 14px"
+                >
                     <div style="display: flex; align-items: baseline">
                         <p class="mk-k" style="margin: 0">
                             {{ t('person.activity') }}
@@ -322,16 +463,67 @@ function remove() {
             </div>
 
             <div>
-                <Rule :label="t('person.who')" />
-                <div style="margin-top: 10px">
+                <Rule :label="t('person.who')">
+                    <button
+                        v-if="!editing"
+                        type="button"
+                        class="mk-btn mk-ghost"
+                        style="height: 22px; padding: 0 6px"
+                        @click="startEditing"
+                    >
+                        {{ t('person.edit') }}
+                    </button>
+                </Rule>
+
+                <!-- Reading. The handles are the addresses this person is
+                     reachable at, so they are links wherever the server could
+                     build one, and plain text wherever it could not. -->
+                <div v-if="!editing" style="margin-top: 10px">
                     <div
                         v-for="row in [
-                            { label: t('person.evm'), value: short(contact.evm_address) },
-                            { label: t('person.solana'), value: short(contact.solana_address) },
-                            { label: t('person.telegram'), value: contact.telegram ?? t('person.none') },
-                            { label: t('person.email'), value: contact.email ?? t('person.none') },
-                            { label: t('person.tags'), value: contact.tags.length ? contact.tags.join(' · ') : t('unit.none') },
-                            { label: t('person.lastSync'), value: contact.last_synced_at ? dateTime(contact.last_synced_at, tag) : t('unit.none') },
+                            {
+                                label: t('person.evm'),
+                                value: short(contact.evm_address),
+                                href: null,
+                            },
+                            {
+                                label: t('person.solana'),
+                                value: short(contact.solana_address),
+                                href: null,
+                            },
+                            {
+                                label: t('person.telegram'),
+                                value: contact.telegram ?? t('person.none'),
+                                href: contact.telegram_url,
+                            },
+                            {
+                                label: t('person.x'),
+                                value: contact.x_handle
+                                    ? `@${contact.x_handle}`
+                                    : t('person.none'),
+                                href: contact.x_url,
+                            },
+                            {
+                                label: t('person.email'),
+                                value: contact.email ?? t('person.none'),
+                                href: contact.email
+                                    ? `mailto:${contact.email}`
+                                    : null,
+                            },
+                            {
+                                label: t('person.tags'),
+                                value: contact.tags.length
+                                    ? contact.tags.join(' · ')
+                                    : t('unit.none'),
+                                href: null,
+                            },
+                            {
+                                label: t('person.lastSync'),
+                                value: contact.last_synced_at
+                                    ? dateTime(contact.last_synced_at, tag)
+                                    : t('unit.none'),
+                                href: null,
+                            },
                         ]"
                         :key="row.label"
                         class="mk-hair"
@@ -345,7 +537,22 @@ function remove() {
                         <span class="mk-t3" style="font-size: 12px">{{
                             row.label
                         }}</span>
+                        <a
+                            v-if="row.href"
+                            :href="row.href"
+                            target="_blank"
+                            rel="noreferrer"
+                            class="mk-m mk-clip"
+                            style="
+                                margin-left: auto;
+                                font-size: 12px;
+                                color: var(--mk-accent);
+                                text-decoration: none;
+                            "
+                            >{{ row.value }}</a
+                        >
                         <span
+                            v-else
                             class="mk-m mk-clip"
                             style="
                                 margin-left: auto;
@@ -356,6 +563,129 @@ function remove() {
                         >
                     </div>
                 </div>
+
+                <!-- Correcting. The same fields, in the same order, in the
+                     same place — an edit screen somewhere else would be a
+                     second version of this panel to keep in step with it. -->
+                <form
+                    v-else
+                    style="
+                        margin-top: 10px;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 7px;
+                    "
+                    @submit.prevent="saveEdit"
+                >
+                    <!-- Labelled rows rather than a stack of placeholders: a
+                         filled field has no placeholder left, and six
+                         identical boxes holding six handles is a puzzle. The
+                         labels sit where the read view puts them, so the panel
+                         does not move when it opens. -->
+                    <label
+                        v-for="field in editFields"
+                        :key="field.key"
+                        style="display: flex; align-items: center; gap: 10px"
+                    >
+                        <span
+                            class="mk-t3"
+                            style="
+                                width: 62px;
+                                flex: 0 0 62px;
+                                font-size: 11.5px;
+                            "
+                            >{{ field.label }}</span
+                        >
+                        <input
+                            v-model="edit[field.key]"
+                            class="mk-input"
+                            style="flex: 1; min-width: 0"
+                            :placeholder="field.hint"
+                        />
+                    </label>
+
+                    <div
+                        style="
+                            margin-top: 3px;
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            flex-wrap: wrap;
+                        "
+                    >
+                        <span class="mk-k">{{ t('person.editType') }}</span>
+                        <button
+                            v-for="value in options.types"
+                            :key="value"
+                            type="button"
+                            class="mk-pick"
+                            :class="{ 'mk-on': edit.type === value }"
+                            @click="edit.type = value"
+                        >
+                            {{ t(`crm.type.${value}`) }}
+                        </button>
+                    </div>
+                    <div
+                        style="
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            flex-wrap: wrap;
+                        "
+                    >
+                        <span class="mk-k">{{ t('person.editStatus') }}</span>
+                        <button
+                            v-for="value in options.statuses"
+                            :key="value"
+                            type="button"
+                            class="mk-pick"
+                            :class="{ 'mk-on': edit.status === value }"
+                            @click="edit.status = value"
+                        >
+                            {{ t(`crm.status.${value}`) }}
+                        </button>
+                    </div>
+
+                    <p
+                        v-if="Object.keys(edit.errors).length"
+                        style="
+                            margin: 4px 0 0;
+                            font-size: 11.5px;
+                            line-height: 1.5;
+                            color: var(--mk-critical);
+                        "
+                    >
+                        {{ Object.values(edit.errors).join(' · ') }}
+                    </p>
+
+                    <div style="margin-top: 4px; display: flex; gap: 8px">
+                        <button
+                            type="submit"
+                            class="mk-btn mk-act"
+                            :disabled="edit.processing"
+                        >
+                            {{ t('person.editSave') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="mk-btn mk-ghost"
+                            @click="editing = false"
+                        >
+                            {{ t('person.editCancel') }}
+                        </button>
+                    </div>
+
+                    <p
+                        class="mk-t3"
+                        style="
+                            margin: 2px 0 0;
+                            font-size: 11px;
+                            line-height: 1.5;
+                        "
+                    >
+                        {{ t('person.editNote') }}
+                    </p>
+                </form>
             </div>
 
             <!-- The same human, filed more than once. Records stay separate;
@@ -387,7 +717,10 @@ function remove() {
                 >
                     <span
                         class="mk-tag"
-                        style="color: var(--mk-cyan); border-color: var(--mk-cyan)"
+                        style="
+                            color: var(--mk-cyan);
+                            border-color: var(--mk-cyan);
+                        "
                         >{{ t('person.identitySame') }}</span
                     >
                     <span
@@ -420,7 +753,8 @@ function remove() {
                     <span
                         class="mk-m mk-clip"
                         style="font-size: 11.5px; color: var(--mk-body)"
-                        >{{ nodeLabel(link.left) }} ↔ {{ nodeLabel(link.right) }}</span
+                        >{{ nodeLabel(link.left) }} ↔
+                        {{ nodeLabel(link.right) }}</span
                     >
                     <span style="margin-left: auto; display: flex; gap: 6px">
                         <button
@@ -448,7 +782,9 @@ function remove() {
                         class="mk-t3"
                         style="cursor: pointer; font-size: 11px"
                     >
-                        {{ t('person.identityWhy', { count: confirmed.length }) }}
+                        {{
+                            t('person.identityWhy', { count: confirmed.length })
+                        }}
                     </summary>
                     <div
                         v-for="link in confirmed"
@@ -461,10 +797,9 @@ function remove() {
                             padding: 6px 0;
                         "
                     >
-                        <span
-                            class="mk-m mk-clip mk-t3"
-                            style="font-size: 11px"
-                            >{{ nodeLabel(link.left) }} ↔ {{ nodeLabel(link.right) }}</span
+                        <span class="mk-m mk-clip mk-t3" style="font-size: 11px"
+                            >{{ nodeLabel(link.left) }} ↔
+                            {{ nodeLabel(link.right) }}</span
                         >
                         <span
                             class="mk-m mk-t3"
@@ -496,7 +831,9 @@ function remove() {
                         type="submit"
                         class="mk-btn mk-ghost"
                         style="padding: 0 10px"
-                        :disabled="identityForm.processing || !identityForm.target"
+                        :disabled="
+                            identityForm.processing || !identityForm.target
+                        "
                     >
                         {{ t('person.identityAdd') }}
                     </button>
@@ -504,7 +841,11 @@ function remove() {
                 <p
                     v-if="identityForm.errors.target"
                     class="mk-t3"
-                    style="margin: 6px 0 0; font-size: 11px; color: var(--mk-red)"
+                    style="
+                        margin: 6px 0 0;
+                        font-size: 11px;
+                        color: var(--mk-red);
+                    "
                 >
                     {{ identityForm.errors.target }}
                 </p>
@@ -531,7 +872,11 @@ function remove() {
                         v-for="task in tasks"
                         :key="task.id"
                         class="mk-panel"
-                        style="display: flex; gap: 11px; padding: 11px 13px 11px 0"
+                        style="
+                            display: flex;
+                            gap: 11px;
+                            padding: 11px 13px 11px 0;
+                        "
                     >
                         <span
                             style="width: 2px; flex: 0 0 2px"
@@ -665,7 +1010,13 @@ function remove() {
                                 <path d="M8 9h8M8 13h5" />
                             </template>
                             <template v-else-if="row.kind === 'task'">
-                                <rect x="4" y="4" width="16" height="16" rx="2" />
+                                <rect
+                                    x="4"
+                                    y="4"
+                                    width="16"
+                                    height="16"
+                                    rx="2"
+                                />
                                 <path d="M8 12l3 3 5-6" />
                             </template>
                             <template v-else>
@@ -696,7 +1047,8 @@ function remove() {
                                 : 'var(--mk-dim)',
                         }"
                     >
-                        {{ row.amount.outbound ? '−' : '+' }}{{ row.amount.value }}
+                        {{ row.amount.outbound ? '−' : '+'
+                        }}{{ row.amount.value }}
                         {{ row.amount.token }}
                     </span>
                 </div>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ContactHandles;
 use App\Models\CrmContact;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -9,6 +10,8 @@ use Illuminate\Validation\Rule;
 
 class UpdateCrmContactRequest extends FormRequest
 {
+    use ContactHandles;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -24,16 +27,26 @@ class UpdateCrmContactRequest extends FormRequest
      */
     public function rules(): array
     {
+        $contact = $this->route('contact');
+
         return [
-            'name' => ['nullable', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'telegram' => ['nullable', 'string', 'max:255'],
-            'evm_address' => ['nullable', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
-            'solana_address' => ['nullable', 'string', 'regex:/^[1-9A-HJ-NP-Za-km-z]{32,44}$/'],
+            // Editing a record must not collide with the record being edited.
+            ...$this->handleRules($contact instanceof CrmContact ? $contact->id : null),
             'type' => ['sometimes', Rule::in(CrmContact::TYPES)],
             'status' => ['sometimes', Rule::in(CrmContact::STATUSES)],
-            'tags' => ['nullable', 'array'],
-            'tags.*' => ['string', 'max:50'],
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return $this->handleMessages();
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->normaliseHandles();
     }
 }

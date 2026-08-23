@@ -8,6 +8,7 @@ use App\Models\CrmNote;
 use App\Models\CrmTask;
 use App\Models\SiteEvent;
 use App\Services\WalletPriceService;
+use App\Support\Handles;
 use Carbon\CarbonImmutable;
 
 /**
@@ -47,8 +48,15 @@ class PersonDossier
         return [
             'contact' => [
                 'id' => $contact->id,
-                'name' => $contact->name ?: ($contact->telegram ?: ($contact->evm_address ?: '#'.$contact->id)),
+                'name' => $contact->displayName(),
                 'telegram' => $contact->telegram,
+                'x_handle' => $contact->x_handle,
+                // The two addresses a message could be sent to, built here so
+                // the page never has to guess whether a stored handle is one:
+                // the sync files numeric Telegram ids in the same column, and
+                // `t.me/812…` opens nothing.
+                'telegram_url' => Handles::telegramUrl($contact->telegram),
+                'x_url' => Handles::xUrl($contact->x_handle),
                 'email' => $contact->email,
                 'evm_address' => $contact->evm_address,
                 'solana_address' => $contact->solana_address,
@@ -112,7 +120,7 @@ class PersonDossier
             'nodes' => IdentityGraph::nodesOf($contact),
             'same' => $same->map(fn (CrmContact $other) => [
                 'id' => $other->id,
-                'name' => $other->name ?: ($other->telegram ?: ($other->evm_address ?: '#'.$other->id)),
+                'name' => $other->displayName(),
                 'source' => $other->source,
                 'evm_address' => $other->evm_address,
                 'solana_address' => $other->solana_address,

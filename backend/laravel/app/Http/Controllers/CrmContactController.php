@@ -174,6 +174,16 @@ class CrmContactController extends Controller
         ]);
     }
 
+    /**
+     * Put a person on the books by hand.
+     *
+     * The redirect goes back to the lens rather than into the new dossier,
+     * because contacts arrive in handfuls — fifteen accounts found in one
+     * afternoon — and a form that closes itself after each one turns a list
+     * into fifteen round trips. The new row is on the screen already — a
+     * contact created a second ago has the freshest signal there is, so it
+     * sorts to the top of the lens — and the dossier is one click from it.
+     */
     public function store(StoreCrmContactRequest $request): RedirectResponse
     {
         $data = $request->validated();
@@ -181,7 +191,7 @@ class CrmContactController extends Controller
 
         $contact = CrmContact::create($data);
 
-        return to_route('crm.show', $contact)->with('success', 'Contact created');
+        return back()->with('success', 'Contact created');
     }
 
     public function update(UpdateCrmContactRequest $request, CrmContact $contact): RedirectResponse

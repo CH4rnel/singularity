@@ -25,7 +25,7 @@ class CrmController extends Controller
     public function export(): StreamedResponse
     {
         $columns = [
-            'id', 'name', 'email', 'telegram', 'evm_address', 'solana_address',
+            'id', 'name', 'email', 'telegram', 'x_handle', 'evm_address', 'solana_address',
             'type', 'status', 'source', 'cyber_balance', 'cyber_sol_balance',
             'last_synced_at', 'created_at',
         ];

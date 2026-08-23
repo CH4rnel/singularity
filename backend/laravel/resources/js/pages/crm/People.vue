@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { computed, nextTick, ref } from 'vue';
 import Rule from '@/components/console/Rule.vue';
 import Spark from '@/components/console/Spark.vue';
 import { useLocale } from '@/composables/useLocale';
@@ -32,6 +32,8 @@ type Row = {
     usd: number | null;
     signal: Signal;
     spark: number[];
+    /* Where a message to this person would go, or null when nowhere does. */
+    write: string | null;
     action: string;
 };
 
@@ -44,11 +46,91 @@ const props = defineProps<{
     limit: number;
     more: boolean;
     search: string | null;
+    options: { types: string[]; statuses: string[] };
 }>();
 
 const { locale, t } = useLocale(consoleMessages);
 
 const query = ref(props.search ?? '');
+
+/*
+ * Putting somebody on the books.
+ *
+ * The panel stays open after each save and the page comes back to the lens
+ * rather than to the new dossier, because people are found in handfuls —
+ * fifteen accounts in one afternoon — and a form that closes itself after
+ * every one of them is fourteen extra decisions. The first field takes the
+ * focus back so the next person is typed, not clicked at.
+ */
+const adding = ref(false);
+const nameField = ref<HTMLInputElement | null>(null);
+
+const draft = useForm({
+    name: '',
+    telegram: '',
+    x_handle: '',
+    email: '',
+    evm_address: '',
+    solana_address: '',
+    tags: '',
+    type: 'lead',
+    status: 'new',
+});
+
+/*
+ * Every field is optional in the column and in the rules, which together
+ * would happily store a row that names nobody. A record with nothing to
+ * identify it cannot be searched, written to or recognised later, so the
+ * one thing asked for is any one of the ways of naming a person.
+ */
+const named = computed(() =>
+    [
+        draft.name,
+        draft.telegram,
+        draft.x_handle,
+        draft.email,
+        draft.evm_address,
+        draft.solana_address,
+    ].some((value) => value.trim() !== ''),
+);
+
+function openAdd() {
+    adding.value = !adding.value;
+
+    if (adding.value) {
+        void nextTick(() => nameField.value?.focus());
+    }
+}
+
+function create() {
+    if (!named.value || draft.processing) {
+        return;
+    }
+
+    draft
+        .transform((data) => ({
+            ...data,
+            tags: data.tags
+                .split(',')
+                .map((tag) => tag.trim())
+                .filter((tag) => tag !== ''),
+        }))
+        .post('/crm/people', {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                const type = draft.type;
+                const status = draft.status;
+
+                draft.reset();
+                // The next fifteen are usually the same kind of person.
+                draft.type = type;
+                draft.status = status;
+
+                void nextTick(() => nameField.value?.focus());
+            },
+        });
+}
 
 const silenceDays = 30;
 
@@ -114,7 +196,8 @@ function ago(iso: string | null): string {
 }
 
 const currentSegment = computed(
-    () => props.segments.find((segment) => segment.key === props.segment) ?? null,
+    () =>
+        props.segments.find((segment) => segment.key === props.segment) ?? null,
 );
 </script>
 
@@ -240,13 +323,158 @@ const currentSegment = computed(
                     <a href="/crm/export" class="mk-btn">{{
                         t('people.export')
                     }}</a>
+                    <button
+                        type="button"
+                        class="mk-btn"
+                        :class="adding ? 'mk-ghost' : 'mk-act'"
+                        @click="openAdd"
+                    >
+                        {{ adding ? t('people.addClose') : t('people.add') }}
+                    </button>
                 </div>
             </div>
 
-            <Rule
-                :label="t('people.happening')"
-                :note="t('people.sortNote')"
-            />
+            <!-- The way somebody gets onto the books by hand. Sync writes the
+                 people the chain and the bot already know about; this is for
+                 the ones found by looking, who exist nowhere in our data until
+                 they are typed. -->
+            <form
+                v-if="adding"
+                class="mk-panel"
+                style="padding: 14px 16px"
+                @submit.prevent="create"
+            >
+                <Rule :label="t('people.addTitle')" />
+                <p
+                    class="mk-t3"
+                    style="margin: 9px 0 0; font-size: 11.5px; line-height: 1.5"
+                >
+                    {{ t('people.addNote') }}
+                </p>
+
+                <div
+                    style="
+                        margin-top: 12px;
+                        display: grid;
+                        grid-template-columns: repeat(
+                            auto-fit,
+                            minmax(196px, 1fr)
+                        );
+                        gap: 8px;
+                    "
+                >
+                    <input
+                        ref="nameField"
+                        v-model="draft.name"
+                        class="mk-input"
+                        :placeholder="t('person.namePlaceholder')"
+                    />
+                    <input
+                        v-model="draft.telegram"
+                        class="mk-input"
+                        :placeholder="`${t('person.telegram')} · ${t('person.handlePlaceholder')}`"
+                    />
+                    <input
+                        v-model="draft.x_handle"
+                        class="mk-input"
+                        :placeholder="`X · ${t('person.handlePlaceholder')}`"
+                    />
+                    <input
+                        v-model="draft.email"
+                        class="mk-input"
+                        :placeholder="t('person.email')"
+                    />
+                    <input
+                        v-model="draft.evm_address"
+                        class="mk-input"
+                        placeholder="EVM · 0x…"
+                    />
+                    <input
+                        v-model="draft.solana_address"
+                        class="mk-input"
+                        placeholder="Solana"
+                    />
+                    <input
+                        v-model="draft.tags"
+                        class="mk-input"
+                        :placeholder="`${t('person.tags')} · ${t('person.tagsPlaceholder')}`"
+                    />
+                </div>
+
+                <div
+                    style="
+                        margin-top: 12px;
+                        display: flex;
+                        align-items: center;
+                        gap: 16px;
+                        flex-wrap: wrap;
+                    "
+                >
+                    <div style="display: flex; align-items: center; gap: 6px">
+                        <span class="mk-k">{{ t('person.editType') }}</span>
+                        <button
+                            v-for="value in options.types"
+                            :key="value"
+                            type="button"
+                            class="mk-pick"
+                            :class="{ 'mk-on': draft.type === value }"
+                            @click="draft.type = value"
+                        >
+                            {{ t(`crm.type.${value}`) }}
+                        </button>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px">
+                        <span class="mk-k">{{ t('person.editStatus') }}</span>
+                        <button
+                            v-for="value in options.statuses"
+                            :key="value"
+                            type="button"
+                            class="mk-pick"
+                            :class="{ 'mk-on': draft.status === value }"
+                            @click="draft.status = value"
+                        >
+                            {{ t(`crm.status.${value}`) }}
+                        </button>
+                    </div>
+                    <button
+                        type="submit"
+                        class="mk-btn mk-act"
+                        style="margin-left: auto"
+                        :disabled="!named || draft.processing"
+                    >
+                        {{ t('people.add') }}
+                    </button>
+                </div>
+
+                <!-- What the server refused, in red. The one thing this form
+                     refuses on its own — a record naming nobody — is not an
+                     error until somebody tries to save one, and an untouched
+                     form that opens red is a form that shouts first. -->
+                <p
+                    v-if="Object.keys(draft.errors).length"
+                    style="
+                        margin: 10px 0 0;
+                        font-size: 11.5px;
+                        line-height: 1.5;
+                        color: var(--mk-critical);
+                    "
+                >
+                    {{ Object.values(draft.errors).join(' · ') }}
+                </p>
+                <p
+                    v-else-if="!named"
+                    class="mk-t3"
+                    style="
+                        margin: 10px 0 0;
+                        font-size: 11.5px;
+                        line-height: 1.5;
+                    "
+                >
+                    {{ t('people.addNothing') }}
+                </p>
+            </form>
+
+            <Rule :label="t('people.happening')" :note="t('people.sortNote')" />
 
             <div v-if="rows.length" style="flex: 1; min-height: 0">
                 <!-- The row opens the dossier; the button is the one action
@@ -301,7 +529,9 @@ const currentSegment = computed(
                     <div class="mk-wide" style="width: 132px; flex: 0 0 132px">
                         <Spark :values="row.spark" :tone="row.signal.tone" />
                     </div>
-                    <div style="width: 110px; flex: 0 0 110px; text-align: right">
+                    <div
+                        style="width: 110px; flex: 0 0 110px; text-align: right"
+                    >
                         <div class="mk-num" style="font-size: 14px">
                             {{ usd(row.usd) }}
                         </div>
@@ -310,8 +540,8 @@ const currentSegment = computed(
                         </div>
                     </div>
                     <a
-                        v-if="row.action === 'write' && row.handle"
-                        :href="`https://t.me/${row.handle.replace('@', '')}`"
+                        v-if="row.write"
+                        :href="row.write"
                         target="_blank"
                         rel="noreferrer"
                         class="mk-btn mk-act"

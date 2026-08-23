@@ -160,6 +160,44 @@ is the orphan this whole design exists to avoid.
 
 ---
 
+## 4b. The two places the console writes a person down
+
+Everything else on Люди is derived: the sync writes what the chain, the site
+and the bot already know, and the lens reads it. Two people-shaped facts have
+no such source, so both are typed by hand and both live on the screen that
+shows them.
+
+**Adding.** Fifteen accounts found in one afternoon on X exist nowhere in our
+data until somebody enters them, so the composer sits on the lens itself
+(`POST /crm/people`) and behaves like a lens and not like a wizard: it stays
+open after each save, keeps the type and status of the previous person, clears
+its fields and takes the focus back. The redirect goes **back to the list**
+rather than into the new dossier — a contact created a second ago has the
+freshest signal there is, so it is already the top row. The one thing the form
+insists on is that the record names somebody: every column is nullable, and a
+row with no name, no handle and no address can never be searched, written to
+or recognised again.
+
+**Correcting.** Half of a dossier is what happened and is a log; the other half
+is what somebody told us, and that half ages — a handle changes, a lead becomes
+a customer. So exactly the told half opens in place inside "Кто это"
+(`PUT /crm/{contact}`), with the same fields in the same order, and the
+timeline underneath stays read-only.
+
+**Where a person is reachable.** `x_handle` is a column beside `telegram`,
+because an address is not somebody you can write to and most people found by
+looking are found on X. Both are stored **bare** — `lain`, never `@lain` and
+never the URL — and `App\Support\Handles` collapses the three spellings on the
+way in, since nobody transcribes a handle out of a profile they are looking at.
+The same class decides, on the way out, whether a stored value can become a
+link at all: the whale sync files numeric Telegram *ids* in that column (all
+the bot knows about somebody who never set a username), and `t.me/819…` opens
+nothing. A row whose one action would be a dead page offers "В досье" instead,
+and the dossier links only the handles the server could actually build an
+address for.
+
+---
+
 ## 5. The code
 
 | File | Holds |
@@ -170,6 +208,7 @@ is the orphan this whole design exists to avoid.
 | `app/Services/Console/Snooze.php` | "Until morning", against `console_snoozes` |
 | `app/Services/Console/PeopleLens.php` | Segments and the signal per person |
 | `app/Services/Console/PersonDossier.php` | One person as one stream |
+| `app/Support/Handles.php` | A pasted profile link in, a bare handle out — and whether a stored one is an address |
 | `app/Services/Console/NumbersReport.php` | The six questions, per subject |
 | `app/Services/Console/TaskLine.php` | `@who !when #whom` out of one typed line |
 | `app/Services/Console/ChatRoom.php` | The room, its people and its files — both lenses on one stream |

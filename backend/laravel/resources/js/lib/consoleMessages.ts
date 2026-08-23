@@ -134,6 +134,11 @@ export const consoleMessages: Messages = {
         'people.sync': 'Sync',
         'people.export': 'Export',
         'people.add': '+ Person',
+        'people.addClose': 'Close',
+        'people.addTitle': 'Put somebody on the books',
+        'people.addNote':
+            'A handle or an address is enough to start — a person found on X is a person we can write to, and the rest fills in as it is learned.',
+        'people.addNothing': 'Give at least a name, a handle or an address.',
         'people.empty': 'Nobody matches this question right now.',
         'segment.all': 'Everyone',
         'segment.whales': 'Whales',
@@ -181,6 +186,7 @@ export const consoleMessages: Messages = {
         /* person */
         'person.back': 'People',
         'person.write': 'Write',
+        'person.writeX': 'On X',
         'person.addTask': '+ Task',
         'person.delete': 'Delete',
         'person.money': 'Money',
@@ -189,6 +195,17 @@ export const consoleMessages: Messages = {
             'transfers per week — this app keeps no balance history',
         'person.noActivity': 'no transfers on record in twelve weeks',
         'person.who': 'Who this is',
+        'person.edit': 'Edit',
+        'person.name': 'Name',
+        'person.editNote':
+            'What we were told, and can correct. Everything below it happened and is not editable.',
+        'person.editSave': 'Save',
+        'person.editCancel': 'Cancel',
+        'person.editType': 'Type',
+        'person.editStatus': 'Status',
+        'person.namePlaceholder': 'Name or what they are called',
+        'person.handlePlaceholder': '@name or a link',
+        'person.tagsPlaceholder': 'comma separated',
         'person.identity': 'Same person',
         'person.identityNone':
             'No other record has been tied to this one. Links come from the evidence — a key attached to an account, an address that signed a bridge deposit — or from you.',
@@ -207,6 +224,7 @@ export const consoleMessages: Messages = {
         'person.evm': 'EVM',
         'person.solana': 'Solana',
         'person.telegram': 'Telegram',
+        'person.x': 'X',
         'person.email': 'Email',
         'person.tags': 'Tags',
         'person.source': 'Came from',
@@ -779,6 +797,11 @@ export const consoleMessages: Messages = {
         'people.sync': 'Синхронизировать',
         'people.export': 'Экспорт',
         'people.add': '+ Человек',
+        'people.addClose': 'Свернуть',
+        'people.addTitle': 'Завести человека',
+        'people.addNote':
+            'Для начала хватит ника или адреса — человек, найденный в X, это человек, которому можно написать, остальное дописывается по мере знакомства.',
+        'people.addNothing': 'Нужно хотя бы имя, ник или адрес.',
         'people.empty': 'На этот вопрос сейчас никто не отвечает.',
         'segment.all': 'Все люди',
         'segment.whales': 'Киты',
@@ -825,6 +848,7 @@ export const consoleMessages: Messages = {
         /* person */
         'person.back': 'Люди',
         'person.write': 'Написать',
+        'person.writeX': 'В X',
         'person.addTask': '+ Задача',
         'person.delete': 'Удалить',
         'person.money': 'Деньги',
@@ -833,6 +857,17 @@ export const consoleMessages: Messages = {
             'переводы по неделям — истории балансов это приложение не хранит',
         'person.noActivity': 'за двенадцать недель переводов не записано',
         'person.who': 'Кто это',
+        'person.edit': 'Править',
+        'person.name': 'Имя',
+        'person.editNote':
+            'То, что нам сказали, и что можно поправить. Всё, что ниже, — уже случилось и не правится.',
+        'person.editSave': 'Сохранить',
+        'person.editCancel': 'Отмена',
+        'person.editType': 'Тип',
+        'person.editStatus': 'Статус',
+        'person.namePlaceholder': 'Имя или как его зовут',
+        'person.handlePlaceholder': '@ник или ссылка',
+        'person.tagsPlaceholder': 'через запятую',
         'person.identity': 'Тот же человек',
         'person.identityNone':
             'С этой записью никто не связан. Связи берутся из свидетельств — ключ, привязанный к аккаунту, адрес, подписавший депозит на мосте — или от вас.',
@@ -851,6 +886,7 @@ export const consoleMessages: Messages = {
         'person.evm': 'EVM',
         'person.solana': 'Solana',
         'person.telegram': 'Телеграм',
+        'person.x': 'X',
         'person.email': 'Почта',
         'person.tags': 'Метки',
         'person.source': 'Пришёл из',
@@ -1256,7 +1292,8 @@ export const consoleMessages: Messages = {
 
         /* линза файлов */
         'chat.f.title': 'Файлы',
-        'chat.f.subtitle': '{count} {files} · {size} · каждый пришёл сообщением',
+        'chat.f.subtitle':
+            '{count} {files} · {size} · каждый пришёл сообщением',
         'chat.f.back': 'В комнату',
         'chat.f.segments': 'Сегменты',
         'chat.f.seg.all': 'Все файлы',

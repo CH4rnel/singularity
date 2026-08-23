@@ -7,6 +7,7 @@ use App\Models\CrmContact;
 use App\Models\CrmNote;
 use App\Models\CrmTask;
 use App\Services\WalletPriceService;
+use App\Support\Handles;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -178,16 +179,25 @@ class PeopleLens
             $cyber = (float) ($contact->cyber_balance ?? 0);
             $sol = (float) ($contact->cyber_sol_balance ?? 0);
 
+            // Where a message to this person would go. Telegram first because
+            // that is where a conversation already exists; X second because a
+            // person found on X is reachable nowhere else. Both may be
+            // missing, and a numeric Telegram id (all the sync knows about
+            // somebody without a username) is not an address — an action that
+            // opens a dead page is worse than no action.
+            $write = Handles::telegramUrl($contact->telegram) ?? Handles::xUrl($contact->x_handle);
+
             return [
                 'id' => $contact->id,
-                'name' => $contact->name ?: ($contact->telegram ?: ($contact->evm_address ?: '#'.$contact->id)),
-                'handle' => $contact->telegram ?: null,
+                'name' => $contact->displayName(),
+                'handle' => $contact->displayHandle(),
                 'type' => $contact->type,
                 'status' => $contact->status,
                 'usd' => $price === null ? null : round(($cyber + $sol) * $price),
                 'signal' => $signal,
                 'spark' => $transfers['weekly'][$contact->id] ?? array_fill(0, self::WEEKS, 0),
-                'action' => $contact->telegram !== null ? 'write' : 'dossier',
+                'write' => $write,
+                'action' => $write !== null ? 'write' : 'dossier',
             ];
         })
             ->sortByDesc(fn (array $row) => $row['signal']['at'] ?? '')

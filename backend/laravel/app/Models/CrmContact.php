@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $name
  * @property string|null $email
  * @property string|null $telegram
+ * @property string|null $x_handle
  * @property string|null $evm_address
  * @property string|null $solana_address
  * @property string $type
@@ -47,6 +48,7 @@ class CrmContact extends Model
         'name',
         'email',
         'telegram',
+        'x_handle',
         'evm_address',
         'solana_address',
         'type',
@@ -98,7 +100,38 @@ class CrmContact extends Model
     }
 
     /**
-     * Filter by a free-text query across name, email, telegram and addresses.
+     * What to call this person on screen.
+     *
+     * A record can arrive carrying nothing but an address, so the fallback
+     * chain is the order in which a name is worth reading: what they are
+     * called, then a handle somebody could write to, then an address, then
+     * the row number — which at least identifies the record itself.
+     */
+    public function displayName(): string
+    {
+        if ($this->name) {
+            return $this->name;
+        }
+
+        if ($this->telegram) {
+            return $this->telegram;
+        }
+
+        if ($this->x_handle) {
+            return '@'.$this->x_handle;
+        }
+
+        return $this->evm_address ?: '#'.$this->getKey();
+    }
+
+    /** The handle under the name: a conversation first, then a profile. */
+    public function displayHandle(): ?string
+    {
+        return $this->telegram ?: ($this->x_handle ? '@'.$this->x_handle : null);
+    }
+
+    /**
+     * Filter by a free-text query across name, email, handles and addresses.
      *
      * @param  Builder<CrmContact>  $query
      */
@@ -114,6 +147,7 @@ class CrmContact extends Model
             $q->where('name', 'like', $like)
                 ->orWhere('email', 'like', $like)
                 ->orWhere('telegram', 'like', $like)
+                ->orWhere('x_handle', 'like', $like)
                 ->orWhere('evm_address', 'like', $like)
                 ->orWhere('solana_address', 'like', $like);
         });

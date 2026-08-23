@@ -184,7 +184,7 @@ class CrmTaskController extends Controller
             'assignee_id' => $task->assigned_to_user_id,
             'contact' => $task->contact === null ? null : [
                 'id' => $task->contact->id,
-                'name' => $task->contact->name ?: $task->contact->telegram,
+                'name' => $task->contact->displayName(),
             ],
         ];
     }
@@ -200,7 +200,7 @@ class CrmTaskController extends Controller
             'assignee' => $task->assignee?->name,
             'contact' => $task->contact === null ? null : [
                 'id' => $task->contact->id,
-                'name' => $task->contact->name ?: $task->contact->telegram,
+                'name' => $task->contact->displayName(),
             ],
         ];
     }
