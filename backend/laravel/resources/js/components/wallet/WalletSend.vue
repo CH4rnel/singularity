@@ -15,6 +15,10 @@ import type {
     WalletTokenBalance,
 } from '@/lib/wallet';
 import { formatUsd, shortAddress, usdValue } from '@/lib/wallet/format';
+import {
+    announceWalletEvent,
+    playWalletSound,
+} from '@/lib/wallet/notifications';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -287,8 +291,11 @@ const traits = () => ({
                   ] ?? null),
         ) ?? undefined,
     fee_usd:
-        usdValue(fee.value, chain.value.decimals, props.prices[props.chain] ?? null) ??
-        undefined,
+        usdValue(
+            fee.value,
+            chain.value.decimals,
+            props.prices[props.chain] ?? null,
+        ) ?? undefined,
 });
 
 /**
@@ -303,6 +310,7 @@ const review = (): void => {
 };
 
 const sign = async (): Promise<void> => {
+    playWalletSound('message');
     phase.value = 'status';
     outcome.value = 'signing';
     failure.value = null;
@@ -324,6 +332,11 @@ const sign = async (): Promise<void> => {
     } catch (error) {
         outcome.value = 'failed';
         failure.value = error instanceof Error ? error.message : String(error);
+        announceWalletEvent({
+            title: t('txFailedTitle'),
+            body: `${chain.value.label} · ${t('txFailedBody')}`,
+            sound: 'error',
+        });
 
         // The normalised code, never the message: the message names an
         // address and an amount, and no two RPC providers phrase the same
@@ -357,6 +370,13 @@ const sign = async (): Promise<void> => {
     // Broadcast is not settlement. Watching can time out without the transfer
     // failing, so a timeout leaves the row pending rather than calling it dead.
     if (!chain.value.awaitOutcome) {
+        announceWalletEvent({
+            title: t('txConfirmedTitle'),
+            body: `${chain.value.label} · ${t('txConfirmedBody')}`,
+            sound: 'success',
+            tag: txHash.value ? `transaction:${txHash.value}` : undefined,
+        });
+
         return;
     }
 
@@ -375,6 +395,20 @@ const sign = async (): Promise<void> => {
                     : { error_code: 'reverted' as const }),
             },
         );
+
+        announceWalletEvent({
+            title:
+                outcome.value === 'confirmed'
+                    ? t('txConfirmedTitle')
+                    : t('txFailedTitle'),
+            body: `${chain.value.label} · ${
+                outcome.value === 'confirmed'
+                    ? t('txConfirmedBody')
+                    : t('txFailedBody')
+            }`,
+            sound: outcome.value === 'confirmed' ? 'success' : 'error',
+            tag: txHash.value ? `transaction:${txHash.value}` : undefined,
+        });
     } catch (error) {
         failure.value = error instanceof Error ? error.message : String(error);
 

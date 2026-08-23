@@ -199,6 +199,13 @@ again. It is there for a window manager that decorates windows its own way.
   the dev binary.
 - **A window of its own** — the title bar is drawn by the app, with the menus,
   the page title and the window buttons in it. See [The window](#the-window).
+- **Tray and login startup** — closing the window keeps Cyberia in the system
+  tray; _Quit_ there stops it. The wallet's Alerts & sound screen can register
+  the packaged app to start hidden at login, with the tray as its way back.
+- **System notifications and sounds** — the wallet can announce incoming
+  transfers, messages and completed operations. The preference stays on the
+  device; notification text contains no address, transaction hash or key
+  material.
 - **Remembered geometry** — window size and position are restored, and revalidated
   against the displays that currently exist.
 - **A real BitTorrent client** — see below. This is the one capability the site

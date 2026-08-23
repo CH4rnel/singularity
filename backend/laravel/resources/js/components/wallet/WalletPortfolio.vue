@@ -54,6 +54,7 @@ const emit = defineEmits<{
     bridge: [];
     earn: [];
     browse: [];
+    preferences: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
@@ -536,6 +537,28 @@ const recent = computed(() =>
                 }}</span>
             </button>
         </div>
+
+        <button
+            type="button"
+            class="cw-card cw-card-button"
+            style="margin-bottom: 24px; padding: 14px 16px"
+            @click="emit('preferences')"
+        >
+            <span class="cw-row">
+                <span style="text-align: left">
+                    <span
+                        style="display: block; font: 500 12px/1 var(--cw-sans)"
+                        >{{ t('navPreferences') }}</span
+                    >
+                    <span
+                        class="cw-label"
+                        style="display: block; margin-top: 5px; font-size: 9px"
+                        >{{ t('tilePreferencesHint') }}</span
+                    >
+                </span>
+                <span class="cw-label" style="color: var(--cw-fainter)">→</span>
+            </span>
+        </button>
 
         <div class="cw-row" style="margin-bottom: 10px">
             <span class="cw-label">{{ t('networks') }}</span>

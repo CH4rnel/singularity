@@ -38,6 +38,10 @@ import {
 } from '@/lib/wallet';
 import type { ChatKeyRecord, ChatMeta, ChatRow } from '@/lib/wallet';
 import { growComposer } from '@/lib/wallet/composer';
+import {
+    announceWalletEvent,
+    playWalletSound,
+} from '@/lib/wallet/notifications';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -372,6 +376,10 @@ const sync = async (): Promise<void> => {
         const batch = await fetchChatEnvelopes(state.cursor);
 
         if (batch.messages.length > 0) {
+            const incoming = batch.messages.filter(
+                (message) => message.to.toLowerCase() === self.toLowerCase(),
+            ).length;
+
             rows.value = storeChatRows(self, batch.messages).rows;
             await decrypt();
 
@@ -384,6 +392,15 @@ const sync = async (): Promise<void> => {
             }
 
             emit('unread');
+
+            if (incoming > 0) {
+                announceWalletEvent({
+                    title: t('chatTitle'),
+                    body: t('notificationChatBody', { count: incoming }),
+                    sound: 'message',
+                    tag: 'wallet-chat',
+                });
+            }
         }
     } catch (failure) {
         const status = (failure as Error & { status?: number }).status;
@@ -443,6 +460,7 @@ const send = async (): Promise<void> => {
         draft.value = '';
         await decrypt();
         await scrollDown();
+        playWalletSound('message');
     } catch (failure) {
         const status = (failure as Error & { status?: number }).status;
 

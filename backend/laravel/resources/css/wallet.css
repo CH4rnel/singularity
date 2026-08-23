@@ -910,6 +910,10 @@
     white-space: nowrap;
 }
 
+.cw-tab-icon {
+    flex: none;
+}
+
 @media (max-width: 429px) {
     .cw-tab {
         letter-spacing: 0.04em;

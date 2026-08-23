@@ -37,9 +37,17 @@ contextBridge.exposeInMainWorld('cyberiaNative', {
     version: info.version,
     url: info.url,
     proxy: info.proxy,
+    tray: info.tray === true,
     retry: () => ipcRenderer.send('shell:retry'),
     openExternal: (url) => ipcRenderer.send('shell:open-external', url),
     openProxySettings: () => ipcRenderer.send('shell:open-proxy'),
+    startup: {
+        available: Boolean(info.startup?.available),
+        enabled: Boolean(info.startup?.enabled),
+        get: () => ipcRenderer.invoke('shell:get-startup'),
+        set: (enabled) =>
+            ipcRenderer.invoke('shell:set-startup', Boolean(enabled)),
+    },
     torrent: {
         version: 1,
         info: () => ipcRenderer.invoke('torrent:info'),

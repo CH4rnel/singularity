@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
-import { ExternalLink, Languages, Lock } from 'lucide-vue-next';
+import {
+    Bot,
+    ExternalLink,
+    Images,
+    Landmark,
+    Languages,
+    Lock,
+    MessageCircle,
+    Newspaper,
+    Rocket,
+    WalletCards,
+} from 'lucide-vue-next';
+import type { Component } from 'vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import WalletAccounts from '@/components/wallet/WalletAccounts.vue';
@@ -25,6 +37,7 @@ import WalletNft from '@/components/wallet/WalletNft.vue';
 import WalletNftMint from '@/components/wallet/WalletNftMint.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
 import WalletPortfolio from '@/components/wallet/WalletPortfolio.vue';
+import WalletPreferences from '@/components/wallet/WalletPreferences.vue';
 import WalletProfile from '@/components/wallet/WalletProfile.vue';
 import WalletProxy from '@/components/wallet/WalletProxy.vue';
 import WalletReceive from '@/components/wallet/WalletReceive.vue';
@@ -45,9 +58,10 @@ import {
     setMainButton,
     telegramHaptic,
 } from '@/lib/telegram';
-import { unreadChatCount } from '@/lib/wallet';
+import { formatUnits, unreadChatCount, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import type { BridgeConfig } from '@/lib/wallet/bridge';
+import { announceWalletEvent } from '@/lib/wallet/notifications';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -118,6 +132,7 @@ type Section =
     | 'importAccount'
     | 'network'
     | 'security'
+    | 'preferences'
     | 'feed'
     | 'profile'
     | 'launchpad'
@@ -190,6 +205,7 @@ const SECTIONS: { id: Section; label: () => string }[] = [
     // and what this account has, which is the only way to know it exists.
     { id: 'lain', label: () => t('navLain') },
     { id: 'security', label: () => t('navSecurity') },
+    { id: 'preferences', label: () => t('navPreferences') },
 ];
 
 /**
@@ -212,14 +228,14 @@ const SECTIONS: { id: Section; label: () => string }[] = [
  * accounts and security are all ways of reading the wallet, reached from the
  * portfolio.
  */
-const TABS: { id: Section; label: () => string }[] = [
-    { id: 'portfolio', label: () => t('tabWallet') },
-    { id: 'chat', label: () => t('tabChat') },
-    { id: 'feed', label: () => t('feed') },
-    { id: 'launchpad', label: () => t('tabLaunch') },
-    { id: 'nft', label: () => t('nftTitle') },
-    { id: 'dao', label: () => t('dao') },
-    { id: 'lain', label: () => t('navLain') },
+const TABS: { id: Section; label: () => string; icon: Component }[] = [
+    { id: 'portfolio', label: () => t('tabWallet'), icon: WalletCards },
+    { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
+    { id: 'feed', label: () => t('feed'), icon: Newspaper },
+    { id: 'launchpad', label: () => t('tabLaunch'), icon: Rocket },
+    { id: 'nft', label: () => t('nftTitle'), icon: Images },
+    { id: 'dao', label: () => t('dao'), icon: Landmark },
+    { id: 'lain', label: () => t('navLain'), icon: Bot },
 ];
 
 /** Which tab a screen lives under, for the bar's active state. */
@@ -233,6 +249,7 @@ const TAB_OF: Record<Section, Section> = {
     importAccount: 'portfolio',
     network: 'portfolio',
     security: 'portfolio',
+    preferences: 'portfolio',
     gas: 'portfolio',
     proxy: 'portfolio',
     earn: 'portfolio',
@@ -305,6 +322,7 @@ const PARENTS: Partial<Record<Section, Section>> = {
     importAccount: 'accounts',
     gas: 'portfolio',
     proxy: 'security',
+    preferences: 'portfolio',
     earn: 'portfolio',
     bridge: 'portfolio',
     profile: 'feed',
@@ -577,13 +595,78 @@ const reportFunding = (): void => {
     }
 };
 
-/** Everything the unlocked app reads from chains, in one pass. */
-const load = async (): Promise<void> => {
-    if (!wallet.unlocked.value) {
-        return;
+let loadPromise: Promise<void> | null = null;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let historyPrimed = false;
+let historyGeneration = 0;
+let reloadAfterCurrent = false;
+const knownHistory = new Set<string>();
+
+const resetHistoryNotifications = (): void => {
+    knownHistory.clear();
+    historyPrimed = false;
+    historyGeneration += 1;
+    reloadAfterCurrent = loadPromise !== null;
+};
+
+/**
+ * Announce only transfers discovered after the first complete history read.
+ * Opening an old wallet must not replay years of receipts as fresh alerts.
+ */
+const announceIncomingTransfers = (): void => {
+    const current = new Set<string>();
+
+    for (const [chainId, entry] of Object.entries(wallet.history.value)) {
+        const details = walletChain(chainId as WalletChainId);
+
+        for (const transaction of entry.items) {
+            const key = `${chainId}:${transaction.hash}`;
+
+            current.add(key);
+
+            if (
+                historyPrimed &&
+                !knownHistory.has(key) &&
+                transaction.direction === 'in' &&
+                transaction.status === 'confirmed'
+            ) {
+                const amount =
+                    transaction.amount < 0n
+                        ? -transaction.amount
+                        : transaction.amount;
+
+                announceWalletEvent({
+                    title: t('notificationIncomingTitle'),
+                    body: t('notificationIncomingBody', {
+                        amount: formatUnits(amount, details.decimals, 6),
+                        symbol: details.symbol,
+                        chain: details.label,
+                    }),
+                    sound: 'incoming',
+                    tag: `incoming:${key}`,
+                });
+            }
+        }
     }
 
-    await Promise.all([
+    knownHistory.clear();
+    current.forEach((key) => knownHistory.add(key));
+    historyPrimed = true;
+};
+
+/** Everything the unlocked app reads from chains, in one pass. */
+const load = (): Promise<void> => {
+    if (!wallet.unlocked.value) {
+        return Promise.resolve();
+    }
+
+    if (loadPromise) {
+        return loadPromise;
+    }
+
+    const generation = historyGeneration;
+
+    loadPromise = Promise.all([
         wallet.refreshBalances(),
         ...wallet.chains.value
             .filter((entry) => entry.fetchHistory)
@@ -592,9 +675,24 @@ const load = async (): Promise<void> => {
             .filter((entry) => entry.fetchTokens)
             .map((entry) => wallet.refreshTokens(entry.id)),
         refreshPrices(),
-    ]);
+    ])
+        .then(() => {
+            reportFunding();
 
-    reportFunding();
+            if (generation === historyGeneration) {
+                announceIncomingTransfers();
+            }
+        })
+        .finally(() => {
+            loadPromise = null;
+
+            if (reloadAfterCurrent) {
+                reloadAfterCurrent = false;
+                void load();
+            }
+        });
+
+    return loadPromise;
 };
 
 /** A network the user just derived opens on its own detail screen. */
@@ -661,11 +759,17 @@ onMounted(() => {
     window.addEventListener('offline', trackConnection);
     refreshUnread();
     void load();
+    refreshTimer = setInterval(() => void load(), 60_000);
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('online', trackConnection);
     window.removeEventListener('offline', trackConnection);
+
+    if (refreshTimer !== null) {
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+    }
 });
 
 /**
@@ -680,6 +784,8 @@ onBeforeUnmount(() => {
 watch(
     () => wallet.activeAccountId.value,
     () => {
+        resetHistoryNotifications();
+
         if (
             !wallet.accounts.value.some(
                 (account) => account.chain === chain.value,
@@ -700,8 +806,10 @@ watch(
         refreshUnread();
 
         if (unlocked) {
+            resetHistoryNotifications();
             void load();
         } else {
+            resetHistoryNotifications();
             overlay.value = null;
             section.value = 'portfolio';
         }
@@ -1067,6 +1175,7 @@ watch(
                             @earn="openSection('earn')"
                             @bridge="openSection('bridge')"
                             @browse="openSection('browse')"
+                            @preferences="openSection('preferences')"
                         />
                     </template>
 
@@ -1256,6 +1365,11 @@ watch(
                         @back="openSection('security')"
                     />
 
+                    <WalletPreferences
+                        v-else-if="section === 'preferences'"
+                        @back="openSection('portfolio')"
+                    />
+
                     <WalletSecurity
                         v-else
                         :wallet="wallet"
@@ -1283,18 +1397,12 @@ watch(
                         "
                         @click="openSection(entry.id)"
                     >
-                        <span
-                            style="
-                                width: 8px;
-                                height: 8px;
-                                border: 1px solid currentColor;
-                            "
-                            :style="{
-                                background:
-                                    activeTab === entry.id && overlay === null
-                                        ? 'currentColor'
-                                        : 'transparent',
-                            }"
+                        <component
+                            :is="entry.icon"
+                            class="cw-tab-icon"
+                            :size="18"
+                            :stroke-width="1.6"
+                            aria-hidden="true"
                         />
                         <span class="cw-tab-label">{{ entry.label() }}</span>
                         <!--

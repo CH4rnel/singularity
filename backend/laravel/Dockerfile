@@ -14,4 +14,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Limits, not extensions: conf.d sits outside /var/www/html, which the repo
+# is bind-mounted over at runtime.
+COPY docker/php.ini /usr/local/etc/php/conf.d/zz-cyberia.ini
+
 WORKDIR /var/www/html

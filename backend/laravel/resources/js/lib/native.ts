@@ -14,13 +14,27 @@ import type { TorrentBridge } from '@/lib/wallet/torrent';
 
 export type NativeShell = 'desktop' | 'mobile' | 'telegram' | null;
 
+export interface NativeStartupState {
+    available: boolean;
+    enabled: boolean;
+    error?: string;
+}
+
+interface DesktopStartupBridge extends NativeStartupState {
+    get?: () => Promise<NativeStartupState>;
+    set?: (enabled: boolean) => Promise<NativeStartupState>;
+}
+
 interface DesktopBridge {
     shell?: string;
     version?: string;
     /** The proxy in force for this window, as the shell describes it. */
     proxy?: string;
+    tray?: boolean;
     openExternal?: (url: string) => void;
     openProxySettings?: () => void;
+    /** Login startup is owned by the installed desktop shell, never the site. */
+    startup?: DesktopStartupBridge;
     /**
      * A real BitTorrent client, which only the desktop shell can host — the
      * DHT is UDP and peers are TCP, neither of which a web view has.
@@ -120,4 +134,43 @@ export function nativeProxy(): string | null {
     const described = window.cyberiaNative?.proxy;
 
     return typeof described === 'string' && described !== '' ? described : null;
+}
+
+/** Whether this packaged desktop build can register itself at login. */
+export function nativeStartup(): NativeStartupState {
+    if (typeof window === 'undefined') {
+        return { available: false, enabled: false };
+    }
+
+    const startup = window.cyberiaNative?.startup;
+
+    return {
+        available: startup?.available === true,
+        enabled: startup?.enabled === true,
+    };
+}
+
+/** True only for a desktop build that keeps a real operating-system tray. */
+export function hasNativeTray(): boolean {
+    return typeof window !== 'undefined' && window.cyberiaNative?.tray === true;
+}
+
+/** Re-read login startup after it may have changed from the tray menu. */
+export async function refreshNativeStartup(): Promise<NativeStartupState> {
+    const startup = window.cyberiaNative?.startup;
+
+    return typeof startup?.get === 'function' ? startup.get() : nativeStartup();
+}
+
+/** Ask the desktop shell to change its own login item. */
+export async function setNativeStartup(
+    enabled: boolean,
+): Promise<NativeStartupState> {
+    const startup = window.cyberiaNative?.startup;
+
+    if (typeof startup?.set !== 'function') {
+        return { available: false, enabled: false, error: 'unavailable' };
+    }
+
+    return startup.set(enabled);
 }

@@ -24,11 +24,13 @@ const {
     BaseWindow,
     BrowserWindow,
     Menu,
+    Tray,
     WebContentsView,
     app,
     dialog,
     ipcMain,
     net,
+    nativeImage,
     session,
     shell,
 } = require('electron');
@@ -37,6 +39,7 @@ const {
     PROTOCOL,
     describeProxy,
     hasProxyFlag,
+    isAppHost,
     isExternallyOpenable,
     isNavigable,
     normalizeProxySetting,
@@ -53,6 +56,7 @@ const {
     usesCustomFrame,
     zoomLevel,
 } = require('./frame');
+const { createAutostart } = require('./autostart');
 const { loadProxySetting, saveProxySetting } = require('./proxy-settings');
 const torrent = require('./torrent');
 const { loadWindowState, trackWindowState } = require('./window-state');
@@ -100,9 +104,13 @@ let mainWindow = null;
 let contentView = null;
 let chromeView = null;
 let appMenu = null;
+let tray = null;
 let proxyWindow = null;
 let shellSession = null;
 let settleTimer = null;
+let autostart = null;
+let quitting = false;
+let startHidden = false;
 
 /** The proxy in force right now, what the user saved, and where it came from. */
 let activeProxy = null;
@@ -116,6 +124,28 @@ function pageContents() {
     }
 
     return contentView.webContents;
+}
+
+/** One icon for the window, notifications and tray, in dev and packaged runs. */
+function appIconPath() {
+    return app.isPackaged
+        ? path.join(process.resourcesPath, 'icon.png')
+        : path.join(__dirname, '..', 'build', 'icon.png');
+}
+
+/** A mutating renderer request may only come from this app's own site. */
+function isTrustedPageEvent(event) {
+    if (event.sender !== pageContents()) {
+        return false;
+    }
+
+    try {
+        const url = new URL(event.senderFrame?.url || event.sender.getURL());
+
+        return isAppHost(url.hostname, APP_HOST);
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -385,7 +415,10 @@ const COMMANDS = {
     minimize: () => mainWindow?.minimize(),
     maximize: () => toggleMaximize(),
     close: () => mainWindow?.close(),
-    quit: () => app.quit(),
+    quit: () => {
+        quitting = true;
+        app.quit();
+    },
     about: () => showAbout(),
 };
 
@@ -396,6 +429,87 @@ function run(command) {
     }
 
     COMMANDS[command]();
+}
+
+function trayLabels() {
+    const russian = app.getLocale().toLowerCase().startsWith('ru');
+
+    return russian
+        ? {
+              open: 'Открыть Cyberia',
+              wallet: 'Кошелёк',
+              site: 'Сайт Cyberia',
+              startup: 'Запускать при входе',
+              quit: 'Выйти',
+          }
+        : {
+              open: 'Open Cyberia',
+              wallet: 'Wallet',
+              site: 'Cyberia Site',
+              startup: 'Launch at login',
+              quit: 'Quit',
+          };
+}
+
+function refreshTrayMenu() {
+    if (!tray || !autostart) {
+        return;
+    }
+
+    const labels = trayLabels();
+    const startup = autostart.state();
+
+    tray.setContextMenu(
+        Menu.buildFromTemplate([
+            { label: labels.open, click: () => focusWindow() },
+            { label: labels.wallet, click: () => showWindow(START_URL) },
+            { label: labels.site, click: () => showWindow(APP_URL) },
+            { type: 'separator' },
+            ...(startup.available
+                ? [
+                      {
+                          label: labels.startup,
+                          type: 'checkbox',
+                          checked: startup.enabled,
+                          click: (item) => {
+                              try {
+                                  autostart.set(item.checked);
+                              } catch {
+                                  console.error(
+                                      '[cyberia] could not change login startup',
+                                  );
+                              } finally {
+                                  refreshTrayMenu();
+                              }
+                          },
+                      },
+                  ]
+                : []),
+            { type: 'separator' },
+            { label: labels.quit, click: () => run('quit') },
+        ]),
+    );
+}
+
+function createTray() {
+    const icon = nativeImage.createFromPath(appIconPath());
+
+    if (icon.isEmpty()) {
+        console.error('[cyberia] tray icon is unavailable');
+
+        return false;
+    }
+
+    tray = new Tray(
+        process.platform === 'linux'
+            ? icon.resize({ width: 22, height: 22 })
+            : icon,
+    );
+    tray.setToolTip('Cyberia');
+    tray.on('click', () => focusWindow());
+    refreshTrayMenu();
+
+    return true;
 }
 
 /** Whether the title bar is on screen right now (it is not in full screen). */
@@ -566,9 +680,7 @@ function createWindow() {
             ? { titleBarStyle: 'hiddenInset', trafficLightPosition: MAC_TRAFFIC_LIGHTS }
             : {}),
         autoHideMenuBar: true,
-        icon: process.platform === 'linux'
-            ? path.join(__dirname, '..', 'build', 'icon.png')
-            : undefined,
+        icon: process.platform === 'linux' ? appIconPath() : undefined,
     });
 
     contentView = new WebContentsView({
@@ -617,6 +729,10 @@ function createWindow() {
     // the site is still arriving — with the bar already usable. The timer is
     // for the run where nothing loads at all.
     const reveal = () => {
+        if (startHidden) {
+            return;
+        }
+
         if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
             mainWindow.show();
             focusPage();
@@ -679,6 +795,15 @@ function createWindow() {
     });
     mainWindow.on('blur', () => sendFrame({ focused: false }));
 
+    // Closing the window leaves the wallet reachable from the tray. Explicit
+    // Quit is the one path that tears down its background process.
+    mainWindow.on('close', (event) => {
+        if (!quitting && tray) {
+            event.preventDefault();
+            mainWindow?.hide();
+        }
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
         contentView = null;
@@ -699,7 +824,17 @@ function focusWindow() {
         mainWindow.restore();
     }
 
+    if (!mainWindow.isVisible()) {
+        mainWindow.show();
+    }
+
     mainWindow.focus();
+    focusPage();
+}
+
+function showWindow(target) {
+    focusWindow();
+    loadApp(target);
 }
 
 /** `cyberia://profile?tab=xp` -> `<APP_URL>/profile?tab=xp`. */
@@ -905,8 +1040,14 @@ if (!app.requestSingleInstanceLock()) {
         app.userAgentFallback = buildUserAgent();
 
         registerProtocol();
+        autostart = createAutostart(app);
+        startHidden = autostart.wasOpenedAtLogin();
         await configureSession();
         buildMenu();
+        if (!createTray()) {
+            // A hidden process without a tray has no route back to its window.
+            startHidden = false;
+        }
 
         console.log(
             `[cyberia] ${START_URL} via proxy ${describeProxy(activeProxy)} (${proxySource})`,
@@ -924,8 +1065,30 @@ if (!app.requestSingleInstanceLock()) {
                 version: app.getVersion(),
                 url: START_URL,
                 proxy: describeProxy(activeProxy),
+                startup: autostart.state(),
+                tray: Boolean(tray),
             };
         });
+        ipcMain.handle('shell:set-startup', (event, enabled) => {
+            if (!isTrustedPageEvent(event)) {
+                return { available: false, enabled: false, error: 'forbidden' };
+            }
+
+            try {
+                const state = autostart.set(Boolean(enabled));
+
+                refreshTrayMenu();
+
+                return { ...state, error: '' };
+            } catch {
+                return { ...autostart.state(), error: 'write_failed' };
+            }
+        });
+        ipcMain.handle('shell:get-startup', (event) =>
+            isTrustedPageEvent(event)
+                ? { ...autostart.state(), error: '' }
+                : { available: false, enabled: false, error: 'forbidden' },
+        );
 
         // The torrent client. Only the site's own pages may reach it, and it
         // stays unstarted until someone agrees to run one in a dialog no page
@@ -953,17 +1116,18 @@ if (!app.requestSingleInstanceLock()) {
         handleDeepLink(deepLinkFrom(process.argv));
 
         app.on('activate', () => {
-            if (!mainWindow || mainWindow.isDestroyed()) {
-                createWindow();
-            }
+            focusWindow();
         });
     });
 
     // No swarm outlives the window: the client is stopped before the app is.
-    app.on('before-quit', () => torrent.shutdown());
+    app.on('before-quit', () => {
+        quitting = true;
+        torrent.shutdown();
+    });
 
     app.on('window-all-closed', () => {
-        if (process.platform !== 'darwin') {
+        if (process.platform !== 'darwin' && !tray) {
             app.quit();
         }
     });

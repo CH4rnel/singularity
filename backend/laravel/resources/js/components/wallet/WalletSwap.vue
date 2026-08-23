@@ -39,6 +39,10 @@ import type {
     WrapQuote,
 } from '@/lib/wallet';
 import { formatUsd, shortAddress, usdValue } from '@/lib/wallet/format';
+import {
+    announceWalletEvent,
+    playWalletSound,
+} from '@/lib/wallet/notifications';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -285,9 +289,7 @@ const gasShortfall = computed(() => {
 const impact = computed(() => quote.value?.impactPct ?? null);
 
 /** Above this the pool is thin enough that the warning belongs on screen. */
-const impactHigh = computed(
-    () => impact.value !== null && impact.value >= 5,
-);
+const impactHigh = computed(() => impact.value !== null && impact.value >= 5);
 
 const canSign = computed(() => account.value?.capabilities.send ?? false);
 
@@ -404,8 +406,9 @@ const rate = computed(() => {
         return null;
     }
 
-    const paid =
-        Number(formatUnits(quote.value.amountIn, payAsset.value.decimals, 18));
+    const paid = Number(
+        formatUnits(quote.value.amountIn, payAsset.value.decimals, 18),
+    );
     const got = Number(
         formatUnits(quote.value.amountOut, receiveAsset.value.decimals, 18),
     );
@@ -712,14 +715,17 @@ const sentence = computed(() => {
             : formatUnits(fee.value, chain.value.decimals, 8);
 
     if (mode.value === 'wrap') {
-        return t(direction.value === 'wrap' ? 'wrapSentence' : 'unwrapSentence', {
-            amount: paid,
-            from: payAsset.value.symbol,
-            to: receiveAsset.value?.symbol ?? '—',
-            network: chain.value.label,
-            fee: gas,
-            gas: chain.value.symbol,
-        });
+        return t(
+            direction.value === 'wrap' ? 'wrapSentence' : 'unwrapSentence',
+            {
+                amount: paid,
+                from: payAsset.value.symbol,
+                to: receiveAsset.value?.symbol ?? '—',
+                network: chain.value.label,
+                fee: gas,
+                gas: chain.value.symbol,
+            },
+        );
     }
 
     return t('swapSentence', {
@@ -764,6 +770,7 @@ const review = (): void => {
 };
 
 const sign = async (): Promise<void> => {
+    playWalletSound('message');
     phase.value = 'status';
     outcome.value = 'signing';
     failure.value = null;
@@ -810,6 +817,11 @@ const sign = async (): Promise<void> => {
     } catch (error) {
         outcome.value = 'failed';
         failure.value = error instanceof Error ? error.message : String(error);
+        announceWalletEvent({
+            title: `${t('swapTitle')} · ${t('swapOutcome_failed')}`,
+            body: t('swapOutcomeBody_failed'),
+            sound: 'error',
+        });
 
         analytics.track('swap_failed', {
             ...traits(),
@@ -826,6 +838,13 @@ const sign = async (): Promise<void> => {
     // Broadcast is not settlement, and watching can time out without the trade
     // failing — a timeout leaves this pending rather than calling it dead.
     if (!chain.value.awaitOutcome || hash.value === null) {
+        announceWalletEvent({
+            title: `${t('swapTitle')} · ${t('swapOutcome_pending')}`,
+            body: t('swapOutcomeBody_pending'),
+            sound: 'success',
+            tag: hash.value ? `swap:${hash.value}` : undefined,
+        });
+
         return;
     }
 
@@ -843,6 +862,19 @@ const sign = async (): Promise<void> => {
                     : { error_code: 'reverted' as const }),
             },
         );
+
+        announceWalletEvent({
+            title: `${t('swapTitle')} · ${t(`swapOutcome_${outcome.value}`)}`,
+            body:
+                outcome.value === 'confirmed'
+                    ? t('swapOutcomeBody_confirmed', {
+                          from: payAsset.value?.symbol ?? '—',
+                          to: receiveAsset.value?.symbol ?? '—',
+                      })
+                    : t('swapOutcomeBody_failed'),
+            sound: outcome.value === 'confirmed' ? 'success' : 'error',
+            tag: `swap:${hash.value}`,
+        });
     } catch (error) {
         failure.value = error instanceof Error ? error.message : String(error);
 
@@ -1150,8 +1182,7 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                             "
                             :disabled="
                                 payBalance === null ||
-                                (payAsset.address === null &&
-                                    gasPrice === null)
+                                (payAsset.address === null && gasPrice === null)
                             "
                             @click="setMax"
                         >
@@ -1202,7 +1233,13 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                     </div>
                 </div>
 
-                <div style="display: flex; justify-content: center; margin: 10px 0">
+                <div
+                    style="
+                        display: flex;
+                        justify-content: center;
+                        margin: 10px 0;
+                    "
+                >
                     <button
                         type="button"
                         class="cw-icon-btn"
