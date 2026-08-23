@@ -489,6 +489,10 @@ Route::middleware(['auth'])->group(function () {
         // and this is the only way back out of it.
         Route::get('chat/files/{file}', [ConsoleChatController::class, 'download'])->name('chat.download');
         Route::post('chat', [ConsoleChatController::class, 'store'])->name('chat.store');
+        // Which model LainOS answers with — the console is one of the
+        // daemon's switch surfaces, and the only one open while its answers
+        // are being read. Declared before the {message} routes.
+        Route::post('chat/lainos/provider', [ConsoleChatController::class, 'provider'])->name('chat.provider');
         Route::post('chat/{message}/answer', [ConsoleChatController::class, 'answer'])->name('chat.answer');
         Route::post('chat/{message}/task', [ConsoleChatController::class, 'task'])->name('chat.task');
         Route::delete('chat/{message}', [ConsoleChatController::class, 'destroy'])->name('chat.destroy');

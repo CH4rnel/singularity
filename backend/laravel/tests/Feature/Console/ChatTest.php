@@ -6,6 +6,7 @@ use App\Models\CrmContact;
 use App\Models\CrmTask;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -20,6 +21,7 @@ beforeEach(function () {
     config()->set('services.lainos.url', null);
     config()->set('services.lain.openrouter_api_key', null);
     Storage::fake('local');
+    Cache::flush();
 });
 
 function chatOperator(
@@ -160,7 +162,22 @@ it('marks a line that calls LainOS, and says so when nothing can answer', functi
 it('writes the daemon’s answer into the room, stamped with who answered', function () {
     config()->set('services.lainos.url', 'http://127.0.0.1:7777');
     Http::fake([
-        '127.0.0.1:7777/chat' => Http::response(['text' => 'все три с одного адреса'], 200),
+        '127.0.0.1:7777/provider' => Http::response([
+            'provider' => [
+                'kind' => 'claude',
+                'name' => 'claude+openrouter',
+                'model' => 'claude-sonnet-4-5',
+                'envKind' => 'codex',
+                'overridden' => true,
+            ],
+            'choices' => [['name' => 'claude', 'kind' => 'claude', 'desc' => 'Claude CLI']],
+        ], 200),
+        // The turn names the model that produced it; the probe above only
+        // knows what the daemon was on a moment earlier.
+        '127.0.0.1:7777/chat' => Http::response([
+            'text' => 'все три с одного адреса',
+            'model' => 'codex/gpt-5.6-sol',
+        ], 200),
     ]);
 
     $operator = chatOperator();
@@ -181,13 +198,144 @@ it('writes the daemon’s answer into the room, stamped with who answered', func
     expect($answer->body)->toBe('все три с одного адреса')
         ->and($answer->user_id)->toBeNull()
         ->and($answer->meta['backend'])->toBe('daemon')
+        // The model is read off the daemon rather than guessed: "which model
+        // answered" is the first question asked of any answer here.
+        ->and($answer->meta['model'])->toBe('codex/gpt-5.6-sol')
+        ->and($answer->meta['model_source'])->toBe('turn')
+        ->and($answer->meta['provider'])->toBe('claude')
+        ->and($answer->meta['ensemble'])->toBe('claude+openrouter')
+        ->and($answer->meta['overridden'])->toBeTrue()
+        ->and($answer->meta['ms'])->toBeInt()
         ->and($answer->meta['context']['messages'])->toBe(1)
         ->and($call->fresh()->lainos_state)->toBe(CrmChatMessage::LAINOS_ANSWERED);
 });
 
+it('shows which model the daemon is on, and says so when it will not tell', function () {
+    config()->set('services.lainos.url', 'http://127.0.0.1:7777');
+    // One reading per request, and the second one fails: a second Http::fake()
+    // would merge rather than replace, so the change of weather is a sequence.
+    Http::fake([
+        '127.0.0.1:7777/provider' => Http::sequence()
+            ->push([
+                'provider' => [
+                    'kind' => 'codex',
+                    'name' => 'codex',
+                    'model' => 'gpt-5-codex',
+                    'envKind' => 'codex',
+                    'overridden' => false,
+                ],
+                'choices' => [
+                    ['name' => 'claude', 'kind' => 'claude', 'desc' => 'Claude CLI'],
+                    ['name' => 'codex', 'kind' => 'codex', 'desc' => 'Codex CLI'],
+                ],
+            ], 200)
+            ->push('', 500),
+    ]);
+
+    $this->actingAs(chatOperator())
+        ->get('/crm/chat')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('lainos.probe', 'ok')
+            ->where('lainos.provider.model', 'gpt-5-codex')
+            ->has('lainos.choices', 2)
+            ->etc());
+
+    Cache::flush();
+
+    // Unreadable is its own state: the daemon may be answering perfectly well
+    // and simply not have said what with.
+    $this->actingAs(chatOperator('netrunner', '0x00000000000000000000000000000000000000bb'))
+        ->get('/crm/chat')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('lainos.probe', 'unreadable')
+            ->where('lainos.provider', null)
+            ->etc());
+});
+
+it('falls back to the probe when a turn does not name its model', function () {
+    config()->set('services.lainos.url', 'http://127.0.0.1:7777');
+    Http::fake([
+        '127.0.0.1:7777/provider' => Http::response(['provider' => [
+            'kind' => 'claude', 'name' => 'claude', 'model' => 'claude-sonnet-4-5',
+            'envKind' => 'claude', 'overridden' => false,
+        ]], 200),
+        '127.0.0.1:7777/chat' => Http::response(['text' => 'без провенанса'], 200),
+    ]);
+
+    $operator = chatOperator();
+
+    $this->actingAs($operator)->post('/crm/chat', ['body' => '@lainos ?']);
+    $call = CrmChatMessage::query()->sole();
+    $this->actingAs($operator)->post("/crm/chat/{$call->id}/answer")->assertOk();
+
+    $answer = CrmChatMessage::query()->where('author', CrmChatMessage::AUTHOR_LAINOS)->sole();
+
+    expect($answer->meta['model'])->toBe('claude-sonnet-4-5')
+        // Named as the weaker source it is, rather than passed off as
+        // provenance.
+        ->and($answer->meta['model_source'])->toBe('probe');
+});
+
+it('records what was tried when nothing answered', function () {
+    config()->set('services.lainos.url', 'http://127.0.0.1:7777');
+    Http::fake([
+        '127.0.0.1:7777/provider' => Http::response(['provider' => [
+            'kind' => 'codex', 'name' => 'codex', 'model' => 'gpt-5-codex',
+            'envKind' => 'codex', 'overridden' => false,
+        ]], 200),
+        '127.0.0.1:7777/chat' => Http::response('', 503),
+    ]);
+
+    $operator = chatOperator();
+
+    $this->actingAs($operator)->post('/crm/chat', ['body' => '@lainos почему упал воркер?']);
+
+    $call = CrmChatMessage::query()->sole();
+
+    $this->actingAs($operator)->post("/crm/chat/{$call->id}/answer")->assertOk();
+
+    $attempts = $call->fresh()->meta['attempts'];
+
+    expect($attempts)->toHaveCount(1)
+        ->and($attempts[0]['backend'])->toBe('daemon')
+        ->and($attempts[0]['outcome'])->toBe('http_503')
+        ->and($attempts[0]['model'])->toBe('gpt-5-codex');
+});
+
+it('switches the daemon’s provider, and repeats its refusal verbatim', function () {
+    config()->set('services.lainos.url', 'http://127.0.0.1:7777');
+    Http::fake([
+        '127.0.0.1:7777/provider' => Http::sequence()
+            ->push(['provider' => [
+                'kind' => 'claude', 'name' => 'claude', 'model' => 'claude-sonnet-4-5',
+                'envKind' => 'codex', 'overridden' => true,
+            ]], 200)
+            ->push(['provider' => [
+                'kind' => 'claude', 'name' => 'claude', 'model' => 'claude-sonnet-4-5',
+                'envKind' => 'codex', 'overridden' => true,
+            ]], 200)
+            ->push(['error' => 'provider "opencode" is unavailable (missing API key or CLI?)'], 409),
+    ]);
+
+    $operator = chatOperator();
+
+    $this->actingAs($operator)
+        ->post('/crm/chat/lainos/provider', ['provider' => 'claude'])
+        ->assertOk()
+        ->assertJson(['ok' => true, 'provider' => ['kind' => 'claude']]);
+
+    $this->actingAs($operator)
+        ->post('/crm/chat/lainos/provider', ['provider' => 'opencode'])
+        ->assertStatus(422)
+        ->assertJson(['ok' => false, 'error' => 'provider "opencode" is unavailable (missing API key or CLI?)']);
+});
+
 it('reports an unreachable daemon instead of inventing an answer', function () {
     config()->set('services.lainos.url', 'http://127.0.0.1:7777');
-    Http::fake(['127.0.0.1:7777/chat' => Http::response('', 500)]);
+    Http::fake([
+        '127.0.0.1:7777/provider' => Http::response('', 500),
+        '127.0.0.1:7777/chat' => Http::response('', 500),
+    ]);
 
     $operator = chatOperator();
 

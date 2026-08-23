@@ -46,16 +46,41 @@ type Message = {
     files: FileRow[];
     contact: { id: number; name: string } | null;
     task: { id: number; title: string } | null;
-    call: { state: string | null; note: string | null } | null;
+    call: {
+        state: string | null;
+        note: string | null;
+        attempts: Attempt[];
+    } | null;
     answer: {
         backend?: string;
-        model?: string;
+        model?: string | null;
+        model_source?: string | null;
+        provider?: string | null;
+        ensemble?: string | null;
+        overridden?: boolean | null;
+        ms?: number;
         context?: {
             messages?: number;
             files?: string[];
             quoted?: string | null;
         };
     } | null;
+};
+
+/** One try at answering: who was asked, what came back, how long it took. */
+type Attempt = {
+    backend: string;
+    outcome: string;
+    ms: number;
+    model: string | null;
+};
+
+type Provider = {
+    kind: string;
+    name: string;
+    model: string;
+    envKind: string;
+    overridden: boolean;
 };
 
 type Person = {
@@ -75,7 +100,16 @@ const props = defineProps<{
     people: Person[];
     recentFiles: FileRow[];
     fileCount: number;
-    lainos: { daemon: boolean; persona: boolean; backend: string | null };
+    lainos: {
+        daemon: boolean;
+        persona: boolean;
+        backend: string | null;
+        // Which model actually answers — a reading of the daemon, not a
+        // setting of ours, so it has a third state: unreadable.
+        provider: Provider | null;
+        choices: { name: string; kind: string; desc: string }[];
+        probe: string;
+    };
     limits: {
         maxMb: number;
         maxFiles: number;
@@ -106,6 +140,8 @@ const sending = ref(false);
 const dragging = ref(false);
 const asking = ref<number | null>(null);
 const side = ref<'room' | 'lainos'>('room');
+const switching = ref<string | null>(null);
+const switchNote = ref<string | null>(null);
 
 const scroller = ref<HTMLElement | null>(null);
 const input = ref<HTMLTextAreaElement | null>(null);
@@ -474,10 +510,63 @@ function stamp(message: Message): string {
         });
     }
 
+    // Provenance or a reading, and the difference is marked: `turn` is the
+    // model the daemon says produced this reply, `probe` is what it said it
+    // was on a moment earlier. Unread is its own answer, better than a
+    // plausible name nobody checked.
+    const model = answer.model
+        ? answer.model +
+          (answer.model_source === 'probe'
+              ? ` ${t('chat.lainos.byProbe')}`
+              : '')
+        : t('chat.lainos.modelUnknown');
+    const took =
+        answer.ms === undefined
+            ? ''
+            : ` · ${t('chat.lainos.took', { s: (answer.ms / 1000).toFixed(1) })}`;
+
     return `${t('chat.lainos.stamp', {
         backend: backendName(answer.backend),
-        model: answer.model ?? '—',
-    })} · ${line}`;
+        model,
+    })}${took} · ${line}`;
+}
+
+/** Ask the daemon to answer with another provider from now on. */
+async function switchProvider(kind: string, name: string): Promise<void> {
+    if (switching.value !== null) {
+        return;
+    }
+
+    switching.value = kind;
+    switchNote.value = null;
+
+    try {
+        const response = await fetch(chat.provider.url(), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                ...(csrf() ? { 'X-XSRF-TOKEN': csrf() as string } : {}),
+            },
+            body: JSON.stringify({ provider: kind }),
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+            ok?: boolean;
+            error?: string;
+        };
+
+        switchNote.value = data.ok
+            ? t('chat.lainos.switched', { name })
+            : t('chat.lainos.switchFailed', { error: data.error ?? '—' });
+    } catch {
+        switchNote.value = t('chat.lainos.switchFailed', { error: '—' });
+    } finally {
+        switching.value = null;
+        // The panel reads the live provider from the server, never from what
+        // this browser hoped the switch did.
+        router.reload({ only: ['lainos'] });
+    }
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -856,6 +945,34 @@ onBeforeUnmount(() => {
                                                         )
                                             }}
                                         </p>
+                                        <!-- What was actually tried. A
+                                             failure is debuggable from the
+                                             screen it happened on, or it is
+                                             debugged in laravel.log by
+                                             whoever still has ssh. -->
+                                        <p
+                                            v-for="(attempt, i) in row.message
+                                                .call.attempts"
+                                            :key="i"
+                                            class="mk-m"
+                                            style="
+                                                margin: 3px 0 0;
+                                                font-size: 11px;
+                                                color: var(--mk-fainter);
+                                            "
+                                        >
+                                            {{
+                                                t('chat.lainos.attempt', {
+                                                    backend: backendName(
+                                                        attempt.backend,
+                                                    ),
+                                                    outcome: attempt.outcome,
+                                                    ms: attempt.ms,
+                                                })
+                                            }}<template v-if="attempt.model">
+                                                · {{ attempt.model }}</template
+                                            >
+                                        </p>
                                     </div>
                                     <button
                                         v-if="row.message.call.note !== 'disabled'"
@@ -1202,6 +1319,110 @@ onBeforeUnmount(() => {
                         "
                     >
                         {{ t('chat.lainos.whoNote') }}
+                    </p>
+                </div>
+
+                <!-- Which model is on the other end right now. Read from the
+                     daemon, because it is the only thing that knows: the
+                     provider is switched at runtime from three surfaces. -->
+                <div v-if="lainos.daemon">
+                    <Rule :label="t('chat.lainos.live')" />
+
+                    <div v-if="lainos.provider" style="margin-top: 8px">
+                        <div
+                            class="mk-hair"
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 10px;
+                                padding: 9px 0;
+                            "
+                        >
+                            <span
+                                class="mk-dot"
+                                style="background: var(--mk-accent)"
+                            />
+                            <span class="mk-m" style="font-size: 12.5px">{{
+                                lainos.provider.model
+                            }}</span>
+                        </div>
+                        <div
+                            class="mk-hair"
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 10px;
+                                padding: 9px 0;
+                            "
+                        >
+                            <span
+                                class="mk-dot"
+                                style="background: var(--mk-flat)"
+                            />
+                            <span class="mk-t2" style="font-size: 12.5px">{{
+                                lainos.provider.name
+                            }}</span>
+                            <span
+                                v-if="lainos.provider.overridden"
+                                class="mk-m mk-t3"
+                                style="margin-left: auto; font-size: 11px"
+                                >{{ t('chat.lainos.override') }}</span
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Unreadable is not "off": the daemon may be answering
+                         perfectly well and simply not have told us. -->
+                    <div v-else class="mk-stripe" style="margin-top: 8px">
+                        <span class="mk-hatch" />
+                        <p
+                            class="mk-m mk-t3"
+                            style="margin: 0; padding: 10px 12px; font-size: 11.5px"
+                        >
+                            {{ t('chat.lainos.unreadable') }}
+                        </p>
+                    </div>
+
+                    <div
+                        v-if="lainos.choices.length > 0"
+                        style="
+                            margin-top: 10px;
+                            display: flex;
+                            flex-wrap: wrap;
+                            gap: 6px;
+                        "
+                    >
+                        <button
+                            v-for="choice in lainos.choices"
+                            :key="choice.kind"
+                            type="button"
+                            class="mk-btn"
+                            :class="{
+                                'mk-act':
+                                    lainos.provider?.kind === choice.kind,
+                            }"
+                            style="height: 24px; padding: 0 8px; font-size: 11px"
+                            :title="choice.desc"
+                            :disabled="
+                                switching !== null ||
+                                lainos.provider?.kind === choice.kind
+                            "
+                            @click="switchProvider(choice.kind, choice.name)"
+                        >
+                            {{ choice.name }}
+                        </button>
+                    </div>
+
+                    <p
+                        v-if="switchNote"
+                        class="mk-m"
+                        style="
+                            margin: 8px 0 0;
+                            font-size: 11px;
+                            color: var(--mk-dim);
+                        "
+                    >
+                        {{ switchNote }}
                     </p>
                 </div>
 

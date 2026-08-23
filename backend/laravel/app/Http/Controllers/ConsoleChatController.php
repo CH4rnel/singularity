@@ -147,15 +147,20 @@ class ConsoleChatController extends Controller
         try {
             $reply = $this->lainos->answer($message->load('files'));
 
-            if ($reply === null) {
+            if ($reply['text'] === null) {
                 $message->update([
                     'lainos_state' => CrmChatMessage::LAINOS_FAILED,
                     'lainos_note' => $this->lainos->status()['backend'] === null ? 'disabled' : 'unreachable',
+                    // What was tried and what came back. A failure an operator
+                    // can read on the screen where it happened beats one they
+                    // have to go and find in laravel.log.
+                    'meta' => ['attempts' => $reply['attempts']],
                 ]);
 
                 return response()->json([
                     'state' => CrmChatMessage::LAINOS_FAILED,
                     'note' => $message->fresh()?->lainos_note,
+                    'attempts' => $reply['attempts'],
                 ]);
             }
 
@@ -170,12 +175,33 @@ class ConsoleChatController extends Controller
             $message->update([
                 'lainos_state' => CrmChatMessage::LAINOS_ANSWERED,
                 'lainos_note' => null,
+                'meta' => ['attempts' => $reply['attempts']],
             ]);
 
             return response()->json(['state' => CrmChatMessage::LAINOS_ANSWERED]);
         } finally {
             $lock->release();
         }
+    }
+
+    /**
+     * Re-route the daemon's replies to another provider.
+     *
+     * "Which model answered" stopped being a rhetorical question the moment
+     * the room started printing it; this is the other half — the operator can
+     * also decide. The daemon owns the choice and persists it, so this is a
+     * request to it rather than a setting of ours, and a refusal comes back
+     * in its words.
+     */
+    public function provider(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'provider' => ['required', 'string', 'max:40'],
+        ]);
+
+        $result = $this->lainos->switchProvider($data['provider']);
+
+        return response()->json($result, $result['ok'] ? 200 : 422);
     }
 
     /**

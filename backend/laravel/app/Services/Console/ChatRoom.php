@@ -277,6 +277,8 @@ class ChatRoom
             'call' => $message->calls_lainos ? [
                 'state' => $message->lainos_state,
                 'note' => $message->lainos_note,
+                // What was tried and what came back, per attempt.
+                'attempts' => $message->meta['attempts'] ?? [],
             ] : null,
             'answer' => $message->isFromLainos() ? ($message->meta ?? []) : null,
         ];
