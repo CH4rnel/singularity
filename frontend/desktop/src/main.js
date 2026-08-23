@@ -12,11 +12,10 @@
  * `target="_blank"`) is handed to the system browser instead of being opened
  * inside the app frame.
  *
- * The window itself is drawn by the app, VSCode-style: one frameless window
- * holding two views — the title bar (`titlebar.html`, local) above the site.
- * The site is remote, so the frame cannot be part of the page; it is a view of
- * its own, which is also what keeps it standing while the page is an OAuth
- * redirect or the offline notice. See `frame.js`.
+ * The window is deliberately undecorated: one frameless window whose only
+ * view is the site. The wallet masthead is its drag region, so no browser-like
+ * title or menu strip is left above the product. See `frame.js` for the
+ * keyboard commands that replace the missing application menu.
  */
 
 const path = require('node:path');
@@ -47,15 +46,7 @@ const {
     resolveProxyDecision,
     resolveStartUrl,
 } = require('./config');
-const {
-    MAC_TRAFFIC_LIGHTS,
-    TITLEBAR_HEIGHT,
-    commandForInput,
-    frameLayout,
-    menuBarItems,
-    usesCustomFrame,
-    zoomLevel,
-} = require('./frame');
+const { commandForInput, usesFramelessWindow, zoomLevel } = require('./frame');
 const { createAutostart } = require('./autostart');
 const { loadProxySetting, saveProxySetting } = require('./proxy-settings');
 const torrent = require('./torrent');
@@ -66,12 +57,11 @@ const START_URL = resolveStartUrl(process.env, process.argv);
 const APP_HOST = new URL(APP_URL).hostname;
 const OFFLINE_PAGE = path.join(__dirname, 'offline.html');
 const PROXY_PAGE = path.join(__dirname, 'proxy.html');
-const TITLEBAR_PAGE = path.join(__dirname, 'titlebar.html');
 
 const IS_MAC = process.platform === 'darwin';
 
-/** Whether this run draws its own title bar; `--native-frame` opts out. */
-const CUSTOM_FRAME = usesCustomFrame(process.env, process.argv);
+/** Whether this run removes every window decoration; `--native-frame` opts out. */
+const FRAMELESS = usesFramelessWindow(process.env, process.argv);
 
 /** A launch flag pins the proxy for this run, so the window cannot change it. */
 const PROXY_LOCKED = hasProxyFlag(process.argv);
@@ -102,7 +92,6 @@ const ERR_ABORTED = -3;
 
 let mainWindow = null;
 let contentView = null;
-let chromeView = null;
 let appMenu = null;
 let tray = null;
 let proxyWindow = null;
@@ -385,12 +374,12 @@ function zoomPage(command) {
 }
 
 /**
- * Everything the frame can be asked to do, under one name each.
+ * Everything the shell can be asked to do, under one name each.
  *
- * The menus, the title bar's buttons and the key strokes all come through here,
- * which is why a command that touches the page names the page's own contents:
- * the window is a `BaseWindow` holding two views, so Electron's built-in menu
- * roles — which reach for the focused *BrowserWindow* — would find nothing.
+ * The native-frame menu, tray and key strokes all come through here, which is
+ * why a command that touches the page names the page's own contents: the window
+ * is a `BaseWindow` holding a view, so Electron's built-in menu roles — which
+ * reach for the focused *BrowserWindow* — would find nothing.
  */
 const COMMANDS = {
     wallet: () => loadApp(),
@@ -512,30 +501,14 @@ function createTray() {
     return true;
 }
 
-/** Whether the title bar is on screen right now (it is not in full screen). */
-function chromeVisible() {
-    return Boolean(chromeView) && !(mainWindow?.isFullScreen() ?? false);
-}
-
 function layoutViews() {
     if (!mainWindow || mainWindow.isDestroyed() || !contentView) {
         return;
     }
 
-    const visible = chromeVisible();
     const { width, height } = mainWindow.getContentBounds();
-    const layout = frameLayout({
-        width,
-        height,
-        titlebar: visible ? TITLEBAR_HEIGHT : 0,
-    });
 
-    if (chromeView) {
-        chromeView.setVisible(visible);
-        chromeView.setBounds(layout.chrome);
-    }
-
-    contentView.setBounds(layout.content);
+    contentView.setBounds({ x: 0, y: 0, width, height });
 }
 
 /**
@@ -553,55 +526,10 @@ function relayout() {
     settleTimer = setTimeout(layoutViews, SETTLE_MS);
 }
 
-function sendFrame(patch) {
-    if (!chromeView || chromeView.webContents.isDestroyed()) {
-        return;
-    }
-
-    chromeView.webContents.send('frame:update', patch);
-}
-
-/** Everything the title bar needs to draw itself from cold. */
-function frameState() {
-    const window = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-
-    return {
-        platform: process.platform,
-        // macOS draws its own window buttons over our bar and keeps the menu
-        // bar at the top of the screen, so the bar there is a title and a drag
-        // region and nothing else.
-        controls: !IS_MAC,
-        menus: IS_MAC ? [] : menuBarItems(appMenu),
-        title: window ? window.getTitle() : 'Cyberia',
-        maximized: window ? window.isMaximized() : false,
-        focused: window ? window.isFocused() : true,
-        menu: null,
-    };
-}
-
-/** Opens one of the application menus under the bar's button. */
-function popupMenu(index, x, y) {
-    const item = Number.isInteger(index) ? appMenu?.items?.[index] : null;
-
-    if (!item?.submenu || !mainWindow || mainWindow.isDestroyed()) {
-        return;
-    }
-
-    sendFrame({ menu: index });
-
-    item.submenu.popup({
-        window: mainWindow,
-        x: Math.round(Number.isFinite(x) ? x : 0),
-        y: Math.round(Number.isFinite(y) ? y : TITLEBAR_HEIGHT),
-        callback: () => sendFrame({ menu: null }),
-    });
-}
-
 function setWindowTitle(title) {
     const text = typeof title === 'string' && title.trim() !== '' ? title : 'Cyberia';
 
     mainWindow?.setTitle(text);
-    sendFrame({ title: text });
 }
 
 /**
@@ -614,7 +542,7 @@ function setWindowTitle(title) {
  * command twice.
  */
 function watchKeys(contents) {
-    if (!CUSTOM_FRAME || IS_MAC) {
+    if (!FRAMELESS || IS_MAC) {
         return;
     }
 
@@ -671,14 +599,9 @@ function createWindow() {
         show: false,
         backgroundColor: '#0b0f10',
         title: 'Cyberia',
-        // Frameless is how the app gets to draw the bar itself. macOS is the
-        // exception on purpose: `hiddenInset` keeps the system's window
-        // buttons and the window's rounded corners, and the bar is worn under
-        // them — which is exactly what VSCode does on each platform.
-        frame: !CUSTOM_FRAME || IS_MAC,
-        ...(CUSTOM_FRAME && IS_MAC
-            ? { titleBarStyle: 'hiddenInset', trafficLightPosition: MAC_TRAFFIC_LIGHTS }
-            : {}),
+        // The wallet itself is the window. `--native-frame` is retained as an
+        // accessibility/compatibility escape hatch for unusual window managers.
+        frame: !FRAMELESS,
         autoHideMenuBar: true,
         icon: process.platform === 'linux' ? appIconPath() : undefined,
     });
@@ -697,26 +620,6 @@ function createWindow() {
     contentView.setBackgroundColor('#0b0f10');
     mainWindow.contentView.addChildView(contentView);
 
-    if (CUSTOM_FRAME) {
-        chromeView = new WebContentsView({
-            webPreferences: {
-                // Its own preload again: the window's buttons and menus are not
-                // something the remote page below may reach.
-                preload: path.join(__dirname, 'preload-frame.js'),
-                contextIsolation: true,
-                nodeIntegration: false,
-                sandbox: true,
-            },
-        });
-
-        chromeView.setBackgroundColor('#0b0f10');
-        mainWindow.contentView.addChildView(chromeView);
-        chromeView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-        watchKeys(chromeView.webContents);
-
-        void chromeView.webContents.loadFile(TITLEBAR_PAGE);
-    }
-
     layoutViews();
 
     if (state.maximized) {
@@ -725,9 +628,7 @@ function createWindow() {
 
     trackWindowState(mainWindow);
 
-    // The frame is local and paints at once, so the window is on screen while
-    // the site is still arriving — with the bar already usable. The timer is
-    // for the run where nothing loads at all.
+    // Reveal when the site settles; the timer covers a run where it never does.
     const reveal = () => {
         if (startHidden) {
             return;
@@ -739,7 +640,6 @@ function createWindow() {
         }
     };
 
-    chromeView?.webContents.once('did-finish-load', reveal);
     contentView.webContents.once('did-stop-loading', reveal);
     setTimeout(reveal, REVEAL_TIMEOUT_MS);
 
@@ -779,21 +679,11 @@ function createWindow() {
 
     mainWindow.on('resize', relayout);
     mainWindow.on('restore', relayout);
-    mainWindow.on('maximize', () => {
-        relayout();
-        sendFrame({ maximized: true });
-    });
-    mainWindow.on('unmaximize', () => {
-        relayout();
-        sendFrame({ maximized: false });
-    });
+    mainWindow.on('maximize', relayout);
+    mainWindow.on('unmaximize', relayout);
     mainWindow.on('enter-full-screen', relayout);
     mainWindow.on('leave-full-screen', relayout);
-    mainWindow.on('focus', () => {
-        focusPage();
-        sendFrame({ focused: true });
-    });
-    mainWindow.on('blur', () => sendFrame({ focused: false }));
+    mainWindow.on('focus', focusPage);
 
     // Closing the window leaves the wallet reachable from the tray. Explicit
     // Quit is the one path that tears down its background process.
@@ -807,7 +697,6 @@ function createWindow() {
     mainWindow.on('closed', () => {
         mainWindow = null;
         contentView = null;
-        chromeView = null;
     });
 
     loadApp();
@@ -862,7 +751,7 @@ function deepLinkFrom(argv) {
 }
 
 /**
- * The application menu — also the menu the drawn bar opens.
+ * The application menu used only in native-frame mode (and by macOS).
  *
  * Every item that touches the page has a `click` of its own rather than a role:
  * roles that reload, zoom or toggle the tools ask Electron for the focused
@@ -969,9 +858,7 @@ function menuTemplate() {
             submenu: [
                 {
                     label: 'Minimize',
-                    // Only where a menu bar is attached to answer it: an
-                    // accelerator printed under a custom frame and answered by
-                    // nobody is worse than none at all.
+                    // Only where a menu bar is attached to answer it.
                     ...(IS_MAC ? { accelerator: 'Command+M' } : {}),
                     click: () => run('minimize'),
                 },
@@ -997,16 +884,15 @@ function menuTemplate() {
 /**
  * Builds the menu, and attaches it only where a window may wear one.
  *
- * On Windows and Linux a menu attached to a frameless window is drawn *inside*
- * it, over the bar the shell draws itself — so under a custom frame there is no
- * application menu at all: the bar opens the same menus as popups, and
- * `watchKeys` answers the strokes they print. macOS keeps its real menu bar,
- * and so does a `--native-frame` run.
+ * On Windows and Linux a menu attached to a frameless window would create the
+ * browser-like strip this shell deliberately removes, so `watchKeys` answers
+ * its useful strokes instead. macOS keeps its real menu bar, and so does a
+ * `--native-frame` run.
  */
 function buildMenu() {
     appMenu = Menu.buildFromTemplate(menuTemplate());
 
-    Menu.setApplicationMenu(IS_MAC || !CUSTOM_FRAME ? appMenu : null);
+    Menu.setApplicationMenu(IS_MAC || !FRAMELESS ? appMenu : null);
 }
 
 function registerProtocol() {
@@ -1098,11 +984,6 @@ if (!app.requestSingleInstanceLock()) {
             getContents: () => pageContents(),
             isTrusted: (url) => isNavigable(url, APP_HOST),
         });
-
-        // The title bar. Its own channels, reachable only from its own preload.
-        ipcMain.handle('frame:state', () => frameState());
-        ipcMain.on('frame:command', (_event, command) => run(String(command)));
-        ipcMain.on('frame:menu', (_event, index, x, y) => popupMenu(index, x, y));
 
         ipcMain.handle('proxy:state', () => proxyState());
         ipcMain.handle('proxy:apply', (_event, setting) => applyProxySetting(setting));

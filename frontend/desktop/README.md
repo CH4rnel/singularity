@@ -8,8 +8,8 @@ it: it renders `https://cyberia.church` in a persistent session. That keeps the
 app permanently in sync with production — a deploy is a shipped update — and
 means the whole shell is a handful of small files in `src/`.
 
-The window is the app's own, VSCode-style: a frameless window with the title
-bar drawn in it — see [The window](#the-window).
+The app is fully frameless: there is no operating-system decoration and no
+second title/menu strip drawn above the wallet — see [The window](#the-window).
 
 **The app is the Cyberia wallet.** The window opens on `/wallet`, which renders
 without the site header and footer inside a native shell and fills the frame
@@ -142,19 +142,11 @@ can do is ask for the window to be raised.
 
 ## The window
 
-The app draws its own title bar the way VSCode does, because a wallet that opens
-in a stock desktop window announces itself as a browser wrapped in a frame. It is
-one frameless window holding **two views**: `src/titlebar.html` across the top and
-the site underneath it (`src/frame.js`, laid out in `src/main.js`). The site is
-remote, so the bar cannot live in the page — as a view of its own it also stays
-standing while the page is an OAuth redirect, a token subdomain or the offline
-notice.
-
-The bar carries the mark, the menus, the page's title and the window buttons; the
-whole strip drags the window and a double click maximises it. Windows and Linux
-get the buttons drawn in the bar; macOS keeps the system's traffic lights over it
-(`titleBarStyle: 'hiddenInset'`) and its real menu bar at the top of the screen.
-Full screen hides the bar and gives the whole window to the site.
+The app draws no title bar. It is one frameless `BaseWindow` whose single
+`WebContentsView` fills every pixel. On the wallet route, the wallet masthead is
+the drag surface and a double click there maximises the window; its buttons and
+links opt out of dragging. There is no browser-like title, menu strip or row of
+window buttons above it.
 
 Two consequences worth knowing before touching `src/main.js`:
 
@@ -162,18 +154,16 @@ Two consequences worth knowing before touching `src/main.js`:
   contents of its own, and Electron's menu **roles** that reach for the focused
   `BrowserWindow` (`reload`, `zoomIn`, `toggleDevTools`, `minimize`) would find
   nothing. Every menu item that touches the page is a `click` naming the site's
-  own contents instead, through one command table shared by the menus, the bar's
-  buttons and the keys.
+  own contents instead, through one command table shared by the native-frame
+  menu and the keys.
 - **Nothing has keyboard focus until something is given it.** A window holding
   views focuses none of them, so the shell focuses the site on show and on every
   window focus — otherwise the app opens with a password field that ignores
   typing until it is clicked.
 
-On Windows and Linux there is no application menu attached to the window: it
-would be drawn *inside* a frameless one, over the bar. The bar opens the same
-menus as popups, and `commandForInput` in `src/frame.js` answers the accelerators
-they print — matched on the physical key as well as the letter, so Ctrl+R still
-reloads on a Cyrillic layout.
+There is no application menu attached to the frameless window. `commandForInput`
+in `src/frame.js` answers the useful accelerators directly — matched on the
+physical key as well as the letter, so Ctrl+R still reloads on a Cyrillic layout.
 
 `--native-frame` (or `CYBERIA_NATIVE_FRAME=1`) hands the window back to the
 desktop: the frame, the menu bar and its accelerators all become the system's
@@ -197,8 +187,8 @@ again. It is there for a window manager that decorates windows its own way.
 - **`cyberia://` deep links** — `cyberia://profile?tab=xp` focuses the running
   window and navigates it. Registered by the installers; `npm start` registers
   the dev binary.
-- **A window of its own** — the title bar is drawn by the app, with the menus,
-  the page title and the window buttons in it. See [The window](#the-window).
+- **A window of its own** — no system frame and no substitute title strip; the
+  wallet itself fills and moves the window. See [The window](#the-window).
 - **Tray and login startup** — closing the window keeps Cyberia in the system
   tray; _Quit_ there stops it. The wallet's Alerts & sound screen can register
   the packaged app to start hidden at login, with the tray as its way back.

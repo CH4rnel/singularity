@@ -178,6 +178,20 @@
 
 /* ---------------------------------------------------------------- shell -- */
 
+/*
+ * The desktop shell has no title bar at all. Its wallet masthead is the one
+ * quiet drag surface; actual controls opt out so clicks remain clicks.
+ */
+html[data-native-shell='desktop'] .cw-masthead {
+    -webkit-app-region: drag;
+}
+
+html[data-native-shell='desktop']
+    .cw-masthead
+    :is(a, button, input, select, textarea) {
+    -webkit-app-region: no-drag;
+}
+
 .cw-shell {
     position: relative;
     display: flex;

@@ -139,8 +139,7 @@ async function ensureEngine() {
 
         child.on('message', (message) => {
             if (message?.event === 'torrents') {
-                // The page's own contents, not the window's: the window is a
-                // frame holding two views, and the title bar is not the page.
+                // The page's own contents, not the BaseWindow that holds it.
                 const contents = context.getContents();
 
                 if (contents && !contents.isDestroyed()) {

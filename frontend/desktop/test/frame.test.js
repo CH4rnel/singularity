@@ -1,60 +1,38 @@
 'use strict';
 
 /**
- * The custom window frame's rules, tested under plain Node like the navigation
+ * The frameless window's rules, tested under plain Node like the navigation
  * ones — no display, no Electron binary, no window.
  *
- * Two of these carry weight beyond tidiness: the layout (the site's view is
- * placed by hand, and an arithmetic slip there is a strip of the wallet hidden
- * under the title bar) and the key table (with a custom frame there is no menu
- * bar left to answer Ctrl+R, so this *is* the accelerator list).
+ * With no menu bar left to answer Ctrl+R, the key table is the accelerator list.
  */
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { test } = require('node:test');
 const {
-    TITLEBAR_HEIGHT,
     commandForInput,
-    frameLayout,
-    menuBarItems,
-    usesCustomFrame,
+    usesFramelessWindow,
     zoomLevel,
 } = require('../src/frame');
 
 const keyDown = (key, modifiers = {}) => ({ type: 'keyDown', key, ...modifiers });
 
-test('the app draws its own frame unless it is told not to', () => {
-    assert.equal(usesCustomFrame({}, []), true);
-    assert.equal(usesCustomFrame({}, ['--native-frame']), false);
-    assert.equal(usesCustomFrame({ CYBERIA_NATIVE_FRAME: '1' }, []), false);
-    assert.equal(usesCustomFrame({ CYBERIA_NATIVE_FRAME: ' Yes ' }, []), false);
-    assert.equal(usesCustomFrame({ CYBERIA_NATIVE_FRAME: '0' }, []), true);
+test('the app removes every decoration unless told not to', () => {
+    assert.equal(usesFramelessWindow({}, []), true);
+    assert.equal(usesFramelessWindow({}, ['--native-frame']), false);
+    assert.equal(usesFramelessWindow({ CYBERIA_NATIVE_FRAME: '1' }, []), false);
+    assert.equal(usesFramelessWindow({ CYBERIA_NATIVE_FRAME: ' Yes ' }, []), false);
+    assert.equal(usesFramelessWindow({ CYBERIA_NATIVE_FRAME: '0' }, []), true);
 });
 
-test('the site gets the window minus the title bar', () => {
-    const layout = frameLayout({ width: 1280, height: 860, titlebar: TITLEBAR_HEIGHT });
+test('the packaged window has one full-size site view and no titlebar view', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
 
-    assert.deepEqual(layout.chrome, { x: 0, y: 0, width: 1280, height: TITLEBAR_HEIGHT });
-    assert.deepEqual(layout.content, {
-        x: 0,
-        y: TITLEBAR_HEIGHT,
-        width: 1280,
-        height: 860 - TITLEBAR_HEIGHT,
-    });
-});
-
-test('a hidden title bar gives the site the whole window', () => {
-    const layout = frameLayout({ width: 1280, height: 860, titlebar: 0 });
-
-    assert.deepEqual(layout.chrome, { x: 0, y: 0, width: 1280, height: 0 });
-    assert.deepEqual(layout.content, { x: 0, y: 0, width: 1280, height: 860 });
-});
-
-test('a window shorter than the bar never asks for a negative height', () => {
-    const layout = frameLayout({ width: 400, height: 20 });
-
-    assert.deepEqual(layout.chrome, { x: 0, y: 0, width: 400, height: 20 });
-    assert.deepEqual(layout.content, { x: 0, y: 20, width: 400, height: 0 });
+    assert.match(source, /frame: !FRAMELESS/);
+    assert.equal(source.match(/new WebContentsView\(/g)?.length, 1);
+    assert.doesNotMatch(source, /titlebar\.html|preload-frame|chromeView/);
 });
 
 test('the strokes the missing menu bar used to answer', () => {
@@ -104,21 +82,4 @@ test('zoom moves in steps and stops at both ends', () => {
     assert.equal(zoomLevel(5, 'zoom-in'), 5);
     assert.equal(zoomLevel(-3, 'zoom-out'), -3);
     assert.equal(zoomLevel(undefined, 'zoom-in'), 0.5);
-});
-
-test('the drawn menu bar shows the menus, and only the menus', () => {
-    const menu = {
-        items: [
-            { label: '&File', submenu: {} },
-            { label: 'Open in Browser' },
-            { label: '', submenu: {} },
-            { label: 'Help', submenu: {} },
-        ],
-    };
-
-    assert.deepEqual(menuBarItems(menu), [
-        { index: 0, label: 'File' },
-        { index: 3, label: 'Help' },
-    ]);
-    assert.deepEqual(menuBarItems(null), []);
 });

@@ -830,6 +830,7 @@ watch(
     >
         <!-- Masthead -->
         <header
+            class="cw-masthead"
             style="
                 display: flex;
                 align-items: flex-end;
