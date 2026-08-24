@@ -787,13 +787,23 @@ const footer = computed(() =>
 
 .task-completed__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+    grid-auto-columns: minmax(280px, 360px);
+    grid-auto-flow: column;
+    align-items: start;
     gap: 10px;
     margin-top: 12px;
+    padding-bottom: 8px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline proximity;
+    scrollbar-color: var(--mk-flat) transparent;
+    scrollbar-width: thin;
 }
 
 .task-completed__item {
+    min-width: 0;
     padding: 12px 14px;
+    scroll-snap-align: start;
 }
 
 .task-completed__item p {
@@ -866,7 +876,16 @@ const footer = computed(() =>
 }
 
 .task-delete {
+    color: var(--mk-faint);
+    transition:
+        color 120ms ease,
+        background-color 120ms ease;
+}
+
+.task-delete:hover,
+.task-delete:focus-visible {
     color: var(--mk-critical);
+    background: rgba(255, 77, 77, 0.08);
 }
 
 .task-edit {
@@ -911,9 +930,16 @@ const footer = computed(() =>
 .task-comments {
     display: grid;
     gap: 8px;
+    max-height: 132px;
     margin-top: 12px;
     padding-top: 10px;
+    padding-right: 5px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     border-top: 1px solid rgba(232, 236, 236, 0.08);
+    scrollbar-color: var(--mk-flat) transparent;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
 }
 
 .task-comment {
@@ -993,6 +1019,10 @@ const footer = computed(() =>
 }
 
 @media (max-width: 620px) {
+    .task-completed__grid {
+        grid-auto-columns: min(86vw, 340px);
+    }
+
     .task-edit__fields {
         grid-template-columns: 1fr;
     }

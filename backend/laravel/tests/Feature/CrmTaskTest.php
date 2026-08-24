@@ -66,6 +66,34 @@ test('the board sorts tasks into late, now and later, and lifts out the unowned'
         );
 });
 
+test('tasks in a column are ordered by priority before their due date', function () {
+    $operator = User::factory()->crmAdmin()->create();
+
+    CrmTask::factory()->assignedTo($operator)->standalone()->create([
+        'title' => 'Low first by date',
+        'priority' => 'low',
+        'due_at' => now()->addDays(5),
+    ]);
+    CrmTask::factory()->assignedTo($operator)->standalone()->create([
+        'title' => 'Normal second',
+        'priority' => 'normal',
+        'due_at' => now()->addDays(6),
+    ]);
+    CrmTask::factory()->assignedTo($operator)->standalone()->create([
+        'title' => 'High first',
+        'priority' => 'high',
+        'due_at' => now()->addWeek(),
+    ]);
+
+    $this->actingAs($operator)
+        ->get(route('crm.tasks.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('columns.later.0.title', 'High first')
+            ->where('columns.later.1.title', 'Normal second')
+            ->where('columns.later.2.title', 'Low first by date')
+        );
+});
+
 test('operators can comment on tasks and comments appear with their authors', function () {
     $operator = User::factory()->crmAdmin()->create(['name' => 'Lain']);
     $task = CrmTask::factory()->assignedTo($operator)->standalone()->create();
