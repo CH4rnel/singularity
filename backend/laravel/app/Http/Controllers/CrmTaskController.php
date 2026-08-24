@@ -6,6 +6,7 @@ use App\Http\Requests\StoreCrmTaskRequest;
 use App\Http\Requests\UpdateCrmTaskRequest;
 use App\Models\CrmContact;
 use App\Models\CrmTask;
+use App\Models\CrmTaskComment;
 use App\Models\User;
 use App\Services\Console\ConsoleFeed;
 use App\Services\Console\TaskLine;
@@ -31,7 +32,7 @@ class CrmTaskController extends Controller
     {
         $tasks = CrmTask::query()
             ->active()
-            ->with(['assignee:id,name', 'contact:id,name,telegram'])
+            ->with(['assignee:id,name', 'contact:id,name,telegram', 'comments.user:id,name'])
             ->byDueDate()
             ->get();
 
@@ -42,19 +43,19 @@ class CrmTaskController extends Controller
 
         $closed = CrmTask::query()
             ->where('status', 'done')
-            ->with(['assignee:id,name', 'contact:id,name,telegram'])
+            ->with(['assignee:id,name', 'contact:id,name,telegram', 'comments.user:id,name'])
             ->orderByDesc('completed_at')
             ->orderByDesc('id')
             ->get()
-            ->map(fn (CrmTask $task) => $this->closedRow($task))
+            ->map(fn (CrmTask $task) => $this->closedRow($task, $request->user()?->id))
             ->all();
 
         return Inertia::render('crm/Tasks', [
-            'columns' => $this->columns($tasks),
+            'columns' => $this->columns($tasks, $request->user()?->id),
             'closed' => $closed,
             'unowned' => $tasks
                 ->filter(fn (CrmTask $task) => $task->assigned_to_user_id === null)
-                ->map(fn (CrmTask $task) => $this->row($task))
+                ->map(fn (CrmTask $task) => $this->row($task, $request->user()?->id))
                 ->values()
                 ->all(),
             'stats' => [
@@ -147,7 +148,7 @@ class CrmTaskController extends Controller
      * @param  Collection<int, CrmTask>  $tasks
      * @return array<string, array<int, array<string, mixed>>>
      */
-    private function columns(Collection $tasks): array
+    private function columns(Collection $tasks, ?int $currentUserId): array
     {
         $tomorrow = CarbonImmutable::now()->addDay()->endOfDay();
 
@@ -160,14 +161,14 @@ class CrmTaskController extends Controller
                 default => 'later',
             };
 
-            $columns[$column][] = $this->row($task);
+            $columns[$column][] = $this->row($task, $currentUserId);
         }
 
         return $columns;
     }
 
     /** @return array<string, mixed> */
-    private function row(CrmTask $task): array
+    private function row(CrmTask $task, ?int $currentUserId): array
     {
         return [
             'id' => $task->id,
@@ -182,6 +183,8 @@ class CrmTaskController extends Controller
                 : null,
             'assignee' => $task->assignee?->name,
             'assignee_id' => $task->assigned_to_user_id,
+            'is_mine' => $task->assigned_to_user_id === $currentUserId,
+            'comments' => $this->comments($task, $currentUserId),
             'contact' => $task->contact === null ? null : [
                 'id' => $task->contact->id,
                 'name' => $task->contact->displayName(),
@@ -190,7 +193,7 @@ class CrmTaskController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function closedRow(CrmTask $task): array
+    private function closedRow(CrmTask $task, ?int $currentUserId): array
     {
         return [
             'id' => $task->id,
@@ -198,11 +201,24 @@ class CrmTaskController extends Controller
             'description' => $task->description,
             'completed_at' => $task->completed_at?->toIso8601String(),
             'assignee' => $task->assignee?->name,
+            'comments' => $this->comments($task, $currentUserId),
             'contact' => $task->contact === null ? null : [
                 'id' => $task->contact->id,
                 'name' => $task->contact->displayName(),
             ],
         ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function comments(CrmTask $task, ?int $currentUserId): array
+    {
+        return $task->comments->map(fn (CrmTaskComment $comment) => [
+            'id' => $comment->id,
+            'body' => $comment->body,
+            'author' => $comment->user->name,
+            'is_mine' => $comment->user_id === $currentUserId,
+            'created_at' => $comment->created_at->toIso8601String(),
+        ])->all();
     }
 
     /** @param Collection<int, CrmTask> $done */

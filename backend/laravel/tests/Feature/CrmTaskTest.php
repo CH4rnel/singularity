@@ -2,6 +2,7 @@
 
 use App\Models\CrmContact;
 use App\Models\CrmTask;
+use App\Models\CrmTaskComment;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -22,6 +23,7 @@ test('guests and non-operators cannot reach tasks', function () {
     $this->actingAs($stranger)->get(route('crm.tasks.index'))->assertNotFound();
     $this->actingAs($stranger)->post(route('crm.tasks.store'), ['title' => 'x'])->assertNotFound();
     $this->actingAs($stranger)->put(route('crm.tasks.update', $task), ['status' => 'done'])->assertNotFound();
+    $this->actingAs($stranger)->post(route('crm.tasks.comments.store', $task), ['body' => 'Nope'])->assertNotFound();
     $this->actingAs($stranger)->delete(route('crm.tasks.destroy', $task))->assertNotFound();
 
     expect($task->fresh()->status)->toBe('open');
@@ -52,6 +54,7 @@ test('the board sorts tasks into late, now and later, and lifts out the unowned'
             ->where('columns.overdue.0.title', 'Rotate relayer key')
             ->has('columns.soon', 1)
             ->where('columns.soon.0.contact.name', 'Alice')
+            ->where('columns.soon.0.is_mine', true)
             ->has('columns.later', 1)
             ->has('closed', 1)
             // Work nobody owns is a state, not a row with an empty column.
@@ -61,6 +64,50 @@ test('the board sorts tasks into late, now and later, and lifts out the unowned'
             ->where('stats.unowned', 2)
             ->where('options.assignees.0.id', $operator->id)
         );
+});
+
+test('operators can comment on tasks and comments appear with their authors', function () {
+    $operator = User::factory()->crmAdmin()->create(['name' => 'Lain']);
+    $task = CrmTask::factory()->assignedTo($operator)->standalone()->create();
+
+    $this->actingAs($operator)
+        ->post(route('crm.tasks.comments.store', $task), [
+            'body' => "Первая строка\nВторая строка",
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    $comment = CrmTaskComment::query()->sole();
+
+    expect($comment->user_id)->toBe($operator->id)
+        ->and($comment->body)->toBe("Первая строка\nВторая строка");
+
+    $this->actingAs($operator)
+        ->get(route('crm.tasks.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('columns.later.0.comments', 1)
+            ->where('columns.later.0.comments.0.author', 'Lain')
+            ->where('columns.later.0.comments.0.is_mine', true)
+            ->where('columns.later.0.comments.0.body', "Первая строка\nВторая строка")
+        );
+});
+
+test('task comments are validated and cascade when the task is deleted', function () {
+    $operator = User::factory()->crmAdmin()->create();
+    $task = CrmTask::factory()->standalone()->create();
+
+    $this->actingAs($operator)
+        ->post(route('crm.tasks.comments.store', $task), ['body' => ''])
+        ->assertSessionHasErrors('body');
+
+    $comment = CrmTaskComment::factory()->create([
+        'crm_task_id' => $task->id,
+        'user_id' => $operator->id,
+    ]);
+
+    $task->delete();
+
+    $this->assertDatabaseMissing('crm_task_comments', ['id' => $comment->id]);
 });
 
 test('an unowned task is taken with one button', function () {
@@ -159,6 +206,31 @@ test('tasks can be reassigned and unassigned', function () {
         ->assertRedirect();
 
     expect($task->fresh()->assigned_to_user_id)->toBeNull();
+});
+
+test('a task can be edited with a multiline description, due date and assignee', function () {
+    $operator = User::factory()->crmAdmin()->create();
+    $other = secondOperator();
+    $task = CrmTask::factory()->standalone()->create();
+
+    $this->actingAs($operator)
+        ->put(route('crm.tasks.update', $task), [
+            'title' => 'Обновлённая задача',
+            'description' => "Первая строка\nВторая строка",
+            'priority' => 'high',
+            'due_at' => '2026-09-15',
+            'assigned_to_user_id' => $other->id,
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    $task->refresh();
+
+    expect($task->title)->toBe('Обновлённая задача')
+        ->and($task->description)->toBe("Первая строка\nВторая строка")
+        ->and($task->priority)->toBe('high')
+        ->and($task->due_at->toDateString())->toBe('2026-09-15')
+        ->and($task->assigned_to_user_id)->toBe($other->id);
 });
 
 test('a user outside the crm allow list cannot be assigned a task', function () {

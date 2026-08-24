@@ -28,12 +28,22 @@ type Task = {
     overdue_days: number | null;
     assignee: string | null;
     assignee_id: number | null;
+    is_mine: boolean;
+    comments: TaskComment[];
     contact: { id: number; name: string } | null;
+};
+
+type TaskComment = {
+    id: number;
+    body: string;
+    author: string;
+    is_mine: boolean;
+    created_at: string;
 };
 
 type ClosedTask = Pick<
     Task,
-    'id' | 'title' | 'description' | 'assignee' | 'contact'
+    'id' | 'title' | 'description' | 'assignee' | 'contact' | 'comments'
 > & {
     completed_at: string | null;
 };
@@ -66,6 +76,8 @@ const edit = useForm({
     due_at: '',
     assigned_to_user_id: null as number | null,
 });
+const commentingTaskId = ref<number | null>(null);
+const comment = useForm({ body: '' });
 
 const COLUMNS = [
     { key: 'overdue', tone: 'critical' },
@@ -141,6 +153,34 @@ function remove(task: Pick<Task, 'id' | 'title'>) {
     }
 
     router.delete(tasks.destroy.url(task.id), { preserveScroll: true });
+}
+
+function submitComment(task: Pick<Task, 'id'>) {
+    if (!comment.body.trim() || comment.processing) {
+        return;
+    }
+
+    comment.post(tasks.comments.store.url(task.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            comment.reset();
+            commentingTaskId.value = null;
+        },
+    });
+}
+
+function toggleComment(task: Pick<Task, 'id'>) {
+    commentingTaskId.value =
+        commentingTaskId.value === task.id ? null : task.id;
+    comment.clearErrors();
+    comment.reset();
+}
+
+function commentTime(value: string): string {
+    return new Intl.DateTimeFormat(tag.value, {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    }).format(new Date(value));
 }
 
 function reopen(task: Pick<Task, 'id'>) {
@@ -405,48 +445,56 @@ const footer = computed(() =>
                                     class="task-edit__control task-edit__title"
                                     :aria-label="t('tasks.field.title')"
                                 />
-                                <textarea
-                                    v-model="edit.description"
-                                    class="task-edit__control task-edit__description"
-                                    :placeholder="t('tasks.field.description')"
-                                    rows="3"
-                                />
-                                <div class="task-edit__fields">
-                                    <select
-                                        v-model="edit.priority"
-                                        class="task-edit__control"
-                                        :aria-label="t('tasks.field.priority')"
-                                    >
-                                        <option
-                                            v-for="priority in options.priorities"
-                                            :key="priority"
-                                            :value="priority"
-                                        >
-                                            {{ t(`priority.${priority}`) }}
-                                        </option>
-                                    </select>
-                                    <input
-                                        v-model="edit.due_at"
-                                        class="task-edit__control"
-                                        type="date"
-                                        :aria-label="t('tasks.field.due')"
+                                <label class="task-edit__label">
+                                    {{ t('tasks.field.description') }}
+                                    <textarea
+                                        v-model="edit.description"
+                                        class="task-edit__control task-edit__description"
+                                        rows="4"
                                     />
-                                    <select
-                                        v-model="edit.assigned_to_user_id"
-                                        class="task-edit__control"
-                                        :aria-label="t('tasks.field.assignee')"
-                                    >
-                                        <option :value="null">
-                                            {{ t('tasks.nobody') }}
-                                        </option>
-                                        <option
-                                            v-for="assignee in options.assignees"
-                                            :key="assignee.id"
-                                            :value="assignee.id"
+                                </label>
+                                <div class="task-edit__fields">
+                                    <label class="task-edit__label">
+                                        {{ t('tasks.field.priority') }}
+                                        <select
+                                            v-model="edit.priority"
+                                            class="task-edit__control"
                                         >
-                                            {{ assignee.name }}
-                                        </option>
-                                    </select>
+                                            <option
+                                                v-for="priority in options.priorities"
+                                                :key="priority"
+                                                :value="priority"
+                                            >
+                                                {{ t(`priority.${priority}`) }}
+                                            </option>
+                                        </select>
+                                    </label>
+                                    <label class="task-edit__label">
+                                        {{ t('tasks.field.due') }}
+                                        <input
+                                            v-model="edit.due_at"
+                                            class="task-edit__control"
+                                            type="date"
+                                        />
+                                    </label>
+                                    <label class="task-edit__label">
+                                        {{ t('tasks.field.assignee') }}
+                                        <select
+                                            v-model="edit.assigned_to_user_id"
+                                            class="task-edit__control"
+                                        >
+                                            <option :value="null">
+                                                {{ t('tasks.nobody') }}
+                                            </option>
+                                            <option
+                                                v-for="assignee in options.assignees"
+                                                :key="assignee.id"
+                                                :value="assignee.id"
+                                            >
+                                                {{ assignee.name }}
+                                            </option>
+                                        </select>
+                                    </label>
                                 </div>
                                 <p
                                     v-if="edit.errors.title"
@@ -498,7 +546,10 @@ const footer = computed(() =>
                                 </p>
                                 <div class="task-card__meta">
                                     <span
-                                        class="mk-m"
+                                        class="mk-m task-assignee"
+                                        :class="{
+                                            'task-assignee--mine': task.is_mine,
+                                        }"
                                         style="font-size: 11px"
                                         :style="{
                                             color: task.assignee
@@ -547,6 +598,79 @@ const footer = computed(() =>
                                     </button>
                                 </div>
                             </template>
+                            <div
+                                v-if="task.comments.length"
+                                class="task-comments"
+                            >
+                                <article
+                                    v-for="item in task.comments"
+                                    :key="item.id"
+                                    class="task-comment"
+                                >
+                                    <div class="task-comment__meta mk-m">
+                                        <span
+                                            :class="{
+                                                'task-assignee--mine':
+                                                    item.is_mine,
+                                            }"
+                                            >{{ item.author }}</span
+                                        >
+                                        <time :datetime="item.created_at">{{
+                                            commentTime(item.created_at)
+                                        }}</time>
+                                    </div>
+                                    <p>{{ item.body }}</p>
+                                </article>
+                            </div>
+                            <form
+                                v-if="commentingTaskId === task.id"
+                                class="task-comment-form"
+                                @submit.prevent="submitComment(task)"
+                            >
+                                <textarea
+                                    v-model="comment.body"
+                                    class="task-edit__control"
+                                    :placeholder="
+                                        t('tasks.comment.placeholder')
+                                    "
+                                    rows="3"
+                                />
+                                <span
+                                    v-if="comment.errors.body"
+                                    class="task-compose__error"
+                                    >{{ comment.errors.body }}</span
+                                >
+                                <div class="task-card__actions">
+                                    <button
+                                        type="submit"
+                                        class="mk-btn mk-act"
+                                        :disabled="
+                                            comment.processing ||
+                                            !comment.body.trim()
+                                        "
+                                    >
+                                        {{ t('tasks.comment.send') }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="mk-btn mk-ghost"
+                                        @click="toggleComment(task)"
+                                    >
+                                        {{ t('tasks.cancel') }}
+                                    </button>
+                                </div>
+                            </form>
+                            <button
+                                v-else
+                                type="button"
+                                class="mk-btn mk-ghost task-comment-toggle"
+                                @click="toggleComment(task)"
+                            >
+                                {{ t('tasks.comment.add') }}
+                                <span v-if="task.comments.length">{{
+                                    num(task.comments.length)
+                                }}</span>
+                            </button>
                         </div>
                     </div>
                     <p
@@ -575,6 +699,26 @@ const footer = computed(() =>
                     <p v-if="task.description" class="mk-t3">
                         {{ task.description }}
                     </p>
+                    <div v-if="task.comments.length" class="task-comments">
+                        <article
+                            v-for="item in task.comments"
+                            :key="item.id"
+                            class="task-comment"
+                        >
+                            <div class="task-comment__meta mk-m">
+                                <span
+                                    :class="{
+                                        'task-assignee--mine': item.is_mine,
+                                    }"
+                                    >{{ item.author }}</span
+                                >
+                                <time :datetime="item.created_at">{{
+                                    commentTime(item.created_at)
+                                }}</time>
+                            </div>
+                            <p>{{ item.body }}</p>
+                        </article>
+                    </div>
                     <div class="task-card__meta mk-m mk-t3">
                         <time :datetime="task.completed_at ?? undefined">{{
                             completedAt(task)
@@ -701,6 +845,20 @@ const footer = computed(() =>
     overflow-wrap: anywhere;
 }
 
+.task-card p,
+.task-unowned-card p {
+    white-space: pre-wrap;
+}
+
+.task-assignee {
+    padding: 2px 5px;
+}
+
+.task-assignee--mine {
+    color: var(--mk-accent) !important;
+    background: rgba(0, 229, 209, 0.1);
+}
+
 .task-card__actions {
     display: flex;
     flex-wrap: wrap;
@@ -726,6 +884,15 @@ const footer = computed(() =>
     font: inherit;
 }
 
+.task-edit__label {
+    display: grid;
+    gap: 5px;
+    color: var(--mk-faint);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .task-edit__title {
     font-size: 13px;
     font-weight: 500;
@@ -739,6 +906,46 @@ const footer = computed(() =>
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+}
+
+.task-comments {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(232, 236, 236, 0.08);
+}
+
+.task-comment {
+    padding-left: 9px;
+    border-left: 2px solid rgba(0, 229, 209, 0.22);
+}
+
+.task-comment p {
+    margin: 4px 0 0;
+    color: var(--mk-dim);
+    font-size: 11.5px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.task-comment__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--mk-faint);
+    font-size: 10px;
+}
+
+.task-comment-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.task-comment-toggle {
+    height: 24px;
+    margin-top: 8px;
 }
 
 .task-compose__mark {

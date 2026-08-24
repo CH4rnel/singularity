@@ -26,6 +26,7 @@ use App\Http\Controllers\ConsoleNumbersController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmNoteController;
+use App\Http\Controllers\CrmTaskCommentController;
 use App\Http\Controllers\CrmTaskController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\DownloadController;
@@ -500,6 +501,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
         Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');
         Route::put('tasks/{task}', [CrmTaskController::class, 'update'])->name('tasks.update');
+        Route::post('tasks/{task}/comments', [CrmTaskCommentController::class, 'store'])->name('tasks.comments.store');
         Route::post('tasks/{task}/claim', [CrmTaskController::class, 'claim'])->name('tasks.claim');
         Route::delete('tasks/{task}', [CrmTaskController::class, 'destroy'])->name('tasks.destroy');
 
