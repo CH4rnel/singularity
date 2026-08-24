@@ -218,6 +218,7 @@ Two usage sources were deliberately removed after they proved misleading:
 | `app/Services/Console/ServiceStrips.php` | a day per service, one cell an hour |
 | `resources/js/pages/crm/Machines.vue` | the machine lens of the console (en/ru) |
 | `scripts/ops/heartbeat.sh` | the host reporter |
+| `scripts/ops/logrotate-cyberia-crons` | bounded retention for host cron logs |
 
 Nothing in `ServiceProbe` signs, writes, funds, restarts or repairs anything.
 It runs unattended every five minutes, which is exactly the kind of job that
@@ -263,6 +264,22 @@ OPS_HEARTBEAT_PRINT=1 OPS_HEARTBEAT_TOKEN=x cyberia-heartbeat
 With no token configured the endpoint 404s and every host-side check reads
 `unknown`. That is intentional: an open ingest would let anyone declare a dead
 host healthy, and it would be believed.
+
+### Cron log rotation
+
+The chat-token and Telegram reward crons append to host files that the
+heartbeat age-checks. `scripts/python/distribute-chats.sh` applies the shared
+rotation policy before each distribution, so a normal cron run is enough to
+activate it after deploy. To clear an already oversized log immediately:
+
+```bash
+logrotate -f --state /var/lib/logrotate/cyberia-crons.status \
+    /root/singularity/scripts/ops/logrotate-cyberia-crons
+```
+
+The policy rotates daily or early at 32 MB, retains 14 compressed generations
+and uses `copytruncate` because cron already has the current file open. A
+rotation failure never blocks token distribution.
 
 ### Adding a service
 
