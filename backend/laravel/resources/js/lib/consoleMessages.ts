@@ -287,8 +287,7 @@ export const consoleMessages: Messages = {
         'tasks.stats':
             '{open} open · {overdue} overdue · {unowned} with no owner',
         'tasks.done': 'Completed',
-        'tasks.quickAdd':
-            'write to the whale about bridge limits @lain !tomorrow #Nakamoto',
+        'tasks.quickAdd': 'What needs to be done?',
         'tasks.quickAddHint':
             '@ assignee · ! due · # person — parsed as you type, no mouse needed',
         'tasks.unowned': 'With no owner',
@@ -985,8 +984,7 @@ export const consoleMessages: Messages = {
         'tasks.stats':
             '{open} открытых · {overdue} просрочены · {unowned} без исполнителя',
         'tasks.done': 'Сделанные',
-        'tasks.quickAdd':
-            'написать киту про лимиты моста @lain !завтра #Nakamoto',
+        'tasks.quickAdd': 'Что нужно сделать?',
         'tasks.quickAddHint':
             '@ исполнитель · ! срок · # человек — разбирается на лету, мышь не нужна',
         'tasks.unowned': 'Ничьи',
