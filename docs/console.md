@@ -178,6 +178,16 @@ insists on is that the record names somebody: every column is nullable, and a
 row with no name, no handle and no address can never be searched, written to
 or recognised again.
 
+A **handle** may not be entered twice: an account is one person, and
+`@fomo_person` typed onto a second record is the first record again — easy to
+do in a handful, hard to notice later, and the two halves then age apart. An
+**address** may. It is a place value sits, and more than one person can stand
+behind one — an exchange deposit address, a shared or custodial wallet, a whale
+whose leads are filed separately — so refusing the second record there refuses
+a fact about the world and loses the entry with it. Saying "these are one
+person" is the identity graph's job: it joins records through the address they
+share and prints each on the other's dossier, with the evidence.
+
 **Correcting.** Half of a dossier is what happened and is a log; the other half
 is what somebody told us, and that half ages — a handle changes, a lead becomes
 a customer. So exactly the told half opens in place inside "Кто это"

@@ -244,6 +244,66 @@ test('a person already on the books is not added twice', function () {
     expect(CrmContact::count())->toBe(1);
 });
 
+test('several records may stand behind one address, and the dossier says so', function () {
+    /*
+     * An address is not an account. More than one person can stand behind
+     * one — an exchange deposit address, a shared or custodial wallet, a
+     * whale whose leads are filed separately — so refusing the second record
+     * refused a fact about the world, and the entry with it.
+     *
+     * Saying "these are one person" is the identity graph's job, and it does
+     * it through the address they share: both dossiers name the other.
+     */
+    $user = User::factory()->crmAdmin()->create();
+    $solana = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+    $evm = '0x'.str_repeat('a', 40);
+
+    $whale = CrmContact::factory()->create([
+        'name' => 'Кит',
+        'type' => 'whale',
+        'solana_address' => $solana,
+        'evm_address' => $evm,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('crm.store'), [
+            'name' => 'Лид за тем же кошельком',
+            'solana_address' => $solana,
+            'evm_address' => $evm,
+            'type' => 'lead',
+            'status' => 'new',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect(CrmContact::count())->toBe(2);
+
+    $lead = CrmContact::query()->where('name', 'Лид за тем же кошельком')->sole();
+
+    // And the other direction: putting the address onto a record that exists.
+    $second = CrmContact::factory()->create(['name' => 'Второй лид', 'solana_address' => null]);
+
+    $this->actingAs($user)
+        ->put(route('crm.update', $second), [
+            'name' => 'Второй лид',
+            'solana_address' => $solana,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($second->refresh()->solana_address)->toBe($solana);
+
+    $this->actingAs($user)
+        ->get(route('crm.show', $whale))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where(
+                'identity.same',
+                fn ($same) => collect($same)->pluck('id')->sort()->values()->all()
+                    === collect([$lead->id, $second->id])->sort()->values()->all(),
+            ));
+});
+
 test('a record keeps its own handle when it is edited', function () {
     $user = User::factory()->crmAdmin()->create();
     $contact = CrmContact::factory()->create(['x_handle' => 'fomo_person']);
