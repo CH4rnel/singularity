@@ -289,7 +289,7 @@ export const consoleMessages: Messages = {
         'tasks.done': 'Completed',
         'tasks.quickAdd': 'What needs to be done?',
         'tasks.quickAddHint':
-            '@ assignee · ! due · # person — parsed as you type, no mouse needed',
+            'Assignee, due date and contact can be added after creation',
         'tasks.unowned': 'With no owner',
         'tasks.unownedNote':
             'nobody picks these up by themselves — that is a state, not a line in a list',
@@ -986,7 +986,7 @@ export const consoleMessages: Messages = {
         'tasks.done': 'Сделанные',
         'tasks.quickAdd': 'Что нужно сделать?',
         'tasks.quickAddHint':
-            '@ исполнитель · ! срок · # человек — разбирается на лету, мышь не нужна',
+            'Исполнителя, срок и контакт можно добавить после создания',
         'tasks.unowned': 'Ничьи',
         'tasks.unownedNote':
             'никто не возьмёт сам — это состояние, а не строчка в списке',
