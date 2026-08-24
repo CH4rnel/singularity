@@ -10,9 +10,55 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.11.0'),
+    'current_version' => env('APP_VERSION', 'v0.13.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.13.0',
+            'date' => '2026-08-21',
+            'title' => 'From first open to a funded wallet',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'A product analytics view follows the path from a first open to a wallet that has actually received funds. Operators can see where people stop, compare platforms, versions and campaigns, and inspect one anonymous journey without collecting a seed phrase, private key or transaction contents.',
+                    ],
+                ],
+                [
+                    'label' => 'Fixed',
+                    'items' => [
+                        'Installing Cyberia from an iPhone now opens the wallet from its home-screen icon. Safari used to install the whole site with the landing page as its start screen, even when the icon was added from the wallet.',
+                    ],
+                ],
+            ],
+        ],
+        [
+            'version' => 'v0.12.0',
+            'date' => '2026-08-16',
+            'title' => 'The wallet stops sending you elsewhere',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'You can move a token on Cyberia without holding the coin the fee is paid in. An address with USDC and no CYBER used to be stuck looking at money it could not send; now the wallet can ask the gas station for enough CYBER to cover the fee, and once it arrives you sign your own transaction exactly as before. It is a small amount, once in a while, for addresses that already have something here — the wallet shows what is left in the tank and where you stand before you ask.',
+                        'Farming, in the wallet. The pools, what you have staked, what it has earned and a button to take it, without leaving for the exchange. Staking, unstaking and claiming are three separate things you agree to, and permission to spend is asked for exactly what you are staking and nothing beyond it.',
+                        'Bridging, in the wallet. The destination address is already your own on the other chain, which is the reason this belongs in a wallet at all. Every route stays on the list: one this wallet cannot sign for tells you why instead of failing somewhere in the middle.',
+                        'The Wired — what actually runs on this chain, in one place, and a plain answer to how a page and a wallet talk to each other.',
+                        'A page that names who answers for each network: the address your wallet asks for balances and history, network by network, and what your app can honestly do about the route those requests take.',
+                        'An inference API for $LAIN holders, at cyberia.church/api/ai/v1. It speaks the same language as the tools you already point at other providers, so most of them need only a new address and key. Access is a holding rather than a subscription: an address signs once for a key, and the key works for as long as the holding does — sell, and it closes by itself.',
+                        'The desktop app downloads torrents. It is the one thing the site cannot do from a browser tab, so it lives in the app: nothing opens a connection until you agree once in a dialog no web page can draw, and that dialog says plainly that peers see your IP address and that the app\'s proxy setting does not cover this traffic.',
+                        'The desktop app has a window of its own — the menus, the page title and the window buttons in one slim bar in the app\'s own colours, instead of the frame your desktop puts around everything else.',
+                    ],
+                ],
+                [
+                    'label' => 'Fixed',
+                    'items' => [
+                        'Everything that reads Solana from your browser works again. Your Solana balance in the wallet, the bridge\'s balances and staking all went blank at the same moment, because the public Solana network answers servers and refuses browsers — it was never down, and from this side it looked like an outage nobody could find. Those reads now go through Cyberia and across several providers, so one of them running out of credit costs a moment instead of a page.',
+                        'The chat\'s Solana posts and the daily digest went quiet for a day when a key behind them expired. Both now walk several sources rather than trusting one, and a digest Telegram refuses to render is sent as plain text instead of being retried into silence every minute.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.11.0',
             'date' => '2026-08-12',

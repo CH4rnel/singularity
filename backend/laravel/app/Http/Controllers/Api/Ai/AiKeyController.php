@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Self-service keys for the inference API.
@@ -61,12 +62,19 @@ class AiKeyController extends Controller
             'address' => ['required', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
             'signature' => ['required', 'string'],
             'name' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'client' => ['sometimes', 'string', Rule::in(AiApiKey::CLIENTS)],
+            'instance_id' => ['exclude_unless:client,'.AiApiKey::CLIENT_LAINOS, 'required_if:client,'.AiApiKey::CLIENT_LAINOS, 'uuid'],
         ]);
 
         $address = $this->prove($data['address'], $data['signature']);
         $status = $this->gate->assert($address);
 
-        ['key' => $key, 'token' => $token] = $this->keys->issue($address, $data['name'] ?? null);
+        ['key' => $key, 'token' => $token] = $this->keys->issue(
+            $address,
+            $data['name'] ?? null,
+            client: $data['client'] ?? AiApiKey::CLIENT_API,
+            instanceId: $data['instance_id'] ?? null,
+        );
 
         return response()->json([
             'key' => $token,

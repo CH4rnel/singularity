@@ -4,6 +4,7 @@ import HoldButton from '@/components/wallet/HoldButton.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { analytics, errorCode } from '@/lib/analytics';
 import {
     ERC20_TRANSFER_GAS_CAP,
     formatUnits,
@@ -393,6 +394,19 @@ watch([direction, sourceWalletChain, deposit], async () => {
             depositIsContract.value = true;
         }
     }
+
+    // A corridor whose cost this screen can actually state. The step between
+    // opening the bridge and having a price is where "which chains do you
+    // support" turns into "what will this cost me", and a corridor that never
+    // reaches it is either closed or unreadable.
+    if (gasPrice.value !== null && route.value) {
+        analytics.track('bridge_quote_received', {
+            chain,
+            from_chain: route.value.source,
+            to_chain: route.value.destination,
+            asset: symbol.value ?? undefined,
+        });
+    }
 });
 
 const setMax = (): void => {
@@ -431,6 +445,28 @@ const sentence = computed(() => {
 
 /* -------------------------------------------------------------- signing -- */
 
+/**
+ * A corridor, an asset and roughly what it is worth. Never the recipient —
+ * that is an address on another chain, and the whole reason the wallet fills
+ * it in for you is that it is yours.
+ */
+const traits = () => ({
+    chain: sourceWalletChain.value ?? undefined,
+    from_chain: route.value?.source ?? undefined,
+    to_chain: route.value?.destination ?? undefined,
+    asset: symbol.value ?? undefined,
+    transaction_type: 'bridge' as const,
+    amount_usd:
+        usdValue(
+            amountUnits.value,
+            decimals.value,
+            sourceWalletChain.value
+                ? (props.prices[sourceWalletChain.value] ?? null)
+                : null,
+        ) ?? undefined,
+    fee_usd: networkFeeUsd.value ?? undefined,
+});
+
 const sign = async (): Promise<void> => {
     const chain = sourceWalletChain.value;
     const chainId = sourceChain.value?.evmChainId ?? null;
@@ -453,6 +489,10 @@ const sign = async (): Promise<void> => {
     busy.value = true;
     error.value = null;
     done.value = null;
+
+    const startedAt = Date.now();
+
+    analytics.track('bridge_started', traits());
 
     const account = props.wallet.accounts.value.find(
         (entry) => entry.chain === chain,
@@ -482,6 +522,13 @@ const sign = async (): Promise<void> => {
             message: null,
         };
 
+        // The source leg is on chain. Everything after this is the relayer's,
+        // and it is a separate step precisely because it can fail on its own.
+        analytics.track('bridge_deposit_confirmed', {
+            ...traits(),
+            duration_ms: Date.now() - startedAt,
+        });
+
         const outcome = await submitBridge({
             direction: route.value.direction,
             token: symbol.value,
@@ -498,11 +545,29 @@ const sign = async (): Promise<void> => {
             message: outcome.message,
         };
 
+        /*
+         * "Completed" here means the deposit registered with the relayer, not
+         * that the payout landed — the wallet never learns that, and it says
+         * so on screen. A deposit that broadcast but failed to register is the
+         * failure worth counting, because it is the one that needs a human.
+         */
+        analytics.track(outcome.ok ? 'bridge_completed' : 'bridge_failed', {
+            ...traits(),
+            duration_ms: Date.now() - startedAt,
+            ...(outcome.ok ? {} : { error_code: 'server_refused' as const }),
+        });
+
         amount.value = '';
         await props.wallet.refreshBalances();
     } catch (failure) {
         error.value =
             failure instanceof Error ? failure.message : String(failure);
+
+        analytics.track('bridge_failed', {
+            ...traits(),
+            error_code: errorCode(failure),
+            duration_ms: Date.now() - startedAt,
+        });
     } finally {
         busy.value = false;
     }

@@ -10,7 +10,13 @@ Artisan::command('inspire', function () {
 
 Schedule::command('slots:expire-prepares')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('slots:import-pumpfun')->hourly()->withoutOverlapping();
+// The full import discovers new platform, bridge, CYBER.sol holder and whale
+// wallets. It includes a getProgramAccounts scan, so keep it off the hot path.
 Schedule::command('crm:sync')->daily()->withoutOverlapping();
+// Cached balances are much cheaper to read one wallet at a time. Refresh the
+// oldest batch so every known EVM/Solana wallet eventually cycles through,
+// even when the CRM grows beyond one batch.
+Schedule::command('crm:sync --balances-only --limit=100')->everyThirtyMinutes()->withoutOverlapping();
 // ~87 chunked eth_getLogs calls per run (1000-block node cap) — keep the
 // interval well above the runtime and never overlap.
 Schedule::command('dex:apr')->everyFifteenMinutes()->withoutOverlapping();
@@ -35,6 +41,10 @@ Schedule::command('predictions:resolve')->everyFiveMinutes()->withoutOverlapping
 // undelivered envelopes alike once they are past the retention window, so the
 // server stops holding a record of who talked to whom.
 Schedule::command('wallet:chat-prune')->daily()->withoutOverlapping();
+// The operators' room is a working record, not an archive: what was worth
+// keeping left it as a task. Files go with the message that brought them,
+// because a file whose reason has been deleted is an orphan on a disk.
+Schedule::command('crm:chat-prune')->daily()->withoutOverlapping();
 // The inference API's metering log is a quota and an invoice, not an archive
 // of who asked what — drop rows once they are past the retention window.
 Schedule::command('ai:prune-usage')->daily()->withoutOverlapping();
@@ -42,3 +52,16 @@ Schedule::command('ai:prune-usage')->daily()->withoutOverlapping();
 // button simply stops working, and nobody reports a wallet that never offered
 // them anything. Reads only, and it shouts at most once every six hours.
 Schedule::command('gas:station --alert')->hourly()->withoutOverlapping();
+// Funding that the browser never got to report: a wallet funded while closed,
+// a deposit that confirmed after the tab was gone. The activation funnel wants
+// those users most, because a wallet that was funded and never came back is
+// the drop-off worth fixing. Bounded per run and reads only.
+Schedule::command('analytics:verify-funding')->everyThirtyMinutes()->withoutOverlapping();
+// Is everything running. Reads only — it probes, records and reports, and can
+// restart nothing, which is what makes it safe to run unattended. Alerts fire
+// on state changes only, so a service that has been down for a week is
+// mentioned once a day rather than every five minutes.
+Schedule::command('services:check --alert')->everyFiveMinutes()->withoutOverlapping();
+// Thirty services swept every five minutes is ten thousand rows a day: a
+// rolling uptime window, never an archive.
+Schedule::command('services:prune')->dailyAt('04:10')->withoutOverlapping();

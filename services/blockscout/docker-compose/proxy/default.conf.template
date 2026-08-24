@@ -35,6 +35,14 @@ server {
     ssl_certificate /etc/letsencrypt/live/cyberia.church/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/cyberia.church/privkey.pem;
 
+    # The console's room (/crm/chat) takes files up to crm.chat.files.max_mb
+    # (25 MB), up to crm.chat.files.max_per_message (5) at a time, and refuses
+    # anything bigger in its own words. nginx defaults to 1m, which turned a
+    # 1.8 MB drop into a bare 413 with none of those reasons — so every layer
+    # under the room has to allow more than the room does. Scoped to this
+    # server: the explorer and the RPC have no business taking 128 MB bodies.
+    client_max_body_size 128m;
+
     location / {
         set                   $cyberia_church_upstream cyberia_church:9001;
         proxy_pass            http://$cyberia_church_upstream;
@@ -111,8 +119,8 @@ server {
     listen 443 ssl http2;
     server_name swap.cyberia.church;
 
-    ssl_certificate /etc/letsencrypt/live/cyberia.church/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/cyberia.church/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/swap.cyberia.church/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/swap.cyberia.church/privkey.pem;
 
     root /usr/share/nginx/dex;
     index index.html;

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { consoleMessages } from '@/lib/consoleMessages';
 import { downloadMessages } from '@/lib/downloadMessages';
 import { progressMessages } from '@/lib/progressMessages';
 import { walletMessages } from '@/lib/walletMessages';
@@ -19,6 +20,9 @@ const DICTS = {
     walletMessages,
     downloadMessages,
     progressMessages,
+    // Operator-facing and therefore en/ru only, but the failure mode is the
+    // same one: a Russian console with an English cell in the middle of it.
+    consoleMessages,
 };
 
 const placeholders = (message) =>

@@ -1,0 +1,22 @@
+{
+  "as_of": "2026-08-20T08:10:08Z",
+  "mint": "E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+  "pump": {
+    "source": "https://frontend-api-v3.pump.fun/coins/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+    "market_cap_sol": 278.07065613066027,
+    "market_cap_usd": 24217.27407085178,
+    "complete": true
+  },
+  "dexscreener": {
+    "source": "https://api.dexscreener.com/latest/dex/tokens/E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+    "pair_address": "Dk19ZrUAJLW2e6Ra1qkaZk1pwb48y5cwQu6xfcFXYtEg",
+    "dex": "pumpswap",
+    "liquidity_usd": 12926.73,
+    "base_reserve_tokens": 276204357,
+    "quote_reserve_sol": 76.8043,
+    "volume_24h_usd": 220.93,
+    "buys_24h": 3,
+    "sells_24h": 3,
+    "holders_public_page": 187
+  }
+}

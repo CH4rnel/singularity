@@ -23,7 +23,7 @@ email: rtutin@pm.me
 description: >- # this means to ignore newlines until "baseurl:"
   A signal log from Cyberia — where software, crypto, and ideology merge into infrastructure.
 baseurl: "" # the subpath of your site, e.g. /blog
-url: "https://cyberia-temple.github.io" # the base hostname & protocol for your site, e.g. http://example.com
+url: "https://blog.cyberia.church" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: cyberia_chain
 github_username:  cyberia-temple/singularity
 

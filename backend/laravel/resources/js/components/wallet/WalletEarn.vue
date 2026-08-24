@@ -4,6 +4,7 @@ import HoldButton from '@/components/wallet/HoldButton.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { analytics, errorCode } from '@/lib/analytics';
 import { aprByPair, formatApr } from '@/lib/dexApr';
 import type { AprSnapshot, FarmApr } from '@/lib/dexApr';
 import { formatUnits, parseUnits, walletChain } from '@/lib/wallet';
@@ -388,6 +389,32 @@ const sentence = computed(() => {
     });
 });
 
+/**
+ * Which pool and which of the three agreements. The pool travels as its `pid`
+ * rather than its label — a label is user-facing text that changes, and a pid
+ * is what the chef actually calls it.
+ */
+const traits = () => ({
+    chain: active.value,
+    pid: pool.value?.pid,
+    pool_kind: (pool.value?.isPair ? 'pair' : 'solo') as 'pair' | 'solo',
+    transaction_type: (
+        act.value === 'claim'
+            ? 'claim'
+            : act.value === 'stake'
+              ? 'stake'
+              : 'unstake'
+    ) as 'claim' | 'stake' | 'unstake',
+    fee_usd: feeUsd.value ?? undefined,
+});
+
+/** Which event a completed act produces — three acts, three funnels. */
+const COMPLETED = {
+    stake: 'staking_completed',
+    unstake: 'staking_withdrawn',
+    claim: 'reward_claimed',
+} as const;
+
 const sign = async (): Promise<void> => {
     const entry = pool.value;
     const chainId = chainMeta.value.chainId;
@@ -399,6 +426,11 @@ const sign = async (): Promise<void> => {
     busy.value = true;
     error.value = null;
     sent.value = null;
+
+    const startedAt = Date.now();
+    const acting = act.value;
+
+    analytics.track('staking_started', traits());
 
     try {
         const receipt =
@@ -430,12 +462,23 @@ const sign = async (): Promise<void> => {
         };
         amount.value = '';
 
+        analytics.track(COMPLETED[acting], {
+            ...traits(),
+            duration_ms: Date.now() - startedAt,
+        });
+
         // The position on screen belongs to the block before this one.
         await load();
         await props.wallet.refreshBalances();
     } catch (failure) {
         error.value =
             failure instanceof Error ? failure.message : String(failure);
+
+        analytics.track('staking_failed', {
+            ...traits(),
+            error_code: errorCode(failure),
+            duration_ms: Date.now() - startedAt,
+        });
     } finally {
         busy.value = false;
     }

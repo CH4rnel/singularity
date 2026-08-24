@@ -178,6 +178,20 @@
 
 /* ---------------------------------------------------------------- shell -- */
 
+/*
+ * The desktop shell has no title bar at all. Its wallet masthead is the one
+ * quiet drag surface; actual controls opt out so clicks remain clicks.
+ */
+html[data-native-shell='desktop'] .cw-masthead {
+    -webkit-app-region: drag;
+}
+
+html[data-native-shell='desktop']
+    .cw-masthead
+    :is(a, button, input, select, textarea) {
+    -webkit-app-region: no-drag;
+}
+
 .cw-shell {
     position: relative;
     display: flex;
@@ -282,6 +296,181 @@
     flex-direction: column;
     overflow-y: auto;
     padding: 20px;
+}
+
+/* ------------------------------------------------------- context bar --- */
+
+/*
+ * Which account, which network, at what price — and both of the first two
+ * changeable where they are stated. The panels below the bar expand in the
+ * flow instead of floating: `.cw-shell` clips its overflow, and a dropdown
+ * hanging out of a 46px bar would be cut off at exactly the height it needs.
+ */
+.cw-context {
+    flex: none;
+    border-bottom: 1px solid var(--cw-line);
+    background: var(--cw-app);
+}
+
+.cw-context-bar {
+    display: flex;
+    min-height: 54px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+}
+
+/* The rate the balances below are quoted at, never the whole sentence. */
+.cw-context-rate {
+    font: 400 11px/1 var(--cw-mono);
+    color: var(--cw-dim);
+    white-space: nowrap;
+}
+
+.cw-chip {
+    display: flex;
+    min-width: 0;
+    min-height: 42px;
+    max-width: 260px;
+    align-items: center;
+    gap: 9px;
+    padding: 0 10px;
+    border: 1px solid var(--cw-border-soft);
+    border-radius: 3px;
+    background: var(--cw-surface);
+    cursor: pointer;
+    text-align: left;
+}
+
+.cw-chip:hover {
+    border-color: var(--cw-border-hover);
+}
+
+.cw-chip-on {
+    border-color: var(--cw-accent);
+}
+
+/* A network is a mark and a ticker; it needs none of the account's width. */
+.cw-chip-tight {
+    flex: none;
+}
+
+.cw-chip-mark {
+    display: flex;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--cw-accent);
+}
+
+.cw-chip-name {
+    display: block;
+    overflow: hidden;
+    font: 500 12px/1.2 var(--cw-sans);
+    color: var(--cw-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cw-chip-sub {
+    display: block;
+    margin-top: 3px;
+    overflow: hidden;
+    font: 400 9px/1.3 var(--cw-mono);
+    letter-spacing: 0.12em;
+    color: var(--cw-dim);
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.cw-chip-net {
+    font: 500 11px/1 var(--cw-mono);
+    color: var(--cw-text);
+}
+
+.cw-chip-chev {
+    flex: none;
+    font: 400 10px/1 var(--cw-mono);
+    color: var(--cw-dim);
+}
+
+.cw-panel {
+    padding: 10px 14px 14px;
+    border-top: 1px solid var(--cw-line);
+    background: #08090b;
+}
+
+/*
+ * The list inside a panel scrolls rather than growing. A vault with eight
+ * networks would otherwise open a 470px menu above a 640px phone screen and
+ * push the screen it belongs to out of sight.
+ */
+.cw-panel-list {
+    display: flex;
+    max-height: 40vh;
+    flex-direction: column;
+    gap: 5px;
+    overflow-y: auto;
+}
+
+.cw-panel-close {
+    border: 0;
+    padding: 6px;
+    background: none;
+    font: 400 10px/1 var(--cw-mono);
+    color: var(--cw-faint);
+    cursor: pointer;
+}
+
+.cw-panel-close:hover {
+    color: var(--cw-text);
+}
+
+/* One row of a panel: pick this account, or pick this network. */
+.cw-pick {
+    display: flex;
+    min-height: 52px;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid var(--cw-hairline);
+    background: var(--cw-surface);
+    cursor: pointer;
+    text-align: left;
+}
+
+.cw-pick:hover {
+    border-color: var(--cw-border);
+}
+
+.cw-pick-on {
+    border-color: var(--cw-accent);
+    background: var(--cw-raised);
+}
+
+.cw-pick-mark {
+    flex: none;
+    width: 14px;
+    font: 400 10px/1 var(--cw-mono);
+    color: var(--cw-fainter);
+}
+
+.cw-pick-on .cw-pick-mark {
+    color: var(--cw-accent);
+}
+
+.cw-pick-usd {
+    flex: none;
+    font: 500 11px/1 var(--cw-mono);
+    color: var(--cw-body);
+}
+
+.cw-ghost-dashed {
+    border-style: dashed;
 }
 
 /*
@@ -735,6 +924,10 @@
     white-space: nowrap;
 }
 
+.cw-tab-icon {
+    flex: none;
+}
+
 @media (max-width: 429px) {
     .cw-tab {
         letter-spacing: 0.04em;
@@ -1086,9 +1279,36 @@
     margin-top: 12px;
 }
 
+/*
+ * The message is the wide element here and the button is a square.
+ *
+ * `.cw-btn` is `width: 100%` because everywhere else in this wallet it is the
+ * one action at the bottom of a screen — and in a flex row that width becomes
+ * the button's basis, so it took the whole line and left the composer a
+ * sliver with its own scrollbar. A composer is the opposite shape: the field
+ * grows, the send control never does.
+ */
 .cw-chat-form .cw-textarea {
-    flex: 1;
+    height: auto;
+    min-height: 48px;
+    /* ~5 lines. Past that the draft scrolls rather than eating the log. */
+    max-height: 136px;
+    min-width: 0;
+    /*
+     * Basis zero, not `auto`: `auto` would resolve to the `width: 100%` the
+     * base rule sets and put the field in the same fight the button just lost.
+     */
+    flex: 1 1 0;
+    padding: 13px 14px;
+    font: 400 13px/1.5 var(--cw-sans);
     margin: 0;
+}
+
+.cw-chat-send {
+    width: 48px;
+    height: 48px;
+    flex: none;
+    padding: 0;
 }
 
 .cw-spin {

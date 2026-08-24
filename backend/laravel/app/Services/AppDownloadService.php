@@ -33,9 +33,9 @@ use Throwable;
  */
 class AppDownloadService
 {
-    // Bumped with the payload shape: a v1 entry has no `reachable` key, and a
-    // deploy would spend the rest of the hour reading it as an outage.
-    private const CACHE_KEY = 'downloads.release.v2';
+    // Bumped after the 1.4 app release so a catalogue cached before publication
+    // cannot keep the public short links on the previous installers.
+    private const CACHE_KEY = 'downloads.release.v3';
 
     /**
      * The download catalogue, ready for the page and the JSON endpoint.

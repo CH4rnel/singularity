@@ -44,6 +44,12 @@ interface TelegramBackButton {
 
 export interface TelegramWebApp {
     initData: string;
+    /**
+     * Only ever read for `start_param`, the campaign payload a Mini App was
+     * opened with. Nothing else in here is touched: `initData` identifies a
+     * Telegram account, and this wallet does not want to know one.
+     */
+    initDataUnsafe?: { start_param?: string };
     version: string;
     platform: string;
     colorScheme: 'light' | 'dark';
@@ -132,6 +138,23 @@ export function isTelegramMiniApp(): boolean {
             typeof window.Telegram?.WebApp?.initData === 'string' &&
             window.Telegram.WebApp.platform !== 'unknown')
     );
+}
+
+/**
+ * The `startapp` payload a Mini App was opened with, or null.
+ *
+ * `t.me/<bot>/app?startapp=<value>` arrives here as `tgWebAppStartParam`, and
+ * inside a chat it is the only campaign channel there is — there is no URL bar
+ * to carry a `utm_source` and no referrer to read. Analytics treats it as the
+ * campaign name; see `lib/analytics/attribution.ts`.
+ */
+export function telegramStartParam(): string | null {
+    const value =
+        launchParams()?.tgWebAppStartParam ??
+        window.Telegram?.WebApp?.initDataUnsafe?.start_param ??
+        null;
+
+    return typeof value === 'string' && value !== '' ? value.slice(0, 100) : null;
 }
 
 /** Which Telegram client, for the few places it changes what is possible. */

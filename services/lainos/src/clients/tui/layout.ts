@@ -10,6 +10,7 @@ import {
   blank,
   concat,
   fitLine,
+  lineWidth,
   mdToLines,
   sp,
   stableMarkdown,
@@ -30,19 +31,41 @@ export interface ToolBlock {
 }
 export type Part = { kind: "text"; text: string } | { kind: "tool"; tool: ToolBlock };
 export type Role = "you" | "lain" | "sys" | "pulse";
-export type Turn = { id: string; role: Role; parts: Part[]; model?: string };
+export type Turn = { id: string; role: Role; parts: Part[]; model?: string; at?: number };
 
-/** The tail of a line that carries a click action. */
-export type FeedRegion = { kind: "tool"; toolId: string };
+/** What a click on a feed line does: expand a tool, or copy a block of text. */
+export type FeedRegion =
+  | { kind: "tool"; toolId: string }
+  | { kind: "copy"; text: string; label: string };
 
 const SPIN = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 export const spinnerChar = (frame: number): string => SPIN[frame % SPIN.length];
 // ---------------------------------------------------------------- banner
 
-export function bannerLines(theme: Theme, width: number): Line[] {
+/**
+ * The masthead. `compact` is the same identity in one row — used the moment a
+ * conversation starts, because nine rows of ASCII art above every reply is a
+ * hole in the middle of the screen, not a welcome.
+ */
+export function bannerLines(theme: Theme, width: number, compact = false): Line[] {
   const c = theme;
-  const wide = width >= BANNER[0].length;
+  const wide = width >= BANNER[0].length && !compact;
   const out: Line[] = [];
+  if (compact) {
+    const word = "LAIN OS";
+    const letters = word.split("").map((ch, i) => ({
+      t: ch,
+      c: lerpColor(c.gradFrom, c.gradTo, i / (word.length - 1)),
+      b: true,
+    }));
+    return [
+      truncateLine(
+        concat(letters, [sp(`  ${GLYPH.dot}  `, c.mutedDim)], [sp("the wired remembers", c.mutedDim)]),
+        width,
+      ),
+      blank(width),
+    ];
+  }
   if (wide) {
     BANNER.forEach((row, i) => {
       out.push([{ t: row, c: lerpColor(c.gradFrom, c.gradTo, BANNER.length <= 1 ? 0 : i / (BANNER.length - 1)) }]);
@@ -73,7 +96,29 @@ export function bootLines(theme: Theme, width: number): Line[] {
 
 // ------------------------------------------------------------------ turns
 
-function turnHeader(turn: Turn, theme: Theme): Line {
+/** Wall-clock hh:mm for a turn's header. */
+function clock(at: number): string {
+  const d = new Date(at);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Every visible character of a turn, as plain text — what a copy yields. */
+export function turnText(turn: Turn): string {
+  const out: string[] = [];
+  for (const part of turn.parts) {
+    if (part.kind === "text") {
+      if (part.text.trim()) out.push(part.text.trimEnd());
+    } else {
+      const args = fmtArgs(part.tool.input);
+      out.push(`${GLYPH.tool} ${part.tool.name}${args ? `  ${args}` : ""}`);
+      if (part.tool.summary) out.push(part.tool.summary);
+    }
+  }
+  return out.join("\n").trim();
+}
+
+function turnHeader(turn: Turn, theme: Theme, width: number): Line {
   const c = theme;
   const meta =
     turn.role === "you"
@@ -85,7 +130,13 @@ function turnHeader(turn: Turn, theme: Theme): Line {
           : { label: `${GLYPH.dot} sys`, color: c.mutedDim };
   const head: Line = [{ t: meta.label, c: meta.color, b: true }];
   if (turn.role === "lain" && turn.model) head.push(sp(` · ${turn.model}`, c.mutedDim));
-  return head;
+  // The time sits hard right, so the eye reads speaker on one edge and clock on
+  // the other instead of hunting through the sentence.
+  const time = turn.at ? clock(turn.at) : "";
+  if (!time) return head;
+  const pad = width - lineWidth(head) - time.length;
+  if (pad < 2) return head;
+  return concat(head, blank(pad), [sp(time, c.mutedDim)]);
 }
 
 function fmtArgs(input: Record<string, unknown>): string {
@@ -160,8 +211,13 @@ export function turnLines(
   spin: string,
 ): { lines: Line[]; regions: (FeedRegion | undefined)[] } {
   const c = theme;
-  const lines: Line[] = [turnHeader(turn, theme)];
-  const regions: (FeedRegion | undefined)[] = [undefined];
+  const whole = turnText(turn);
+  const lines: Line[] = [truncateLine(turnHeader(turn, theme, width), width)];
+  // Clicking the name copies everything under it — the reply you actually want,
+  // without dragging a mouse across a frame the app repaints under you.
+  const regions: (FeedRegion | undefined)[] = [
+    whole ? { kind: "copy", text: whole, label: turn.role === "lain" ? "lain's reply" : `the ${turn.role} line` } : undefined,
+  ];
   for (const part of turn.parts) {
     if (part.kind === "tool") {
       const block = part.tool;
@@ -178,22 +234,39 @@ export function turnLines(
         regions.push(tool.region);
       }
     } else if (part.text.trim()) {
+      // Code blocks report themselves line by line, so a click anywhere inside
+      // one copies exactly the code — not the prose around it.
+      const marks: (string | undefined)[] = [];
       const body =
         turn.role === "lain"
           ? stableMarkdown(part.text)
-            ? mdToLines(part.text.trimEnd(), theme, width)
+            ? mdToLines(part.text.trimEnd(), theme, width, marks)
             : wrapSpans([{ t: part.text, c: c.fg }], width)
           : plainBody(part.text.trimEnd(), theme, width, turn.role === "pulse" ? c.muted : turn.role === "sys" ? c.mutedDim : c.fg);
       lines.push(...body);
-      regions.push(...body.map(() => undefined));
+      regions.push(
+        ...body.map((_, i) => {
+          const code = marks[i];
+          return code ? ({ kind: "copy", text: code, label: "the code block" } as FeedRegion) : undefined;
+        }),
+      );
     }
   }
+  // One blank row between speakers: the transcript reads as a conversation
+  // rather than one long paragraph with names sprinkled through it.
+  lines.push(blank(width));
+  regions.push(undefined);
   return { lines, regions };
 }
 
 // --------------------------------------------------------------- sidebar
 
-export type SidebarRegion = { kind: "pick"; action: "model" | "effort" | "skin" };
+/** A clickable sidebar row: open a picker, or run one of the copy actions.
+ *  The actions have keys too, but an editor that hosts the terminal may eat
+ *  those (VS Code keeps ctrl+s for itself), and a click it cannot take. */
+export type SidebarRegion =
+  | { kind: "pick"; action: "model" | "effort" | "skin" }
+  | { kind: "act"; action: "select" | "copy" };
 
 export interface SidebarData {
   provider: string;
@@ -219,7 +292,12 @@ export function sidebarLines(
   const c = theme;
   const inner = Math.max(4, sidebarW - 2);
   const box = (l: Line): Line => concat([sp("│", c.border)], fitLine(l, inner), [sp("│", c.border)]);
-  const pickRow = (label: string, value: string, valColor: string, action: SidebarRegion["action"]): { line: Line; region?: SidebarRegion } => ({
+  const pickRow = (
+    label: string,
+    value: string,
+    valColor: string,
+    action: "model" | "effort" | "skin",
+  ): { line: Line; region?: SidebarRegion } => ({
     line: box(concat([sp(`${label} `, c.mutedDim)], [sp(value, valColor)])),
     region: { kind: "pick", action },
   });
@@ -229,6 +307,14 @@ export function sidebarLines(
   const gap: { line: Line; region?: SidebarRegion } = { line: box(blank(inner)) };
   const hintRow = (label: string, value: string): { line: Line; region?: SidebarRegion } => ({
     line: box(concat([sp(`${label} `, c.mutedDim)], [sp(value, c.muted)])),
+  });
+  const actRow = (
+    label: string,
+    value: string,
+    action: "select" | "copy",
+  ): { line: Line; region?: SidebarRegion } => ({
+    line: box(concat([sp(`${label} `, c.secondary)], [sp(value, c.muted)])),
+    region: { kind: "act", action },
   });
 
   const rowsList: { line: Line; region?: SidebarRegion }[] = [
@@ -247,10 +333,14 @@ export function sidebarLines(
     infoRow("topics", String(data.topics)),
     infoRow("skills", String(data.skills)),
     gap,
+    hintRow("alt+↵", "new line"),
+    hintRow("drag", "select · copies"),
+    actRow("freeze", "frame · ctrl+s", "select"),
+    actRow("copy", "last · ctrl+y", "copy"),
+    hintRow("click", "name → copy it"),
+    hintRow("click", "tool → expand"),
     hintRow("wheel", "scroll · pgup page"),
-    hintRow("click", "tool to expand"),
-    hintRow("x", "expand last tool"),
-    hintRow("alt↑↓", "input history"),
+    hintRow("ctrl+c", "twice to leave"),
   ];
 
   // Fill to `rows`, pushing the bottom border to the last screen row.

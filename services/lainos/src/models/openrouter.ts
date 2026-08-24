@@ -27,6 +27,8 @@ export const DEFAULT_OPENROUTER_MODELS: Record<ModelTier, string> = {
 
 export interface OpenRouterProviderOptions {
   apiKey: string;
+  /** Provider id exposed by LainOS when reusing this OpenAI-compatible client. */
+  name?: string;
   baseUrl?: string;
   models?: Partial<Record<ModelTier, string>>;
   /** Optional attribution headers OpenRouter shows on its dashboard. */
@@ -35,7 +37,6 @@ export interface OpenRouterProviderOptions {
   /** Optional HTTP(S) proxy for API traffic (hosts where openrouter.ai is blocked). */
   proxy?: string;
 }
-
 // Minimal shapes of the OpenAI-compatible chat completion response.
 // `reasoning`/`reasoning_content` carry a reasoning model's chain of thought;
 // it must never reach the user, so both are read and dropped.
@@ -140,7 +141,7 @@ function possibleTagTail(s: string): string {
  * LainOS (which speaks the Anthropic-style ToolSchema) is unchanged.
  */
 export class OpenRouterModelProvider implements ModelProvider {
-  readonly name = "openrouter";
+  readonly name: string;
   private apiKey: string;
   private baseUrl: string;
   private models: Record<ModelTier, string>;
@@ -149,6 +150,7 @@ export class OpenRouterModelProvider implements ModelProvider {
   private dispatcher?: Dispatcher;
 
   constructor(opts: OpenRouterProviderOptions) {
+    this.name = opts.name ?? "openrouter";
     this.apiKey = opts.apiKey;
     this.baseUrl = (opts.baseUrl ?? "https://openrouter.ai/api/v1").replace(/\/$/, "");
     this.models = { ...DEFAULT_OPENROUTER_MODELS, ...opts.models };
@@ -156,7 +158,7 @@ export class OpenRouterModelProvider implements ModelProvider {
     this.title = opts.title ?? "LainOS";
     if (opts.proxy) {
       this.dispatcher = new ProxyAgent(opts.proxy);
-      log.info(`routing OpenRouter traffic via proxy ${opts.proxy}`);
+      log.info(`routing ${this.name} traffic via proxy ${opts.proxy}`);
     }
   }
 
@@ -203,11 +205,11 @@ export class OpenRouterModelProvider implements ModelProvider {
 
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
-      throw new Error(`OpenRouter HTTP ${res.status}: ${detail.slice(0, 300)}`);
+      throw new Error(`${this.name} HTTP ${res.status}: ${detail.slice(0, 300)}`);
     }
 
     const data = (await res.json()) as ORResponse;
-    if (data.error) throw new Error(`OpenRouter error: ${data.error.message}`);
+    if (data.error) throw new Error(`${this.name} error: ${data.error.message}`);
 
     const msg = data.choices?.[0]?.message ?? {};
     // msg.reasoning / msg.reasoning_content are deliberately dropped.

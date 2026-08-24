@@ -1,3 +1,4 @@
+import { walletChain } from '@/lib/wallet/chains';
 import type { WalletChainId } from '@/lib/wallet/chains';
 
 /**
@@ -150,3 +151,51 @@ export const accountName = (
     record: WalletAccountRecord,
     fallback: (record: WalletAccountRecord) => string,
 ): string => record.label?.trim() || fallback(record);
+
+/** How a translator is handed to the helpers below. */
+type Translate = (
+    key: string,
+    vars?: Record<string, string | number>,
+) => string;
+
+/**
+ * The same name in every list that shows accounts — the switcher in the header,
+ * the portfolio's chip and the accounts screen. Three copies of this drifted
+ * apart once already, one of them naming a chain by its id rather than its
+ * label.
+ */
+export const accountDisplayName = (
+    record: WalletAccountRecord,
+    t: Translate,
+): string =>
+    accountName(record, (entry) => {
+        if (entry.kind === 'seed') {
+            return entry.index === 0
+                ? t('accountPrimaryName')
+                : t('accountSeedName', { index: entry.index + 1 });
+        }
+
+        if (entry.kind === 'phrase') {
+            return t('accountPhraseName');
+        }
+
+        const chain = walletChain(entry.chain).label;
+
+        return entry.kind === 'key'
+            ? t('accountKeyName', { chain })
+            : t('accountWatchName', { chain });
+    });
+
+/** Where an account came from, in three words — never where it can spend. */
+export const accountKindLabel = (
+    record: WalletAccountRecord,
+    t: Translate,
+): string =>
+    t(
+        {
+            seed: 'accountKindSeed',
+            phrase: 'accountKindPhrase',
+            key: 'accountKindKey',
+            watch: 'accountKindWatch',
+        }[record.kind],
+    );

@@ -1,0 +1,51 @@
+server {
+    listen       80;
+    server_name  blog.cyberia.church;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name blog.cyberia.church;
+
+    # Wildcard lineage issued via manual DNS-01 (see /root/acme-hook).
+    ssl_certificate     /etc/letsencrypt/live/cyberia-wildcard/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/cyberia-wildcard/privkey.pem;
+
+    # Built Jekyll site (frontend/jekyll), rsynced to /root/cyberia-blog.
+    root /usr/share/nginx/blog;
+    index index.html;
+
+    # A static site, not an SPA: an unknown path is a 404, never the index.
+    error_page 404 /404.html;
+
+    location / {
+        try_files $uri $uri/ $uri.html =404;
+    }
+
+    # Jekyll asset names are not content-hashed, so a long immutable cache
+    # would pin a stale stylesheet after every rebuild.
+    location ~* \.(?:css|js|map)$ {
+        expires 1h;
+        add_header Cache-Control "public, max-age=3600";
+        try_files $uri =404;
+    }
+
+    location ~* \.(?:woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico|webp)$ {
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+        try_files $uri =404;
+    }
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript application/xml application/xml+rss application/atom+xml text/javascript image/svg+xml;
+    gzip_min_length 1024;
+}

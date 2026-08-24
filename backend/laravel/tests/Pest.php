@@ -51,3 +51,10 @@ function something()
 {
     // ..
 }
+
+/*
+| Builders shared across a feature area, loaded here so they exist whether the
+| suite is run whole or one file at a time.
+*/
+
+require_once __DIR__.'/Feature/Analytics/Helpers.php';

@@ -4,85 +4,192 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreCrmContactRequest;
 use App\Http\Requests\UpdateCrmContactRequest;
-use App\Models\BridgeRequest;
 use App\Models\CrmContact;
+use App\Models\CrmIdentityLink;
 use App\Models\CrmTask;
 use App\Models\User;
+use App\Services\Console\IdentityGraph;
+use App\Services\Console\PeopleLens;
+use App\Services\Console\PersonDossier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * "Люди" and one person's dossier.
+ *
+ * The list is a lens rather than a table: a segment is a saved question with
+ * its rule on screen, and the middle of every row says what happened to that
+ * person rather than repeating their database columns.
+ */
 class CrmContactController extends Controller
 {
+    public function __construct(
+        private PeopleLens $lens,
+        private PersonDossier $dossier,
+        private IdentityGraph $identities,
+    ) {}
+
+    /**
+     * Say that this record and another identity are one person.
+     *
+     * The console can already see the evidence — a bridge request naming an
+     * account and the address that signed its deposit — but evidence is not
+     * every case: an operator recognising a customer from a conversation is
+     * the case no derivation will ever cover, and it is why this is a button
+     * rather than only a command.
+     *
+     * The target is given as `kind:value` (`user:38`, `evm:0x…`, `solana:…`)
+     * or as a bare address, whose shape decides the kind. Linking to a contact
+     * record is deliberately not offered: a record is not an identity, and the
+     * link has to survive the sync rebuilding it.
+     */
+    public function link(Request $request, CrmContact $contact): RedirectResponse
+    {
+        $target = trim((string) $request->string('target'));
+        $parsed = $this->parseIdentity($target);
+
+        if ($parsed === null) {
+            return back()->withErrors(['target' => 'Not an account id, an EVM address or a Solana address.']);
+        }
+
+        $mine = IdentityGraph::nodesOf($contact);
+
+        if ($mine === []) {
+            return back()->withErrors(['target' => 'This record carries no identity to link from.']);
+        }
+
+        // Anchored on this record's strongest identity: its account if it has
+        // one, otherwise the first address it carries. Linking every node
+        // would assert edges nobody claimed.
+        [$kind, $value] = explode(':', $mine[0], 2);
+
+        $this->identities->link(
+            $kind,
+            $value,
+            $parsed[0],
+            $parsed[1],
+            'manual',
+            'operator',
+            'strong',
+            $request->user()?->id,
+        );
+
+        return back();
+    }
+
+    /**
+     * Promote a suggestion, or withdraw a link entirely.
+     *
+     * Both directions exist because a judgement that cannot be taken back is a
+     * judgement people stop making. Nothing is deleted but the claim itself —
+     * the records at either end are untouched.
+     */
+    public function unlink(CrmIdentityLink $link): RedirectResponse
+    {
+        $link->delete();
+        $this->identities->forget();
+
+        return back();
+    }
+
+    public function confirmLink(CrmIdentityLink $link): RedirectResponse
+    {
+        $link->forceFill(['confidence' => 'strong', 'source' => 'manual'])->save();
+        $this->identities->forget();
+
+        return back();
+    }
+
+    /**
+     * Read an identity out of what an operator typed.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    private function parseIdentity(string $value): ?array
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        if (str_contains($value, ':')) {
+            [$kind, $rest] = explode(':', $value, 2);
+            $kind = strtolower(trim($kind));
+
+            if (in_array($kind, ['user', 'evm', 'solana'], true) && trim($rest) !== '') {
+                return [$kind, trim($rest)];
+            }
+
+            return null;
+        }
+
+        if (preg_match('/^0x[0-9a-fA-F]{40}$/', $value) === 1) {
+            return ['evm', $value];
+        }
+
+        if (preg_match('/^[1-9A-HJ-NP-Za-km-z]{32,44}$/', $value) === 1) {
+            return ['solana', $value];
+        }
+
+        if (ctype_digit($value)) {
+            return ['user', $value];
+        }
+
+        return null;
+    }
+
     public function index(Request $request): Response
     {
-        $filters = [
-            'q' => $request->string('q')->value() ?: null,
-            'type' => $request->string('type')->value() ?: null,
-            'status' => $request->string('status')->value() ?: null,
-            'source' => $request->string('source')->value() ?: null,
-            'chain' => $request->string('chain')->value() ?: null,
-        ];
+        $segment = PeopleLens::has((string) $request->query('segment'))
+            ? (string) $request->query('segment')
+            : 'all';
 
-        $contacts = CrmContact::query()
-            ->search($filters['q'])
-            ->when($filters['type'], fn ($q, $type) => $q->where('type', $type))
-            ->when($filters['status'], fn ($q, $status) => $q->where('status', $status))
-            ->when($filters['source'], fn ($q, $source) => $q->where('source', $source))
-            ->chain($filters['chain'])
-            ->withCount('notes')
-            ->latest()
-            ->paginate(25)
-            ->withQueryString();
+        $search = $request->string('q')->value() ?: null;
 
-        return Inertia::render('crm/Index', [
-            'contacts' => $contacts,
-            'filters' => $filters,
-            'stats' => $this->stats(),
+        return Inertia::render('crm/People', [
+            'segment' => $segment,
+            'segments' => $this->lens->segments(),
+            'search' => $search,
+            ...$this->lens->rows($segment, $search, (int) $request->integer('rows', 40)),
             'options' => [
                 'types' => CrmContact::TYPES,
                 'statuses' => CrmContact::STATUSES,
-                'sources' => CrmContact::SOURCES,
-                'chains' => CrmContact::CHAINS,
             ],
         ]);
     }
 
     public function show(CrmContact $contact): Response
     {
-        $contact->load(['notes.author', 'user', 'tasks.assignee:id,name']);
-
-        $addresses = array_filter([$contact->evm_address, $contact->solana_address]);
-
-        $bridgeActivity = $addresses === []
-            ? collect()
-            : BridgeRequest::query()
-                ->whereIn('sender_address', $addresses)
-                ->orWhereIn('recipient_address', $addresses)
-                ->latest()
-                ->limit(20)
-                ->get(['id', 'direction', 'token', 'amount', 'status', 'created_at']);
-
-        return Inertia::render('crm/Show', [
-            'contact' => $contact,
-            'bridgeActivity' => $bridgeActivity,
+        return Inertia::render('crm/Person', $this->dossier->build($contact) + [
             'options' => [
                 'types' => CrmContact::TYPES,
                 'statuses' => CrmContact::STATUSES,
-                'taskStatuses' => CrmTask::STATUSES,
                 'taskPriorities' => CrmTask::PRIORITIES,
-                'assignees' => User::crmOperators()->get(['id', 'name'])->all(),
+                'assignees' => User::crmOperators()
+                    ->get(['id', 'name'])
+                    ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name])
+                    ->all(),
             ],
         ]);
     }
 
+    /**
+     * Put a person on the books by hand.
+     *
+     * The redirect goes back to the lens rather than into the new dossier,
+     * because contacts arrive in handfuls — fifteen accounts found in one
+     * afternoon — and a form that closes itself after each one turns a list
+     * into fifteen round trips. The new row is on the screen already — a
+     * contact created a second ago has the freshest signal there is, so it
+     * sorts to the top of the lens — and the dossier is one click from it.
+     */
     public function store(StoreCrmContactRequest $request): RedirectResponse
     {
         $data = $request->validated();
         $data['source'] = 'manual';
 
-        CrmContact::create($data);
+        $contact = CrmContact::create($data);
 
         return back()->with('success', 'Contact created');
     }
@@ -98,25 +205,6 @@ class CrmContactController extends Controller
     {
         $contact->delete();
 
-        return to_route('crm.index')->with('success', 'Contact deleted');
-    }
-
-    /**
-     * Aggregate counts for the dashboard cards.
-     *
-     * @return array<string, int|float>
-     */
-    private function stats(): array
-    {
-        return [
-            'total' => CrmContact::count(),
-            'leads' => CrmContact::where('type', 'lead')->count(),
-            'holders' => CrmContact::where('type', 'holder')->count(),
-            'whales' => CrmContact::where('type', 'whale')->count(),
-            'customers' => CrmContact::where('status', 'customer')->count(),
-            'evm' => CrmContact::query()->chain('evm')->count(),
-            'solana' => CrmContact::query()->chain('solana')->count(),
-            'both' => CrmContact::query()->chain('both')->count(),
-        ];
+        return to_route('crm.people')->with('success', 'Contact deleted');
     }
 }

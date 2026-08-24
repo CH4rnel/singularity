@@ -13,7 +13,7 @@ import type {
     WalletTokenBalance,
     WalletTxStatus,
 } from '@/lib/wallet';
-import { formatUsd, usdValue } from '@/lib/wallet/format';
+import { formatUsd, formatUsdPrice, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -154,6 +154,24 @@ watch(() => props.chain, load);
                           )
                         : t('noBalanceHere')
                 }}
+            </div>
+
+            <!--
+              What one coin costs, said outright. A balance in dollars answers
+              "how much do I have"; the rate answers "at what", and until it
+              was here the wallet quoted a Cyberia balance without ever naming
+              the price it had quoted it at.
+            -->
+            <div
+                v-if="prices[props.chain] != null"
+                style="
+                    margin-top: 6px;
+                    font: 400 11px/1 var(--cw-mono);
+                    color: var(--cw-faint);
+                "
+            >
+                1 {{ account.symbol }} =
+                {{ formatUsdPrice(prices[props.chain] ?? null, locale) }}
             </div>
 
             <div

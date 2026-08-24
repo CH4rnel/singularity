@@ -27,7 +27,7 @@ class AiProvidersCommand extends Command
 
         if ($configured === []) {
             $this->error('No inference provider has a key on this host — /api/ai/v1 serves nothing.');
-            $this->line('Set OPENROUTER_API_KEY and/or GROQ_API_KEY, then run `php artisan config:cache`.');
+            $this->line('Set at least one provider credential from `.env.example`, then run `php artisan config:cache`.');
 
             return self::FAILURE;
         }

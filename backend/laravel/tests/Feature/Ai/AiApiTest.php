@@ -8,6 +8,7 @@ use Elliptic\EC\KeyPair;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use kornrunner\Keccak;
 
 /**
@@ -149,6 +150,90 @@ it('hides models whose provider has no key on this server', function () {
     expect($ids)->toContain('lain-free')->not->toContain('lain-fast');
 });
 
+it('carries the complete free claude code provider catalogue', function () {
+    $providers = array_keys((array) config('ai.providers'));
+
+    expect($providers)->toBe([
+        'nvidia_nim',
+        'openrouter',
+        'groq',
+        'cline_pass',
+        'openai',
+        'xai',
+        'qwencloud',
+        'qwencloud_coding',
+        'together',
+        'deepinfra',
+        'siliconflow',
+        'nebius',
+        'chutes',
+        'featherless',
+        'agnes',
+        'zenmux',
+        'wandb',
+        'azure_openai',
+        'gemini',
+        'vertex',
+        'deepseek',
+        'mistral',
+        'mistral_codestral',
+        'opencode_zen',
+        'opencode_go',
+        'vercel',
+        'bedrock',
+        'huggingface',
+        'cohere',
+        'github_models',
+        'wafer',
+        'kimi',
+        'kimi_code',
+        'kilo',
+        'minimax',
+        'cerebras',
+        'sambanova',
+        'fireworks',
+        'novita',
+        'cloudflare',
+        'zai',
+        'zai_api',
+        'tokenrouter',
+        'nararoute',
+        'poolside',
+        'ollama_cloud',
+        'lmstudio',
+        'llamacpp',
+        'ollama',
+    ]);
+});
+
+it('calls a declarative provider with its request policy', function () {
+    aiChain(AI_ONE_PERCENT);
+    $key = aiIssueKey(aiWallet());
+    config()->set('ai.providers.minimax.api_key', 'test-minimax-key');
+
+    $url = 'https://api.minimax.io/v1/chat/completions';
+
+    Http::fake([
+        AI_RPC_URL => Http::response(['result' => aiHex(AI_ONE_PERCENT)]),
+        $url => Http::response(aiCompletion('MiniMax-M3')),
+    ]);
+
+    $this->withToken($key)->postJson('/api/ai/v1/chat/completions', [
+        'model' => 'lain-minimax',
+        'messages' => [['role' => 'user', 'content' => 'hi']],
+        'max_tokens' => 123,
+    ])
+        ->assertOk()
+        ->assertJsonPath('model', 'lain-minimax')
+        ->assertJsonPath('provider', 'minimax');
+
+    Http::assertSent(fn (Request $request) => $request->url() === $url
+        && $request->header('Authorization')[0] === 'Bearer test-minimax-key'
+        && $request->data()['model'] === 'MiniMax-M3'
+        && $request->data()['max_completion_tokens'] === 123
+        && ! array_key_exists('max_tokens', $request->data()));
+});
+
 it('issues a key to an address that holds enough, and only shows it once', function () {
     aiChain(AI_ONE_PERCENT);
     $wallet = aiWallet();
@@ -162,6 +247,39 @@ it('issues a key to an address that holds enough, and only shows it once', funct
         ->and($record->name)->toBe('laptop')
         ->and($record->token_hash)->toBe(hash('sha256', $key))
         ->and($record->toPublicArray())->not->toHaveKey('token_hash');
+});
+
+it('binds a LainOS key to the installation that authorised it', function () {
+    aiChain(AI_ONE_PERCENT);
+    $wallet = aiWallet();
+    $instanceId = (string) Str::uuid();
+    $challenge = $this->postJson('/api/ai/keys/nonce', ['address' => $wallet['address']])
+        ->assertOk()
+        ->json('message');
+
+    $this->postJson('/api/ai/keys', [
+        'address' => $wallet['address'],
+        'signature' => aiSign($wallet['pair'], $challenge),
+        'client' => 'lainos',
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('instance_id');
+
+    $this->postJson('/api/ai/keys', [
+        'address' => $wallet['address'],
+        'signature' => aiSign($wallet['pair'], $challenge),
+        'name' => 'lain bedroom',
+        'client' => 'lainos',
+        'instance_id' => $instanceId,
+    ])
+        ->assertCreated()
+        ->assertJsonPath('record.client', 'lainos')
+        ->assertJsonPath('record.instance_id', $instanceId);
+
+    $record = AiApiKey::sole();
+    expect($record->client)->toBe('lainos')
+        ->and($record->instance_id)->toBe($instanceId)
+        ->and($record->gate_exempt)->toBeFalse();
 });
 
 it('refuses to issue a key to an address that holds too little', function () {

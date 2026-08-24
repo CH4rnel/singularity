@@ -186,18 +186,27 @@ class User extends Authenticatable
     }
 
     /**
-     * Operators whose EVM wallet is on the CRM allow list (config/crm.php).
-     * They are the only accounts that can open the CRM, and therefore the
-     * only ones a CRM task can be assigned to. Compared lowercased to match
-     * EnsureCrmAdmin, which tolerates legacy checksummed rows.
+     * The operators on the CRM allow list (config/crm.php). They are the only
+     * accounts that can open the CRM, and therefore the only ones a CRM task
+     * can be assigned to. Both halves of EnsureCrmAdmin are asked here, in the
+     * same order and lowercased the same way, or a task could be assigned to
+     * somebody who cannot open the page it is on.
      *
      * @param  Builder<User>  $query
      */
     public function scopeCrmOperators(Builder $query): void
     {
-        $query->whereIn(
-            DB::raw('lower(wallet_address)'),
-            config('crm.admin_wallets', []),
-        )->orderBy('id');
+        $ids = config('crm.admin_user_ids', []);
+
+        $query->where(function (Builder $query) use ($ids) {
+            $query->whereIn(
+                DB::raw('lower(wallet_address)'),
+                config('crm.admin_wallets', []),
+            );
+
+            if ($ids !== []) {
+                $query->orWhereIn('id', $ids);
+            }
+        })->orderBy('id');
     }
 }

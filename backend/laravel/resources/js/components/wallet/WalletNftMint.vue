@@ -5,6 +5,7 @@ import GasSponsor from '@/components/wallet/GasSponsor.vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { analytics, errorCode } from '@/lib/analytics';
 import { mintableChains } from '@/lib/nftChains';
 import { formatUnits, walletChains } from '@/lib/wallet';
 import { formatBytes, pinFile, pinJson } from '@/lib/wallet/ipfs';
@@ -168,6 +169,18 @@ const mint = async (): Promise<void> => {
     busy.value = true;
     failure.value = null;
 
+    const startedAt = Date.now();
+
+    // The chain and that a mint was attempted. Nothing about *what* is being
+    // minted — the name, the description, the file and the tokenURI are the
+    // user's content, and this is a product metric, not a catalogue.
+    const traits = {
+        chain: chainId.value ?? undefined,
+        transaction_type: 'mint' as const,
+    };
+
+    analytics.track('nft_mint_started', traits);
+
     try {
         hash.value = await props.wallet.mintNft(
             chainId.value,
@@ -175,9 +188,19 @@ const mint = async (): Promise<void> => {
             quote.value,
         );
         stage.value = 'done';
+        analytics.track('nft_minted', {
+            ...traits,
+            duration_ms: Date.now() - startedAt,
+        });
         emit('minted');
     } catch (error) {
         failure.value = error instanceof Error ? error.message : String(error);
+
+        analytics.track('nft_mint_failed', {
+            ...traits,
+            error_code: errorCode(error),
+            duration_ms: Date.now() - startedAt,
+        });
     } finally {
         busy.value = false;
     }

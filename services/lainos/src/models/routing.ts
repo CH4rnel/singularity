@@ -56,7 +56,6 @@ export class FallbackModelProvider implements ModelProvider {
     }
   }
 }
-
 /**
  * Route each {@link ModelTier} to its own provider, e.g. the main chat (LARGE)
  * through codex while cheap background work (scout digests use MEDIUM) stays
@@ -94,6 +93,7 @@ export class TieredModelProvider implements ModelProvider {
  * the HTTP /provider endpoint, and Lain's own set_chat_provider action).
  */
 export const CHAT_PROVIDER_CHOICES: { name: string; kind: string; desc: string }[] = [
+  { name: "cyberia", kind: "cyberia", desc: "Cyberia (free) · issued API key required" },
   { name: "claude", kind: "claude", desc: "Claude CLI · subscription, no key" },
   { name: "codex", kind: "codex", desc: "Codex CLI · ChatGPT subscription" },
   { name: "opencode", kind: "opencode", desc: "OpenCode CLI · your own OpenCode setup" },
@@ -111,6 +111,7 @@ export function resolveChatProviderKind(raw: string): string | undefined {
 
 /** Human label for a kind: "claude" and "anthropic" are the same models. */
 export function chatProviderLabel(kind: string): string {
+  if (kind === "cyberia") return "cyberia (free)";
   if (kind === "claude") return "claude (cli)";
   if (kind === "opencode") return "opencode (cli)";
   return kind === "anthropic" ? "claude (anthropic api)" : kind;

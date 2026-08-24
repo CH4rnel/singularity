@@ -11,15 +11,34 @@
  * Anything that is not Cyberia (wallet deep links, explorer links,
  * `target="_blank"`) is handed to the system browser instead of being opened
  * inside the app frame.
+ *
+ * The window is deliberately undecorated: one frameless window whose only
+ * view is the site. The wallet masthead is its drag region, so no browser-like
+ * title or menu strip is left above the product. See `frame.js` for the
+ * keyboard commands that replace the missing application menu.
  */
 
 const path = require('node:path');
-const { app, BrowserWindow, Menu, dialog, ipcMain, net, session, shell } = require('electron');
+const {
+    BaseWindow,
+    BrowserWindow,
+    Menu,
+    Tray,
+    WebContentsView,
+    app,
+    dialog,
+    ipcMain,
+    net,
+    nativeImage,
+    session,
+    shell,
+} = require('electron');
 const {
     PARTITION,
     PROTOCOL,
     describeProxy,
     hasProxyFlag,
+    isAppHost,
     isExternallyOpenable,
     isNavigable,
     normalizeProxySetting,
@@ -27,6 +46,8 @@ const {
     resolveProxyDecision,
     resolveStartUrl,
 } = require('./config');
+const { commandForInput, usesFramelessWindow, zoomLevel } = require('./frame');
+const { createAutostart } = require('./autostart');
 const { loadProxySetting, saveProxySetting } = require('./proxy-settings');
 const torrent = require('./torrent');
 const { loadWindowState, trackWindowState } = require('./window-state');
@@ -37,6 +58,11 @@ const APP_HOST = new URL(APP_URL).hostname;
 const OFFLINE_PAGE = path.join(__dirname, 'offline.html');
 const PROXY_PAGE = path.join(__dirname, 'proxy.html');
 
+const IS_MAC = process.platform === 'darwin';
+
+/** Whether this run removes every window decoration; `--native-frame` opts out. */
+const FRAMELESS = usesFramelessWindow(process.env, process.argv);
+
 /** A launch flag pins the proxy for this run, so the window cannot change it. */
 const PROXY_LOCKED = hasProxyFlag(process.argv);
 
@@ -46,6 +72,12 @@ const PROXY_LOCKED = hasProxyFlag(process.argv);
  * not look like a frozen window.
  */
 const PROBE_TIMEOUT_MS = 12000;
+
+/** A site that never finishes loading must not leave the app with no window. */
+const REVEAL_TIMEOUT_MS = 2500;
+
+/** How long the window manager gets to settle before the views are laid out again. */
+const SETTLE_MS = 150;
 
 /** Permissions the site legitimately needs; everything else is refused. */
 const ALLOWED_PERMISSIONS = new Set([
@@ -59,13 +91,62 @@ const ALLOWED_PERMISSIONS = new Set([
 const ERR_ABORTED = -3;
 
 let mainWindow = null;
+let contentView = null;
+let appMenu = null;
+let tray = null;
 let proxyWindow = null;
 let shellSession = null;
+let settleTimer = null;
+let autostart = null;
+let quitting = false;
+let startHidden = false;
 
 /** The proxy in force right now, what the user saved, and where it came from. */
 let activeProxy = null;
 let proxySetting = { mode: 'system', server: '' };
 let proxySource = 'system';
+
+/** The site's own web contents — the window has none of its own any more. */
+function pageContents() {
+    if (!contentView || contentView.webContents.isDestroyed()) {
+        return null;
+    }
+
+    return contentView.webContents;
+}
+
+/** One icon for the window, notifications and tray, in dev and packaged runs. */
+function appIconPath() {
+    return app.isPackaged
+        ? path.join(process.resourcesPath, 'icon.png')
+        : path.join(__dirname, '..', 'build', 'icon.png');
+}
+
+/** A mutating renderer request may only come from this app's own site. */
+function isTrustedPageEvent(event) {
+    if (event.sender !== pageContents()) {
+        return false;
+    }
+
+    try {
+        const url = new URL(event.senderFrame?.url || event.sender.getURL());
+
+        return isAppHost(url.hostname, APP_HOST);
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Puts the keyboard on the page.
+ *
+ * A window holding views focuses none of them by itself, so without this the
+ * app opens with a password field that ignores typing until it is clicked —
+ * the one screen where that is least forgivable.
+ */
+function focusPage() {
+    pageContents()?.focus();
+}
 
 function buildUserAgent() {
     return `${app.userAgentFallback}`
@@ -86,19 +167,11 @@ function openExternal(target) {
 }
 
 function loadApp(target = START_URL) {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-        return;
-    }
-
-    void mainWindow.loadURL(target);
+    void pageContents()?.loadURL(target);
 }
 
 function showOffline(error = '') {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-        return;
-    }
-
-    void mainWindow.loadFile(OFFLINE_PAGE, {
+    void pageContents()?.loadFile(OFFLINE_PAGE, {
         query: { url: START_URL, error, proxy: describeProxy(activeProxy) },
     });
 }
@@ -266,6 +339,225 @@ function openProxyWindow() {
     void proxyWindow.loadFile(PROXY_PAGE);
 }
 
+function showAbout() {
+    void dialog.showMessageBox(mainWindow ?? undefined, {
+        type: 'info',
+        title: 'Cyberia',
+        message: `Cyberia ${app.getVersion()}`,
+        detail: `Electron ${process.versions.electron}\n${START_URL}`,
+        buttons: ['OK'],
+    });
+}
+
+function toggleMaximize() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
+    }
+
+    if (mainWindow.isMaximized()) {
+        mainWindow.unmaximize();
+
+        return;
+    }
+
+    mainWindow.maximize();
+}
+
+function zoomPage(command) {
+    const contents = pageContents();
+
+    if (!contents) {
+        return;
+    }
+
+    contents.setZoomLevel(zoomLevel(contents.getZoomLevel(), command));
+}
+
+/**
+ * Everything the shell can be asked to do, under one name each.
+ *
+ * The native-frame menu, tray and key strokes all come through here, which is
+ * why a command that touches the page names the page's own contents: the window
+ * is a `BaseWindow` holding a view, so Electron's built-in menu roles — which
+ * reach for the focused *BrowserWindow* — would find nothing.
+ */
+const COMMANDS = {
+    wallet: () => loadApp(),
+    site: () => loadApp(APP_URL),
+    browser: () => openExternal(pageContents()?.getURL() || START_URL),
+    proxy: () => openProxyWindow(),
+    back: () => pageContents()?.navigationHistory.goBack(),
+    forward: () => pageContents()?.navigationHistory.goForward(),
+    reload: () => pageContents()?.reload(),
+    'force-reload': () => pageContents()?.reloadIgnoringCache(),
+    devtools: () => pageContents()?.toggleDevTools(),
+    'zoom-in': () => zoomPage('zoom-in'),
+    'zoom-out': () => zoomPage('zoom-out'),
+    'zoom-reset': () => zoomPage('zoom-reset'),
+    undo: () => pageContents()?.undo(),
+    redo: () => pageContents()?.redo(),
+    cut: () => pageContents()?.cut(),
+    copy: () => pageContents()?.copy(),
+    paste: () => pageContents()?.paste(),
+    'select-all': () => pageContents()?.selectAll(),
+    fullscreen: () => mainWindow?.setFullScreen(!mainWindow.isFullScreen()),
+    minimize: () => mainWindow?.minimize(),
+    maximize: () => toggleMaximize(),
+    close: () => mainWindow?.close(),
+    quit: () => {
+        quitting = true;
+        app.quit();
+    },
+    about: () => showAbout(),
+};
+
+/** Runs a command by name. An unknown name is ignored, never guessed at. */
+function run(command) {
+    if (!Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
+        return;
+    }
+
+    COMMANDS[command]();
+}
+
+function trayLabels() {
+    const russian = app.getLocale().toLowerCase().startsWith('ru');
+
+    return russian
+        ? {
+              open: 'Открыть Cyberia',
+              wallet: 'Кошелёк',
+              site: 'Сайт Cyberia',
+              startup: 'Запускать при входе',
+              quit: 'Выйти',
+          }
+        : {
+              open: 'Open Cyberia',
+              wallet: 'Wallet',
+              site: 'Cyberia Site',
+              startup: 'Launch at login',
+              quit: 'Quit',
+          };
+}
+
+function refreshTrayMenu() {
+    if (!tray || !autostart) {
+        return;
+    }
+
+    const labels = trayLabels();
+    const startup = autostart.state();
+
+    tray.setContextMenu(
+        Menu.buildFromTemplate([
+            { label: labels.open, click: () => focusWindow() },
+            { label: labels.wallet, click: () => showWindow(START_URL) },
+            { label: labels.site, click: () => showWindow(APP_URL) },
+            { type: 'separator' },
+            ...(startup.available
+                ? [
+                      {
+                          label: labels.startup,
+                          type: 'checkbox',
+                          checked: startup.enabled,
+                          click: (item) => {
+                              try {
+                                  autostart.set(item.checked);
+                              } catch {
+                                  console.error(
+                                      '[cyberia] could not change login startup',
+                                  );
+                              } finally {
+                                  refreshTrayMenu();
+                              }
+                          },
+                      },
+                  ]
+                : []),
+            { type: 'separator' },
+            { label: labels.quit, click: () => run('quit') },
+        ]),
+    );
+}
+
+function createTray() {
+    const icon = nativeImage.createFromPath(appIconPath());
+
+    if (icon.isEmpty()) {
+        console.error('[cyberia] tray icon is unavailable');
+
+        return false;
+    }
+
+    tray = new Tray(
+        process.platform === 'linux'
+            ? icon.resize({ width: 22, height: 22 })
+            : icon,
+    );
+    tray.setToolTip('Cyberia');
+    tray.on('click', () => focusWindow());
+    refreshTrayMenu();
+
+    return true;
+}
+
+function layoutViews() {
+    if (!mainWindow || mainWindow.isDestroyed() || !contentView) {
+        return;
+    }
+
+    const { width, height } = mainWindow.getContentBounds();
+
+    contentView.setBounds({ x: 0, y: 0, width, height });
+}
+
+/**
+ * Lays the views out now, and again once the window manager has settled.
+ *
+ * Both passes are needed on Linux: `unmaximize` is emitted with no `resize`
+ * behind it, and around a maximise the sizes that do arrive can be transient
+ * ones the window never keeps. A frame left sized for the window's previous
+ * shape has its buttons off the edge, so the late pass is worth its 150ms.
+ */
+function relayout() {
+    layoutViews();
+
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(layoutViews, SETTLE_MS);
+}
+
+function setWindowTitle(title) {
+    const text = typeof title === 'string' && title.trim() !== '' ? title : 'Cyberia';
+
+    mainWindow?.setTitle(text);
+}
+
+/**
+ * The key strokes the menu bar used to answer.
+ *
+ * Only where the shell drew the frame itself and there is no native menu bar
+ * attached to the window: macOS has a real one at the top of the screen, and a
+ * `--native-frame` run gets the application menu back, so in both of those the
+ * strokes are already spoken for and answering them again would run every
+ * command twice.
+ */
+function watchKeys(contents) {
+    if (!FRAMELESS || IS_MAC) {
+        return;
+    }
+
+    contents.on('before-input-event', (event, input) => {
+        const command = commandForInput(input);
+
+        if (!command) {
+            return;
+        }
+
+        event.preventDefault();
+        run(command);
+    });
+}
+
 async function configureSession() {
     shellSession = session.fromPartition(PARTITION);
 
@@ -297,7 +589,7 @@ async function configureSession() {
 function createWindow() {
     const state = loadWindowState();
 
-    mainWindow = new BrowserWindow({
+    mainWindow = new BaseWindow({
         x: state.x,
         y: state.y,
         width: state.width,
@@ -307,10 +599,14 @@ function createWindow() {
         show: false,
         backgroundColor: '#0b0f10',
         title: 'Cyberia',
+        // The wallet itself is the window. `--native-frame` is retained as an
+        // accessibility/compatibility escape hatch for unusual window managers.
+        frame: !FRAMELESS,
         autoHideMenuBar: true,
-        icon: process.platform === 'linux'
-            ? path.join(__dirname, '..', 'build', 'icon.png')
-            : undefined,
+        icon: process.platform === 'linux' ? appIconPath() : undefined,
+    });
+
+    contentView = new WebContentsView({
         webPreferences: {
             partition: PARTITION,
             preload: path.join(__dirname, 'preload.js'),
@@ -321,15 +617,35 @@ function createWindow() {
         },
     });
 
+    contentView.setBackgroundColor('#0b0f10');
+    mainWindow.contentView.addChildView(contentView);
+
+    layoutViews();
+
     if (state.maximized) {
         mainWindow.maximize();
     }
 
     trackWindowState(mainWindow);
 
-    mainWindow.once('ready-to-show', () => mainWindow.show());
+    // Reveal when the site settles; the timer covers a run where it never does.
+    const reveal = () => {
+        if (startHidden) {
+            return;
+        }
 
-    const contents = mainWindow.webContents;
+        if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+            mainWindow.show();
+            focusPage();
+        }
+    };
+
+    contentView.webContents.once('did-stop-loading', reveal);
+    setTimeout(reveal, REVEAL_TIMEOUT_MS);
+
+    const contents = contentView.webContents;
+
+    watchKeys(contents);
 
     contents.setWindowOpenHandler(({ url }) => {
         openExternal(url);
@@ -358,8 +674,29 @@ function createWindow() {
         }
     });
 
+    // A window with no page of its own has no title of its own either.
+    contents.on('page-title-updated', (_event, title) => setWindowTitle(title));
+
+    mainWindow.on('resize', relayout);
+    mainWindow.on('restore', relayout);
+    mainWindow.on('maximize', relayout);
+    mainWindow.on('unmaximize', relayout);
+    mainWindow.on('enter-full-screen', relayout);
+    mainWindow.on('leave-full-screen', relayout);
+    mainWindow.on('focus', focusPage);
+
+    // Closing the window leaves the wallet reachable from the tray. Explicit
+    // Quit is the one path that tears down its background process.
+    mainWindow.on('close', (event) => {
+        if (!quitting && tray) {
+            event.preventDefault();
+            mainWindow?.hide();
+        }
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
+        contentView = null;
     });
 
     loadApp();
@@ -376,7 +713,17 @@ function focusWindow() {
         mainWindow.restore();
     }
 
+    if (!mainWindow.isVisible()) {
+        mainWindow.show();
+    }
+
     mainWindow.focus();
+    focusPage();
+}
+
+function showWindow(target) {
+    focusWindow();
+    loadApp(target);
 }
 
 /** `cyberia://profile?tab=xp` -> `<APP_URL>/profile?tab=xp`. */
@@ -403,83 +750,149 @@ function deepLinkFrom(argv) {
     return argv.find((argument) => argument.startsWith(`${PROTOCOL}://`)) ?? null;
 }
 
-function buildMenu() {
-    const isMac = process.platform === 'darwin';
+/**
+ * The application menu used only in native-frame mode (and by macOS).
+ *
+ * Every item that touches the page has a `click` of its own rather than a role:
+ * roles that reload, zoom or toggle the tools ask Electron for the focused
+ * BrowserWindow, and this window is a frame holding views instead. The two
+ * roles that stay are macOS-only and act on the app or the first responder,
+ * which is exactly what they should do.
+ */
+function menuTemplate() {
+    const editItems = [
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => run('undo') },
+        { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => run('redo') },
+        { type: 'separator' },
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', click: () => run('cut') },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: () => run('copy') },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', click: () => run('paste') },
+        { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => run('select-all') },
+    ];
 
-    const template = [
-        ...(isMac ? [{ role: 'appMenu' }] : []),
+    return [
+        ...(IS_MAC ? [{ role: 'appMenu' }] : []),
         {
             label: 'File',
             submenu: [
                 {
                     label: 'Wallet',
                     accelerator: 'CmdOrCtrl+Shift+H',
-                    click: () => loadApp(),
+                    click: () => run('wallet'),
                 },
                 {
                     label: 'Cyberia Site',
                     accelerator: 'CmdOrCtrl+Shift+S',
-                    click: () => loadApp(APP_URL),
+                    click: () => run('site'),
                 },
                 {
                     label: 'Open in Browser',
-                    click: () => openExternal(mainWindow?.webContents.getURL() ?? START_URL),
+                    click: () => run('browser'),
                 },
                 { type: 'separator' },
                 {
                     label: 'Proxy…',
-                    click: () => openProxyWindow(),
+                    click: () => run('proxy'),
                 },
                 { type: 'separator' },
-                isMac ? { role: 'close' } : { role: 'quit' },
+                IS_MAC
+                    ? { label: 'Close Window', accelerator: 'Command+W', click: () => run('close') }
+                    : { label: 'Quit', accelerator: 'Ctrl+Q', click: () => run('quit') },
             ],
         },
-        { role: 'editMenu' },
+        IS_MAC ? { role: 'editMenu' } : { label: 'Edit', submenu: editItems },
         {
             label: 'View',
             submenu: [
                 {
                     label: 'Back',
                     accelerator: 'Alt+Left',
-                    click: () => mainWindow?.webContents.navigationHistory.goBack(),
+                    click: () => run('back'),
                 },
                 {
                     label: 'Forward',
                     accelerator: 'Alt+Right',
-                    click: () => mainWindow?.webContents.navigationHistory.goForward(),
+                    click: () => run('forward'),
                 },
-                { role: 'reload' },
-                { role: 'forceReload' },
+                {
+                    label: 'Reload',
+                    accelerator: 'CmdOrCtrl+R',
+                    click: () => run('reload'),
+                },
+                {
+                    label: 'Force Reload',
+                    accelerator: 'CmdOrCtrl+Shift+R',
+                    click: () => run('force-reload'),
+                },
                 { type: 'separator' },
-                { role: 'resetZoom' },
-                { role: 'zoomIn' },
-                { role: 'zoomOut' },
+                {
+                    label: 'Actual Size',
+                    accelerator: 'CmdOrCtrl+0',
+                    click: () => run('zoom-reset'),
+                },
+                {
+                    label: 'Zoom In',
+                    accelerator: 'CmdOrCtrl+=',
+                    click: () => run('zoom-in'),
+                },
+                {
+                    label: 'Zoom Out',
+                    accelerator: 'CmdOrCtrl+-',
+                    click: () => run('zoom-out'),
+                },
                 { type: 'separator' },
-                { role: 'togglefullscreen' },
-                { role: 'toggleDevTools' },
+                {
+                    label: 'Toggle Full Screen',
+                    accelerator: IS_MAC ? 'Control+Command+F' : 'F11',
+                    click: () => run('fullscreen'),
+                },
+                {
+                    label: 'Toggle Developer Tools',
+                    accelerator: IS_MAC ? 'Alt+Command+I' : 'Ctrl+Shift+I',
+                    click: () => run('devtools'),
+                },
             ],
         },
-        { role: 'windowMenu' },
         {
-            role: 'help',
+            label: 'Window',
+            submenu: [
+                {
+                    label: 'Minimize',
+                    // Only where a menu bar is attached to answer it.
+                    ...(IS_MAC ? { accelerator: 'Command+M' } : {}),
+                    click: () => run('minimize'),
+                },
+                {
+                    label: 'Zoom',
+                    click: () => run('maximize'),
+                },
+                ...(IS_MAC ? [{ type: 'separator' }, { role: 'front' }] : []),
+            ],
+        },
+        {
+            label: 'Help',
             submenu: [
                 {
                     label: 'About Cyberia',
-                    click: () => {
-                        void dialog.showMessageBox(mainWindow ?? undefined, {
-                            type: 'info',
-                            title: 'Cyberia',
-                            message: `Cyberia ${app.getVersion()}`,
-                            detail: `Electron ${process.versions.electron}\n${START_URL}`,
-                            buttons: ['OK'],
-                        });
-                    },
+                    click: () => run('about'),
                 },
             ],
         },
     ];
+}
 
-    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+/**
+ * Builds the menu, and attaches it only where a window may wear one.
+ *
+ * On Windows and Linux a menu attached to a frameless window would create the
+ * browser-like strip this shell deliberately removes, so `watchKeys` answers
+ * its useful strokes instead. macOS keeps its real menu bar, and so does a
+ * `--native-frame` run.
+ */
+function buildMenu() {
+    appMenu = Menu.buildFromTemplate(menuTemplate());
+
+    Menu.setApplicationMenu(IS_MAC || !FRAMELESS ? appMenu : null);
 }
 
 function registerProtocol() {
@@ -513,8 +926,14 @@ if (!app.requestSingleInstanceLock()) {
         app.userAgentFallback = buildUserAgent();
 
         registerProtocol();
+        autostart = createAutostart(app);
+        startHidden = autostart.wasOpenedAtLogin();
         await configureSession();
         buildMenu();
+        if (!createTray()) {
+            // A hidden process without a tray has no route back to its window.
+            startHidden = false;
+        }
 
         console.log(
             `[cyberia] ${START_URL} via proxy ${describeProxy(activeProxy)} (${proxySource})`,
@@ -532,14 +951,37 @@ if (!app.requestSingleInstanceLock()) {
                 version: app.getVersion(),
                 url: START_URL,
                 proxy: describeProxy(activeProxy),
+                startup: autostart.state(),
+                tray: Boolean(tray),
             };
         });
+        ipcMain.handle('shell:set-startup', (event, enabled) => {
+            if (!isTrustedPageEvent(event)) {
+                return { available: false, enabled: false, error: 'forbidden' };
+            }
+
+            try {
+                const state = autostart.set(Boolean(enabled));
+
+                refreshTrayMenu();
+
+                return { ...state, error: '' };
+            } catch {
+                return { ...autostart.state(), error: 'write_failed' };
+            }
+        });
+        ipcMain.handle('shell:get-startup', (event) =>
+            isTrustedPageEvent(event)
+                ? { ...autostart.state(), error: '' }
+                : { available: false, enabled: false, error: 'forbidden' },
+        );
 
         // The torrent client. Only the site's own pages may reach it, and it
         // stays unstarted until someone agrees to run one in a dialog no page
         // can draw.
         torrent.register({
             getWindow: () => mainWindow,
+            getContents: () => pageContents(),
             isTrusted: (url) => isNavigable(url, APP_HOST),
         });
 
@@ -555,17 +997,18 @@ if (!app.requestSingleInstanceLock()) {
         handleDeepLink(deepLinkFrom(process.argv));
 
         app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) {
-                createWindow();
-            }
+            focusWindow();
         });
     });
 
     // No swarm outlives the window: the client is stopped before the app is.
-    app.on('before-quit', () => torrent.shutdown());
+    app.on('before-quit', () => {
+        quitting = true;
+        torrent.shutdown();
+    });
 
     app.on('window-all-closed', () => {
-        if (process.platform !== 'darwin') {
+        if (process.platform !== 'darwin' && !tray) {
             app.quit();
         }
     });

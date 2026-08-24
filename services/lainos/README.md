@@ -28,15 +28,16 @@ and repeat-protected.
 
 ### Model providers
 
-LainOS speaks to six backends through one `ModelProvider` interface, selected
+LainOS speaks to seven backends through one `ModelProvider` interface, selected
 from the environment:
 
-1. `LAINOS_MODEL_PROVIDER` if set (`codex` | `claude` | `opencode` | `openrouter` |
-   `anthropic` | `mock`)
-2. else `OPENROUTER_API_KEY` present → **OpenRouter**
-3. else `ANTHROPIC_API_KEY` present → **Anthropic** (direct)
-4. else a `claude` CLI on the machine → **Claude CLI** (subscription)
-5. else → **offline mock** (deterministic; the whole pipeline still runs — this
+1. `LAINOS_MODEL_PROVIDER` if set (`cyberia` | `codex` | `claude` | `opencode` |
+   `openrouter` | `anthropic` | `mock`)
+2. else `CYBERIA_AI_KEY` present → **Cyberia (free)**
+3. else `OPENROUTER_API_KEY` present → **OpenRouter**
+4. else `ANTHROPIC_API_KEY` present → **Anthropic** (direct)
+5. else a `claude` CLI on the machine → **Claude CLI** (subscription)
+6. else → **offline mock** (deterministic; the whole pipeline still runs — this
    is what the smoke test exercises)
 
 **Codex CLI** (`codex`), **Claude CLI** (`claude`) and **OpenCode CLI**
@@ -59,11 +60,11 @@ vs. API key), so each falls back to the other when its own route is missing —
 asking Lain for Claude works with either one configured.
 
 The live chat routing is switchable at runtime — same switch behind three
-surfaces, all taking `claude` | `codex` | `opencode` | `claude-api`:
+surfaces, all taking `cyberia` | `claude` | `codex` | `opencode` | `claude-api`:
 
 ```bash
 /model                      # in the TUI: pick with the arrows (/model codex switches straight away)
-npm run provider claude     # from a shell, against the running daemon
+npm run provider cyberia    # from a shell, against the running daemon
 curl -s localhost:7777/provider                                    # who answers now
 curl -sX POST localhost:7777/provider -d '{"provider":"codex"}'    # switch it
 ```
@@ -90,7 +91,20 @@ that traffic through a proxy: `LAINOS_MODEL_PROXY` for model APIs,
 `TELEGRAM_PROXY` for the bot (both fall back to `HTTPS_PROXY`). Cyberia RPC
 traffic is never proxied.
 
-**OpenRouter** is the easiest path — one key, OpenAI-compatible, and you can
+**Cyberia (free)** is the installation path: an operator creates a LainOS grant
+at <https://cyberia.church/crm/api-keys> and the page shows its secret once.
+Copy the ready-made setup into `.env`; the key is sent as an OpenAI-compatible
+Bearer token and LainOS selects Cyberia automatically:
+
+```bash
+LAINOS_MODEL_PROVIDER=cyberia
+CYBERIA_AI_KEY=sk-cyb-…
+```
+
+You can also switch a running session with `/model cyberia`. The choice fails
+loudly when `CYBERIA_AI_KEY` is missing, so it cannot silently use a paid route.
+
+**OpenRouter** remains an alternative — one key, OpenAI-compatible, and you can
 point any tier at any OpenRouter model via `OPENROUTER_MODEL_SMALL/MEDIUM/LARGE`
 (e.g. a free model for `SMALL`). Get a key at <https://openrouter.ai/keys>:
 
@@ -104,13 +118,62 @@ npm run chat
 
 ```bash
 npm install
-cp .env.example .env        # optional: add ANTHROPIC_API_KEY + CYBERIA_AGENT_PK
+cp .env.example .env        # add the CYBERIA_AI_KEY issued for this installation
 npm run smoke               # end-to-end check (uses a real Cyberia chain read)
 npm run chat                # interactive REPL with Lain
 npm run tui                 # full-screen terminal UI (skins, live chain pulse)
 npm run serve               # daemon: HTTP bridge on :7777 + Telegram bot (if token set)
-npm run provider [claude|codex|opencode]  # who writes the daemon's replies (no arg = show)
+npm run provider [cyberia|claude|codex|opencode]  # who writes the daemon's replies (no arg = show)
 ```
+
+## The terminal UI
+
+`npm run tui` draws its own frame: transcript on top, a framed composer at the
+bottom, session facts in the right sidebar (from 100 columns wide). The frame is
+one row shorter than the window on purpose — a frame as tall as the terminal
+makes ink clear the screen, scrollback and all, on every repaint.
+
+**Leaving.** `ctrl+c` once clears the composer and asks; `ctrl+c` again leaves.
+Any other key answers "no". `/exit` still works. ink's own ctrl+c handler is
+turned off (`exitOnCtrlC: false`) because it ends the session on the first press
+— and because it only ever sees a bare `\x03`, which a terminal speaking the
+kitty keyboard protocol (the TUI asks for it, to tell shift+enter from enter)
+never sends: there every chord arrives as `CSI <code>;<mods>u` and is decoded in
+`keys.ts`.
+
+**Several lines in one message.** Enter sends. A new line is `alt+enter`,
+`ctrl+j`, `shift+enter` where the terminal can report it (kitty keyboard
+protocol), or a trailing `\` before Enter. Pasted text keeps its line breaks and
+never sends by itself — the composer speaks bracketed paste.
+
+**Getting text back out.** Mouse reporting is on — that is what makes the wheel
+scroll and the sidebar clickable — so the terminal never sees the drag and its
+own selection cannot work. The app therefore selects text itself:
+
+- **Drag** over any part of the screen: the cells highlight as you go and
+  releasing copies them. A selection spanning rows stays inside the pane it
+  started in, so a copied reply never has sidebar text down its right edge.
+- `ctrl+y` copies Lain's last reply; clicking a speaker's name copies that whole
+  message, clicking a code block copies just the code.
+- `ctrl+s` (or `/select`, or the sidebar's `freeze frame` row) freezes the frame
+  and hands the mouse back to the terminal — for selecting up into the
+  terminal's own scrollback, above the app. Nothing is written while it holds.
+  `esc` returns.
+- `/copy`, `/copy all` (the whole transcript), `/copy code` (the last fenced
+  block). Copies go out over OSC 52 (so ssh and tmux work) and to a local
+  clipboard helper (`wl-copy`, `xclip`, `xsel`, `pbcopy`) when there is one.
+
+The sidebar's `select text` and `copy last` rows do the same two things with a
+click, because an editor hosting the terminal can keep the chord for itself —
+VS Code answers ctrl+s with a file save — but never the click.
+
+The transcript scrolls in-app: wheel, PgUp/PgDn, `ctrl+↑/↓`. `/help` lists the
+rest; `/skin`, `/effort`, `/cursor` and `/model` open pickers that take the
+arrow keys, the wheel, and a click on the row you want.
+
+Headless probes: `npm test` runs all of them — `tui:smoke` (frame, keys, copy,
+freeze), `keys:smoke` (escape sequences → edits), `markdown:smoke`, and the
+typecheck. Run it before and after touching anything under `clients/tui/`.
 
 ## systemd daemon
 
@@ -452,7 +515,7 @@ GET  /wishes                          -> { wishes } (the forge wishboard)
 GET  /research                        -> { topics } (the scout's subscriptions)
 POST /research/cyberia-study/run      -> { topic, digest, message }
 GET  /provider                        -> { provider, choices } (who answers)
-POST /provider { provider }           -> { provider } (switch claude/codex/opencode live)
+POST /provider { provider }           -> { provider } (switch cyberia/claude/codex/opencode live)
 POST /chat { roomId, userId, text }   -> { text, actions }
 ```
 
@@ -470,7 +533,9 @@ src/
   models/             codex.ts | claude-cli.ts | opencode.ts (agent CLIs, cli-protocol.ts)
                       anthropic.ts | openrouter.ts | mock.ts | index.ts (factory)
   plugins/bootstrap/  time provider + fact extractor + remember/recall
-  plugins/cyberia/    chain service + balance/transfer actions
+  plugins/cyberia/    the chain: chain.ts (registry) + abi.ts + math.ts (pure AMM)
+                      + config.ts (trading policy) + service.ts (client + journal)
+                      + explorer.ts + actions/{wallet,trade,liquidity,speculate,portfolio}
   plugins/sentinel/   background balance watches -> alerts (push + next-turn)
   plugins/forge/      wishboard + coding-agent jobs (wishes -> direct commits)
   plugins/skills/     hot-loaded self-written tools (skills/*.mjs, no restart)

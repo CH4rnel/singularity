@@ -6,7 +6,83 @@
  * Without a `width` the whole buffer is one line, so every transform collapses
  * to the classic single-line behaviour the smoke tests pin down. */
 import type { TuiKey } from "./keys.js";
-import { cursorToWrap, wrapIndices } from "./transcript.js";
+
+/** One wrapped display line plus its source range in the flat string. */
+export interface WrappedLine {
+  text: string;
+  /** Flat index of the first character of the line. */
+  start: number;
+  /** Flat index just past the last character of the line. */
+  end: number;
+}
+
+/** Greedy word-wrap onto `width` columns, tracking flat indices so a cursor
+ *  position can be mapped onto the visual layout. Hard newlines in
+ *  `value` start a fresh display line, so shift+enter stays visible. */
+export function wrapIndices(value: string, width: number): WrappedLine[] {
+  const w = Math.max(4, width);
+  const out: WrappedLine[] = [];
+  let offset = 0;
+  for (const logical of value.split("\n")) {
+    const words: { text: string; index: number }[] = [];
+    const re = /\S+/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(logical)) !== null) words.push({ text: m[0], index: offset + m.index });
+    if (!words.length) {
+      out.push({ text: logical, start: offset, end: offset + logical.length });
+    } else {
+      let lineWords: typeof words = [];
+      let lineStart = words[0].index;
+      let lineEnd = words[0].index + words[0].text.length;
+      let used = 0;
+      const flush = () => {
+        if (lineWords.length) {
+          out.push({ text: lineWords.map((x) => x.text).join(" "), start: lineStart, end: lineEnd });
+        }
+        lineWords = [];
+      };
+      for (const word of words) {
+        if (word.text.length > w) {
+          flush();
+          for (let i = 0; i < word.text.length; i += w) {
+            out.push({
+              text: word.text.slice(i, i + w),
+              start: word.index + i,
+              end: word.index + Math.min(i + w, word.text.length),
+            });
+          }
+          lineStart = word.index + word.text.length;
+          continue;
+        }
+        const need = lineWords.length ? 1 + word.text.length : word.text.length;
+        if (lineWords.length && used + need > w) {
+          flush();
+          lineStart = word.index;
+          used = 0;
+        }
+        lineWords.push(word);
+        used += need;
+        lineEnd = word.index + word.text.length;
+      }
+      flush();
+    }
+    offset += logical.length + 1;
+  }
+  if (!out.length) out.push({ text: "", start: 0, end: 0 });
+  return out;
+}
+
+/** Map a flat cursor index to (line, col) in the wrapped layout. */
+export function cursorToWrap(value: string, cursor: number, width: number): { line: number; col: number } {
+  const lines = wrapIndices(value, width);
+  for (let i = 0; i < lines.length; i++) {
+    const { start, end } = lines[i];
+    if (cursor <= start) return { line: i, col: 0 };
+    if (cursor <= end) return { line: i, col: cursor - start };
+    if (i === lines.length - 1) return { line: i, col: lines[i].text.length };
+  }
+  return { line: 0, col: 0 };
+}
 
 export interface LineState {
   value: string;
@@ -45,7 +121,13 @@ export function editLine(s: LineState, input: string, key: TuiKey, width?: numbe
   const { value, cursor } = s;
   const byWord = key.ctrl || key.meta;
 
-  // shift+enter inserts a newline inside the multi-line composer.
+  // A bracketed paste is text, whatever it contains — several lines of it stay
+  // several lines instead of firing several messages.
+  if (key.paste) {
+    return { value: value.slice(0, cursor) + input + value.slice(cursor), cursor: cursor + input.length };
+  }
+
+  // shift+enter (and its alt+enter / ctrl+j stand-ins) breaks the line.
   if (key.return && key.shift) {
     return { value: value.slice(0, cursor) + "\n" + value.slice(cursor), cursor: cursor + 1 };
   }

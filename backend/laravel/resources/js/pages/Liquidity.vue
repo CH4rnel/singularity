@@ -22,6 +22,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useWallet } from '@/composables/useWallet';
+import { analytics } from '@/lib/analytics';
 import { KNOWN_TOKENS, filterJunkPools } from '@/lib/cyberiaTokens';
 import type { AprSnapshot } from '@/lib/dexApr';
 import { aprByPair, formatApr } from '@/lib/dexApr';
@@ -35,6 +36,7 @@ import {
 import type { LiquidityChainConfig } from '@/lib/liquidityChains';
 import { scanLiquidityBalances } from '@/lib/liquidityPositions';
 import { track } from '@/lib/track';
+import { walletChains } from '@/lib/wallet';
 
 // Router/factory/wrapped-native/pools are per-chain (LIQUIDITY_CHAINS); the
 // page reads and trades entirely within the wallet's chain, so Robinhood
@@ -116,6 +118,16 @@ const activeChainId = ref<number>(DEFAULT_LIQUIDITY_CHAIN_ID);
 const activeChain = computed<LiquidityChainConfig>(() =>
     liquidityChainById(activeChainId.value),
 );
+
+/**
+ * The chain slug product analytics uses, which is the wallet's own id for the
+ * network rather than the DEX config's numeric one — so a swap signed in the
+ * wallet and liquidity added here group under the same name.
+ */
+const walletAnalyticsChain = (): string | undefined =>
+    walletChains().find(
+        (chain) => chain.chainId === activeChain.value.chainId,
+    )?.id;
 
 const makeReadProvider = (cfg: LiquidityChainConfig): JsonRpcProvider =>
     new JsonRpcProvider(cfg.readRpcUrl, {
@@ -502,6 +514,20 @@ const addLiquidity = async (): Promise<void> => {
         }
 
         status.value = 'Liquidity added.';
+        /*
+         * Also a meaningful action for product analytics: adding liquidity is
+         * one of the few things a person can do here that settles on a chain
+         * and costs them something, so it activates a user exactly as a swap
+         * does. Two systems, deliberately — `track` answers the site funnel
+         * (which browser sessions convert), `analytics` answers the product
+         * one (which installations became users).
+         */
+        analytics.track('liquidity_added', {
+            chain: walletAnalyticsChain(),
+            transaction_type: 'liquidity',
+            token_in: symbolOf(tokenA.value),
+            token_out: symbolOf(tokenB.value),
+        });
         track('liquidity_added', {
             metadata: {
                 action_type: 'add_liquidity',
@@ -737,6 +763,10 @@ const removeLiquidity = async (): Promise<void> => {
         }
 
         status.value = 'Liquidity removed.';
+        analytics.track('liquidity_removed', {
+            chain: walletAnalyticsChain(),
+            transaction_type: 'liquidity',
+        });
         await loadPositions();
         selected.value = null;
     } catch (e) {

@@ -1,0 +1,778 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>x-dc{display:block}helmet{display:none}</style>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #07090a; color: #e8ecec;
+      font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    a { color: #00e5d1; text-decoration: none; }
+    a:hover { color: #6cf3e6; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-variant-numeric: tabular-nums; }
+    /* Микро-подпись. Единственный способ назвать блок: линия сверху и малый кегль. */
+    .k { font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #5a686c; }
+    .t2 { color: #8d9a9d; }
+    .t3 { color: #5a686c; }
+    /* Полоса-разделитель раздела: подпись слева, волосяная линия до края. */
+    .rule { display: flex; align-items: center; gap: 12px; }
+    .rule::after { content: ""; flex: 1; height: 1px; background: rgba(232,236,236,.09); }
+    .dot { width: 7px; height: 7px; border-radius: 999px; flex: 0 0 7px; }
+    /* «Нет данных» — штриховка, а не цвет: неизвестность не должна выглядеть как состояние. */
+    .hatch { background-image: repeating-linear-gradient(135deg, rgba(141,154,157,.5) 0 1px, transparent 1px 4px);
+      background-color: transparent; border: 1px solid rgba(141,154,157,.35); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 30px;
+      padding: 0 13px; border: 1px solid rgba(232,236,236,.14); font-size: 12px; font-weight: 600;
+      letter-spacing: .04em; text-transform: uppercase; color: #cdd6d7; background: transparent; }
+    .btn.act { border-color: rgba(0,229,209,.55); color: #00e5d1; }
+    .btn.g { border-color: transparent; color: #5a686c; text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .panel { background: #0b0e0f; border: 1px solid rgba(232,236,236,.07); }
+    .hair { border-top: 1px solid rgba(232,236,236,.07); }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums;
+      font-weight: 600; letter-spacing: -.02em; }
+    table { border-collapse: collapse; width: 100%; }
+    th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+      color: #5a686c; padding: 0 14px 9px; }
+    td { padding: 9px 14px; border-top: 1px solid rgba(232,236,236,.07); font-size: 13px; }
+    .tag { display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 7px;
+      font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+      border: 1px solid rgba(232,236,236,.14); color: #8d9a9d; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 1740px; display: flex; flex-direction: column; background: #07090a; color: #e8ecec; font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif; overflow: hidden">
+    <div style="height: 46px; flex: 0 0 46px; display: flex; align-items: stretch; border-bottom: 1px solid rgba(232,236,236,.07)">
+      <div style="display: flex; align-items: center; gap: 11px; padding: 0 16px; background: rgba(255,77,77,.10); border-left: 2px solid #ff4d4d">
+        <span class="dot" style="background: #ff4d4d"></span>
+        <span class="m" style="font-size: 13px; font-weight: 600; color: #ff4d4d">12 МИН</span>
+        <span style="font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #ffb3b3">Очередь упала</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Цепь</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #e0a516">2/3</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Веб</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #8d9a9d">5/5</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Инфра</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #ff4d4d">20/21</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Демоны</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #8d9a9d">3/5</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Продукт</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #e0a516">8/9</span>
+      </div>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Активные с деньгами</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">268</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Установки 30 д</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">1 942</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Мост 30 д</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">$1.2M</span>
+      </div>
+      <div style="display: flex; align-items: center; padding: 0 16px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="m" style="font-size: 11px; color: #5a686c">обход 14:20:11</span>
+      </div>
+    </div>
+  <div style="flex: 1; min-height: 0; display: flex">
+    <nav style="width: 76px; flex: 0 0 76px; border-right: 1px solid rgba(232,236,236,.07); display: flex; flex-direction: column; align-items: stretch; padding: 12px 0">
+      <div style="display: flex; align-items: center; justify-content: center; height: 34px; margin-bottom: 14px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00e5d1" stroke-width="1.7" stroke-linecap="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="4.5"/></svg>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h4l3-7.5 4.5 15 3-7.5h5.5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Сейчас</span>
+        <span class="m" style="position: absolute; top: 8px; right: 14px; min-width: 15px; height: 15px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: #07090a; background: #00e5d1">5</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5a6 6 0 0 1 12 0"/><circle cx="17" cy="8.5" r="2.6"/><path d="M16.5 14.2a5.4 5.4 0 0 1 4.6 5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Люди</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="16" height="16" rx="2"/><path d="M8 12.2l2.6 2.6L16 9.5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Задачи</span>
+        <span class="m" style="position: absolute; top: 8px; right: 14px; min-width: 15px; height: 15px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: #07090a; background: #e0a516">3</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5V12M10.5 19.5V5M16 19.5v-5.5M21 19.5V9"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Числа</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #e8ecec; background: rgba(0,229,209,.05)">
+        <span style="position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: #00e5d1"></span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Машины</span>
+      </div>
+      <div style="margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px">
+        <span class="m" style="font-size: 10px; color: #5a686c">RU</span>
+        <div style="width: 26px; height: 26px; border: 1px solid rgba(232,236,236,.14); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #8d9a9d">ЛА</div>
+      </div>
+    </nav>
+    <main style="flex: 1; min-width: 0; padding: 22px 24px; display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; align-items: center; gap: 14px">
+        <h1 style="margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.01em">Машины</h1>
+        <span class="m" style="font-size: 12px; color: #5a686c">46 программ в реестре · 1 упала · 2 деградируют · 3 молчат · 1 выключена</span>
+        <div style="margin-left: auto; display: flex; gap: 8px">
+          <span class="btn act">Только проблемы</span>
+          <span class="btn g">Реестр — файл, не база: добавить сервис = правка config</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="rule"><span class="k">Требует действия</span></div>
+        <div style="margin-top: 10px">
+          <div style="display: flex; align-items: center; gap: 18px; padding: 13px 4px 13px 0" class="hair">
+            <div style="width: 96px; flex: 0 0 96px; text-align: right">
+              <div class="num" style="font-size: 19px; color: #ff4d4d; line-height: 1">12</div>
+              <div class="k" style="margin-top: 3px; color: #ff4d4d; opacity: .7">минут</div>
+            </div>
+            <span class="dot" style="background: #ff4d4d"></span>
+            <div style="flex: 1; min-width: 0">
+              <div style="font-size: 14px; font-weight: 600">Очередь упала</div>
+              <div style="margin-top: 3px; font-size: 12px; color: #8d9a9d">воркер не отвечает · критичный · инцидент открыт после двух неудач подряд</div>
+            </div>
+            <div style="width: 132px; flex: 0 0 132px"><svg width="132" height="10" viewBox="0 0 132 10" fill="none"><rect x="0.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="5.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="11.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="16.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="22.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="27.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="33.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="38.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="44.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="49.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="55.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="60.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="66.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="71.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="77.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="82.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="88.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="93.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="99.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="104.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="110.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="115.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="121.00" y="0" width="4.50" height="10" fill="#ff4d4d"/><rect x="126.50" y="0" width="4.50" height="10" fill="#ff4d4d"/></svg><div class="k" style="margin-top: 5px">сутки</div></div>
+            <span class="btn act">Открыть</span>
+            <span class="btn g">Отложить</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 18px; padding: 13px 4px 13px 0" class="hair">
+            <div style="width: 96px; flex: 0 0 96px; text-align: right">
+              <div class="num" style="font-size: 19px; color: #e0a516; line-height: 1">3:12</div>
+              <div class="k" style="margin-top: 3px; color: #e0a516; opacity: .7">часа</div>
+            </div>
+            <span class="dot" style="background: #e0a516"></span>
+            <div style="flex: 1; min-width: 0">
+              <div style="font-size: 14px; font-weight: 600">Explorer отвечает дольше секунды</div>
+              <div style="margin-top: 3px; font-size: 12px; color: #8d9a9d">1 204 мс при пороге 1 000 · дежурная деградация, но от неё зависит история в кошельке</div>
+            </div>
+            <div style="width: 132px; flex: 0 0 132px"><svg width="132" height="10" viewBox="0 0 132 10" fill="none"><rect x="0.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="5.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="11.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="16.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="22.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="27.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="33.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="38.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="44.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="49.50" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="55.00" y="0" width="4.50" height="10" fill="#2a3436"/><rect x="60.50" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="66.00" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="71.50" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="77.00" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="82.50" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="88.00" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="93.50" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="99.00" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="104.50" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="110.00" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="115.50" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="121.00" y="0" width="4.50" height="10" fill="#e0a516"/><rect x="126.50" y="0" width="4.50" height="10" fill="#e0a516"/></svg><div class="k" style="margin-top: 5px">сутки</div></div>
+            <span class="btn act">Открыть</span>
+            <span class="btn g">Отложить</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="rule"><span class="dot" style="background: #e0a516"></span><span class="k">Цепь</span><span class="k" style="color: #3d494c">3</span></div>
+        <div style="margin-top: 11px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px">
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Cyberia RPC</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">42 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">1 204 запроса</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(224,165,22,.35); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #e0a516"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Blockscout explorer</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">1 204 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="6.52" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="13.04" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="19.57" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="26.09" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="32.61" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="39.13" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="45.65" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="52.17" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="58.70" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="65.22" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="71.74" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="78.26" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="84.78" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="91.30" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="97.83" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="104.35" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="110.87" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="117.39" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="123.91" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="130.43" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="136.96" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="143.48" y="0" width="5.52" height="6" fill="#e0a516"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #2a3436"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Второй узел</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="6.25" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="12.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="18.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="25.00" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="31.25" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="37.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="43.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="50.00" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="56.25" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="62.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="68.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="75.00" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="81.25" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="87.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="93.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="100.00" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="106.25" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="112.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="118.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="125.00" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="131.25" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="137.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="143.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">выключен намеренно</span>
+              
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="rule"><span class="dot" style="background: #3d6e5c"></span><span class="k">Веб</span><span class="k" style="color: #3d494c">5</span></div>
+        <div style="margin-top: 11px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px">
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">cyberia.church</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">118 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">8 421 сессия</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">bridge</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">96 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">143 заявки</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">swap</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">141 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">1 204 свопа</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">blog</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">88 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">TLS-сертификаты</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">41 день запаса</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="rule"><span class="dot" style="background: #ff4d4d"></span><span class="k">Инфраструктура</span><span class="k" style="color: #3d494c">14</span></div>
+        <div style="margin-top: 11px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px">
+          <div style="border: 1px solid rgba(255,77,77,.45); background: rgba(255,77,77,.06); padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #ff4d4d"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Очередь</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#ff4d4d"/><rect x="143.75" y="0" width="5.25" height="6" fill="#ff4d4d"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(224,165,22,.35); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #e0a516"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Хост</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="6.52" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="13.04" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="19.57" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="26.09" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="32.61" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="39.13" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="45.65" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="52.17" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="58.70" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="65.22" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="71.74" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="78.26" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="84.78" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="91.30" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="97.83" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="104.35" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="110.87" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="117.39" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="123.91" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="130.43" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="136.96" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="143.48" y="0" width="5.52" height="6" fill="#e0a516"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">диск 88%</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Пульс хоста</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">41 с</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">cyber.main</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">База данных</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">4 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Redis</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">2 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Планировщик</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">40 с</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">9 команд</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot hatch" style="border-radius: 999px"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Узел IPFS</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="118.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="125.00" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="131.25" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="137.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="143.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">88 пинов</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">nginx</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">12 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Blockscout backend</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">204 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Blockscout frontend</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">96 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Blockscout stats</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">142 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Индексатор user-ops</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">88 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">NFT media handler</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">64 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">12 файлов</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">polygon-edge</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="rule"><span class="dot" style="background: #e0a516"></span><span class="k">Демоны</span><span class="k" style="color: #3d494c">5</span></div>
+        <div style="margin-top: 11px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px">
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Telegram-бот</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">40 с</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">612 сообщений</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Индексатор пулов</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">3 мин</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">34 пула</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot hatch" style="border-radius: 999px"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Демон LainOS</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="118.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="125.00" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="131.25" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="137.50" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/><rect x="143.75" y="0" width="5.25" height="6" fill="rgba(141,154,157,.25)"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не измеряется</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(224,165,22,.35); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #e0a516"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Раздача наград</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="6.52" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="13.04" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="19.57" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="26.09" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="32.61" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="39.13" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="45.65" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="52.17" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="58.70" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="65.22" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="71.74" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="78.26" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="84.78" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="91.30" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="97.83" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="104.35" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="110.87" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="117.39" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="123.91" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="130.43" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="136.96" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="143.48" y="0" width="5.52" height="6" fill="#e0a516"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">41 выплата</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Токены в чате</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #e0a516; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">никто 34 дня</span>
+              
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="rule"><span class="dot" style="background: #e0a516"></span><span class="k">Он-чейн</span><span class="k" style="color: #3d494c">3</span></div>
+        <div style="margin-top: 11px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px">
+          <div style="border: 1px solid rgba(224,165,22,.35); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #e0a516"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Газовая станция</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="6.52" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="13.04" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="19.57" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="26.09" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="32.61" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="39.13" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="45.65" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="52.17" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="58.70" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="65.22" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="71.74" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="78.26" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="84.78" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="91.30" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="97.83" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="104.35" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="110.87" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="117.39" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="123.91" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="130.43" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="136.96" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="143.48" y="0" width="5.52" height="6" fill="#e0a516"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">412 выдач</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Релеер моста</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">96 переводов</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Рынки предсказаний</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">8 рынков</span>
+              
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="rule"><span class="dot" style="background: #e0a516"></span><span class="k">Продукт</span><span class="k" style="color: #3d494c">9</span></div>
+        <div style="margin-top: 11px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px">
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Кошелёк</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">1 942 установки</span>
+              <span class="k" style="color: #3d494c">крит</span>
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(224,165,22,.35); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #e0a516"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Чат кошелька</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">1 402 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="6.52" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="13.04" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="19.57" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="26.09" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="32.61" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="39.13" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="45.65" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="52.17" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="58.70" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="65.22" y="0" width="5.52" height="6" fill="#2a3436"/><rect x="71.74" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="78.26" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="84.78" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="91.30" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="97.83" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="104.35" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="110.87" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="117.39" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="123.91" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="130.43" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="136.96" y="0" width="5.52" height="6" fill="#e0a516"/><rect x="143.48" y="0" width="5.52" height="6" fill="#e0a516"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">96 человек</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Inference API</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">212 мс</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">1 204 запроса</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Чат с Лейн</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">88 сессий</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Лаунчпад</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">2 запуска</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">DAO</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">4 голосования</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Слоты</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #e0a516; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">никто 34 дня</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Стейкинг Solana</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #e0a516; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">не открывали</span>
+              
+            </div>
+          </div>
+          <div style="border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 10px 11px 11px">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="dot" style="background: #3d6e5c"></span>
+              <span style="font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Лента</span>
+              <span class="m" style="margin-left: auto; font-size: 10px; color: #5a686c">—</span>
+            </div>
+            <div style="margin-top: 9px"><svg width="150" height="6" viewBox="0 0 150 6" fill="none"><rect x="0.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="6.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="12.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="18.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="25.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="31.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="37.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="43.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="50.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="56.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="62.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="68.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="75.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="81.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="87.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="93.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="100.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="106.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="112.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="118.75" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="125.00" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="131.25" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="137.50" y="0" width="5.25" height="6" fill="#2a3436"/><rect x="143.75" y="0" width="5.25" height="6" fill="#2a3436"/></svg></div>
+            <div style="margin-top: 7px; display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; color: #5a686c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">402 просмотра</span>
+              
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 22px">
+        <div>
+          <div class="rule"><span class="k">Машины, которые всё это держат</span><span class="k" style="color: #3d494c">пульс раз в минуту</span></div>
+          <div style="margin-top: 11px; display: flex; gap: 12px">
+            <div style="flex: 1; border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 13px 15px">
+              <div style="display: flex; align-items: center; gap: 9px">
+                <span class="dot" style="background: #3d6e5c"></span>
+                <span class="m" style="font-size: 13px; font-weight: 600">cyber.main</span>
+                <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">41 с назад</span>
+              </div>
+              <div style="margin-top: 12px; display: flex; gap: 18px">
+                <div>
+                  <p class="k" style="margin: 0">Нагрузка</p>
+                  <p class="num" style="margin: 5px 0 0; font-size: 17px; color: #e8ecec">1.42</p>
+                  <p style="margin: 2px 0 0; font-size: 10px; color: #3d494c">из 4</p>
+                </div>
+                <div>
+                  <p class="k" style="margin: 0">Память</p>
+                  <p class="num" style="margin: 5px 0 0; font-size: 17px; color: #e8ecec">38%</p>
+                  <p style="margin: 2px 0 0; font-size: 10px; color: #3d494c">свободно</p>
+                </div>
+                <div>
+                  <p class="k" style="margin: 0">Swap</p>
+                  <p class="num" style="margin: 5px 0 0; font-size: 17px; color: #e8ecec">12%</p>
+                  <p style="margin: 2px 0 0; font-size: 10px; color: #3d494c">занято</p>
+                </div>
+                <div>
+                  <p class="k" style="margin: 0">Диск</p>
+                  <p class="num" style="margin: 5px 0 0; font-size: 17px; color: #e0a516">88%</p>
+                  <p style="margin: 2px 0 0; font-size: 10px; color: #3d494c">18 ГБ</p>
+                </div>
+                <div>
+                  <p class="k" style="margin: 0">Аптайм</p>
+                  <p class="num" style="margin: 5px 0 0; font-size: 17px; color: #e8ecec">11 д</p>
+                  <p style="margin: 2px 0 0; font-size: 10px; color: #3d494c">без перезагрузок</p>
+                </div>
+              </div>
+              <p style="margin: 12px 0 0; font-size: 11px; color: #3d494c">Крутится, но не в реестре: <span class="m">lain-forge</span>, <span class="m">tmux:scout</span></p>
+            </div>
+            <div style="width: 300px; flex: 0 0 300px; border: 1px solid rgba(224,165,22,.35); background: rgba(224,165,22,.05); padding: 13px 15px">
+              <div style="display: flex; align-items: center; gap: 9px">
+                <span class="dot" style="background: #e0a516"></span>
+                <span class="m" style="font-size: 13px; font-weight: 600">cyber.edge</span>
+                <span class="m" style="margin-left: auto; font-size: 11px; color: #e0a516">молчит 6 мин</span>
+              </div>
+              <p style="margin: 10px 0 0; font-size: 11.5px; line-height: 1.55; color: #b79445">Три плитки выше стоят в штриховке из-за этого. Умер отчётчик, а не сервисы: инцидент по ним не открывается и в аптайм они не идут.</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="rule"><span class="k">Никто не пользуется</span></div>
+          <div style="margin-top: 11px; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; align-items: center; gap: 10px; border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 11px 13px">
+              <span style="font-size: 12.5px; font-weight: 500">Слоты</span>
+              <span class="m" style="margin-left: auto; font-size: 11.5px; color: #e0a516">никто 34 дня</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; border: 1px solid rgba(232,236,236,.07); background: #0b0e0f; padding: 11px 13px">
+              <span style="font-size: 12.5px; font-weight: 500">Стейкинг Solana</span>
+              <span class="m" style="margin-left: auto; font-size: 11.5px; color: #e0a516">не открывали ни разу</span>
+            </div>
+            <p style="margin: 4px 0 0; font-size: 11px; line-height: 1.55; color: #3d494c">Сюда попадает только измеримое. Ещё 19 программ помечены «не измеряется» — среди них RPC, эксплорер и DEX, и попади они в этот список, он рекомендовал бы удалить половину продукта.</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="rule"><span class="k">Что ломалось</span><span class="k" style="color: #3d494c">открывается после двух неудач подряд, закрывается само</span></div>
+        <div style="margin-top: 10px">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 9px 2px" class="hair">
+            <span class="dot" style="background: #ff4d4d"></span>
+            <span style="width: 190px; flex: 0 0 190px; font-size: 12.5px">Очередь</span>
+            <span style="flex: 1; font-size: 11.5px; color: #5a686c">воркер не отвечает</span>
+            <span class="num" style="width: 110px; text-align: right; font-size: 12.5px; color: #e0a516">12 мин · идёт</span>
+            <span class="m" style="width: 130px; text-align: right; font-size: 11.5px; color: #3d494c">22.08 14:08</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 9px 2px" class="hair">
+            <span class="dot" style="background: #e0a516"></span>
+            <span style="width: 190px; flex: 0 0 190px; font-size: 12.5px">Explorer</span>
+            <span style="flex: 1; font-size: 11.5px; color: #5a686c">отвечает дольше секунды</span>
+            <span class="num" style="width: 110px; text-align: right; font-size: 12.5px; color: #e0a516">3 ч 12 мин · идёт</span>
+            <span class="m" style="width: 130px; text-align: right; font-size: 11.5px; color: #3d494c">22.08 11:08</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 9px 2px" class="hair">
+            <span class="dot" style="background: #ff4d4d"></span>
+            <span style="width: 190px; flex: 0 0 190px; font-size: 12.5px">Cyberia RPC</span>
+            <span style="flex: 1; font-size: 11.5px; color: #5a686c">голова блока не двигалась четыре минуты</span>
+            <span class="num" style="width: 110px; text-align: right; font-size: 12.5px; color: #8d9a9d">9 мин</span>
+            <span class="m" style="width: 130px; text-align: right; font-size: 11.5px; color: #3d494c">21.08 03:41</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 9px 2px" class="hair">
+            <span class="dot" style="background: #ff4d4d"></span>
+            <span style="width: 190px; flex: 0 0 190px; font-size: 12.5px">Telegram-бот</span>
+            <span style="flex: 1; font-size: 11.5px; color: #5a686c">пульс пропал</span>
+            <span class="num" style="width: 110px; text-align: right; font-size: 12.5px; color: #8d9a9d">11 ч 40 мин</span>
+            <span class="m" style="width: 130px; text-align: right; font-size: 11.5px; color: #3d494c">19.08 22:14</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 9px 2px" class="hair">
+            <span class="dot" style="background: #ff4d4d"></span>
+            <span style="width: 190px; flex: 0 0 190px; font-size: 12.5px">cyberia.church</span>
+            <span style="flex: 1; font-size: 11.5px; color: #5a686c">502 от прокси после перезагрузки</span>
+            <span class="num" style="width: 110px; text-align: right; font-size: 12.5px; color: #8d9a9d">26 мин</span>
+            <span class="m" style="width: 130px; text-align: right; font-size: 11.5px; color: #3d494c">18.08 06:02</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

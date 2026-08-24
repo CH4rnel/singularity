@@ -6,7 +6,10 @@ application for Linux, Windows, and macOS.
 The site is a server-driven Inertia app, so the shell does not bundle a copy of
 it: it renders `https://cyberia.church` in a persistent session. That keeps the
 app permanently in sync with production — a deploy is a shipped update — and
-means the whole shell is three small files in `src/`.
+means the whole shell is a handful of small files in `src/`.
+
+The app is fully frameless: there is no operating-system decoration and no
+second title/menu strip drawn above the wallet — see [The window](#the-window).
 
 **The app is the Cyberia wallet.** The window opens on `/wallet`, which renders
 without the site header and footer inside a native shell and fills the frame
@@ -64,6 +67,8 @@ notes, and `config/downloads.php` in the Laravel app.
 | `CYBERIA_PROXY`    | —                        | Proxy for the shell, wins over `*_proxy` |
 | `--proxy=<url>`    | —                        | Same, as a command-line switch, and pins this run |
 | `--no-proxy`       | —                        | Ignore every proxy, connect directly |
+| `CYBERIA_NATIVE_FRAME` | —                    | `1` gives the window back to the desktop's own frame |
+| `--native-frame`   | —                        | Same, as a command-line switch        |
 
 The proxy is also settable inside the app (_File → Proxy…_), which is what a
 packaged install has instead of a command line — see [Proxies](#proxies).
@@ -135,6 +140,35 @@ Reading or changing the proxy lives behind that window's own preload
 (`src/preload-proxy.js`), which no remote page is ever loaded into. All the site
 can do is ask for the window to be raised.
 
+## The window
+
+The app draws no title bar. It is one frameless `BaseWindow` whose single
+`WebContentsView` fills every pixel. On the wallet route, the wallet masthead is
+the drag surface and a double click there maximises the window; its buttons and
+links opt out of dragging. There is no browser-like title, menu strip or row of
+window buttons above it.
+
+Two consequences worth knowing before touching `src/main.js`:
+
+- **The window is a `BaseWindow`, not a `BrowserWindow`** — it has no web
+  contents of its own, and Electron's menu **roles** that reach for the focused
+  `BrowserWindow` (`reload`, `zoomIn`, `toggleDevTools`, `minimize`) would find
+  nothing. Every menu item that touches the page is a `click` naming the site's
+  own contents instead, through one command table shared by the native-frame
+  menu and the keys.
+- **Nothing has keyboard focus until something is given it.** A window holding
+  views focuses none of them, so the shell focuses the site on show and on every
+  window focus — otherwise the app opens with a password field that ignores
+  typing until it is clicked.
+
+There is no application menu attached to the frameless window. `commandForInput`
+in `src/frame.js` answers the useful accelerators directly — matched on the
+physical key as well as the letter, so Ctrl+R still reloads on a Cyrillic layout.
+
+`--native-frame` (or `CYBERIA_NATIVE_FRAME=1`) hands the window back to the
+desktop: the frame, the menu bar and its accelerators all become the system's
+again. It is there for a window manager that decorates windows its own way.
+
 ## What the shell adds over a browser tab
 
 - **Persistent session** — cookies and local storage live in the `persist:cyberia`
@@ -153,6 +187,15 @@ can do is ask for the window to be raised.
 - **`cyberia://` deep links** — `cyberia://profile?tab=xp` focuses the running
   window and navigates it. Registered by the installers; `npm start` registers
   the dev binary.
+- **A window of its own** — no system frame and no substitute title strip; the
+  wallet itself fills and moves the window. See [The window](#the-window).
+- **Tray and login startup** — closing the window keeps Cyberia in the system
+  tray; _Quit_ there stops it. The wallet's Alerts & sound screen can register
+  the packaged app to start hidden at login, with the tray as its way back.
+- **System notifications and sounds** — the wallet can announce incoming
+  transfers, messages and completed operations. The preference stays on the
+  device; notification text contains no address, transaction hash or key
+  material.
 - **Remembered geometry** — window size and position are restored, and revalidated
   against the displays that currently exist.
 - **A real BitTorrent client** — see below. This is the one capability the site
@@ -206,3 +249,6 @@ that finds nobody.
   `src/main.js`. Hardware wallets therefore need the WalletConnect route too.
 - Installers are unsigned. macOS Gatekeeper and Windows SmartScreen will warn
   until a Developer ID / Authenticode certificate is wired into the build.
+- The drawn menu bar is opened with the pointer: there is no Alt to walk it from
+  the keyboard, the way there would be with a native one. Every command in it
+  has a working accelerator, and `--native-frame` brings the native bar back.

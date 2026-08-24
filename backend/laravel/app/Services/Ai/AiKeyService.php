@@ -35,9 +35,29 @@ class AiKeyService
      *
      * @return array{key: AiApiKey, token: string}
      */
-    public function issue(string $address, ?string $name = null, bool $gateExempt = false): array
-    {
+    public function issue(
+        string $address,
+        ?string $name = null,
+        bool $gateExempt = false,
+        string $client = AiApiKey::CLIENT_API,
+        ?string $instanceId = null,
+    ): array {
         $address = Str::lower($address);
+        $client = Str::lower(trim($client));
+        $instanceId = $instanceId === null ? null : Str::lower(trim($instanceId));
+
+        if (! in_array($client, AiApiKey::CLIENTS, true)) {
+            throw new \InvalidArgumentException("Unsupported AI API client: {$client}");
+        }
+
+        if ($client === AiApiKey::CLIENT_LAINOS && ($instanceId === null || ! Str::isUuid($instanceId))) {
+            throw new \InvalidArgumentException('A LainOS key requires a valid instance UUID.');
+        }
+
+        if ($client !== AiApiKey::CLIENT_LAINOS) {
+            $instanceId = null;
+        }
+
         $limit = (int) config('ai.limits.keys_per_address', 5);
 
         // Service keys are issued by an operator at the console, one at a
@@ -55,6 +75,8 @@ class AiKeyService
         $key = AiApiKey::create([
             'address' => $address,
             'name' => $this->cleanName($name),
+            'client' => $client,
+            'instance_id' => $instanceId,
             'prefix' => substr($token, 0, self::VISIBLE_CHARS),
             'token_hash' => $this->hash($token),
             'gate_exempt' => $gateExempt,

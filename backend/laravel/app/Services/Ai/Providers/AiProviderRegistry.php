@@ -19,7 +19,7 @@ class AiProviderRegistry
     private array $instances = [];
 
     /** @var array<string, class-string<AiProvider>> */
-    private const PROVIDERS = [
+    private const SPECIAL_PROVIDERS = [
         'openrouter' => OpenRouterProvider::class,
         'groq' => GroqProvider::class,
     ];
@@ -29,9 +29,14 @@ class AiProviderRegistry
         $provider = $this->instances[$name] ?? null;
 
         if ($provider === null) {
-            $class = self::PROVIDERS[$name] ?? null;
+            $class = self::SPECIAL_PROVIDERS[$name] ?? null;
+            $config = config("ai.providers.{$name}");
 
-            if ($class === null) {
+            if ($class !== null) {
+                $provider = new $class;
+            } elseif (is_array($config)) {
+                $provider = new ConfiguredOpenAiProvider($name, $config);
+            } else {
                 throw AiApiException::upstream(
                     sprintf('Unknown inference provider "%s".', $name),
                     'unknown_provider',
@@ -39,7 +44,7 @@ class AiProviderRegistry
                 );
             }
 
-            $provider = $this->instances[$name] = new $class;
+            $this->instances[$name] = $provider;
         }
 
         return $provider;
@@ -48,14 +53,15 @@ class AiProviderRegistry
     /** Whether a provider exists and holds a key on this server. */
     public function configured(string $name): bool
     {
-        return isset(self::PROVIDERS[$name]) && $this->get($name)->configured();
+        return array_key_exists($name, (array) config('ai.providers', []))
+            && $this->get($name)->configured();
     }
 
     /** @return list<string> */
     public function names(): array
     {
         return array_values(array_filter(
-            array_keys(self::PROVIDERS),
+            array_keys((array) config('ai.providers', [])),
             fn (string $name): bool => $this->configured($name),
         ));
     }

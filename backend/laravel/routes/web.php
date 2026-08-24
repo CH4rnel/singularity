@@ -18,7 +18,11 @@ use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChangelogController;
-use App\Http\Controllers\CrmAnalyticsController;
+use App\Http\Controllers\ConsoleAiKeysController;
+use App\Http\Controllers\ConsoleChatController;
+use App\Http\Controllers\ConsoleController;
+use App\Http\Controllers\ConsoleMockupController;
+use App\Http\Controllers\ConsoleNumbersController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmNoteController;
@@ -32,12 +36,14 @@ use App\Http\Controllers\LinkController;
 use App\Http\Controllers\LiquidityController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PostController;
+use App\Http\Controllers\ProductAnalyticsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProposalCommentController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProposalVoteController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReactionController;
+use App\Http\Controllers\ServiceMonitorController;
 use App\Http\Controllers\StakingController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
@@ -424,24 +430,103 @@ Route::middleware(['auth'])->group(function () {
     Route::post('push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
 
-    // CRM — contacts, notes and data-source sync. Restricted to the operator
-    // wallets in config/crm.php; everyone else gets a 404. Static routes
-    // (sync/export) are declared before the {contact} wildcard so they take
-    // precedence.
+    /*
+     * The console ("Пульт") — operational lenses on one stream, behind the operator
+     * wallet allowlist in config/crm.php; everyone else gets a 404.
+     *
+     * `/crm` is the queue rather than a list of contacts, because the question
+     * an operator arrives with is "what requires me now" and never "what do I
+     * want to look at". The original pages are lenses on the same material;
+     * API keys adds a read-only inventory. Static routes are declared before the
+     * {contact} wildcard so they take precedence.
+     */
     Route::prefix('crm')->name('crm.')->middleware(EnsureCrmAdmin::class)->group(function () {
+        Route::get('/', [ConsoleController::class, 'index'])->name('index');
+        Route::post('snooze', [ConsoleController::class, 'snooze'])->name('snooze');
+        Route::delete('snooze', [ConsoleController::class, 'wake'])->name('snooze.wake');
+
         Route::post('sync', [CrmController::class, 'sync'])->name('sync');
         Route::get('export', [CrmController::class, 'export'])->name('export');
-        Route::get('analytics', [CrmAnalyticsController::class, 'index'])->name('analytics');
+
+        Route::get('people', [CrmContactController::class, 'index'])->name('people');
+        Route::post('people', [CrmContactController::class, 'store'])->name('store');
+
+        // One subject switch instead of two analytics pages: installations of
+        // the wallet, or browsers reading the site.
+        Route::get('numbers', [ConsoleNumbersController::class, 'index'])->name('numbers');
+        Route::get('installs/{user}', [ProductAnalyticsController::class, 'show'])->name('installs.show');
+        // Marking an installation as ours, or taking the mark back. A POST
+        // because it changes what every number on the console means.
+        Route::post('installs/{user}/internal', [ProductAnalyticsController::class, 'internal'])
+            ->name('installs.internal');
+
+        // Is everything running, and is anyone using it. Renders the last
+        // sweep; the probing itself is `services:check` on the scheduler.
+        Route::get('machines', [ServiceMonitorController::class, 'index'])->name('machines');
+
+        // OpenAI-compatible grants bound to user-installed LainOS instances.
+        // A full secret leaves the issue response once; the inventory stores
+        // and renders only its hash and visible prefix.
+        Route::get('api-keys', [ConsoleAiKeysController::class, 'index'])->name('ai-keys');
+        Route::post('api-keys', [ConsoleAiKeysController::class, 'store'])->name('ai-keys.store');
+
+        // The design this console was built from, kept where the console is.
+        // A canvas link rots and an exported picture loses its text; the
+        // artboards themselves outlive both.
+        Route::get('mockup', [ConsoleMockupController::class, 'index'])->name('mockup');
+        Route::get('mockup/{screen}', [ConsoleMockupController::class, 'screen'])
+            ->where('screen', '[a-z]+')
+            ->name('mockup.screen');
+
+        /*
+         * The room. Static addresses first: `chat/files` is the same stream
+         * read as a pile of files, and `chat/{message}` must not swallow it.
+         */
+        Route::get('chat', [ConsoleChatController::class, 'index'])->name('chat.index');
+        Route::get('chat/since', [ConsoleChatController::class, 'since'])->name('chat.since');
+        Route::get('chat/files', [ConsoleChatController::class, 'files'])->name('chat.files');
+        // A file has no address of its own: the private disk is not served,
+        // and this is the only way back out of it.
+        Route::get('chat/files/{file}', [ConsoleChatController::class, 'download'])->name('chat.download');
+        Route::post('chat', [ConsoleChatController::class, 'store'])->name('chat.store');
+        // Which model LainOS answers with — the console is one of the
+        // daemon's switch surfaces, and the only one open while its answers
+        // are being read. Declared before the {message} routes.
+        Route::post('chat/lainos/provider', [ConsoleChatController::class, 'provider'])->name('chat.provider');
+        Route::post('chat/{message}/answer', [ConsoleChatController::class, 'answer'])->name('chat.answer');
+        Route::post('chat/{message}/task', [ConsoleChatController::class, 'task'])->name('chat.task');
+        Route::delete('chat/{message}', [ConsoleChatController::class, 'destroy'])->name('chat.destroy');
+
         Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
         Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');
         Route::put('tasks/{task}', [CrmTaskController::class, 'update'])->name('tasks.update');
+        Route::post('tasks/{task}/claim', [CrmTaskController::class, 'claim'])->name('tasks.claim');
         Route::delete('tasks/{task}', [CrmTaskController::class, 'destroy'])->name('tasks.destroy');
-        Route::get('/', [CrmContactController::class, 'index'])->name('index');
-        Route::post('/', [CrmContactController::class, 'store'])->name('store');
+
+        /*
+         * The addresses the old five pages had. They are in messages, in
+         * bookmarks and in the Telegram ops channel, so they keep working and
+         * land on the lens that answers the same question.
+         */
+        Route::redirect('analytics', '/crm/numbers?subject=sessions')->name('analytics');
+        Route::redirect('product', '/crm/numbers')->name('product');
+        Route::redirect('services', '/crm/machines')->name('services');
+        Route::get('product/users/{user}', fn (string $user) => redirect()->route('crm.installs.show', $user))
+            ->name('product.user');
+
         Route::get('{contact}', [CrmContactController::class, 'show'])->name('show');
         Route::put('{contact}', [CrmContactController::class, 'update'])->name('update');
         Route::delete('{contact}', [CrmContactController::class, 'destroy'])->name('destroy');
         Route::post('{contact}/notes', [CrmNoteController::class, 'store'])->name('notes.store');
+        /*
+         * Same-person links. A person arrives under an account, an EVM address
+         * and a Solana address, and the console used to file three strangers;
+         * these say which records are one human. Never a merge — the claim is
+         * a row, and withdrawing it is a delete.
+         */
+        Route::post('{contact}/identity', [CrmContactController::class, 'link'])->name('identity.link');
+        Route::post('identity-links/{link}/confirm', [CrmContactController::class, 'confirmLink'])->name('identity.confirm');
+        Route::delete('identity-links/{link}', [CrmContactController::class, 'unlink'])->name('identity.unlink');
         Route::delete('notes/{note}', [CrmNoteController::class, 'destroy'])->name('notes.destroy');
         Route::post('{contact}/tasks', [CrmTaskController::class, 'store'])->name('tasks.storeForContact');
     });

@@ -4,6 +4,7 @@ use App\Models\BridgeRequest;
 use App\Models\CrmContact;
 use App\Models\User;
 use App\Services\CrmSyncService;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -126,6 +127,71 @@ test('the sync endpoint runs every importer', function () {
         ->assertSessionHas('success');
 
     $this->assertDatabaseHas('crm_contacts', ['user_id' => $user->id]);
+});
+
+test('the balances-only command skips imports and refreshes the requested batch', function () {
+    $sync = Mockery::mock(CrmSyncService::class);
+    $sync->shouldNotReceive('syncAll');
+    $sync->shouldReceive('refreshBalances')->once()->with(25)->andReturn(7);
+    app()->instance(CrmSyncService::class, $sync);
+
+    $this->artisan('crm:sync --balances-only --limit=25')
+        ->expectsOutputToContain('Refreshed on-chain balances for 7 contacts.')
+        ->assertSuccessful();
+});
+
+test('holder discovery and wallet balance refreshes are scheduled automatically', function () {
+    $events = collect(app(Schedule::class)->events());
+
+    $holderSync = $events->first(fn ($event) => str_contains((string) $event->command, 'crm:sync')
+        && ! str_contains((string) $event->command, '--balances-only'));
+    $walletRefresh = $events->first(fn ($event) => str_contains(
+        (string) $event->command,
+        'crm:sync --balances-only --limit=100',
+    ));
+
+    expect($holderSync !== null)->toBeTrue();
+    expect($holderSync->expression)->toBe('0 0 * * *');
+    expect($holderSync->withoutOverlapping)->toBeTrue();
+
+    expect($walletRefresh !== null)->toBeTrue();
+    expect($walletRefresh->expression)->toBe('*/30 * * * *');
+    expect($walletRefresh->withoutOverlapping)->toBeTrue();
+});
+
+test('wallet refresh updates the oldest evm and solana contacts in one batch', function () {
+    $evm = CrmContact::factory()->create([
+        'evm_address' => '0x'.str_repeat('a', 40),
+        'solana_address' => null,
+        'last_synced_at' => now()->subHours(3),
+    ]);
+    $solana = CrmContact::factory()->create([
+        'evm_address' => null,
+        'solana_address' => 'So1anaWa11etrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr11',
+        'last_synced_at' => now()->subHours(2),
+    ]);
+    $next = CrmContact::factory()->create([
+        'evm_address' => '0x'.str_repeat('b', 40),
+        'solana_address' => null,
+        'last_synced_at' => now()->subHour(),
+    ]);
+
+    Http::fake(function ($request) {
+        return match ($request->data()['method'] ?? '') {
+            'eth_getBalance' => Http::response(['result' => '0xde0b6b3a7640000']),
+            'getTokenAccountsByOwner' => Http::response(['result' => ['value' => [
+                holderAccount('ignored-owner', '2500000'),
+            ]]]),
+            default => Http::response([], 500),
+        };
+    });
+
+    $refreshed = app(CrmSyncService::class)->refreshBalances(2);
+
+    expect($refreshed)->toBe(2)
+        ->and($evm->refresh()->cyber_balance)->toBe('1.000000000000000000')
+        ->and($solana->refresh()->cyber_sol_balance)->toBe('2.500000')
+        ->and($next->refresh()->cyber_balance)->toBeNull();
 });
 
 test('on-chain holders are imported with balances and whale tier', function () {

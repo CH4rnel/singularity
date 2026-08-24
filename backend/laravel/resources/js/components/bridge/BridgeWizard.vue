@@ -311,8 +311,77 @@ watch(sourceWalletConnected, (connected) => {
         flow.context.sourceAddress = evmWallet.address.value;
     }
 
+    if (flow.context.sourceAddress) {
+        reportConnection(flow.context.sourceAddress);
+    }
+
     refreshSourceBalance();
 });
+
+/**
+ * The step that was invisible.
+ *
+ * Of 513 recorded bridge sessions, 123 chose a direction and 42 reached the
+ * destination field: two thirds of everyone who engaged with this wizard at
+ * all disappeared inside the configure step, and no event distinguished
+ * "opened the form and never typed a number" from "typed one and thought
+ * better of it". `amount_entered` has been declared in `BridgeEventType`ate
+ * since this wizard was written and emitted by nobody.
+ *
+ * Fired once per direction, at the moment the amount first becomes a positive
+ * number — not on every keystroke, which would say how fast somebody types
+ * rather than whether they committed to a figure.
+ */
+const amountReported = ref<string | null>(null);
+
+watch(
+    () => flow.context.amount,
+    (amount) => {
+        const direction = flow.context.direction;
+
+        if (!direction || !(parseFloat(amount) > 0)) {
+            return;
+        }
+
+        if (amountReported.value === direction) {
+            return;
+        }
+
+        amountReported.value = direction;
+        analytics.track('amount_entered', { direction, amount });
+    },
+);
+
+/**
+ * A wallet that was already connected when the wizard opened.
+ *
+ * The connect events fired only from the button's own handler, so a visitor
+ * arriving with Phantom or MetaMask already authorised — which is most repeat
+ * visitors — recorded no connection at all: 39 sessions submitted a lock
+ * transaction while 11 had recorded connecting a wallet. The funnel then
+ * showed people signing transactions from wallets they had apparently never
+ * connected.
+ */
+const connectionReported = ref(false);
+
+const reportConnection = (address: string) => {
+    if (connectionReported.value || !flow.context.direction) {
+        return;
+    }
+
+    connectionReported.value = true;
+
+    const sourceWallet = bridgeRoute(flow.context.direction).sourceWallet;
+
+    analytics.track(
+        sourceWallet === 'solana'
+            ? 'solana_wallet_connected'
+            : sourceWallet === 'ton'
+              ? 'ton_wallet_connected'
+              : 'evm_wallet_connected',
+        { source_address: address },
+    );
+};
 
 watch(
     () => flow.context.token,
@@ -376,6 +445,10 @@ const handleDirection = (
         flow.context.sourceAddress = evmWallet.address.value;
     }
 
+    if (flow.context.sourceAddress) {
+        reportConnection(flow.context.sourceAddress);
+    }
+
     refreshSourceBalance();
     refreshDestinationCapacity();
 };
@@ -387,26 +460,15 @@ const handleConnectSource = async () => {
 
     const sourceWallet = bridgeRoute(flow.context.direction).sourceWallet;
 
-    if (sourceWallet === 'solana') {
-        const addr = await solanaWallet.connect();
+    const addr =
+        sourceWallet === 'solana'
+            ? await solanaWallet.connect()
+            : sourceWallet === 'ton'
+              ? await tonWallet.connect()
+              : await evmWallet.connect();
 
-        if (addr) {
-            analytics.track('solana_wallet_connected', {
-                source_address: addr,
-            });
-        }
-    } else if (sourceWallet === 'ton') {
-        const addr = await tonWallet.connect();
-
-        if (addr) {
-            analytics.track('ton_wallet_connected', { source_address: addr });
-        }
-    } else {
-        const addr = await evmWallet.connect();
-
-        if (addr) {
-            analytics.track('evm_wallet_connected', { source_address: addr });
-        }
+    if (addr) {
+        reportConnection(addr);
     }
 };
 

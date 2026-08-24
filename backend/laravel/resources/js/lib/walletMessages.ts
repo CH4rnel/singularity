@@ -23,6 +23,7 @@ export const walletMessages: Messages = {
         navActivity: 'Activity',
         navAnalytics: 'Analytics',
         navSecurity: 'Security',
+        navPreferences: 'Alerts & sound',
         navLain: 'Lain',
         tabWallet: 'Wallet',
         // Shorter than "Messages", because six labels share the width five had.
@@ -31,6 +32,33 @@ export const walletMessages: Messages = {
         tileTokensHint: 'ERC-20 · every network',
         tileAnalyticsHint: 'Allocation · flow',
         tileSecurityHint: 'Lock · keys',
+        tilePreferencesHint: 'Alerts · sound · startup',
+
+        // Local app preferences
+        preferencesTitle: 'Alerts & sound',
+        preferencesBody:
+            'Choose what this device says out loud and whether the desktop app stays within reach after login.',
+        preferencesNotifications: 'System notifications',
+        preferencesNotificationsHint:
+            'Incoming transfers, messages and completed operations',
+        preferencesNotificationsDenied:
+            'Blocked by the operating system or browser — allow Cyberia in its notification settings',
+        preferencesNotificationsUnsupported:
+            'System notifications are not available in this shell',
+        preferencesSounds: 'Wallet sounds',
+        preferencesSoundsHint: 'Incoming, success, message and error cues',
+        preferencesStartup: 'Launch with the operating system',
+        preferencesStartupHint:
+            'Starts hidden and remains available from the system tray',
+        preferencesStartupError: 'The login item could not be changed.',
+        preferencesTrayHint:
+            'Closing the window keeps Cyberia in the system tray. Use Quit there to stop it completely.',
+        preferencesTest: 'Test notification and sound',
+        preferencesTestTitle: 'Cyberia is listening',
+        preferencesTestBody: 'Notifications and wallet sounds are ready.',
+        notificationIncomingTitle: 'Incoming transfer',
+        notificationIncomingBody: '{amount} {symbol} received on {chain}',
+        notificationChatBody: '{count} new encrypted messages',
 
         // Welcome
         welcomeHeadline: 'one key.\nevery network.\nyour custody.',
@@ -625,6 +653,10 @@ export const walletMessages: Messages = {
         autoLockHint: 'locks after inactivity',
         clipboardRow: 'Clear clipboard after copy',
         clipboardHint: '30 seconds, while this tab keeps focus',
+        analyticsRow: 'Anonymous usage statistics',
+        analyticsHint:
+            'Which screens are used and whether actions succeed. Never your seed phrase, keys, password, addresses or amounts.',
+        analyticsBlocked: 'Off — your browser asks sites not to track you',
         networksSection: 'Networks',
         builtinNetworks: 'Built-in networks',
         verified: 'Verified',
@@ -1113,15 +1145,43 @@ export const walletMessages: Messages = {
         refresh: 'Обновить',
         navPortfolio: 'Портфель',
         navAnalytics: 'Аналитика',
+        navPreferences: 'Уведомления и звук',
         tabWallet: 'Кошелёк',
         tabChat: 'Чат',
         tabLaunch: 'Запуск',
         tileTokensHint: 'ERC-20 · во всех сетях',
         tileAnalyticsHint: 'Доли · переводы',
         tileSecurityHint: 'Замок · ключи',
+        tilePreferencesHint: 'Сигналы · звук · автозапуск',
         navActivity: 'История',
         navSecurity: 'Безопасность',
         navLain: 'Лейн',
+
+        // Локальные настройки приложения
+        preferencesTitle: 'Уведомления и звук',
+        preferencesBody:
+            'Выберите, о чём сообщать на этом устройстве и должно ли настольное приложение оставаться доступным после входа в ОС.',
+        preferencesNotifications: 'Системные уведомления',
+        preferencesNotificationsHint:
+            'Входящие переводы, сообщения и завершённые операции',
+        preferencesNotificationsDenied:
+            'Заблокированы системой или браузером — разрешите уведомления для Cyberia в их настройках',
+        preferencesNotificationsUnsupported:
+            'В этой оболочке системные уведомления недоступны',
+        preferencesSounds: 'Звуки кошелька',
+        preferencesSoundsHint: 'Входящие, успех, сообщение и ошибка',
+        preferencesStartup: 'Запускать вместе с ОС',
+        preferencesStartupHint:
+            'Запускается скрыто и остаётся доступным через системный трей',
+        preferencesStartupError: 'Не удалось изменить настройку автозапуска.',
+        preferencesTrayHint:
+            'Закрытие окна оставляет Cyberia в системном трее. Чтобы остановить приложение полностью, выберите там «Выйти».',
+        preferencesTest: 'Проверить уведомление и звук',
+        preferencesTestTitle: 'Cyberia слушает',
+        preferencesTestBody: 'Уведомления и звуки кошелька готовы.',
+        notificationIncomingTitle: 'Входящий перевод',
+        notificationIncomingBody: 'Получено {amount} {symbol} в сети {chain}',
+        notificationChatBody: 'Новых зашифрованных сообщений: {count}',
 
         // Welcome
         welcomeHeadline: 'один ключ.\nвсе сети.\nваше хранение.',
@@ -1707,6 +1767,10 @@ export const walletMessages: Messages = {
         autoLockHint: 'блокируется после простоя',
         clipboardRow: 'Очищать буфер после копирования',
         clipboardHint: '30 секунд, пока вкладка остаётся активной',
+        analyticsRow: 'Анонимная статистика использования',
+        analyticsHint:
+            'Какими экранами пользуются и удаются ли действия. Никогда — сид-фраза, ключи, пароль, адреса и суммы.',
+        analyticsBlocked: 'Выключено — браузер просит сайты не отслеживать вас',
         networksSection: 'Сети',
         builtinNetworks: 'Встроенные сети',
         verified: 'Проверено',
@@ -2197,6 +2261,7 @@ export const walletMessages: Messages = {
         navActivity: '动态',
         navAnalytics: '分析',
         navSecurity: '安全',
+        navPreferences: '通知与声音',
         navLain: 'Lain',
         tabWallet: '钱包',
         // Shorter than "Messages", because six labels share the width five had.
@@ -2205,6 +2270,30 @@ export const walletMessages: Messages = {
         tileTokensHint: 'ERC-20 · 所有网络',
         tileAnalyticsHint: '配置 · 流向',
         tileSecurityHint: '锁定 · 密钥',
+        tilePreferencesHint: '提醒 · 声音 · 自启动',
+
+        // 本地应用设置
+        preferencesTitle: '通知与声音',
+        preferencesBody:
+            '选择这台设备要提醒什么，以及桌面版是否在登录系统后保持可用。',
+        preferencesNotifications: '系统通知',
+        preferencesNotificationsHint: '收款、消息和已完成的操作',
+        preferencesNotificationsDenied:
+            '已被系统或浏览器阻止 — 请在通知设置中允许 Cyberia',
+        preferencesNotificationsUnsupported: '这个运行环境不支持系统通知',
+        preferencesSounds: '钱包声音',
+        preferencesSoundsHint: '收款、成功、消息和错误提示音',
+        preferencesStartup: '随操作系统启动',
+        preferencesStartupHint: '隐藏启动，并可从系统托盘打开',
+        preferencesStartupError: '无法修改自启动设置。',
+        preferencesTrayHint:
+            '关闭窗口后 Cyberia 会留在系统托盘。要完全退出，请在托盘菜单中选择“退出”。',
+        preferencesTest: '测试通知和声音',
+        preferencesTestTitle: 'Cyberia 正在监听',
+        preferencesTestBody: '通知和钱包声音已就绪。',
+        notificationIncomingTitle: '收到转账',
+        notificationIncomingBody: '在 {chain} 收到 {amount} {symbol}',
+        notificationChatBody: '{count} 条新的加密消息',
 
         // Welcome
         welcomeHeadline: '一把密钥。\n所有网络。\n由你保管。',
@@ -2763,6 +2852,10 @@ export const walletMessages: Messages = {
         autoLockHint: '闲置一段时间后锁定',
         clipboardRow: '复制后清空剪贴板',
         clipboardHint: '30 秒，前提是这个标签页保持在前台',
+        analyticsRow: '匿名使用统计',
+        analyticsHint:
+            '记录使用了哪些界面以及操作是否成功。绝不包含助记词、私钥、密码、地址或金额。',
+        analyticsBlocked: '已关闭 — 你的浏览器要求网站不要追踪你',
         networksSection: '网络',
         builtinNetworks: '内置网络',
         verified: '已验证',

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { telegramLaunchParams } from '@/lib/telegram';
 
@@ -52,5 +53,40 @@ test('an ordinary visit is never mistaken for Telegram', () => {
         'https://cyberia.church/wallet#tgWebAppVersion=7.0',
     ]) {
         assert.equal(telegramLaunchParams(url), null, url);
+    }
+});
+
+/**
+ * The Mini App's furniture is wired with `immediate` watches, so it runs while
+ * `setup` is still executing — reading `telegramBack` there evaluates the
+ * navigation table and the openers. Declared further down the file, those are
+ * still in their temporal dead zone, and the whole page throws before its
+ * first paint: the Mini App opened on a black screen while the same wallet was
+ * fine in a browser tab, because nothing outside Telegram runs that block.
+ *
+ * Source order is the fix, so source order is what is pinned.
+ */
+test('the Telegram wiring sits below the navigation it reads', () => {
+    const source = readFileSync(
+        new URL('../../resources/js/pages/Wallet.vue', import.meta.url),
+        'utf8',
+    );
+
+    const wiring = source.indexOf('telegram mini app ---');
+
+    assert.ok(wiring > 0, 'the Telegram section is gone from Wallet.vue');
+
+    for (const declaration of [
+        'const PARENTS',
+        'const openSection',
+        'const openSend',
+    ]) {
+        const at = source.indexOf(declaration);
+
+        assert.ok(at > 0, `${declaration} is gone from Wallet.vue`);
+        assert.ok(
+            at < wiring,
+            `${declaration} must be initialised before the Telegram watches read it`,
+        );
     }
 });

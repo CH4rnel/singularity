@@ -1,0 +1,287 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>x-dc{display:block}helmet{display:none}</style>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #07090a; color: #e8ecec;
+      font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    a { color: #00e5d1; text-decoration: none; }
+    a:hover { color: #6cf3e6; }
+    .m { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-variant-numeric: tabular-nums; }
+    /* Микро-подпись. Единственный способ назвать блок: линия сверху и малый кегль. */
+    .k { font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #5a686c; }
+    .t2 { color: #8d9a9d; }
+    .t3 { color: #5a686c; }
+    /* Полоса-разделитель раздела: подпись слева, волосяная линия до края. */
+    .rule { display: flex; align-items: center; gap: 12px; }
+    .rule::after { content: ""; flex: 1; height: 1px; background: rgba(232,236,236,.09); }
+    .dot { width: 7px; height: 7px; border-radius: 999px; flex: 0 0 7px; }
+    /* «Нет данных» — штриховка, а не цвет: неизвестность не должна выглядеть как состояние. */
+    .hatch { background-image: repeating-linear-gradient(135deg, rgba(141,154,157,.5) 0 1px, transparent 1px 4px);
+      background-color: transparent; border: 1px solid rgba(141,154,157,.35); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 30px;
+      padding: 0 13px; border: 1px solid rgba(232,236,236,.14); font-size: 12px; font-weight: 600;
+      letter-spacing: .04em; text-transform: uppercase; color: #cdd6d7; background: transparent; }
+    .btn.act { border-color: rgba(0,229,209,.55); color: #00e5d1; }
+    .btn.g { border-color: transparent; color: #5a686c; text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .panel { background: #0b0e0f; border: 1px solid rgba(232,236,236,.07); }
+    .hair { border-top: 1px solid rgba(232,236,236,.07); }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums;
+      font-weight: 600; letter-spacing: -.02em; }
+    table { border-collapse: collapse; width: 100%; }
+    th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+      color: #5a686c; padding: 0 14px 9px; }
+    td { padding: 9px 14px; border-top: 1px solid rgba(232,236,236,.07); font-size: 13px; }
+    .tag { display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 7px;
+      font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+      border: 1px solid rgba(232,236,236,.14); color: #8d9a9d; }
+    /* Комната. Автор — моноширинный, как всё, что сравнивают глазами. */
+    .who { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600;
+      letter-spacing: .12em; text-transform: uppercase; color: #cdd6d7; }
+    /* Вложение — строка на волосяной рамке, а не карточка: файл здесь такой же
+       предмет, как сервис в «Машинах». */
+    .att { display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 12px;
+      border: 1px solid rgba(232,236,236,.10); background: #0b0e0f; }
+    .ext { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 9.5px; font-weight: 600;
+      letter-spacing: .1em; padding: 3px 6px; border: 1px solid rgba(232,236,236,.14); color: #8d9a9d; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 940px; display: flex; flex-direction: column; background: #07090a; color: #e8ecec; font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif; overflow: hidden">
+    <div style="height: 46px; flex: 0 0 46px; display: flex; align-items: stretch; border-bottom: 1px solid rgba(232,236,236,.07)">
+      <div style="display: flex; align-items: center; gap: 11px; padding: 0 16px; border-left: 2px solid rgba(141,154,157,.4)">
+        <span class="dot" style="background: #3d6e5c"></span>
+        <span style="font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8d9a9d">Всё на месте</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Цепь</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #8d9a9d">3/3</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Веб</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #8d9a9d">5/5</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Инфра</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #8d9a9d">21/21</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Демоны</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #e0a516">4/5</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Продукт</span>
+        <span class="m" style="font-size: 12px; font-weight: 600; color: #8d9a9d">9/9</span>
+      </div>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Активные с деньгами</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">268</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Установки 30 д</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">1 942</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 0 15px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="k">Мост 30 д</span>
+        <span class="m" style="font-size: 12px; font-weight: 600">$1.2M</span>
+      </div>
+      <div style="display: flex; align-items: center; padding: 0 16px; border-left: 1px solid rgba(232,236,236,.07)">
+        <span class="m" style="font-size: 11px; color: #5a686c">обход 12:47:03</span>
+      </div>
+    </div>
+  <div style="flex: 1; min-height: 0; display: flex">
+    <nav style="width: 76px; flex: 0 0 76px; border-right: 1px solid rgba(232,236,236,.07); display: flex; flex-direction: column; align-items: stretch; padding: 12px 0">
+      <div style="display: flex; align-items: center; justify-content: center; height: 34px; margin-bottom: 14px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00e5d1" stroke-width="1.7" stroke-linecap="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="4.5"/></svg>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h4l3-7.5 4.5 15 3-7.5h5.5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Сейчас</span>
+        <span class="m" style="position: absolute; top: 8px; right: 14px; min-width: 15px; height: 15px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: #07090a; background: #00e5d1">5</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5a6 6 0 0 1 12 0"/><circle cx="17" cy="8.5" r="2.6"/><path d="M16.5 14.2a5.4 5.4 0 0 1 4.6 5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Люди</span>
+        
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="16" height="16" rx="2"/><path d="M8 12.2l2.6 2.6L16 9.5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Задачи</span>
+        <span class="m" style="position: absolute; top: 8px; right: 14px; min-width: 15px; height: 15px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: #07090a; background: #e0a516">3</span>
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #e8ecec; background: rgba(0,229,209,.05)">
+        <span style="position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: #00e5d1"></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 4.5h17v11h-9.8L6 19.5V15.5H3.5z"/><path d="M7.5 8.5h9M7.5 11.5h5.5"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Чат</span>
+        
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5V12M10.5 19.5V5M16 19.5v-5.5M21 19.5V9"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Числа</span>
+        
+      </div>
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 0; color: #5a686c">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+        <span style="font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase">Машины</span>
+        
+      </div>
+      <div style="margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px">
+        <span class="m" style="font-size: 10px; color: #5a686c">RU</span>
+        <div style="width: 26px; height: 26px; border: 1px solid rgba(232,236,236,.14); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #8d9a9d">ЛА</div>
+      </div>
+    </nav>
+    <main style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: baseline; gap: 12px; padding: 20px 24px 0">
+        <h1 style="margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.01em">Чат</h1>
+        <span class="m" style="font-size: 12px; color: #5a686c">LainOS в комнате · отвечает, только когда позвали по имени</span>
+        <div style="margin-left: auto; display: flex; gap: 8px">
+          <span class="btn g">Только ответы LainOS</span>
+          <span class="btn g">Файлы · 128</span>
+        </div>
+      </div>
+      <div style="flex: 1; min-height: 0; display: flex">
+        <div style="flex: 1; min-width: 0; padding: 16px 24px 20px; display: flex; flex-direction: column">
+          <div style="display: flex; flex-direction: column">
+          <div style="display: flex; justify-content: center; padding: 2px 0 8px">
+            <span class="btn g" style="height: 24px">Показать ещё 18 сообщений</span>
+          </div>
+          <div class="rule" style="margin: 2px 0 4px"><span class="k">Сегодня, 23 августа</span><span class="k" style="margin-left: 12px; color: #5a686c">разговор с LainOS</span></div>
+          <div style="display: flex; align-items: flex-start; gap: 16px; padding: 12px 4px 12px 0" class="hair">
+            <div style="width: 46px; flex: 0 0 46px; text-align: right; padding-top: 2px"><span class="m" style="font-size: 11.5px; color: #5a686c">14:02</span></div>
+            <div style="flex: 1; min-width: 0; ">
+              <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 5px"><span class="dot" style="background: #2a3436"></span><span class="who">lain</span></div><p style="margin: 0; font-size: 13px; line-height: 1.55; color: #cdd6d7"><span style="color: #00e5d1">@lainos</span> собери, что мы знаем про 0x89bb… — он опять торгует</p><div style="margin-top: 8px; display: flex; gap: 7px"><span class="tag" style="border-color: rgba(255,43,214,.4); color: #ff2bd6"><span class="dot" style="width: 5px; height: 5px; flex: 0 0 5px; background: #ff2bd6"></span>Nakamoto Ghost</span></div>
+            </div>
+            
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 16px; padding: 12px 4px 12px 0" class="hair">
+            <div style="width: 46px; flex: 0 0 46px; text-align: right; padding-top: 2px"><span class="m" style="font-size: 11.5px; color: #5a686c">14:02</span></div>
+            <div style="flex: 1; min-width: 0; border-left: 2px solid rgba(0,229,209,.35); padding-left: 14px; margin-left: -16px;">
+              <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 5px"><span class="dot" style="background: #00e5d1"></span><span class="who" style=color:#00e5d1>LainOS</span><span class="k" style="color: #3d494c">демон · claude</span></div><p style="margin: 0; font-size: 13px; line-height: 1.6; color: #cdd6d7">первый вход 21 августа, кошелёк создан в тот же час. первая сделка — обмен CYBER.sol на SOL с проскальзыванием 99.98%: он отдал почти всё в пустой пул. после этого три дня тишины и сегодня два обмена по $40.</p><p style="margin: 8px 0 0; font-size: 13px; line-height: 1.6; color: #cdd6d7">это не кит, который вернулся. это человек, которому в первый день сломали кошелёк, и он проверяет, работает ли он ещё.</p><p style="margin: 9px 0 0; font-size: 11px; color: #3d494c; line-height: 1.5">в контексте: карточка человека #482 и 20 последних сообщений комнаты · файлы не открывались · ответил демон LainOS, claude</p>
+            </div>
+            <div style="width: 128px; flex: 0 0 128px; display: flex; justify-content: flex-end; padding-top: 1px"><span class="btn act" style="height: 26px">В задачу</span></div>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 16px; padding: 12px 4px 12px 0" class="hair">
+            <div style="width: 46px; flex: 0 0 46px; text-align: right; padding-top: 2px"><span class="m" style="font-size: 11.5px; color: #5a686c">14:05</span></div>
+            <div style="flex: 1; min-width: 0; ">
+              <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 5px"><span class="dot" style="background: #2a3436"></span><span class="who">netrunner</span></div><p style="margin: 0; font-size: 13px; line-height: 1.55; color: #cdd6d7">а бак газа мы тогда так и не долили?</p>
+            </div>
+            <div style="width: 128px; flex: 0 0 128px; display: flex; justify-content: flex-end; padding-top: 1px"><span style="font-size: 11px; color: #3d494c; text-align: right; line-height: 1.45">LainOS молчит:<br>его не позвали</span></div>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 16px; padding: 12px 4px 12px 0" class="hair">
+            <div style="width: 46px; flex: 0 0 46px; text-align: right; padding-top: 2px"><span class="m" style="font-size: 11.5px; color: #5a686c">14:05</span></div>
+            <div style="flex: 1; min-width: 0; ">
+              <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 5px"><span class="dot" style="background: #2a3436"></span><span class="who">lain</span></div><p style="margin: 0; font-size: 13px; line-height: 1.55; color: #cdd6d7">долили вчера, 60 CYBER. <span style="color: #00e5d1">@lainos</span> сколько ушло с тех пор?</p>
+            </div>
+            
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 16px; padding: 12px 4px 12px 0" class="hair">
+            <div style="width: 46px; flex: 0 0 46px; text-align: right; padding-top: 2px"><span class="m" style="font-size: 11.5px; color: #5a686c">14:06</span></div>
+            <div style="flex: 1; min-width: 0; border-left: 2px solid rgba(0,229,209,.35); padding-left: 14px; margin-left: -16px;">
+              <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 5px"><span class="dot" style="background: #00e5d1"></span><span class="who" style=color:#00e5d1>LainOS</span><span class="k" style="color: #3d494c">демон · claude</span></div><p style="margin: 0; font-size: 13px; line-height: 1.6; color: #cdd6d7">за сутки девятнадцать выдач, 5.7 CYBER. при этом темпе бак опустеет через восемь дней, а порог тревоги — 60, то есть он сработает завтра к вечеру.</p><p style="margin: 9px 0 0; font-size: 11px; color: #3d494c; line-height: 1.5">в контексте: числа станции из пульта на 12:47 · ответил демон LainOS, claude</p>
+            </div>
+            
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 16px; padding: 12px 4px 12px 0" class="hair">
+            <div style="width: 46px; flex: 0 0 46px; text-align: right; padding-top: 2px"><span class="m" style="font-size: 11.5px; color: #5a686c">14:20</span></div>
+            <div style="flex: 1; min-width: 0; ">
+              <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 5px"><span class="dot" style="background: #2a3436"></span><span class="who">lain</span></div><p style="margin: 0; font-size: 13px; line-height: 1.55; color: #cdd6d7"><span style="color: #00e5d1">@lainos</span> набросай текст письма киту</p>
+            </div>
+            
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 16px; padding: 12px 4px 12px 0" class="hair">
+            <div style="width: 46px; flex: 0 0 46px; text-align: right; padding-top: 2px"></div>
+            <div style="flex: 1; min-width: 0; ">
+              <div style="display: flex; align-items: stretch; border: 1px solid rgba(141,154,157,.35); background: #0b0e0f"><span class="hatch" style="width: 8px; flex: 0 0 8px; border: 0"></span><div style="flex: 1; display: flex; align-items: center; gap: 14px; padding: 12px 15px"><div style="flex: 1"><p style="margin: 0; font-size: 13px; font-weight: 600; color: #8d9a9d">LainOS не отвечает</p><p style="margin: 4px 0 0; font-size: 11.5px; color: #5a686c" class="m">демон недоступен 3 минуты · lainos, 127.0.0.1:7777 · последний удачный ответ 14:06</p></div><span class="btn g" style="height: 26px">Открыть машину</span><span class="btn" style="height: 26px">Переспросить</span></div></div>
+            </div>
+            
+          </div>
+          </div>
+        <div style="margin-top: auto; padding-top: 16px">
+          <div style="display: flex; align-items: center; gap: 13px; padding: 0 15px; height: 52px; border: 1px solid rgba(0,229,209,.25); background: rgba(0,229,209,.04)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a686c" stroke-width="1.6" stroke-linecap="round"><path d="M20 11.5l-8 8a4.5 4.5 0 0 1-6.4-6.4l8.4-8.4a3 3 0 0 1 4.2 4.2l-8.4 8.4a1.6 1.6 0 0 1-2.2-2.2l7.7-7.7"/></svg>
+            <span class="m" style="font-size: 13.5px; color: #cdd6d7"><span style="color: #00e5d1">@lainos</span> <span style="color: #5a686c">…</span></span>
+            <span style="width: 1px; height: 15px; background: rgba(232,236,236,.35)"></span>
+            <span style="margin-left: auto; font-size: 11.5px; color: #5a686c">@lainos — позвать · #человек — прикрепить · файл — перетащить</span>
+          </div>
+        </div>
+        </div>
+        <aside style="width: 320px; flex: 0 0 320px; border-left: 1px solid rgba(232,236,236,.07); padding: 20px 18px; display: flex; flex-direction: column; gap: 18px">
+          <div>
+            <div class="rule"><span class="k">Кто отвечает</span></div>
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 1px">
+              <div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 11px; font-size: 13px; background: rgba(0,229,209,.06); box-shadow: inset 2px 0 0 #00e5d1">
+                <span class="dot" style="background: #00e5d1"></span>Демон LainOS
+                <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">есть руки</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 11px; font-size: 13px; color: #8d9a9d">
+                <span class="dot" style="background: #2a3436"></span>Персона без инструментов
+                <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">запасной</span>
+              </div>
+            </div>
+            <p style="margin: 10px 11px 0; font-size: 11px; line-height: 1.55; color: #3d494c">Это два разных собеседника: один может пойти и посмотреть, другой только рассуждает. Поэтому под каждым ответом подписано, кто его дал, — а не просто «LainOS».</p>
+          </div>
+
+          <div>
+            <div class="rule"><span class="k">Что видит LainOS</span></div>
+            <div style="margin-top: 6px">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0" class="hair">
+              <span class="dot" style="background: #00e5d1"></span>
+              <span style="font-size: 12.5px">20 последних сообщений</span>
+              <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">всегда</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0" class="hair">
+              <span class="dot" style="background: #00e5d1"></span>
+              <span style="font-size: 12.5px">имена и размеры файлов</span>
+              <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">всегда</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0" class="hair">
+              <span class="dot" style="background: #e0a516"></span>
+              <span style="font-size: 12.5px">содержимое файла</span>
+              <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">если попросить</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0" class="hair">
+              <span class="dot" style="background: #e0a516"></span>
+              <span style="font-size: 12.5px">карточку человека</span>
+              <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">если прикреплён</span>
+            </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="rule"><span class="k">Чего не видит</span></div>
+            <div style="margin-top: 6px">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0" class="hair">
+              <span class="dot" style="background: #2a3436"></span>
+              <span style="font-size: 12.5px">переписки кошельков</span>
+              <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">никогда</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0" class="hair">
+              <span class="dot" style="background: #2a3436"></span>
+              <span style="font-size: 12.5px">ключи, сид-фразы, .env</span>
+              <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">никогда</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0" class="hair">
+              <span class="dot" style="background: #2a3436"></span>
+              <span style="font-size: 12.5px">комнату старше контекста</span>
+              <span class="m" style="margin-left: auto; font-size: 11px; color: #5a686c">никогда</span>
+            </div>
+            </div>
+          </div>
+
+          <p style="margin: auto 0 0; font-size: 11px; line-height: 1.55; color: #3d494c">Список слева — не обещание в промте, а то, что уходит наверх. Комната показывает его, потому что оператор здесь говорит про чужие деньги и адреса.</p>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

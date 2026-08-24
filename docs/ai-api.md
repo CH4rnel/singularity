@@ -2,14 +2,30 @@
 
 OpenAI-compatible inference at `https://cyberia.church/api/ai/v1`, in front of
 the provider accounts that already live on the Cyberia host. There is no
-signup: a key is issued to an EVM address that holds its share of the gate
-token, and it keeps working for exactly as long as that holding does.
+signup: a holder may self-issue a key tied to its position, while an operator
+may issue a quota-limited free grant to an installed LainOS instance.
 
 Implementation: `backend/laravel/config/ai.php`, `app/Services/Ai/`,
 `app/Http/Controllers/Api/Ai/`, `app/Http/Middleware/AuthenticateAiApiKey.php`,
 tests in `tests/Feature/Ai/AiApiTest.php`.
 
 ## Getting a key
+
+There are two issuance paths. For a free user-installed LainOS grant, an
+operator opens `/crm/api-keys`, enters the owner's EVM address and an optional
+instance label, then presses **Create API key**. The page creates the instance
+UUID and shows this setup exactly once:
+
+```dotenv
+LAINOS_MODEL_PROVIDER=cyberia
+CYBERIA_AI_KEY=sk-cyb-…
+```
+
+That grant is `client=lainos` and skips the holding gate, but keeps the normal
+per-minute and per-day quotas. Only its SHA-256 and visible prefix remain after
+the response.
+
+The second path is self-service access for a `$LAIN` holder:
 
 Three calls, all unauthenticated, all signed with the wallet that holds the
 token. The signature is EIP-191 (`personal_sign`) over the exact message the
@@ -40,6 +56,16 @@ still be able to see and kill what they left behind:
 - `POST /api/ai/keys/revoke` → `{address, signature, id}`
 
 Each challenge answers exactly once; ask for a new nonce per call.
+
+A holder-authorised LainOS may instead send its stable installation UUID in
+the signed self-service request:
+
+```json
+{"client":"lainos","instance_id":"9cc28b0c-20a5-4d67-9faa-5a72507b2192"}
+```
+
+That grant remains subject to the holding gate. In both paths the token becomes
+LainOS's Bearer credential for `https://cyberia.church/api/ai/v1`.
 
 ## Calling it
 
@@ -93,13 +119,43 @@ falls back to when its provider rate-limits, times out or drops it:
 | `lain-reason-mini` | `openai/gpt-oss-20b` | Groq |
 | `lain-free` | OpenRouter's free router | OpenRouter |
 
+Most other configured providers get one `lain-<provider>` entry using the
+reference project's current example model. Override that upstream id with
+`AI_MODEL_<PROVIDER>` (for example `AI_MODEL_OPENAI`); OpenAI, Azure and local
+providers deliberately have no guessed default because their model/deployment
+id belongs to the operator. More allowlisted entries can be added without code
+changes:
+
+```dotenv
+AI_EXTRA_MODELS_JSON='[{"id":"lain-coder","label":"Lain Coder","provider":"deepinfra","upstream":"org/model","context":131072,"fallback":"lain-free"}]'
+```
+
 The catalogue is an allowlist, not a passthrough: the account being spent is
 Cyberia's, so an unknown model id is a `400`, never a bill. A model whose
-provider has no key on the host disappears from `/v1/models` instead of being
+provider is not configured on the host disappears from `/v1/models` instead of being
 offered and then failing.
 
 When a fallback answers, the response still reports the model that was asked
 for and adds `served_by` naming what actually replied.
+
+## Providers
+
+The registry mirrors the 49-provider catalogue in
+[`free-claude-code`](https://github.com/Alishahryar1/free-claude-code): NVIDIA
+NIM, OpenRouter, Groq, ClinePass, OpenAI, xAI, both QwenCloud plans, Together,
+DeepInfra, SiliconFlow, Nebius, Chutes, Featherless, Agnes, ZenMux, W&B, Azure
+OpenAI, Gemini, Vertex, DeepSeek, both Mistral endpoints, both OpenCode plans,
+Vercel, Bedrock, Hugging Face, Cohere, GitHub Models, Wafer, both Kimi
+endpoints, Kilo, MiniMax, Cerebras, SambaNova, Fireworks, Novita, Cloudflare,
+both Z.ai endpoints, TokenRouter, NaraRoute, Poolside, Ollama Cloud, LM Studio,
+llama.cpp and local Ollama.
+
+They remain dormant until their credential is present. Cloudflare additionally
+needs `CLOUDFLARE_ACCOUNT_ID`; Azure needs its complete
+`AZURE_OPENAI_BASE_URL`; local providers require an explicit
+`AI_ENABLE_*`. Vertex uses `VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT_ID` and
+`VERTEX_LOCATION`; token renewal is the host's responsibility. The OpenAI slot
+uses a server API key, not free-claude-code's interactive ChatGPT OAuth flow.
 
 ## The gate
 
@@ -114,8 +170,8 @@ revoke or reissue either way. The gate fails closed — if the Cyberia RPC canno
 be read the answer is `503 gate_unreadable`, because an unreadable balance is
 not a passing balance.
 
-Cyberia's own daemons (LainOS, the Telegram bot) cannot hold a position, so
-they get service keys issued at the console:
+Cyberia's own server-side daemons (the hosted LainOS, the Telegram bot) cannot
+hold a position, so they get service keys issued through the CLI:
 
 ```bash
 php artisan ai:key issue 0x… --service --name=lainos
@@ -171,9 +227,8 @@ theirs, not Cyberia's.
 
 ## Operating it
 
-`GROQ_API_KEY` is the only new secret; `OPENROUTER_API_KEY` is the one the
-"Talk to Lain" chat already uses, and this API shares that account rather than
-opening a second one. Set them in the prod `.env`, then:
+Set one or more credentials from `backend/laravel/.env.example` in the prod
+`.env`; `OPENROUTER_API_KEY` remains shared with "Talk to Lain". Then:
 
 ```bash
 php artisan migrate
@@ -184,7 +239,7 @@ php artisan ai:providers --probe
 `ai:providers` lists the providers that hold a key and the models each one
 serves; `--probe` spends one two-token completion per model to prove the key
 in the environment is accepted upstream. It never prints a key, so it is the
-safe way to answer "is Groq actually wired up on this host".
+safe way to answer which upstreams are actually wired up on this host.
 
 Dropping a provider's key from the environment is a supported way to take its
 models off the menu: the catalogue shrinks, `lain-free` remains as long as

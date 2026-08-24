@@ -37,6 +37,11 @@ import {
     storeChatRows,
 } from '@/lib/wallet';
 import type { ChatKeyRecord, ChatMeta, ChatRow } from '@/lib/wallet';
+import { growComposer } from '@/lib/wallet/composer';
+import {
+    announceWalletEvent,
+    playWalletSound,
+} from '@/lib/wallet/notifications';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -371,6 +376,10 @@ const sync = async (): Promise<void> => {
         const batch = await fetchChatEnvelopes(state.cursor);
 
         if (batch.messages.length > 0) {
+            const incoming = batch.messages.filter(
+                (message) => message.to.toLowerCase() === self.toLowerCase(),
+            ).length;
+
             rows.value = storeChatRows(self, batch.messages).rows;
             await decrypt();
 
@@ -383,6 +392,15 @@ const sync = async (): Promise<void> => {
             }
 
             emit('unread');
+
+            if (incoming > 0) {
+                announceWalletEvent({
+                    title: t('chatTitle'),
+                    body: t('notificationChatBody', { count: incoming }),
+                    sound: 'message',
+                    tag: 'wallet-chat',
+                });
+            }
         }
     } catch (failure) {
         const status = (failure as Error & { status?: number }).status;
@@ -442,6 +460,7 @@ const send = async (): Promise<void> => {
         draft.value = '';
         await decrypt();
         await scrollDown();
+        playWalletSound('message');
     } catch (failure) {
         const status = (failure as Error & { status?: number }).status;
 
@@ -456,6 +475,9 @@ const send = async (): Promise<void> => {
     }
 };
 
+/** The field itself, so the draft can size it. */
+const composer = ref<HTMLTextAreaElement | null>(null);
+
 /** Enter sends; Shift+Enter is a newline, as in every chat ever written. */
 const onKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -463,6 +485,9 @@ const onKeydown = (event: KeyboardEvent): void => {
         void send();
     }
 };
+
+// A sent message empties the field, and an empty field is one line tall again.
+watch(draft, () => void nextTick(() => growComposer(composer.value)));
 
 /* ------------------------------------------------------------ navigation --- */
 
@@ -1077,21 +1102,34 @@ onBeforeUnmount(stopPolling);
 
             <form class="cw-chat-form" @submit.prevent="send()">
                 <textarea
+                    ref="composer"
                     v-model="draft"
                     class="cw-textarea"
-                    rows="2"
+                    rows="1"
                     maxlength="2000"
                     :placeholder="t('chatPlaceholder')"
                     :aria-label="t('chatPlaceholder')"
                     @keydown="onKeydown"
                 />
+                <!--
+                  A square, because the field beside it is the part that has
+                  to be wide. The word lives in the label a screen reader
+                  reads and in the title a pointer finds.
+                -->
                 <button
                     type="submit"
-                    class="cw-btn cw-btn-primary"
+                    class="cw-btn cw-btn-primary cw-chat-send"
                     :disabled="sending || draft.trim() === ''"
+                    :title="sending ? t('chatSending') : t('chatSend')"
+                    :aria-label="sending ? t('chatSending') : t('chatSend')"
                 >
-                    <Send :size="13" aria-hidden="true" />
-                    {{ sending ? t('chatSending') : t('chatSend') }}
+                    <Loader2
+                        v-if="sending"
+                        :size="15"
+                        class="cw-spin"
+                        aria-hidden="true"
+                    />
+                    <Send v-else :size="15" aria-hidden="true" />
                 </button>
             </form>
 

@@ -54,46 +54,12 @@ const emit = defineEmits<{
     bridge: [];
     earn: [];
     browse: [];
+    preferences: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
 
 const activeRecord = computed(() => props.wallet.activeAccount.value);
-
-const activeAccountName = computed(() => {
-    const record = activeRecord.value;
-
-    if (!record) {
-        return t('accountPrimaryName');
-    }
-
-    if (record.label?.trim()) {
-        return record.label.trim();
-    }
-
-    if (record.kind === 'seed') {
-        return record.index === 0
-            ? t('accountPrimaryName')
-            : t('accountSeedName', { index: record.index + 1 });
-    }
-
-    return record.kind === 'phrase'
-        ? t('accountPhraseName')
-        : record.kind === 'key'
-          ? t('accountKeyName', { chain: record.chain })
-          : t('accountWatchName', { chain: record.chain });
-});
-
-const activeAccountKind = computed(() =>
-    t(
-        {
-            seed: 'accountKindSeed',
-            phrase: 'accountKindPhrase',
-            key: 'accountKindKey',
-            watch: 'accountKindWatch',
-        }[activeRecord.value?.kind ?? 'seed'],
-    ),
-);
 
 /**
  * What this account is not covered by, said on the screen that spends from it
@@ -307,77 +273,18 @@ const recent = computed(() =>
 <template>
     <div class="cw-stack">
         <!--
-          Which account this whole screen is about. It sits above the total
-          rather than beside it because every number below belongs to it, and
-          an imported or watched account says so here rather than only in the
-          list it came from.
+          What this account is *not* covered by. The bar above already names
+          the account and switches it, so what is left here is the one thing
+          that bar cannot say in a chip: an imported key or a watched address
+          is outside the backup the user wrote down.
         -->
-        <div
-            style="
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                margin-bottom: 22px;
-            "
+        <p
+            v-if="activeAccountWarning"
+            class="cw-label"
+            style="margin-bottom: 18px; color: var(--cw-pending)"
         >
-            <button
-                type="button"
-                class="cw-open"
-                style="
-                    display: flex;
-                    align-items: center;
-                    gap: 9px;
-                    width: auto;
-                "
-                @click="emit('accounts')"
-            >
-                <span
-                    style="
-                        display: flex;
-                        width: 18px;
-                        height: 18px;
-                        align-items: center;
-                        justify-content: center;
-                        border: 1px solid var(--cw-accent);
-                    "
-                >
-                    <span
-                        style="
-                            width: 5px;
-                            height: 5px;
-                            background: var(--cw-accent);
-                        "
-                    />
-                </span>
-                <span>
-                    <span
-                        style="
-                            display: block;
-                            font: 500 12px/1.2 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                        >{{ activeAccountName }}</span
-                    >
-                    <span
-                        class="cw-label"
-                        style="
-                            display: block;
-                            margin-top: 3px;
-                            color: var(--cw-muted);
-                        "
-                        >{{ activeAccountKind }} ·
-                        {{ t('accountSwitch') }}</span
-                    >
-                </span>
-            </button>
-            <span class="cw-fill"></span>
-            <span
-                v-if="activeAccountWarning"
-                class="cw-label"
-                style="color: var(--cw-pending); text-align: right"
-                >{{ activeAccountWarning }}</span
-            >
-        </div>
+            {{ activeAccountWarning }}
+        </p>
 
         <p v-if="!online" class="cw-note" style="margin-bottom: 18px">
             <span>
@@ -630,6 +537,28 @@ const recent = computed(() =>
                 }}</span>
             </button>
         </div>
+
+        <button
+            type="button"
+            class="cw-card cw-card-button"
+            style="margin-bottom: 24px; padding: 14px 16px"
+            @click="emit('preferences')"
+        >
+            <span class="cw-row">
+                <span style="text-align: left">
+                    <span
+                        style="display: block; font: 500 12px/1 var(--cw-sans)"
+                        >{{ t('navPreferences') }}</span
+                    >
+                    <span
+                        class="cw-label"
+                        style="display: block; margin-top: 5px; font-size: 9px"
+                        >{{ t('tilePreferencesHint') }}</span
+                    >
+                </span>
+                <span class="cw-label" style="color: var(--cw-fainter)">→</span>
+            </span>
+        </button>
 
         <div class="cw-row" style="margin-bottom: 10px">
             <span class="cw-label">{{ t('networks') }}</span>

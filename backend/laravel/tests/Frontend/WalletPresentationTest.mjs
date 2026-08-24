@@ -3,6 +3,7 @@ import test from 'node:test';
 import { walletChain } from '@/lib/wallet';
 import {
     formatUsd,
+    formatUsdPrice,
     shortAddress,
     signedAmount,
     usdValue,
@@ -43,6 +44,26 @@ test('a missing price is unknown, not zero', () => {
     assert.equal(usdValue(2n * 10n ** 18n, 18, 7), 14);
     assert.equal(formatUsd(null, 'en'), '—');
     assert.equal(formatUsd(0, 'en'), '$0.00');
+});
+
+test('a coin worth a fraction of a cent is not rendered as an empty wallet', () => {
+    // CYBER trades in the tens of microdollars. Two fixed decimals printed
+    // every Cyberia balance in this wallet as "$0.00" — a claim about the
+    // balance rather than about the price.
+    assert.equal(formatUsd(0.0000221, 'en'), '$0.0000221');
+    assert.equal(formatUsd(0.0284, 'en'), '$0.03');
+    assert.equal(formatUsd(-0.000004567, 'en'), '-$0.00000457');
+    // Zero stays two decimals: that one really is a fact about the balance.
+    assert.equal(formatUsd(0, 'en'), '$0.00');
+    assert.equal(formatUsd(1284.5, 'en'), '$1,284.50');
+});
+
+test('a rate keeps enough digits to be compared between screens', () => {
+    assert.equal(formatUsdPrice(null, 'en'), '—');
+    assert.equal(formatUsdPrice(0.0000221, 'en'), '$0.0000221');
+    assert.equal(formatUsdPrice(0.000123456, 'en'), '$0.0001235');
+    assert.equal(formatUsdPrice(1881.44, 'en'), '$1,881.44');
+    assert.equal(formatUsdPrice(1.00042, 'en'), '$1.0004');
 });
 
 /** A finder pattern is a 7×7 dark ring, a light ring, and a 3×3 dark core. */

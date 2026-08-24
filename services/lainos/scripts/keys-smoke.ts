@@ -17,7 +17,11 @@ import {
   loadInputHistory,
   saveInputHistory,
 } from "../src/clients/tui/history.js";
-import { transcriptLines, wrapIndices } from "../src/clients/tui/transcript.js";
+import { highlightSelection, isDrag, ordered, rowRange, selectionText } from "../src/clients/tui/selection.js";
+import type { Line } from "../src/clients/tui/markdown.js";
+import { turnLines, type Turn } from "../src/clients/tui/layout.js";
+import { THEMES, DEFAULT_THEME } from "../src/clients/tui/theme.js";
+import { wrapIndices } from "../src/clients/tui/editor.js";
 
 // A throwaway state dir: the history probe writes a real file.
 process.env.LAINOS_DATA_DIR = mkdtempSync(join(tmpdir(), "lainos-keys-"));
@@ -148,9 +152,43 @@ check(
   "home+type inserts    ",
   drive("world", ["\x1b[H", "hey "]).value === "hey world",
 );
+check("unknown seq is inert ", drive("hello", ["\x1bOP"]).value === "hello");
+
+// -------------------------------------------------------- bracketed paste
+
 check(
-  "unknown seq is inert ",
-  drive("hello", ["\x1b[200~", "\x1bOP"]).value === "hello",
+  "paste keeps newlines ",
+  (() => {
+    const s = drive("", ["\x1b[200~one\ntwo\x1b[201~"]);
+    return s.value === "one\ntwo" && s.cursor === 7;
+  })(),
+);
+check(
+  "paste normalises CRLF",
+  drive("", ["\x1b[200~a\r\nb\rc\x1b[201~"]).value === "a\nb\nc",
+);
+check(
+  "paste survives chunks",
+  // the fences, the body and even the terminator can be split across reads
+  drive("", ["\x1b[200~one\n", "two", "\x1b[20", "1~"]).value === "one\ntwo",
+);
+check(
+  "paste is never enter ",
+  (() => {
+    // A pasted CR is text; only a typed \r ends the line, and the paste's \r
+    // must not smuggle one through.
+    const { key } = parseKey("\r");
+    const pasted = new KeyReader().feed("\x1b[200~a\rb\x1b[201~");
+    return key.return && pasted.length === 1 && !pasted[0].key.return && pasted[0].key.paste === true;
+  })(),
+);
+check(
+  "paste blocks esc flush",
+  (() => {
+    const r = new KeyReader();
+    r.feed("\x1b[200~half");
+    return !r.partial && r.flush().length === 0;
+  })(),
 );
 
 // ------------------------------------------------- multi-line composer
@@ -158,6 +196,13 @@ check(
 const shifted = drive("ab", ["\x1b[13;2u", "c"]);
 check("shift+enter newline  ", shifted.value === "ab\nc" && shifted.cursor === 4);
 check("lf types a newline   ", drive("ab", ["\n"]).value === "ab\n");
+// The three ways a terminal can report a modified Enter, plus the one chord
+// that needs no protocol at all. A composer nobody can break a line in is a
+// single-line composer, whatever the help says.
+check("alt+enter newline    ", drive("ab", ["\x1b\r"]).value === "ab\n");
+check("modifyOtherKeys enter", drive("ab", ["\x1b[27;2;13~"]).value === "ab\n");
+check("kitty ctrl+enter     ", drive("ab", ["\x1b[13;5u"]).value === "ab\n");
+check("bare kitty enter sends", parseKey("\x1b[13u").key.return && !parseKey("\x1b[13u").key.shift);
 check(
   "hard newline wraps    ",
   (() => {
@@ -254,21 +299,27 @@ check("mouse is inert text  ", (() => {
 
 // --------------------------------------------------- transcript pager
 
-const turns = [
-  { role: "you", parts: [{ kind: "text" as const, text: "first question" }] },
+const turns: Turn[] = [
+  { id: "t1", role: "you", parts: [{ kind: "text" as const, text: "first question" }] },
   {
+    id: "t2",
     role: "lain",
     model: "stub",
     parts: [
       { kind: "text" as const, text: "word ".repeat(40).trim() },
       {
         kind: "tool" as const,
-        tool: { name: "get_balance", status: "ok", summary: "12 CYBER", input: { address: "0xbeef" } },
+        tool: { id: "c1", name: "get_balance", status: "ok" as const, summary: "12 CYBER", input: { address: "0xbeef" } },
       },
     ],
   },
 ];
-const flat = transcriptLines(turns, 40);
+/** A styled line as the terminal would print it, minus the colours. */
+const plain = (l: Line): string => l.map((s) => s.t).join("");
+
+// The same renderer the app paints with, flattened back to plain text.
+const theme = THEMES[DEFAULT_THEME];
+const flat = turns.flatMap((t) => turnLines(t, new Set(["c1"]), theme, 40, "⠋").lines.map(plain));
 check(
   "labels every speaker ",
   flat[0] === "▸ you" && flat.some((l) => l.startsWith("◆ lain · stub")),
@@ -276,6 +327,85 @@ check(
 check("keeps the turn order ", flat.indexOf("  first question") < flat.findIndex((l) => l.startsWith("◆ lain")));
 check("wraps to the width   ", flat.every((l) => [...l].length <= 40) && flat.length > 8);
 check("renders tool calls   ", flat.some((l) => l.includes("get_balance") && l.includes("address=0xbeef")));
+
+// ------------------------------- kitty keyboard protocol (CSI u chords)
+// The TUI asks for this protocol so it can tell shift+enter from enter. In it
+// EVERY chord arrives as a code point plus modifiers — and an undecoded ctrl+c
+// is an app with no way out.
+
+check("csi-u ctrl+c         ", flags("\x1b[99;5u", { ctrl: true }, "c"));
+check("csi-u ctrl+u         ", flags("\x1b[117;5u", { ctrl: true }, "u"));
+check("csi-u alt+b          ", flags("\x1b[98;3u", { meta: true }, "b"));
+check("csi-u escape         ", flags("\x1b[27u", { escape: true, meta: true }));
+check("csi-u backspace      ", flags("\x1b[127u", { backspace: true }));
+check("csi-u plain enter    ", flags("\x1b[13u", { return: true }));
+check("csi-u key release    ", parseKey("\x1b[99;5:3u").input === "" && !parseKey("\x1b[99;5:3u").key.ctrl);
+check(
+  "csi-u with alternates",
+  flags("\x1b[99:99;5u", { ctrl: true }, "c") &&
+    (() => {
+      // …and the reader must not cut the sequence at the colon
+      const r = new KeyReader();
+      const [press] = r.feed("\x1b[99:99;5u");
+      return !!press && press.key.ctrl && press.input === "c";
+    })(),
+);
+check("modifyOtherKeys ctrl+c", flags("\x1b[27;5;99~", { ctrl: true }, "c"));
+
+// ------------------------------------------------- mouse text selection
+// The terminal cannot select text while the app reads the mouse, so the drag
+// is the app's: these are the cells it turns into a string.
+
+const frame: Line[] = [
+  [{ t: "hello world" }, { t: "   " }],
+  [{ t: "second line" }, { t: "  " }],
+];
+const W = 14;
+
+check(
+  "upward drag flips    ",
+  (() => {
+    const r = ordered({ a: { row: 1, col: 3 }, b: { row: 0, col: 1 } });
+    return r.a.row === 0 && r.a.col === 1 && r.b.row === 1 && r.b.col === 3;
+  })(),
+);
+check(
+  "end cell is included ",
+  (() => {
+    const span = rowRange({ a: { row: 0, col: 0 }, b: { row: 0, col: 4 } }, 0, W);
+    return !!span && span[0] === 0 && span[1] === 5;
+  })(),
+);
+check("one cell is no drag  ", !isDrag({ a: { row: 2, col: 2 }, b: { row: 2, col: 2 } }));
+check(
+  "selects inside a row ",
+  selectionText(frame, { a: { row: 0, col: 6 }, b: { row: 0, col: 10 } }, W) === "world",
+);
+check(
+  "selects across rows  ",
+  // trailing frame padding is not part of what you dragged over
+  selectionText(frame, { a: { row: 0, col: 0 }, b: { row: 1, col: 13 } }, W) === "hello world\nsecond line",
+);
+check(
+  "highlights only that ",
+  (() => {
+    const out = highlightSelection(frame, { a: { row: 0, col: 6 }, b: { row: 0, col: 10 } }, "#333", W);
+    const painted = out[0].filter((sp) => sp.bg).map((sp) => sp.t).join("");
+    return painted === "world" && out[1].every((sp) => !sp.bg);
+  })(),
+);
+check(
+  "wide glyphs stay whole",
+  (() => {
+    // ⚙ is two columns wide: column 3 is the "t", and dragging over the glyph
+    // itself takes all of it rather than half a character
+    const line: Line[] = [[{ t: "⚙ tool ok" }]];
+    return (
+      selectionText(line, { a: { row: 0, col: 3 }, b: { row: 0, col: 6 } }, 12) === "tool" &&
+      selectionText(line, { a: { row: 0, col: 0 }, b: { row: 0, col: 1 } }, 12) === "⚙"
+    );
+  })(),
+);
 
 let ok = true;
 for (const [name, pass] of results) {

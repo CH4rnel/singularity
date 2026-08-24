@@ -37,7 +37,7 @@ let nextId = 1;
 const pending = new Map();
 
 /** Set by `register`, so this module never reaches for a window of its own. */
-let context = { getWindow: () => null, isTrusted: () => false };
+let context = { getWindow: () => null, getContents: () => null, isTrusted: () => false };
 
 function consentPath() {
     return path.join(app.getPath('userData'), CONSENT_FILE);
@@ -139,10 +139,11 @@ async function ensureEngine() {
 
         child.on('message', (message) => {
             if (message?.event === 'torrents') {
-                const window = context.getWindow();
+                // The page's own contents, not the BaseWindow that holds it.
+                const contents = context.getContents();
 
-                if (window && !window.isDestroyed()) {
-                    window.webContents.send('torrent:update', message.value);
+                if (contents && !contents.isDestroyed()) {
+                    contents.send('torrent:update', message.value);
                 }
 
                 return;
@@ -226,10 +227,11 @@ async function ensureConsent() {
  *
  * `isTrusted` decides which frames may speak to the engine at all: the offline
  * page and any other local page share this preload, and none of them has any
- * business starting a download.
+ * business starting a download. `getWindow` is only ever a dialog's parent;
+ * `getContents` is where progress is pushed.
  */
-function register({ getWindow, isTrusted }) {
-    context = { getWindow, isTrusted };
+function register({ getWindow, getContents, isTrusted }) {
+    context = { getWindow, getContents, isTrusted };
 
     const guard = (handler) => async (event, ...args) => {
         if (!context.isTrusted(event.senderFrame?.url ?? '')) {
