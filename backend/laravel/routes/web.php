@@ -443,6 +443,10 @@ Route::middleware(['auth'])->group(function () {
      */
     Route::prefix('crm')->name('crm.')->middleware(EnsureCrmAdmin::class)->group(function () {
         Route::get('/', [ConsoleController::class, 'index'])->name('index');
+        // The console's heartbeat. Every lens is open on more than one desk,
+        // so each of them asks this one cheap question every few seconds and
+        // re-reads itself only when its own version has moved.
+        Route::get('pulse', [ConsoleController::class, 'pulse'])->name('pulse');
         Route::post('snooze', [ConsoleController::class, 'snooze'])->name('snooze');
         Route::delete('snooze', [ConsoleController::class, 'wake'])->name('snooze.wake');
 
@@ -546,6 +550,11 @@ Route::middleware(['auth'])->group(function () {
 });
 
 // Bridge (public — no auth required, controller handles optional user)
+// Admission: capacity is CLAIMED here, under a server-side lock, before the
+// wallet is ever opened. A UI check is not a gate — see BridgeAdmissionService.
+Route::post('bridge/reserve', [BridgeController::class, 'reserve'])
+    ->middleware('throttle:60,1')
+    ->name('bridge.reserve');
 Route::post('bridge/submit', [BridgeController::class, 'submit'])->name('bridge.submit');
 // Two-phase one-time-address routes (Yenten): prepare commits the recipient
 // and returns a unique deposit address; claim verifies the deposit landed on it.

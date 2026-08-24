@@ -5,6 +5,7 @@ namespace App\Services\Console;
 use App\Models\BridgeRequest;
 use App\Models\CrmContact;
 use App\Models\CrmNote;
+use App\Models\CrmSync;
 use App\Models\CrmTask;
 use App\Services\WalletPriceService;
 use App\Support\Handles;
@@ -118,12 +119,51 @@ class PeopleLens
                     ->where('status', 'new')
                     ->whereDoesntHave('notes'),
             ],
+            // People who held and stopped. They are not deleted and they are
+            // not "lost" either — the balance left, the person did not, and a
+            // holder who sold once is the readiest audience there is.
+            'sold' => [
+                'tone' => 'warning',
+                'apply' => fn (Builder $query) => $query->where('status', 'sold'),
+            ],
             'solana_only' => [
                 'tone' => 'plain',
                 'apply' => fn (Builder $query) => $query
                     ->whereNotNull('solana_address')
                     ->whereNull('evm_address'),
             ],
+        ];
+    }
+
+    /**
+     * How old the base is, as the last recorded import.
+     *
+     * The question a filled screen never answers on its own is how much of it
+     * is still true. `crm_contacts.last_synced_at` cannot answer it — it is
+     * stamped per contact by the half-hourly balance refresh, so its maximum
+     * says a balance was read, not that the base was rebuilt.
+     *
+     * `partial` is the load-bearing half: the holder scan is one call to a
+     * public RPC that answers a rate-limit with an empty result, and a date
+     * over a run that read nothing is exactly the lie this reports instead.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function lastSync(): ?array
+    {
+        $run = CrmSync::query()->latest('id')->first();
+
+        if ($run === null) {
+            return null;
+        }
+
+        return [
+            'at' => ($run->finished_at ?? $run->started_at)->toIso8601String(),
+            'trigger' => $run->trigger,
+            'added' => $run->added,
+            'sold' => $run->sold,
+            'running' => $run->finished_at === null,
+            'partial' => ! $run->isComplete(),
         ];
     }
 
@@ -145,25 +185,41 @@ class PeopleLens
         return $query;
     }
 
+    /** How the list may be ordered, and what each order is for. */
+    public const SORTS = ['signal', 'added', 'name', 'money'];
+
     /**
-     * The rows of one segment, newest signal first.
+     * The rows of one segment, in the order that was asked for.
+     *
+     * A segment is a saved question and stays one; `type`, `status` and the
+     * search are the narrowing an operator does inside it, and `sort` is the
+     * one thing the lens could not say before: **when somebody was written
+     * down**. Everything on this screen is stamped by the half-hourly balance
+     * refresh, so "newest first" by `updated_at` is really "in sync order",
+     * and a lead entered by hand yesterday sank under two hundred whales
+     * whose balances were re-read this morning. That is the whole reason a
+     * person could be on the books and impossible to find.
      *
      * @return array<string, mixed>
      */
-    public function rows(string $segment, ?string $search = null, int $limit = self::ROWS): array
-    {
+    public function rows(
+        string $segment,
+        ?string $search = null,
+        int $limit = self::ROWS,
+        ?string $type = null,
+        ?string $status = null,
+        string $sort = 'signal',
+    ): array {
         $limit = max(self::ROWS, min($limit, 400));
-        $total = $this->query($segment)->when($search, fn ($q) => $q->search($search))->count();
+        $sort = in_array($sort, self::SORTS, true) ? $sort : 'signal';
 
-        // Twice the asked-for rows are read because the sort is by signal
-        // freshness, which is computed here rather than in SQL: taking exactly
-        // forty by `updated_at` and then reordering them would put the fortieth
-        // row's signal above the forty-first's without ever having seen it.
-        $contacts = $this->query($segment)
+        $narrow = fn (Builder $query): Builder => $query
             ->when($search, fn ($q) => $q->search($search))
-            ->orderByDesc('updated_at')
-            ->limit($limit * 2)
-            ->get();
+            ->when($type, fn ($q) => $q->where('type', $type))
+            ->when($status, fn ($q) => $q->where('status', $status));
+
+        $total = $narrow($this->query($segment))->count();
+        $contacts = $this->candidates($segment, $narrow, $limit, $sort);
 
         if ($contacts->isEmpty()) {
             return ['rows' => [], 'total' => $total, 'shown' => 0, 'limit' => $limit, 'more' => false];
@@ -194,13 +250,17 @@ class PeopleLens
                 'type' => $contact->type,
                 'status' => $contact->status,
                 'usd' => $price === null ? null : round(($cyber + $sol) * $price),
+                // When this record was written down, which is the one fact
+                // about a person the lens could not show and the one an
+                // operator uses to find somebody they entered yesterday.
+                'added' => $contact->created_at?->toIso8601String(),
                 'signal' => $signal,
                 'spark' => $transfers['weekly'][$contact->id] ?? array_fill(0, self::WEEKS, 0),
                 'write' => $write,
                 'action' => $write !== null ? 'write' : 'dossier',
             ];
         })
-            ->sortByDesc(fn (array $row) => $row['signal']['at'] ?? '')
+            ->pipe(fn (Collection $rows) => $this->ordered($rows, $sort))
             ->values()
             ->take($limit)
             ->all();
@@ -212,6 +272,65 @@ class PeopleLens
             'limit' => $limit,
             'more' => $total > count($rows),
         ];
+    }
+
+    /**
+     * The contacts one screen might show, before the row is built.
+     *
+     * Three of the four orders are SQL and take exactly one screen. The
+     * fourth — the default — is computed from notes, tasks and transfers
+     * after the rows are read, so it deliberately reads more than a screen:
+     * taking forty by `updated_at` and reordering *those* would rank the
+     * fortieth row's signal above the forty-first's without having seen it.
+     *
+     * The second read is what keeps a new person findable. `updated_at` on
+     * this table is mostly the balance refresh talking, so the recently
+     * *written down* are pulled in explicitly rather than left to compete
+     * with two hundred rows the sync touched this morning.
+     *
+     * @param  callable(Builder<CrmContact>): Builder  $narrow
+     * @return Collection<int, CrmContact>
+     */
+    private function candidates(string $segment, callable $narrow, int $limit, string $sort): Collection
+    {
+        $base = fn (): Builder => $narrow($this->query($segment));
+
+        return match ($sort) {
+            'name' => $base()->orderBy('name')->limit($limit)->get(),
+            'added' => $base()->orderByDesc('created_at')->limit($limit)->get(),
+            'money' => $base()
+                ->orderByRaw('(coalesce(cyber_balance, 0) + coalesce(cyber_sol_balance, 0)) desc')
+                ->limit($limit)
+                ->get(),
+            default => $base()
+                ->orderByDesc('updated_at')
+                ->limit($limit * 2)
+                ->get()
+                ->concat($base()->orderByDesc('created_at')->limit($limit)->get())
+                ->unique('id'),
+        };
+    }
+
+    /**
+     * Put the built rows in the asked-for order.
+     *
+     * `signal` is the lens's own answer — what happened most recently — and
+     * the other three are the ordinary questions a list has to answer for
+     * somebody who knows what they are looking for. Money sorts unpriced
+     * rows last rather than as zero: a balance nobody could read is not a
+     * balance of nothing.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function ordered(Collection $rows, string $sort): Collection
+    {
+        return match ($sort) {
+            'name' => $rows->sortBy(fn (array $row) => mb_strtolower((string) $row['name'])),
+            'added' => $rows->sortByDesc(fn (array $row) => (string) ($row['added'] ?? '')),
+            'money' => $rows->sortByDesc(fn (array $row) => $row['usd'] ?? -1),
+            default => $rows->sortByDesc(fn (array $row) => $row['signal']['at'] ?? ''),
+        };
     }
 
     /**

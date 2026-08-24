@@ -2,6 +2,7 @@
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import Rule from '@/components/console/Rule.vue';
+import { useConsoleLive } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import { dateTime, num, shortDate, toneColor, usd } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
@@ -116,6 +117,31 @@ const note = useForm({ body: '' });
  * log underneath stays a log.
  */
 const editing = ref(false);
+
+/*
+ * A dossier is read while somebody else is writing in it: a note added, a
+ * task closed, the sync landing a new balance. So it re-reads itself — except
+ * while the told half is open for editing, because replacing the record
+ * under a form that is about to overwrite it is how two operators undo each
+ * other's corrections.
+ */
+useConsoleLive(
+    ['people', 'notes', 'tasks'],
+    () =>
+        router.reload({
+            only: [
+                'contact',
+                'money',
+                'activity',
+                'summary',
+                'tasks',
+                'timeline',
+                'identity',
+                'console',
+            ],
+        }),
+    { active: () => !editing.value },
+);
 
 const edit = useForm({
     name: '',

@@ -147,14 +147,46 @@ class CrmContactController extends Controller
 
         $search = $request->string('q')->value() ?: null;
 
+        /*
+         * The narrowing an operator does inside a segment, and the order they
+         * read it in. Both are in the address, so a question worth asking
+         * twice can be kept in a bookmark or pasted to the other desk — which
+         * is the same reason a segment carries its rule on screen.
+         */
+        $type = in_array($request->query('type'), CrmContact::TYPES, true)
+            ? (string) $request->query('type')
+            : null;
+
+        $status = in_array($request->query('status'), CrmContact::STATUSES, true)
+            ? (string) $request->query('status')
+            : null;
+
+        $sort = in_array($request->query('sort'), PeopleLens::SORTS, true)
+            ? (string) $request->query('sort')
+            : 'signal';
+
         return Inertia::render('crm/People', [
             'segment' => $segment,
             'segments' => $this->lens->segments(),
             'search' => $search,
-            ...$this->lens->rows($segment, $search, (int) $request->integer('rows', 40)),
+            'type' => $type,
+            'status' => $status,
+            'sort' => $sort,
+            // How old what you are reading is, beside the button that
+            // refreshes it — a list with no date is a list nobody can act on.
+            'sync' => $this->lens->lastSync(),
+            ...$this->lens->rows(
+                $segment,
+                $search,
+                (int) $request->integer('rows', 40),
+                $type,
+                $status,
+                $sort,
+            ),
             'options' => [
                 'types' => CrmContact::TYPES,
                 'statuses' => CrmContact::STATUSES,
+                'sorts' => PeopleLens::SORTS,
             ],
         ]);
     }

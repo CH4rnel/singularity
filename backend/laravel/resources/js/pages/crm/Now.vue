@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AgeCell from '@/components/console/AgeCell.vue';
 import DayStrip from '@/components/console/DayStrip.vue';
 import Rule from '@/components/console/Rule.vue';
 import Spark from '@/components/console/Spark.vue';
+import { useConsoleLive } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import {
     age,
@@ -101,7 +102,29 @@ const operator = computed(
             ?.name ?? '—',
 );
 
-const now = new Date();
+/*
+ * The clock this lens does its arithmetic against.
+ *
+ * A ref rather than a constant, because the queue now re-reads itself while
+ * nobody navigates: a page that prints "quiet for 20 minutes" off the moment
+ * it was opened would freeze that number for the rest of the night.
+ */
+const now = ref(new Date());
+
+/*
+ * The queue on every desk at once.
+ *
+ * It is drawn from six sources and cached, so what is watched here is the
+ * material underneath it — an incident opening, a sweep landing, somebody
+ * putting a row to sleep. The sweep alone lands every five minutes, which is
+ * the floor on how stale an open queue can get and matches the rate the
+ * material is collected at.
+ */
+useConsoleLive('now', () => {
+    now.value = new Date();
+
+    router.reload({ only: ['attention', 'watch', 'quiet', 'tiles', 'console'] });
+});
 
 const quietFor = computed(() => {
     if (!props.quiet.since) {
@@ -109,7 +132,7 @@ const quietFor = computed(() => {
     }
 
     const seconds = Math.floor(
-        (now.getTime() - Date.parse(props.quiet.since)) / 1000,
+        (now.value.getTime() - Date.parse(props.quiet.since)) / 1000,
     );
 
     return age(seconds);
@@ -121,7 +144,7 @@ const sweptAgo = computed(() => {
     }
 
     const seconds = Math.floor(
-        (now.getTime() - Date.parse(props.quiet.last_sweep)) / 1000,
+        (now.value.getTime() - Date.parse(props.quiet.last_sweep)) / 1000,
     );
     const value = age(seconds);
 

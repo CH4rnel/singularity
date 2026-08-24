@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { useConsolePulse } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import {
     age,
@@ -54,6 +55,16 @@ type Console = {
 
 const page = usePage();
 const { locale, t, tag, toggleLocale, nextTag } = useLocale(consoleMessages);
+
+/*
+ * The console's heartbeat, held by the shell rather than by a lens.
+ *
+ * The shell outlives every page inside it, so the timer survives navigation
+ * and five lenses never become five pollers. Its badges are the ones that
+ * must be right on a screen nobody is navigating: the rail is what an
+ * operator glances at while doing something else.
+ */
+const pulse = useConsolePulse();
 
 const console_ = computed(() => page.props.console as Console | null);
 const current = computed(() => page.url.split('?')[0]);
@@ -155,18 +166,22 @@ function active(key: string): boolean {
     return url.startsWith(`/crm/${key}`);
 }
 
+/**
+ * What a badge says right now.
+ *
+ * The heartbeat wins over the rendered page: the props were true when this
+ * lens was last read, and a rail that still shows the count from four
+ * minutes ago is the reason somebody presses F5. A count the heartbeat has
+ * not answered yet falls back to the page's own.
+ */
 function badgeCount(badge: string | null): number {
     if (!badge || !console_.value) {
         return 0;
     }
 
-    if (badge === 'attention') {
-        return console_.value.counts.attention;
-    }
+    const key = badge as 'attention' | 'tasks' | 'chat';
 
-    return badge === 'chat'
-        ? console_.value.counts.chat
-        : console_.value.counts.tasks;
+    return pulse.counts.value[key] ?? console_.value.counts[key];
 }
 
 const bannerAge = computed(() => age(console_.value?.banner?.duration_seconds));
@@ -306,6 +321,16 @@ const initials = computed(() =>
                               })
                             : t('top.noSweep')
                     }}
+                </span>
+                <!-- A console that quietly stopped updating looks exactly
+                     like a quiet night, so it says which one it is. -->
+                <span
+                    v-if="pulse.stale.value"
+                    class="mk-m"
+                    style="font-size: 11px"
+                    :style="{ color: toneColor('warning') }"
+                >
+                    {{ t('top.stale') }}
                 </span>
             </div>
         </header>

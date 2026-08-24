@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Handles;
 use Database\Factories\CrmContactFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -38,9 +39,22 @@ class CrmContact extends Model
 
     public const TYPES = ['lead', 'holder', 'whale'];
 
-    public const STATUSES = ['new', 'contacted', 'qualified', 'customer', 'lost'];
+    /**
+     * The pipeline, plus the two ways out of it.
+     *
+     * `sold` is written by the sync rather than chosen: somebody who emptied
+     * their wallet is not a record to delete — they are a person we know, and
+     * that they sold is the most interesting thing on their file. `lost` stays
+     * an operator's judgement, and the sync never overwrites it.
+     */
+    public const STATUSES = ['new', 'contacted', 'qualified', 'customer', 'sold', 'lost'];
 
-    public const SOURCES = ['manual', 'platform', 'bridge', 'whale_bot'];
+    /**
+     * Where the record came from. `holder` is written by the on-chain scan and
+     * was missing from this list, so a row discovered on Solana rendered its
+     * own translation key on screen.
+     */
+    public const SOURCES = ['manual', 'platform', 'bridge', 'holder', 'whale_bot'];
 
     public const CHAINS = ['evm', 'solana', 'both', 'none'];
 
@@ -133,23 +147,45 @@ class CrmContact extends Model
     /**
      * Filter by a free-text query across name, email, handles and addresses.
      *
+     * Searched in both the spelling that was typed and the spelling this
+     * column stores. Handles go in bare (`Handles`), and what an operator
+     * looking for somebody types is what they are looking at — `@name`, or
+     * the profile URL out of the clipboard — so a box that only matched the
+     * stored form answered "not found" for a person who is on the books, and
+     * that answer is how somebody gets entered a second time.
+     *
+     * Tags are searched too: a tag is the operator's own filing, and the
+     * word they will look for later is the word they filed it under.
+     *
      * @param  Builder<CrmContact>  $query
      */
     public function scopeSearch(Builder $query, ?string $term): void
     {
-        if (! $term) {
+        $term = trim((string) $term);
+
+        if ($term === '') {
             return;
         }
 
-        $like = '%'.$term.'%';
+        $spellings = array_values(array_unique(array_filter([
+            $term,
+            Handles::searchable($term),
+        ])));
 
-        $query->where(function (Builder $q) use ($like) {
-            $q->where('name', 'like', $like)
-                ->orWhere('email', 'like', $like)
-                ->orWhere('telegram', 'like', $like)
-                ->orWhere('x_handle', 'like', $like)
-                ->orWhere('evm_address', 'like', $like)
-                ->orWhere('solana_address', 'like', $like);
+        $query->where(function (Builder $outer) use ($spellings) {
+            foreach ($spellings as $spelling) {
+                $like = '%'.$spelling.'%';
+
+                $outer->orWhere(function (Builder $q) use ($like) {
+                    $q->where('name', 'like', $like)
+                        ->orWhere('email', 'like', $like)
+                        ->orWhere('telegram', 'like', $like)
+                        ->orWhere('x_handle', 'like', $like)
+                        ->orWhere('evm_address', 'like', $like)
+                        ->orWhere('solana_address', 'like', $like)
+                        ->orWhere('tags', 'like', $like);
+                });
+            }
         });
     }
 

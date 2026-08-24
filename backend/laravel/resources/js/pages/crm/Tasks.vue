@@ -2,6 +2,7 @@
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, ref } from 'vue';
 import Rule from '@/components/console/Rule.vue';
+import { useConsoleLive } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import { num, shortDate } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
@@ -78,6 +79,25 @@ const edit = useForm({
 });
 const commentingTaskId = ref<number | null>(null);
 const comment = useForm({ body: '' });
+
+/*
+ * The board is the one lens where two operators reach for the same row.
+ * Somebody claiming a task, closing it or writing a new one has to land on
+ * the other desk by itself — a board that is only right after a reload is a
+ * board two people do the same task from. The composer is a form of its own
+ * and survives the re-read, so a half-typed line is never eaten by one.
+ */
+useConsoleLive(
+    'tasks',
+    () =>
+        router.reload({
+            only: ['columns', 'closed', 'unowned', 'stats', 'console'],
+        }),
+    // Not while a row is open under somebody's hands: replacing the task
+    // being edited, or the thread being answered, is how two operators undo
+    // each other. A few seconds of staleness is the cheaper mistake.
+    { active: () => editingTaskId.value === null && commentingTaskId.value === null },
+);
 
 const COLUMNS = [
     { key: 'overdue', tone: 'critical' },

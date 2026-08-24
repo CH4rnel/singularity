@@ -73,6 +73,26 @@ class Handles
     }
 
     /**
+     * The same collapsing, applied to something being searched for.
+     *
+     * An operator looking for somebody types what they are looking at: the
+     * `@` is part of how the name is written, and half the time the thing in
+     * the clipboard is the whole profile URL. Both are stored bare, so both
+     * have to be searched bare — a search box that answers "not found" for
+     * `@lain` when `lain` is on the books is a search box that gets somebody
+     * entered twice.
+     */
+    public static function searchable(?string $value): ?string
+    {
+        $bare = self::bare($value, [
+            't.me', 'telegram.me', 'telegram.dog',
+            'x.com', 'twitter.com', 'mobile.twitter.com',
+        ]);
+
+        return $bare === '' ? null : $bare;
+    }
+
+    /**
      * Strip a profile URL, a leading `@` and the surrounding whitespace.
      *
      * @param  array<int, string>  $hosts  hosts whose first path segment is the handle

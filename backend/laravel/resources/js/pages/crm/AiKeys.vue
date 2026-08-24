@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Head, Link, useHttp } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
+import { store } from '@/actions/App/Http/Controllers/ConsoleAiKeysController';
 import { useLocale } from '@/composables/useLocale';
 import { age, dateTime, num, plural, secondsSince } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
-import { store } from '@/actions/App/Http/Controllers/ConsoleAiKeysController';
 
 type Usage = {
     requests: number;

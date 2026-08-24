@@ -2,6 +2,7 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import Rule from '@/components/console/Rule.vue';
+import { useConsoleLive } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import { dateTime, num, plural, toneColor } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
@@ -48,6 +49,13 @@ const { locale, t, tag } = useLocale(consoleMessages);
 
 const dragging = ref(false);
 const sending = ref(false);
+
+/* A file somebody else dropped into the room belongs on this pile at once. */
+useConsoleLive('files', () =>
+    router.reload({
+        only: ['segments', 'files', 'total', 'console'],
+    }),
+);
 
 const title = computed(() => t(`chat.f.seg.${props.segment}`));
 const current = computed(() =>
