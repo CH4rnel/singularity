@@ -49,6 +49,7 @@ class TokenController extends Controller
         return Inertia::render('Tokens', [
             'groups' => $groups,
             'count' => count($registry),
+            'ticker' => $this->ticker($priceMap),
         ]);
     }
 
@@ -88,8 +89,91 @@ class TokenController extends Controller
         return Inertia::render('Token', [
             'token' => $this->present($addr, $meta, $priceMap[$addr] ?? null),
             'pools' => $this->poolsFor($addr, $pools, $priceMap),
+            'chart' => $this->chart($addr, $pools, $symbols),
             'explorerUrl' => $this->explorerUrl(),
+            'ticker' => $this->ticker($priceMap),
         ]);
+    }
+
+    /**
+     * The running price strip: every documented token the pool graph can
+     * price, in registry order (native first), each one a link to its page.
+     *
+     * It carries no change percentage on purpose — nothing on this server
+     * stores yesterday's price, and a ticker is the last place to invent one.
+     *
+     * @param  array<string, float>  $priceMap
+     * @return list<array{address: string, symbol: string, logo: string|null, price: float}>
+     */
+    private function ticker(array $priceMap): array
+    {
+        $logoBase = rtrim((string) config('tokens.logo_base'), '/');
+
+        return collect((array) config('tokens.list', []))
+            ->map(fn (array $meta, string $addr): array => [
+                'address' => $addr,
+                'symbol' => (string) ($meta['symbol'] ?? ''),
+                'logo' => isset($meta['logo']) ? $logoBase.$meta['logo'] : null,
+                'price' => $priceMap[$addr] ?? null,
+            ])
+            ->filter(fn (array $row): bool => $row['symbol'] !== '' && $row['price'] !== null)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Everything the browser needs to redraw this token's price history from
+     * the chain, or null when it cannot be drawn honestly.
+     *
+     * The route is the one the USD price above the chart was walked through,
+     * so both agree. Reserves in the pool rows are already in human units but
+     * a `Sync` log is raw, so every hop needs its two tokens' decimals — which
+     * only the registry knows. An undocumented token on the route therefore
+     * yields no chart rather than one scaled by a guess.
+     *
+     * @param  Collection<int, object>  $pools
+     * @param  array<string, string>  $symbols
+     * @return array{hops: list<array<string, mixed>>, route: list<string>, quoteSymbol: string}|null
+     */
+    private function chart(string $addr, Collection $pools, array $symbols): ?array
+    {
+        $route = $this->prices->usdRoute($pools, $addr);
+
+        if ($route === null) {
+            return null;
+        }
+
+        $registry = (array) config('tokens.list', []);
+        $decimals = fn (string $token): ?int => isset($registry[$token]['decimals'])
+            ? (int) $registry[$token]['decimals']
+            : null;
+        $hops = [];
+
+        foreach ($route as $hop) {
+            $decIn = $decimals($hop['tokenIn']);
+            $decOut = $decimals($hop['tokenOut']);
+
+            if ($decIn === null || $decOut === null) {
+                return null;
+            }
+
+            $hops[] = $hop + ['decIn' => $decIn, 'decOut' => $decOut];
+        }
+
+        $symbolOf = fn (string $token): string => $registry[$token]['symbol']
+            ?? $symbols[$token]
+            ?? substr($token, 0, 6);
+
+        return [
+            'hops' => $hops,
+            // "CYBER → USDT → USDC": the charted price is a routed one, and
+            // saying so is cheaper than a footnote nobody reads.
+            'route' => array_map($symbolOf, array_merge(
+                [$route[0]['tokenIn']],
+                array_column($route, 'tokenOut'),
+            )),
+            'quoteSymbol' => $symbolOf($route[count($route) - 1]['tokenOut']),
+        ];
     }
 
     /**
