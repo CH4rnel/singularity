@@ -96,7 +96,10 @@ useConsoleLive(
     // Not while a row is open under somebody's hands: replacing the task
     // being edited, or the thread being answered, is how two operators undo
     // each other. A few seconds of staleness is the cheaper mistake.
-    { active: () => editingTaskId.value === null && commentingTaskId.value === null },
+    {
+        active: () =>
+            editingTaskId.value === null && commentingTaskId.value === null,
+    },
 );
 
 const COLUMNS = [
@@ -392,7 +395,7 @@ const footer = computed(() =>
                         </button>
                         <button
                             type="button"
-                            class="mk-btn mk-ghost"
+                            class="mk-btn mk-ghost task-action--edit"
                             @click="startEditing(task)"
                         >
                             {{ t('tasks.edit') }}
@@ -596,7 +599,7 @@ const footer = computed(() =>
                                     </span>
                                     <button
                                         type="button"
-                                        class="mk-btn mk-ghost"
+                                        class="mk-btn mk-ghost task-action--done"
                                         style="margin-left: auto; height: 22px"
                                         @click="done(task)"
                                     >
@@ -604,7 +607,7 @@ const footer = computed(() =>
                                     </button>
                                     <button
                                         type="button"
-                                        class="mk-btn mk-ghost"
+                                        class="mk-btn mk-ghost task-action--edit"
                                         @click="startEditing(task)"
                                     >
                                         {{ t('tasks.edit') }}
@@ -673,7 +676,7 @@ const footer = computed(() =>
                                     </button>
                                     <button
                                         type="button"
-                                        class="mk-btn mk-ghost"
+                                        class="mk-btn mk-ghost task-action--comment-cancel"
                                         @click="toggleComment(task)"
                                     >
                                         {{ t('tasks.cancel') }}
@@ -683,7 +686,7 @@ const footer = computed(() =>
                             <button
                                 v-else
                                 type="button"
-                                class="mk-btn mk-ghost task-comment-toggle"
+                                class="mk-btn mk-ghost task-comment-toggle task-action--comment"
                                 @click="toggleComment(task)"
                             >
                                 {{ t('tasks.comment.add') }}
@@ -747,7 +750,7 @@ const footer = computed(() =>
                         <span v-if="task.contact">{{ task.contact.name }}</span>
                         <button
                             type="button"
-                            class="mk-btn mk-ghost"
+                            class="mk-btn mk-ghost task-action--reopen"
                             @click="reopen(task)"
                         >
                             {{ t('tasks.reopen') }}
@@ -807,23 +810,22 @@ const footer = computed(() =>
 
 .task-completed__grid {
     display: grid;
-    grid-auto-columns: minmax(280px, 360px);
-    grid-auto-flow: column;
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
     align-items: start;
     gap: 10px;
+    max-height: min(520px, 60vh);
     margin-top: 12px;
-    padding-bottom: 8px;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scroll-snap-type: inline proximity;
+    padding-right: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     scrollbar-color: var(--mk-flat) transparent;
+    scrollbar-gutter: stable;
     scrollbar-width: thin;
 }
 
 .task-completed__item {
     min-width: 0;
     padding: 12px 14px;
-    scroll-snap-align: start;
 }
 
 .task-completed__item p {
@@ -906,6 +908,36 @@ const footer = computed(() =>
 .task-delete:focus-visible {
     color: var(--mk-critical);
     background: rgba(255, 77, 77, 0.08);
+}
+
+.mk-btn.mk-ghost.task-action--reopen:hover,
+.mk-btn.mk-ghost.task-action--reopen:focus-visible {
+    color: var(--mk-warning);
+    background: rgba(224, 165, 22, 0.08);
+}
+
+.mk-btn.mk-ghost.task-action--edit:hover,
+.mk-btn.mk-ghost.task-action--edit:focus-visible {
+    color: #65c18c;
+    background: rgba(101, 193, 140, 0.08);
+}
+
+.mk-btn.mk-ghost.task-action--done:hover,
+.mk-btn.mk-ghost.task-action--done:focus-visible {
+    color: var(--mk-accent);
+    background: var(--mk-accent-soft);
+}
+
+.mk-btn.mk-ghost.task-action--comment:hover,
+.mk-btn.mk-ghost.task-action--comment:focus-visible {
+    color: #008f86;
+    background: rgba(0, 143, 134, 0.1);
+}
+
+.mk-btn.mk-ghost.task-action--comment-cancel:hover,
+.mk-btn.mk-ghost.task-action--comment-cancel:focus-visible {
+    color: var(--mk-critical);
+    background: var(--mk-critical-soft);
 }
 
 .task-edit {
@@ -1039,10 +1071,6 @@ const footer = computed(() =>
 }
 
 @media (max-width: 620px) {
-    .task-completed__grid {
-        grid-auto-columns: min(86vw, 340px);
-    }
-
     .task-edit__fields {
         grid-template-columns: 1fr;
     }
