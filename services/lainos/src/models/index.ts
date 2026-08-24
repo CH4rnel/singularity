@@ -13,7 +13,17 @@ import {
   FallbackModelProvider,
   SwitchableModelProvider,
   TieredModelProvider,
+  type TaskRouteEntry,
 } from "./routing.js";
+import {
+  TASKS,
+  TASK_ORDER,
+  TaskKind,
+  formatTaskRoute,
+  parseTaskRoute,
+  taskEnvKey,
+  type TaskRoute,
+} from "./tasks.js";
 
 const log = createLogger("model");
 
@@ -29,7 +39,20 @@ export {
   SwitchableModelProvider,
   TieredModelProvider,
 } from "./routing.js";
-export type { ChatProviderState } from "./routing.js";
+export type { ChatProviderState, TaskRouteEntry, TaskRouteState } from "./routing.js";
+export {
+  TASKS,
+  TASK_ORDER,
+  TaskKind,
+  classifyTask,
+  formatTaskRoute,
+  isTaskKind,
+  parseTaskRoute,
+  taskEnvKey,
+  taskSpec,
+  taskTag,
+} from "./tasks.js";
+export type { Classification, TaskRoute, TaskSpec } from "./tasks.js";
 
 function tierOverrides(
   getSetting: (key: string) => string | undefined,
@@ -105,15 +128,33 @@ export function createModelProvider(
   };
 
   const cache = new Map<string, ModelProvider>();
-  const make = (kind: string): ModelProvider | undefined => {
-    const cached = cache.get(kind);
+  const make = (kind: string, pinned?: string): ModelProvider | undefined => {
+    const key = pinned ? `${kind}|${pinned}` : kind;
+    const cached = cache.get(key);
     if (cached) return cached;
-    const built = build(kind);
-    if (built) cache.set(kind, built);
+    const built = build(kind, pinned);
+    if (built) cache.set(key, built);
     return built;
   };
 
-  const build = (kind: string): ModelProvider | undefined => {
+  /**
+   * A task route may pin one model id (`openrouter:openai/gpt-oss-120b:free`).
+   * A pinned model answers every tier — the route already said what to use, so
+   * a tier default underneath it would only ever contradict it.
+   */
+  const pin = (
+    pinned: string | undefined,
+    fallback: Partial<Record<ModelTier, string>>,
+  ): Partial<Record<ModelTier, string>> =>
+    pinned
+      ? {
+          [ModelTier.SMALL]: pinned,
+          [ModelTier.MEDIUM]: pinned,
+          [ModelTier.LARGE]: pinned,
+        }
+      : fallback;
+
+  const build = (kind: string, pinned?: string): ModelProvider | undefined => {
     switch (kind) {
       case "mock":
         return new MockModelProvider();
@@ -125,7 +166,7 @@ export function createModelProvider(
         return new CyberiaModelProvider({
           apiKey: cyberiaKey,
           baseUrl: getSetting("CYBERIA_AI_BASE_URL"),
-          models: tierOverrides(getSetting, "CYBERIA_AI_MODEL"),
+          models: pin(pinned, tierOverrides(getSetting, "CYBERIA_AI_MODEL")),
           proxy,
         });
       }
@@ -137,7 +178,7 @@ export function createModelProvider(
         return new OpenRouterModelProvider({
           apiKey: openrouterKey,
           baseUrl: getSetting("OPENROUTER_BASE_URL"),
-          models: tierOverrides(getSetting, "OPENROUTER_MODEL"),
+          models: pin(pinned, tierOverrides(getSetting, "OPENROUTER_MODEL")),
           referer: getSetting("OPENROUTER_REFERER"),
           title: getSetting("OPENROUTER_TITLE"),
           proxy,
@@ -148,14 +189,14 @@ export function createModelProvider(
           // Same models, other route: the subscription CLI needs no key.
           if (claudeBin()) {
             log.info("ANTHROPIC_API_KEY is missing — using the Claude CLI subscription instead.");
-            return make("claude");
+            return make("claude", pinned);
           }
           log.warn("Anthropic selected but ANTHROPIC_API_KEY is missing.");
           return undefined;
         }
         return new AnthropicModelProvider({
           apiKey: anthropicKey,
-          models: tierOverrides(getSetting, "LAINOS_MODEL"),
+          models: pin(pinned, tierOverrides(getSetting, "LAINOS_MODEL")),
           proxy,
         });
       }
@@ -164,7 +205,7 @@ export function createModelProvider(
         if (!bin) {
           if (anthropicKey) {
             log.info("no claude CLI found — using the Anthropic API key instead.");
-            return make("anthropic");
+            return make("anthropic", pinned);
           }
           log.warn("claude selected but no claude CLI found (PATH or ~/.local/bin).");
           return undefined;
@@ -173,7 +214,7 @@ export function createModelProvider(
         const retriesRaw = Number(getSetting("LAINOS_CLAUDE_RETRIES"));
         return new ClaudeCliModelProvider({
           bin,
-          models: tierOverrides(getSetting, "LAINOS_CLAUDE_MODEL"),
+          models: pin(pinned, tierOverrides(getSetting, "LAINOS_CLAUDE_MODEL")),
           timeoutMs: Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : undefined,
           retries: Number.isFinite(retriesRaw) && retriesRaw >= 0 ? retriesRaw : undefined,
           extraArgs: splitArgs(getSetting("LAINOS_CLAUDE_ARGS")),
@@ -193,7 +234,7 @@ export function createModelProvider(
         const retriesRaw = Number(getSetting("LAINOS_CODEX_RETRIES"));
         return new CodexModelProvider({
           bin,
-          models: tierOverrides(getSetting, "LAINOS_CODEX_MODEL"),
+          models: pin(pinned, tierOverrides(getSetting, "LAINOS_CODEX_MODEL")),
           timeoutMs: Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : undefined,
           retries: Number.isFinite(retriesRaw) && retriesRaw >= 0 ? retriesRaw : undefined,
           extraArgs: splitArgs(getSetting("LAINOS_CODEX_ARGS")),
@@ -215,7 +256,7 @@ export function createModelProvider(
         const retriesRaw = Number(getSetting("LAINOS_OPENCODE_RETRIES"));
         return new OpencodeModelProvider({
           bin,
-          models: tierOverrides(getSetting, "LAINOS_OPENCODE_MODEL"),
+          models: pin(pinned, tierOverrides(getSetting, "LAINOS_OPENCODE_MODEL")),
           timeoutMs: Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : undefined,
           retries: Number.isFinite(retriesRaw) && retriesRaw >= 0 ? retriesRaw : undefined,
           extraArgs: splitArgs(getSetting("LAINOS_OPENCODE_ARGS")),
@@ -304,15 +345,125 @@ export function createModelProvider(
     assembled = assemble("mock")!;
   }
 
+  // Per-task routing: what the environment says, plus whatever the operator
+  // pointed elsewhere in an earlier run (data/task-routes.json wins).
+  const routesFile = taskRoutesFile(getSetting);
+  const envRoutes = resolveEnvTaskRoutes(getSetting, baseKind);
+  const operatorRoutes = loadStoredTaskRoutes(routesFile);
+
   const provider = new SwitchableModelProvider({
     initial: assembled,
     kind: baseKind,
     envKind,
     assemble,
     persist: (kind) => storeChatProvider(overrideFile, kind),
+    routes: envRoutes,
+    operatorRoutes,
+    buildRoute: (route) => make(route.provider, route.model),
+    persistRoutes: (routes) => storeTaskRoutes(routesFile, routes),
   });
   log.info(`using model provider: ${provider.name}`);
+
+  // Say the table out loud at boot: a routing decision nobody can see is how
+  // an operator ends up paying Opus rates for a news digest.
+  const routed = provider
+    .taskRoutes()
+    .filter((r) => r.source !== "base")
+    .map((r) => `${r.emoji} ${r.task}→${r.provider}${r.model ? `/${r.model}` : ""} (${r.source})`);
+  if (routed.length) log.info(`task routing: ${routed.join(", ")}`);
+
   return provider;
+}
+
+/**
+ * The standing per-task policy, read from the environment.
+ *
+ * Two knobs, and the second is the one that matters on a budget:
+ *   LAINOS_TASK_<KIND>  — this exact kind goes to this provider[:model]
+ *   LAINOS_TASK_CHEAP   — every kind marked `cheap` (digests, translation,
+ *                         analysis, recaps) goes there unless named above
+ *
+ * With neither set, cheap work still moves off a paid base when the machine
+ * already holds a free key — a Cyberia grant, or OpenRouter's free router —
+ * because that is free by construction and the alternative is paying Opus
+ * rates to summarise an RSS feed. Set LAINOS_TASK_CHEAP=none to keep
+ * everything on one provider.
+ *
+ * `critical` kinds (money, code) are never swept up by the cheap knob: they
+ * act on the world, and cheapening them takes naming them explicitly.
+ */
+export function resolveEnvTaskRoutes(
+  getSetting: (key: string) => string | undefined,
+  baseKind: string,
+): Partial<Record<TaskKind, TaskRouteEntry>> {
+  const out: Partial<Record<TaskKind, TaskRouteEntry>> = {};
+  const cheapRaw = getSetting("LAINOS_TASK_CHEAP")?.trim();
+  const cheap = cheapRaw ? parseTaskRoute(cheapRaw) : autoCheapRoute(getSetting, baseKind);
+
+  for (const kind of TASK_ORDER) {
+    const raw = getSetting(taskEnvKey(kind))?.trim();
+    const explicit = raw ? parseTaskRoute(raw) : undefined;
+    if (explicit) {
+      out[kind] = { route: explicit, source: "env" };
+      if (TASKS[kind].critical) {
+        log.warn(
+          `${TASKS[kind].emoji} ${kind} is routed to ${formatTaskRoute(explicit)} — ` +
+            `this kind acts on the world (money/code), so trust that model`,
+        );
+      }
+      continue;
+    }
+    if (cheap && TASKS[kind].cheap) out[kind] = { route: cheap, source: "cheap" };
+  }
+  return out;
+}
+
+/** A free route this machine already has, other than the one already in use. */
+function autoCheapRoute(
+  getSetting: (key: string) => string | undefined,
+  baseKind: string,
+): TaskRoute | undefined {
+  if (getSetting("CYBERIA_AI_KEY") && baseKind !== "cyberia") return { provider: "cyberia" };
+  if (getSetting("OPENROUTER_API_KEY") && baseKind !== "openrouter") {
+    return {
+      provider: "openrouter",
+      model: getSetting("OPENROUTER_MODEL_CHEAP")?.trim() || "openrouter/free",
+    };
+  }
+  return undefined;
+}
+
+/** Where the operator's own per-task routes live between runs. */
+function taskRoutesFile(getSetting: (key: string) => string | undefined): string {
+  return join(getSetting("LAINOS_DATA_DIR") ?? "./data", "task-routes.json");
+}
+
+function loadStoredTaskRoutes(file: string): Partial<Record<TaskKind, TaskRoute>> {
+  const out: Partial<Record<TaskKind, TaskRoute>> = {};
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as { routes?: Record<string, unknown> };
+    for (const [task, raw] of Object.entries(parsed.routes ?? {})) {
+      if (!(task in TASKS) || typeof raw !== "string") continue;
+      const route = parseTaskRoute(raw);
+      if (route) out[task as TaskKind] = route;
+    }
+  } catch {
+    // No stored routes.
+  }
+  return out;
+}
+
+function storeTaskRoutes(file: string, routes: Record<string, string>): void {
+  if (!Object.keys(routes).length) {
+    rmSync(file, { force: true });
+    return;
+  }
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    `${JSON.stringify({ routes, updatedAt: new Date().toISOString() }, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 /**

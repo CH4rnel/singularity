@@ -4,6 +4,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { createLogger } from "../../logger.js";
+import { TaskKind } from "../../models/tasks.js";
 import { resolveOperatorChatId, sendToOperator } from "../telegram/index.js";
 import {
   ModelTier,
@@ -541,6 +542,8 @@ export class StudyService implements Service {
 
     const res = await runtime.model.generate({
       tier: ModelTier.MEDIUM,
+      // Reading the repo and saying what it means: analysis, not conversation.
+      task: TaskKind.ANALYSIS,
       system,
       messages: [{ role: "user", content: user }],
       maxTokens: 700,

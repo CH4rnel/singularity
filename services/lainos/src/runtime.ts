@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createLogger } from "./logger.js";
+import { clientOfRoom, type SessionStore } from "./memory/sessions.js";
+import { TASKS, TaskKind, classifyTask } from "./models/tasks.js";
 import {
   ModelTier,
   type Action,
@@ -38,6 +40,10 @@ interface TurnTranscript {
   userText: string;
   startedAt: string;
   modelProvider: string;
+  /** What kind of work this turn was routed as, and the words that said so. */
+  task?: string;
+  taskSignal?: string;
+  escalatedFrom?: string;
   forcedAction?: string;
   modelCalls: TranscriptModelCall[];
   toolResults: TranscriptToolResult[];
@@ -75,6 +81,8 @@ export interface RuntimeOptions {
   character: Character;
   memory: MemoryStore;
   model: ModelProvider;
+  /** Session index; without one, turns are still stored but never titled. */
+  sessions?: SessionStore;
   /** Markdown soul document prepended verbatim to the system prompt. */
   soul?: string;
   settings?: Record<string, string | undefined>;
@@ -88,6 +96,7 @@ export class AgentRuntime implements IAgentRuntime {
   readonly character: Character;
   readonly memory: MemoryStore;
   readonly model: ModelProvider;
+  readonly sessions?: SessionStore;
   readonly soul?: string;
   readonly actions: Action[] = [];
   readonly providers: Provider[] = [];
@@ -103,6 +112,7 @@ export class AgentRuntime implements IAgentRuntime {
     this.character = opts.character;
     this.memory = opts.memory;
     this.model = opts.model;
+    this.sessions = opts.sessions;
     this.soul = opts.soul;
     this.settings = opts.settings ?? { ...process.env };
   }
@@ -250,6 +260,7 @@ export class AgentRuntime implements IAgentRuntime {
     roomId: string;
     userId: string;
     text: string;
+    task?: TaskKind;
   }): Promise<TurnResult> {
     return this.handleMessageStream(input, () => {});
   }
@@ -262,7 +273,7 @@ export class AgentRuntime implements IAgentRuntime {
   private turnQueue: Promise<unknown> = Promise.resolve();
 
   async handleMessageStream(
-    input: { roomId: string; userId: string; text: string },
+    input: { roomId: string; userId: string; text: string; task?: TaskKind },
     onEvent: (event: AgentEvent) => void,
   ): Promise<TurnResult> {
     const run = this.turnQueue.then(() => this.runTurn(input, onEvent));
@@ -271,7 +282,7 @@ export class AgentRuntime implements IAgentRuntime {
   }
 
   private async runTurn(
-    input: { roomId: string; userId: string; text: string },
+    input: { roomId: string; userId: string; text: string; task?: TaskKind },
     onEvent: (event: AgentEvent) => void,
   ): Promise<TurnResult> {
     const incoming: Memory = {
@@ -290,13 +301,53 @@ export class AgentRuntime implements IAgentRuntime {
     const system = this.composeSystemPrompt(state);
     const tools = this.buildToolSchemas(state);
     const messages = this.memoriesToMessages(state.recent);
-    const tier = this.character.modelTier ?? ModelTier.LARGE;
+
+    // What kind of work is this? A pure classifier over the operator's own
+    // words — it costs no tokens, answers the same way every time, and is the
+    // whole basis on which a provider is chosen. A caller that already knows
+    // (the scout's digests, a recap) declares the kind instead of guessing.
+    const classified = classifyTask(input.text);
+    let task = input.task ?? classified.kind;
+    const taskSignal = input.task ? "declared by the caller" : classified.signal;
+    let tier = this.tierFor(task);
+    onEvent({ type: "task", kind: task, signal: taskSignal });
+    if (transcript) {
+      transcript.task = task;
+      transcript.taskSignal = taskSignal;
+    }
+
+    /**
+     * Cheap work may be answered by the cheapest model on the machine — but
+     * the moment a turn reaches for a tool it stops being text: it is about to
+     * read a balance, spend gas, write a file. Lift the rest of the turn back
+     * onto the operator's own provider, and say so. LAINOS_TASK_ESCALATE=0 for
+     * an operator who really means "free, whatever it does".
+     */
+    let escalatedFrom: TaskKind | undefined;
+    const escalate = () => {
+      if (escalatedFrom || !TASKS[task].cheap) return;
+      if (this.getSetting("LAINOS_TASK_ESCALATE") === "0") return;
+      escalatedFrom = task;
+      task = TaskKind.CHAT;
+      tier = this.tierFor(task);
+      if (transcript) transcript.escalatedFrom = escalatedFrom;
+      onEvent({
+        type: "task",
+        kind: task,
+        signal: `${escalatedFrom} called a tool`,
+        escalated: true,
+      });
+      log.info(`escalated ${escalatedFrom} → chat: the turn reached for a tool`);
+    };
+
     const ranActions: TurnResult["actions"] = [];
     const convo = [...messages];
 
     const forcedAction = this.forcedActionForState(state);
     let res: ModelResponse | null = null;
     let modelUsed = "";
+    let providerUsed = "";
+    let upstreamUsed = "";
     if (forcedAction) {
       if (transcript) transcript.forcedAction = forcedAction.name;
       onEvent({ type: "thinking" });
@@ -308,6 +359,7 @@ export class AgentRuntime implements IAgentRuntime {
         ranActions,
         transcript,
       );
+      escalate();
       convo.push(
         {
           role: "assistant",
@@ -321,12 +373,14 @@ export class AgentRuntime implements IAgentRuntime {
         },
       );
       res = await this.streamOrGenerate(
-        { tier, system, messages: convo, maxTokens: this.maxTokens },
+        { tier, task, system, messages: convo, maxTokens: this.maxTokens },
         (delta) => onEvent({ type: "text", delta }),
         transcript,
         "forced-action-summary",
       );
       modelUsed = res.model;
+      providerUsed = res.provider ?? providerUsed;
+      upstreamUsed = res.upstream ?? "";
     }
 
     // --- Think → act loop (streamed, with tools) ---
@@ -337,12 +391,14 @@ export class AgentRuntime implements IAgentRuntime {
     if (!res) {
       onEvent({ type: "thinking" });
       res = await this.streamOrGenerate(
-        { tier, system, messages, tools, maxTokens: this.maxTokens },
+        { tier, task, system, messages, tools, maxTokens: this.maxTokens },
         (delta) => onEvent({ type: "text", delta }),
         transcript,
         "initial",
       );
       modelUsed = res.model;
+      providerUsed = res.provider ?? providerUsed;
+      upstreamUsed = res.upstream ?? "";
     }
     // Provenance: which model produced the text the user will actually see.
     const seenCalls = new Set<string>();
@@ -350,6 +406,7 @@ export class AgentRuntime implements IAgentRuntime {
 
     while (res.toolCalls.length) {
       rounds += 1;
+      escalate();
       const toolSummaries: string[] = [];
       let sawRepeat = false;
 
@@ -402,6 +459,7 @@ export class AgentRuntime implements IAgentRuntime {
       const followup = await this.streamOrGenerate(
         {
           tier,
+          task,
           system,
           maxTokens: this.maxTokens,
           messages: convo,
@@ -413,6 +471,8 @@ export class AgentRuntime implements IAgentRuntime {
       );
       res = canContinue ? followup : { ...followup, toolCalls: [] };
       modelUsed = res.model;
+      providerUsed = res.provider ?? providerUsed;
+      upstreamUsed = res.upstream ?? "";
     }
 
     let replyText =
@@ -427,6 +487,7 @@ export class AgentRuntime implements IAgentRuntime {
         const retry = await this.streamOrGenerate(
           {
             tier,
+            task,
             system,
             maxTokens: Math.max(this.maxTokens, 2048),
             messages: [
@@ -445,6 +506,8 @@ export class AgentRuntime implements IAgentRuntime {
         );
         replyText = retry.text;
         modelUsed = retry.model;
+        providerUsed = retry.provider ?? providerUsed;
+        upstreamUsed = retry.upstream ?? "";
       } catch (err) {
         log.warn("empty-reply retry failed", err);
       }
@@ -462,7 +525,13 @@ export class AgentRuntime implements IAgentRuntime {
       replyText = autoLearn;
     }
 
-    log.info(`reply via ${modelUsed} (room ${input.roomId})`);
+    const spec = TASKS[task];
+    log.info(
+      `reply via ${providerUsed ? `${providerUsed}/` : ""}${modelUsed}` +
+        `${upstreamUsed ? ` (upstream ${upstreamUsed})` : ""} ${spec.emoji} ${task}` +
+        (escalatedFrom ? ` (escalated from ${escalatedFrom})` : "") +
+        ` (room ${input.roomId})`,
+    );
     const reply: Memory = {
       id: randomUUID(),
       roomId: input.roomId,
@@ -472,6 +541,10 @@ export class AgentRuntime implements IAgentRuntime {
       createdAt: Date.now(),
       metadata: {
         model: modelUsed,
+        ...(providerUsed ? { provider: providerUsed } : {}),
+        ...(upstreamUsed ? { upstream: upstreamUsed } : {}),
+        task,
+        ...(escalatedFrom ? { escalatedFrom } : {}),
         ...(ranActions.length ? { actions: ranActions } : {}),
       },
     };
@@ -495,9 +568,45 @@ export class AgentRuntime implements IAgentRuntime {
       }
     }
 
-    const result: TurnResult = { text: replyText, actions: ranActions, model: modelUsed };
+    // The session index is written last and never fails a turn: an unwritable
+    // index is a lost title, not a lost conversation.
+    if (this.sessions) {
+      try {
+        await this.sessions.record({
+          roomId: input.roomId,
+          client: clientOfRoom(input.roomId),
+          userText: input.text,
+          model: modelUsed,
+          task,
+          tools: ranActions.map((action) => action.name),
+        });
+      } catch (err) {
+        log.warn("could not record the session turn", err);
+      }
+    }
+
+    const result: TurnResult = {
+      text: replyText,
+      actions: ranActions,
+      model: modelUsed,
+      provider: providerUsed || undefined,
+      upstream: upstreamUsed || undefined,
+      task,
+      taskSignal,
+      escalatedFrom,
+    };
     onEvent({ type: "done", result });
     return result;
+  }
+
+  /**
+   * The tier a kind of work asks for. A conversation still honours whatever
+   * the character asked for — that is the agent's own voice — while every
+   * other kind takes the tier its own definition names.
+   */
+  private tierFor(task: TaskKind): ModelTier {
+    if (task === TaskKind.CHAT) return this.character.modelTier ?? TASKS[task].tier;
+    return TASKS[task].tier;
   }
 
   /** Stream when the provider supports it, otherwise fall back to one generate. */

@@ -16,72 +16,91 @@ export interface WrappedLine {
   end: number;
 }
 
-/** Greedy word-wrap onto `width` columns, tracking flat indices so a cursor
- *  position can be mapped onto the visual layout. Hard newlines in
- *  `value` start a fresh display line, so shift+enter stays visible. */
+/**
+ * Soft-wrap `value` onto `width` columns, **verbatim**.
+ *
+ * The invariant every caller depends on: `text === value.slice(start, end)`,
+ * and the lines partition the string. The first version of this rebuilt each
+ * row out of `/\S+/` tokens joined by single spaces, which quietly reflowed
+ * what you typed — a trailing space belonged to no row at all (so the caret
+ * refused to move when you pressed space, and the space only appeared once the
+ * next letter made it part of a word), and a run of several spaces collapsed
+ * into one, dragging the caret out of step with the real cursor for the rest
+ * of the line. A composer must draw exactly the characters it holds.
+ *
+ * Breaks prefer the position just after the last space that fits, so words
+ * stay whole and the space stays visible at the end of the row it belongs to;
+ * a word longer than the width is cut hard. Hard newlines start a fresh row,
+ * so alt+enter stays visible.
+ */
 export function wrapIndices(value: string, width: number): WrappedLine[] {
   const w = Math.max(4, width);
   const out: WrappedLine[] = [];
   let offset = 0;
+
   for (const logical of value.split("\n")) {
-    const words: { text: string; index: number }[] = [];
-    const re = /\S+/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(logical)) !== null) words.push({ text: m[0], index: offset + m.index });
-    if (!words.length) {
-      out.push({ text: logical, start: offset, end: offset + logical.length });
-    } else {
-      let lineWords: typeof words = [];
-      let lineStart = words[0].index;
-      let lineEnd = words[0].index + words[0].text.length;
-      let used = 0;
-      const flush = () => {
-        if (lineWords.length) {
-          out.push({ text: lineWords.map((x) => x.text).join(" "), start: lineStart, end: lineEnd });
-        }
-        lineWords = [];
-      };
-      for (const word of words) {
-        if (word.text.length > w) {
-          flush();
-          for (let i = 0; i < word.text.length; i += w) {
-            out.push({
-              text: word.text.slice(i, i + w),
-              start: word.index + i,
-              end: word.index + Math.min(i + w, word.text.length),
-            });
-          }
-          lineStart = word.index + word.text.length;
-          continue;
-        }
-        const need = lineWords.length ? 1 + word.text.length : word.text.length;
-        if (lineWords.length && used + need > w) {
-          flush();
-          lineStart = word.index;
-          used = 0;
-        }
-        lineWords.push(word);
-        used += need;
-        lineEnd = word.index + word.text.length;
+    if (logical.length === 0) {
+      out.push({ text: "", start: offset, end: offset });
+      offset += 1;
+      continue;
+    }
+    let pos = 0;
+    while (pos < logical.length) {
+      const remaining = logical.length - pos;
+      if (remaining <= w) {
+        out.push({
+          text: logical.slice(pos),
+          start: offset + pos,
+          end: offset + logical.length,
+        });
+        pos = logical.length;
+        break;
       }
-      flush();
+      // Break just after the last space inside the window; a space at the very
+      // edge is a legal break too, which is what keeps whole words together.
+      let cut = -1;
+      for (let i = pos + w - 1; i > pos; i--) {
+        if (logical[i] === " ") {
+          cut = i + 1;
+          break;
+        }
+      }
+      const stop = cut > pos ? cut : pos + w;
+      out.push({ text: logical.slice(pos, stop), start: offset + pos, end: offset + stop });
+      pos = stop;
     }
     offset += logical.length + 1;
   }
+
   if (!out.length) out.push({ text: "", start: 0, end: 0 });
+  // A last row filled to the very edge leaves the caret nowhere to stand, so
+  // it gets the next row — the same thing a terminal does at column 80.
+  const last = out[out.length - 1];
+  if (last.end - last.start === w) {
+    out.push({ text: "", start: last.end, end: last.end });
+  }
   return out;
 }
 
 /** Map a flat cursor index to (line, col) in the wrapped layout. */
 export function cursorToWrap(value: string, cursor: number, width: number): { line: number; col: number } {
-  const lines = wrapIndices(value, width);
+  const w = Math.max(4, width);
+  const lines = wrapIndices(value, w);
   for (let i = 0; i < lines.length; i++) {
     const { start, end } = lines[i];
-    if (cursor <= start) return { line: i, col: 0 };
-    if (cursor <= end) return { line: i, col: cursor - start };
-    if (i === lines.length - 1) return { line: i, col: lines[i].text.length };
+    if (cursor < start) return { line: i, col: 0 };
+    if (cursor < end) return { line: i, col: cursor - start };
+    if (cursor === end) {
+      // A boundary belongs to two rows. It reads as the end of this one —
+      // that is where a trailing space puts the caret — unless this row is
+      // full to the edge and the text simply continues on the next.
+      const next = lines[i + 1];
+      if (next && next.start === cursor && end - start >= w) return { line: i + 1, col: 0 };
+      return { line: i, col: cursor - start };
+    }
   }
-  return { line: 0, col: 0 };
+  const tail = lines[lines.length - 1];
+  return { line: lines.length - 1, col: tail.end - tail.start };
 }
 
 export interface LineState {

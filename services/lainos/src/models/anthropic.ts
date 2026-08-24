@@ -91,7 +91,7 @@ export class AnthropicModelProvider implements ModelProvider {
       }
     }
 
-    return { text: text.trim(), toolCalls, model };
+    return { text: text.trim(), toolCalls, model: res.model ?? model, provider: this.name };
   }
 
   async stream(
@@ -130,6 +130,6 @@ export class AnthropicModelProvider implements ModelProvider {
       }
     }
 
-    return { text: text.trim(), toolCalls, model };
+    return { text: text.trim(), toolCalls, model: final.model ?? model, provider: this.name };
   }
 }

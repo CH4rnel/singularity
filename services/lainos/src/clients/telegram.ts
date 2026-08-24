@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { fetch as undiciFetch, ProxyAgent, type Dispatcher } from "undici";
 import { runCyberiaStudyNow } from "../cyberia-study.js";
 import { createLogger } from "../logger.js";
+import { buildRecap } from "../memory/recap.js";
+import { answerStamp, SwitchableModelProvider } from "../models/routing.js";
 import { formatForgeJobs, type ForgeService } from "../plugins/forge/index.js";
 import type { ScoutService } from "../plugins/scout/index.js";
 import type { IAgentRuntime } from "../types.js";
@@ -83,6 +85,8 @@ const HELP_TEXT = [
   "  · remember durable facts across conversations",
   "  · /study — run the Cyberia research sweep now",
   "  · /jobs — show forge job history",
+  "  · /recap — summarise this conversation so far",
+  "  · /tasks — which model answers which kind of work",
   "",
   "try: \"watch 0x… and warn me below 5 CYBER\"",
 ].join("\n");
@@ -281,6 +285,26 @@ export class TelegramClient {
       await this.runCyberiaStudy(chatId);
       return;
     }
+    if (cmd === "/recap") {
+      await this.sendRecap(chatId);
+      return;
+    }
+    if (cmd === "/tasks") {
+      const model = this.runtime.model;
+      await this.sendChunked(
+        chatId,
+        model instanceof SwitchableModelProvider
+          ? model
+              .taskRoutes()
+              .map(
+                (r) =>
+                  `${r.emoji} ${r.task} → ${r.provider}${r.model ? ` · ${r.model}` : ""} (${r.source})`,
+              )
+              .join("\n")
+          : "the model provider is fixed for this run.",
+      );
+      return;
+    }
     if (cmd === "/jobs") {
       await this.showForgeJobs(chatId, content.split(/\s+/).slice(1));
       return;
@@ -301,11 +325,13 @@ export class TelegramClient {
         userId: `tg:${msg.from.username ?? msg.from.id}`,
         text: content,
       });
-      // Provenance receipt: which model actually answered (the operator must
-      // be able to see it's the subscription, not some fallback). Off: =0.
+      // Provenance receipt: what kind of work this was taken as, and which
+      // model actually answered it (the operator must be able to see it's the
+      // subscription, not some fallback, and that a digest went to the cheap
+      // route). Off: =0.
       const sig =
         result.model && this.runtime.getSetting("LAINOS_REPLY_SIGNATURE") !== "0"
-          ? `\n\n⌁ ${result.model}`
+          ? `\n\n⌁ ${answerStamp(result)}`
           : "";
       await this.sendChunked(chatId, (result.text || "…") + sig);
     } catch (err) {
@@ -317,6 +343,34 @@ export class TelegramClient {
   }
 
   // ------------------------------------------------------------- helpers
+
+  /**
+   * `/recap` for a chat: the counted half always lands, the written half is
+   * produced by whatever the `memory` task is routed to — summarising your own
+   * log is never worth a paid token.
+   */
+  private async sendRecap(chatId: number): Promise<void> {
+    const sessions = this.runtime.sessions;
+    const record = await sessions?.resolve(`tg-${chatId}`);
+    if (!record) {
+      await this.sendChunked(chatId, "nothing recorded in this conversation yet.");
+      return;
+    }
+    const typing = this.keepTyping(chatId);
+    try {
+      const result = await buildRecap(this.runtime, record);
+      if (result.summarised && result.model) {
+        await sessions?.setRecap(record.id, {
+          text: result.text,
+          at: Date.now(),
+          model: result.model,
+        });
+      }
+      await this.sendChunked(chatId, result.model ? `${result.text}\n\n⌁ ${result.model}` : result.text);
+    } finally {
+      typing();
+    }
+  }
 
   private async runCyberiaStudy(chatId: number): Promise<void> {
     const scout = this.runtime.getService<ScoutService>("scout");

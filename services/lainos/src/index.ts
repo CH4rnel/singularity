@@ -10,6 +10,7 @@
 import "dotenv/config";
 import { createLogger } from "./logger.js";
 import { createEmbeddingProvider } from "./memory/embeddings.js";
+import { SessionStore } from "./memory/sessions.js";
 import { FileMemoryStore } from "./memory/store.js";
 import { createModelProvider } from "./models/index.js";
 import { bootstrapPlugin } from "./plugins/bootstrap/index.js";
@@ -34,6 +35,10 @@ export * from "./types.js";
 export { AgentRuntime } from "./runtime.js";
 export { loadSoul } from "./soul.js";
 export { FileMemoryStore } from "./memory/store.js";
+export { SessionStore, clientOfRoom, newRoomId } from "./memory/sessions.js";
+export type { SessionRecap, SessionRecord, TurnRecord } from "./memory/sessions.js";
+export { buildRecap, humanDuration, recapHeader, transcriptFor } from "./memory/recap.js";
+export type { RecapResult } from "./memory/recap.js";
 export {
   createModelProvider,
   AnthropicModelProvider,
@@ -46,8 +51,24 @@ export {
   TieredModelProvider,
   resolveCodexBin,
   resolveOpenCodeBin,
+  TASKS,
+  TASK_ORDER,
+  TaskKind,
+  classifyTask,
+  formatTaskRoute,
+  isTaskKind,
+  parseTaskRoute,
+  taskEnvKey,
+  taskSpec,
+  taskTag,
 } from "./models/index.js";
-export type { ChatProviderState } from "./models/index.js";
+export type {
+  ChatProviderState,
+  Classification,
+  TaskRoute,
+  TaskRouteState,
+  TaskSpec,
+} from "./models/index.js";
 export { bootstrapPlugin } from "./plugins/bootstrap/index.js";
 export {
   createEmbeddingProvider,
@@ -143,6 +164,13 @@ export async function createAgent(opts: CreateAgentOptions): Promise<AgentRuntim
   const embedder = createEmbeddingProvider(getSetting);
   const memory = new FileMemoryStore(dataDir, embedder);
   const model = createModelProvider(getSetting);
+  // Every surface leaves a session behind without being asked to — that is
+  // what makes /resume and /recap possible days later.
+  const sessionLimit = Number(getSetting("LAINOS_SESSION_LIMIT"));
+  const sessions = new SessionStore(
+    dataDir,
+    Number.isFinite(sessionLimit) && sessionLimit > 0 ? sessionLimit : undefined,
+  );
 
   // Pin the data dir in settings so services (sentinel, telegram) that read
   // LAINOS_DATA_DIR land in the same place as the memory store.
@@ -150,6 +178,7 @@ export async function createAgent(opts: CreateAgentOptions): Promise<AgentRuntim
     character: opts.character,
     memory,
     model,
+    sessions,
     soul: loadSoul(getSetting),
     settings: { ...process.env, LAINOS_DATA_DIR: dataDir },
   });

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useApp, useStdin, useStdout } from "ink";
 import { ModelTier, type AgentEvent, type IAgentRuntime } from "../../types.js";
+import { buildRecap } from "../../memory/recap.js";
+import { newRoomId, type SessionRecord } from "../../memory/sessions.js";
+import { TASKS, TASK_ORDER, isTaskKind, type TaskKind } from "../../models/tasks.js";
 import {
   CHAT_PROVIDER_CHOICES,
   chatProviderLabel,
@@ -209,13 +212,12 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const cursorStyle: "block" | "line" = cursorPref.startsWith("line") ? "line" : "block";
   const blinkEnabled = cursorPref.endsWith("blink");
 
-  const [room, setRoom] = useState("tui");
+  // A launch is a session: a fresh room, saved from its first turn, with every
+  // earlier one still on disk behind /resume. The room used to be the constant
+  // "tui", which made every run since the first one the same conversation.
+  const [room, setRoom] = useState(() => newRoomId("tui"));
   const [history, setHistory] = useState<Turn[]>(() => []);
-  const session = useMemo(() => {
-    const d = new Date();
-    const p = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-  }, []);
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [live, setLive] = useState<Turn | null>(null);
   const [status, setStatus] = useState<"idle" | "thinking" | "streaming">("idle");
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -443,6 +445,228 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
     });
   }, [switchable, switchProvider]);
 
+  // ------------------------------------------------------------- sessions
+  //
+  // A session is a room plus what the index knows about it. The index is
+  // written by the runtime as turns happen, so everything here only reads —
+  // which is why /resume can reach a conversation from another surface, and
+  // another week.
+
+  const sessions = runtime.sessions;
+
+  /** A session list is read by *when*, so that is what its left column says. */
+  const ago = useCallback((at: number): string => {
+    const mins = Math.round((Date.now() - at) / 60_000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }, []);
+
+  const taskGlyphs = useCallback(
+    (record: SessionRecord): string =>
+      Object.keys(record.tasks)
+        .filter(isTaskKind)
+        .map((k) => TASKS[k].emoji)
+        .join(""),
+    [],
+  );
+
+  /** Put a stored conversation back on screen, exactly as the store kept it. */
+  const restore = useCallback(
+    async (record: SessionRecord) => {
+      const mems = await runtime.memory.recent(record.roomId, 200);
+      const turns: Turn[] = mems
+        .filter((m) => m.role !== "system")
+        .map((m) => {
+          const task = m.metadata?.task;
+          return {
+            id: nextId(),
+            role: m.role === "agent" ? ("lain" as const) : ("you" as const),
+            parts: [{ kind: "text" as const, text: m.content }],
+            at: m.createdAt,
+            model: typeof m.metadata?.model === "string" ? m.metadata.model : undefined,
+            provider: typeof m.metadata?.provider === "string" ? m.metadata.provider : undefined,
+            upstream: typeof m.metadata?.upstream === "string" ? m.metadata.upstream : undefined,
+            task: isTaskKind(task) ? task : undefined,
+            escalated: Boolean(m.metadata?.escalatedFrom),
+          };
+        });
+      setRoom(record.roomId);
+      setSessionId(record.id);
+      setLive(null);
+      setHistory([
+        ...turns,
+        sysTurn(
+          `resumed ${record.id} · ${record.turns} turn${record.turns === 1 ? "" : "s"} · ` +
+            `last touched ${ago(record.updatedAt)}` +
+            (record.recap ? `\n\n${record.recap.text}` : ""),
+        ),
+      ]);
+    },
+    [ago, runtime],
+  );
+
+  // A new session shows the masthead again — an empty screen under the banner
+  // *is* the announcement, and a notice line would only push it away. What
+  // happened to the old one is on the boot lines and in the sidebar's row.
+  const newSession = useCallback(() => {
+    setRoom(newRoomId("tui"));
+    setSessionId(undefined);
+    setLive(null);
+    setHistory([]);
+  }, []);
+
+  const resumeSession = useCallback(
+    (ref?: string) => {
+      if (!sessions) {
+        pushHistory(sysTurn("this build keeps no session index — nothing to resume."));
+        return;
+      }
+      void (async () => {
+        if (ref) {
+          const record = await sessions.resolve(ref, { client: "tui" });
+          if (!record) {
+            pushHistory(sysTurn(`no session "${ref}" — /sessions lists them.`));
+            return;
+          }
+          await restore(record);
+          return;
+        }
+        const list = (await sessions.list(10, { client: "tui" })).filter((r) => r.roomId !== room);
+        if (!list.length) {
+          pushHistory(sysTurn("no earlier sessions here yet — this is the first one."));
+          return;
+        }
+        setPicker({
+          title: "resume a session",
+          kind: "plain",
+          options: list.map((r) => ({
+            value: r.id,
+            label: r.id,
+            hint: `  ${ago(r.updatedAt).padEnd(9)} ${String(r.turns).padStart(3)} turns ${taskGlyphs(r)}  ${r.title || "—"}`,
+          })),
+          index: 0,
+          onPick: (value) => {
+            const record = list.find((r) => r.id === value);
+            if (record) void restore(record);
+          },
+        });
+      })();
+    },
+    [ago, pushHistory, restore, room, sessions, taskGlyphs],
+  );
+
+  const recapSession = useCallback(
+    (ref?: string) => {
+      if (!sessions) {
+        pushHistory(sysTurn("this build keeps no session index — nothing to recap."));
+        return;
+      }
+      void (async () => {
+        const record = ref
+          ? await sessions.resolve(ref, { client: "tui" })
+          : await sessions.resolve(room);
+        if (!record) {
+          pushHistory(
+            sysTurn(
+              ref ? `no session "${ref}" — /sessions lists them.` : "nothing said in this session yet.",
+            ),
+          );
+          return;
+        }
+        pushHistory(sysTurn(`recapping ${record.id} — ${record.turns} turns…`));
+        const result = await buildRecap(runtime, record);
+        if (result.summarised && result.model) {
+          await sessions.setRecap(record.id, {
+            text: result.text,
+            at: Date.now(),
+            model: result.model,
+          });
+        }
+        pushHistory(
+          sysTurn(result.model ? `${result.text}\n\n— ${result.model}` : result.text),
+        );
+      })();
+    },
+    [pushHistory, room, runtime, sessions],
+  );
+
+  const listSessions = useCallback(() => {
+    if (!sessions) {
+      pushHistory(sysTurn("this build keeps no session index."));
+      return;
+    }
+    void (async () => {
+      const list = await sessions.list(10);
+      if (!list.length) {
+        pushHistory(sysTurn("no sessions recorded yet."));
+        return;
+      }
+      const rows = list.map((r, i) => {
+        const here = r.roomId === room ? "❯" : " ";
+        return (
+          `  ${here} ${String(i + 1).padStart(2)}  ${r.id.padEnd(10)} ${r.client.padEnd(4)} ` +
+          `${ago(r.updatedAt).padEnd(9)} ${String(r.turns).padStart(3)} turns ${taskGlyphs(r).padEnd(6)} ${r.title || "—"}`
+        );
+      });
+      pushHistory(
+        sysTurn(`sessions (newest first) — /resume <n> · /recap <n>\n${rows.join("\n")}`),
+      );
+    })();
+  }, [ago, pushHistory, room, sessions, taskGlyphs]);
+
+  const taskRoutes = useCallback(
+    (task?: string, route?: string) => {
+      if (!switchable) {
+        pushHistory(sysTurn("this session's model provider is fixed — nothing to route."));
+        return;
+      }
+      const row = (r: { emoji: string; task: string; provider: string; model: string; source: string; error?: string }) =>
+        `  ${r.emoji} ${r.task.padEnd(10)} ${r.provider}${r.model ? ` · ${r.model}` : ""}` +
+        `  (${r.source})${r.error ? `  ⚠ ${r.error}` : ""}`;
+      if (!task) {
+        pushHistory(
+          sysTurn(
+            `who answers what — /tasks <kind> <provider[:model]>\n` +
+              `${switchable.taskRoutes().map(row).join("\n")}`,
+          ),
+        );
+        return;
+      }
+      const kind = task.trim().toLowerCase();
+      if (!isTaskKind(kind)) {
+        pushHistory(sysTurn(`unknown kind "${task}" — one of: ${TASK_ORDER.join(" · ")}`));
+        return;
+      }
+      if (!route) {
+        pushHistory(
+          sysTurn(
+            `${row(switchable.taskRouteState(kind))}\n` +
+              `  ${TASKS[kind].desc}. change it: /tasks ${kind} openrouter:openrouter/free`,
+          ),
+        );
+        return;
+      }
+      const clearing = ["default", "none", "base"].includes(route.trim().toLowerCase());
+      const result = switchable.setTaskRoute(kind, clearing ? null : route.trim());
+      if (typeof result === "string") {
+        pushHistory(sysTurn(result));
+        return;
+      }
+      pushHistory(
+        sysTurn(
+          `${row(result)}` +
+            (result.critical && !clearing
+              ? "\n  ⚠ this kind acts on the world (money/code) — trust that model."
+              : ""),
+        ),
+      );
+    },
+    [pushHistory, switchable],
+  );
+
   /** What a slash command may reach — see ./commands.ts, where the bodies live. */
   const commandCtx = useMemo(
     () => ({
@@ -474,14 +698,14 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         else openModelPicker();
       },
       switchProvider,
-      newRoom: () => {
-        const r = `tui-${Date.now().toString(36)}`;
-        setRoom(r);
-        pushHistory(sysTurn(`new room: ${r} — short-term memory is fresh here.`));
-      },
+      newSession,
+      resumeSession,
+      recapSession,
+      listSessions,
+      taskRoutes,
       exit,
     }),
-    [copyOut, exit, history, lastReply, model, openCursorPicker, openEffortPicker, openModelPicker, openSkinPicker, provider, pulseOn, pushHistory, runtime, switchProvider, switchable],
+    [copyOut, exit, history, lastReply, listSessions, model, newSession, openCursorPicker, openEffortPicker, openModelPicker, openSkinPicker, provider, pulseOn, pushHistory, recapSession, resumeSession, runtime, switchProvider, switchable, taskRoutes],
   );
 
   const command = useCallback((text: string) => dispatchCommand(text, commandCtx), [commandCtx]);
@@ -508,6 +732,11 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           id: acc.id,
           role: acc.role,
           at: acc.at,
+          task: acc.task,
+          escalated: acc.escalated,
+          model: acc.model,
+          provider: acc.provider,
+          upstream: acc.upstream,
           parts: acc.parts.map((p) =>
             p.kind === "tool" ? { kind: "tool", tool: { ...p.tool } } : { kind: "text", text: p.text },
           ),
@@ -520,6 +749,12 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         const result = await runtime.handleMessageStream({ roomId: room, userId: "user", text }, (ev: AgentEvent) => {
           if (ev.type === "thinking") {
             setStatus("thinking");
+          } else if (ev.type === "task") {
+            // The stamp appears while she is still thinking, so the operator
+            // sees which model is about to be spent before a word arrives.
+            acc.task = ev.kind;
+            if (ev.escalated) acc.escalated = true;
+            flush();
           } else if (ev.type === "text") {
             setStatus("streaming");
             const last = acc.parts.at(-1);
@@ -540,6 +775,13 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
           }
         });
         acc.model = result.model;
+        acc.provider = result.provider;
+        acc.upstream = result.upstream;
+        acc.task = result.task;
+        acc.escalated = Boolean(result.escalatedFrom);
+        // The index gets its record on the first turn — pick the id up so the
+        // sidebar stops saying "new".
+        void runtime.sessions?.resolve(room).then((r) => setSessionId(r?.id));
       } catch (err) {
         acc.parts.push({ kind: "text", text: `⚠ ${(err as Error).message}` });
       } finally {
@@ -568,7 +810,10 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
   const contentW = sidebarOn ? width - sidebarW : width;
   // the composer's text area: the gutter, the panel's two borders, its padding
   // and the prompt
-  const composerWidth = Math.max(4, contentW - 7);
+  // The composer's drawable text is `contentW - 9` cells (the frame, the ▸
+  // prefix and the truncation the chrome applies), and the caret needs one
+  // more to stand past the last character — wrap one column short of that.
+  const composerWidth = Math.max(4, contentW - 10);
   // One row is deliberately left to the terminal. ink clears the whole screen —
   // scrollback included — whenever a frame is as tall as the window, and a
   // screen that is wiped several times a second cannot be selected or copied.
@@ -611,6 +856,7 @@ export function App({ runtime }: { runtime: IAgentRuntime }) {
         block,
         tokens,
         room,
+        session: sessionId,
         effort,
         skinLabel: theme.name,
         watches,

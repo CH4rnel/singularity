@@ -42,6 +42,7 @@ export class MockModelProvider implements ModelProvider {
             },
           ],
           model: this.modelFor(request.tier),
+          provider: this.name,
         };
       }
     }
@@ -57,6 +58,7 @@ export class MockModelProvider implements ModelProvider {
         text: `[offline] ${truncate(results, 300)}`,
         toolCalls: [],
         model: this.modelFor(request.tier),
+        provider: this.name,
       };
     }
 
@@ -64,7 +66,7 @@ export class MockModelProvider implements ModelProvider {
       ? `[offline] I hear you: "${truncate(text, 160)}". Set ANTHROPIC_API_KEY for a real mind.`
       : "[offline] ...the Wired is quiet. Set ANTHROPIC_API_KEY to wake me.";
 
-    return { text: reply, toolCalls: [], model: this.modelFor(request.tier) };
+    return { text: reply, toolCalls: [], model: this.modelFor(request.tier), provider: this.name };
   }
 }
 

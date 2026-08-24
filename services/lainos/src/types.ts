@@ -15,6 +15,9 @@
  *   AgentRuntime — wires it all together and drives the think→act loop.
  */
 
+import type { SessionStore } from "./memory/sessions.js";
+import type { TaskKind } from "./models/tasks.js";
+
 export type UUID = string;
 
 /** Model capability tiers. Map to concrete model ids in the provider. */
@@ -174,6 +177,11 @@ export interface Plugin {
 
 export interface ModelRequest {
   tier: ModelTier;
+  /**
+   * What kind of work this is (see models/tasks.ts). The router reads it to
+   * pick a provider by cost and responsibility; providers ignore it.
+   */
+  task?: TaskKind;
   system: string;
   /** Conversation turns. */
   messages: { role: "user" | "assistant"; content: string }[];
@@ -203,6 +211,14 @@ export interface ModelResponse {
   toolCalls: ModelToolCall[];
   /** Underlying model id used, for logging. */
   model: string;
+  /** Provider that actually answered ("openrouter", "claude", ...). */
+  provider?: string;
+  /**
+   * Who ran it upstream, when the provider is a gateway rather than the model's
+   * home — Cyberia's `lain-free` served out of Groq, OpenRouter's free router
+   * served out of DeepInfra. Absent when the provider *is* the runner.
+   */
+  upstream?: string;
 }
 
 export interface ModelProvider {
@@ -226,6 +242,18 @@ export interface TurnResult {
   actions: { name: string; result: ActionResult }[];
   /** Model id that produced the final reply (provenance, e.g. "codex/gpt-5.5"). */
   model?: string;
+  /** Provider that produced it ("openrouter", "claude", ...). */
+  provider?: string;
+  /** Who ran the model upstream, when the provider is a gateway. */
+  upstream?: string;
+  /** Kind of work this turn was routed as, and why it was tagged that way. */
+  task?: TaskKind;
+  taskSignal?: string;
+  /**
+   * Set when a cheap task called a tool and was lifted back onto the main
+   * provider mid-turn: acting on the world is never left to the free pool.
+   */
+  escalatedFrom?: TaskKind;
 }
 
 /**
@@ -235,6 +263,7 @@ export interface TurnResult {
  */
 export type AgentEvent =
   | { type: "thinking" }
+  | { type: "task"; kind: TaskKind; signal: string; escalated?: boolean }
   | { type: "text"; delta: string }
   | { type: "tool"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; id: string; name: string; ok: boolean; summary: string }
@@ -248,6 +277,8 @@ export interface IAgentRuntime {
   readonly actions: Action[];
   readonly providers: Provider[];
   readonly evaluators: Evaluator[];
+  /** Index over the conversation rooms: titles, counts, recaps. */
+  readonly sessions?: SessionStore;
 
   /** Reply token budget — the effort knob the TUI's /effort selector writes. */
   maxTokens: number;
@@ -263,6 +294,8 @@ export interface IAgentRuntime {
     roomId: string;
     userId: string;
     text: string;
+    /** Declare the kind of work instead of letting the classifier guess. */
+    task?: TaskKind;
   }): Promise<TurnResult>;
 
   /**
@@ -270,7 +303,7 @@ export interface IAgentRuntime {
    * (thinking, text deltas, tool calls). Returns the final turn result.
    */
   handleMessageStream(
-    input: { roomId: string; userId: string; text: string },
+    input: { roomId: string; userId: string; text: string; task?: TaskKind },
     onEvent: (event: AgentEvent) => void,
   ): Promise<TurnResult>;
 }

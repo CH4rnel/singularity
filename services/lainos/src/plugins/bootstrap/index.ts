@@ -1,9 +1,11 @@
 import {
+  answerStamp,
   CHAT_PROVIDER_CHOICES,
   chatProviderLabel,
   resolveChatProviderKind,
   SwitchableModelProvider,
 } from "../../models/routing.js";
+import { TASKS, TASK_ORDER, TaskKind, isTaskKind } from "../../models/tasks.js";
 import type { Action, Evaluator, IAgentRuntime, Plugin, Provider } from "../../types.js";
 
 /** Injects the current wall-clock time so the agent is temporally grounded. */
@@ -203,24 +205,146 @@ const chatProviderStatusAction: Action = {
   async validate(runtime) {
     return Boolean(switchableModel(runtime));
   },
-  async handler(runtime) {
+  async handler(runtime, state) {
     const model = switchableModel(runtime);
     if (!model) return { ok: false, text: "The live model provider is fixed for this run." };
     const s = model.state();
+    // What is *configured* is not what answered: `lain-free` is an alias of
+    // Cyberia's gateway, and the last reply carries the provider, the model
+    // and the upstream that actually produced it. Report the receipt, not the
+    // setting — that is what the question is usually about.
+    const recent = await runtime.memory.recent(state.roomId, 12);
+    const previous = [...recent]
+      .reverse()
+      .find((m) => m.role === "agent" && typeof m.metadata?.model === "string");
+    const last = previous
+      ? answerStamp({
+          task: isTaskKind(previous.metadata?.task) ? previous.metadata?.task : undefined,
+          model: String(previous.metadata?.model),
+          provider:
+            typeof previous.metadata?.provider === "string" ? previous.metadata.provider : undefined,
+          upstream:
+            typeof previous.metadata?.upstream === "string" ? previous.metadata.upstream : undefined,
+        })
+      : "";
     return {
       ok: true,
       text:
-        `Live replies: ${chatProviderLabel(s.kind)} — ${s.model} (ensemble ${s.name}). ` +
+        (last ? `The previous reply here was written by ${last}. ` : "") +
+        `Configured for live replies: ${chatProviderLabel(s.kind)} — ${s.model} (ensemble ${s.name}). ` +
         (s.overridden
           ? `Runtime override active; env default is ${s.envKind}.`
-          : `Matches the env default.`),
+          : `Matches the env default.`) +
+        ` Note the id is what is asked for; every reply is stamped with the provider, the model and the upstream that actually answered.`,
       data: {
         provider: s.kind,
         model: s.model,
         ensemble: s.name,
         envDefault: s.envKind,
         overridden: s.overridden,
+        lastAnswer: last || undefined,
       },
+    };
+  },
+};
+
+// --------------------------------------------------------------- task routes
+
+/** One printable row: `📰 digest → openrouter/openrouter/free (cheap)`. */
+function routeLine(row: {
+  emoji: string;
+  task: TaskKind;
+  provider: string;
+  model: string;
+  source: string;
+  error?: string;
+}): string {
+  const where = `${row.provider}${row.model ? ` · ${row.model}` : ""}`;
+  return `${row.emoji} ${row.task} → ${where} (${row.source})${row.error ? ` ⚠ ${row.error}` : ""}`;
+}
+
+/**
+ * Point one kind of work at one provider. This is the knob that makes a
+ * budget hold: digests and translation on a free model, the chat and anything
+ * touching money on the one the operator trusts.
+ */
+const setTaskRouteAction: Action = {
+  name: "set_task_route",
+  similes: ["route_task", "set_task_provider", "assign_model_to_task"],
+  description:
+    "Route one kind of work to a model provider: " +
+    TASK_ORDER.map((t) => `${t} (${TASKS[t].desc})`).join(", ") +
+    ". The route is provider[:model], e.g. openrouter:openrouter/free, cyberia, claude. " +
+    'Pass route="default" to hand the kind back to the environment\'s own choice. ' +
+    "Live chat provider switching is a different thing — use set_chat_provider for that.",
+  parameters: {
+    type: "object",
+    properties: {
+      task: { type: "string", enum: [...TASK_ORDER], description: "Kind of work to route." },
+      route: {
+        type: "string",
+        description: 'provider[:model], or "default" to clear the override.',
+      },
+    },
+    required: ["task", "route"],
+  },
+  examples: [
+    {
+      user: "дайджесты собирай бесплатной моделью, не трать токены",
+      agent: "Готово: 📰 digest теперь идёт через openrouter/openrouter/free.",
+    },
+  ],
+  async validate(runtime) {
+    return Boolean(switchableModel(runtime));
+  },
+  async handler(runtime, _state, params) {
+    const model = switchableModel(runtime);
+    if (!model) return { ok: false, text: "The model provider is fixed for this run." };
+    const task = String(params.task ?? "").trim().toLowerCase();
+    if (!isTaskKind(task)) {
+      return { ok: false, text: `task must be one of: ${TASK_ORDER.join(", ")}` };
+    }
+    const raw = String(params.route ?? "").trim();
+    const clearing = !raw || ["default", "none", "base"].includes(raw.toLowerCase());
+    const result = model.setTaskRoute(task, clearing ? null : raw);
+    if (typeof result === "string") return { ok: false, text: result };
+    const warning =
+      TASKS[task].critical && !clearing
+        ? " This kind acts on the world (money/code) — make sure that model is one you trust."
+        : "";
+    return {
+      ok: true,
+      text: `${routeLine(result)}.${warning}`,
+      data: { task, provider: result.provider, model: result.model, source: result.source },
+    };
+  },
+};
+
+/** What answers what, right now — the table an operator asks for out loud. */
+const taskRoutesAction: Action = {
+  name: "task_routes",
+  similes: ["which_model_for_what", "routing_table", "show_task_routes"],
+  description:
+    "Report which model provider answers each kind of work (chat, code, money, write, " +
+    "analysis, digest, translate, memory) and where that route came from.",
+  parameters: { type: "object", properties: {} },
+  examples: [
+    {
+      user: "какая модель за что отвечает?",
+      agent: "💬 chat → claude, 📰 digest → openrouter/free, 💰 money → claude.",
+    },
+  ],
+  async validate(runtime) {
+    return Boolean(switchableModel(runtime));
+  },
+  async handler(runtime) {
+    const model = switchableModel(runtime);
+    if (!model) return { ok: false, text: "The model provider is fixed for this run." };
+    const rows = model.taskRoutes();
+    return {
+      ok: true,
+      text: rows.map(routeLine).join("\n"),
+      data: { routes: rows },
     };
   },
 };
@@ -228,7 +352,14 @@ const chatProviderStatusAction: Action = {
 export const bootstrapPlugin: Plugin = {
   name: "bootstrap",
   description: "Core providers, evaluators, and long-term memory skills every agent needs.",
-  actions: [rememberAction, recallAction, setChatProviderAction, chatProviderStatusAction],
+  actions: [
+    rememberAction,
+    recallAction,
+    setChatProviderAction,
+    chatProviderStatusAction,
+    setTaskRouteAction,
+    taskRoutesAction,
+  ],
   providers: [timeProvider],
   evaluators: [factEvaluator],
 };

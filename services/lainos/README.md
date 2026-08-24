@@ -114,6 +114,101 @@ cp .env.example .env        # already done for you
 npm run chat
 ```
 
+### Task routing — who answers which kind of work
+
+A capability tier says how *hard* a call is. It says nothing about what the
+work is worth, which is the question an operator on a budget actually has: a
+news digest and a trade both want the best model available, and only one of
+them deserves it. So every turn also carries a **kind**, and the kind decides
+which provider answers it.
+
+| Kind | Tag | What it is | Cheapenable |
+|------|-----|------------|-------------|
+| `chat` | 💬 | live conversation with the operator | no |
+| `code` | 🛠 | code, patches, scripts | no — acts on the world |
+| `money` | 💰 | trades, transfers, balances, positions | no — acts on the world |
+| `write` | ✍️ | posts, tweets, announcements | no |
+| `analysis` | 📊 | metrics, comparisons, reports | yes |
+| `digest` | 📰 | news, roundups, "what happened" | yes |
+| `translate` | 🌐 | translating text | yes |
+| `memory` | 🧠 | recaps, titles, fact extraction | yes |
+
+The kind is decided by a **pure classifier** over the operator's own words
+(ru/en) — no tokens spent, same answer every time — and a caller that already
+knows declares it instead (the scout's digests, a recap, `POST /chat {task}`).
+Ordering is the policy: "напиши пост про новый кошелёк" is `write`, not
+`money`, and "переведи 5 CYBER на 0x…" is `money`, not `translate`.
+
+```bash
+LAINOS_TASK_DIGEST=openrouter:openai/gpt-oss-120b:free   # one kind
+LAINOS_TASK_CHEAP=openrouter:openrouter/free             # every cheap kind at once
+```
+
+With `LAINOS_TASK_CHEAP` unset, LainOS adopts a free route the machine already
+has — a Cyberia grant, else OpenRouter's free router — for the cheapenable
+kinds only, and prints the resulting table at boot. `LAINOS_TASK_CHEAP=none`
+keeps everything on one provider. `critical` kinds (money, code) are never
+swept up by that knob: pointing them at a free pool takes naming them, and is
+logged when it happens.
+
+Two rules make the cheap routes safe:
+
+- **Escalation.** The moment a cheap turn calls a tool it stops being text —
+  it is about to read a balance, spend gas, write a file — so the rest of the
+  turn is lifted back onto the operator's own provider and the reply is
+  stamped `📰↑`. `LAINOS_TASK_ESCALATE=0` turns that off.
+- **Provenance.** Every reply says which kind it was taken as, through which
+  provider, on which model, and — when the provider is a gateway — who ran it
+  upstream: `📰 digest · cyberia/lain-free ← groq`. The id alone would be a
+  half-truth, because `lain-free` and `openrouter/free` are *aliases*: the
+  Cyberia gateway rewrites `model` back to what you asked for and names the
+  real one in `provider`/`served_by`, and OpenRouter's free router picks a
+  different model per request. One stamp (`answerStamp`) is rendered by the
+  TUI header, the Telegram signature, the REPL, `TurnResult` and each
+  session's counts, and `chat_provider_status` answers with the last reply's
+  receipt rather than the setting. A routing decision nobody can see is how
+  you end up paying Opus rates for an RSS summary.
+
+Change routes live, from any surface:
+
+```bash
+/tasks                                   # the table, in the TUI or the REPL
+/tasks digest openrouter:openrouter/free # point one kind somewhere
+/tasks digest default                    # back to what the environment says
+curl -s localhost:7777/tasks             # the daemon's table
+curl -sX POST localhost:7777/tasks -d '{"task":"digest","route":"cyberia"}'
+```
+
+Lain can do it herself too (`set_task_route`, `task_routes`), and an
+operator's choice is persisted in `data/task-routes.json`, so it survives the
+self-upgrade restarts.
+
+## Sessions
+
+Every conversation on every surface is indexed as it happens
+(`data/sessions.json`): when it started, how many turns, which models answered
+them, which kinds of work they were, which tools fired. The messages
+themselves stay where they always were, in `memory.json` — the index is what
+makes them findable a week later.
+
+| Command | What it does |
+|---------|--------------|
+| `/new` (`/clear`, `/reset`) | start a fresh session; the old one is saved |
+| `/resume` | reopen an earlier one — arrow-key picker, or `/resume <id\|n>` |
+| `/sessions` | recent sessions, newest first (the number is what `/resume` takes) |
+| `/recap` | summarise this session — or `/recap <id\|n>` for an older one |
+| `/wipe` | clear the screen only; the session and its memory stay |
+
+A launch is a session: the TUI and the REPL each open a fresh room, so a run
+never silently continues last week's conversation — and `/resume` is one
+keystroke away. Telegram keeps one room per chat and answers `/recap` there.
+
+A **recap** is two halves, and the split is the point. The header is *counted*
+— duration, turns, models, kinds, tools — so it costs nothing and cannot be
+invented. The summary under it is the only written part, and it is written by
+whatever the `memory` kind is routed to (the cheapest route you allow). If
+that call fails, the header still stands and says so.
+
 ## Quick start
 
 ```bash
@@ -124,6 +219,7 @@ npm run chat                # interactive REPL with Lain
 npm run tui                 # full-screen terminal UI (skins, live chain pulse)
 npm run serve               # daemon: HTTP bridge on :7777 + Telegram bot (if token set)
 npm run provider [cyberia|claude|codex|opencode]  # who writes the daemon's replies (no arg = show)
+npm run tasks:smoke         # pins the task classifier, the router and sessions
 ```
 
 ## The terminal UI
@@ -168,8 +264,10 @@ click, because an editor hosting the terminal can keep the chord for itself —
 VS Code answers ctrl+s with a file save — but never the click.
 
 The transcript scrolls in-app: wheel, PgUp/PgDn, `ctrl+↑/↓`. `/help` lists the
-rest; `/skin`, `/effort`, `/cursor` and `/model` open pickers that take the
-arrow keys, the wheel, and a click on the row you want.
+rest; `/skin`, `/effort`, `/cursor`, `/model` and `/resume` open pickers that
+take the arrow keys, the wheel, and a click on the row you want. `/new` starts
+a session, `/recap` sums one up, and `/tasks` says who answers what — see
+[Sessions](#sessions) and [Task routing](#task-routing--who-answers-which-kind-of-work).
 
 Headless probes: `npm test` runs all of them — `tui:smoke` (frame, keys, copy,
 freeze), `keys:smoke` (escape sequences → edits), `markdown:smoke`, and the
@@ -228,6 +326,8 @@ and secret values loaded from the environment.
   - `set_chat_provider` / `chat_provider_status` — switch which model writes
     the live replies (claude | codex | opencode; persisted) and report the
     active one
+  - `set_task_route` / `task_routes` — point one kind of work (digest,
+    translate, code, money, …) at one provider, and report the whole table
 - **cyberia** — reads/writes the Cyberia chain (id `49406`):
   - `check_balance` — native CYBER balance of an address
   - `token_balance` — ERC20 balance (symbol like `USDC`/`BTC` or a `0x` address)
@@ -516,7 +616,12 @@ GET  /research                        -> { topics } (the scout's subscriptions)
 POST /research/cyberia-study/run      -> { topic, digest, message }
 GET  /provider                        -> { provider, choices } (who answers)
 POST /provider { provider }           -> { provider } (switch cyberia/claude/codex/opencode live)
-POST /chat { roomId, userId, text }   -> { text, actions }
+GET  /tasks                           -> { routes, kinds } (who answers which kind of work)
+POST /tasks { task, route }           -> { route } (point one kind elsewhere)
+GET  /sessions[?client=&limit=]       -> { sessions } (the conversation index)
+GET  /sessions/{id}                   -> { session, messages }
+POST /sessions/{id}/recap             -> { recap }
+POST /chat { roomId, userId, text, task? } -> { text, actions, model, provider, task }
 ```
 
 The **Wired** Godot game (`game/wired/`) drives its Lain NPC through this
@@ -529,9 +634,12 @@ src/
   types.ts            core interfaces (the contract)
   runtime.ts          AgentRuntime — the think→act→evaluate loop
   memory/store.ts     file-backed long-term memory + retrieval
+  memory/sessions.ts  the session index (/new, /resume, /sessions)
+  memory/recap.ts     /recap: counted header + a summary from the cheap route
   memory/embeddings.ts  embedding providers (OpenAI-compatible | offline hash)
   models/             codex.ts | claude-cli.ts | opencode.ts (agent CLIs, cli-protocol.ts)
                       anthropic.ts | openrouter.ts | mock.ts | index.ts (factory)
+                      tasks.ts (kinds + classifier) | routing.ts (per-kind router)
   plugins/bootstrap/  time provider + fact extractor + remember/recall
   plugins/cyberia/    the chain: chain.ts (registry) + abi.ts + math.ts (pure AMM)
                       + config.ts (trading policy) + service.ts (client + journal)
@@ -548,7 +656,7 @@ src/
   plugins/system/     terminal + filesystem skills (sandboxed workspace)
   clients/            cli.ts (REPL) | http.ts (bridge) | telegram.ts (bot) | tui/
   characters/lain.ts  the resident mind of Cyberia
-scripts/              chat.ts | tui.ts | serve.ts | smoke.ts
+scripts/              chat.ts | tui.ts | serve.ts | smoke.ts | tasks-smoke.ts
 ```
 
 ## Safety

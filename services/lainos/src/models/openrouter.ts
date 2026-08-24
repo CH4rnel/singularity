@@ -52,10 +52,20 @@ interface ORMessage {
 interface ORResponse {
   choices?: { message?: ORMessage }[];
   error?: { message?: string };
+  /** The model that answered. OpenRouter resolves `openrouter/free` here. */
+  model?: string;
+  /** Who ran it upstream — Cyberia's gateway and OpenRouter both say. */
+  provider?: string;
+  /** Cyberia only: set when a fallback model answered instead. */
+  served_by?: string;
 }
 
-// One server-sent chunk of a streaming chat completion.
+// One server-sent chunk of a streaming chat completion. The provenance
+// fields repeat on every frame; the last one that carries them wins.
 interface ORStreamChunk {
+  model?: string;
+  provider?: string;
+  served_by?: string;
   choices?: {
     delta?: {
       content?: string | null;
@@ -67,6 +77,29 @@ interface ORStreamChunk {
 }
 
 const THINK_TAGS = ["<think>", "<thinking>", "</think>", "</thinking>"];
+
+/**
+ * Who actually answered, as opposed to what we asked for.
+ *
+ * An OpenAI-compatible id is often an *alias*: `openrouter/free` is a router
+ * that picks a different model per request, and Cyberia's own gateway answers
+ * `lain-free` out of whichever provider is up — it even rewrites `model` back
+ * to the id you asked for and names the real one in `provider`/`served_by`.
+ * Echoing the requested id as provenance is therefore a lie by omission, which
+ * is exactly what "какой моделью это сгенерено?" is asking about.
+ *
+ * Precedence: an explicit fallback (`served_by`) beats the body's `model`,
+ * which beats the id we sent. `upstream` is who ran it, when anyone says.
+ */
+export function servedBy(
+  requested: string,
+  body: { model?: string; provider?: string; served_by?: string } | undefined,
+): { model: string; upstream?: string } {
+  const model = body?.served_by?.trim() || body?.model?.trim() || requested;
+  const upstream = body?.provider?.trim();
+  // "openrouter answered via openrouter" tells nobody anything.
+  return { model, upstream: upstream && upstream.toLowerCase() !== model.toLowerCase() ? upstream : undefined };
+}
 
 /**
  * Remove a reasoning model's chain of thought from a completed reply. Models
@@ -221,7 +254,9 @@ export class OpenRouterModelProvider implements ModelProvider {
         input: safeParseArgs(tc.function?.arguments),
       }));
 
-    return { text, toolCalls, model };
+    const served = servedBy(model, data);
+    if (served.model !== model) log.debug(`${model} was served by ${served.model}`);
+    return { text, toolCalls, model: served.model, provider: this.name, upstream: served.upstream };
   }
 
   async stream(
@@ -269,6 +304,8 @@ export class OpenRouterModelProvider implements ModelProvider {
     const decoder = new TextDecoder();
     let buffer = "";
     let text = "";
+    // Provenance rides along the frames; keep the last one that said anything.
+    let provenance: { model?: string; provider?: string; served_by?: string } = {};
     const thinkFilter = new ThinkTagFilter();
     const toolAcc: Record<number, { name?: string; args: string }> = {};
 
@@ -289,6 +326,13 @@ export class OpenRouterModelProvider implements ModelProvider {
           chunk = JSON.parse(payload) as ORStreamChunk;
         } catch {
           continue;
+        }
+        if (chunk.model || chunk.provider || chunk.served_by) {
+          provenance = {
+            model: chunk.model ?? provenance.model,
+            provider: chunk.provider ?? provenance.provider,
+            served_by: chunk.served_by ?? provenance.served_by,
+          };
         }
         const delta = chunk.choices?.[0]?.delta;
         if (!delta) continue;
@@ -318,7 +362,14 @@ export class OpenRouterModelProvider implements ModelProvider {
       .filter((t) => t.name)
       .map((t) => ({ name: t.name as string, input: safeParseArgs(t.args) }));
 
-    return { text: stripReasoning(text), toolCalls, model };
+    const served = servedBy(model, provenance);
+    return {
+      text: stripReasoning(text),
+      toolCalls,
+      model: served.model,
+      provider: this.name,
+      upstream: served.upstream,
+    };
   }
 }
 

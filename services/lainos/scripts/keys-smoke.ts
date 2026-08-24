@@ -21,7 +21,7 @@ import { highlightSelection, isDrag, ordered, rowRange, selectionText } from "..
 import type { Line } from "../src/clients/tui/markdown.js";
 import { turnLines, type Turn } from "../src/clients/tui/layout.js";
 import { THEMES, DEFAULT_THEME } from "../src/clients/tui/theme.js";
-import { wrapIndices } from "../src/clients/tui/editor.js";
+import { cursorToWrap, wrapIndices } from "../src/clients/tui/editor.js";
 
 // A throwaway state dir: the history probe writes a real file.
 process.env.LAINOS_DATA_DIR = mkdtempSync(join(tmpdir(), "lainos-keys-"));
@@ -237,6 +237,75 @@ check(
   (() => {
     const w = wrapIndices("ab\ncd", 20);
     return w[1].start === 3 && w[1].end === 5;
+  })(),
+);
+
+// ------------------------------------------------- the composer is verbatim
+//
+// The wrapper used to rebuild each row out of non-space tokens joined by a
+// single space. That reflowed what had been typed: a trailing space belonged
+// to no row, so the caret would not move when you pressed space (it appeared
+// only once the next letter made it part of a word), and several spaces in a
+// row collapsed into one, sliding the caret out of step with the cursor.
+
+check(
+  "a trailing space stays ",
+  (() => {
+    const lines = wrapIndices("a ", 20);
+    return lines.length === 1 && lines[0].text === "a " && lines[0].end === 2;
+  })(),
+);
+check(
+  "caret moves on space  ",
+  cursorToWrap("a ", 2, 20).col === 2 && cursorToWrap("a   ", 4, 20).col === 4,
+);
+check("several spaces survive", wrapIndices("a   b", 20)[0].text === "a   b");
+check(
+  "rows are exact slices ",
+  (() => {
+    const value = "one two   three four five six seven eight nine ten eleven twelve";
+    const lines = wrapIndices(value, 16);
+    const verbatim = lines.every((l) => l.text === value.slice(l.start, l.end));
+    const partitions = lines.map((l) => l.text).join("") === value;
+    const fits = lines.every((l) => l.text.length <= 16);
+    return verbatim && partitions && fits;
+  })(),
+);
+check(
+  "long word breaks hard ",
+  (() => {
+    const lines = wrapIndices("x".repeat(9), 4);
+    return lines.map((l) => l.text).join("") === "x".repeat(9) && lines[0].text.length === 4;
+  })(),
+);
+check(
+  "full row hands over   ",
+  (() => {
+    // The caret past the last column of a full row belongs to the next row —
+    // otherwise it is drawn outside the frame and the chrome truncates it away.
+    const value = "abcd";
+    return cursorToWrap(value, 4, 4).line === 1 && cursorToWrap(value, 4, 4).col === 0;
+  })(),
+);
+check(
+  "break keeps its space ",
+  (() => {
+    // The space that ends a row stays *on* that row, so the caret has
+    // somewhere to stand right after you press it — the whole bug.
+    const value = "hello world";
+    const rows = wrapIndices(value, 8);
+    const at = cursorToWrap(value, 6, 8);
+    return (
+      rows[0].text === "hello " && rows[1].text === "world" && at.line === 0 && at.col === 6
+    );
+  })(),
+);
+check(
+  "no room = space leads  ",
+  (() => {
+    // …and when it does not fit, it leads the next row rather than vanishing.
+    const rows = wrapIndices("hello world", 5);
+    return rows[0].text === "hello" && rows[1].text === " worl" && rows[2].text === "d";
   })(),
 );
 
