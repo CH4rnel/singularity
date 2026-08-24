@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, ref } from 'vue';
+import Linked from '@/components/console/Linked.vue';
 import Rule from '@/components/console/Rule.vue';
 import { useConsoleLive } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
@@ -372,7 +373,7 @@ const footer = computed(() =>
                             line-height: 1.4;
                         "
                     >
-                        {{ task.title }}
+                        <Linked :text="task.title" />
                     </p>
                     <div class="task-card__meta">
                         <span class="mk-m mk-t3" style="font-size: 11px">{{
@@ -554,7 +555,7 @@ const footer = computed(() =>
                                         line-height: 1.4;
                                     "
                                 >
-                                    {{ task.title }}
+                                    <Linked :text="task.title" />
                                 </p>
                                 <p
                                     v-if="task.description"
@@ -565,7 +566,7 @@ const footer = computed(() =>
                                         line-height: 1.45;
                                     "
                                 >
-                                    {{ task.description }}
+                                    <Linked :text="task.description" />
                                 </p>
                                 <div class="task-card__meta">
                                     <span
@@ -642,7 +643,7 @@ const footer = computed(() =>
                                             commentTime(item.created_at)
                                         }}</time>
                                     </div>
-                                    <p>{{ item.body }}</p>
+                                    <p><Linked :text="item.body" /></p>
                                 </article>
                             </div>
                             <form
@@ -718,9 +719,9 @@ const footer = computed(() =>
                     :key="task.id"
                     class="mk-panel task-completed__item"
                 >
-                    <p>{{ task.title }}</p>
+                    <p><Linked :text="task.title" /></p>
                     <p v-if="task.description" class="mk-t3">
-                        {{ task.description }}
+                        <Linked :text="task.description" />
                     </p>
                     <div v-if="task.comments.length" class="task-comments">
                         <article
@@ -739,7 +740,7 @@ const footer = computed(() =>
                                     commentTime(item.created_at)
                                 }}</time>
                             </div>
-                            <p>{{ item.body }}</p>
+                            <p><Linked :text="item.body" /></p>
                         </article>
                     </div>
                     <div class="task-card__meta mk-m mk-t3">

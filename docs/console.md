@@ -272,7 +272,10 @@ cached derivative of six sources, so it stamps the *material* underneath it —
 open incidents, the newest sweep row, what is asleep, the tasks — rather than
 rebuilding the queue to find out whether the queue changed. The sweep alone
 lands every five minutes, which is the floor on how stale an open queue can
-get, and matches the rate the material is collected at anyway.
+get, and matches the rate the material is collected at anyway. A dossier
+watches `messages` alongside `people`, `notes` and `tasks`, because a dossier
+open on two desks is usually open because somebody is writing down what was
+just said on it.
 
 **The room does not use a version at all.** These columns keep whole seconds,
 so two writes inside one second can leave a version where it was; on a board
@@ -327,6 +330,70 @@ found" for somebody who is on the books is how a person gets entered twice.
 
 ---
 
+## 4e. The dossier: what was said, and the three readings of one stream
+
+A dossier answered "what happened to this person" and could not answer the
+question an operator actually arrives with, which is **"where does this
+conversation stand"**. That answer lived in somebody's Telegram.
+
+**The correspondence is a table** (`crm_messages`, `CrmMessageController`,
+`POST /crm/{contact}/messages`, `DELETE /crm/messages/{message}`), not notes
+with a convention, and the reason is one column: `direction`. Only a direction
+makes "we wrote four days ago and they have not answered" a fact this console
+can state rather than a thing an operator remembers. `sent_at` is the second
+load-bearing column — when it was *said*, not when it was typed in, because
+these lines are entered after the fact and will later be imported from
+Telegram and Discord, where the timestamp is the whole point of the import.
+The browser sends it as a full ISO string with the desk's own offset: a bare
+`Y-m-d H:i` out of a datetime-local input is read here in the app's timezone,
+which is three hours from the desk that typed it. `external_id` is the
+importer's guard, unique per channel, so replaying an export writes each line
+once; it is null for everything typed by hand, and every engine here allows
+repeated nulls in a unique index.
+
+**It records and it does not send.** Nothing on this host holds an operator's
+Telegram session, and a CRM that appears to deliver a message it never sent is
+worse than one that only writes down. "Написать" stays what it always was — a
+link out to the place the conversation actually happens.
+
+**Two derived numbers, and what they say when they cannot say anything.**
+«Последний контакт» is the last line and whose it was. «Отвечает» is the
+**median** gap between our line and their answer — not the mean, because one
+message answered three days later against sixteen answered inside the hour
+describes a person who answers inside the hour, and the mean would say a day
+and a half. The gap is measured from the *first* unanswered line we sent, not
+the last: when three messages go out and one reply comes back, what was waited
+on started with the first of them. A conversation nobody has answered reads
+"ещё ни разу не ответил" and never a zero, and four days of our own silence
+outranks a whale's balance in the one sentence at the top of the page.
+
+**The stream reads three ways** (`?events=all|touch|money`, in the address like
+every other filter here): `touch` is what people did — our lines, their
+replies, notes, promises — and `money` is what the chain did. The filter is
+applied on the server and not in the browser, because a page that hides rows
+out of the newest sixty is a page whose "only money" really means "the money
+inside the last sixty events", which is a different claim. Every count under
+the table is a **count of the record**, from `count()` queries, never of the
+slice on screen — a footer that counts what it already holds always says
+nothing more is there.
+
+**Copying an address.** Every value on this screen is shortened, and shortened
+is exactly what cannot be pasted into an explorer or a message; until now the
+only way to get all forty characters was to open the edit form and select the
+field by hand. `CopyValue.vue` draws one string and copies another, and
+confirms **in place** — a confirmation elsewhere on the page is a confirmation
+nobody sees while looking at the value they just copied.
+
+**A promise, made from the page it is about.** "+ Задача" existed in the design
+and in the dictionary and led nowhere; a task about this person had to be typed
+on the board and pointed back with `#name`. It now takes the board's own
+one-line grammar (`@who !when`) minus the part that names the person — that is
+the page you are standing on — and «Что дальше» lists only what is still owed,
+with the one action that empties it. A closed promise is not "what next"; it is
+what happened, and the stream carries it.
+
+---
+
 ## 5. The code
 
 | File | Holds |
@@ -336,7 +403,9 @@ found" for somebody who is on the books is how a person gets entered twice.
 | `app/Services/Console/ConsoleHeader.php` | The top strip, shared with every lens through `HandleInertiaRequests` |
 | `app/Services/Console/Snooze.php` | "Until morning", against `console_snoozes` |
 | `app/Services/Console/PeopleLens.php` | Segments and the signal per person |
-| `app/Services/Console/PersonDossier.php` | One person as one stream |
+| `app/Services/Console/PersonDossier.php` | One person as one stream: the three readings, the correspondence, and how long they take to answer |
+| `app/Http/Controllers/CrmMessageController.php` | The correspondence: written down here, imported from Telegram and Discord later |
+| `resources/js/components/console/CopyValue.vue` | One string drawn, another copied — confirmed in place |
 | `app/Support/Handles.php` | A pasted profile link in, a bare handle out — and whether a stored one is an address |
 | `app/Services/CrmSyncService.php` | The importers, the run record (`crm_syncs`) and who stopped holding |
 | `app/Services/Console/NumbersReport.php` | The six questions, per subject |

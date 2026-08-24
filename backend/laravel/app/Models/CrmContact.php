@@ -108,6 +108,20 @@ class CrmContact extends Model
         return $this->hasMany(CrmTask::class)->byDueDate();
     }
 
+    /**
+     * The correspondence, oldest first.
+     *
+     * Notes are latest-first because a note is read as "what is the newest
+     * thing somebody wrote about them"; a conversation is read in the order
+     * it happened, which is the opposite.
+     *
+     * @return HasMany<CrmMessage, $this>
+     */
+    public function messages(): HasMany
+    {
+        return $this->hasMany(CrmMessage::class)->inOrder();
+    }
+
     public function isWhale(): bool
     {
         return $this->type === 'whale';

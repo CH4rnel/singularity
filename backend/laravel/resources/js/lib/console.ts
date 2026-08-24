@@ -35,7 +35,12 @@ export function plural(locale: Locale, count: number, forms: string): string {
     return parts[2] ?? parts[0];
 }
 
-export type Age = { value: string; unit: string; count: number; scale: 'second' | 'minute' | 'hour' | 'day' };
+export type Age = {
+    value: string;
+    unit: string;
+    count: number;
+    scale: 'second' | 'minute' | 'hour' | 'day';
+};
 
 /**
  * How long something has been in this state — the console's priority column.
@@ -51,13 +56,23 @@ export function age(seconds: number | null | undefined): Age | null {
     const total = Math.max(0, Math.floor(seconds));
 
     if (total < 60) {
-        return { value: String(total), unit: 'unit.second', count: total, scale: 'second' };
+        return {
+            value: String(total),
+            unit: 'unit.second',
+            count: total,
+            scale: 'second',
+        };
     }
 
     const minutes = Math.floor(total / 60);
 
     if (minutes < 60) {
-        return { value: String(minutes), unit: 'unit.minute', count: minutes, scale: 'minute' };
+        return {
+            value: String(minutes),
+            unit: 'unit.minute',
+            count: minutes,
+            scale: 'minute',
+        };
     }
 
     const hours = Math.floor(minutes / 60);
@@ -151,7 +166,9 @@ export function grouped(
 
     for (const [key, value] of Object.entries(params ?? {})) {
         out[key] =
-            typeof value === 'number' && Number.isInteger(value) && Math.abs(value) >= 1000
+            typeof value === 'number' &&
+            Number.isInteger(value) &&
+            Math.abs(value) >= 1000
                 ? num(value)
                 : (value ?? '');
     }
@@ -231,4 +248,114 @@ export function dateTime(iso: string | null | undefined, tag: string): string {
               tag,
               { hour: '2-digit', minute: '2-digit' },
           )}`;
+}
+
+/**
+ * One piece of a line: text, or text that is a link.
+ *
+ * Segments and never HTML. What goes through here is typed by an operator or
+ * imported from a chat, so it is somebody else's string; building markup out
+ * of it and handing that to `v-html` is the one way this console could be
+ * made to run somebody else's script. Vue escapes each segment for us.
+ */
+export type TextPart = { text: string; href?: string };
+
+/*
+ * What counts as an address in a line: an explicit scheme, a `www.`, an
+ * email, with a path, query or fragment if it has one. Bare domains stay text:
+ * a console is full of filenames and version numbers with the same shape.
+ */
+const LINK = new RegExp(
+    [
+        String.raw`(?:https?:\/\/|www\.)[^\s<>"'\`]+`,
+        String.raw`[\w.+-]+@[\w-]+(?:\.[\w-]+)+`,
+    ].join('|'),
+    'gi',
+);
+
+/*
+ * Characters that mean the match is part of something bigger — a path, a
+ * handle, a filename — rather than an address of its own. Checked against the
+ * character before the match instead of with a lookbehind, which Safari only
+ * learned recently and this has no reason to depend on.
+ */
+const INSIDE = /[\w@./-]/;
+
+/** Sentence punctuation that an address match must hand back to the text. */
+const TRAILING = /[.,!?;:)\]}]$/;
+
+/**
+ * Turn a written line into text and the links inside it.
+ *
+ * The only interesting part is where an address ends. A URL pasted into a
+ * sentence usually ends with the sentence — `…смотри https://x.com/a.` — so
+ * trailing punctuation is given back to the text, except a closing bracket
+ * that something inside the address opened: half of the deep links people
+ * actually paste carry balanced parentheses, and cutting one turns a working
+ * link into a 404.
+ */
+export function linkify(value: string | null | undefined): TextPart[] {
+    const text = value ?? '';
+
+    if (text === '') {
+        return [];
+    }
+
+    const parts: TextPart[] = [];
+    let at = 0;
+
+    for (const match of text.matchAll(LINK)) {
+        let found = match[0];
+        const start = match.index ?? 0;
+
+        if (start > 0 && INSIDE.test(text[start - 1])) {
+            continue;
+        }
+
+        // Give the sentence back its punctuation, one character at a time, so
+        // a closing bracket that belongs to the address survives.
+        for (;;) {
+            const tail = TRAILING.exec(found);
+
+            if (tail === null) {
+                break;
+            }
+
+            const last = found.slice(-1);
+            const opens = (found.match(/\(/g) ?? []).length;
+            const closes = (found.match(/\)/g) ?? []).length;
+
+            if (last === ')' && closes <= opens) {
+                break;
+            }
+
+            found = found.slice(0, -1);
+        }
+
+        if (found === '') {
+            continue;
+        }
+
+        if (start > at) {
+            parts.push({ text: text.slice(at, start) });
+        }
+
+        parts.push({ text: found, href: hrefOf(found) });
+        at = start + found.length;
+    }
+
+    if (at < text.length) {
+        parts.push({ text: text.slice(at) });
+    }
+
+    return parts;
+}
+
+/** The address a written form points at: `www.` gets a scheme, a mail gets `mailto:`. */
+function hrefOf(found: string): string {
+    if (/^https?:\/\//i.test(found)) {
+        return found;
+    }
+
+    return /^www\./i.test(found) ? `https://${found}` : `mailto:${found}`;
 }

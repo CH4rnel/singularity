@@ -25,6 +25,7 @@ use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
+use App\Http\Controllers\CrmMessageController;
 use App\Http\Controllers\CrmNoteController;
 use App\Http\Controllers\CrmTaskCommentController;
 use App\Http\Controllers\CrmTaskController;
@@ -535,6 +536,15 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('identity-links/{link}', [CrmContactController::class, 'unlink'])->name('identity.unlink');
         Route::delete('notes/{note}', [CrmNoteController::class, 'destroy'])->name('notes.destroy');
         Route::post('{contact}/tasks', [CrmTaskController::class, 'store'])->name('tasks.storeForContact');
+        /*
+         * The correspondence. Written down by an operator now, imported from
+         * Telegram and Discord later — the row is the same either way, which
+         * is why this is a log and not a send button: nothing here holds an
+         * operator's Telegram session, and a console that pretends to deliver
+         * is worse than one that only records.
+         */
+        Route::post('{contact}/messages', [CrmMessageController::class, 'store'])->name('messages.store');
+        Route::delete('messages/{message}', [CrmMessageController::class, 'destroy'])->name('messages.destroy');
     });
 
     // Wallet attach/detach

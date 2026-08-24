@@ -51,6 +51,10 @@ class ConsolePulse
                 'tasks' => $this->stamp('crm_tasks').':'.$this->stamp('crm_task_comments'),
                 'people' => $this->stamp('crm_contacts'),
                 'notes' => $this->stamp('crm_notes'),
+                // The correspondence with one person. Separate from `notes`
+                // because a dossier open on two desks is usually open because
+                // somebody is writing down what was just said on it.
+                'messages' => $this->stamp('crm_messages'),
                 'chat' => $this->stamp('crm_chat_messages'),
                 'files' => $this->stamp('crm_chat_files'),
                 'machines' => $this->machines(),

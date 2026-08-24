@@ -85,6 +85,8 @@ export const consoleMessages: Messages = {
         'action.wake': 'Bring back',
         'action.wholeFeed': 'Whole feed',
         'action.snoozedUntil': 'until {time}',
+        'action.copy': 'Copy',
+        'action.copied': 'Copied',
 
         /* watch list */
         'watch.bridge.title': 'Bridge: {count} request(s) waiting',
@@ -262,6 +264,8 @@ export const consoleMessages: Messages = {
         'person.noHistory': 'nothing on record yet',
         'person.summary.overdue':
             'Here since {since}, from {source}. We owe them {open} thing(s), {overdue} of which is past its date.',
+        'person.summary.waiting':
+            'Here since {since}, from {source}. We wrote {waiting} day(s) ago and they have not answered; {open} thing(s) promised.',
         'person.summary.moved':
             'Here since {since}, from {source}. Last movement: {amount} {token} on {when}; {transfers} transfers in twelve weeks.',
         'person.summary.talked':
@@ -269,6 +273,8 @@ export const consoleMessages: Messages = {
         'person.summary.quiet':
             'Here since {since}, from {source}. Nothing on record besides the sync.',
         'person.event.note': 'Note by {author}',
+        'person.event.said': 'We wrote · {channel}',
+        'person.event.heard': 'They answered · {channel}',
         'person.event.task': 'Task set for {assignee}',
         'person.event.taskDone': 'Task closed by {assignee}',
         'person.event.bridgeOut': 'Bridge out · {direction} · {status}',
@@ -281,6 +287,51 @@ export const consoleMessages: Messages = {
         'person.event.liquidity_added': 'Added liquidity',
         'person.addNote': 'Add a note…',
         'person.saveNote': 'Save',
+
+        /* the record, read three ways */
+        'person.paneFeed': 'Feed',
+        'person.paneThread': 'Conversation',
+        'person.viewAll': 'All',
+        'person.viewTouch': 'Our touches',
+        'person.viewMoney': 'Money',
+        'person.moreEvents': '{count} more, back to {since}',
+        'person.allEvents': 'all {count} on record',
+        'person.noHistoryHere': 'nothing of this kind on record',
+
+        /* what was said, and what came back */
+        'person.conversation': 'Conversation',
+        'person.conversationNote':
+            'written down here — this console sends nothing',
+        'person.conversationHint':
+            'Enter sends, shift+enter is a new line. Leave the time empty and it is now; fill it in for something said earlier. Telegram and Discord will be imported into these same lines.',
+        'person.noConversation': 'nothing said yet, on either side',
+        'person.lineOurs': 'We wrote',
+        'person.lineTheirs': 'They wrote',
+        'person.lineDrop': 'Delete',
+        'person.lineWhen': 'When it was said',
+        'person.linePlaceholder': 'what was said…',
+        'person.lineSave': 'Write down',
+        'person.wroteDown': 'entered by {name}',
+        'person.channel.telegram': 'telegram',
+        'person.channel.discord': 'discord',
+        'person.channel.x': 'x',
+        'person.channel.email': 'email',
+        'person.channel.call': 'call',
+        'person.channel.other': 'elsewhere',
+        'person.lastContact': 'Last contact',
+        'person.contactNever': 'nothing written down',
+        'person.contactOurs': 'ours',
+        'person.contactTheirs': 'theirs',
+        'person.replies': 'Answers',
+        'person.repliesUnknown': 'never answered yet',
+        'person.repliesMinutes': 'usually within {count} min',
+        'person.repliesHours': 'usually within {count} h',
+        'person.repliesDays': 'usually within {count} d',
+
+        /* a promise, made from the page it is about */
+        'person.taskPlaceholder': 'what we owe them @lain !tomorrow',
+        'person.taskSave': 'Set',
+        'person.taskDone': 'Done',
 
         /* tasks */
         'tasks.title': 'Tasks',
@@ -785,6 +836,8 @@ export const consoleMessages: Messages = {
         'action.wake': 'Вернуть',
         'action.wholeFeed': 'Вся лента',
         'action.snoozedUntil': 'до {time}',
+        'action.copy': 'Скопировать',
+        'action.copied': 'Скопировано',
 
         /* watch list */
         'watch.bridge.title': 'Мост: {count} заявок ждут',
@@ -959,6 +1012,8 @@ export const consoleMessages: Messages = {
         'person.noHistory': 'записей пока нет',
         'person.summary.overdue':
             'С нами с {since}, пришёл из {source}. За нами {open} обещаний, из них {overdue} просрочено.',
+        'person.summary.waiting':
+            'С нами с {since}, пришёл из {source}. Мы написали {waiting} дн. назад и ответа нет; обещаний за нами — {open}.',
         'person.summary.moved':
             'С нами с {since}, пришёл из {source}. Последнее движение: {amount} {token}, {when}; за двенадцать недель переводов — {transfers}.',
         'person.summary.talked':
@@ -966,6 +1021,8 @@ export const consoleMessages: Messages = {
         'person.summary.quiet':
             'С нами с {since}, пришёл из {source}. Кроме синка о нём ничего не записано.',
         'person.event.note': 'Заметка, {author}',
+        'person.event.said': 'Написали · {channel}',
+        'person.event.heard': 'Ответил · {channel}',
         'person.event.task': 'Задача поставлена на {assignee}',
         'person.event.taskDone': 'Задача закрыта, {assignee}',
         'person.event.bridgeOut': 'Вывод через мост · {direction} · {status}',
@@ -978,6 +1035,52 @@ export const consoleMessages: Messages = {
         'person.event.liquidity_added': 'Добавил ликвидность',
         'person.addNote': 'Заметка…',
         'person.saveNote': 'Сохранить',
+
+        /* запись, три способа читать */
+        'person.paneFeed': 'Лента',
+        'person.paneThread': 'Переписка',
+        'person.viewAll': 'Всё',
+        'person.viewTouch': 'Наши касания',
+        'person.viewMoney': 'Деньги',
+        'person.moreEvents': 'дальше ещё {count}, до {since}',
+        'person.allEvents': 'всего записано {count}',
+        'person.noHistoryHere': 'такого в записи нет',
+
+        /* что сказали и что ответили */
+        'person.conversation': 'Переписка',
+        'person.conversationNote':
+            'записывается здесь — пульт ничего не отправляет',
+        'person.conversationHint':
+            'Enter — записать, shift+enter — перенос строки. Пустое время значит «сейчас»; поставьте своё, если разговор был раньше. Телеграм и дискорд позже приедут в эти же строки.',
+        'person.noConversation':
+            'пока ничего не сказано — ни с той, ни с этой стороны',
+        'person.lineOurs': 'Мы',
+        'person.lineTheirs': 'Он',
+        'person.lineDrop': 'Удалить',
+        'person.lineWhen': 'Когда это было сказано',
+        'person.linePlaceholder': 'что было сказано…',
+        'person.lineSave': 'Записать',
+        'person.wroteDown': 'записал {name}',
+        'person.channel.telegram': 'телеграм',
+        'person.channel.discord': 'дискорд',
+        'person.channel.x': 'x',
+        'person.channel.email': 'почта',
+        'person.channel.call': 'созвон',
+        'person.channel.other': 'иначе',
+        'person.lastContact': 'Последний контакт',
+        'person.contactNever': 'не записан',
+        'person.contactOurs': 'наш',
+        'person.contactTheirs': 'его',
+        'person.replies': 'Отвечает',
+        'person.repliesUnknown': 'ещё ни разу не ответил',
+        'person.repliesMinutes': 'обычно за {count} мин',
+        'person.repliesHours': 'обычно за {count} ч',
+        'person.repliesDays': 'обычно за {count} дн',
+
+        /* обещание — со страницы, о которой оно */
+        'person.taskPlaceholder': 'что мы ему должны @lain !завтра',
+        'person.taskSave': 'Поставить',
+        'person.taskDone': 'Сделано',
 
         /* tasks */
         'tasks.title': 'Задачи',

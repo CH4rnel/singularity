@@ -48,7 +48,7 @@ it('carries a version per lens and the rail badges', function () {
         ->assertOk()
         ->assertJsonStructure([
             'at',
-            'v' => ['now', 'tasks', 'people', 'notes', 'chat', 'files', 'machines'],
+            'v' => ['now', 'tasks', 'people', 'notes', 'messages', 'chat', 'files', 'machines'],
             'counts' => ['attention', 'tasks', 'chat'],
         ]);
 });

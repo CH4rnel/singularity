@@ -191,13 +191,27 @@ class CrmContactController extends Controller
         ]);
     }
 
-    public function show(CrmContact $contact): Response
+    /**
+     * One person's dossier.
+     *
+     * Which slice of the stream is being read, and how much of it, are in the
+     * address for the same reason the lens keeps its filters there: a dossier
+     * scrolled down to the money is a thing worth pasting to the other desk,
+     * and the back button should undo a filter rather than leave the page.
+     */
+    public function show(Request $request, CrmContact $contact): Response
     {
-        return Inertia::render('crm/Person', $this->dossier->build($contact) + [
+        return Inertia::render('crm/Person', $this->dossier->build(
+            $contact,
+            (string) $request->query('events', 'all'),
+            (int) $request->integer('rows', 60),
+        ) + [
             'options' => [
                 'types' => CrmContact::TYPES,
                 'statuses' => CrmContact::STATUSES,
                 'taskPriorities' => CrmTask::PRIORITIES,
+                'taskStatuses' => CrmTask::STATUSES,
+                'views' => PersonDossier::VIEWS,
                 'assignees' => User::crmOperators()
                     ->get(['id', 'name'])
                     ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name])

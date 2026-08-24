@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import Linked from '@/components/console/Linked.vue';
 import Rule from '@/components/console/Rule.vue';
 import { useConsoleBeat } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
@@ -165,7 +166,9 @@ const errors = computed(
 const latestId = computed(() =>
     list.value.length === 0 ? 0 : list.value[list.value.length - 1].id,
 );
-const operators = computed(() => people.value.filter((p) => p.kind !== 'lainos'));
+const operators = computed(() =>
+    people.value.filter((p) => p.kind !== 'lainos'),
+);
 const lastAt = computed(() =>
     list.value.length === 0 ? null : list.value[list.value.length - 1].at,
 );
@@ -354,7 +357,10 @@ async function refresh(): Promise<void> {
                     at: seenAt.value,
                 },
             }),
-            { credentials: 'same-origin', headers: { Accept: 'application/json' } },
+            {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' },
+            },
         );
 
         if (!response.ok) {
@@ -663,7 +669,9 @@ onMounted(() => {
     <div style="display: flex; align-items: baseline; gap: 12px">
         <h1 class="mk-h1">{{ t('chat.title') }}</h1>
         <span class="mk-m mk-t3" style="font-size: 12px">
-            {{ t('chat.room', { who: operators.map((p) => p.name).join(', ') }) }}
+            {{
+                t('chat.room', { who: operators.map((p) => p.name).join(', ') })
+            }}
             ·
             <template v-if="lastAt">{{
                 t('chat.last', { ago: ago(lastAt) ?? '—' })
@@ -705,7 +713,11 @@ onMounted(() => {
             <div ref="scroller" class="mk-chat-scroll">
                 <div
                     v-if="older"
-                    style="display: flex; justify-content: center; padding: 6px 0"
+                    style="
+                        display: flex;
+                        justify-content: center;
+                        padding: 6px 0;
+                    "
                 >
                     <Link
                         :href="chat.index.url({ query: { before: older } })"
@@ -831,7 +843,9 @@ onMounted(() => {
                                 >
                             </div>
 
-                            <p v-if="row.message.body">{{ row.message.body }}</p>
+                            <p v-if="row.message.body">
+                                <Linked :text="row.message.body" />
+                            </p>
                             <p v-else class="mk-t3" style="font-style: italic">
                                 {{ t('chat.noCaption') }}
                             </p>
@@ -924,7 +938,11 @@ onMounted(() => {
                                             background: var(--mk-accent);
                                         "
                                     />
-                                    {{ t('chat.task', { id: row.message.task.id }) }}
+                                    {{
+                                        t('chat.task', {
+                                            id: row.message.task.id,
+                                        })
+                                    }}
                                 </Link>
                             </div>
 
@@ -993,7 +1011,10 @@ onMounted(() => {
                                         </p>
                                         <p
                                             class="mk-m mk-t3"
-                                            style="margin: 4px 0 0; font-size: 11.5px"
+                                            style="
+                                                margin: 4px 0 0;
+                                                font-size: 11.5px;
+                                            "
                                         >
                                             {{
                                                 row.message.call.state ===
@@ -1049,7 +1070,9 @@ onMounted(() => {
                                         </p>
                                     </div>
                                     <button
-                                        v-if="row.message.call.note !== 'disabled'"
+                                        v-if="
+                                            row.message.call.note !== 'disabled'
+                                        "
                                         type="button"
                                         class="mk-btn mk-act"
                                         style="height: 26px"
@@ -1237,7 +1260,9 @@ onMounted(() => {
                                         ago: ago(person.seenAt) ?? '—',
                                     })
                                 }}</template>
-                                <template v-else>{{ t('chat.unseen') }}</template>
+                                <template v-else>{{
+                                    t('chat.unseen')
+                                }}</template>
                             </span>
                         </div>
                     </div>
@@ -1266,7 +1291,10 @@ onMounted(() => {
                                 <a
                                     :href="chat.download.url(file.id)"
                                     class="mk-clip"
-                                    style="font-size: 12.5px; color: var(--mk-body)"
+                                    style="
+                                        font-size: 12.5px;
+                                        color: var(--mk-body);
+                                    "
                                     >{{ file.name }}</a
                                 >
                                 <span
@@ -1451,7 +1479,11 @@ onMounted(() => {
                         <span class="mk-hatch" />
                         <p
                             class="mk-m mk-t3"
-                            style="margin: 0; padding: 10px 12px; font-size: 11.5px"
+                            style="
+                                margin: 0;
+                                padding: 10px 12px;
+                                font-size: 11.5px;
+                            "
                         >
                             {{ t('chat.lainos.unreadable') }}
                         </p>
@@ -1472,10 +1504,13 @@ onMounted(() => {
                             type="button"
                             class="mk-btn"
                             :class="{
-                                'mk-act':
-                                    lainos.provider?.kind === choice.kind,
+                                'mk-act': lainos.provider?.kind === choice.kind,
                             }"
-                            style="height: 24px; padding: 0 8px; font-size: 11px"
+                            style="
+                                height: 24px;
+                                padding: 0 8px;
+                                font-size: 11px;
+                            "
                             :title="choice.desc"
                             :disabled="
                                 switching !== null ||
@@ -1534,7 +1569,9 @@ onMounted(() => {
                         >
                             <span
                                 class="mk-dot"
-                                :style="{ background: `var(--mk-${item.tone})` }"
+                                :style="{
+                                    background: `var(--mk-${item.tone})`,
+                                }"
                             />
                             <span style="font-size: 12.5px">{{
                                 item.label
