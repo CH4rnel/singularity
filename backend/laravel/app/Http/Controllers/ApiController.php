@@ -35,7 +35,7 @@ class ApiController extends Controller
                 ->map(fn (BridgeRequest $request) => $this->bridgeRequestPayload($request));
 
             $bridgeActiveRequests = BridgeRequest::where('user_id', auth()->id())
-                ->whereIn('status', ['awaiting_deposit', 'pending', 'processing'])
+                ->whereIn('status', BridgeRequest::IN_FLIGHT)
                 ->orderByDesc('created_at')
                 ->limit(50)
                 ->get([
@@ -88,7 +88,7 @@ class ApiController extends Controller
 
     private function bridgeRequestExpiredForUi(BridgeRequest $request): bool
     {
-        return $request->status === 'awaiting_deposit'
+        return $request->status === BridgeRequest::AWAITING_DEPOSIT
             && $request->source_chain === 'yenten'
             && $request->created_at->lte(now()->subMinutes($this->yentenDepositTtlMinutes()));
     }
@@ -98,7 +98,7 @@ class ApiController extends Controller
      */
     private function bridgeRequestPayload(BridgeRequest $request): array
     {
-        $expiresAt = $request->status === 'awaiting_deposit' && $request->source_chain === 'yenten'
+        $expiresAt = $request->status === BridgeRequest::AWAITING_DEPOSIT && $request->source_chain === 'yenten'
             ? $request->created_at->copy()->addMinutes($this->yentenDepositTtlMinutes())->toIso8601String()
             : null;
 

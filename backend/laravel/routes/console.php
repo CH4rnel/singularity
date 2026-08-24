@@ -37,6 +37,10 @@ Schedule::command('launchpad:pin-sites')->hourly()->withoutOverlapping();
 // answer can drift from the question; cheap because a run with nothing to
 // settle is one eth_call and a cached quote, and signs nothing.
 Schedule::command('predictions:resolve')->everyFiveMinutes()->withoutOverlapping();
+// Capacity holds taken before a wallet prompt that never came back. They stop
+// counting against liquidity the moment they expire — this only closes the
+// row, and it never touches a hold that has a transfer behind it.
+Schedule::command('bridge:release-reservations')->everyFiveMinutes()->withoutOverlapping();
 // The wallet chat relay is a queue, not an archive: drop delivered and
 // undelivered envelopes alike once they are past the retention window, so the
 // server stops holding a record of who talked to whom.

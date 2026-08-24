@@ -12,8 +12,16 @@
  *   ANCHOR_PROVIDER_URL — Solana RPC
  *   ANCHOR_WALLET      — path to relayer keypair JSON
  *
- * stdout (last line):
- *   {"txHash":"<solana_signature>","status":"success"}
+ * stdout:
+ *   {"broadcastTxHash":"<signature>"}                  — the moment it is sent
+ *   {"txHash":"<solana_signature>","status":"success"} — after confirmation
+ *
+ * The first line is not cosmetic. A Solana signature exists nowhere until this
+ * process prints it: if the relayer dies between sending and confirming, the
+ * only record of a payout that already happened is on an explorer somebody has
+ * to go and read. Laravel streams this stdout and writes the signature onto the
+ * bridge request the instant it appears, so a crashed relay reconciles instead
+ * of paying twice.
  */
 import {
   Connection,
@@ -21,7 +29,6 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
-  sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import fs from "fs";
 
@@ -62,9 +69,30 @@ async function main() {
     }),
   );
 
-  const sig = await sendAndConfirmTransaction(connection, tx, [relayer], {
-    commitment: "confirmed",
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = relayer.publicKey;
+  tx.sign(relayer);
+
+  const sig = await connection.sendRawTransaction(tx.serialize(), {
+    maxRetries: 5,
   });
+  // Print the signature BEFORE waiting on confirmation — see the header.
+  console.log(JSON.stringify({ broadcastTxHash: sig }));
+
+  const confirmation = await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+
+  if (confirmation.value.err) {
+    throw new Error(
+      `Solana transfer failed (${sig}): ${JSON.stringify(
+        confirmation.value.err,
+      )}`,
+    );
+  }
 
   console.log("TX:", sig);
   console.log(JSON.stringify({ txHash: sig, status: "success" }));

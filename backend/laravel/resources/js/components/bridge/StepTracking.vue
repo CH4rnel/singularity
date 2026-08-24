@@ -68,6 +68,18 @@ const destExplorerFallbacks = computed(() =>
 
 const manualReview = computed(() => !bridgeRoute(props.direction).autoProcess);
 
+/**
+ * The deposit is real, the destination cannot pay it yet, and nothing has been
+ * burned or sent. Saying so is the point of the state: a spinner that never
+ * stops reads as a lost transfer, and this one is neither lost nor finished.
+ */
+const awaitingLiquidity = computed(() => status.value === 'awaiting_liquidity');
+
+/** The payout has left; only the bridge's own bookkeeping is outstanding. */
+const payoutInFlight = computed(
+    () => status.value === 'paying_out' || status.value === 'burn_pending',
+);
+
 const poll = async () => {
     try {
         const res = await fetch(`/api/bridge/${props.bridgeRequestId}/status`, {
@@ -122,9 +134,13 @@ const steps = computed(() => [
         state: 'done',
     },
     {
-        label: manualReview.value ? 'Operator review' : 'Relayer processing',
+        label: manualReview.value
+            ? 'Operator review'
+            : awaitingLiquidity.value
+              ? 'Waiting for destination liquidity'
+              : 'Relayer processing',
         state:
-            status.value === 'completed'
+            status.value === 'completed' || payoutInFlight.value
                 ? 'done'
                 : status.value === 'failed'
                   ? 'failed'
@@ -137,7 +153,9 @@ const steps = computed(() => [
                 ? 'done'
                 : status.value === 'failed'
                   ? 'failed'
-                  : 'idle',
+                  : payoutInFlight.value
+                    ? 'pending'
+                    : 'idle',
     },
 ]);
 </script>
@@ -150,11 +168,25 @@ const steps = computed(() => [
                     ? 'Bridge complete'
                     : status === 'failed'
                       ? 'Bridge failed'
-                      : manualReview
-                        ? 'Request pending review'
-                        : 'Bridging your funds…'
+                      : awaitingLiquidity
+                        ? 'Waiting for liquidity'
+                        : manualReview
+                          ? 'Request pending review'
+                          : 'Bridging your funds…'
             }}
         </h2>
+
+        <p
+            v-if="awaitingLiquidity"
+            class="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400"
+        >
+            Your deposit is confirmed and held. The bridge does not yet have
+            enough on
+            {{ bridgeRoute(direction).destinationLabel }} to pay it out, so it
+            is waiting rather than proceeding — nothing has been burned and no
+            payout has been attempted. It completes on its own once the reserve
+            is topped up.
+        </p>
 
         <div
             class="flex flex-col gap-3 rounded-lg border border-[#19140035] p-4 dark:border-[#3E3E3A]"

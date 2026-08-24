@@ -117,10 +117,45 @@ test('--tx looks up by source_tx_hash', function () {
     expect($request->status)->toBe('completed');
 });
 
-test('--force allows re-running completed requests', function () {
-    $request = makeStuckRequest(['status' => 'completed']);
+test('a completed request is never re-paid, with or without --force', function () {
+    // `--force` used to mean "re-run anything", completed rows included. A
+    // completed row has a payout hash on it: re-running is a second transfer
+    // to the same recipient, which is how one incident becomes two.
+    $request = makeStuckRequest([
+        'status' => 'completed',
+        'destination_tx_hash' => '0xalreadypaid',
+    ]);
+
+    Process::fake();
 
     $this->artisan("bridge:relay {$request->id}")
-        ->expectsOutputToContain('Use --force')
+        ->expectsOutputToContain('will not be paid again')
         ->assertExitCode(1);
+
+    $this->artisan("bridge:relay {$request->id} --force")
+        ->expectsOutputToContain('not even with --force')
+        ->assertExitCode(1);
+
+    Process::assertNothingRan();
+
+    expect($request->refresh()->status)->toBe('completed')
+        ->and($request->destination_tx_hash)->toBe('0xalreadypaid');
+});
+
+test('a payout-confirmed request that is not completed is still never re-paid', function () {
+    // The dangerous shape: a payout that broadcast and then lost its worker.
+    // The row is not `completed`, so the old guard would have let a retry
+    // through — but the hash says the money already left.
+    $request = makeStuckRequest([
+        'status' => 'paying_out',
+        'destination_tx_hash' => '0xbroadcast',
+    ]);
+
+    Process::fake();
+
+    $this->artisan("bridge:relay {$request->id} --force")
+        ->expectsOutputToContain('will not be paid again')
+        ->assertExitCode(1);
+
+    Process::assertNothingRan();
 });

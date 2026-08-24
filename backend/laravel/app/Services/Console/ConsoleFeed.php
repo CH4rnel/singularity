@@ -503,7 +503,13 @@ class ConsoleFeed
         $minutes = (int) config('crm.console.bridge_wait_minutes', 20);
 
         $waiting = BridgeRequest::query()
-            ->whereIn('status', ['pending', 'processing'])
+            ->whereIn('status', [
+                BridgeRequest::PENDING,
+                BridgeRequest::PROCESSING,
+                BridgeRequest::AWAITING_LIQUIDITY,
+                BridgeRequest::PAYING_OUT,
+                BridgeRequest::BURN_PENDING,
+            ])
             ->where('created_at', '<=', now()->subMinutes($minutes))
             ->get(['id', 'fee_usd', 'amount', 'token']);
 

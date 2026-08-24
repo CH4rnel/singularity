@@ -6,15 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessBridgeRequest;
 use App\Models\BridgeRequest;
 use App\Rules\ValidDestinationAddress;
+use App\Services\BridgeAdmissionService;
 use App\Services\BridgeConfigService;
 use App\Services\BridgeEventLogger;
 use App\Services\BridgeFeeService;
-use App\Services\BridgeInventoryService;
 use App\Services\BridgeService;
 use App\Services\CyberiaRpcService;
 use App\Services\TonApiService;
 use App\Services\Yenten\YentenAddressDeriver;
 use App\Services\YentenApiService;
+use App\Support\BridgeCapacity;
 use App\Support\TokenAmount;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -33,10 +34,20 @@ class BridgeController extends Controller
 
     /**
      * Live withdrawal capacity for a route+token: how much can be paid out to
-     * the destination chain right now. Returns { available: string|null },
-     * where null means uncapped (relayer mints on the home chain) or unknown.
+     * the destination chain right now, minus everything already promised to
+     * somebody else.
+     *
+     * The payload names its own state, because `available: null` used to mean
+     * both "no ceiling" and "we could not read it" and the UI could not tell
+     * them apart:
+     *
+     *   unlimited   — the relayer mints here; there is nothing to run out of.
+     *   available   — a real number, with its raw integer form and decimals so
+     *                 the browser can compare without touching a float.
+     *   unmeasured  — manual reserves; this server does not read them.
+     *   unavailable — the read failed. The UI must NOT let a signature happen.
      */
-    public function capacity(Request $request, BridgeInventoryService $inventory): JsonResponse
+    public function capacity(Request $request, BridgeAdmissionService $admission): JsonResponse
     {
         $validated = $request->validate([
             'direction' => ['required', 'string'],
@@ -46,15 +57,81 @@ class BridgeController extends Controller
         $direction = $validated['direction'];
         $token = $validated['token'];
 
-        // Only answer for corridors/tokens that are actually offered.
+        // Only answer for corridors/tokens that are actually offered. A
+        // corridor nobody may use has no capacity to quote — and saying
+        // "unavailable" keeps the browser from treating silence as a ceiling.
         if (! isset($this->bridgeConfig->availableRoutes()[$direction])
             || ! isset($this->bridgeConfig->tokensForRoute($direction)[$token])) {
-            return response()->json(['available' => null]);
+            return response()->json(
+                BridgeCapacity::unavailable('this corridor is not currently available')->toArray()
+            );
         }
 
-        return response()->json([
-            'available' => $inventory->destinationCapacity($direction, $token),
+        return response()->json($admission->availableCapacity($direction, $token)->toArray());
+    }
+
+    /**
+     * Claim destination capacity BEFORE the user is asked to sign anything.
+     *
+     * This is the admission gate, and it is the server's, not the interface's.
+     * A browser check cannot hold the invariant: between reading a balance and
+     * signing a transfer there is a wallet prompt, a person, and possibly
+     * another person doing exactly the same thing against the same reserve.
+     * The reservation is written under a lock over the destination pool, so
+     * two requests for 0.6 of a 1.0 balance cannot both be told yes.
+     */
+    public function reserve(Request $request, BridgeAdmissionService $admission): JsonResponse
+    {
+        $direction = $request->input('direction');
+        $routes = $this->bridgeConfig->availableRoutes();
+
+        $validated = $request->validate([
+            'direction' => ['required', Rule::in(array_keys($routes))],
+            'token' => ['nullable', 'string', 'in:'.implode(',', array_keys(config('bridge.tokens', [])))],
+            'sender_address' => ['nullable', 'string'],
+            'recipient_address' => [
+                'required',
+                'string',
+                new ValidDestinationAddress(is_string($direction) ? $direction : ''),
+            ],
+            'amount' => ['required', 'numeric', 'gt:0'],
         ]);
+
+        $token = $validated['token'] ?? 'CYBER.sol';
+
+        if (! isset($this->bridgeConfig->tokensForRoute($validated['direction'])[$token])) {
+            return response()->json(['message' => 'Token is not supported on this bridge route.'], 422);
+        }
+
+        $result = $admission->reserve(
+            $validated['direction'],
+            $token,
+            (string) $validated['amount'],
+            $validated['sender_address'] ?? null,
+            $validated['recipient_address'],
+        );
+
+        if ($result['ok'] !== true) {
+            return response()->json([
+                'message' => $result['message'],
+                'reason' => $result['reason'],
+                'capacity' => $result['capacity']->toArray(),
+            ], $result['reason'] === 'busy' ? 409 : 422);
+        }
+
+        $reservation = $result['reservation'];
+
+        return response()->json([
+            'reservation' => [
+                'reference' => $reservation->reference,
+                'direction' => $reservation->direction,
+                'token' => $reservation->token,
+                'amount' => $reservation->amount,
+                'net_raw' => $reservation->net_raw,
+                'decimals' => $reservation->decimals,
+                'expires_at' => $reservation->expires_at?->toIso8601String(),
+            ],
+        ], 201);
     }
 
     /**
@@ -80,6 +157,7 @@ class BridgeController extends Controller
             ],
             'amount' => ['required', 'numeric', 'gt:0'],
             'convert_to_native' => ['nullable', 'boolean'],
+            'reservation' => ['nullable', 'string', 'max:64'],
             'session_id' => ['nullable', 'uuid'],
         ]);
 
@@ -170,6 +248,17 @@ class BridgeController extends Controller
                 'message' => 'This transaction has already been submitted to the bridge.',
             ], 422);
         }
+
+        // Turn the claim into an obligation — or record one for a transfer
+        // that never claimed anything (someone who sent tokens straight to the
+        // relayer's public address). Submit is reached only AFTER the source
+        // transfer is signed, so it can refuse nothing: what it can do is make
+        // sure the relayer knows it owes this payout before deciding whether
+        // it can make it. See BridgeAdmissionService::commit().
+        app(BridgeAdmissionService::class)->commit(
+            $bridgeRequest,
+            $validated['reservation'] ?? null,
+        );
 
         if (! empty($validated['session_id'])) {
             $this->eventLogger->log('bridge_request_created', [
@@ -370,8 +459,12 @@ class BridgeController extends Controller
         $decimals = (int) ($tokenChain['decimals'] ?? 8);
         $bridgeRequest->update([
             'amount' => TokenAmount::fromRaw($balanceRaw, $decimals),
-            'status' => 'pending',
+            'status' => BridgeRequest::PENDING,
         ]);
+
+        // The coins are on the request's own address: this is an obligation
+        // from here, whatever the payout does next.
+        app(BridgeAdmissionService::class)->commit($bridgeRequest, null);
 
         if ($this->shouldAutoProcess($bridgeRequest->direction)) {
             ProcessBridgeRequest::dispatchSync($bridgeRequest->id, $validated['session_id'] ?? null);
@@ -381,11 +474,14 @@ class BridgeController extends Controller
 
         // Mint failed (e.g. transient RPC) — revert to awaiting so the user can
         // retry once the deposit confirms. Funds stay safe on the address.
-        if ($bridgeRequest->status === 'failed') {
+        if ($bridgeRequest->status === BridgeRequest::FAILED) {
+            app(BridgeAdmissionService::class)
+                ->releaseFor($bridgeRequest, 'claim did not mint; the deposit is still on its own address');
             $bridgeRequest->update([
-                'status' => 'awaiting_deposit',
+                'status' => BridgeRequest::AWAITING_DEPOSIT,
                 'amount' => '0',
                 'error_message' => null,
+                'source_verified_at' => null,
             ]);
 
             return response()->json([
