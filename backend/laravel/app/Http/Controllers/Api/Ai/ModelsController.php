@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Ai;
 use App\Http\Controllers\Controller;
 use App\Services\Ai\AiHolderGate;
 use App\Services\Ai\AiModelCatalog;
+use App\Services\X402\PaymentTerms;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -20,6 +21,7 @@ class ModelsController extends Controller
     public function __construct(
         private AiModelCatalog $catalog,
         private AiHolderGate $gate,
+        private PaymentTerms $terms,
     ) {}
 
     /** GET /api/ai/v1/models — OpenAI's list shape, with our ids. */
@@ -59,6 +61,7 @@ class ModelsController extends Controller
                 'issue_key' => url('/api/ai/keys'),
             ],
             'gate' => $this->gate->terms(),
+            'payment' => $this->payment(),
             'limits' => [
                 'requests_per_minute' => (int) config('ai.limits.requests_per_minute'),
                 'requests_per_day' => (int) config('ai.limits.requests_per_day'),
@@ -68,5 +71,40 @@ class ModelsController extends Controller
             ],
             'models' => array_column($this->catalog->models(), 'id'),
         ]);
+    }
+
+    /**
+     * The paid door, for a caller who holds nothing.
+     *
+     * Advertised here rather than only in a 402 so that an agent can find out
+     * what this costs before it spends a request finding out — the same reason
+     * the gate's terms are public. Absent entirely when the paywall is not
+     * configured, because an offer nobody can settle is worse than no offer.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function payment(): ?array
+    {
+        if (! $this->terms->usable()) {
+            return null;
+        }
+
+        $price = (string) config('x402.ai.price');
+
+        return [
+            'protocol' => 'x402',
+            'x402_version' => PaymentTerms::VERSION,
+            'scheme' => (string) config('x402.scheme'),
+            'network' => (string) config('x402.network'),
+            'asset' => [
+                'address' => (string) config('x402.asset.address'),
+                'symbol' => (string) config('x402.asset.symbol'),
+                'decimals' => (int) config('x402.asset.decimals'),
+            ],
+            'pay_to' => (string) config('x402.pay_to'),
+            'price_per_call' => $price,
+            'price_per_call_atomic' => $this->terms->atomic($price),
+            'docs' => 'https://docs.x402.org',
+        ];
     }
 }

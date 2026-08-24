@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Ai;
 use App\Exceptions\AiApiException;
 use App\Http\Controllers\Controller;
 use App\Models\AiApiKey;
+use App\Models\X402Payment;
 use App\Services\Ai\AiChatPayload;
 use App\Services\Ai\AiGateway;
 use App\Services\Ai\AiModelCatalog;
@@ -44,9 +45,10 @@ class ChatCompletionsController extends Controller
         $model = $this->catalog->resolve(is_string($input['model'] ?? null) ? $input['model'] : null);
         $payload = AiChatPayload::fromRequest($input);
         $key = $this->key($request);
+        $payment = $this->payment($request);
 
         if ($payload->stream) {
-            return $this->streamed($key, $model, $payload);
+            return $this->streamed($key, $payment, $model, $payload);
         }
 
         $result = $this->gateway->complete($model, $payload);
@@ -58,6 +60,7 @@ class ChatCompletionsController extends Controller
             'status' => 200,
             'streamed' => false,
             'usage' => $result['body']['usage'] ?? null,
+            'payment' => $payment,
         ]);
 
         return response()->json($result['body']);
@@ -73,13 +76,13 @@ class ChatCompletionsController extends Controller
      *
      * @param  array{id: string, provider: string, upstream: string, fallback: ?string}  $model
      */
-    private function streamed(AiApiKey $key, array $model, AiChatPayload $payload): StreamedResponse
+    private function streamed(?AiApiKey $key, ?X402Payment $payment, array $model, AiChatPayload $payload): StreamedResponse
     {
         $chunks = $this->gateway->stream($model, $payload);
         $chunks->rewind();
 
         return response()->stream(
-            function () use ($chunks, $key, $model): void {
+            function () use ($chunks, $key, $payment, $model): void {
                 $usage = null;
                 $served = $model['id'];
                 $provider = $model['provider'];
@@ -119,6 +122,7 @@ class ChatCompletionsController extends Controller
                     'status' => $status,
                     'streamed' => true,
                     'usage' => $usage,
+                    'payment' => $payment,
                 ]);
             },
             200,
@@ -159,14 +163,34 @@ class ChatCompletionsController extends Controller
         flush();
     }
 
-    private function key(Request $request): AiApiKey
+    /**
+     * The credential, if this caller came through the key door.
+     *
+     * Null is a legitimate answer now: a call paid for over x402 has no key by
+     * design. What is not legitimate is arriving with neither — that means no
+     * middleware let this request in, so it is refused here rather than served
+     * for free by omission.
+     */
+    private function key(Request $request): ?AiApiKey
     {
         $key = $request->attributes->get('ai_api_key');
 
-        if (! $key instanceof AiApiKey) {
-            throw AiApiException::unauthorized('This endpoint requires an API key.');
+        if ($key instanceof AiApiKey) {
+            return $key;
         }
 
-        return $key;
+        if (! $request->attributes->get('x402_payment') instanceof X402Payment) {
+            throw AiApiException::unauthorized('This endpoint requires an API key or an x402 payment.');
+        }
+
+        return null;
+    }
+
+    /** The payment, if this caller came through the paywall instead. */
+    private function payment(Request $request): ?X402Payment
+    {
+        $payment = $request->attributes->get('x402_payment');
+
+        return $payment instanceof X402Payment ? $payment : null;
     }
 }
