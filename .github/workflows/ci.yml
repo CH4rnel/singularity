@@ -54,7 +54,9 @@ jobs:
         run: npm run build
 
       - name: Tests
-        run: php artisan test --compact
+        # The suite is large enough that PHP's 128 MB default can die inside
+        # finfo while Flysystem detects an uploaded file's MIME type.
+        run: php -d memory_limit=512M vendor/bin/pest --compact
 
   hardhat:
     name: EVM contracts
