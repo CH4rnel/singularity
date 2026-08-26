@@ -40,6 +40,12 @@ export interface TelegramOptions {
   /** Where telegram.json (known chats) lives; defaults to LAINOS_DATA_DIR. */
   dataDir?: string;
   /**
+   * Long-poll for incoming updates. Defaults to LAINOS_TELEGRAM_POLL !== "0".
+   * False makes the client send-only, so a second instance can deliver
+   * messages without stealing updates from the one that answers.
+   */
+  poll?: boolean;
+  /**
    * HTTP(S) proxy for Telegram API traffic only (e.g. http://127.0.0.1:10808),
    * for hosts where api.telegram.org is blocked. Defaults to TELEGRAM_PROXY,
    * then HTTPS_PROXY/https_proxy. Chain RPC traffic is never proxied.
@@ -99,6 +105,7 @@ export class TelegramClient {
   private readonly chatsFile: string;
   private readonly proxyUrl?: string;
   private readonly dispatcher?: Dispatcher;
+  private readonly polling: boolean;
 
   private running = false;
   private offset = 0;
@@ -132,6 +139,11 @@ export class TelegramClient {
       runtime.getSetting("HTTPS_PROXY") ??
       runtime.getSetting("https_proxy");
     if (this.proxyUrl) this.dispatcher = new ProxyAgent(this.proxyUrl);
+    // Only one process may call getUpdates for a token — a second poller makes
+    // Telegram hand each update to whichever asked first, so messages go
+    // missing at random. A send-only instance (the always-on host that just
+    // delivers the day's post) sets LAINOS_TELEGRAM_POLL=0 and never competes.
+    this.polling = (opts.poll ?? runtime.getSetting("LAINOS_TELEGRAM_POLL") ?? "1") !== "0";
   }
 
   get enabled(): boolean {
@@ -177,6 +189,10 @@ export class TelegramClient {
         `${this.allowedUsers.size ? `, users: ${[...this.allowedUsers].join("/")}` : ""}` +
         `${this.proxyUrl ? `, proxy ${this.proxyUrl}` : ""})`,
     );
+    if (!this.polling) {
+      log.info("telegram send-only (LAINOS_TELEGRAM_POLL=0) — not polling for updates.");
+      return;
+    }
     await this.pollLoop();
   }
 
@@ -193,6 +209,33 @@ export class TelegramClient {
     } catch (err) {
       log.warn(`sendTo ${chatId} failed`, err);
     }
+  }
+
+  /**
+   * Like `sendTo`, but the failure reaches the caller. Used where losing the
+   * message matters (the day's post), so the sender can try again later.
+   */
+  async sendToOrThrow(chatId: number, text: string): Promise<void> {
+    if (!this.token) throw new Error("telegram has no token");
+    if (!this.isAllowed(chatId)) throw new Error(`chat ${chatId} is not on the allowlist`);
+    await this.sendChunked(chatId, text);
+  }
+
+  /** Like `broadcast`, but a chat that could not be reached reaches the caller. */
+  async broadcastOrThrow(text: string): Promise<void> {
+    if (!this.token) throw new Error("telegram has no token");
+    let sent = 0;
+    let last: unknown;
+    for (const chatId of this.knownChats) {
+      if (!this.isAllowed(chatId)) continue;
+      try {
+        await this.sendChunked(chatId, text);
+        sent += 1;
+      } catch (err) {
+        last = err;
+      }
+    }
+    if (!sent) throw last ?? new Error("telegram knows no chat to broadcast to");
   }
 
   /** Push a message to every chat the bot has spoken in (sentinel alerts). */
@@ -437,7 +480,30 @@ export class TelegramClient {
 
   private async sendChunked(chatId: number, text: string): Promise<void> {
     for (const chunk of splitMessage(text, MAX_MESSAGE)) {
-      await this.api("sendMessage", { chat_id: chatId, text: chunk });
+      await this.send("sendMessage", { chat_id: chatId, text: chunk });
+    }
+  }
+
+  /**
+   * A send that survives one bad moment on the proxy. Telegram is reached
+   * through a local proxy here, and it drops a request now and then: the
+   * message the daemon had to deliver — an alert, the day's post — is then
+   * simply gone, and nothing anywhere says so. So a *transport* failure is
+   * tried once more; a refusal from Telegram itself ("chat not found") is not,
+   * because repeating it would only produce the same answer.
+   *
+   * The retry can duplicate a message that actually arrived before the timeout.
+   * That is the trade taken deliberately: a message twice is a nuisance, a
+   * message never is a silent failure.
+   */
+  private async send<T>(method: string, body: Record<string, unknown>): Promise<T | null> {
+    try {
+      return await this.api<T>(method, body);
+    } catch (err) {
+      if (isTelegramRefusal(err)) throw err;
+      log.warn(`${method} failed on the transport — retrying once`, err);
+      await sleep(2_000);
+      return this.api<T>(method, body);
     }
   }
 
@@ -509,4 +575,14 @@ export function splitMessage(text: string, max: number): string[] {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Did Telegram answer and say no? Those errors are shaped by `api()` itself
+ * ("telegram sendMessage 400: chat not found"); anything else — an abort, a
+ * dead socket, a proxy that went away — never reached Telegram at all.
+ * Exported for tests.
+ */
+export function isTelegramRefusal(err: unknown): boolean {
+  return err instanceof Error && /^telegram \w+ \d{3}:/.test(err.message);
 }

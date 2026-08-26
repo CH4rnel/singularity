@@ -292,6 +292,40 @@ Inspect it with `systemctl --user status lainos.service` and
 startup during boot without an interactive login (`loginctl show-user "$USER"
 -p Linger`); it is already enabled on the current Cyberia host.
 
+### Two instances: the desk and the always-on host
+
+A workstation is not a schedule. It is powered off at night, it suspends in
+the middle of the day, and its proxy comes up after the daemon does — so
+anything with an hour attached to it (the day's post, most obviously) is
+missed rather than late, and nobody is told. The answer is not a better timer:
+it is a second instance on a host that is already awake.
+
+The split is by **what needs a person and what needs an uptime**:
+
+| | desk | always-on host |
+|---|---|---|
+| answers Telegram, runs the forge, holds the wallet, TUI | yes | no |
+| writes and delivers the day's post | no | yes |
+| `LAINOS_TELEGRAM_POLL` | `1` (default) | `0` |
+| `LAINOS_PRESS` | `0` | `1` |
+
+Only one process may call `getUpdates` for a bot token — a second poller makes
+Telegram hand each update to whichever asked first, so messages go missing at
+random. `LAINOS_TELEGRAM_POLL=0` makes an instance **send-only**: it delivers
+posts and alerts and never reads, so it cannot compete. Sending has never
+needed the poller.
+
+`LAINOS_PRESS=0` on the desk is the other half of the same rule — two rooms
+working the same calendar would write the same day twice, and `data/` is
+per-instance, so neither would know.
+
+The always-on side is a **system** unit (`deploy/lainos-press.service`), not a
+user one: `root` on a server usually has `Linger=no`, and a user unit under a
+no-linger account dies with the SSH session that started it. It runs from its
+own clone, never from the deploy checkout the site is served out of, and with
+the forge off — an agent that commits to the tree a production host renders
+from is a bad afternoon.
+
 ## Debugging model/tool decisions
 
 Every turn writes a JSON transcript under `data/model-transcripts/` by default.
@@ -439,7 +473,10 @@ and secret values loaded from the environment.
   conversation, then either sends the operator a Telegram message in her own
   voice or stays silent. Quiet hours (`LAINOS_INITIATIVE_QUIET`, default 23–9,
   night alerts remain the sentinel's job) and a daily cap
-  (`LAINOS_INITIATIVE_MAX_PER_DAY`) keep it worth reading.
+  (`LAINOS_INITIATIVE_MAX_PER_DAY`, default 2) keep it worth reading. The tick
+  asks for what **changed** — restating an unchanged portfolio is named as
+  forbidden, because "позиции те же" four times a day is how a heartbeat stops
+  being read at all.
 - **scout** — an autonomous researcher. *"Следи за Solana и сообщай только
   реально важные изменения"* or *"каждый день собирай всё про zkVM"* becomes a
   subscribed topic:
@@ -523,6 +560,69 @@ and secret values loaded from the environment.
   channels); tune with `LAINOS_CHANNEL_REMIND_HOUR` (default 18),
   `LAINOS_CHANNEL_INTERVAL_MS` and `LAINOS_CHANNEL_PROXY` (falls back to
   `TELEGRAM_PROXY`).
+
+  A readable channel the **press** room owns is never nudged: a reminder to
+  post, delivered next to a finished post, is the noise reminders exist to
+  prevent.
+- **press** — writes the day's public post instead of reminding anyone to write
+  one. This replaced three daily messages that were not the work: research
+  digests about other people's chains, a nightly restatement of an unchanged
+  portfolio, and an evening "the channel is quiet".
+
+  The queue is a **calendar**: `content-plan.json` next to `soul.md` (28 days,
+  24 August — 20 September 2026), a slot per day carrying its pillar, its
+  thesis, the material the operator attaches and the one question the post ends
+  on — plus the standing brief (four series, the rules drawn from the last
+  fifty posts of the account, the voice). It is data, not code, because it came
+  from outside the daemon; a new month is a new file.
+
+  The material is **the repository's own commit log** since the last post went
+  out — the only record of what was actually built that nobody has to be asked
+  to write. It reaches the writer as evidence and never as copy: the prompt
+  forbids libraries, files, versions, "refactored" and every other word that
+  belongs to the person who built the thing rather than the person using it.
+  ("Fixed CI" was a real post; the strategy report names it as a failure.)
+
+  Nothing here publishes. This host holds no account session, and a daemon that
+  could post unattended is one that can embarrass the project at 4am — so the
+  finished English text arrives in Telegram as **two messages**: what it is,
+  then the post alone, so copying it copies exactly what goes out.
+
+  - `write_post` — write (or rewrite) the post for a day, optionally with an
+    angle ("сделай про мост"); it delivers the text itself
+  - `post_plan` — today's slot, what is still owed, and what state each day is in
+  - `mark_post_published` — record that it went out (only needed where the
+    channel cannot show it)
+  - `skip_post` — drop a day; it never joins the backlog
+
+  Three guards keep it from becoming what it replaced: the watched channel is
+  the ground truth for "did it go out" (a day it published is a day that needs
+  nothing); a backlog **drains** rather than floods — at most
+  `LAINOS_PRESS_MAX_PER_DAY` (2) drafts a day, `LAINOS_PRESS_SPACING_MS` (4h)
+  apart, and a slot older than `LAINOS_PRESS_BACKLOG_DAYS` (3) is dropped
+  rather than published stale; and the evening repeat fires once, only for a
+  post already delivered and still unpublished.
+
+  A post is lost the same two ways every scheduled job is, and neither is
+  allowed to pass quietly. **The host was not awake at the hour**: a desktop
+  that is off at 11:00, or asleep, simply misses the slot — so the room sweeps
+  once a minute after start as well as on its interval, and a daemon that wakes
+  at three in the afternoon writes then instead of waiting for tomorrow. **The
+  message did not arrive**: a delivery whose transport failed takes its
+  delivery stamp back (`markUndelivered`) and is re-sent on the next sweep,
+  where a refusal from Telegram itself — chat not found, bot blocked — is final
+  and never retried. The room re-sends the post it already wrote rather than
+  writing a second one for the same day.
+
+  Neither guard makes a desktop always-on, which is what a daily post actually
+  needs: see **Two instances** below.
+
+  Writing is `WRITE`-kind work, so `LAINOS_TASK_WRITE` decides which model
+  holds the public voice. Posts persist in `data/press.json` with the model
+  that wrote each one and the commits that fed it. Daemon-only unless
+  `LAINOS_PRESS=1`; tune with `LAINOS_PRESS_HOUR` (11),
+  `LAINOS_PRESS_REMIND_HOUR` (19), `LAINOS_PRESS_PLAN`, `LAINOS_PRESS_CHANNEL`,
+  `LAINOS_PRESS_CHAT_ID`, `LAINOS_PRESS_REPO`, `LAINOS_PRESS_INTERVAL_MS`.
 - **telegram** — the operator notification channel: `send_telegram` delivers a
   message via the Bot API from TUI, HTTP, or daemon mode and returns
   delivery status. The token stays on the host; the model never sees it. The
@@ -653,10 +753,14 @@ src/
   plugins/study/      self-teaching: read-only repo analysis -> real findings
   plugins/github/     commit-streak keeper (daily reminder on commitless days)
   plugins/channel/    telegram channel keeper (daily reminder on postless days)
+  plugins/press/      the press room: the day's post, written from the plan
+                      (plan.ts = calendar + brief, commits.ts = the material)
   plugins/system/     terminal + filesystem skills (sandboxed workspace)
   clients/            cli.ts (REPL) | http.ts (bridge) | telegram.ts (bot) | tui/
   characters/lain.ts  the resident mind of Cyberia
+content-plan.json     the 28-day content calendar the press room writes from
 scripts/              chat.ts | tui.ts | serve.ts | smoke.ts | tasks-smoke.ts
+                      | press-smoke.ts
 ```
 
 ## Safety
