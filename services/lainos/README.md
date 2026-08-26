@@ -331,6 +331,27 @@ own clone, never from the deploy checkout the site is served out of, and with
 the forge off — an agent that commits to the tree a production host renders
 from is a bad afternoon.
 
+```bash
+git clone https://github.com/cyberia-temple/singularity.git /root/lainos
+cd /root/lainos/services/lainos && npm ci
+# .env: LAINOS_PRESS=1, LAINOS_TELEGRAM_POLL=0, LAINOS_PRESS_REPO=/root/lainos,
+#       LAINOS_PRESS_CHAT_ID=…, LAINOS_INITIATIVE=0 LAINOS_TRADER=0 LAINOS_STUDY=0
+ln -sfn "$PWD/deploy/lainos-press.service" /etc/systemd/system/lainos-press.service
+systemctl daemon-reload && systemctl enable --now lainos-press
+```
+
+The writer needs its own credential on that host, and a subscription CLI has
+no headless login — `codex login --device-auth` prints a code to enter in any
+browser, which is the one step that cannot be scripted from here. Copy the
+`data/press.json` of the instance that was writing before, or the new one
+rewrites every day still inside the backlog window.
+
+The material is the repo's own commit log, so the clone has to keep up with
+master: a `git pull --ff-only` from cron every 20 minutes
+(`/etc/cron.d/lainos-press`). Code changes still take an explicit
+`systemctl restart lainos-press`, which rebuilds — an agent host that redeploys
+itself on every upstream commit is one a red master takes down.
+
 ## Debugging model/tool decisions
 
 Every turn writes a JSON transcript under `data/model-transcripts/` by default.
