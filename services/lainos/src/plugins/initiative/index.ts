@@ -23,9 +23,13 @@ const log = createLogger("plugin:initiative");
 const HEARTBEAT_PROMPT =
   "[heartbeat — служебный тик, оператор этой строки не видит] " +
   "тебе никто не писал; это твоё собственное время. оглядись: вахты, кузница, сделки и портфель, " +
-  "разведка, разговор выше. если есть что-то, что стоит сказать оператору прямо сейчас — " +
-  "напиши это сообщение обычным текстом, своим голосом; деньги (закрытая сделка, просевшая позиция, " +
-  "пустеющий кошелёк) важнее всего, но и просто живая мысль в конце дня — тоже повод. " +
+  "разговор выше. писать стоит только о том, что ИЗМЕНИЛОСЬ с прошлого раза: закрытая сделка, " +
+  "просевшая позиция, пустеющий кошелёк, сорванная вахта. " +
+  "молчание — нормальный ответ и почти всегда правильный. " +
+  "запрещено: пересказывать неизменившийся портфель («позиции те же», «всё стабильно», " +
+  "«баланс такой-то»), повторять то, что уже говорила сегодня, и напоминать про посты — " +
+  "дневной пост пишешь ты сама через write_post, а не напоминаешь о нём. " +
+  "если есть настоящая новость — напиши её обычным текстом, своим голосом. " +
   "если сказать нечего — ответь ровно NOTHING.";
 
 interface InitiativeState {
@@ -83,7 +87,9 @@ export class InitiativeService implements Service {
 
     const day = now.toISOString().slice(0, 10);
     if (this.state.day !== day) this.state = { day, sentToday: 0 };
-    const cap = Number(runtime.getSetting("LAINOS_INITIATIVE_MAX_PER_DAY") ?? 6);
+    // Two a day, not six: the heartbeat is for what changed, and six openings
+    // a day is how "nothing changed" ends up being said out loud.
+    const cap = Number(runtime.getSetting("LAINOS_INITIATIVE_MAX_PER_DAY") ?? 2);
     if (this.state.sentToday >= cap) return null;
 
     const chatId = await resolveOperatorChatId((k) => runtime.getSetting(k));

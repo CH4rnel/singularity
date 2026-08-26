@@ -77,6 +77,22 @@ export interface ChannelActivity {
   postsToday: number;
 }
 
+/** One post as the public preview renders it: when it went out, and its text. */
+export interface ChannelPost {
+  at: number;
+  text: string;
+}
+
+/**
+ * A service that owns the daily post for a channel itself (the press room).
+ * The watcher asks before nudging: a reminder to post, delivered next to a
+ * finished post, is exactly the noise these reminders were meant to prevent.
+ * Duck-typed rather than imported so the dependency stays one-directional.
+ */
+interface PostAuthority {
+  covers(channel: string): boolean;
+}
+
 interface ChannelFile {
   watches: ChannelWatch[];
   counter: number;
@@ -140,6 +156,53 @@ export function parseChannelPosts(html: string, day: string): ChannelActivity {
 }
 
 /**
+ * Parse the posts themselves out of a channel's public web preview: each
+ * message block carries its text next to the `<time datetime="…">` of the date
+ * link. Oldest first, as the page renders them. Exported for tests.
+ */
+export function parseChannelPostTexts(html: string): ChannelPost[] {
+  const posts: ChannelPost[] = [];
+  // Each message's text block is followed by its own dated footer link, so the
+  // post is paired with the first <time> that comes after it. Splitting on the
+  // message container instead would cut inside it: `tgme_widget_message_text`
+  // starts with the container's own class name.
+  for (const m of html.matchAll(
+    /<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+  )) {
+    const end = (m.index ?? 0) + m[0].length;
+    const at = Date.parse(
+      html.slice(end, end + 4000).match(/<time[^>]*datetime="([^"]+)"/i)?.[1] ?? "",
+    );
+    if (!Number.isFinite(at)) continue;
+    const text = stripHtml(m[1]);
+    if (text) posts.push({ at, text });
+  }
+  return posts;
+}
+
+/** Telegram's preview markup → the plain text a reader sees. */
+function stripHtml(raw: string): string {
+  return decodeEntities(
+    raw
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div)>/gi, "\n")
+      .replace(/<[^>]+>/g, ""),
+  )
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function decodeEntities(raw: string): string {
+  return raw
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+/**
  * Does this venue owe a nudge right now? Pure, so the schedule is testable
  * without a clock or a network. `activity` is the reading for a readable
  * venue and is ignored for blind ones — a readable day that could not be read
@@ -195,8 +258,10 @@ export class ChannelWatchService implements Service {
   private busy = false;
   private defaultRemindHour = DEFAULT_REMIND_HOUR;
   private subscribers = new Set<(event: ChannelEvent) => void>();
+  private runtime?: IAgentRuntime;
 
   async start(runtime: IAgentRuntime): Promise<void> {
+    this.runtime = runtime;
     const dataDir = runtime.getSetting("LAINOS_DATA_DIR") ?? "./data";
     this.file = join(dataDir, "channels.json");
     try {
@@ -373,6 +438,20 @@ export class ChannelWatchService implements Service {
     }
   }
 
+  /**
+   * Read the channel's public preview and return its recent posts, newest
+   * last. Null when the page could not be read — the caller must be able to
+   * tell "nothing published" from "nothing readable".
+   */
+  async recentPosts(channel: string): Promise<ChannelPost[] | null> {
+    try {
+      return parseChannelPostTexts(await this.get(`https://t.me/s/${channel}`));
+    } catch (err) {
+      log.warn(`preview fetch failed for t.me/${channel}`, err);
+      return null;
+    }
+  }
+
   /** Scheduled sweep: one nudge per chat per day, covering every quiet venue. */
   private async tick(): Promise<void> {
     if (this.busy) return;
@@ -381,10 +460,14 @@ export class ChannelWatchService implements Service {
       const now = new Date();
       const day = localDay(now);
       const due: ChannelWatch[] = [];
+      const author = this.runtime?.getService<PostAuthority & Service>("press");
       let dirty = false;
       for (const watch of this.watches) {
         if (watch.lastRemindedDay === day || watch.lastPostedDay === day) continue;
         if (now.getHours() < watch.remindHour) continue;
+        // Somebody else already owns this room's daily post and delivers it
+        // written — nudging on top of that is the noise, not the cure.
+        if (isReadableVenue(watch) && author?.covers(watch.channel)) continue;
         let activity: ChannelActivity | null = null;
         if (isReadableVenue(watch)) {
           activity = await this.activityToday(watch.channel);

@@ -20,6 +20,7 @@ import { forgePlugin } from "./plugins/forge/index.js";
 import { githubPlugin } from "./plugins/github/index.js";
 import { initiativePlugin } from "./plugins/initiative/index.js";
 import { presencePlugin } from "./plugins/presence/index.js";
+import { pressPlugin } from "./plugins/press/index.js";
 import { scoutPlugin } from "./plugins/scout/index.js";
 import { sentinelPlugin } from "./plugins/sentinel/index.js";
 import { skillsPlugin } from "./plugins/skills/index.js";
@@ -89,6 +90,7 @@ export {
   channelPlugin,
   ChannelWatchService,
   parseChannelPosts,
+  parseChannelPostTexts,
   normalizeChannel,
   localDay,
   inferVenueKind,
@@ -100,6 +102,7 @@ export {
 export type {
   ChannelActivity,
   ChannelEvent,
+  ChannelPost,
   ChannelWatch,
   VenueKind,
 } from "./plugins/channel/index.js";
@@ -124,6 +127,21 @@ export {
 export type { ParsedFinding, StudyArea, StudyFinding } from "./plugins/study/index.js";
 export { presencePlugin, PresenceService } from "./plugins/presence/index.js";
 export type { PresenceJournalEntry, PresenceState } from "./plugins/presence/index.js";
+export {
+  pressPlugin,
+  PressService,
+  cleanPostText,
+  commitsText,
+  parseGitLog,
+  parsePlan,
+  pendingSlots,
+  planDay,
+  resolveDay,
+  slotFor,
+  writerBrief,
+  writerSystemPrompt,
+} from "./plugins/press/index.js";
+export type { Commit, ContentPlan, PostRecord, PostSlot, PressEvent } from "./plugins/press/index.js";
 export { traderPlugin, TraderService } from "./plugins/trader/index.js";
 export type { TraderEvent } from "./plugins/trader/index.js";
 export { TradeJournal, applyBuy, applySell } from "./plugins/cyberia/journal.js";
@@ -147,6 +165,7 @@ const BUILTIN_PLUGINS: Record<string, Plugin> = {
   trader: traderPlugin,
   initiative: initiativePlugin,
   presence: presencePlugin,
+  press: pressPlugin,
   study: studyPlugin,
 };
 
