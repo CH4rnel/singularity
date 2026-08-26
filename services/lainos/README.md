@@ -319,6 +319,11 @@ needed the poller.
 working the same calendar would write the same day twice, and `data/` is
 per-instance, so neither would know.
 
+The post hour and the plan's day boundary are **host-local**, and a server is
+rarely in the operator's timezone — so the unit pins `TZ` rather than inheriting
+the machine's. Otherwise "11:00" quietly means something else, and a day rolls
+over at the wrong hour.
+
 The always-on side is a **system** unit (`deploy/lainos-press.service`), not a
 user one: `root` on a server usually has `Linger=no`, and a user unit under a
 no-linger account dies with the SSH session that started it. It runs from its
@@ -613,6 +618,11 @@ and secret values loaded from the environment.
   where a refusal from Telegram itself — chat not found, bot blocked — is final
   and never retried. The room re-sends the post it already wrote rather than
   writing a second one for the same day.
+
+  And a writer that cannot answer at all — the CLI is unauthenticated, the
+  upstream timed out — is said out loud once a day rather than logged. Silence
+  is indistinguishable from a day with nothing in it, which is the state this
+  room exists to end.
 
   Neither guard makes a desktop always-on, which is what a daily post actually
   needs: see **Two instances** below.

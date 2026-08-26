@@ -92,7 +92,7 @@ export interface PressEvent {
    * the queue is empty, said once. A plan that simply stops producing posts is
    * indistinguishable from a broken writer.
    */
-  kind: "draft" | "repeat" | "plan_over";
+  kind: "draft" | "repeat" | "plan_over" | "failed";
   /** Operator-facing line above the post; a separate Telegram message. */
   header: string;
   /** The post, alone, so copying the message copies exactly what is published. */
@@ -106,6 +106,7 @@ interface PressFile {
   posts: Record<string, PostRecord>;
   /** YYYY-MM-DD of the last evening repeat, so it fires at most once a day. */
   lastRepeatDay?: string;
+  lastFailureDay?: string;
   /** Set once the operator has been told the calendar ran out. */
   planOverAnnounced?: string;
 }
@@ -133,6 +134,7 @@ export class PressService implements Service {
   private planError: string | null = null;
   private posts: Record<string, PostRecord> = {};
   private lastRepeatDay?: string;
+  private lastFailureDay?: string;
   private planOverAnnounced?: string;
   private file = "";
   private repo = "";
@@ -156,6 +158,7 @@ export class PressService implements Service {
       const parsed = JSON.parse(await readFile(this.file, "utf8")) as PressFile;
       this.posts = parsed.posts ?? {};
       this.lastRepeatDay = parsed.lastRepeatDay;
+      this.lastFailureDay = parsed.lastFailureDay;
       this.planOverAnnounced = parsed.planOverAnnounced;
     } catch {
       // Fresh store.
@@ -455,7 +458,16 @@ export class PressService implements Service {
         if (slot) {
           const prev = this.posts[slot.date];
           if (prev?.failedAt && now.getTime() - prev.failedAt < RETRY_AFTER_MS) return null;
-          const record = await this.write(slot);
+          let record: PostRecord;
+          try {
+            record = await this.write(slot);
+          } catch (err) {
+            // The writer is unreachable or gave back nothing. Saying so costs
+            // one message a day; saying nothing looks exactly like a day with
+            // no work in it, which is the failure this room was built to end.
+            await this.announceFailure(day, slot, err);
+            return null;
+          }
           await this.deliver(slot, record, { at: now.getTime() });
           log.info(`post for ${slot.date} delivered (${record.text.length} chars)`);
           return record;
@@ -479,6 +491,43 @@ export class PressService implements Service {
       return null;
     } finally {
       this.busy = false;
+    }
+  }
+
+  /**
+   * Say once a day that the post could not be written. `RETRY_AFTER_MS` still
+   * governs the retry — this only makes the wait audible.
+   */
+  private async announceFailure(day: string, slot: PostSlot, err: unknown): Promise<void> {
+    log.warn(`could not write the post for ${slot.date}`, err);
+    if (this.lastFailureDay === day) return;
+    this.lastFailureDay = day;
+    await this.persist();
+    const reason = err instanceof Error ? err.message : String(err);
+    const header =
+      `\u26A0 не смогла написать пост на ${slot.date.slice(8)}.${slot.date.slice(5, 7)} ` +
+      `(${slot.pillar}).\n${reason}\nповторю через полчаса — или скажи «напиши пост», ` +
+      `и я попробую сейчас.`;
+    const chatId = await this.chatId();
+    for (const fn of this.subscribers) {
+      try {
+        fn({
+          kind: "failed",
+          header,
+          post: "",
+          slot,
+          record: this.posts[slot.date] ?? {
+            date: slot.date,
+            pillar: slot.pillar,
+            text: "",
+            revision: 0,
+            writtenAt: Date.now(),
+          },
+          chatId,
+        });
+      } catch {
+        /* a broken subscriber must never break the press room */
+      }
     }
   }
 
@@ -623,6 +672,7 @@ export class PressService implements Service {
     const payload: PressFile = {
       posts: this.posts,
       lastRepeatDay: this.lastRepeatDay,
+      lastFailureDay: this.lastFailureDay,
       planOverAnnounced: this.planOverAnnounced,
     };
     await writeFile(this.file, JSON.stringify(payload, null, 2), "utf8");

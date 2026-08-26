@@ -204,7 +204,8 @@ let calls = 0;
 async function pressRoom(
   slots: ContentPlan["slots"],
   overrides: Record<string, string> = {},
-): Promise<{ press: PressService; delivered: PressEvent[]; dir: string }> {
+  opts: { writerFails?: boolean } = {},
+): Promise<{ press: PressService; delivered: PressEvent[]; dir: string; writes: () => number }> {
   const dir = await mkdtemp(join(tmpdir(), "lainos-press-"));
   dirs.push(dir);
   const planPath = join(dir, "plan.json");
@@ -236,6 +237,7 @@ async function pressRoom(
       modelFor: () => "mock",
       async generate(_req: ModelRequest): Promise<ModelResponse> {
         calls += 1;
+        if (opts.writerFails) throw new Error("codex timed out after 240s");
         return {
           text:
             "```\n" +
@@ -254,7 +256,7 @@ async function pressRoom(
   const delivered: PressEvent[] = [];
   press.onEvent((ev) => delivered.push(ev));
   await press.start(runtime);
-  return { press, delivered, dir };
+  return { press, delivered, dir, writes: () => calls };
 }
 
 const window = shipped.slots.filter((s) => s.date >= "2026-08-24" && s.date <= "2026-08-26");
@@ -318,6 +320,40 @@ check(
     flood.press.pending("2026-08-25").some((s) => s.date === "2026-08-25"),
 );
 await flood.press.stop();
+
+// A post that was written but never reached the operator is re-sent, and is
+// not written a second time — the transport failed, not the writer.
+const lost = await pressRoom(window);
+await lost.press.tick(new Date("2026-08-25T12:00:00"));
+const wroteOnce = lost.writes();
+await lost.press.markUndelivered("2026-08-24");
+await lost.press.tick(new Date("2026-08-25T12:30:00"));
+check(
+  "a lost hand-over is re-sent  ",
+  lost.delivered.length === 2 &&
+    lost.delivered[1].slot.date === "2026-08-24" &&
+    lost.delivered[1].post === lost.delivered[0].post,
+);
+check("re-sending costs no model call", lost.writes() === wroteOnce);
+await lost.press.stop();
+
+// A writer that cannot answer is said out loud once a day. Silence here reads
+// exactly like a day with no work in it, which is what this room removes.
+const mute = await pressRoom(window, {}, { writerFails: true });
+await mute.press.tick(new Date("2026-08-25T12:00:00"));
+await mute.press.tick(new Date("2026-08-25T13:00:00"));
+const failures = mute.delivered.filter((e) => e.kind === "failed");
+check(
+  "a writer that fails says so  ",
+  failures.length === 1 && failures[0].post === "" && failures[0].header.includes("240s"),
+);
+check("no draft escapes a failed write", mute.delivered.every((e) => e.kind === "failed"));
+await mute.press.tick(new Date("2026-08-26T12:00:00"));
+check(
+  "a new day may say it again   ",
+  mute.delivered.filter((e) => e.kind === "failed").length === 2,
+);
+await mute.press.stop();
 
 // The calendar runs out; that is news, said once, not silence.
 const over = await pressRoom(window);

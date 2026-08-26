@@ -18,6 +18,10 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/root/lainos/services/lainos
 Environment=NODE_ENV=production
+# LAINOS_PRESS_HOUR and the plan's day boundary are host-local, and this host
+# is not where the operator lives. Pin the clock to the operator's day so
+# "11:00" and "today" mean what the calendar meant when it was written.
+Environment=TZ=Europe/Moscow
 # ~/.local/bin and /usr/local/bin hold the writer's CLI (codex).
 Environment=PATH=/root/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStartPre=/usr/bin/npm run build
