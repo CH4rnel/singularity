@@ -342,7 +342,7 @@ export const consoleMessages: Messages = {
             '{open} open · {overdue} overdue · {unowned} with no owner',
         'tasks.done': 'Completed',
         'tasks.quickAdd': 'What needs to be done?',
-        'tasks.quickAddHint': '— parsed as you type, no mouse needed',
+        'tasks.quickAddHint': '@ assignee · ! due date · # lead',
         'tasks.unowned': 'With no owner',
         'tasks.unownedNote':
             'nobody picks these up by themselves — that is a state, not a line in a list',
@@ -1095,7 +1095,7 @@ export const consoleMessages: Messages = {
             '{open} открытых · {overdue} просрочены · {unowned} без исполнителя',
         'tasks.done': 'Сделанные',
         'tasks.quickAdd': 'Что нужно сделать?',
-        'tasks.quickAddHint': '— разбирается на лету, мышь не нужна',
+        'tasks.quickAddHint': '@ исполнитель · ! срок · # лид',
         'tasks.unowned': 'Ничьи',
         'tasks.unownedNote':
             'никто не возьмёт сам — это состояние, а не строчка в списке',
