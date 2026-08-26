@@ -37,7 +37,7 @@ class CrmContact extends Model
     /** @use HasFactory<CrmContactFactory> */
     use HasFactory, SoftDeletes;
 
-    public const TYPES = ['lead', 'holder', 'whale'];
+    public const TYPES = ['lead', 'partner', 'holder', 'whale'];
 
     /**
      * The pipeline, plus the two ways out of it.

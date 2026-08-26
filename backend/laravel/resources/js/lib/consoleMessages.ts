@@ -18,7 +18,7 @@ export const consoleMessages: Messages = {
     en: {
         /* chrome */
         'nav.now': 'Now',
-        'nav.people': 'People',
+        'nav.people': 'Leads',
         'nav.tasks': 'Tasks',
         'nav.chat': 'Chat',
         'nav.numbers': 'Numbers',
@@ -126,7 +126,7 @@ export const consoleMessages: Messages = {
         'tiles.tasks.note': '{overdue} overdue · {unassigned} unowned',
 
         /* people */
-        'people.title': 'People',
+        'people.title': 'Leads',
         'people.segments': 'Segments',
         'people.happening': 'What is happening to them',
         'people.sortNote': 'sorted by how fresh the signal is',
@@ -154,6 +154,7 @@ export const consoleMessages: Messages = {
         'people.addNothing': 'Give at least a name, a handle or an address.',
         'people.empty': 'Nobody matches this question right now.',
         'segment.all': 'Everyone',
+        'segment.partners': 'Partners',
         'segment.whales': 'Whales',
         'segment.new_whales': 'New whales this month',
         'segment.awaiting': 'Waiting on us',
@@ -163,6 +164,7 @@ export const consoleMessages: Messages = {
         'segment.sold': 'Sold and stayed',
         'segment.solana_only': 'Solana only',
         'rule.all': 'every contact in the base',
+        'rule.partners': 'type = partner',
         'rule.whales': 'type = whale (set by the sync from balances)',
         'rule.new_whales': 'type = whale, first seen in the last 30 days',
         'rule.awaiting': 'has an open task on our side',
@@ -186,6 +188,7 @@ export const consoleMessages: Messages = {
         'sort.money': 'by money',
         'people.addedAgo': 'added {ago}',
         'crm.type.lead': 'lead',
+        'crm.type.partner': 'partner',
         'crm.type.holder': 'holder',
         'crm.type.whale': 'whale',
         'crm.status.new': 'new',
@@ -213,7 +216,7 @@ export const consoleMessages: Messages = {
         'signal.ago': '{ago} ago',
 
         /* person */
-        'person.back': 'People',
+        'person.back': 'Leads',
         'person.write': 'Write',
         'person.writeX': 'On X',
         'person.addTask': '+ Task',
@@ -339,8 +342,7 @@ export const consoleMessages: Messages = {
             '{open} open · {overdue} overdue · {unowned} with no owner',
         'tasks.done': 'Completed',
         'tasks.quickAdd': 'What needs to be done?',
-        'tasks.quickAddHint':
-            'Assignee, due date and contact can be added after creation',
+        'tasks.quickAddHint': '— parsed as you type, no mouse needed',
         'tasks.unowned': 'With no owner',
         'tasks.unownedNote':
             'nobody picks these up by themselves — that is a state, not a line in a list',
@@ -374,6 +376,8 @@ export const consoleMessages: Messages = {
         'tasks.footerEmpty': 'nothing closed this week',
         'tasks.empty': 'empty',
         'tasks.done.action': 'Done',
+        'tasks.inProgress': 'In progress',
+        'tasks.inProgress.action': 'Start',
         'priority.low': 'low',
         'priority.normal': 'normal',
         'priority.high': 'high',
@@ -771,7 +775,7 @@ export const consoleMessages: Messages = {
     ru: {
         /* chrome */
         'nav.now': 'Сейчас',
-        'nav.people': 'Люди',
+        'nav.people': 'Лиды',
         'nav.tasks': 'Задачи',
         'nav.chat': 'Чат',
         'nav.numbers': 'Числа',
@@ -877,7 +881,7 @@ export const consoleMessages: Messages = {
         'tiles.tasks.note': '{overdue} просрочены · {unassigned} ничьи',
 
         /* people */
-        'people.title': 'Люди',
+        'people.title': 'Лиды',
         'people.segments': 'Сегменты',
         'people.happening': 'Что с ними происходит',
         'people.sortNote': 'сортировка по свежести сигнала',
@@ -905,6 +909,7 @@ export const consoleMessages: Messages = {
         'people.addNothing': 'Нужно хотя бы имя, ник или адрес.',
         'people.empty': 'На этот вопрос сейчас никто не отвечает.',
         'segment.all': 'Все люди',
+        'segment.partners': 'Партнёры',
         'segment.whales': 'Киты',
         'segment.new_whales': 'Новые киты за месяц',
         'segment.awaiting': 'Ждут нашего ответа',
@@ -914,6 +919,7 @@ export const consoleMessages: Messages = {
         'segment.sold': 'Продали, но остались',
         'segment.solana_only': 'Только Solana',
         'rule.all': 'все контакты в базе',
+        'rule.partners': 'тип = партнёр',
         'rule.whales': 'тип = кит (ставит синк по балансам)',
         'rule.new_whales': 'тип = кит, появился за последние 30 дней',
         'rule.awaiting': 'есть незакрытая задача с нашей стороны',
@@ -934,6 +940,7 @@ export const consoleMessages: Messages = {
         'sort.money': 'по деньгам',
         'people.addedAgo': 'внесён {ago}',
         'crm.type.lead': 'лид',
+        'crm.type.partner': 'партнёр',
         'crm.type.holder': 'держатель',
         'crm.type.whale': 'кит',
         'crm.status.new': 'новый',
@@ -961,7 +968,7 @@ export const consoleMessages: Messages = {
         'signal.ago': '{ago} назад',
 
         /* person */
-        'person.back': 'Люди',
+        'person.back': 'Лиды',
         'person.write': 'Написать',
         'person.writeX': 'В X',
         'person.addTask': '+ Задача',
@@ -1088,8 +1095,7 @@ export const consoleMessages: Messages = {
             '{open} открытых · {overdue} просрочены · {unowned} без исполнителя',
         'tasks.done': 'Сделанные',
         'tasks.quickAdd': 'Что нужно сделать?',
-        'tasks.quickAddHint':
-            'Исполнителя, срок и контакт можно добавить после создания',
+        'tasks.quickAddHint': '— разбирается на лету, мышь не нужна',
         'tasks.unowned': 'Ничьи',
         'tasks.unownedNote':
             'никто не возьмёт сам — это состояние, а не строчка в списке',
@@ -1124,6 +1130,8 @@ export const consoleMessages: Messages = {
         'tasks.footerEmpty': 'за неделю ничего не закрыто',
         'tasks.empty': 'пусто',
         'tasks.done.action': 'Готово',
+        'tasks.inProgress': 'В работе',
+        'tasks.inProgress.action': 'В работу',
         'priority.low': 'низкий',
         'priority.normal': 'обычный',
         'priority.high': 'высокий',

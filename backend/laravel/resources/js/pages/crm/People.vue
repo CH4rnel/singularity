@@ -17,7 +17,7 @@ import {
 import { consoleMessages } from '@/lib/consoleMessages';
 
 /**
- * "Люди" — contacts read as what happened to them.
+ * "Лиды" — contacts read as what happened to them.
  *
  * Segments carry the questions worth re-asking: a filter is a question typed
  * out by hand every time, a segment is that question saved with its rule
@@ -351,7 +351,7 @@ const currentSegment = computed(
 </script>
 
 <template>
-    <Head title="Пульт · Люди" />
+    <Head title="Пульт · Лиды" />
 
     <div
         style="
@@ -540,14 +540,15 @@ const currentSegment = computed(
                     style="width: auto"
                     :value="type ?? ''"
                     @change="
-                        pick(
-                            'type',
-                            ($event.target as HTMLSelectElement).value,
-                        )
+                        pick('type', ($event.target as HTMLSelectElement).value)
                     "
                 >
                     <option value="">{{ t('people.anyType') }}</option>
-                    <option v-for="value in options.types" :key="value" :value="value">
+                    <option
+                        v-for="value in options.types"
+                        :key="value"
+                        :value="value"
+                    >
                         {{ t(`crm.type.${value}`) }}
                     </option>
                 </select>
@@ -580,13 +581,14 @@ const currentSegment = computed(
                     style="width: auto"
                     :value="sort"
                     @change="
-                        pick(
-                            'sort',
-                            ($event.target as HTMLSelectElement).value,
-                        )
+                        pick('sort', ($event.target as HTMLSelectElement).value)
                     "
                 >
-                    <option v-for="value in options.sorts" :key="value" :value="value">
+                    <option
+                        v-for="value in options.sorts"
+                        :key="value"
+                        :value="value"
+                    >
                         {{ t(`sort.${value}`) }}
                     </option>
                 </select>
@@ -795,7 +797,12 @@ const currentSegment = computed(
                                  the date being sorted on, or the order looks
                                  arbitrary against a column of signals. -->
                             <template v-if="sort === 'added' && row.added">
-                                · {{ t('people.addedAgo', { ago: ago(row.added) || '—' }) }}
+                                ·
+                                {{
+                                    t('people.addedAgo', {
+                                        ago: ago(row.added) || '—',
+                                    })
+                                }}
                             </template>
                         </div>
                     </div>

@@ -77,6 +77,10 @@ class PeopleLens
                 'tone' => 'plain',
                 'apply' => function (Builder $query): void {},
             ],
+            'partners' => [
+                'tone' => 'accent',
+                'apply' => fn (Builder $query) => $query->where('type', 'partner'),
+            ],
             'whales' => [
                 'tone' => 'money',
                 'apply' => fn (Builder $query) => $query->where('type', 'whale'),

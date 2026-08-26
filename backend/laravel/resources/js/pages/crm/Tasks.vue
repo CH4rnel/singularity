@@ -24,6 +24,7 @@ type Task = {
     id: number;
     title: string;
     description: string | null;
+    status: string;
     priority: string;
     due_at: string | null;
     overdue: boolean;
@@ -132,6 +133,14 @@ function done(task: Task) {
     router.put(
         tasks.update.url(task.id),
         { status: 'done' },
+        { preserveScroll: true },
+    );
+}
+
+function start(task: Task) {
+    router.put(
+        tasks.update.url(task.id),
+        { status: 'in_progress' },
         { preserveScroll: true },
     );
 }
@@ -453,6 +462,10 @@ const footer = computed(() =>
                         :id="`task-${task.id}`"
                         :key="task.id"
                         class="mk-panel task-card"
+                        :class="{
+                            'task-card--in-progress':
+                                task.status === 'in_progress',
+                        }"
                     >
                         <span
                             style="width: 2px; flex: 0 0 2px"
@@ -555,6 +568,11 @@ const footer = computed(() =>
                                         line-height: 1.4;
                                     "
                                 >
+                                    <span
+                                        v-if="task.status === 'in_progress'"
+                                        class="task-status task-status--in-progress"
+                                        >{{ t('tasks.inProgress') }}</span
+                                    >
                                     <Linked :text="task.title" />
                                 </p>
                                 <p
@@ -599,9 +617,24 @@ const footer = computed(() =>
                                         >
                                     </span>
                                     <button
+                                        v-if="task.status !== 'in_progress'"
+                                        type="button"
+                                        class="mk-btn mk-ghost task-action--start"
+                                        style="margin-left: auto; height: 22px"
+                                        @click="start(task)"
+                                    >
+                                        {{ t('tasks.inProgress.action') }}
+                                    </button>
+                                    <button
                                         type="button"
                                         class="mk-btn mk-ghost task-action--done"
-                                        style="margin-left: auto; height: 22px"
+                                        :style="{
+                                            marginLeft:
+                                                task.status === 'in_progress'
+                                                    ? 'auto'
+                                                    : undefined,
+                                            height: '22px',
+                                        }"
                                         @click="done(task)"
                                     >
                                         {{ t('tasks.done.action') }}
@@ -890,6 +923,33 @@ const footer = computed(() =>
 .task-assignee--mine {
     color: var(--mk-accent) !important;
     background: rgba(0, 229, 209, 0.1);
+}
+
+.task-card--in-progress {
+    border-color: color-mix(in srgb, var(--mk-warning) 45%, transparent);
+    background: color-mix(in srgb, var(--mk-warning) 7%, var(--mk-panel));
+}
+
+.task-status {
+    display: inline-block;
+    margin-right: 7px;
+    padding: 2px 6px;
+    font-family: var(--mk-mono);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.task-status--in-progress {
+    color: var(--mk-warning);
+    background: color-mix(in srgb, var(--mk-warning) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mk-warning) 38%, transparent);
+}
+
+.mk-btn.mk-ghost.task-action--start {
+    color: var(--mk-warning);
 }
 
 .task-card__actions {

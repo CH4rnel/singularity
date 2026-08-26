@@ -325,6 +325,22 @@ async function toBottom(): Promise<void> {
     }
 }
 
+/** Start a visit at the first unread line; a fully read room starts at now. */
+async function toFirstUnreadOrBottom(): Promise<void> {
+    await nextTick();
+
+    const marker =
+        scroller.value?.querySelector<HTMLElement>('[data-chat-unread]');
+
+    if (marker && scroller.value) {
+        scroller.value.scrollTop = Math.max(0, marker.offsetTop - 12);
+
+        return;
+    }
+
+    await toBottom();
+}
+
 /**
  * Catch the room up.
  *
@@ -659,7 +675,7 @@ async function switchProvider(kind: string, name: string): Promise<void> {
 useConsoleBeat(() => void refresh());
 
 onMounted(() => {
-    void toBottom();
+    void toFirstUnreadOrBottom();
 });
 </script>
 
@@ -777,6 +793,7 @@ onMounted(() => {
 
                     <div
                         v-else-if="row.kind === 'unread'"
+                        data-chat-unread
                         style="
                             display: flex;
                             align-items: center;
