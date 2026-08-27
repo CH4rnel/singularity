@@ -29,6 +29,7 @@ use App\Http\Controllers\CrmMessageController;
 use App\Http\Controllers\CrmNoteController;
 use App\Http\Controllers\CrmTaskCommentController;
 use App\Http\Controllers\CrmTaskController;
+use App\Http\Controllers\CyberController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\FediverseController;
@@ -173,6 +174,9 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 // {token} accepts a 0x address or a symbol (e.g. /token/CYBER.sol).
 Route::get('/tokens', [TokenController::class, 'index'])->name('tokens.index');
 Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.show');
+// What the coin is for, with the contract behind every claim — and the list of
+// things it deliberately does not do yet. Cited by the token pages and the nav.
+Route::get('/cyber', CyberController::class)->name('cyber');
 Route::get('/changelog', ChangelogController::class)->name('changelog');
 // Where the native apps come from. /download/<platform> is the short link worth
 // pasting into a message; it redirects to the current file for that platform.

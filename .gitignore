@@ -4,6 +4,10 @@ scripts/python/.env
 # JavaScript dependencies
 **/node_modules/
 
+# Documentation build output
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
 # Local environment files
 .env
 .env.*

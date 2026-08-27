@@ -15,17 +15,19 @@ Cyberia is an EVM-compatible Layer 1 network. This guide explains how to set up 
 ## Guides
 
 1. **[Getting started](getting-started.md)** — add Cyberia to MetaMask, get your first CYBER for gas.
-2. **[Bridge](bridge.md)** — move assets between Solana, TON, Robinhood Chain and Cyberia; fees, statuses, and the CYBER.sol converter.
-3. **[DEX](dex.md)** — swap tokens and provide liquidity on Ritual and on the in-app swap.
-4. **[Tokens](tokens.md)** — every asset on Cyberia with its contract address, and how CYBER, CYBER.sol and wrapped CYBER.sol differ.
-5. **[Account and profile](account-and-profile.md)** — sign-in options, on-chain nicknames, achievements.
-6. **[FAQ](faq.md)** — common questions and troubleshooting.
+2. **[Cyberia Wallet](wallet.md)** — create or restore the multichain vault, send safely, add networks, and understand what stays on the device.
+3. **[Bridge](bridge.md)** — move assets between Solana, TON, Robinhood Chain and Cyberia; fees, statuses, and the CYBER.sol converter.
+4. **[DEX](dex.md)** — swap tokens and provide liquidity on Ritual and on the in-app swap.
+5. **[Tokens](tokens.md)** — every asset on Cyberia with its contract address, and how CYBER, CYBER.sol and wrapped CYBER.sol differ.
+6. **[Account and profile](account-and-profile.md)** — sign-in options, on-chain nicknames, achievements.
+7. **[FAQ](faq.md)** — common questions and troubleshooting.
 
 ## Apps
 
 | App | URL | What it does |
 | --- | --- | --- |
 | Main site | <https://cyberia.church> | Landing, ecosystem overview |
+| Cyberia Wallet | <https://cyberia.church/wallet> | Non-custodial multichain wallet |
 | Bridge | <https://cyberia.church/bridge> (also <https://bridge.cyberia.church>) | Cross-chain transfers |
 | Ritual DEX | <https://swap.cyberia.church> | Swap, pools, farm, wrap |
 | In-app swap | <https://cyberia.church/swap> | Swap directly on the main site |

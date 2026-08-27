@@ -13,6 +13,10 @@ To upgrade Blockscout, bump the image tag in `docker-compose.yml` (and migration
 run automatically on backend start via `create_and_migrate()`); there is nothing to
 rebuild from source.
 
+The shared production nginx also serves `https://docs.cyberia.church` from the
+read-only `docs/.vitepress/dist/` mount. `scripts/deploy-prod.sh` builds that
+artifact inside the Laravel container before any required nginx recreation.
+
 ## Prerequisites
 
 - Docker v20.10+ and the Docker Compose v2 plugin
