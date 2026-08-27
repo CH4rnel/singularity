@@ -847,14 +847,7 @@ const footer = computed(() =>
     grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
     align-items: start;
     gap: 10px;
-    max-height: min(520px, 60vh);
     margin-top: 12px;
-    padding-right: 6px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-color: var(--mk-flat) transparent;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
 }
 
 .task-completed__item {
@@ -1043,16 +1036,9 @@ const footer = computed(() =>
 .task-comments {
     display: grid;
     gap: 8px;
-    max-height: 132px;
     margin-top: 12px;
     padding-top: 10px;
-    padding-right: 5px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
     border-top: 1px solid rgba(232, 236, 236, 0.08);
-    scrollbar-color: var(--mk-flat) transparent;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
 }
 
 .task-comment {

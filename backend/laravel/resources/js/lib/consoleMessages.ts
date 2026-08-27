@@ -24,6 +24,7 @@ export const consoleMessages: Messages = {
         'nav.numbers': 'Numbers',
         'nav.machines': 'Machines',
         'nav.keys': 'API keys',
+        'nav.strategy': 'Strategy',
         'nav.mockup': 'Design',
         'group.chain': 'Chain',
         'group.web': 'Web',
@@ -624,6 +625,39 @@ export const consoleMessages: Messages = {
             'Meaningful means settled on chain; broadcasting is not settlement. That is why an unfinished row is empty rather than optimistically filled.',
         'install.noEvents': 'nothing recorded yet',
 
+        /* editable content strategy */
+        'strategy.title': 'Strategy',
+        'strategy.lead':
+            'The 30-day Cyberia content plan. Select anything in the document and use the controls to edit it.',
+        'strategy.toolbar': 'Document formatting',
+        'strategy.block': 'Text style',
+        'strategy.font': 'Font',
+        'strategy.size': 'Size',
+        'strategy.color': 'Text colour',
+        'strategy.highlight': 'Highlight colour',
+        'strategy.link': 'Add link',
+        'strategy.linkPrompt': 'Link address',
+        'strategy.image': 'Insert image',
+        'strategy.clear': 'Clear formatting',
+        'strategy.save': 'Save',
+        'strategy.saving': 'saving…',
+        'strategy.unsaved': 'unsaved changes',
+        'strategy.savedAt': 'saved {at}',
+        'strategy.original': 'original plan',
+        'strategy.reset': 'Restore original',
+        'strategy.resetConfirm':
+            'Discard every saved edit and restore the uploaded plan?',
+        'strategy.loading': 'Loading strategy',
+        'strategy.document': 'Editable Cyberia content strategy',
+        'strategy.window': 'Strategy document',
+        'strategy.pin': 'Pin above CRM',
+        'strategy.unpin': 'Return to page',
+        'strategy.close': 'Close window',
+        'strategy.open': 'Open strategy',
+        'strategy.hintTitle': 'Editing',
+        'strategy.hint':
+            'Select text inside the frame, then format it above. Images are embedded in the document. Save makes the working copy available to both operators.',
+
         /* the design this console was built from */
         'mockup.title': 'Design',
         'mockup.lead': 'The nine artboards this console was drawn as.',
@@ -787,6 +821,7 @@ export const consoleMessages: Messages = {
         'nav.numbers': 'Числа',
         'nav.machines': 'Машины',
         'nav.keys': 'API-ключи',
+        'nav.strategy': 'Стратегия',
         'nav.mockup': 'Макет',
         'group.chain': 'Цепь',
         'group.web': 'Веб',
@@ -1383,6 +1418,39 @@ export const consoleMessages: Messages = {
         'install.meaningfulNote':
             'Значимое — это подтверждённое сетью, а отправка в сеть подтверждением не считается. Поэтому незавершённая строка пуста, а не заполнена оптимистично.',
         'install.noEvents': 'событий пока нет',
+
+        /* редактируемая контент-стратегия */
+        'strategy.title': 'Стратегия',
+        'strategy.lead':
+            'Контент-план Cyberia на 30 дней. Выделите любой фрагмент документа и отредактируйте его инструментами сверху.',
+        'strategy.toolbar': 'Форматирование документа',
+        'strategy.block': 'Стиль текста',
+        'strategy.font': 'Шрифт',
+        'strategy.size': 'Размер',
+        'strategy.color': 'Цвет текста',
+        'strategy.highlight': 'Цвет выделения',
+        'strategy.link': 'Добавить ссылку',
+        'strategy.linkPrompt': 'Адрес ссылки',
+        'strategy.image': 'Вставить изображение',
+        'strategy.clear': 'Очистить форматирование',
+        'strategy.save': 'Сохранить',
+        'strategy.saving': 'сохраняю…',
+        'strategy.unsaved': 'есть несохранённые изменения',
+        'strategy.savedAt': 'сохранено {at}',
+        'strategy.original': 'исходный план',
+        'strategy.reset': 'Вернуть оригинал',
+        'strategy.resetConfirm':
+            'Удалить все сохранённые правки и вернуть загруженный план?',
+        'strategy.loading': 'Загружаю стратегию',
+        'strategy.document': 'Редактируемая контент-стратегия Cyberia',
+        'strategy.window': 'Документ стратегии',
+        'strategy.pin': 'Закрепить поверх CRM',
+        'strategy.unpin': 'Вернуть на страницу',
+        'strategy.close': 'Закрыть окно',
+        'strategy.open': 'Открыть стратегию',
+        'strategy.hintTitle': 'Как редактировать',
+        'strategy.hint':
+            'Выделите текст внутри рамки и примените форматирование сверху. Изображения встраиваются в документ. После сохранения рабочая версия доступна обоим операторам.',
 
         /* макет, из которого вырос этот пульт */
         'mockup.title': 'Макет',

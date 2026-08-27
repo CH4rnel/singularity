@@ -123,6 +123,13 @@ const LENSES = [
         badge: null,
         phone: false,
     },
+    {
+        key: 'strategy',
+        href: '/crm/strategy',
+        label: 'nav.strategy',
+        badge: null,
+        phone: false,
+    },
     // The design the console was built from. A desk lens: nobody opens a
     // mockup on a phone at three in the morning, and the phone bar is for
     // what is on fire.
@@ -427,6 +434,11 @@ const initials = computed(() =>
                         <template v-else-if="lens.key === 'keys'">
                             <circle cx="8" cy="12" r="3.5" />
                             <path d="M11.5 12H21M17 12v3M20 12v2" />
+                        </template>
+                        <template v-else-if="lens.key === 'strategy'">
+                            <path d="M5 3.5h11l3 3v14H5z" />
+                            <path d="M8.5 9h7M8.5 12.5h7M8.5 16h4.5" />
+                            <path d="M16 3.5v3h3" />
                         </template>
                         <template v-else>
                             <rect

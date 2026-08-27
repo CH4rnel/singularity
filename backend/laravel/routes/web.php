@@ -23,6 +23,7 @@ use App\Http\Controllers\ConsoleChatController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
+use App\Http\Controllers\ConsoleStrategyController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmMessageController;
@@ -475,6 +476,13 @@ Route::middleware(['auth'])->group(function () {
         // and renders only its hash and visible prefix.
         Route::get('api-keys', [ConsoleAiKeysController::class, 'index'])->name('ai-keys');
         Route::post('api-keys', [ConsoleAiKeysController::class, 'store'])->name('ai-keys.store');
+
+        // The editable content plan is framed like the frozen mockup, but its
+        // working copy lives on the private disk and changes on an operator action.
+        Route::get('strategy', [ConsoleStrategyController::class, 'index'])->name('strategy');
+        Route::get('strategy/document', [ConsoleStrategyController::class, 'document'])->name('strategy.document');
+        Route::put('strategy', [ConsoleStrategyController::class, 'update'])->name('strategy.update');
+        Route::delete('strategy', [ConsoleStrategyController::class, 'reset'])->name('strategy.reset');
 
         // The design this console was built from, kept where the console is.
         // A canvas link rots and an exported picture loses its text; the
