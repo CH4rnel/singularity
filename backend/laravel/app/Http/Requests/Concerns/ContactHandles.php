@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Concerns;
 
+use App\Support\CrmContactUrl;
 use App\Support\Handles;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
@@ -32,6 +33,17 @@ trait ContactHandles
             'solana_address' => ['nullable', 'string', 'regex:/^[1-9A-HJ-NP-Za-km-z]{32,44}$/'],
             'tags' => ['nullable', 'array'],
             'tags.*' => ['string', 'max:50'],
+            'contact_link_url' => [
+                'nullable',
+                'string',
+                'max:2048',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value !== null && CrmContactUrl::normalise($value) === null) {
+                        $fail('Use an http(s), mailto or tel contact link.');
+                    }
+                },
+            ],
+            'contact_link_label' => ['nullable', 'string', 'max:80'],
         ];
     }
 
@@ -91,6 +103,18 @@ trait ContactHandles
 
         if ($this->has('x_handle')) {
             $normalised['x_handle'] = Handles::x($this->input('x_handle'));
+        }
+
+        if ($this->has('contact_link_url')) {
+            $rawUrl = trim((string) $this->input('contact_link_url'));
+            $normalised['contact_link_url'] = $rawUrl === ''
+                ? null
+                : (CrmContactUrl::normalise($rawUrl) ?? $rawUrl);
+        }
+
+        if ($this->has('contact_link_label')) {
+            $label = trim((string) $this->input('contact_link_label'));
+            $normalised['contact_link_label'] = $label === '' ? null : $label;
         }
 
         foreach (['name', 'email', 'evm_address', 'solana_address'] as $field) {

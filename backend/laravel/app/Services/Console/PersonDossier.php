@@ -9,6 +9,7 @@ use App\Models\CrmNote;
 use App\Models\CrmTask;
 use App\Models\SiteEvent;
 use App\Services\WalletPriceService;
+use App\Support\CrmContactUrl;
 use App\Support\Handles;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -56,7 +57,7 @@ class PersonDossier
      */
     public function build(CrmContact $contact, string $view = 'all', int $limit = self::EVENTS): array
     {
-        $contact->loadMissing(['notes.author', 'tasks.assignee:id,name', 'messages.author:id,name', 'user']);
+        $contact->loadMissing(['notes.author', 'tasks.assignee:id,name', 'messages.author:id,name', 'contactLinks', 'user']);
 
         $view = in_array($view, self::VIEWS, true) ? $view : 'all';
         $limit = max(self::EVENTS, min($limit, 400));
@@ -81,6 +82,13 @@ class PersonDossier
                 // `t.me/812…` opens nothing.
                 'telegram_url' => Handles::telegramUrl($contact->telegram),
                 'x_url' => Handles::xUrl($contact->x_handle),
+                'write_ways' => CrmContactUrl::ways($contact),
+                'contact_links' => $contact->contactLinks->map(fn ($link) => [
+                    'id' => $link->id,
+                    'label' => $link->label,
+                    'kind' => $link->kind,
+                    'url' => $link->url,
+                ])->all(),
                 'email' => $contact->email,
                 'evm_address' => $contact->evm_address,
                 'solana_address' => $contact->solana_address,

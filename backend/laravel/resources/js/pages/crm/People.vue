@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, ref } from 'vue';
+import ContactWays, {
+    type ContactWay,
+} from '@/components/console/ContactWays.vue';
 import Rule from '@/components/console/Rule.vue';
 import Spark from '@/components/console/Spark.vue';
 import { useConsoleLive } from '@/composables/useConsolePulse';
@@ -55,6 +58,7 @@ type Row = {
     spark: number[];
     /* Where a message to this person would go, or null when nowhere does. */
     write: string | null;
+    write_ways: ContactWay[];
     action: string;
 };
 
@@ -112,6 +116,8 @@ useConsoleLive('people', () =>
  */
 const adding = ref(false);
 const nameField = ref<HTMLInputElement | null>(null);
+const linkField = ref<HTMLInputElement | null>(null);
+const addTab = ref<'details' | 'link'>('details');
 
 const draft = useForm({
     name: '',
@@ -123,6 +129,8 @@ const draft = useForm({
     tags: '',
     type: 'lead',
     status: 'new',
+    contact_link_url: '',
+    contact_link_label: '',
 });
 
 /*
@@ -139,6 +147,7 @@ const named = computed(() =>
         draft.email,
         draft.evm_address,
         draft.solana_address,
+        draft.contact_link_url,
     ].some((value) => value.trim() !== ''),
 );
 
@@ -148,6 +157,13 @@ function openAdd() {
     if (adding.value) {
         void nextTick(() => nameField.value?.focus());
     }
+}
+
+function pickAddTab(tab: 'details' | 'link') {
+    addTab.value = tab;
+    void nextTick(() =>
+        tab === 'details' ? nameField.value?.focus() : linkField.value?.focus(),
+    );
 }
 
 function create() {
@@ -622,6 +638,34 @@ const currentSegment = computed(
                 </p>
 
                 <div
+                    role="tablist"
+                    :aria-label="t('people.addTitle')"
+                    style="margin-top: 12px; display: flex; gap: 6px"
+                >
+                    <button
+                        type="button"
+                        role="tab"
+                        class="mk-pick"
+                        :class="{ 'mk-on': addTab === 'details' }"
+                        :aria-selected="addTab === 'details'"
+                        @click="pickAddTab('details')"
+                    >
+                        {{ t('people.addDetails') }}
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        class="mk-pick"
+                        :class="{ 'mk-on': addTab === 'link' }"
+                        :aria-selected="addTab === 'link'"
+                        @click="pickAddTab('link')"
+                    >
+                        {{ t('people.addLinkTab') }}
+                    </button>
+                </div>
+
+                <div
+                    v-if="addTab === 'details'"
                     style="
                         margin-top: 12px;
                         display: grid;
@@ -667,6 +711,30 @@ const currentSegment = computed(
                         v-model="draft.tags"
                         class="mk-input"
                         :placeholder="`${t('person.tags')} · ${t('person.tagsPlaceholder')}`"
+                    />
+                </div>
+
+                <div
+                    v-else
+                    style="
+                        margin-top: 12px;
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+                        gap: 8px;
+                    "
+                >
+                    <input
+                        ref="linkField"
+                        v-model="draft.contact_link_url"
+                        class="mk-input"
+                        inputmode="url"
+                        autocomplete="url"
+                        :placeholder="t('people.linkUrl')"
+                    />
+                    <input
+                        v-model="draft.contact_link_label"
+                        class="mk-input"
+                        :placeholder="t('people.linkLabel')"
                     />
                 </div>
 
@@ -819,16 +887,11 @@ const currentSegment = computed(
                             {{ t(`crm.status.${row.status}`) }}
                         </div>
                     </div>
-                    <a
-                        v-if="row.write"
-                        :href="row.write"
-                        target="_blank"
-                        rel="noreferrer"
-                        class="mk-btn mk-act"
-                        style="width: 108px"
-                        @click.stop
-                        >{{ t('person.write') }}</a
-                    >
+                    <ContactWays
+                        v-if="row.write_ways.length"
+                        :ways="row.write_ways"
+                        :label="t('person.write')"
+                    />
                     <span v-else class="mk-btn" style="width: 108px">{{
                         t('action.openPerson')
                     }}</span>

@@ -524,6 +524,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('{contact}', [CrmContactController::class, 'show'])->name('show');
         Route::put('{contact}', [CrmContactController::class, 'update'])->name('update');
         Route::delete('{contact}', [CrmContactController::class, 'destroy'])->name('destroy');
+        Route::post('{contact}/contact-links', [CrmContactController::class, 'storeContactLink'])->name('contact-links.store');
+        Route::delete('{contact}/contact-links/{contactLink}', [CrmContactController::class, 'destroyContactLink'])->name('contact-links.destroy');
         Route::post('{contact}/notes', [CrmNoteController::class, 'store'])->name('notes.store');
         /*
          * Same-person links. A person arrives under an account, an EVM address

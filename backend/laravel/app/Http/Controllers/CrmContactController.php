@@ -5,14 +5,17 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreCrmContactRequest;
 use App\Http\Requests\UpdateCrmContactRequest;
 use App\Models\CrmContact;
+use App\Models\CrmContactLink;
 use App\Models\CrmIdentityLink;
 use App\Models\CrmTask;
 use App\Models\User;
 use App\Services\Console\IdentityGraph;
 use App\Services\Console\PeopleLens;
 use App\Services\Console\PersonDossier;
+use App\Support\CrmContactUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -233,18 +236,64 @@ class CrmContactController extends Controller
     public function store(StoreCrmContactRequest $request): RedirectResponse
     {
         $data = $request->validated();
+        $linkUrl = $data['contact_link_url'] ?? null;
+        $linkLabel = $data['contact_link_label'] ?? null;
+        unset($data['contact_link_url'], $data['contact_link_label']);
         $data['source'] = 'manual';
 
-        $contact = CrmContact::create($data);
+        DB::transaction(function () use ($data, $linkUrl, $linkLabel): void {
+            $contact = CrmContact::create($data);
+
+            if (is_string($linkUrl)) {
+                $contact->contactLinks()->create([
+                    'url' => $linkUrl,
+                    'kind' => CrmContactUrl::kind($linkUrl),
+                    'label' => $linkLabel ?: CrmContactUrl::label($linkUrl),
+                ]);
+            }
+        });
 
         return back()->with('success', 'Contact created');
     }
 
     public function update(UpdateCrmContactRequest $request, CrmContact $contact): RedirectResponse
     {
-        $contact->update($request->validated());
+        $data = $request->validated();
+        unset($data['contact_link_url'], $data['contact_link_label']);
+        $contact->update($data);
 
         return back()->with('success', 'Contact updated');
+    }
+
+    public function storeContactLink(Request $request, CrmContact $contact): RedirectResponse
+    {
+        $data = $request->validate([
+            'url' => ['required', 'string', 'max:2048'],
+            'label' => ['nullable', 'string', 'max:80'],
+        ]);
+        $url = CrmContactUrl::normalise($data['url']);
+
+        if ($url === null) {
+            return back()->withErrors(['url' => 'Use an http(s), mailto or tel contact link.']);
+        }
+
+        $contact->contactLinks()->firstOrCreate(
+            ['url' => $url],
+            [
+                'kind' => CrmContactUrl::kind($url),
+                'label' => trim((string) ($data['label'] ?? '')) ?: CrmContactUrl::label($url),
+            ],
+        );
+
+        return back()->with('success', 'Contact link added');
+    }
+
+    public function destroyContactLink(CrmContact $contact, CrmContactLink $contactLink): RedirectResponse
+    {
+        abort_unless($contactLink->crm_contact_id === $contact->id, 404);
+        $contactLink->delete();
+
+        return back()->with('success', 'Contact link removed');
     }
 
     public function destroy(CrmContact $contact): RedirectResponse

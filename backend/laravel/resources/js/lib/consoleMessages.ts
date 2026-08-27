@@ -151,7 +151,11 @@ export const consoleMessages: Messages = {
         'people.addTitle': 'Put somebody on the books',
         'people.addNote':
             'A handle or an address is enough to start — a person found on X is a person we can write to, and the rest fills in as it is learned.',
-        'people.addNothing': 'Give at least a name, a handle or an address.',
+        'people.addDetails': 'Details',
+        'people.addLinkTab': 'Contact link',
+        'people.linkUrl': 'Paste any profile, chat, email or phone link',
+        'people.linkLabel': 'Label (optional)',
+        'people.addNothing': 'Give at least a name, a handle, an address or a contact link.',
         'people.empty': 'Nobody matches this question right now.',
         'segment.all': 'Everyone',
         'segment.partners': 'Partners',
@@ -227,6 +231,8 @@ export const consoleMessages: Messages = {
             'transfers per week — this app keeps no balance history',
         'person.noActivity': 'no transfers on record in twelve weeks',
         'person.who': 'Who this is',
+        'person.contactWays': 'Other contact links',
+        'person.contactLinkDelete': 'Remove contact link',
         'person.edit': 'Edit',
         'person.name': 'Name',
         'person.editNote':
@@ -906,7 +912,11 @@ export const consoleMessages: Messages = {
         'people.addTitle': 'Завести человека',
         'people.addNote':
             'Для начала хватит ника или адреса — человек, найденный в X, это человек, которому можно написать, остальное дописывается по мере знакомства.',
-        'people.addNothing': 'Нужно хотя бы имя, ник или адрес.',
+        'people.addDetails': 'Данные',
+        'people.addLinkTab': 'Контактная ссылка',
+        'people.linkUrl': 'Любая ссылка на профиль, чат, почту или телефон',
+        'people.linkLabel': 'Подпись (необязательно)',
+        'people.addNothing': 'Нужно хотя бы имя, ник, адрес или контактную ссылку.',
         'people.empty': 'На этот вопрос сейчас никто не отвечает.',
         'segment.all': 'Все люди',
         'segment.partners': 'Партнёры',
@@ -979,6 +989,8 @@ export const consoleMessages: Messages = {
             'переводы по неделям — истории балансов это приложение не хранит',
         'person.noActivity': 'за двенадцать недель переводов не записано',
         'person.who': 'Кто это',
+        'person.contactWays': 'Другие способы связи',
+        'person.contactLinkDelete': 'Удалить контактную ссылку',
         'person.edit': 'Править',
         'person.name': 'Имя',
         'person.editNote':

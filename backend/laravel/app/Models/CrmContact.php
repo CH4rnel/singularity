@@ -108,6 +108,12 @@ class CrmContact extends Model
         return $this->hasMany(CrmTask::class)->byDueDate();
     }
 
+    /** @return HasMany<CrmContactLink, $this> */
+    public function contactLinks(): HasMany
+    {
+        return $this->hasMany(CrmContactLink::class)->oldest('id');
+    }
+
     /**
      * The correspondence, oldest first.
      *
@@ -147,6 +153,10 @@ class CrmContact extends Model
 
         if ($this->x_handle) {
             return '@'.$this->x_handle;
+        }
+
+        if ($this->relationLoaded('contactLinks') && $this->contactLinks->isNotEmpty()) {
+            return $this->contactLinks->first()->label;
         }
 
         return $this->evm_address ?: '#'.$this->getKey();
@@ -197,7 +207,10 @@ class CrmContact extends Model
                         ->orWhere('x_handle', 'like', $like)
                         ->orWhere('evm_address', 'like', $like)
                         ->orWhere('solana_address', 'like', $like)
-                        ->orWhere('tags', 'like', $like);
+                        ->orWhere('tags', 'like', $like)
+                        ->orWhereHas('contactLinks', fn (Builder $links) => $links
+                            ->where('label', 'like', $like)
+                            ->orWhere('url', 'like', $like));
                 });
             }
         });

@@ -2,6 +2,9 @@
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import CopyValue from '@/components/console/CopyValue.vue';
+import ContactWays, {
+    type ContactWay,
+} from '@/components/console/ContactWays.vue';
 import Linked from '@/components/console/Linked.vue';
 import Rule from '@/components/console/Rule.vue';
 import { useConsoleLive } from '@/composables/useConsolePulse';
@@ -15,6 +18,7 @@ import {
     usd,
 } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
+import contactLinks from '@/routes/crm/contact-links';
 
 /**
  * One person's dossier.
@@ -65,6 +69,13 @@ const props = defineProps<{
         /* Built by the server: a stored handle is not always an address. */
         telegram_url: string | null;
         x_url: string | null;
+        write_ways: ContactWay[];
+        contact_links: {
+            id: number;
+            label: string;
+            kind: string;
+            url: string;
+        }[];
         email: string | null;
         evm_address: string | null;
         solana_address: string | null;
@@ -169,6 +180,20 @@ const props = defineProps<{
 const { t, tag } = useLocale(consoleMessages);
 
 const note = useForm({ body: '' });
+const contactLink = useForm({ url: '', label: '' });
+
+function addContactLink() {
+    contactLink.post(contactLinks.store.url(props.contact.id), {
+        preserveScroll: true,
+        onSuccess: () => contactLink.reset(),
+    });
+}
+
+function removeContactLink(id: number) {
+    router.delete(contactLinks.destroy.url([props.contact.id, id]), {
+        preserveScroll: true,
+    });
+}
 
 /*
  * Correcting the record.
@@ -635,23 +660,11 @@ function remove() {
         >
         <span class="mk-tag">{{ t(`crm.status.${contact.status}`) }}</span>
         <div style="margin-left: auto; display: flex; gap: 8px">
-            <a
-                v-if="contact.telegram_url"
-                :href="contact.telegram_url"
-                target="_blank"
-                rel="noreferrer"
-                class="mk-btn mk-act"
-                >{{ t('person.write') }}</a
-            >
-            <a
-                v-if="contact.x_url"
-                :href="contact.x_url"
-                target="_blank"
-                rel="noreferrer"
-                class="mk-btn"
-                :class="{ 'mk-act': !contact.telegram_url }"
-                >{{ t('person.writeX') }}</a
-            >
+            <ContactWays
+                v-if="contact.write_ways.length"
+                :ways="contact.write_ways"
+                :label="t('person.write')"
+            />
             <button type="button" class="mk-btn" @click="openTask">
                 {{ t('person.addTask') }}
             </button>
@@ -973,6 +986,59 @@ function remove() {
                                 :href="row.href"
                             />
                         </span>
+                    </div>
+
+                    <div style="margin-top: 12px">
+                        <p class="mk-k" style="margin: 0 0 7px">
+                            {{ t('person.contactWays') }}
+                        </p>
+                        <div
+                            v-for="way in contact.contact_links"
+                            :key="way.id"
+                            class="mk-hair"
+                            style="display: flex; align-items: center; gap: 8px; padding: 7px 0"
+                        >
+                            <a
+                                :href="way.url"
+                                target="_blank"
+                                rel="noreferrer"
+                                class="mk-clip"
+                                style="flex: 1; min-width: 0; color: var(--mk-cyan); font-size: 12px"
+                                :title="way.url"
+                            >{{ way.label }}</a>
+                            <button
+                                type="button"
+                                class="mk-btn mk-ghost"
+                                style="height: 22px; padding: 0 6px"
+                                :aria-label="t('person.contactLinkDelete')"
+                                @click="removeContactLink(way.id)"
+                            >×</button>
+                        </div>
+                        <form
+                            style="margin-top: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 6px"
+                            @submit.prevent="addContactLink"
+                        >
+                            <input
+                                v-model="contactLink.url"
+                                class="mk-input"
+                                inputmode="url"
+                                :placeholder="t('people.linkUrl')"
+                            />
+                            <input
+                                v-model="contactLink.label"
+                                class="mk-input"
+                                :placeholder="t('people.linkLabel')"
+                            />
+                            <button
+                                type="submit"
+                                class="mk-btn"
+                                :disabled="contactLink.processing || !contactLink.url.trim()"
+                            >+</button>
+                        </form>
+                        <p
+                            v-if="Object.keys(contactLink.errors).length"
+                            style="margin: 6px 0 0; color: var(--mk-critical); font-size: 11px"
+                        >{{ Object.values(contactLink.errors).join(' · ') }}</p>
                     </div>
                 </div>
 

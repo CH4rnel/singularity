@@ -8,7 +8,7 @@ use App\Models\CrmNote;
 use App\Models\CrmSync;
 use App\Models\CrmTask;
 use App\Services\WalletPriceService;
-use App\Support\Handles;
+use App\Support\CrmContactUrl;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -233,6 +233,7 @@ class PeopleLens
         $tasks = $this->openTasks($contacts);
         $transfers = $this->transfers($contacts);
         $price = $this->prices->quotes()['prices']['cyberia'] ?? null;
+        $contacts->loadMissing('contactLinks');
 
         $rows = $contacts->map(function (CrmContact $contact) use ($notes, $tasks, $transfers, $price): array {
             $signal = $this->signal($contact, $notes, $tasks, $transfers);
@@ -245,7 +246,7 @@ class PeopleLens
             // missing, and a numeric Telegram id (all the sync knows about
             // somebody without a username) is not an address — an action that
             // opens a dead page is worse than no action.
-            $write = Handles::telegramUrl($contact->telegram) ?? Handles::xUrl($contact->x_handle);
+            $writeWays = CrmContactUrl::ways($contact);
 
             return [
                 'id' => $contact->id,
@@ -260,8 +261,9 @@ class PeopleLens
                 'added' => $contact->created_at?->toIso8601String(),
                 'signal' => $signal,
                 'spark' => $transfers['weekly'][$contact->id] ?? array_fill(0, self::WEEKS, 0),
-                'write' => $write,
-                'action' => $write !== null ? 'write' : 'dossier',
+                'write' => $writeWays[0]['url'] ?? null,
+                'write_ways' => $writeWays,
+                'action' => $writeWays !== [] ? 'write' : 'dossier',
             ];
         })
             ->pipe(fn (Collection $rows) => $this->ordered($rows, $sort))

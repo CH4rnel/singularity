@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\CrmContact;
+use App\Models\CrmContactLink;
 use App\Models\CrmSync;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -205,6 +206,79 @@ test('a contact can be created', function () {
     ]);
 });
 
+test('a contact can be created from any safe contact link', function () {
+    $user = User::factory()->crmAdmin()->create();
+
+    $this->actingAs($user)
+        ->post(route('crm.store'), [
+            'contact_link_url' => 'discord.gg/cyberia',
+            'contact_link_label' => 'Cyberia Discord',
+            'type' => 'lead',
+            'status' => 'new',
+        ])
+        ->assertRedirect();
+
+    $contact = CrmContact::query()->sole();
+
+    $this->assertDatabaseHas('crm_contact_links', [
+        'crm_contact_id' => $contact->id,
+        'label' => 'Cyberia Discord',
+        'kind' => 'discord',
+        'url' => 'https://discord.gg/cyberia',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('crm.people'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('rows.0.name', 'Cyberia Discord')
+            ->where('rows.0.write_ways.0.kind', 'discord')
+            ->where('rows.0.write_ways.0.url', 'https://discord.gg/cyberia'));
+});
+
+test('unsafe contact links are refused', function () {
+    $user = User::factory()->crmAdmin()->create();
+
+    $this->actingAs($user)
+        ->post(route('crm.store'), [
+            'contact_link_url' => 'javascript:alert(1)',
+            'type' => 'lead',
+            'status' => 'new',
+        ])
+        ->assertSessionHasErrors('contact_link_url');
+
+    expect(CrmContact::count())->toBe(0);
+});
+
+test('contact links can be added to and removed from a dossier', function () {
+    $user = User::factory()->crmAdmin()->create();
+    $contact = CrmContact::factory()->create([
+        'telegram' => null,
+        'x_handle' => null,
+        'email' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('crm.contact-links.store', $contact), [
+            'url' => 'https://github.com/cyberia-temple',
+        ])
+        ->assertRedirect();
+
+    $link = CrmContactLink::query()->sole();
+    expect($link->kind)->toBe('github');
+
+    $this->actingAs($user)
+        ->get(route('crm.show', $contact))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('contact.contact_links.0.id', $link->id)
+            ->where('contact.write_ways.0.kind', 'github'));
+
+    $this->actingAs($user)
+        ->delete(route('crm.contact-links.destroy', [$contact, $link]))
+        ->assertRedirect();
+
+    $this->assertDatabaseMissing('crm_contact_links', ['id' => $link->id]);
+});
+
 test('a pasted profile link is stored as a bare handle', function () {
     $user = User::factory()->crmAdmin()->create();
 
@@ -367,6 +441,7 @@ test('a numeric telegram id is never offered as a way of writing', function () {
     $contact = CrmContact::factory()->create([
         'telegram' => '819914001',
         'x_handle' => null,
+        'email' => null,
     ]);
 
     $this->actingAs($user)
