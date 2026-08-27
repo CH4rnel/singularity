@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import StrategyWorkspace from '@/components/console/StrategyWorkspace.vue';
 import { useConsolePulse } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import {
@@ -530,6 +531,11 @@ const initials = computed(() =>
                 >
             </Link>
         </nav>
+
+        <!-- One persistent editor instance: docked on /strategy, teleported
+             above every other lens while pinned. Navigation never destroys
+             the iframe or an unsaved selection. -->
+        <StrategyWorkspace />
     </div>
 </template>
 

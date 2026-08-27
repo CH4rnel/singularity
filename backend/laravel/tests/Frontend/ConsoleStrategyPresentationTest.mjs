@@ -7,7 +7,18 @@ const tasks = readFileSync(
     'utf8',
 );
 const strategy = readFileSync(
+    new URL(
+        '../../resources/js/components/console/StrategyWorkspace.vue',
+        import.meta.url,
+    ),
+    'utf8',
+);
+const strategyPage = readFileSync(
     new URL('../../resources/js/pages/crm/Strategy.vue', import.meta.url),
+    'utf8',
+);
+const consoleLayout = readFileSync(
+    new URL('../../resources/js/layouts/ConsoleLayout.vue', import.meta.url),
     'utf8',
 );
 
@@ -23,19 +34,32 @@ test('completed tasks use the console page scroll instead of a nested scroller',
 test('the strategy frame exposes rich editing, images and durable save controls', () => {
     for (const feature of [
         "run('bold')",
-        "run('fontName'",
-        "run('fontSize'",
-        "run('foreColor'",
-        "run('hiliteColor'",
+        "'fontName'",
+        "'fontSize'",
+        "'foreColor'",
+        "'hiliteColor'",
         "run('insertImage'",
         'strategy.update.url()',
         'sandbox="allow-same-origin"',
         'strategy-shell--pinned',
-        'resize:both',
+        'startResize',
         'strategy-close',
         'startDrag',
         'crm-strategy-window',
+        "pinned ? '.mostik' : '#strategy-dock'",
     ]) {
-        assert.ok(strategy.includes(feature), `missing editor feature: ${feature}`);
+        assert.ok(
+            strategy.includes(feature),
+            `missing editor feature: ${feature}`,
+        );
     }
+
+    assert.match(
+        strategyPage,
+        /#strategy-dock\s*\{[^}]*width:\s*100%[^}]*height:/,
+    );
+    assert.ok(
+        consoleLayout.includes('<StrategyWorkspace />'),
+        'persistent console layout owns the strategy window',
+    );
 });
