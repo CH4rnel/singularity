@@ -20,6 +20,10 @@ in_container() {
     docker exec -w "$APP_DIR" "$CONTAINER" "$@"
 }
 
+in_docs_container() {
+    docker exec -w /singularity/docs "$CONTAINER" "$@"
+}
+
 cd "$REPO_DIR"
 
 before=$(git rev-parse HEAD)
@@ -54,6 +58,19 @@ if changed backend/laravel/resources backend/laravel/package.json backend/larave
     in_container npm run build
 fi
 
+if changed docs; then
+    echo "==> build docs.cyberia.church"
+    # The Laravel container already carries the production Node toolchain and
+    # bind-mounts the whole repository at /singularity. The host intentionally
+    # has no Node installation of its own.
+    in_docs_container npm ci
+    in_docs_container npm run build
+    test -s "$REPO_DIR/docs/.vitepress/dist/index.html" || {
+        echo "docs build produced no index.html, refusing to deploy" >&2
+        exit 1
+    }
+fi
+
 if changed backend/laravel/database/migrations; then
     echo "==> migrate"
     in_container php artisan migrate --force
@@ -69,5 +86,23 @@ in_container php artisan route:cache
 
 echo "==> queue restart"
 in_container php artisan queue:restart
+
+# nginx templates are expanded only when the container starts. Recreate just
+# the proxy when its template or mounts changed; application-only deploys do
+# not disturb it. The documentation output itself is a bind mount and needs no
+# reload after subsequent content-only builds.
+if changed services/blockscout/docker-compose/proxy services/blockscout/docker-compose/services/nginx.yml; then
+    echo "==> recreate proxy"
+    docker compose \
+        -f "$REPO_DIR/services/blockscout/docker-compose/docker-compose.yml" \
+        up -d --no-deps --force-recreate proxy
+    docker exec proxy nginx -t
+fi
+
+if changed docs services/blockscout/docker-compose/proxy services/blockscout/docker-compose/services/nginx.yml; then
+    echo "==> verify docs.cyberia.church"
+    curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+        --max-time 20 https://docs.cyberia.church/ >/dev/null
+fi
 
 echo "==> deployed $(git rev-parse --short HEAD)"

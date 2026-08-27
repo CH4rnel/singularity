@@ -11,6 +11,7 @@ services:
       - "/root/singularity/frontend/landing:/usr/share/nginx/landing:ro"
       - "/root/dex-frontend:/usr/share/nginx/dex:ro"
       - "/root/cyberia-blog:/usr/share/nginx/blog:ro"
+      - "/root/singularity/docs/.vitepress/dist:/usr/share/nginx/docs:ro"
       - "/root/certbot/conf:/etc/letsencrypt:ro"
       - "/root/certbot/www:/var/www/certbot:ro"
     environment:

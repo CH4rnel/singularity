@@ -1,6 +1,6 @@
 # Cyberia User Guide
 
-Cyberia is an EVM-compatible Layer 1 network. This guide explains how to set up a wallet, move assets in and out of the network, trade on the DEX, and use your on-chain profile.
+Cyberia is an EVM-compatible Layer 1 network. This guide starts with the meaning of wallets, networks, gas, tokens, and transaction confirmations, then walks through every main Cyberia product.
 
 ## Network at a glance
 
@@ -12,20 +12,31 @@ Cyberia is an EVM-compatible Layer 1 network. This guide explains how to set up 
 | Native token | CYBER (18 decimals, pays gas) |
 | Explorer | <https://explorer.cyberia.church> |
 
-## Guides
+## Beginner path
 
-1. **[Getting started](getting-started.md)** — add Cyberia to MetaMask, get your first CYBER for gas.
-2. **[Bridge](bridge.md)** — move assets between Solana, TON, Robinhood Chain and Cyberia; fees, statuses, and the CYBER.sol converter.
-3. **[DEX](dex.md)** — swap tokens and provide liquidity on Ritual and on the in-app swap.
-4. **[Tokens](tokens.md)** — every asset on Cyberia with its contract address, and how CYBER, CYBER.sol and wrapped CYBER.sol differ.
-5. **[Account and profile](account-and-profile.md)** — sign-in options, on-chain nicknames, achievements.
-6. **[FAQ](faq.md)** — common questions and troubleshooting.
+Follow these pages in order if this is your first crypto wallet:
+
+1. **[Crypto basics](crypto-basics.md)** — learn addresses, networks, gas, tokens, signatures, approvals, explorers, and recovery phrases.
+2. **[Getting started](getting-started.md)** — open a wallet, add Cyberia, receive CYBER, and verify a first transaction.
+3. **[Cyberia Wallet](wallet.md)** — create or restore the multichain vault, receive assets, and send a small test transfer.
+4. **[Why CYBER exists](cyber.md)** — understand the native coin and its role across the ecosystem.
+5. **[Bridge](bridge.md)** — move an asset from another supported network into Cyberia.
+6. **[DEX](dex.md)** — make a token swap and learn how liquidity pools work.
+7. **[Explore the ecosystem](ecosystem.md)** — discover lending, staking, launchpad, DAO, NFTs, analytics, and games.
+
+## Reference guides
+
+- **[Apps and downloads](apps.md)** — choose the browser, desktop, mobile, or extension experience.
+- **[Tokens and contracts](tokens.md)** — look up asset identifiers and distinguish CYBER, WCYBER, and CYBER.sol.
+- **[Account and profile](account-and-profile.md)** — sign in, attach wallets, choose a nickname, and collect achievements.
+- **[FAQ](faq.md)** — solve common wallet, bridge, DEX, and asset questions.
 
 ## Apps
 
 | App | URL | What it does |
 | --- | --- | --- |
 | Main site | <https://cyberia.church> | Landing, ecosystem overview |
+| Cyberia Wallet | <https://cyberia.church/wallet> | Non-custodial multichain wallet |
 | Bridge | <https://cyberia.church/bridge> (also <https://bridge.cyberia.church>) | Cross-chain transfers |
 | Ritual DEX | <https://swap.cyberia.church> | Swap, pools, farm, wrap |
 | In-app swap | <https://cyberia.church/swap> | Swap directly on the main site |
@@ -41,6 +52,4 @@ Cyberia is an EVM-compatible Layer 1 network. This guide explains how to set up 
 | Profile | <https://cyberia.church/profile> | Wallets, nickname, achievements |
 | Explorer | <https://explorer.cyberia.church> | Blocks, transactions, contracts (Blockscout) |
 
-## A note on trust
-
-The Cyberia bridge is operated by the project's relayer, not by a trustless light-client protocol. Contract addresses in this guide can and should be verified independently on the [explorer](https://explorer.cyberia.church). See [bridge.md](bridge.md#trust-model) for details.
+Every guide includes a clear completion check. Keep the transaction hash after each on-chain action; it is your receipt and opens directly in the explorer.

@@ -4,7 +4,7 @@ Singularity is the open-source monorepo for **Cyberia**: an experimental EVM Lay
 
 If you arrived from **pump.fun**: `CYBER.sol` is the Solana-facing community asset. The chain itself is **Cyberia** (`chainId 49406`) and uses native **CYBER** for gas. Singularity is the software stack that connects those surfaces: the website, bridge, DEX, launchpad, analytics, contracts, bots, and explorer configuration.
 
-**Using Cyberia rather than developing it?** Start with the **[User Guide](docs/user-guide/README.md)**: wallet setup, the bridge, the DEX, token addresses, and troubleshooting.
+**Using Cyberia rather than developing it?** Start with the **[User Guide](docs/user-guide/README.md)**: the multichain wallet, network setup, bridge, DEX, token addresses, and troubleshooting. The same Markdown is rendered as a searchable VitePress documentation site from `docs/`.
 
 ## What Is This?
 
@@ -30,6 +30,7 @@ Live or implemented surfaces in this repo:
 | Explorer | `https://explorer.cyberia.church` | Blockscout deployment config |
 | Main site / bridge app | `https://cyberia.church`, `https://bridge.cyberia.church` | Laravel + Vue/Inertia app |
 | DEX | `https://swap.cyberia.church` | Ritual/QuickSwap-derived React app |
+| Documentation | `https://docs.cyberia.church` | VitePress user and developer manuals |
 | Bridge | `backend/laravel`, `crypto/hardhat`, `crypto/anchor` | EVM/Solana bridge UI, contracts, relayer scripts |
 | Launchpad | `backend/laravel/resources/js/pages/Launchpad.vue` | Token launch UI + metadata storage |
 | Lending | `backend/laravel/resources/js/pages/Lending.vue` | EVM lending UI/contracts |
@@ -288,6 +289,8 @@ This subtree is **deployment configuration only**: it runs the official Blocksco
 ## Development Notes
 
 - User-facing documentation (wallet setup, bridge, DEX, tokens, profile, FAQ) lives in [`docs/user-guide/`](docs/user-guide/README.md).
+- The documentation site, developer guide, and maintenance rules live in [`docs/`](docs/index.md). Run it with `cd docs && npm install && npm run dev`; validate it with `npm run build`.
+- Staff operations and node-provisioning manuals remain source-controlled but are excluded from the public documentation build, navigation, search, and sitemap.
 - Agent/developer instructions live in [`AGENTS.md`](AGENTS.md).
 - Laravel-specific agent instructions live in [`backend/laravel/AGENTS.md`](backend/laravel/AGENTS.md).
 - Do not commit `.env` files, wallet keys, cookies, or private keys.
