@@ -73,8 +73,8 @@ These answer different questions and are deliberately separate:
 | System | Subject | Main documentation |
 | --- | --- | --- |
 | Site events | Visitors and site conversion | Operator console context |
-| Product analytics | Anonymous wallet installations and activation | [Product analytics](../product-analytics.md) |
-| Service monitoring | Runtime health and service usage | [Monitoring](../monitoring.md) |
+| Product analytics | Anonymous wallet installations and activation | Internal product manual |
+| Service monitoring | Runtime health and service usage | Internal operations manual |
 
 ### Explorer boundary
 

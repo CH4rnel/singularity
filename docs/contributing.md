@@ -10,10 +10,12 @@ Write for one primary audience:
 
 - `docs/user-guide/` — people using Cyberia applications and holding assets;
 - `docs/developers/` — contributors and external integrators;
-- `docs/operations/` plus the existing deep manuals — operators running the stack;
+- internal operations manuals — source-controlled for Cyberia staff and excluded from the public VitePress build;
 - `docs/growth/` and `docs/strategy/` — working artifacts, deliberately excluded from the published manual and search index.
 
 Do not organize user documentation around controllers, composables, or repository folders. Start with the task the reader is trying to complete, then link to code only when it helps them verify or extend the behavior.
+
+The maintained roadmap and page ownership matrix live in the [documentation plan](documentation-plan.md).
 
 ## Definition of done
 
@@ -63,5 +65,7 @@ The build must finish without dead internal links. Generated files under `.vitep
 3. Link it from the nearest overview page.
 4. Build the site.
 5. Check the mobile layout for wide tables and long code blocks.
+
+Internal operations pages and node provisioning material are intentionally excluded in `.vitepress/config.mts`. Keep employee runbooks in that excluded set unless an explicit publication review approves a public version.
 
 VitePress file names become URLs. Use lowercase kebab-case for new files and avoid moving published pages without adding a redirect at the hosting layer.

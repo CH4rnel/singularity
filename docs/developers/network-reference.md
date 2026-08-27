@@ -33,6 +33,59 @@
 
 Pass this object to the EIP-1193 `wallet_addEthereumChain` method when a wallet does not yet know Cyberia. Treat an error from the wallet as a user-visible action failure; do not silently fall back to signing on a different network.
 
+## Add or switch the network in a browser
+
+```ts
+const CYBERIA_CHAIN_ID = '0xC0FE';
+
+export async function connectCyberia(provider: {
+  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+}) {
+  const accounts = await provider.request({
+    method: 'eth_requestAccounts',
+  });
+
+  try {
+    await provider.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: CYBERIA_CHAIN_ID }],
+    });
+  } catch (error: any) {
+    if (error?.code !== 4902) throw error;
+
+    await provider.request({
+      method: 'wallet_addEthereumChain',
+      params: [{
+        chainId: CYBERIA_CHAIN_ID,
+        chainName: 'Cyberia',
+        nativeCurrency: {
+          name: 'CYBER',
+          symbol: 'CYBER',
+          decimals: 18,
+        },
+        rpcUrls: ['https://rpc.cyberia.church'],
+        blockExplorerUrls: ['https://explorer.cyberia.church'],
+      }],
+    });
+  }
+
+  const chainId = await provider.request({ method: 'eth_chainId' });
+  if (chainId !== CYBERIA_CHAIN_ID) {
+    throw new Error(`Expected ${CYBERIA_CHAIN_ID}, received ${chainId}`);
+  }
+
+  return accounts;
+}
+```
+
+Integration flow:
+
+1. Request accounts from the injected wallet provider.
+2. Ask the wallet to switch to `0xC0FE`.
+3. If the wallet reports error `4902`, add Cyberia using the canonical object.
+4. Read `eth_chainId` again before enabling a signing action.
+5. After broadcasting a transaction, wait for its receipt and link the hash to the explorer.
+
 ## Public asset identifiers
 
 | Asset | Identifier |

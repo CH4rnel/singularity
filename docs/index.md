@@ -4,8 +4,8 @@ titleTemplate: false
 
 hero:
   name: Cyberia Docs
-  text: Use, build, and operate the network
-  tagline: One manual for the Cyberia wallet, bridge, DEX, contracts, services, and the Singularity monorepo.
+  text: Learn Cyberia, one step at a time
+  tagline: Beginner-friendly guides for the wallet, CYBER, bridge and DEX, plus references for developers building on the network.
   actions:
     - theme: brand
       text: Start using Cyberia
@@ -25,14 +25,14 @@ features:
     linkText: Read the user guide
   - icon: ⌘
     title: Build on Cyberia
-    details: Understand the monorepo, run each component locally, integrate the EVM network, and use the inference API.
+    details: Understand the monorepo, run a product component locally, integrate the EVM network, test changes, and use the inference API.
     link: /developers/
     linkText: Open developer docs
   - icon: ◉
-    title: Operate the stack
-    details: Run the console, monitoring, analytics, releases, and the services that keep the ecosystem observable.
-    link: /operations/
-    linkText: Open operations docs
+    title: Understand CYBER
+    details: Learn why the network has a native coin, where CYBER is used, and how it differs from WCYBER and CYBER.sol.
+    link: /user-guide/cyber
+    linkText: Read about CYBER
 ---
 
 ## Network at a glance
@@ -45,8 +45,4 @@ features:
 | Native token | CYBER |
 | Explorer | <https://explorer.cyberia.church> |
 
-Cyberia is an experimental EVM Layer 1 and application stack. Production-facing applications and prototypes live in the same repository, so each guide states which surface it covers and where the source of truth lives.
-
-::: warning Verify before you transact
-Cyberia's bridge is relayer-operated, and some products are experimental. Verify token and contract addresses on the explorer and read the relevant trust model before moving significant value.
-:::
+Cyberia is an EVM-compatible Layer 1 and an ecosystem of connected applications. If this is your first time using cryptocurrency, begin with [Crypto basics](/user-guide/crypto-basics) and follow the beginner path in order.

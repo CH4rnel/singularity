@@ -17,19 +17,19 @@ You need native CYBER for gas. If you arrived via the bridge you received a smal
 Usually a few minutes end-to-end: source-chain confirmation plus relayer verification and payout. Cyberia-side payouts confirm in seconds; payouts on slower external chains take longer.
 
 **My bridge transfer shows "failed".**
-First check the destination address on the destination chain's explorer — a payout can time out in the UI yet still confirm on-chain, especially on chains with slow RPCs. If the funds genuinely didn't arrive, the deposit is recorded against your request and the transfer can be re-run by the operator; your deposit is not lost.
+First check the destination address on the destination chain's explorer, because the on-chain transaction may confirm after the page's monitoring window. If the destination transaction is not present, keep the request ID and source transaction hash so the recorded request can be reviewed.
 
 **My request shows "expired".**
 No deposit was detected within the monitoring window. If you did send the deposit in time, it is still honored — reopen the request/claim flow, or check back; detected late deposits are credited.
 
 **Why is a route greyed out ("Coming soon")?**
-The corridor is visible but not yet open for submissions — see the [route table](bridge.md#supported-routes) for what's live.
+The corridor is prepared in the bridge but is not accepting new submissions at that moment. Use the source, destination, and asset selectors to see the [currently available combinations](bridge.md#supported-routes).
 
 **What are the fees?**
 Flat ~$0.10 on stablecoins only, small network-fee retention on native-coin payouts, zero bridge fee otherwise — details in [bridge.md](bridge.md#fees). Source-chain gas is always yours.
 
-**Is the bridge trustless?**
-No. It is relayer-operated by the project — read the [trust model](bridge.md#trust-model) before moving significant value.
+**How does the bridge complete a transfer?**
+The Cyberia relayer verifies the confirmed source transaction and performs the matching destination payout. A completed request shows both transaction hashes; see [How settlement is verified](bridge.md#how-settlement-is-verified).
 
 ## DEX
 

@@ -2,10 +2,14 @@ import { defineConfig } from 'vitepress';
 
 const userGuide = [
     { text: 'Overview', link: '/user-guide/' },
+    { text: 'Crypto basics', link: '/user-guide/crypto-basics' },
     { text: 'Getting started', link: '/user-guide/getting-started' },
     { text: 'Cyberia Wallet', link: '/user-guide/wallet' },
+    { text: 'Why CYBER exists', link: '/user-guide/cyber' },
     { text: 'Bridge', link: '/user-guide/bridge' },
     { text: 'DEX and liquidity', link: '/user-guide/dex' },
+    { text: 'Explore the ecosystem', link: '/user-guide/ecosystem' },
+    { text: 'Apps and downloads', link: '/user-guide/apps' },
     { text: 'Tokens and contracts', link: '/user-guide/tokens' },
     { text: 'Account and profile', link: '/user-guide/account-and-profile' },
     { text: 'FAQ and troubleshooting', link: '/user-guide/faq' },
@@ -14,19 +18,12 @@ const userGuide = [
 const developerGuide = [
     { text: 'Developer overview', link: '/developers/' },
     { text: 'Architecture', link: '/developers/architecture' },
+    { text: 'Component guide', link: '/developers/components' },
     { text: 'Local development', link: '/developers/local-development' },
-    { text: 'Run a Cyberia node', link: '/developers/running-a-node' },
+    { text: 'Testing and verification', link: '/developers/testing' },
     { text: 'Network reference', link: '/developers/network-reference' },
     { text: 'Inference API', link: '/ai-api' },
     { text: 'LainOS and Wired', link: '/lainos-wired' },
-];
-
-const operationsGuide = [
-    { text: 'Operations overview', link: '/operations/' },
-    { text: 'Operator console', link: '/console' },
-    { text: 'Service monitoring', link: '/monitoring' },
-    { text: 'Product analytics', link: '/product-analytics' },
-    { text: 'Release process', link: '/RELEASES' },
 ];
 
 export default defineConfig({
@@ -34,7 +31,7 @@ export default defineConfig({
     title: 'Cyberia Docs',
     titleTemplate: ':title · Cyberia Docs',
     description:
-        'User, developer, and operator documentation for the Cyberia network and Singularity monorepo.',
+        'User and developer documentation for the Cyberia network and Singularity monorepo.',
     sitemap: {
         hostname: 'https://docs.cyberia.church',
     },
@@ -43,9 +40,18 @@ export default defineConfig({
     rewrites: {
         'user-guide/README.md': 'user-guide/index.md',
     },
-    // Campaign drafts and dated research artifacts belong in the repository,
-    // but are not part of the maintained product manual or its search index.
-    srcExclude: ['growth/**', 'strategy/**'],
+    // Internal manuals and working artifacts remain source-controlled for the
+    // team, but are not emitted into the public site or its search index.
+    srcExclude: [
+        'growth/**',
+        'strategy/**',
+        'operations/**',
+        'console.md',
+        'monitoring.md',
+        'product-analytics.md',
+        'RELEASES.md',
+        'developers/running-a-node.md',
+    ],
     head: [
         ['meta', { name: 'theme-color', content: '#9d6cff' }],
         ['meta', { name: 'color-scheme', content: 'dark light' }],
@@ -55,7 +61,6 @@ export default defineConfig({
         nav: [
             { text: 'User guide', link: '/user-guide/' },
             { text: 'Developers', link: '/developers/' },
-            { text: 'Operations', link: '/operations/' },
             { text: 'AI API', link: '/ai-api' },
             {
                 text: 'Live apps',
@@ -75,18 +80,15 @@ export default defineConfig({
             '/developers/': [
                 { text: 'Build on Cyberia', items: developerGuide },
             ],
-            '/operations/': [
-                { text: 'Run Cyberia', items: operationsGuide },
-            ],
             '/': [
                 { text: 'Use Cyberia', collapsed: false, items: userGuide },
                 { text: 'Build', collapsed: true, items: developerGuide },
-                { text: 'Operate', collapsed: true, items: operationsGuide },
                 {
                     text: 'Project',
                     collapsed: true,
                     items: [
                         { text: 'Documentation guide', link: '/contributing' },
+                        { text: 'Documentation plan', link: '/documentation-plan' },
                         { text: 'Good first issues', link: '/GOOD_FIRST_ISSUES' },
                     ],
                 },

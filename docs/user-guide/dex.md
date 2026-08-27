@@ -7,11 +7,21 @@ There are two trading surfaces, backed by the same on-chain QuickSwap-style (Uni
 
 Both need a connected EVM wallet on the Cyberia network and a little CYBER for gas ([getting started](getting-started.md)).
 
+## Before you swap
+
+1. Confirm the wallet is on Cyberia, chain ID `49406`.
+2. Confirm the input token balance and a separate CYBER balance for gas.
+3. If you imported a token manually, compare its contract with [Tokens and contracts](tokens.md).
+4. Decide the largest price impact you are comfortable accepting before opening the wallet confirmation.
+
 ## Swapping
 
-1. Connect your wallet and pick the tokens and amount. Native CYBER can be traded directly — the router wraps/unwraps it automatically.
-2. Review the quote: rate, price impact, and the route. The router searches across **all** liquidity pools with multi-hop routes (up to 5 hops), so pairs without a direct pool still trade through intermediate tokens.
-3. For ERC-20 inputs, approve the token once, then confirm the swap. With ~1-second blocks, swaps confirm almost immediately.
+1. Connect your wallet and pick the input token, output token, and amount. Native CYBER can be traded directly — the router wraps or unwraps it automatically.
+2. Review the quote: expected output, rate, price impact, minimum received, and route. The router searches across liquidity pools with multi-hop routes, so pairs without a direct pool can trade through intermediate tokens.
+3. For an ERC-20 input, confirm the approval transaction when requested and wait for it to complete.
+4. Return to the quote, choose **Swap**, and review the final amounts in the wallet.
+5. Confirm the swap transaction.
+6. Open its transaction hash and confirm the output token in the wallet or explorer.
 
 Tips:
 
@@ -26,7 +36,16 @@ On the **Pools** page (Ritual) or **/liquidity** (main site):
 2. You receive LP tokens representing your share; trading fees accrue to the pool.
 3. Remove liquidity any time by redeeming the LP tokens.
 
-Standard AMM caveats apply — impermanent loss is real; pool APR estimates shown in the UI are based on recent trading volume and can change quickly. Very small ("dust") pools may show no APR at all.
+The value of a liquidity position follows the pool's token ratio, and displayed APR uses recent trading activity. Review the current pair ratio and pool figures before confirming a deposit.
+
+To add liquidity:
+
+1. Open the pool and choose **Add liquidity**.
+2. Enter one token amount; the interface calculates the matching amount at the current pool ratio.
+3. Approve each ERC-20 that the router is not yet allowed to use.
+4. Review the two deposit amounts and the slippage setting.
+5. Confirm the liquidity transaction.
+6. Verify that the LP balance or position appears on the pools page.
 
 Providing liquidity earns the on-chain **Liquidity Farmer** achievement; a first swap earns **First Exchange** ([profile](account-and-profile.md#achievements)).
 

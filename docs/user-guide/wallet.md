@@ -10,12 +10,15 @@ Write the phrase down offline and verify the backup before funding the wallet. C
 
 ## Create or restore a wallet
 
-1. Open <https://cyberia.church/wallet> and choose to create a new wallet or restore an existing BIP-39 phrase.
-2. Set a strong vault password. This password protects the encrypted copy on this device; it is not an account with a server-side reset.
-3. Record the recovery phrase offline in the order shown.
-4. Confirm the backup before receiving funds.
+1. Open <https://cyberia.church/wallet> and choose **Create wallet** or **Import wallet**.
+2. For a new wallet, record the recovery phrase offline in the order shown.
+3. Complete the backup confirmation, or validate the phrase entered during import.
+4. Set a strong vault password. This password protects the encrypted copy on this device; it is not an account with a server-side reset.
+5. Unlock the vault and select the network you want to use.
 
 You can derive additional numbered accounts from the same phrase. Imported phrases and private keys are separate accounts and need their own backups; they are not covered by the primary recovery phrase.
+
+Completion check: lock and unlock the vault once, then compare the first and last characters of its receive address with the address you recorded.
 
 ## Built-in networks
 
@@ -32,17 +35,23 @@ You can derive additional numbered accounts from the same phrase. Imported phras
 
 Every built-in EVM network uses the same BIP-44 account and therefore displays the same `0x` address. Solana, Monero, Bitcoin, and Litecoin use their own derivation paths and address formats.
 
-## Receive and send
+## Receive
 
-To receive, choose a network, copy its full address, and confirm that the sender selected the same network. An address that looks valid on another chain does not make the transfer compatible.
+1. Unlock the wallet and choose the destination network.
+2. Open **Receive**.
+3. Copy the full address or show its QR code.
+4. Confirm that the sender selected the same network and asset.
+5. Start with a small test transfer.
+6. Open the transaction hash in that network's explorer and wait for confirmation.
 
-To send:
+## Send
 
 1. Select the network or token.
 2. Paste and verify the recipient address.
 3. Enter the amount and choose a fee tier when offered.
 4. Read the final signing sentence, then hold the confirmation control to sign and broadcast.
 5. Keep the transaction hash until the transfer is confirmed.
+6. Open the hash from the wallet history and compare the destination and amount.
 
 ERC-20 tokens share the EVM network's address and require that network's native coin for gas. For example, holding USDC on Cyberia does not pay a fee denominated in CYBER.
 
