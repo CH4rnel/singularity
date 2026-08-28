@@ -25,11 +25,11 @@ const glyph: Record<string, string> = {
 </script>
 
 <template>
-    <details class="contact-ways" @click.stop>
-        <summary class="mk-btn mk-act contact-ways__summary">
+    <div class="contact-ways" @click.stop>
+        <span class="mk-btn mk-act contact-ways__summary">
             {{ label }}
             <span class="contact-ways__count">{{ ways.length }}</span>
-        </summary>
+        </span>
         <div class="contact-ways__menu" role="group" :aria-label="label">
             <a
                 v-for="way in ways"
@@ -42,12 +42,14 @@ const glyph: Record<string, string> = {
                 :aria-label="way.label"
                 @click.stop
             >
-                <span :class="`contact-ways__glyph contact-ways__glyph--${way.kind}`">
+                <span
+                    :class="`contact-ways__glyph contact-ways__glyph--${way.kind}`"
+                >
                     {{ glyph[way.kind] ?? glyph.link }}
                 </span>
             </a>
         </div>
-    </details>
+    </div>
 </template>
 
 <style scoped>
@@ -60,10 +62,6 @@ const glyph: Record<string, string> = {
     width: 100%;
     list-style: none;
     cursor: pointer;
-}
-
-.contact-ways__summary::-webkit-details-marker {
-    display: none;
 }
 
 .contact-ways__count {
@@ -90,12 +88,12 @@ const glyph: Record<string, string> = {
     opacity: 0;
     pointer-events: none;
     transform: translateY(-3px);
-    transition: opacity 120ms ease, transform 120ms ease;
+    transition:
+        opacity 120ms ease,
+        transform 120ms ease;
 }
 
-.contact-ways[open] .contact-ways__menu,
-.contact-ways:hover .contact-ways__menu,
-.contact-ways:focus-within .contact-ways__menu {
+.contact-ways:hover .contact-ways__menu {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
@@ -110,7 +108,10 @@ const glyph: Record<string, string> = {
     color: var(--mk-dim);
     background: rgba(232, 236, 236, 0.035);
     text-decoration: none;
-    transition: border-color 100ms ease, color 100ms ease, background 100ms ease;
+    transition:
+        border-color 100ms ease,
+        color 100ms ease,
+        background 100ms ease;
 }
 
 .contact-ways__link:hover,

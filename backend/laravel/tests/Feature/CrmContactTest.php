@@ -477,6 +477,32 @@ test('a contact can be updated', function () {
     expect($contact->refresh()->status)->toBe('customer');
 });
 
+test('an operator records how much a lead bought and sold', function () {
+    $user = User::factory()->crmAdmin()->create();
+    $contact = CrmContact::factory()->create(['status' => 'new']);
+
+    $this->actingAs($user)
+        ->put(route('crm.update', $contact), [
+            'status' => 'customer',
+            'bought_usd' => '1250.50',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($user)
+        ->put(route('crm.update', $contact), [
+            'status' => 'sold',
+            'sold_usd' => '800.25',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($contact->refresh())
+        ->status->toBe('sold')
+        ->bought_usd->toBe('1250.50')
+        ->sold_usd->toBe('800.25');
+});
+
 test('editing the record corrects every field the operator was told', function () {
     $user = User::factory()->crmAdmin()->create();
     $contact = CrmContact::factory()->create([

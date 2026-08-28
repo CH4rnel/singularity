@@ -94,6 +94,8 @@ class PersonDossier
                 'solana_address' => $contact->solana_address,
                 'type' => $contact->type,
                 'status' => $contact->status,
+                'bought_usd' => $contact->bought_usd,
+                'sold_usd' => $contact->sold_usd,
                 'source' => $contact->source,
                 'tags' => $contact->tags ?? [],
                 'created_at' => $contact->created_at?->toIso8601String(),

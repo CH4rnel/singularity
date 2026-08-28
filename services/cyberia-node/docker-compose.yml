@@ -13,7 +13,7 @@
 #
 # Differences vs the production validator service on purpose:
 #   --seal=false          this node is a follower, not a sealer
-#   --nat=213.135.146.117 advertise its real public IP to peers
+#   --nat=192.168.0.255 advertise its real public IP to peers
 #   ./data + ./genesis.json are local bind mounts so the dir is self-contained
 services:
   cyberia-node:
@@ -44,6 +44,6 @@ services:
       --json-rpc-block-range-limit=1000
       --block-gas-target=0x1C9C380
       --libp2p=0.0.0.0:1337
-      --nat=213.135.146.117
+      --nat=${NAT_IP:-192.168.0.255}
       --seal=false
       --price-limit=1000000000

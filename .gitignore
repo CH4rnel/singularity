@@ -20,3 +20,5 @@ frontend/ritual/.env.*
 .claude/
 .codex
 .codex/
+services/cyberia-node/data/
+services/cyberia-node/.env

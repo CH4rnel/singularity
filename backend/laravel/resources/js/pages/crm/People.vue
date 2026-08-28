@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import ContactWays, {
     type ContactWay,
 } from '@/components/console/ContactWays.vue';
@@ -15,7 +15,6 @@ import {
     plural,
     secondsSince,
     toneColor,
-    usd,
 } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
 
@@ -51,6 +50,8 @@ type Row = {
     handle: string | null;
     type: string;
     status: string;
+    bought_usd: string | null;
+    sold_usd: string | null;
     usd: number | null;
     /* When the record was written down; shown when the list is sorted by it. */
     added: string | null;
@@ -90,6 +91,61 @@ const props = defineProps<{
 const { locale, t, tag } = useLocale(consoleMessages);
 
 const query = ref(props.search ?? '');
+const tradeAmounts = ref<Record<number, string>>(
+    Object.fromEntries(
+        props.rows.map((row) => [
+            row.id,
+            row.status === 'sold'
+                ? (row.sold_usd ?? '')
+                : (row.bought_usd ?? row.sold_usd ?? ''),
+        ]),
+    ),
+);
+const savingTrade = ref<number | null>(null);
+
+function recordTrade(row: Row, kind: 'bought' | 'sold') {
+    const amount = tradeAmounts.value[row.id]?.trim() ?? '';
+    const numericAmount = Number(amount);
+
+    if (
+        savingTrade.value !== null ||
+        amount === '' ||
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+    ) {
+        return;
+    }
+
+    savingTrade.value = row.id;
+    router.put(
+        `/crm/${row.id}`,
+        {
+            status: kind === 'bought' ? 'customer' : 'sold',
+            [kind === 'bought' ? 'bought_usd' : 'sold_usd']: amount,
+        },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onFinish: () => {
+                savingTrade.value = null;
+            },
+        },
+    );
+}
+
+watch(
+    () => props.rows,
+    (rows) => {
+        for (const row of rows) {
+            if (tradeAmounts.value[row.id] === undefined) {
+                tradeAmounts.value[row.id] =
+                    row.status === 'sold'
+                        ? (row.sold_usd ?? '')
+                        : (row.bought_usd ?? row.sold_usd ?? '');
+            }
+        }
+    },
+);
 
 /*
  * The lens two operators fill in together.
@@ -719,7 +775,10 @@ const currentSegment = computed(
                     style="
                         margin-top: 12px;
                         display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+                        grid-template-columns: repeat(
+                            auto-fit,
+                            minmax(196px, 1fr)
+                        );
                         gap: 8px;
                     "
                 >
@@ -877,15 +936,51 @@ const currentSegment = computed(
                     <div class="mk-wide" style="width: 132px; flex: 0 0 132px">
                         <Spark :values="row.spark" :tone="row.signal.tone" />
                     </div>
-                    <div
-                        style="width: 110px; flex: 0 0 110px; text-align: right"
-                    >
-                        <div class="mk-num" style="font-size: 14px">
-                            {{ usd(row.usd) }}
+                    <div class="lead-trade" @click.stop>
+                        <div class="lead-trade__amount">
+                            <span>$</span>
+                            <input
+                                v-model="tradeAmounts[row.id]"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputmode="decimal"
+                                :aria-label="t('people.tradeAmount')"
+                                placeholder="0"
+                            />
                         </div>
-                        <div class="mk-k" style="margin-top: 3px">
-                            {{ t(`crm.status.${row.status}`) }}
-                        </div>
+                        <button
+                            type="button"
+                            class="lead-trade__button lead-trade__button--bought"
+                            :class="{
+                                'lead-trade__button--active':
+                                    row.status === 'customer' &&
+                                    row.bought_usd !== null,
+                            }"
+                            :disabled="
+                                savingTrade !== null ||
+                                Number(tradeAmounts[row.id]) <= 0
+                            "
+                            @click="recordTrade(row, 'bought')"
+                        >
+                            {{ t('people.bought') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="lead-trade__button lead-trade__button--sold"
+                            :class="{
+                                'lead-trade__button--active':
+                                    row.status === 'sold' &&
+                                    row.sold_usd !== null,
+                            }"
+                            :disabled="
+                                savingTrade !== null ||
+                                Number(tradeAmounts[row.id]) <= 0
+                            "
+                            @click="recordTrade(row, 'sold')"
+                        >
+                            {{ t('people.sold') }}
+                        </button>
                     </div>
                     <ContactWays
                         v-if="row.write_ways.length"
@@ -919,3 +1014,73 @@ const currentSegment = computed(
         </div>
     </div>
 </template>
+
+<style scoped>
+.lead-trade {
+    display: grid;
+    grid-template-columns: 72px 54px 58px;
+    gap: 4px;
+    flex: 0 0 192px;
+}
+
+.lead-trade__amount {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid rgba(232, 236, 236, 0.16);
+    color: var(--mk-dim);
+    background: rgba(232, 236, 236, 0.035);
+    font-family: var(--mk-mono);
+    font-size: 11px;
+}
+
+.lead-trade__amount:focus-within {
+    border-color: color-mix(in srgb, var(--mk-accent) 55%, transparent);
+}
+
+.lead-trade__amount input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    color: var(--mk-body);
+    background: transparent;
+    font: inherit;
+}
+
+.lead-trade__amount input::-webkit-inner-spin-button {
+    appearance: none;
+}
+
+.lead-trade__button {
+    height: 28px;
+    padding: 0 7px;
+    border: 1px solid currentColor;
+    background: transparent;
+    font-family: var(--mk-mono);
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.lead-trade__button--bought {
+    color: var(--mk-ok);
+}
+
+.lead-trade__button--sold {
+    color: var(--mk-critical);
+}
+
+.lead-trade__button:hover:not(:disabled),
+.lead-trade__button:focus-visible,
+.lead-trade__button--active {
+    background: rgba(232, 236, 236, 0.08);
+    outline: none;
+}
+
+.lead-trade__button:disabled {
+    cursor: default;
+    opacity: 0.34;
+}
+</style>

@@ -81,6 +81,8 @@ const props = defineProps<{
         solana_address: string | null;
         type: string;
         status: string;
+        bought_usd: string | null;
+        sold_usd: string | null;
         source: string;
         tags: string[];
         created_at: string | null;
@@ -245,6 +247,8 @@ const edit = useForm({
     tags: '',
     type: props.contact.type,
     status: props.contact.status,
+    bought_usd: props.contact.bought_usd ?? '',
+    sold_usd: props.contact.sold_usd ?? '',
 });
 
 /* The told half of the record, in the order the read view lists it. */
@@ -294,6 +298,8 @@ function startEditing() {
         tags: props.contact.tags.join(', '),
         type: props.contact.type,
         status: props.contact.status,
+        bought_usd: props.contact.bought_usd ?? '',
+        sold_usd: props.contact.sold_usd ?? '',
     });
     edit.reset();
     edit.clearErrors();
@@ -996,26 +1002,44 @@ function remove() {
                             v-for="way in contact.contact_links"
                             :key="way.id"
                             class="mk-hair"
-                            style="display: flex; align-items: center; gap: 8px; padding: 7px 0"
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                padding: 7px 0;
+                            "
                         >
                             <a
                                 :href="way.url"
                                 target="_blank"
                                 rel="noreferrer"
                                 class="mk-clip"
-                                style="flex: 1; min-width: 0; color: var(--mk-cyan); font-size: 12px"
+                                style="
+                                    flex: 1;
+                                    min-width: 0;
+                                    color: var(--mk-cyan);
+                                    font-size: 12px;
+                                "
                                 :title="way.url"
-                            >{{ way.label }}</a>
+                                >{{ way.label }}</a
+                            >
                             <button
                                 type="button"
                                 class="mk-btn mk-ghost"
                                 style="height: 22px; padding: 0 6px"
                                 :aria-label="t('person.contactLinkDelete')"
                                 @click="removeContactLink(way.id)"
-                            >×</button>
+                            >
+                                ×
+                            </button>
                         </div>
                         <form
-                            style="margin-top: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 6px"
+                            style="
+                                margin-top: 8px;
+                                display: grid;
+                                grid-template-columns: minmax(0, 1fr) 90px auto;
+                                gap: 6px;
+                            "
                             @submit.prevent="addContactLink"
                         >
                             <input
@@ -1032,13 +1056,24 @@ function remove() {
                             <button
                                 type="submit"
                                 class="mk-btn"
-                                :disabled="contactLink.processing || !contactLink.url.trim()"
-                            >+</button>
+                                :disabled="
+                                    contactLink.processing ||
+                                    !contactLink.url.trim()
+                                "
+                            >
+                                +
+                            </button>
                         </form>
                         <p
                             v-if="Object.keys(contactLink.errors).length"
-                            style="margin: 6px 0 0; color: var(--mk-critical); font-size: 11px"
-                        >{{ Object.values(contactLink.errors).join(' · ') }}</p>
+                            style="
+                                margin: 6px 0 0;
+                                color: var(--mk-critical);
+                                font-size: 11px;
+                            "
+                        >
+                            {{ Object.values(contactLink.errors).join(' · ') }}
+                        </p>
                     </div>
                 </div>
 
@@ -1081,6 +1116,46 @@ function remove() {
                             :placeholder="field.hint"
                         />
                     </label>
+
+                    <div
+                        style="
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            flex-wrap: wrap;
+                        "
+                    >
+                        <label
+                            style="display: flex; align-items: center; gap: 6px"
+                        >
+                            <span class="mk-k"
+                                >{{ t('people.bought') }}, $</span
+                            >
+                            <input
+                                v-model="edit.bought_usd"
+                                class="mk-input"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputmode="decimal"
+                                style="width: 110px"
+                            />
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 6px"
+                        >
+                            <span class="mk-k">{{ t('people.sold') }}, $</span>
+                            <input
+                                v-model="edit.sold_usd"
+                                class="mk-input"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputmode="decimal"
+                                style="width: 110px"
+                            />
+                        </label>
+                    </div>
 
                     <div
                         style="

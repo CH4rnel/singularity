@@ -26,6 +26,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $user_id
  * @property string|null $cyber_balance
  * @property string|null $cyber_sol_balance
+ * @property string|null $bought_usd
+ * @property string|null $sold_usd
  * @property array<int, string>|null $tags
  * @property array<string, mixed>|null $metadata
  * @property Carbon|null $last_synced_at
@@ -71,6 +73,8 @@ class CrmContact extends Model
         'user_id',
         'cyber_balance',
         'cyber_sol_balance',
+        'bought_usd',
+        'sold_usd',
         'tags',
         'metadata',
         'last_synced_at',
@@ -83,6 +87,8 @@ class CrmContact extends Model
             'metadata' => 'array',
             'cyber_balance' => 'decimal:18',
             'cyber_sol_balance' => 'decimal:6',
+            'bought_usd' => 'decimal:2',
+            'sold_usd' => 'decimal:2',
             'last_synced_at' => 'datetime',
         ];
     }

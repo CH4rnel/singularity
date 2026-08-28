@@ -34,6 +34,8 @@ class UpdateCrmContactRequest extends FormRequest
             ...$this->handleRules($contact instanceof CrmContact ? $contact->id : null),
             'type' => ['sometimes', Rule::in(CrmContact::TYPES)],
             'status' => ['sometimes', Rule::in(CrmContact::STATUSES)],
+            'bought_usd' => ['sometimes', 'nullable', 'decimal:0,2', 'min:0', 'max:999999999999999999.99'],
+            'sold_usd' => ['sometimes', 'nullable', 'decimal:0,2', 'min:0', 'max:999999999999999999.99'],
         ];
     }
 

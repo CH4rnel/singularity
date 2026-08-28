@@ -254,6 +254,8 @@ class PeopleLens
                 'handle' => $contact->displayHandle(),
                 'type' => $contact->type,
                 'status' => $contact->status,
+                'bought_usd' => $contact->bought_usd,
+                'sold_usd' => $contact->sold_usd,
                 'usd' => $price === null ? null : round(($cyber + $sol) * $price),
                 // When this record was written down, which is the one fact
                 // about a person the lens could not show and the one an
