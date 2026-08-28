@@ -101,7 +101,7 @@ fi
 
 if changed docs services/blockscout/docker-compose/proxy services/blockscout/docker-compose/services/nginx.yml; then
     echo "==> verify docs.cyberia.church"
-    curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+    curl --fail --silent --show-error --retry 5 --retry-connrefused --retry-delay 2 \
         --max-time 20 https://docs.cyberia.church/ >/dev/null
 fi
 
