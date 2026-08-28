@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\SolanaRpcController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAuthController;
+use App\Http\Controllers\Api\WalletCrosschainController;
 use App\Http\Controllers\Api\WalletGasController;
 use App\Http\Controllers\Api\WalletIpfsController;
 use App\Http\Middleware\AuthenticateAiApiKey;
@@ -43,6 +44,22 @@ Route::prefix('wallet')->group(function () {
     // can only ever arrive at the address that was named. See GasSponsorService.
     Route::get('gas', [WalletGasController::class, 'status'])->middleware('throttle:60,1');
     Route::post('gas/claim', [WalletGasController::class, 'claim'])->middleware('throttle:10,1');
+
+    /*
+     * Cross-chain swaps. Cyberia has no liquidity on other chains and does not
+     * pretend to: a router quotes the whole route and delivers it, and this
+     * host's only part is composing the request — Cyberia's fee is a field in
+     * it, and a field a browser writes is a field a browser can delete. No key
+     * lives behind these routes and nothing here signs.
+     *
+     * The quote is throttled harder than the catalogue: the lists are cached
+     * and identical for every visitor, while a quote is a live call to the
+     * router for one person's amount.
+     */
+    Route::get('crosschain', [WalletCrosschainController::class, 'index'])->middleware('throttle:60,1');
+    Route::get('crosschain/tokens', [WalletCrosschainController::class, 'tokens'])->middleware('throttle:60,1');
+    Route::post('crosschain/quote', [WalletCrosschainController::class, 'quote'])->middleware('throttle:30,1');
+    Route::get('crosschain/status', [WalletCrosschainController::class, 'status'])->middleware('throttle:60,1');
 });
 
 /*

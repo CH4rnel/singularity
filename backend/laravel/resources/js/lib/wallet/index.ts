@@ -99,16 +99,34 @@ export const deriveAccounts = (
             record.index,
         );
 
+        /**
+         * One derivation per key, not per network.
+         *
+         * Two chains of the same family walking the same path derive the same
+         * address by definition — that is what "every EVM network shows one
+         * address" means, and the path carries the coin type that makes the
+         * Bitcoin family differ. Without this the catalogue turns one unlock
+         * into 120 identical BIP-32 walks (~500ms), and every network switch
+         * pays it again.
+         */
+        const derived = new Map<string, string>();
+
         return walletChains().flatMap((chain) => {
+            const path = chain.path(record.index);
+            const key = `${chain.family}:${path}`;
+
             // A chain that cannot answer for this account number is skipped
             // rather than rendered broken: Monero numbers subaddresses and
             // takes every index, but a custom fork could refuse one.
             try {
+                const address = derived.get(key) ?? chain.derive(source);
+                derived.set(key, address);
+
                 return [
                     describe(
                         chain,
-                        chain.derive(source),
-                        chain.path(record.index),
+                        address,
+                        path,
                         record.kind,
                         chain.capabilities,
                     ),
@@ -188,6 +206,7 @@ export {
     formatUnits,
     nativeSendGas,
     parseUnits,
+    setCatalogueWalletChains,
     setCustomWalletChains,
     walletChain,
     walletChains,
@@ -221,6 +240,18 @@ export type {
     CustomNetworkProblem,
     CustomUtxoNetwork,
 } from '@/lib/wallet/customChains';
+export {
+    NETWORK_CATALOGUE,
+    catalogueCapabilities,
+    catalogueMark,
+    catalogueNetwork,
+    catalogueWalletChain,
+    catalogueWalletChains,
+    readEnabledNetworks,
+    searchCatalogue,
+    writeEnabledNetworks,
+} from '@/lib/wallet/catalogue';
+export type { CatalogueNetwork } from '@/lib/wallet/catalogue';
 export type { UtxoAddressType } from '@/lib/wallet/utxo';
 export {
     ERC20_TRANSFER_GAS_CAP,

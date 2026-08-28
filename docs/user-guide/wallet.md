@@ -35,6 +35,19 @@ Completion check: lock and unlock the vault once, then compare the first and las
 
 Every built-in EVM network uses the same BIP-44 account and therefore displays the same `0x` address. Solana, Monero, Bitcoin, and Litecoin use their own derivation paths and address formats.
 
+## More networks
+
+The wallet also ships knowing over 120 further EVM networks — Ethereum, Arbitrum, Optimism, Polygon, Avalanche, zkSync, Linea, Scroll, Mantle, Blast, Gnosis, Celo and so on. They start switched **off**. Open **Networks** from the portfolio to search the list by name, ticker or chain ID and switch on the ones you use.
+
+Switching a network on does not create an account. Your recovery phrase already derives the same `0x` address on all of them; what changes is that the portfolio draws a card for that network and reads its balance on every refresh. That is the cost of switching one on, and it is why the list does not start fully enabled.
+
+Each row states what that network can do here before you switch it on:
+
+- **balances · tokens · history** — the network has a public keyless index, so token balances and transfers appear in the wallet.
+- **balances only** — no such index exists for that network. The wallet reads the balance and can send; tokens must be added by contract address, and history is read in that network's own explorer.
+
+Every endpoint in this list was checked against the live network before shipping: the RPC has to answer a browser and report its own chain ID. Endpoints can still go down or change hands — treat an unreachable network as an endpoint problem, not a lost account, and test with a small amount after switching one on.
+
 ## Receive
 
 1. Unlock the wallet and choose the destination network.
@@ -70,6 +83,28 @@ The wallet can add:
 
 Custom networks are marked as unverified. Their endpoints can observe requests and return misleading chain data, so use infrastructure you trust and verify the chain ID independently. Removing a custom network forgets its configuration; it does not remove the derived account or move funds.
 
+## Cross-chain swap
+
+The **swap** screen trades on Cyberia's own liquidity. A **cross-chain swap** is the other case — spending an asset on one network to receive a different asset on another, for example USDC on Base for SOL on Solana. Cyberia holds no liquidity on other chains, so the wallet asks an external routing service that does.
+
+What happens when you confirm:
+
+1. You sign one deposit transaction on the network you are spending from. Depending on the token, an allowance transaction may go first.
+2. The deposit goes to the routing service's contract on that network — not to Cyberia.
+3. The routing service delivers the destination asset to the recipient address.
+
+Before you sign, the screen shows what you will receive, the minimum guaranteed amount, the routing service's fee, Cyberia's fee, and the estimated delivery time. **There is no cancel between the deposit and the delivery.**
+
+Fees: Cyberia takes a percentage of the amount you send, deducted from the input on the source chain. The figure on the review screen is the one contained in the quote from the routing service, which is what will actually be charged. If the routing service does not apply Cyberia's fee to a particular route, the screen says so and you are not charged it.
+
+Limits, and the reasons for them:
+
+- The **source** must be an EVM network you have switched on in this wallet — that is where the wallet gets both an endpoint to broadcast through and a balance you have already seen.
+- The **destination** must be a network whose addresses this wallet can validate: any EVM network, Solana, or Bitcoin. Other networks the routing service serves are listed with that as the reason. A cross-chain swap cannot be recalled, so the wallet will not send to an address format it cannot check.
+- The recipient defaults to your own address on the destination network. You can change it; the screen says plainly when the recipient is not you.
+
+After signing, the screen keeps the transaction hashes and polls the routing service for the outcome. Closing the screen does not stop the route.
+
 ## Security checklist
 
 - Keep the phrase offline and never paste it into support chats, bridge forms, websites, or issue reports.
@@ -82,4 +117,4 @@ Custom networks are marked as unverified. Their endpoints can observe requests a
 
 ## What the server can see
 
-Normal RPC providers can see the public addresses they are asked about, just as any blockchain explorer can. Cyberia's Laravel app supplies public configuration, price quotes, and a Solana RPC relay, but signing stays in the browser. Features that explicitly require an address or proof—such as account linking or holders-only chat—ask before sending that public address to the server.
+Normal RPC providers can see the public addresses they are asked about, just as any blockchain explorer can. Cyberia's Laravel app supplies public configuration, price quotes, and a Solana RPC relay, but signing stays in the browser. Cross-chain quotes are requested through Cyberia's server, which sees the addresses and amounts in a quote and adds Cyberia's fee to the request; it holds no key and signs nothing. Features that explicitly require an address or proof—such as account linking or holders-only chat—ask before sending that public address to the server.
