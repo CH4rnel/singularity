@@ -1,0 +1,25 @@
+# Cyberia Arcade SDK
+
+Reusable infrastructure for blockchain games on Cyberia Network. The first
+reference game will be Rock–Paper–Scissors with commit–reveal moves.
+
+## Requirements
+
+- Node.js 22 or newer
+- pnpm 11.3.0
+
+## Development
+
+```bash
+pnpm install
+pnpm build
+pnpm test
+pnpm lint
+```
+
+The default local Hardhat network uses chain ID `31337`. The `cyberia` network
+uses chain ID `49406` and `https://rpc.cyberia.church` unless
+`CYBERIA_RPC_URL` overrides it. Copy `.env.example` to `.env` and set
+`CYBERIA_PRIVATE_KEY` only when a script needs to sign a transaction.
+
+Never commit `.env` or a private key.
