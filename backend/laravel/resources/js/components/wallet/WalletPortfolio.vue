@@ -45,6 +45,7 @@ const emit = defineEmits<{
     send: [];
     receive: [];
     swap: [];
+    crosschain: [];
     addNetwork: [];
     tokens: [];
     analytics: [];
@@ -538,6 +539,34 @@ const recent = computed(() =>
             </button>
         </div>
 
+        <!--
+          The other kind of swap, and a full row rather than a fourth tile in
+          a row of three: it is the only thing on this screen that hands money
+          to somebody who is not Cyberia, and the sentence saying so does not
+          fit in a tile.
+        -->
+        <button
+            type="button"
+            class="cw-card cw-card-button"
+            style="margin-bottom: 10px; padding: 14px 16px"
+            @click="emit('crosschain')"
+        >
+            <span class="cw-row">
+                <span style="text-align: left">
+                    <span
+                        style="display: block; font: 500 12px/1 var(--cw-sans)"
+                        >{{ t('crossTile') }}</span
+                    >
+                    <span
+                        class="cw-label"
+                        style="display: block; margin-top: 5px; font-size: 9px"
+                        >{{ t('crossTileHint') }}</span
+                    >
+                </span>
+                <span class="cw-label" style="color: var(--cw-fainter)">→</span>
+            </span>
+        </button>
+
         <button
             type="button"
             class="cw-card cw-card-button"
@@ -694,7 +723,7 @@ const recent = computed(() =>
                             display: block;
                             font: 500 13px/1.2 var(--cw-sans);
                         "
-                        >{{ t('addNetwork') }}</span
+                        >{{ t('networksTile') }}</span
                     >
                     <span
                         style="
@@ -703,7 +732,7 @@ const recent = computed(() =>
                             font: 400 10px/1.4 var(--cw-mono);
                             color: var(--cw-dim);
                         "
-                        >{{ t('addNetworkHint') }}</span
+                        >{{ t('networksTileHint') }}</span
                     >
                 </span>
                 <span

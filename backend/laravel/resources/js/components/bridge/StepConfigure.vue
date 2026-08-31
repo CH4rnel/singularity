@@ -6,6 +6,8 @@ import type { RecentDestination } from '@/composables/useBridgeFlow';
 import { bridgeRoute, isManualBridgeRoute } from '@/lib/addressValidation';
 import { validateDestination } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
+import type { DestinationCapacity } from '@/lib/bridgeCapacity';
+import { capacityVerdict } from '@/lib/bridgeCapacity';
 import { tokensForRoute } from '@/lib/bridgeConfig';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 
@@ -24,8 +26,11 @@ const props = defineProps<{
     sourceWalletConnecting: boolean;
     sourceBalance: string | null;
     sourceMaxAmount: string | null;
-    /** Live max deliverable to the destination chain now; null = uncapped. */
-    destinationCapacity: string | null;
+    /**
+     * What the destination can deliver right now — a state, not a number. A
+     * failed read is `unavailable` and blocks; it is never an absent limit.
+     */
+    destinationCapacity: DestinationCapacity;
     /** Destination chain label (e.g. "Base") for the capacity hint. */
     destinationLabel: string | null;
     sourceDepositAddress: string | null;
@@ -227,16 +232,33 @@ const maxReservesGas = computed(
         props.sourceBalance !== props.sourceMaxAmount,
 );
 
-// The relayer can only pay out what it holds on the destination chain right now.
-const overCapacity = computed(
-    () =>
-        props.destinationCapacity !== null &&
-        amountNum.value > 0 &&
-        amountNum.value > parseFloat(props.destinationCapacity),
+/**
+ * The relayer can only pay out what it holds on the destination chain, and it
+ * must not be asked to try on a number nobody has.
+ *
+ * The comparison is in raw integer units, not floats: 0.492836888 SOL is
+ * 492836888 lamports and the boundary is where this decision matters. See
+ * `@/lib/bridgeCapacity`.
+ */
+const capacity = computed(() =>
+    capacityVerdict(props.destinationCapacity, localAmount.value),
+);
+
+const overCapacity = computed(() => capacity.value === 'exceeded');
+
+// Still asking, or the read failed. Both block the way to a signature, and
+// they say different things to the person waiting.
+const capacityPending = computed(() => capacity.value === 'loading');
+const capacityUnknown = computed(() => capacity.value === 'unavailable');
+
+const capacityCeiling = computed(() =>
+    props.destinationCapacity.state === 'available'
+        ? props.destinationCapacity.available
+        : null,
 );
 
 const setMax = () => {
-    const limits = [props.sourceMaxAmount, props.destinationCapacity]
+    const limits = [props.sourceMaxAmount, capacityCeiling.value]
         .filter((v): v is string => v !== null)
         .sort((a, b) => parseFloat(a) - parseFloat(b));
 
@@ -250,7 +272,9 @@ const canProceed = computed(
         props.sourceWalletConnected &&
         amountValid.value &&
         !amountExceedsBalance.value &&
-        !overCapacity.value &&
+        // Fail-closed, exactly like the server: only an affirmative 'ok'
+        // opens the way forward. Loading and unavailable both stop here.
+        capacity.value === 'ok' &&
         manualFieldsValid.value &&
         validation.value.valid,
 );
@@ -522,14 +546,29 @@ const formatRelative = (ts: number): string => {
                 </span>
             </div>
             <p
-                v-if="destinationCapacity !== null"
+                v-if="capacityCeiling !== null"
                 class="mb-1 text-xs text-[#706f6c] dark:text-[#A1A09A]"
             >
                 Deliverable to {{ destinationLabel ?? 'destination' }} now:
                 <span class="font-mono">{{
-                    parseFloat(destinationCapacity).toFixed(4)
+                    parseFloat(capacityCeiling).toFixed(4)
                 }}</span>
                 {{ token }}
+            </p>
+            <p
+                v-else-if="capacityPending"
+                class="mb-1 text-xs text-[#706f6c] dark:text-[#A1A09A]"
+            >
+                Checking what {{ destinationLabel ?? 'the destination' }} can
+                deliver…
+            </p>
+            <p
+                v-else-if="capacityUnknown"
+                class="mb-1 text-xs text-amber-600 dark:text-amber-400"
+            >
+                The bridge cannot read its balance on
+                {{ destinationLabel ?? 'the destination chain' }} right now, so
+                it will not take this transfer. Nothing has been sent.
             </p>
             <input
                 id="bridge-amount"
@@ -718,6 +757,8 @@ const formatRelative = (ts: number): string => {
             <span v-else-if="!amountValid">Enter amount</span>
             <span v-else-if="amountExceedsBalance">Insufficient balance</span>
             <span v-else-if="overCapacity">Insufficient liquidity</span>
+            <span v-else-if="capacityPending">Checking liquidity…</span>
+            <span v-else-if="capacityUnknown">Liquidity unavailable</span>
             <span v-else-if="!manualFieldsValid">Enter source transaction</span>
             <span v-else-if="!validation.valid">Enter destination address</span>
             <span v-else>Review</span>

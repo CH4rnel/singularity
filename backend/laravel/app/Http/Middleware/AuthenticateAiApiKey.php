@@ -32,6 +32,14 @@ class AuthenticateAiApiKey
 
     public function handle(Request $request, Closure $next): Response
     {
+        // The other door. A caller who paid for this call was already let in by
+        // X402Paywall, holds no key and answers to no holding — that is the
+        // entire claim of x402, and asking them for a credential here would
+        // take it back.
+        if ($request->attributes->has('x402_payment')) {
+            return $next($request);
+        }
+
         $key = $this->keys->resolve($this->bearer($request));
 
         if ($key === null) {

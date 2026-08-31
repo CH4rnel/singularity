@@ -21,6 +21,8 @@ import type { SentinelService } from "../../plugins/sentinel/index.js";
 export type CommandCtx = {
   /** The first word after the command name, exactly as typed. */
   arg?: string;
+  /** Every word after the command name — `/tasks digest openrouter:…`. */
+  args: string[];
   runtime: IAgentRuntime;
   history: Turn[];
   provider: string;
@@ -35,7 +37,16 @@ export type CommandCtx = {
   togglePulse: () => void;
   openPicker: (which: "skin" | "effort" | "cursor" | "model") => void;
   switchProvider: (name: string) => void;
-  newRoom: () => void;
+  /** Close the current session and open a fresh one (the old one is kept). */
+  newSession: () => void;
+  /** Reopen a past session — no ref opens the picker. */
+  resumeSession: (ref?: string) => void;
+  /** Summarise a session (this one, unless a ref is given). */
+  recapSession: (ref?: string) => void;
+  /** Print the recent sessions, newest first. */
+  listSessions: () => void;
+  /** Print the task routing table, or point one kind of work elsewhere. */
+  taskRoutes: (task?: string, route?: string) => void;
   exit: () => void;
 };
 
@@ -192,9 +203,40 @@ export const COMMANDS: readonly Command[] = [
     run: (ctx) => ctx.openPicker("cursor"),
   },
   {
-    name: "/clear",
-    desc: "clear the screen (memory intact)",
-    help: "clear the screen (conversation memory stays)",
+    name: "/new",
+    desc: "start a fresh session",
+    help: "start a fresh session — the old one is saved, /resume brings it back",
+    aliases: ["/clear", "/reset"],
+    run: (ctx) => ctx.newSession(),
+  },
+  {
+    name: "/resume",
+    desc: "reopen a past session (arrows)",
+    help: "reopen a past session — /resume, or /resume <id|n>",
+    run: (ctx) => ctx.resumeSession(ctx.arg),
+  },
+  {
+    name: "/recap",
+    desc: "summarise this session",
+    help: "summarise this session — or /recap <id|n> for an older one",
+    run: (ctx) => ctx.recapSession(ctx.arg),
+  },
+  {
+    name: "/sessions",
+    desc: "past sessions, newest first",
+    help: "past sessions, newest first (the number is what /resume takes)",
+    run: (ctx) => ctx.listSessions(),
+  },
+  {
+    name: "/tasks",
+    desc: "who answers which kind of work",
+    help: "the task routing table — /tasks <kind> <provider[:model]> to change one",
+    run: (ctx) => ctx.taskRoutes(ctx.args[0], ctx.args.slice(1).join(" ") || undefined),
+  },
+  {
+    name: "/wipe",
+    desc: "clear the screen (session intact)",
+    help: "clear the screen — the session and its memory stay",
     run: (ctx) => ctx.clear(),
   },
   {
@@ -232,12 +274,6 @@ export const COMMANDS: readonly Command[] = [
     desc: "freeze the frame to select text (ctrl+s)",
     help: "freeze the frame so the mouse can select text (ctrl+s)",
     run: (ctx) => ctx.freeze(),
-  },
-  {
-    name: "/reset",
-    desc: "fresh memory room",
-    help: "start a fresh memory room",
-    run: (ctx) => ctx.newRoom(),
   },
   {
     name: "/model",
@@ -314,7 +350,7 @@ export function helpText(): string {
 }
 
 /** Dispatch a typed line. Unknown names answer in the transcript. */
-export function runCommand(text: string, ctx: Omit<CommandCtx, "arg">): void {
+export function runCommand(text: string, ctx: Omit<CommandCtx, "arg" | "args">): void {
   const words = text.trim().split(/\s+/);
   const name = words[0].slice(1).toLowerCase();
   const cmd = BY_NAME.get(name);
@@ -322,5 +358,6 @@ export function runCommand(text: string, ctx: Omit<CommandCtx, "arg">): void {
     ctx.say(`unknown command: /${name}  (try /help)`);
     return;
   }
-  cmd.run({ ...ctx, arg: words[1] });
+  const args = words.slice(1);
+  cmd.run({ ...ctx, arg: args[0], args });
 }

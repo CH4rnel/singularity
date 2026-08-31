@@ -6,6 +6,7 @@
  * the exact tool / sidebar row they land on.
  */
 import { THEMES, BANNER, CHAIN_ID, GLYPH, VERSION, lerpColor, type Theme } from "./theme.js";
+import { TASKS, type TaskKind } from "../../models/tasks.js";
 import {
   blank,
   concat,
@@ -31,7 +32,21 @@ export interface ToolBlock {
 }
 export type Part = { kind: "text"; text: string } | { kind: "tool"; tool: ToolBlock };
 export type Role = "you" | "lain" | "sys" | "pulse";
-export type Turn = { id: string; role: Role; parts: Part[]; model?: string; at?: number };
+export type Turn = {
+  id: string;
+  role: Role;
+  parts: Part[];
+  model?: string;
+  /** LainOS provider that answered: cyberia | claude | codex | openrouter … */
+  provider?: string;
+  /** Who ran the model upstream, when the provider is a gateway. */
+  upstream?: string;
+  /** What kind of work this turn was routed as (drawn as its emoji). */
+  task?: TaskKind;
+  /** True when a cheap task was lifted onto the main provider mid-turn. */
+  escalated?: boolean;
+  at?: number;
+};
 
 /** What a click on a feed line does: expand a tool, or copy a block of text. */
 export type FeedRegion =
@@ -91,7 +106,13 @@ export function bootLines(theme: Theme, width: number): Line[] {
     [{ t: `${GLYPH.spark} tip: she reads the Cyberia chain live — try “what's the latest block?”`, c: c.mutedDim }],
     width,
   );
-  return [...line1, ...line2, blank(width)];
+  // Every launch is its own session now, so the way back to the last one has
+  // to be on the first screen — otherwise a fresh start reads as a loss.
+  const line3 = wrapSpans(
+    [{ t: `${GLYPH.dot} /resume reopens an earlier session · /recap sums one up · /tasks says who answers what`, c: c.mutedDim }],
+    width,
+  );
+  return [...line1, ...line2, ...line3, blank(width)];
 }
 
 // ------------------------------------------------------------------ turns
@@ -129,7 +150,18 @@ function turnHeader(turn: Turn, theme: Theme, width: number): Line {
           ? { label: `${GLYPH.spark} wired`, color: c.muted }
           : { label: `${GLYPH.dot} sys`, color: c.mutedDim };
   const head: Line = [{ t: meta.label, c: meta.color, b: true }];
-  if (turn.role === "lain" && turn.model) head.push(sp(` · ${turn.model}`, c.mutedDim));
+  if (turn.role === "lain" && turn.task) {
+    const spec = TASKS[turn.task];
+    head.push(sp(` · ${spec.emoji} ${spec.label}${turn.escalated ? "↑" : ""}`, c.mutedDim));
+  }
+  // Provenance, left to right: what kind of work, through which provider, on
+  // which model, run by whom. A model id alone is not an answer — `lain-free`
+  // is an alias of Cyberia's gateway and says nothing about who replied.
+  if (turn.role === "lain") {
+    if (turn.provider) head.push(sp(` · ${turn.provider}`, c.mutedDim));
+    if (turn.model) head.push(sp(` · ${turn.model}`, c.mutedDim));
+    if (turn.upstream) head.push(sp(` ← ${turn.upstream}`, c.mutedDim));
+  }
   // The time sits hard right, so the eye reads speaker on one edge and clock on
   // the other instead of hunting through the sentence.
   const time = turn.at ? clock(turn.at) : "";
@@ -274,6 +306,8 @@ export interface SidebarData {
   block: number | null;
   tokens: number;
   room: string;
+  /** Session id for the current room, once it has one (first turn creates it). */
+  session?: string;
   effort: string;
   skinLabel: string;
   watches: number;
@@ -325,6 +359,7 @@ export function sidebarLines(
     gap,
     infoRow("chain", `cyberia ${CHAIN_ID}`),
     infoRow("height", data.block === null ? "—" : data.block.toLocaleString("en-US")),
+    infoRow("session", data.session ?? "new"),
     infoRow("room", data.room),
     infoRow("tokens", data.tokens >= 1000 ? `${(data.tokens / 1000).toFixed(1)}k` : String(data.tokens)),
     gap,

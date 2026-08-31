@@ -10,6 +10,7 @@ import { useTonWallet } from '@/composables/useTonWallet';
 import { useWallet } from '@/composables/useWallet';
 import { bridgeRoute, isManualBridgeRoute } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
+import { LOADING_CAPACITY } from '@/lib/bridgeCapacity';
 import {
     bridgeChainInfo,
     bridgeDepositAddress,
@@ -68,6 +69,11 @@ const props = withDefaults(
 );
 
 const gasDropPlanned = ref(false);
+
+// The capacity claim this transfer signs against, handed to /bridge/submit so
+// the hold becomes the obligation rather than a second claim on the same
+// reserve. Null on manual-source routes, which have nothing to sign.
+const reservationReference = ref<string | null>(null);
 
 const checkEvmRecipientNeedsGas = async (
     recipient: string,
@@ -231,15 +237,16 @@ const sourceMaxAmount = computed(() => {
     return sourceBalance.value;
 });
 
-// Live max the relayer can pay out to the destination chain now; null = the
-// relayer mints on the home chain (uncapped) or the read failed.
+// What the relayer can deliver to the destination chain now, as a state
+// rather than a number: `unavailable` (a read that failed) blocks exactly like
+// `exceeded`, and is never mistaken for "no ceiling".
 const destinationCapacity = computed(() =>
     flow.context.direction
         ? bridge.getDestinationCapacity(
               flow.context.direction,
               flow.context.token,
           )
-        : null,
+        : LOADING_CAPACITY,
 );
 
 const destinationLabel = computed(() =>
@@ -505,6 +512,34 @@ const handleConfirm = async () => {
     const manualSource = isManualBridgeRoute(flow.context.direction);
 
     if (!manualSource) {
+        // Hold the destination liquidity BEFORE the wallet opens.
+        //
+        // This is the step that makes the whole thing safe, and it has to be
+        // here rather than at submit: by the time submit is reached the user's
+        // transfer is already on chain and nothing can refuse it. Bridge
+        // request #68 passed a capacity check, was reviewed, was signed — and
+        // by the time the relayer looked again the reserve was gone.
+        const reserved = await bridge.reserveDestinationCapacity({
+            direction: flow.context.direction,
+            token: flow.context.token,
+            amount: flow.context.amount,
+            senderAddress: flow.context.sourceAddress || null,
+            recipientAddress: flow.context.destinationAddress,
+        });
+
+        if (!reserved.ok) {
+            analytics.track('bridge_submit_failed', {
+                direction: flow.context.direction,
+                error_message: `reservation ${reserved.reason}: ${reserved.message}`,
+            });
+            flow.markFailed(reserved.message);
+            refreshDestinationCapacity();
+
+            return;
+        }
+
+        reservationReference.value = reserved.reference;
+
         flow.beginSigning();
         analytics.track('lock_tx_submitted', {
             direction: flow.context.direction,
@@ -654,6 +689,7 @@ const handleConfirm = async () => {
                 recipient_address: flow.context.destinationAddress,
                 amount: flow.context.amount,
                 convert_to_native: flow.context.convertToNative,
+                reservation: reservationReference.value,
                 session_id: analytics.sessionId,
             }),
         });

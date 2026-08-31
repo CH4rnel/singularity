@@ -22,6 +22,12 @@ import {
 import { ref } from 'vue';
 
 import type { BridgeChain } from '@/lib/addressValidation';
+import type { DestinationCapacity } from '@/lib/bridgeCapacity';
+import {
+    LOADING_CAPACITY,
+    parseCapacity,
+    unreadableCapacity,
+} from '@/lib/bridgeCapacity';
 import { bridgeChainInfo, tokenOnChain } from '@/lib/bridgeConfig';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenInfo, BridgeTokenSymbol } from '@/lib/bridgeTokens';
@@ -94,8 +100,10 @@ const evmNativeMaxAmounts = ref<Record<string, string | null>>({});
 const tokenBalances = ref<Record<string, string | null>>({});
 
 // Live per-destination withdrawal capacity, keyed by `${direction}:${symbol}`.
-// A null value means uncapped (the relayer mints on the home chain) or unknown.
-const destinationCapacities = ref<Record<string, string | null>>({});
+// Never a bare number: the state says whether there IS a ceiling, and a read
+// that failed is `unavailable` rather than an absent limit. See
+// `@/lib/bridgeCapacity`.
+const destinationCapacities = ref<Record<string, DestinationCapacity>>({});
 
 const capacityKey = (direction: string, symbol: string): string =>
     `${direction}:${symbol}`;
@@ -882,9 +890,12 @@ export const useBridge = () => {
     };
 
     /**
-     * How much of `symbol` the relayer can pay out to `direction`'s destination
-     * chain right now (human units), from live relayer inventory. null result
-     * = uncapped (mint on the home chain) or a failed/unknown read.
+     * How much of `symbol` the relayer can deliver to `direction`'s destination
+     * chain right now, net of what is already promised to other transfers.
+     *
+     * A failed fetch is `unavailable`, not "no limit". Before the answer
+     * arrives the entry is `loading`, which also blocks — the wizard must not
+     * walk somebody into a wallet prompt on a number it has not got.
      */
     const fetchDestinationCapacity = async (
         direction: string,
@@ -892,22 +903,30 @@ export const useBridge = () => {
     ): Promise<void> => {
         const key = capacityKey(direction, symbol);
 
+        destinationCapacities.value = {
+            ...destinationCapacities.value,
+            [key]: LOADING_CAPACITY,
+        };
+
         try {
             const res = await fetch(
                 `/bridge/capacity?direction=${encodeURIComponent(direction)}&token=${encodeURIComponent(symbol)}`,
                 { headers: { Accept: 'application/json' } },
             );
-            const json = await res.json();
 
             destinationCapacities.value = {
                 ...destinationCapacities.value,
-                [key]: typeof json.available === 'string' ? json.available : null,
+                [key]: res.ok
+                    ? parseCapacity(await res.json())
+                    : unreadableCapacity(
+                          `capacity request failed (HTTP ${res.status})`,
+                      ),
             };
         } catch (e) {
             console.error('[bridge] fetchDestinationCapacity failed', e);
             destinationCapacities.value = {
                 ...destinationCapacities.value,
-                [key]: null,
+                [key]: unreadableCapacity('capacity request failed'),
             };
         }
     };
@@ -915,8 +934,97 @@ export const useBridge = () => {
     const getDestinationCapacity = (
         direction: string,
         symbol: BridgeTokenSymbol,
-    ): string | null =>
-        destinationCapacities.value[capacityKey(direction, symbol)] ?? null;
+    ): DestinationCapacity =>
+        destinationCapacities.value[capacityKey(direction, symbol)] ??
+        LOADING_CAPACITY;
+
+    /**
+     * Claim the destination capacity for this exact transfer, immediately
+     * before the wallet is opened.
+     *
+     * This is the step that closes the window a UI check cannot: between
+     * reading a balance and signing against it there is a wallet prompt, a
+     * person, and possibly somebody else spending the same reserve. The server
+     * writes the claim under a lock; what comes back is a reference that
+     * `/bridge/submit` consumes once.
+     */
+    const reserveDestinationCapacity = async (params: {
+        direction: string;
+        token: BridgeTokenSymbol;
+        amount: string;
+        senderAddress: string | null;
+        recipientAddress: string;
+    }): Promise<
+        | { ok: true; reference: string; expiresAt: string | null }
+        | { ok: false; message: string; reason: string }
+    > => {
+        const csrfToken = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1];
+
+        try {
+            const res = await fetch('/bridge/reserve', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-XSRF-TOKEN': csrfToken
+                        ? decodeURIComponent(csrfToken)
+                        : '',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    direction: params.direction,
+                    token: params.token,
+                    sender_address: params.senderAddress,
+                    recipient_address: params.recipientAddress,
+                    amount: params.amount,
+                }),
+            });
+
+            const json = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                // Show the number that caused the refusal, not the stale one
+                // the screen was drawn with.
+                if (json?.capacity) {
+                    destinationCapacities.value = {
+                        ...destinationCapacities.value,
+                        [capacityKey(params.direction, params.token)]:
+                            parseCapacity(json.capacity),
+                    };
+                }
+
+                return {
+                    ok: false,
+                    reason:
+                        typeof json?.reason === 'string'
+                            ? json.reason
+                            : 'refused',
+                    message:
+                        typeof json?.message === 'string'
+                            ? json.message
+                            : 'The bridge cannot take this transfer right now.',
+                };
+            }
+
+            return {
+                ok: true,
+                reference: json.reservation.reference,
+                expiresAt: json.reservation.expires_at ?? null,
+            };
+        } catch (e) {
+            console.error('[bridge] reserveDestinationCapacity failed', e);
+
+            // Never fall through to a signature on a failed reservation: the
+            // point of the whole mechanism is that an irreversible source-side
+            // step must not begin uncovered.
+            return {
+                ok: false,
+                reason: 'unreachable',
+                message:
+                    'Could not reach the bridge to hold liquidity for this transfer. Nothing was sent — try again.',
+            };
+        }
+    };
 
     return {
         cyberSolBalance,
@@ -928,6 +1036,7 @@ export const useBridge = () => {
         destinationCapacities,
         fetchDestinationCapacity,
         getDestinationCapacity,
+        reserveDestinationCapacity,
         fetchEvmNativeBalance,
         getEvmNativeBalance,
         getEvmNativeMaxAmount,

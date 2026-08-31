@@ -5,14 +5,17 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreCrmContactRequest;
 use App\Http\Requests\UpdateCrmContactRequest;
 use App\Models\CrmContact;
+use App\Models\CrmContactLink;
 use App\Models\CrmIdentityLink;
 use App\Models\CrmTask;
 use App\Models\User;
 use App\Services\Console\IdentityGraph;
 use App\Services\Console\PeopleLens;
 use App\Services\Console\PersonDossier;
+use App\Support\CrmContactUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -147,25 +150,71 @@ class CrmContactController extends Controller
 
         $search = $request->string('q')->value() ?: null;
 
+        /*
+         * The narrowing an operator does inside a segment, and the order they
+         * read it in. Both are in the address, so a question worth asking
+         * twice can be kept in a bookmark or pasted to the other desk — which
+         * is the same reason a segment carries its rule on screen.
+         */
+        $type = in_array($request->query('type'), CrmContact::TYPES, true)
+            ? (string) $request->query('type')
+            : null;
+
+        $status = in_array($request->query('status'), CrmContact::STATUSES, true)
+            ? (string) $request->query('status')
+            : null;
+
+        $sort = in_array($request->query('sort'), PeopleLens::SORTS, true)
+            ? (string) $request->query('sort')
+            : 'signal';
+
         return Inertia::render('crm/People', [
             'segment' => $segment,
             'segments' => $this->lens->segments(),
             'search' => $search,
-            ...$this->lens->rows($segment, $search, (int) $request->integer('rows', 40)),
+            'type' => $type,
+            'status' => $status,
+            'sort' => $sort,
+            // How old what you are reading is, beside the button that
+            // refreshes it — a list with no date is a list nobody can act on.
+            'sync' => $this->lens->lastSync(),
+            ...$this->lens->rows(
+                $segment,
+                $search,
+                (int) $request->integer('rows', 40),
+                $type,
+                $status,
+                $sort,
+            ),
             'options' => [
                 'types' => CrmContact::TYPES,
                 'statuses' => CrmContact::STATUSES,
+                'sorts' => PeopleLens::SORTS,
             ],
         ]);
     }
 
-    public function show(CrmContact $contact): Response
+    /**
+     * One person's dossier.
+     *
+     * Which slice of the stream is being read, and how much of it, are in the
+     * address for the same reason the lens keeps its filters there: a dossier
+     * scrolled down to the money is a thing worth pasting to the other desk,
+     * and the back button should undo a filter rather than leave the page.
+     */
+    public function show(Request $request, CrmContact $contact): Response
     {
-        return Inertia::render('crm/Person', $this->dossier->build($contact) + [
+        return Inertia::render('crm/Person', $this->dossier->build(
+            $contact,
+            (string) $request->query('events', 'all'),
+            (int) $request->integer('rows', 60),
+        ) + [
             'options' => [
                 'types' => CrmContact::TYPES,
                 'statuses' => CrmContact::STATUSES,
                 'taskPriorities' => CrmTask::PRIORITIES,
+                'taskStatuses' => CrmTask::STATUSES,
+                'views' => PersonDossier::VIEWS,
                 'assignees' => User::crmOperators()
                     ->get(['id', 'name'])
                     ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name])
@@ -187,18 +236,64 @@ class CrmContactController extends Controller
     public function store(StoreCrmContactRequest $request): RedirectResponse
     {
         $data = $request->validated();
+        $linkUrl = $data['contact_link_url'] ?? null;
+        $linkLabel = $data['contact_link_label'] ?? null;
+        unset($data['contact_link_url'], $data['contact_link_label']);
         $data['source'] = 'manual';
 
-        $contact = CrmContact::create($data);
+        DB::transaction(function () use ($data, $linkUrl, $linkLabel): void {
+            $contact = CrmContact::create($data);
+
+            if (is_string($linkUrl)) {
+                $contact->contactLinks()->create([
+                    'url' => $linkUrl,
+                    'kind' => CrmContactUrl::kind($linkUrl),
+                    'label' => $linkLabel ?: CrmContactUrl::label($linkUrl),
+                ]);
+            }
+        });
 
         return back()->with('success', 'Contact created');
     }
 
     public function update(UpdateCrmContactRequest $request, CrmContact $contact): RedirectResponse
     {
-        $contact->update($request->validated());
+        $data = $request->validated();
+        unset($data['contact_link_url'], $data['contact_link_label']);
+        $contact->update($data);
 
         return back()->with('success', 'Contact updated');
+    }
+
+    public function storeContactLink(Request $request, CrmContact $contact): RedirectResponse
+    {
+        $data = $request->validate([
+            'url' => ['required', 'string', 'max:2048'],
+            'label' => ['nullable', 'string', 'max:80'],
+        ]);
+        $url = CrmContactUrl::normalise($data['url']);
+
+        if ($url === null) {
+            return back()->withErrors(['url' => 'Use an http(s), mailto or tel contact link.']);
+        }
+
+        $contact->contactLinks()->firstOrCreate(
+            ['url' => $url],
+            [
+                'kind' => CrmContactUrl::kind($url),
+                'label' => trim((string) ($data['label'] ?? '')) ?: CrmContactUrl::label($url),
+            ],
+        );
+
+        return back()->with('success', 'Contact link added');
+    }
+
+    public function destroyContactLink(CrmContact $contact, CrmContactLink $contactLink): RedirectResponse
+    {
+        abort_unless($contactLink->crm_contact_id === $contact->id, 404);
+        $contactLink->delete();
+
+        return back()->with('success', 'Contact link removed');
     }
 
     public function destroy(CrmContact $contact): RedirectResponse

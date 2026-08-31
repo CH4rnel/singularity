@@ -55,6 +55,80 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Destination inventory: admission control for capped corridors.
+    |--------------------------------------------------------------------------
+    | A corridor whose payout comes out of a finite relayer balance is
+    | ADMISSION-CONTROLLED: capacity is read live, reserved before the user
+    | signs anything, and re-checked under a lock before the relayer burns or
+    | pays. An unreadable balance is 'unavailable' and blocks — it is never
+    | mistaken for "the relayer mints here, so there is no ceiling".
+    |
+    | measured_chain_types lists the destination chain types this server can
+    | actually read. A type NOT listed is reported 'unmeasured': explicitly
+    | not admission-controlled (Yenten/BTC/LTC/XMR run on manual reserves), so
+    | the UI shows no number rather than a made-up one.
+    */
+
+    'inventory' => [
+        'measured_chain_types' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('BRIDGE_INVENTORY_MEASURED_TYPES', 'evm,solana,ton')),
+        ))),
+
+        // How long a pre-signature reservation holds capacity. Long enough for
+        // a wallet prompt and a source confirmation, short enough that an
+        // abandoned tab gives the capacity back on its own.
+        'reservation_ttl_seconds' => (int) env('BRIDGE_RESERVATION_TTL_SECONDS', 900),
+
+        // Atomic lock over one destination inventory pool. Held across the
+        // read-decide-write of a reservation, and across the relayer's
+        // capacity re-check + payout, so two payouts can never both believe
+        // they are the last one the balance covers.
+        'pool_lock_seconds' => (int) env('BRIDGE_POOL_LOCK_SECONDS', 600),
+        'pool_lock_wait_seconds' => (int) env('BRIDGE_POOL_LOCK_WAIT_SECONDS', 5),
+
+        // Per-request lock: one worker, one manual retry, one request.
+        'request_lock_seconds' => (int) env('BRIDGE_REQUEST_LOCK_SECONDS', 600),
+
+        // Gas the relayer must be able to pay for a token payout. A balance of
+        // USDT with no BNB to move it is not deliverable inventory.
+        'token_transfer_gas_limit' => (int) env('BRIDGE_TOKEN_TRANSFER_GAS_LIMIT', 120000),
+
+        // Lamports kept back on the Solana hot wallet: rent exemption plus
+        // transaction fees plus one recipient ATA creation.
+        'solana_fee_reserve_sol' => env('BRIDGE_SOLANA_FEE_RESERVE_SOL', '0.01'),
+
+        // Toncoin kept back on the TON hot wallet for jetton message fees.
+        'ton_fee_reserve' => env('BRIDGE_TON_FEE_RESERVE', '0.1'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Relay subprocess and job budgets.
+    |--------------------------------------------------------------------------
+    | These three numbers have to stay in this order or the queue itself
+    | becomes a double-payment bug: a job that outlives the queue's
+    | `retry_after` is handed to a SECOND worker while the first one still has
+    | a payout subprocess open.
+    |
+    |   slowest relay script  <  job timeout  <  queue retry_after
+    |
+    | `BridgeQueueSafetyTest` pins exactly that, so raising a script timeout
+    | fails the suite until the two above it are raised too.
+    */
+
+    'relay' => [
+        'script_timeout_seconds' => (int) env('BRIDGE_RELAY_SCRIPT_TIMEOUT', 120),
+        'solana_timeout_seconds' => (int) env('BRIDGE_RELAY_SOLANA_TIMEOUT', 120),
+        'ton_timeout_seconds' => (int) env('BRIDGE_RELAY_TON_TIMEOUT', 240),
+        'yenten_timeout_seconds' => (int) env('BRIDGE_RELAY_YENTEN_TIMEOUT', 300),
+        // One request can run a payout AND a burn, so the job must outlive
+        // two of the slowest scripts back to back.
+        'job_timeout_seconds' => (int) env('BRIDGE_RELAY_JOB_TIMEOUT', 660),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Gas drop — top up empty EVM recipients with a small amount of native CYBER
     | so they can pay for their first transaction on Cyberia.
     |--------------------------------------------------------------------------

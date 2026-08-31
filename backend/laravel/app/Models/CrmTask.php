@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -85,6 +86,12 @@ class CrmTask extends Model
         return $this->belongsTo(User::class, 'created_by_user_id');
     }
 
+    /** @return HasMany<CrmTaskComment, $this> */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(CrmTaskComment::class)->oldest();
+    }
+
     public function isActive(): bool
     {
         return in_array($this->status, self::ACTIVE_STATUSES, true);
@@ -116,13 +123,14 @@ class CrmTask extends Model
     }
 
     /**
-     * Order by soonest due date, undated tasks last, then newest first.
+     * Order by priority, then soonest due date, with undated tasks last.
      *
      * @param  Builder<CrmTask>  $query
      */
     public function scopeByDueDate(Builder $query): void
     {
-        $query->orderByRaw('CASE WHEN due_at IS NULL THEN 1 ELSE 0 END')
+        $query->orderByRaw("CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 WHEN 'low' THEN 2 ELSE 3 END")
+            ->orderByRaw('CASE WHEN due_at IS NULL THEN 1 ELSE 0 END')
             ->orderBy('due_at')
             ->orderByDesc('id');
     }

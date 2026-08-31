@@ -133,7 +133,12 @@ export class ClaudeCliModelProvider implements ModelProvider {
         }
         // The envelope names the snapshots an alias resolved to — surface that
         // instead of echoing "opus" back.
-        return { text, toolCalls, model: `claude/${observedModel(envelope, model) ?? model}` };
+        return {
+          text,
+          toolCalls,
+          model: `claude/${observedModel(envelope, model) ?? model}`,
+          provider: this.name,
+        };
       } catch (err) {
         lastErr = err;
         if (err instanceof Error && err.message.includes("timed out")) break;

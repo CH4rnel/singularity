@@ -21,6 +21,10 @@ function lainosConsoleOperator(): User
 }
 
 it('shows LainOS keys and metering without exposing a secret', function () {
+    // Keep "a minute ago" inside today even when CI starts this test at
+    // midnight UTC.
+    $this->travelTo(now()->startOfDay()->addHours(12));
+
     $address = '0x00000000000000000000000000000000000000bb';
     $instanceId = (string) Str::uuid();
     $owner = User::factory()->create([

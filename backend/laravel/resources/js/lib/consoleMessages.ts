@@ -18,12 +18,13 @@ export const consoleMessages: Messages = {
     en: {
         /* chrome */
         'nav.now': 'Now',
-        'nav.people': 'People',
+        'nav.people': 'Leads',
         'nav.tasks': 'Tasks',
         'nav.chat': 'Chat',
         'nav.numbers': 'Numbers',
         'nav.machines': 'Machines',
         'nav.keys': 'API keys',
+        'nav.strategy': 'Strategy',
         'nav.mockup': 'Design',
         'group.chain': 'Chain',
         'group.web': 'Web',
@@ -36,6 +37,9 @@ export const consoleMessages: Messages = {
         'top.bridge': 'Bridge 30d',
         'top.sweep': 'swept {time}',
         'top.noSweep': 'never swept',
+        // The heartbeat stopped answering. Said out loud, because a console
+        // that quietly froze is indistinguishable from a quiet night.
+        'top.stale': 'not updating',
         'top.allGood': 'All present',
         'top.shift': 'shift: {name}',
 
@@ -82,6 +86,8 @@ export const consoleMessages: Messages = {
         'action.wake': 'Bring back',
         'action.wholeFeed': 'Whole feed',
         'action.snoozedUntil': 'until {time}',
+        'action.copy': 'Copy',
+        'action.copied': 'Copied',
 
         /* watch list */
         'watch.bridge.title': 'Bridge: {count} request(s) waiting',
@@ -121,7 +127,7 @@ export const consoleMessages: Messages = {
         'tiles.tasks.note': '{overdue} overdue · {unassigned} unowned',
 
         /* people */
-        'people.title': 'People',
+        'people.title': 'Leads',
         'people.segments': 'Segments',
         'people.happening': 'What is happening to them',
         'people.sortNote': 'sorted by how fresh the signal is',
@@ -131,24 +137,40 @@ export const consoleMessages: Messages = {
         'people.rest': 'the rest had nothing change this month',
         'people.more': 'Show more',
         'people.search': 'name, address, telegram…',
-        'people.sync': 'Sync',
+        'people.sync': 'Load new',
+        'people.syncing': 'Loading…',
+        'people.syncNever': 'never loaded',
+        'people.syncAt': 'base updated {ago} ago',
+        'people.syncRunning': 'loading since {ago} ago',
+        'people.syncBrought': '+{added} new · {sold} sold',
+        'people.syncPartial': 'partial: the chain did not answer',
+        'people.syncNote':
+            'Platform accounts, bridge addresses, CYBER.sol holders and the whale gate. Nobody is ever deleted: somebody who sold becomes a lead whose status is sold.',
         'people.export': 'Export',
         'people.add': '+ Person',
         'people.addClose': 'Close',
         'people.addTitle': 'Put somebody on the books',
         'people.addNote':
             'A handle or an address is enough to start — a person found on X is a person we can write to, and the rest fills in as it is learned.',
-        'people.addNothing': 'Give at least a name, a handle or an address.',
+        'people.addDetails': 'Details',
+        'people.addLinkTab': 'Contact link',
+        'people.linkUrl': 'Paste any profile, chat, email or phone link',
+        'people.linkLabel': 'Label (optional)',
+        'people.addNothing':
+            'Give at least a name, a handle, an address or a contact link.',
         'people.empty': 'Nobody matches this question right now.',
         'segment.all': 'Everyone',
+        'segment.partners': 'Partners',
         'segment.whales': 'Whales',
         'segment.new_whales': 'New whales this month',
         'segment.awaiting': 'Waiting on us',
         'segment.silent_customers': 'Customers gone quiet',
         'segment.one_and_done': 'Left after the first deal',
         'segment.cold_leads': 'Leads who never answered',
+        'segment.sold': 'Sold and stayed',
         'segment.solana_only': 'Solana only',
         'rule.all': 'every contact in the base',
+        'rule.partners': 'type = partner',
         'rule.whales': 'type = whale (set by the sync from balances)',
         'rule.new_whales': 'type = whale, first seen in the last 30 days',
         'rule.awaiting': 'has an open task on our side',
@@ -157,18 +179,37 @@ export const consoleMessages: Messages = {
         'rule.one_and_done':
             'qualified or customer, no note ever, older than {days} days',
         'rule.cold_leads': 'lead, status new, no note ever',
+        'rule.sold': 'held CYBER.sol at the last import and holds none now',
         'rule.solana_only': 'has a Solana address and no EVM address',
+        // Narrowing inside a segment: the ordinary questions a list has to
+        // answer for somebody who already knows who they are looking for.
+        'people.filters': 'narrow',
+        'people.anyType': 'any type',
+        'people.anyStatus': 'any status',
+        'people.sort': 'order',
+        'people.clear': 'clear',
+        'sort.signal': 'by what happened',
+        'sort.added': 'by when added',
+        'sort.name': 'by name',
+        'sort.money': 'by money',
+        'people.addedAgo': 'added {ago}',
+        'people.tradeAmount': 'Deal amount in USD',
+        'people.bought': 'Bought',
+        'people.sold': 'Sold',
         'crm.type.lead': 'lead',
+        'crm.type.partner': 'partner',
         'crm.type.holder': 'holder',
         'crm.type.whale': 'whale',
         'crm.status.new': 'new',
         'crm.status.contacted': 'contacted',
         'crm.status.qualified': 'qualified',
         'crm.status.customer': 'customer',
+        'crm.status.sold': 'sold',
         'crm.status.lost': 'lost',
         'crm.source.manual': 'added by hand',
         'crm.source.platform': 'the site',
         'crm.source.bridge': 'the bridge',
+        'crm.source.holder': 'the chain',
         'crm.source.whale_bot': 'the whale bot',
 
         /* people signals */
@@ -184,7 +225,7 @@ export const consoleMessages: Messages = {
         'signal.ago': '{ago} ago',
 
         /* person */
-        'person.back': 'People',
+        'person.back': 'Leads',
         'person.write': 'Write',
         'person.writeX': 'On X',
         'person.addTask': '+ Task',
@@ -195,6 +236,8 @@ export const consoleMessages: Messages = {
             'transfers per week — this app keeps no balance history',
         'person.noActivity': 'no transfers on record in twelve weeks',
         'person.who': 'Who this is',
+        'person.contactWays': 'Other contact links',
+        'person.contactLinkDelete': 'Remove contact link',
         'person.edit': 'Edit',
         'person.name': 'Name',
         'person.editNote':
@@ -235,6 +278,8 @@ export const consoleMessages: Messages = {
         'person.noHistory': 'nothing on record yet',
         'person.summary.overdue':
             'Here since {since}, from {source}. We owe them {open} thing(s), {overdue} of which is past its date.',
+        'person.summary.waiting':
+            'Here since {since}, from {source}. We wrote {waiting} day(s) ago and they have not answered; {open} thing(s) promised.',
         'person.summary.moved':
             'Here since {since}, from {source}. Last movement: {amount} {token} on {when}; {transfers} transfers in twelve weeks.',
         'person.summary.talked':
@@ -242,6 +287,8 @@ export const consoleMessages: Messages = {
         'person.summary.quiet':
             'Here since {since}, from {source}. Nothing on record besides the sync.',
         'person.event.note': 'Note by {author}',
+        'person.event.said': 'We wrote · {channel}',
+        'person.event.heard': 'They answered · {channel}',
         'person.event.task': 'Task set for {assignee}',
         'person.event.taskDone': 'Task closed by {assignee}',
         'person.event.bridgeOut': 'Bridge out · {direction} · {status}',
@@ -255,15 +302,58 @@ export const consoleMessages: Messages = {
         'person.addNote': 'Add a note…',
         'person.saveNote': 'Save',
 
+        /* the record, read three ways */
+        'person.paneFeed': 'Feed',
+        'person.paneThread': 'Conversation',
+        'person.viewAll': 'All',
+        'person.viewTouch': 'Our touches',
+        'person.viewMoney': 'Money',
+        'person.moreEvents': '{count} more, back to {since}',
+        'person.allEvents': 'all {count} on record',
+        'person.noHistoryHere': 'nothing of this kind on record',
+
+        /* what was said, and what came back */
+        'person.conversation': 'Conversation',
+        'person.conversationNote':
+            'written down here — this console sends nothing',
+        'person.conversationHint':
+            'Enter sends, shift+enter is a new line. Leave the time empty and it is now; fill it in for something said earlier. Telegram and Discord will be imported into these same lines.',
+        'person.noConversation': 'nothing said yet, on either side',
+        'person.lineOurs': 'We wrote',
+        'person.lineTheirs': 'They wrote',
+        'person.lineDrop': 'Delete',
+        'person.lineWhen': 'When it was said',
+        'person.linePlaceholder': 'what was said…',
+        'person.lineSave': 'Write down',
+        'person.wroteDown': 'entered by {name}',
+        'person.channel.telegram': 'telegram',
+        'person.channel.discord': 'discord',
+        'person.channel.x': 'x',
+        'person.channel.email': 'email',
+        'person.channel.call': 'call',
+        'person.channel.other': 'elsewhere',
+        'person.lastContact': 'Last contact',
+        'person.contactNever': 'nothing written down',
+        'person.contactOurs': 'ours',
+        'person.contactTheirs': 'theirs',
+        'person.replies': 'Answers',
+        'person.repliesUnknown': 'never answered yet',
+        'person.repliesMinutes': 'usually within {count} min',
+        'person.repliesHours': 'usually within {count} h',
+        'person.repliesDays': 'usually within {count} d',
+
+        /* a promise, made from the page it is about */
+        'person.taskPlaceholder': 'what we owe them @lain !tomorrow',
+        'person.taskSave': 'Set',
+        'person.taskDone': 'Done',
+
         /* tasks */
         'tasks.title': 'Tasks',
         'tasks.stats':
             '{open} open · {overdue} overdue · {unowned} with no owner',
         'tasks.done': 'Completed',
-        'tasks.quickAdd':
-            'write to the whale about bridge limits @lain !tomorrow #Nakamoto',
-        'tasks.quickAddHint':
-            '@ assignee · ! due · # person — parsed as you type, no mouse needed',
+        'tasks.quickAdd': 'What needs to be done?',
+        'tasks.quickAddHint': '@ assignee · ! due date · # lead',
         'tasks.unowned': 'With no owner',
         'tasks.unownedNote':
             'nobody picks these up by themselves — that is a state, not a line in a list',
@@ -273,6 +363,19 @@ export const consoleMessages: Messages = {
         'tasks.later': 'Later',
         'tasks.create': 'Create task',
         'tasks.reopen': 'Reopen',
+        'tasks.edit': 'Edit',
+        'tasks.delete': 'Delete',
+        'tasks.deleteConfirm': 'Delete “{title}”? This cannot be undone.',
+        'tasks.save': 'Save',
+        'tasks.cancel': 'Cancel',
+        'tasks.field.title': 'Task title',
+        'tasks.field.description': 'Description',
+        'tasks.field.priority': 'Priority',
+        'tasks.field.due': 'Due date',
+        'tasks.field.assignee': 'Assignee',
+        'tasks.comment.add': 'Comment',
+        'tasks.comment.placeholder': 'Write a comment…',
+        'tasks.comment.send': 'Add comment',
         'tasks.journal.title': 'Completed tasks',
         'tasks.journal.empty': 'No completed tasks yet',
         'tasks.noDue': 'no date',
@@ -284,6 +387,8 @@ export const consoleMessages: Messages = {
         'tasks.footerEmpty': 'nothing closed this week',
         'tasks.empty': 'empty',
         'tasks.done.action': 'Done',
+        'tasks.inProgress': 'In progress',
+        'tasks.inProgress.action': 'Start',
         'priority.low': 'low',
         'priority.normal': 'normal',
         'priority.high': 'high',
@@ -524,6 +629,39 @@ export const consoleMessages: Messages = {
             'Meaningful means settled on chain; broadcasting is not settlement. That is why an unfinished row is empty rather than optimistically filled.',
         'install.noEvents': 'nothing recorded yet',
 
+        /* editable content strategy */
+        'strategy.title': 'Strategy',
+        'strategy.lead':
+            'The 30-day Cyberia content plan. Select anything in the document and use the controls to edit it.',
+        'strategy.toolbar': 'Document formatting',
+        'strategy.block': 'Text style',
+        'strategy.font': 'Font',
+        'strategy.size': 'Size',
+        'strategy.color': 'Text colour',
+        'strategy.highlight': 'Highlight colour',
+        'strategy.link': 'Add link',
+        'strategy.linkPrompt': 'Link address',
+        'strategy.image': 'Insert image',
+        'strategy.clear': 'Clear formatting',
+        'strategy.save': 'Save',
+        'strategy.saving': 'saving…',
+        'strategy.unsaved': 'unsaved changes',
+        'strategy.savedAt': 'saved {at}',
+        'strategy.original': 'original plan',
+        'strategy.reset': 'Restore original',
+        'strategy.resetConfirm':
+            'Discard every saved edit and restore the uploaded plan?',
+        'strategy.loading': 'Loading strategy',
+        'strategy.document': 'Editable Cyberia content strategy',
+        'strategy.window': 'Strategy document',
+        'strategy.pin': 'Pin above CRM',
+        'strategy.unpin': 'Return to page',
+        'strategy.close': 'Close window',
+        'strategy.open': 'Open strategy',
+        'strategy.hintTitle': 'Editing',
+        'strategy.hint':
+            'Select text inside the frame, then format it above. Images are embedded in the document. Save makes the working copy available to both operators.',
+
         /* the design this console was built from */
         'mockup.title': 'Design',
         'mockup.lead': 'The nine artboards this console was drawn as.',
@@ -681,12 +819,13 @@ export const consoleMessages: Messages = {
     ru: {
         /* chrome */
         'nav.now': 'Сейчас',
-        'nav.people': 'Люди',
+        'nav.people': 'Лиды',
         'nav.tasks': 'Задачи',
         'nav.chat': 'Чат',
         'nav.numbers': 'Числа',
         'nav.machines': 'Машины',
         'nav.keys': 'API-ключи',
+        'nav.strategy': 'Стратегия',
         'nav.mockup': 'Макет',
         'group.chain': 'Цепь',
         'group.web': 'Веб',
@@ -699,6 +838,7 @@ export const consoleMessages: Messages = {
         'top.bridge': 'Мост 30 д',
         'top.sweep': 'обход {time}',
         'top.noSweep': 'обхода не было',
+        'top.stale': 'не обновляется',
         'top.allGood': 'Всё на месте',
         'top.shift': 'смена: {name}',
 
@@ -745,6 +885,8 @@ export const consoleMessages: Messages = {
         'action.wake': 'Вернуть',
         'action.wholeFeed': 'Вся лента',
         'action.snoozedUntil': 'до {time}',
+        'action.copy': 'Скопировать',
+        'action.copied': 'Скопировано',
 
         /* watch list */
         'watch.bridge.title': 'Мост: {count} заявок ждут',
@@ -784,7 +926,7 @@ export const consoleMessages: Messages = {
         'tiles.tasks.note': '{overdue} просрочены · {unassigned} ничьи',
 
         /* people */
-        'people.title': 'Люди',
+        'people.title': 'Лиды',
         'people.segments': 'Сегменты',
         'people.happening': 'Что с ними происходит',
         'people.sortNote': 'сортировка по свежести сигнала',
@@ -794,24 +936,40 @@ export const consoleMessages: Messages = {
         'people.rest': 'дальше те, у кого за месяц ничего не менялось',
         'people.more': 'Показать ещё',
         'people.search': 'имя, адрес, телеграм…',
-        'people.sync': 'Синхронизировать',
+        'people.sync': 'Подгрузить',
+        'people.syncing': 'Гружу…',
+        'people.syncNever': 'ни разу не грузили',
+        'people.syncAt': 'база обновлена {ago} назад',
+        'people.syncRunning': 'грузится уже {ago}',
+        'people.syncBrought': '+{added} новых · {sold} продали',
+        'people.syncPartial': 'неполно: цепь не ответила',
+        'people.syncNote':
+            'Аккаунты сайта, адреса моста, держатели CYBER.sol и китобот. Никого не удаляем: кто продал — становится лидом со статусом «продал».',
         'people.export': 'Экспорт',
         'people.add': '+ Человек',
         'people.addClose': 'Свернуть',
         'people.addTitle': 'Завести человека',
         'people.addNote':
             'Для начала хватит ника или адреса — человек, найденный в X, это человек, которому можно написать, остальное дописывается по мере знакомства.',
-        'people.addNothing': 'Нужно хотя бы имя, ник или адрес.',
+        'people.addDetails': 'Данные',
+        'people.addLinkTab': 'Контактная ссылка',
+        'people.linkUrl': 'Любая ссылка на профиль, чат, почту или телефон',
+        'people.linkLabel': 'Подпись (необязательно)',
+        'people.addNothing':
+            'Нужно хотя бы имя, ник, адрес или контактную ссылку.',
         'people.empty': 'На этот вопрос сейчас никто не отвечает.',
         'segment.all': 'Все люди',
+        'segment.partners': 'Партнёры',
         'segment.whales': 'Киты',
         'segment.new_whales': 'Новые киты за месяц',
         'segment.awaiting': 'Ждут нашего ответа',
         'segment.silent_customers': 'Замолчавшие клиенты',
         'segment.one_and_done': 'Ушли после первой сделки',
         'segment.cold_leads': 'Лиды без единого ответа',
+        'segment.sold': 'Продали, но остались',
         'segment.solana_only': 'Только Solana',
         'rule.all': 'все контакты в базе',
+        'rule.partners': 'тип = партнёр',
         'rule.whales': 'тип = кит (ставит синк по балансам)',
         'rule.new_whales': 'тип = кит, появился за последние 30 дней',
         'rule.awaiting': 'есть незакрытая задача с нашей стороны',
@@ -819,18 +977,35 @@ export const consoleMessages: Messages = {
         'rule.one_and_done':
             'квалифицирован или клиент, ни одной заметки, старше {days} дней',
         'rule.cold_leads': 'лид со статусом «новый» и без единой заметки',
+        'rule.sold': 'держал CYBER.sol, на последнем импорте баланса уже нет',
         'rule.solana_only': 'есть адрес Solana и нет адреса EVM',
+        'people.filters': 'сузить',
+        'people.anyType': 'любой тип',
+        'people.anyStatus': 'любой статус',
+        'people.sort': 'порядок',
+        'people.clear': 'сбросить',
+        'sort.signal': 'по событию',
+        'sort.added': 'по дате внесения',
+        'sort.name': 'по имени',
+        'sort.money': 'по деньгам',
+        'people.addedAgo': 'внесён {ago}',
+        'people.tradeAmount': 'Сумма сделки в долларах',
+        'people.bought': 'Купил',
+        'people.sold': 'Продал',
         'crm.type.lead': 'лид',
+        'crm.type.partner': 'партнёр',
         'crm.type.holder': 'держатель',
         'crm.type.whale': 'кит',
         'crm.status.new': 'новый',
         'crm.status.contacted': 'связались',
         'crm.status.qualified': 'квалифицирован',
         'crm.status.customer': 'клиент',
+        'crm.status.sold': 'продал',
         'crm.status.lost': 'потерян',
         'crm.source.manual': 'добавлен руками',
         'crm.source.platform': 'сайта',
         'crm.source.bridge': 'моста',
+        'crm.source.holder': 'цепи',
         'crm.source.whale_bot': 'китобота',
 
         /* people signals */
@@ -846,7 +1021,7 @@ export const consoleMessages: Messages = {
         'signal.ago': '{ago} назад',
 
         /* person */
-        'person.back': 'Люди',
+        'person.back': 'Лиды',
         'person.write': 'Написать',
         'person.writeX': 'В X',
         'person.addTask': '+ Задача',
@@ -857,6 +1032,8 @@ export const consoleMessages: Messages = {
             'переводы по неделям — истории балансов это приложение не хранит',
         'person.noActivity': 'за двенадцать недель переводов не записано',
         'person.who': 'Кто это',
+        'person.contactWays': 'Другие способы связи',
+        'person.contactLinkDelete': 'Удалить контактную ссылку',
         'person.edit': 'Править',
         'person.name': 'Имя',
         'person.editNote':
@@ -897,6 +1074,8 @@ export const consoleMessages: Messages = {
         'person.noHistory': 'записей пока нет',
         'person.summary.overdue':
             'С нами с {since}, пришёл из {source}. За нами {open} обещаний, из них {overdue} просрочено.',
+        'person.summary.waiting':
+            'С нами с {since}, пришёл из {source}. Мы написали {waiting} дн. назад и ответа нет; обещаний за нами — {open}.',
         'person.summary.moved':
             'С нами с {since}, пришёл из {source}. Последнее движение: {amount} {token}, {when}; за двенадцать недель переводов — {transfers}.',
         'person.summary.talked':
@@ -904,6 +1083,8 @@ export const consoleMessages: Messages = {
         'person.summary.quiet':
             'С нами с {since}, пришёл из {source}. Кроме синка о нём ничего не записано.',
         'person.event.note': 'Заметка, {author}',
+        'person.event.said': 'Написали · {channel}',
+        'person.event.heard': 'Ответил · {channel}',
         'person.event.task': 'Задача поставлена на {assignee}',
         'person.event.taskDone': 'Задача закрыта, {assignee}',
         'person.event.bridgeOut': 'Вывод через мост · {direction} · {status}',
@@ -917,15 +1098,59 @@ export const consoleMessages: Messages = {
         'person.addNote': 'Заметка…',
         'person.saveNote': 'Сохранить',
 
+        /* запись, три способа читать */
+        'person.paneFeed': 'Лента',
+        'person.paneThread': 'Переписка',
+        'person.viewAll': 'Всё',
+        'person.viewTouch': 'Наши касания',
+        'person.viewMoney': 'Деньги',
+        'person.moreEvents': 'дальше ещё {count}, до {since}',
+        'person.allEvents': 'всего записано {count}',
+        'person.noHistoryHere': 'такого в записи нет',
+
+        /* что сказали и что ответили */
+        'person.conversation': 'Переписка',
+        'person.conversationNote':
+            'записывается здесь — пульт ничего не отправляет',
+        'person.conversationHint':
+            'Enter — записать, shift+enter — перенос строки. Пустое время значит «сейчас»; поставьте своё, если разговор был раньше. Телеграм и дискорд позже приедут в эти же строки.',
+        'person.noConversation':
+            'пока ничего не сказано — ни с той, ни с этой стороны',
+        'person.lineOurs': 'Мы',
+        'person.lineTheirs': 'Он',
+        'person.lineDrop': 'Удалить',
+        'person.lineWhen': 'Когда это было сказано',
+        'person.linePlaceholder': 'что было сказано…',
+        'person.lineSave': 'Записать',
+        'person.wroteDown': 'записал {name}',
+        'person.channel.telegram': 'телеграм',
+        'person.channel.discord': 'дискорд',
+        'person.channel.x': 'x',
+        'person.channel.email': 'почта',
+        'person.channel.call': 'созвон',
+        'person.channel.other': 'иначе',
+        'person.lastContact': 'Последний контакт',
+        'person.contactNever': 'не записан',
+        'person.contactOurs': 'наш',
+        'person.contactTheirs': 'его',
+        'person.replies': 'Отвечает',
+        'person.repliesUnknown': 'ещё ни разу не ответил',
+        'person.repliesMinutes': 'обычно за {count} мин',
+        'person.repliesHours': 'обычно за {count} ч',
+        'person.repliesDays': 'обычно за {count} дн',
+
+        /* обещание — со страницы, о которой оно */
+        'person.taskPlaceholder': 'что мы ему должны @lain !завтра',
+        'person.taskSave': 'Поставить',
+        'person.taskDone': 'Сделано',
+
         /* tasks */
         'tasks.title': 'Задачи',
         'tasks.stats':
             '{open} открытых · {overdue} просрочены · {unowned} без исполнителя',
         'tasks.done': 'Сделанные',
-        'tasks.quickAdd':
-            'написать киту про лимиты моста @lain !завтра #Nakamoto',
-        'tasks.quickAddHint':
-            '@ исполнитель · ! срок · # человек — разбирается на лету, мышь не нужна',
+        'tasks.quickAdd': 'Что нужно сделать?',
+        'tasks.quickAddHint': '@ исполнитель · ! срок · # лид',
         'tasks.unowned': 'Ничьи',
         'tasks.unownedNote':
             'никто не возьмёт сам — это состояние, а не строчка в списке',
@@ -935,6 +1160,20 @@ export const consoleMessages: Messages = {
         'tasks.later': 'Дальше',
         'tasks.create': 'Создать задачу',
         'tasks.reopen': 'Вернуть',
+        'tasks.edit': 'Изменить',
+        'tasks.delete': 'Удалить',
+        'tasks.deleteConfirm':
+            'Удалить «{title}»? Отменить это действие нельзя.',
+        'tasks.save': 'Сохранить',
+        'tasks.cancel': 'Отмена',
+        'tasks.field.title': 'Название задачи',
+        'tasks.field.description': 'Описание',
+        'tasks.field.priority': 'Приоритет',
+        'tasks.field.due': 'Срок',
+        'tasks.field.assignee': 'Исполнитель',
+        'tasks.comment.add': 'Комментарий',
+        'tasks.comment.placeholder': 'Написать комментарий…',
+        'tasks.comment.send': 'Добавить комментарий',
         'tasks.journal.title': 'Сделанные задачи',
         'tasks.journal.empty': 'Сделанных задач пока нет',
         'tasks.noDue': 'без срока',
@@ -946,6 +1185,8 @@ export const consoleMessages: Messages = {
         'tasks.footerEmpty': 'за неделю ничего не закрыто',
         'tasks.empty': 'пусто',
         'tasks.done.action': 'Готово',
+        'tasks.inProgress': 'В работе',
+        'tasks.inProgress.action': 'В работу',
         'priority.low': 'низкий',
         'priority.normal': 'обычный',
         'priority.high': 'высокий',
@@ -1185,6 +1426,39 @@ export const consoleMessages: Messages = {
         'install.meaningfulNote':
             'Значимое — это подтверждённое сетью, а отправка в сеть подтверждением не считается. Поэтому незавершённая строка пуста, а не заполнена оптимистично.',
         'install.noEvents': 'событий пока нет',
+
+        /* редактируемая контент-стратегия */
+        'strategy.title': 'Стратегия',
+        'strategy.lead':
+            'Контент-план Cyberia на 30 дней. Выделите любой фрагмент документа и отредактируйте его инструментами сверху.',
+        'strategy.toolbar': 'Форматирование документа',
+        'strategy.block': 'Стиль текста',
+        'strategy.font': 'Шрифт',
+        'strategy.size': 'Размер',
+        'strategy.color': 'Цвет текста',
+        'strategy.highlight': 'Цвет выделения',
+        'strategy.link': 'Добавить ссылку',
+        'strategy.linkPrompt': 'Адрес ссылки',
+        'strategy.image': 'Вставить изображение',
+        'strategy.clear': 'Очистить форматирование',
+        'strategy.save': 'Сохранить',
+        'strategy.saving': 'сохраняю…',
+        'strategy.unsaved': 'есть несохранённые изменения',
+        'strategy.savedAt': 'сохранено {at}',
+        'strategy.original': 'исходный план',
+        'strategy.reset': 'Вернуть оригинал',
+        'strategy.resetConfirm':
+            'Удалить все сохранённые правки и вернуть загруженный план?',
+        'strategy.loading': 'Загружаю стратегию',
+        'strategy.document': 'Редактируемая контент-стратегия Cyberia',
+        'strategy.window': 'Документ стратегии',
+        'strategy.pin': 'Закрепить поверх CRM',
+        'strategy.unpin': 'Вернуть на страницу',
+        'strategy.close': 'Закрыть окно',
+        'strategy.open': 'Открыть стратегию',
+        'strategy.hintTitle': 'Как редактировать',
+        'strategy.hint':
+            'Выделите текст внутри рамки и примените форматирование сверху. Изображения встраиваются в документ. После сохранения рабочая версия доступна обоим операторам.',
 
         /* макет, из которого вырос этот пульт */
         'mockup.title': 'Макет',

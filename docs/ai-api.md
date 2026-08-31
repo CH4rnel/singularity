@@ -2,12 +2,15 @@
 
 OpenAI-compatible inference at `https://cyberia.church/api/ai/v1`, in front of
 the provider accounts that already live on the Cyberia host. There is no
-signup: a holder may self-issue a key tied to its position, while an operator
-may issue a quota-limited free grant to an installed LainOS instance.
+signup: a holder may self-issue a key tied to its position, an operator may
+issue a quota-limited free grant to an installed LainOS instance, and a caller
+who holds nothing may simply pay per call over x402.
 
 Implementation: `backend/laravel/config/ai.php`, `app/Services/Ai/`,
 `app/Http/Controllers/Api/Ai/`, `app/Http/Middleware/AuthenticateAiApiKey.php`,
-tests in `tests/Feature/Ai/AiApiTest.php`.
+tests in `tests/Feature/Ai/AiApiTest.php`. The paid door is
+`config/x402.php`, `app/Services/X402/`, `app/Http/Middleware/X402Paywall.php`
+and `tests/Feature/Ai/AiX402Test.php`.
 
 ## Getting a key
 
@@ -181,6 +184,72 @@ php artisan ai:key revoke 12
 
 A service key skips the gate and nothing else.
 
+## Paying instead of holding (x402)
+
+The gate asks for a position. [x402](https://docs.x402.org) asks for a cent,
+and asks it of a caller with no account, no key and nothing held — which is
+what an autonomous agent arriving at this URL for the first time actually is.
+
+One exchange, entirely in headers:
+
+```bash
+# 1. ask without paying
+curl -isX POST https://cyberia.church/api/ai/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{"model":"lain-fast","messages":[{"role":"user","content":"hi"}]}'
+# -> HTTP/1.1 402 Payment Required
+# -> PAYMENT-REQUIRED: <base64 of {"x402Version":2,"accepts":[…]}>
+
+# 2. sign an authorization for exactly those terms and repeat the request
+#    with `PAYMENT-SIGNATURE: <base64 payload>`. Any x402 client does this
+#    for you — x402-fetch, x402-axios, the Python and Go middlewares.
+# -> HTTP/1.1 200 OK
+# -> PAYMENT-RESPONSE: <base64 of {"success":true,"transaction":"0x…"}>
+```
+
+Default terms: `exact` on Base (`eip155:8453`), native USDC, one cent a call,
+`X402_AI_PRICE` to change it and `x402.ai.models` to price individual models
+apart. The same terms are published unpaid at `GET /api/ai/v1` under
+`payment`, so an agent can decide what this costs before spending a request
+finding out.
+
+This server holds no wallet and signs nothing. Verification and settlement are
+a **facilitator's** job — it is the party that pays gas and broadcasts — so
+accepting payment costs this host no key, no RPC and no nonce. The facilitator
+is chosen in the environment, and the pairing is checked before a caller has
+to discover it is wrong:
+
+```bash
+php artisan x402:check
+```
+
+That command refuses a payee that is unset, a price that rounds to zero atomic
+units, and — the failure worth naming — a facilitator that does not serve the
+network being quoted. The default `https://x402.org/facilitator` serves Base
+**Sepolia** only; pointing it at mainnet terms is a paywall that quotes and
+never collects. Mainnet means Coinbase's CDP facilitator (credentials, and a
+fee per settlement above a free tier) or one of the free third-party ones.
+
+Order is the design. Verification is free and happens before the work, so a bad
+authorization costs nothing upstream; settlement happens once the answer exists
+but before a byte of it is sent — a stream has already pulled its first chunk
+by then — so nothing is charged for a request that failed, and no answer is
+given away for a payment that did not settle. The requirements handed to the
+facilitator are always rebuilt from this server's own configuration, never read
+back from the payload, because a payer's copy of the terms is a payer's
+opinion.
+
+Prices are flat per call, because `exact` charges before the token count
+exists. Metering an inference call to its actual usage is what x402's `upto`
+scheme is for, and it is deliberately not implemented yet.
+
+Two doors, one URL. A request carrying a key uses the key door and never
+touches a facilitator; a request carrying a payment skips the key and the
+holding entirely. A paid call is metered like any other, and names the payment
+that bought it instead of the credential that was presented
+(`x402_payments`, `ai_api_requests.x402_payment_id`). An unsettled payment row
+is the record of money promised and never collected.
+
 ## Limits
 
 Per key, not per address — issuing more keys buys more of neither:
@@ -195,6 +264,10 @@ Per key, not per address — issuing more keys buys more of neither:
 
 The minute window lives in the rate limiter; the day is counted from the usage
 log, which a cache flush cannot reset.
+
+A paying caller answers to neither — they are paying — but to one burst limit
+per payer address (`X402_REQUESTS_PER_MINUTE`, 60), so a single payer cannot
+hold the upstream open between settlements.
 
 ## Errors
 
@@ -217,10 +290,15 @@ that was rejected is this server's, not the caller's.
 
 ## What is stored
 
-One metering row per call: key id, model, provider, token counts, status,
-whether it streamed. No prompt, no completion, not even their lengths — the
-table has no column one could go in. Rows are dropped after
+One metering row per call: the key id **or** the payment id, model, provider,
+token counts, status, whether it streamed. No prompt, no completion, not even
+their lengths — the table has no column one could go in. Rows are dropped after
 `AI_USAGE_RETENTION_DAYS` (90) by the daily `ai:prune-usage` command.
+
+A settled payment keeps its own receipt in `x402_payments`: payer address,
+network, asset, atomic amount, transaction hash, and the resource path it
+bought. That is the whole identity of a paying caller — no account, no session,
+no key — and it is also the limit of what the row may ever say about a person.
 
 Providers see the prompts, as they must to answer them. Their retention is
 theirs, not Cyberia's.
@@ -234,6 +312,7 @@ Set one or more credentials from `backend/laravel/.env.example` in the prod
 php artisan migrate
 php artisan config:cache   # prod config IS cached
 php artisan ai:providers --probe
+php artisan x402:check     # only if the paid door is switched on
 ```
 
 `ai:providers` lists the providers that hold a key and the models each one

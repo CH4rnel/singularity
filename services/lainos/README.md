@@ -114,6 +114,101 @@ cp .env.example .env        # already done for you
 npm run chat
 ```
 
+### Task routing — who answers which kind of work
+
+A capability tier says how *hard* a call is. It says nothing about what the
+work is worth, which is the question an operator on a budget actually has: a
+news digest and a trade both want the best model available, and only one of
+them deserves it. So every turn also carries a **kind**, and the kind decides
+which provider answers it.
+
+| Kind | Tag | What it is | Cheapenable |
+|------|-----|------------|-------------|
+| `chat` | 💬 | live conversation with the operator | no |
+| `code` | 🛠 | code, patches, scripts | no — acts on the world |
+| `money` | 💰 | trades, transfers, balances, positions | no — acts on the world |
+| `write` | ✍️ | posts, tweets, announcements | no |
+| `analysis` | 📊 | metrics, comparisons, reports | yes |
+| `digest` | 📰 | news, roundups, "what happened" | yes |
+| `translate` | 🌐 | translating text | yes |
+| `memory` | 🧠 | recaps, titles, fact extraction | yes |
+
+The kind is decided by a **pure classifier** over the operator's own words
+(ru/en) — no tokens spent, same answer every time — and a caller that already
+knows declares it instead (the scout's digests, a recap, `POST /chat {task}`).
+Ordering is the policy: "напиши пост про новый кошелёк" is `write`, not
+`money`, and "переведи 5 CYBER на 0x…" is `money`, not `translate`.
+
+```bash
+LAINOS_TASK_DIGEST=openrouter:openai/gpt-oss-120b:free   # one kind
+LAINOS_TASK_CHEAP=openrouter:openrouter/free             # every cheap kind at once
+```
+
+With `LAINOS_TASK_CHEAP` unset, LainOS adopts a free route the machine already
+has — a Cyberia grant, else OpenRouter's free router — for the cheapenable
+kinds only, and prints the resulting table at boot. `LAINOS_TASK_CHEAP=none`
+keeps everything on one provider. `critical` kinds (money, code) are never
+swept up by that knob: pointing them at a free pool takes naming them, and is
+logged when it happens.
+
+Two rules make the cheap routes safe:
+
+- **Escalation.** The moment a cheap turn calls a tool it stops being text —
+  it is about to read a balance, spend gas, write a file — so the rest of the
+  turn is lifted back onto the operator's own provider and the reply is
+  stamped `📰↑`. `LAINOS_TASK_ESCALATE=0` turns that off.
+- **Provenance.** Every reply says which kind it was taken as, through which
+  provider, on which model, and — when the provider is a gateway — who ran it
+  upstream: `📰 digest · cyberia/lain-free ← groq`. The id alone would be a
+  half-truth, because `lain-free` and `openrouter/free` are *aliases*: the
+  Cyberia gateway rewrites `model` back to what you asked for and names the
+  real one in `provider`/`served_by`, and OpenRouter's free router picks a
+  different model per request. One stamp (`answerStamp`) is rendered by the
+  TUI header, the Telegram signature, the REPL, `TurnResult` and each
+  session's counts, and `chat_provider_status` answers with the last reply's
+  receipt rather than the setting. A routing decision nobody can see is how
+  you end up paying Opus rates for an RSS summary.
+
+Change routes live, from any surface:
+
+```bash
+/tasks                                   # the table, in the TUI or the REPL
+/tasks digest openrouter:openrouter/free # point one kind somewhere
+/tasks digest default                    # back to what the environment says
+curl -s localhost:7777/tasks             # the daemon's table
+curl -sX POST localhost:7777/tasks -d '{"task":"digest","route":"cyberia"}'
+```
+
+Lain can do it herself too (`set_task_route`, `task_routes`), and an
+operator's choice is persisted in `data/task-routes.json`, so it survives the
+self-upgrade restarts.
+
+## Sessions
+
+Every conversation on every surface is indexed as it happens
+(`data/sessions.json`): when it started, how many turns, which models answered
+them, which kinds of work they were, which tools fired. The messages
+themselves stay where they always were, in `memory.json` — the index is what
+makes them findable a week later.
+
+| Command | What it does |
+|---------|--------------|
+| `/new` (`/clear`, `/reset`) | start a fresh session; the old one is saved |
+| `/resume` | reopen an earlier one — arrow-key picker, or `/resume <id\|n>` |
+| `/sessions` | recent sessions, newest first (the number is what `/resume` takes) |
+| `/recap` | summarise this session — or `/recap <id\|n>` for an older one |
+| `/wipe` | clear the screen only; the session and its memory stay |
+
+A launch is a session: the TUI and the REPL each open a fresh room, so a run
+never silently continues last week's conversation — and `/resume` is one
+keystroke away. Telegram keeps one room per chat and answers `/recap` there.
+
+A **recap** is two halves, and the split is the point. The header is *counted*
+— duration, turns, models, kinds, tools — so it costs nothing and cannot be
+invented. The summary under it is the only written part, and it is written by
+whatever the `memory` kind is routed to (the cheapest route you allow). If
+that call fails, the header still stands and says so.
+
 ## Quick start
 
 ```bash
@@ -124,6 +219,7 @@ npm run chat                # interactive REPL with Lain
 npm run tui                 # full-screen terminal UI (skins, live chain pulse)
 npm run serve               # daemon: HTTP bridge on :7777 + Telegram bot (if token set)
 npm run provider [cyberia|claude|codex|opencode]  # who writes the daemon's replies (no arg = show)
+npm run tasks:smoke         # pins the task classifier, the router and sessions
 ```
 
 ## The terminal UI
@@ -168,8 +264,10 @@ click, because an editor hosting the terminal can keep the chord for itself —
 VS Code answers ctrl+s with a file save — but never the click.
 
 The transcript scrolls in-app: wheel, PgUp/PgDn, `ctrl+↑/↓`. `/help` lists the
-rest; `/skin`, `/effort`, `/cursor` and `/model` open pickers that take the
-arrow keys, the wheel, and a click on the row you want.
+rest; `/skin`, `/effort`, `/cursor`, `/model` and `/resume` open pickers that
+take the arrow keys, the wheel, and a click on the row you want. `/new` starts
+a session, `/recap` sums one up, and `/tasks` says who answers what — see
+[Sessions](#sessions) and [Task routing](#task-routing--who-answers-which-kind-of-work).
 
 Headless probes: `npm test` runs all of them — `tui:smoke` (frame, keys, copy,
 freeze), `keys:smoke` (escape sequences → edits), `markdown:smoke`, and the
@@ -193,6 +291,66 @@ Inspect it with `systemctl --user status lainos.service` and
 `journalctl --user -u lainos.service -f`. User lingering must be enabled for
 startup during boot without an interactive login (`loginctl show-user "$USER"
 -p Linger`); it is already enabled on the current Cyberia host.
+
+### Two instances: the desk and the always-on host
+
+A workstation is not a schedule. It is powered off at night, it suspends in
+the middle of the day, and its proxy comes up after the daemon does — so
+anything with an hour attached to it (the day's post, most obviously) is
+missed rather than late, and nobody is told. The answer is not a better timer:
+it is a second instance on a host that is already awake.
+
+The split is by **what needs a person and what needs an uptime**:
+
+| | desk | always-on host |
+|---|---|---|
+| answers Telegram, runs the forge, holds the wallet, TUI | yes | no |
+| writes and delivers the day's post | no | yes |
+| `LAINOS_TELEGRAM_POLL` | `1` (default) | `0` |
+| `LAINOS_PRESS` | `0` | `1` |
+
+Only one process may call `getUpdates` for a bot token — a second poller makes
+Telegram hand each update to whichever asked first, so messages go missing at
+random. `LAINOS_TELEGRAM_POLL=0` makes an instance **send-only**: it delivers
+posts and alerts and never reads, so it cannot compete. Sending has never
+needed the poller.
+
+`LAINOS_PRESS=0` on the desk is the other half of the same rule — two rooms
+working the same calendar would write the same day twice, and `data/` is
+per-instance, so neither would know.
+
+The post hour and the plan's day boundary are **host-local**, and a server is
+rarely in the operator's timezone — so the unit pins `TZ` rather than inheriting
+the machine's. Otherwise "11:00" quietly means something else, and a day rolls
+over at the wrong hour.
+
+The always-on side is a **system** unit (`deploy/lainos-press.service`), not a
+user one: `root` on a server usually has `Linger=no`, and a user unit under a
+no-linger account dies with the SSH session that started it. It runs from its
+own clone, never from the deploy checkout the site is served out of, and with
+the forge off — an agent that commits to the tree a production host renders
+from is a bad afternoon.
+
+```bash
+git clone https://github.com/cyberia-temple/singularity.git /root/lainos
+cd /root/lainos/services/lainos && npm ci
+# .env: LAINOS_PRESS=1, LAINOS_TELEGRAM_POLL=0, LAINOS_PRESS_REPO=/root/lainos,
+#       LAINOS_PRESS_CHAT_ID=…, LAINOS_INITIATIVE=0 LAINOS_TRADER=0 LAINOS_STUDY=0
+ln -sfn "$PWD/deploy/lainos-press.service" /etc/systemd/system/lainos-press.service
+systemctl daemon-reload && systemctl enable --now lainos-press
+```
+
+The writer needs its own credential on that host, and a subscription CLI has
+no headless login — `codex login --device-auth` prints a code to enter in any
+browser, which is the one step that cannot be scripted from here. Copy the
+`data/press.json` of the instance that was writing before, or the new one
+rewrites every day still inside the backlog window.
+
+The material is the repo's own commit log, so the clone has to keep up with
+master: a `git pull --ff-only` from cron every 20 minutes
+(`/etc/cron.d/lainos-press`). Code changes still take an explicit
+`systemctl restart lainos-press`, which rebuilds — an agent host that redeploys
+itself on every upstream commit is one a red master takes down.
 
 ## Debugging model/tool decisions
 
@@ -228,6 +386,8 @@ and secret values loaded from the environment.
   - `set_chat_provider` / `chat_provider_status` — switch which model writes
     the live replies (claude | codex | opencode; persisted) and report the
     active one
+  - `set_task_route` / `task_routes` — point one kind of work (digest,
+    translate, code, money, …) at one provider, and report the whole table
 - **cyberia** — reads/writes the Cyberia chain (id `49406`):
   - `check_balance` — native CYBER balance of an address
   - `token_balance` — ERC20 balance (symbol like `USDC`/`BTC` or a `0x` address)
@@ -339,7 +499,10 @@ and secret values loaded from the environment.
   conversation, then either sends the operator a Telegram message in her own
   voice or stays silent. Quiet hours (`LAINOS_INITIATIVE_QUIET`, default 23–9,
   night alerts remain the sentinel's job) and a daily cap
-  (`LAINOS_INITIATIVE_MAX_PER_DAY`) keep it worth reading.
+  (`LAINOS_INITIATIVE_MAX_PER_DAY`, default 2) keep it worth reading. The tick
+  asks for what **changed** — restating an unchanged portfolio is named as
+  forbidden, because "позиции те же" four times a day is how a heartbeat stops
+  being read at all.
 - **scout** — an autonomous researcher. *"Следи за Solana и сообщай только
   реально важные изменения"* or *"каждый день собирай всё про zkVM"* becomes a
   subscribed topic:
@@ -423,6 +586,74 @@ and secret values loaded from the environment.
   channels); tune with `LAINOS_CHANNEL_REMIND_HOUR` (default 18),
   `LAINOS_CHANNEL_INTERVAL_MS` and `LAINOS_CHANNEL_PROXY` (falls back to
   `TELEGRAM_PROXY`).
+
+  A readable channel the **press** room owns is never nudged: a reminder to
+  post, delivered next to a finished post, is the noise reminders exist to
+  prevent.
+- **press** — writes the day's public post instead of reminding anyone to write
+  one. This replaced three daily messages that were not the work: research
+  digests about other people's chains, a nightly restatement of an unchanged
+  portfolio, and an evening "the channel is quiet".
+
+  The queue is a **calendar**: `content-plan.json` next to `soul.md` (28 days,
+  24 August — 20 September 2026), a slot per day carrying its pillar, its
+  thesis, the material the operator attaches and the one question the post ends
+  on — plus the standing brief (four series, the rules drawn from the last
+  fifty posts of the account, the voice). It is data, not code, because it came
+  from outside the daemon; a new month is a new file.
+
+  The material is **the repository's own commit log** since the last post went
+  out — the only record of what was actually built that nobody has to be asked
+  to write. It reaches the writer as evidence and never as copy: the prompt
+  forbids libraries, files, versions, "refactored" and every other word that
+  belongs to the person who built the thing rather than the person using it.
+  ("Fixed CI" was a real post; the strategy report names it as a failure.)
+
+  Nothing here publishes. This host holds no account session, and a daemon that
+  could post unattended is one that can embarrass the project at 4am — so the
+  finished English text arrives in Telegram as **two messages**: what it is,
+  then the post alone, so copying it copies exactly what goes out.
+
+  - `write_post` — write (or rewrite) the post for a day, optionally with an
+    angle ("сделай про мост"); it delivers the text itself
+  - `post_plan` — today's slot, what is still owed, and what state each day is in
+  - `mark_post_published` — record that it went out (only needed where the
+    channel cannot show it)
+  - `skip_post` — drop a day; it never joins the backlog
+
+  Three guards keep it from becoming what it replaced: the watched channel is
+  the ground truth for "did it go out" (a day it published is a day that needs
+  nothing); a backlog **drains** rather than floods — at most
+  `LAINOS_PRESS_MAX_PER_DAY` (2) drafts a day, `LAINOS_PRESS_SPACING_MS` (4h)
+  apart, and a slot older than `LAINOS_PRESS_BACKLOG_DAYS` (3) is dropped
+  rather than published stale; and the evening repeat fires once, only for a
+  post already delivered and still unpublished.
+
+  A post is lost the same two ways every scheduled job is, and neither is
+  allowed to pass quietly. **The host was not awake at the hour**: a desktop
+  that is off at 11:00, or asleep, simply misses the slot — so the room sweeps
+  once a minute after start as well as on its interval, and a daemon that wakes
+  at three in the afternoon writes then instead of waiting for tomorrow. **The
+  message did not arrive**: a delivery whose transport failed takes its
+  delivery stamp back (`markUndelivered`) and is re-sent on the next sweep,
+  where a refusal from Telegram itself — chat not found, bot blocked — is final
+  and never retried. The room re-sends the post it already wrote rather than
+  writing a second one for the same day.
+
+  And a writer that cannot answer at all — the CLI is unauthenticated, the
+  upstream timed out — is said out loud once a day rather than logged. Silence
+  is indistinguishable from a day with nothing in it, which is the state this
+  room exists to end.
+
+  Neither guard makes a desktop always-on, which is what a daily post actually
+  needs: see **Two instances** below.
+
+  Writing is `WRITE`-kind work, so `LAINOS_TASK_WRITE` decides which model
+  holds the public voice. Posts persist in `data/press.json` with the model
+  that wrote each one and the commits that fed it. Daemon-only unless
+  `LAINOS_PRESS=1`; tune with `LAINOS_PRESS_HOUR` (11),
+  `LAINOS_PRESS_REMIND_HOUR` (19), `LAINOS_PRESS_PLAN`, `LAINOS_PRESS_CHANNEL`,
+  `LAINOS_PRESS_CHAT_ID`, `LAINOS_PRESS_REPO`, `LAINOS_PRESS_INTERVAL_MS`.
 - **telegram** — the operator notification channel: `send_telegram` delivers a
   message via the Bot API from TUI, HTTP, or daemon mode and returns
   delivery status. The token stays on the host; the model never sees it. The
@@ -516,7 +747,12 @@ GET  /research                        -> { topics } (the scout's subscriptions)
 POST /research/cyberia-study/run      -> { topic, digest, message }
 GET  /provider                        -> { provider, choices } (who answers)
 POST /provider { provider }           -> { provider } (switch cyberia/claude/codex/opencode live)
-POST /chat { roomId, userId, text }   -> { text, actions }
+GET  /tasks                           -> { routes, kinds } (who answers which kind of work)
+POST /tasks { task, route }           -> { route } (point one kind elsewhere)
+GET  /sessions[?client=&limit=]       -> { sessions } (the conversation index)
+GET  /sessions/{id}                   -> { session, messages }
+POST /sessions/{id}/recap             -> { recap }
+POST /chat { roomId, userId, text, task? } -> { text, actions, model, provider, task }
 ```
 
 The **Wired** Godot game (`game/wired/`) drives its Lain NPC through this
@@ -529,9 +765,12 @@ src/
   types.ts            core interfaces (the contract)
   runtime.ts          AgentRuntime — the think→act→evaluate loop
   memory/store.ts     file-backed long-term memory + retrieval
+  memory/sessions.ts  the session index (/new, /resume, /sessions)
+  memory/recap.ts     /recap: counted header + a summary from the cheap route
   memory/embeddings.ts  embedding providers (OpenAI-compatible | offline hash)
   models/             codex.ts | claude-cli.ts | opencode.ts (agent CLIs, cli-protocol.ts)
                       anthropic.ts | openrouter.ts | mock.ts | index.ts (factory)
+                      tasks.ts (kinds + classifier) | routing.ts (per-kind router)
   plugins/bootstrap/  time provider + fact extractor + remember/recall
   plugins/cyberia/    the chain: chain.ts (registry) + abi.ts + math.ts (pure AMM)
                       + config.ts (trading policy) + service.ts (client + journal)
@@ -545,10 +784,14 @@ src/
   plugins/study/      self-teaching: read-only repo analysis -> real findings
   plugins/github/     commit-streak keeper (daily reminder on commitless days)
   plugins/channel/    telegram channel keeper (daily reminder on postless days)
+  plugins/press/      the press room: the day's post, written from the plan
+                      (plan.ts = calendar + brief, commits.ts = the material)
   plugins/system/     terminal + filesystem skills (sandboxed workspace)
   clients/            cli.ts (REPL) | http.ts (bridge) | telegram.ts (bot) | tui/
   characters/lain.ts  the resident mind of Cyberia
-scripts/              chat.ts | tui.ts | serve.ts | smoke.ts
+content-plan.json     the 28-day content calendar the press room writes from
+scripts/              chat.ts | tui.ts | serve.ts | smoke.ts | tasks-smoke.ts
+                      | press-smoke.ts
 ```
 
 ## Safety

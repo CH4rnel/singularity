@@ -19,6 +19,7 @@ process.env.LAINOS_DATA_DIR = mkdtempSync(join(tmpdir(), "lainos-tui-"));
 import { App } from "../src/clients/tui/App.js";
 import { AgentRuntime } from "../src/runtime.js";
 import { FileMemoryStore } from "../src/memory/store.js";
+import { SessionStore } from "../src/memory/sessions.js";
 import { SwitchableModelProvider } from "../src/models/routing.js";
 import { lain } from "../src/characters/lain.js";
 import type { ModelRequest, ModelResponse } from "../src/types.js";
@@ -72,7 +73,8 @@ async function main() {
     name: "stub",
     modelFor: () => "stub-model",
     async generate(_req: ModelRequest): Promise<ModelResponse> {
-      return { text: REPLY, toolCalls: [], model: "stub" };
+      // A gateway answers: the id asked for, and the upstream that ran it.
+      return { text: REPLY, toolCalls: [], model: "stub", provider: "gw", upstream: "groq" };
     },
   };
   // The daemon's chat model is switchable (/model claude|codex), so the probe
@@ -92,6 +94,9 @@ async function main() {
     character: lain,
     memory: new FileMemoryStore(mkdtempSync(join(tmpdir(), "lainos-tui-mem-"))),
     model: switchable as never,
+    // Sessions are what /new, /resume and /sessions read; without a store the
+    // commands answer "no index", which would pass for the wrong reason.
+    sessions: new SessionStore(mkdtempSync(join(tmpdir(), "lainos-tui-ses-"))),
     settings: {},
   });
   runtime.use({
@@ -137,8 +142,10 @@ async function main() {
   await type("hi\r");
   await sleep(700);
   results.push(["reply shows in feed  ", anyPlain(REPLY)]);
-  // …with the provenance marker (which model answered) in the turn header.
+  // …with the whole provenance in the turn header: a model id alone cannot
+  // say who ran it when the provider is a gateway serving an alias.
   results.push(["reply names model    ", anyPlain("· stub")]);
+  results.push(["header names provider", anyPlain("· gw · stub ← groq")]);
 
   // The feed is drawn in the app's own frame now (not terminal scrollback), so
   // a blink repaint must keep the reply visible rather than drop it.
@@ -165,6 +172,22 @@ async function main() {
   await sleep(100);
   results.push(["line cleared         ", anyPlain("ask lain…", beforeEdit)]);
 
+  // 1.6) the composer draws exactly what was typed. Spaces used to be eaten by
+  // the wrapper (it rebuilt rows out of words), so the caret stood still until
+  // the next letter arrived and a run of spaces collapsed into one.
+  const beforeSpaces = stdout.writes.length;
+  await type("a   b");
+  await sleep(150);
+  results.push(["spaces stay as typed ", anyPlain("a   b", beforeSpaces)]);
+  await type(" ");
+  await sleep(150);
+  // The caret is a cell drawn *at* the cursor, so a trailing space means the
+  // frame carries "a   b" followed by two cells before the frame's edge.
+  const withTrailing = stripAnsi(stdout.writes.at(-1) ?? "");
+  results.push(["trailing space shows ", withTrailing.includes("a   b  ")]);
+  await press("\x15"); // ctrl+u — back to an empty composer
+  await sleep(100);
+
   // 2) /copy emits OSC 52 with the reply, confirms in the feed
   const beforeCopy = stdout.writes.length;
   await type("/copy");
@@ -179,6 +202,33 @@ async function main() {
   }
   results.push(["/copy OSC52 payload  ", oscOk]);
   results.push(["/copy confirmation   ", anyPlain("copied lain's last reply", beforeCopy)]);
+
+  // 2.5) sessions: the run is one, /sessions can see it, /new starts another
+  // and /resume brings the first one back with its transcript intact.
+  const beforeTasks = stdout.writes.length;
+  await type("/tasks\r");
+  await sleep(300);
+  results.push(["/tasks prints the table", anyPlain("chat", beforeTasks) && anyPlain("(base)", beforeTasks)]);
+
+  const beforeList = stdout.writes.length;
+  await type("/sessions\r");
+  await sleep(400);
+  results.push(["/sessions sees this one", anyPlain("turns", beforeList) && anyPlain("❯", beforeList)]);
+
+  await type("/new\r");
+  await sleep(400);
+  // Typing the command repaints the old feed on the way, so only the frame
+  // that is actually on screen at the end says whether the session changed.
+  const afterNew = stripAnsi(stdout.writes.at(-1) ?? "");
+  results.push([
+    "/new empties the feed  ",
+    !afterNew.includes(REPLY) && afterNew.includes("welcome to the wired"),
+  ]);
+
+  const beforeResume = stdout.writes.length;
+  await type("/resume 1\r");
+  await sleep(600);
+  results.push(["/resume brings it back ", anyPlain(REPLY, beforeResume)]);
 
   // 3) /clear resets the feed but keeps the banner + boot line. The screen is
   // rebuilt in the app's own frame, so check the LAST frame is clean.

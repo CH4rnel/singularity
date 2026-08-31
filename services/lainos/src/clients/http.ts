@@ -9,6 +9,8 @@ import {
 import type { ForgeService } from "../plugins/forge/index.js";
 import type { ScoutService } from "../plugins/scout/index.js";
 import type { SentinelService } from "../plugins/sentinel/index.js";
+import { buildRecap } from "../memory/recap.js";
+import { TASK_ORDER, isTaskKind } from "../models/tasks.js";
 import type { IAgentRuntime } from "../types.js";
 
 const log = createLogger("http");
@@ -29,7 +31,12 @@ export interface HttpOptions {
  *   POST /research/cyberia-study/run -> { topic, digest }
  *   GET  /provider          -> { provider, choices } (who writes the replies)
  *   POST /provider {provider} -> { provider } (switch claude/codex/opencode live)
- *   POST /chat {roomId,userId,text} -> { text, actions }
+ *   GET  /tasks             -> { routes } (which model answers which kind of work)
+ *   POST /tasks {task,route}  -> { route } (point one kind of work elsewhere)
+ *   GET  /sessions[?client=] -> { sessions } (the conversation index)
+ *   GET  /sessions/{id}      -> { session, messages }
+ *   POST /sessions/{id}/recap -> { recap }
+ *   POST /chat {roomId,userId,text,task} -> { text, actions, model, provider, task }
  */
 export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {}): Server {
   const host = opts.host ?? process.env.LAINOS_HTTP_HOST ?? "127.0.0.1";
@@ -110,17 +117,86 @@ export function createHttpServer(runtime: IAgentRuntime, opts: HttpOptions = {})
       }
     }
 
+    // Which model answers which kind of work. The daemon is the one paying
+    // for background digests, so this must be readable and changeable without
+    // a restart, exactly like /provider.
+    if (req.url?.startsWith("/tasks") && (req.method === "GET" || req.method === "POST")) {
+      const model = runtime.model;
+      if (!(model instanceof SwitchableModelProvider)) {
+        return json(res, 409, { error: "model provider is fixed for this run" });
+      }
+      if (req.method === "GET") {
+        return json(res, 200, { routes: model.taskRoutes(), kinds: TASK_ORDER });
+      }
+      try {
+        const body = await readBody(req);
+        const { task, route } = JSON.parse(body || "{}");
+        const kind = String(task ?? "").trim().toLowerCase();
+        if (!isTaskKind(kind)) {
+          return json(res, 400, { error: `field 'task' must be one of: ${TASK_ORDER.join(", ")}` });
+        }
+        const raw = String(route ?? "").trim();
+        const clearing = !raw || ["default", "none", "base"].includes(raw.toLowerCase());
+        const result = model.setTaskRoute(kind, clearing ? null : raw);
+        if (typeof result === "string") return json(res, 409, { error: result });
+        return json(res, 200, { route: result });
+      } catch (err) {
+        log.error("task route change failed", err);
+        return json(res, 500, { error: "internal error" });
+      }
+    }
+
+    // The session index: what has been talked about, where, and by which
+    // models. Read-only apart from asking for a recap.
+    if (req.method === "GET" && req.url?.startsWith("/sessions")) {
+      if (!runtime.sessions) return json(res, 503, { error: "no session index" });
+      const url = new URL(req.url, "http://localhost");
+      const id = url.pathname.slice("/sessions".length).replace(/^\//, "");
+      if (!id) {
+        const limit = Number(url.searchParams.get("limit")) || 20;
+        const client = url.searchParams.get("client") ?? undefined;
+        return json(res, 200, { sessions: await runtime.sessions.list(limit, { client }) });
+      }
+      const session = await runtime.sessions.resolve(decodeURIComponent(id));
+      if (!session) return json(res, 404, { error: "no such session" });
+      const messages = await runtime.memory.recent(session.roomId, 200);
+      return json(res, 200, { session, messages });
+    }
+
+    if (req.method === "POST" && /^\/sessions\/[^/]+\/recap$/.test(req.url ?? "")) {
+      if (!runtime.sessions) return json(res, 503, { error: "no session index" });
+      const id = decodeURIComponent((req.url ?? "").split("/")[2]);
+      const session = await runtime.sessions.resolve(id);
+      if (!session) return json(res, 404, { error: "no such session" });
+      const result = await buildRecap(runtime, session);
+      if (result.summarised && result.model) {
+        await runtime.sessions.setRecap(session.id, {
+          text: result.text,
+          at: Date.now(),
+          model: result.model,
+        });
+      }
+      return json(res, 200, { recap: result });
+    }
+
     if (req.method === "POST" && req.url === "/chat") {
       try {
         const body = await readBody(req);
-        const { roomId, userId, text } = JSON.parse(body || "{}");
+        const { roomId, userId, text, task } = JSON.parse(body || "{}");
         if (typeof text !== "string" || !text.trim()) {
           return json(res, 400, { error: "field 'text' is required" });
+        }
+        // A caller that already knows what it is asking for (a digest job, a
+        // translation) says so; anything else is classified from the text.
+        const declared = typeof task === "string" ? task.trim().toLowerCase() : undefined;
+        if (declared && !isTaskKind(declared)) {
+          return json(res, 400, { error: `field 'task' must be one of: ${TASK_ORDER.join(", ")}` });
         }
         const result = await runtime.handleMessage({
           roomId: typeof roomId === "string" ? roomId : "http",
           userId: typeof userId === "string" ? userId : "anon",
           text,
+          task: declared && isTaskKind(declared) ? declared : undefined,
         });
         return json(res, 200, result);
       } catch (err) {

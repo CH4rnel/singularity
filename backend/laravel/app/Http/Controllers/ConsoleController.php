@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Console\ChatRoom;
 use App\Services\Console\ConsoleFeed;
+use App\Services\Console\ConsolePulse;
 use App\Services\Console\Snooze;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -28,6 +31,32 @@ class ConsoleController extends Controller
     public function index(): Response
     {
         return Inertia::render('crm/Now', $this->feed->cached());
+    }
+
+    /**
+     * The console's heartbeat: one version per lens, and the rail's badges.
+     *
+     * Every lens is open on more than one desk, so none of them may wait for
+     * a reload to tell the truth. This is the cheapest question that answers
+     * "has what I am looking at changed" — the browser compares the versions
+     * it holds and re-reads only the lens that moved. It writes nothing and
+     * rebuilds nothing (see `ConsolePulse`).
+     */
+    public function pulse(Request $request, ConsolePulse $pulse, ChatRoom $room): JsonResponse
+    {
+        $user = $request->user();
+
+        /*
+         * Presence in the room is, and stays, "this person's browser asked
+         * the room for news". The room's own polling now hangs off this
+         * heartbeat, so the reader who has it on screen says so here — and
+         * somebody sitting on another lens is not drawn into the room.
+         */
+        if ($user !== null && $request->query('lens') === 'chat') {
+            $room->markRead($user);
+        }
+
+        return response()->json($pulse->build($user));
     }
 
     /**

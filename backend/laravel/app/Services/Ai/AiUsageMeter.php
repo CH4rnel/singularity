@@ -5,6 +5,7 @@ namespace App\Services\Ai;
 use App\Exceptions\AiApiException;
 use App\Models\AiApiKey;
 use App\Models\AiApiRequest;
+use App\Models\X402Payment;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -55,14 +56,20 @@ class AiUsageMeter
     /**
      * Log one completed call.
      *
-     * @param  array{model: string, served_model: string, provider: string, status: int, streamed: bool, usage?: array<string, mixed>|null}  $call
+     * The key is optional because the caller may not have one: a call paid for
+     * over x402 is metered exactly like a key's, and names the payment that
+     * bought it instead of the credential that was presented.
+     *
+     * @param  array{model: string, served_model: string, provider: string, status: int, streamed: bool, usage?: array<string, mixed>|null, payment?: ?X402Payment}  $call
      */
-    public function record(AiApiKey $key, array $call): AiApiRequest
+    public function record(?AiApiKey $key, array $call): AiApiRequest
     {
         $usage = is_array($call['usage'] ?? null) ? $call['usage'] : [];
+        $payment = $call['payment'] ?? null;
 
         return AiApiRequest::create([
-            'ai_api_key_id' => $key->id,
+            'ai_api_key_id' => $key?->id,
+            'x402_payment_id' => $payment instanceof X402Payment ? $payment->id : null,
             'model' => $call['model'],
             'served_model' => $call['served_model'],
             'provider' => $call['provider'],

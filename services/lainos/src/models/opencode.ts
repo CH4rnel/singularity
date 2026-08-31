@@ -124,7 +124,12 @@ export class OpencodeModelProvider implements ModelProvider {
       try {
         const raw = await this.run(args, prompt);
         const { text, toolCalls } = parseToolReply(raw);
-        return { text, toolCalls, model: model ? `opencode/${model}` : "opencode" };
+        return {
+          text,
+          toolCalls,
+          model: model ? `opencode/${model}` : "opencode",
+          provider: this.name,
+        };
       } catch (err) {
         lastErr = err;
         if (err instanceof Error && err.message.includes("timed out")) break;

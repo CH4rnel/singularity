@@ -178,11 +178,51 @@ insists on is that the record names somebody: every column is nullable, and a
 row with no name, no handle and no address can never be searched, written to
 or recognised again.
 
+A **handle** may not be entered twice: an account is one person, and
+`@fomo_person` typed onto a second record is the first record again — easy to
+do in a handful, hard to notice later, and the two halves then age apart. An
+**address** may. It is a place value sits, and more than one person can stand
+behind one — an exchange deposit address, a shared or custodial wallet, a whale
+whose leads are filed separately — so refusing the second record there refuses
+a fact about the world and loses the entry with it. Saying "these are one
+person" is the identity graph's job: it joins records through the address they
+share and prints each on the other's dossier, with the evidence.
+
 **Correcting.** Half of a dossier is what happened and is a log; the other half
 is what somebody told us, and that half ages — a handle changes, a lead becomes
 a customer. So exactly the told half opens in place inside "Кто это"
 (`PUT /crm/{contact}`), with the same fields in the same order, and the
 timeline underneath stays read-only.
+
+**How old the list is.** The button that pulls new people in (`POST /crm/sync`
+— platform accounts, bridge addresses, CYBER.sol holders, the whale gate) now
+says what it did, and the date of the last run stands under it. That date could
+not come from `crm_contacts.last_synced_at`: it is stamped per contact by the
+half-hourly balance refresh, so its maximum says a balance was read, not that
+the base was rebuilt. Every run writes a row in `crm_syncs` instead — when,
+who asked, what it brought, and **whether it was complete**. The last part is
+the reason the table exists: the holder scan is one `getProgramAccounts` call
+against a public RPC that answers a rate-limit with an *empty result* rather
+than an error, and "обновлено минуту назад" over a run that read nothing is
+precisely the lie a freshness date is supposed to prevent. A partial run says
+so, in amber. The import runs in the request rather than on the queue, because
+this host is not guaranteed a worker and an import that silently never happens
+is worse than one an operator waits for.
+
+**Selling is a state, not a deletion.** The scan lists the token accounts that
+exist; an emptied one is simply absent, so a contact used to keep the balance
+and the whale tier it had on the day it was last seen — and the base filled up
+with whales holding nothing. Now the run compares the holder set against
+everybody we have *seen holding* and writes the difference down: type **лид**,
+status **продал**, balance zeroed, record kept. Somebody who sold once is the
+readiest audience there is, and the segment "Продали, но остались" is where
+they wait. Two guards carry it: nothing happens on an **empty** scan (a
+rate-limited RPC is not a market where everyone sold on the same afternoon),
+and only a contact with a recorded balance above zero is eligible — a platform
+user typed `holder` for owning a wallet never held anything. A record an
+operator wrote off by hand keeps `lost`: that is a judgement about the person,
+while `sold` is a fact about their balance, and the judgement is the one a
+machine must not overwrite.
 
 **Where a person is reachable.** `x_handle` is a column beside `telegram`,
 because an address is not somebody you can write to and most people found by
@@ -198,6 +238,162 @@ address for.
 
 ---
 
+## 4c. Why nobody presses F5
+
+Three operators read the same lenses at the same time — that is the entire
+reason this thing exists — and until the console had a heartbeat only the room
+refreshed itself. A task claimed on one desk stayed unclaimed on the other, a
+person written down at one screen was invisible at the next, and the rail's
+badge kept counting a number from four minutes ago. A status board that is only
+true after a reload is a status board nobody trusts twice.
+
+**One heartbeat, held by the shell.** `GET /crm/pulse` (`ConsolePulse`,
+`useConsolePulse.ts`) is asked once every five seconds by `ConsoleLayout` — the
+shell, which outlives every lens inside it, so five lenses never become five
+pollers. What comes back is a **version per lens** plus the rail's counts.
+Each version is an opaque string the browser only compares; when it differs,
+that lens re-reads *its own props* through a partial Inertia reload, and
+nothing else on the page is touched — a half-written sentence in a composer
+survives, because a refresh that eats one is worse than a stale row.
+
+**A poll and deliberately not a socket.** A push would need a process of its
+own — Reverb, or an SSE loop holding a PHP-FPM worker per open tab — and this
+is the host whose scheduler was dormant for months without anyone noticing. A
+liveness that depends on a daemon nobody watches is a liveness that ends
+silently. Three operators asking one cheap question every five seconds is a
+load this server does not notice, and it fails the honest way: **the top bar
+says "не обновляется"** after three failures in a row, because a console that
+quietly froze looks exactly like a quiet night.
+
+**What each version is made of.** A count and the newest `updated_at`, per
+table: either alone misses half of what happens — an edit leaves the count
+where it was, a delete leaves the high-water mark where it was. "Сейчас" is a
+cached derivative of six sources, so it stamps the *material* underneath it —
+open incidents, the newest sweep row, what is asleep, the tasks — rather than
+rebuilding the queue to find out whether the queue changed. The sweep alone
+lands every five minutes, which is the floor on how stale an open queue can
+get, and matches the rate the material is collected at anyway. A dossier
+watches `messages` alongside `people`, `notes` and `tasks`, because a dossier
+open on two desks is usually open because somebody is writing down what was
+just said on it.
+
+**The room does not use a version at all.** These columns keep whole seconds,
+so two writes inside one second can leave a version where it was; on a board
+that is one beat of lateness, and in a conversation it is an answer nobody
+ever sees. So the room asks its own question on every beat
+(`GET /crm/chat/since`) and gets an answer that is right to the row: lines
+**said** (new), lines **changed** under the reader (an answer landing on the
+call that asked for it, a line becoming a task) and lines **taken back** —
+answered against the window the reader actually holds, so the cost is bounded
+by what is on screen rather than by how long the room has existed. The id
+roster that repairs a deletion is sent only when the counts disagree. The
+window is compared with `>=` and not `>`, so a line changed in the very second
+of the last read comes back one extra time instead of being lost for good.
+
+**Costs nothing while nobody is looking.** The heartbeat is paused while the
+tab is hidden and beaten once the moment it comes back, which is the reload
+this replaces. `attention` is read out of the queue's cache and never rebuilt
+by a poll — a cold cache answers `null`, and the rail keeps its previous
+number rather than drawing an unknown count as zero. Presence in the room
+("seen just now") is stamped by the heartbeat only for whoever has `/crm/chat`
+on screen: it means "this person's browser asked *the room* for news", and
+somebody reading the numbers is not in the room. That stamp is sent with its
+UTC offset — a bare `Y-m-d H:i:s` is read by a browser as its own local time,
+which drew a person typing at that moment as last seen three hours ago.
+
+---
+
+## 4d. Finding one person, which is not the same as reading a segment
+
+Segments answer the questions worth re-asking. They are the wrong shape for
+the other task — **somebody you know exists and cannot find** — so a narrow
+strip sits above the table: type, status, the search box, and an order. All of
+it lives in the address, so a question worth asking twice can be bookmarked or
+pasted to the other desk, and the back button undoes a filter.
+
+The order is the load-bearing part. Every row on this lens is stamped by the
+half-hourly balance refresh, so "newest first" by `updated_at` really means
+"in sync order", and a lead entered by hand yesterday sank under a screenful
+of whales whose balances were re-read this morning — not merely far down the
+list, but never read at all, because the lens reads two screenfuls of
+candidates before it ranks them. Two answers: the default order now pulls in
+the recently *written down* explicitly, and `sort=added` asks the question
+outright ("по дате внесения"), printing the date it sorts on so the order is
+not arbitrary against a column of signals.
+
+The search box reads a handle the way it is pasted. Handles are stored bare,
+and what an operator types is what they are looking at — `@name`, or the whole
+profile URL out of the clipboard — so both spellings are searched
+(`Handles::searchable`), along with tags, which are the operator's own filing
+and therefore the word they will look for later. A box that answers "not
+found" for somebody who is on the books is how a person gets entered twice.
+
+---
+
+## 4e. The dossier: what was said, and the three readings of one stream
+
+A dossier answered "what happened to this person" and could not answer the
+question an operator actually arrives with, which is **"where does this
+conversation stand"**. That answer lived in somebody's Telegram.
+
+**The correspondence is a table** (`crm_messages`, `CrmMessageController`,
+`POST /crm/{contact}/messages`, `DELETE /crm/messages/{message}`), not notes
+with a convention, and the reason is one column: `direction`. Only a direction
+makes "we wrote four days ago and they have not answered" a fact this console
+can state rather than a thing an operator remembers. `sent_at` is the second
+load-bearing column — when it was *said*, not when it was typed in, because
+these lines are entered after the fact and will later be imported from
+Telegram and Discord, where the timestamp is the whole point of the import.
+The browser sends it as a full ISO string with the desk's own offset: a bare
+`Y-m-d H:i` out of a datetime-local input is read here in the app's timezone,
+which is three hours from the desk that typed it. `external_id` is the
+importer's guard, unique per channel, so replaying an export writes each line
+once; it is null for everything typed by hand, and every engine here allows
+repeated nulls in a unique index.
+
+**It records and it does not send.** Nothing on this host holds an operator's
+Telegram session, and a CRM that appears to deliver a message it never sent is
+worse than one that only writes down. "Написать" stays what it always was — a
+link out to the place the conversation actually happens.
+
+**Two derived numbers, and what they say when they cannot say anything.**
+«Последний контакт» is the last line and whose it was. «Отвечает» is the
+**median** gap between our line and their answer — not the mean, because one
+message answered three days later against sixteen answered inside the hour
+describes a person who answers inside the hour, and the mean would say a day
+and a half. The gap is measured from the *first* unanswered line we sent, not
+the last: when three messages go out and one reply comes back, what was waited
+on started with the first of them. A conversation nobody has answered reads
+"ещё ни разу не ответил" and never a zero, and four days of our own silence
+outranks a whale's balance in the one sentence at the top of the page.
+
+**The stream reads three ways** (`?events=all|touch|money`, in the address like
+every other filter here): `touch` is what people did — our lines, their
+replies, notes, promises — and `money` is what the chain did. The filter is
+applied on the server and not in the browser, because a page that hides rows
+out of the newest sixty is a page whose "only money" really means "the money
+inside the last sixty events", which is a different claim. Every count under
+the table is a **count of the record**, from `count()` queries, never of the
+slice on screen — a footer that counts what it already holds always says
+nothing more is there.
+
+**Copying an address.** Every value on this screen is shortened, and shortened
+is exactly what cannot be pasted into an explorer or a message; until now the
+only way to get all forty characters was to open the edit form and select the
+field by hand. `CopyValue.vue` draws one string and copies another, and
+confirms **in place** — a confirmation elsewhere on the page is a confirmation
+nobody sees while looking at the value they just copied.
+
+**A promise, made from the page it is about.** "+ Задача" existed in the design
+and in the dictionary and led nowhere; a task about this person had to be typed
+on the board and pointed back with `#name`. It now takes the board's own
+one-line grammar (`@who !when`) minus the part that names the person — that is
+the page you are standing on — and «Что дальше» lists only what is still owed,
+with the one action that empties it. A closed promise is not "what next"; it is
+what happened, and the stream carries it.
+
+---
+
 ## 5. The code
 
 | File | Holds |
@@ -207,11 +403,16 @@ address for.
 | `app/Services/Console/ConsoleHeader.php` | The top strip, shared with every lens through `HandleInertiaRequests` |
 | `app/Services/Console/Snooze.php` | "Until morning", against `console_snoozes` |
 | `app/Services/Console/PeopleLens.php` | Segments and the signal per person |
-| `app/Services/Console/PersonDossier.php` | One person as one stream |
+| `app/Services/Console/PersonDossier.php` | One person as one stream: the three readings, the correspondence, and how long they take to answer |
+| `app/Http/Controllers/CrmMessageController.php` | The correspondence: written down here, imported from Telegram and Discord later |
+| `resources/js/components/console/CopyValue.vue` | One string drawn, another copied — confirmed in place |
 | `app/Support/Handles.php` | A pasted profile link in, a bare handle out — and whether a stored one is an address |
+| `app/Services/CrmSyncService.php` | The importers, the run record (`crm_syncs`) and who stopped holding |
 | `app/Services/Console/NumbersReport.php` | The six questions, per subject |
 | `app/Services/Console/TaskLine.php` | `@who !when #whom` out of one typed line |
-| `app/Services/Console/ChatRoom.php` | The room, its people and its files — both lenses on one stream |
+| `app/Services/Console/ChatRoom.php` | The room, its people and its files — both lenses on one stream, and what changed in it since a reader last looked |
+| `app/Services/Console/ConsolePulse.php` | The heartbeat: one version per lens, and the rail's counts |
+| `resources/js/composables/useConsolePulse.ts` | The browser half: one timer for the console, `useConsoleLive` per lens, `useConsoleBeat` for the room |
 | `app/Services/Console/LainOsRoom.php` | One call to LainOS: which backend answered, and what it was allowed to see |
 | `app/Services/Console/ServiceStrips.php` | A day per service, one cell an hour |
 | `app/Services/Console/Mockup.php` | The canvas manifest: fourteen artboards and four annotations out of `resources/console-mockup/` |
@@ -279,6 +480,10 @@ never be assigned to somebody who cannot open the page it is on.
 - **The room never invents an answer.** An unreachable LainOS is a hatched
   stripe with a retry; a swapped backend is named under the answer. "LainOS
   said so" has to keep meaning something.
+- **A lens that stopped updating says so.** Liveness is a poll, it is paused
+  while nobody is looking, and after three failed beats the top bar admits it
+  — silence that is indistinguishable from a quiet night is the one failure
+  this design cannot afford.
 - **Both languages, always.** The server sends keys and parameters, the
   browser holds the dictionary (`tests/Frontend/LocaleMessagesTest.mjs` pins
   the key sets and the `{placeholders}`).

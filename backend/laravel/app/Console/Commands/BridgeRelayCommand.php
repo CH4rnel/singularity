@@ -11,8 +11,8 @@ use Illuminate\Console\Command;
 #[Signature('bridge:relay
     {id? : BridgeRequest id (omit to list stuck requests)}
     {--tx= : Look up by source_tx_hash instead of id}
-    {--all-failed : Retry every request currently marked failed}
-    {--force : Re-run even if status is processing or completed}')]
+    {--all-failed : Retry every failed / awaiting-liquidity / burn-pending request}
+    {--force : Re-run a request stuck in processing (NEVER re-pays a broadcast payout)}')]
 #[Description('Retry a stuck bridge request — resets it to pending and runs ProcessBridgeRequest synchronously.')]
 class BridgeRelayCommand extends Command
 {
@@ -64,7 +64,31 @@ class BridgeRelayCommand extends Command
     {
         $force = (bool) $this->option('force');
 
-        if (! $force && in_array($request->status, ['processing', 'completed'], true)) {
+        // `--force` overrides the operator's own caution, never the ledger. A
+        // request whose payout has already been broadcast is not re-runnable
+        // by anybody: the money left this server once and the hash proves it.
+        // Bridge request #68 was recovered by hand precisely because a blind
+        // re-run is how one incident becomes two.
+        if ($request->isCompleted() || $request->hasPayout()) {
+            $this->error(sprintf(
+                'Request #%d already has a payout (%s). It will not be paid again%s.',
+                $request->id,
+                $request->destination_tx_hash ?: 'completed',
+                $force ? ', not even with --force' : '',
+            ));
+
+            // A payout that landed but whose wrapper burn is still owed is the
+            // one thing a retry here CAN finish, and it never re-pays.
+            if ($request->isBurnPending()) {
+                $this->line('  finishing the outstanding wrapper burn…');
+
+                return $this->finish($request);
+            }
+
+            return self::FAILURE;
+        }
+
+        if (! $force && $request->status === BridgeRequest::PROCESSING) {
             $this->error("Request #{$request->id} is {$request->status}. Use --force to re-run anyway.");
 
             return self::FAILURE;
@@ -84,17 +108,27 @@ class BridgeRelayCommand extends Command
         }
 
         $request->update([
-            'status' => 'pending',
+            'status' => BridgeRequest::PENDING,
             'error_message' => null,
         ]);
 
+        return $this->finish($request);
+    }
+
+    /**
+     * Hand the request to the one relay path there is — the same job the queue
+     * runs, so a manual retry cannot take a shortcut past a lock or a capacity
+     * check.
+     */
+    private function finish(BridgeRequest $request): int
+    {
         ProcessBridgeRequest::dispatchSync($request->id);
 
         $request->refresh();
 
         $colour = match ($request->status) {
-            'completed' => 'info',
-            'failed' => 'error',
+            BridgeRequest::COMPLETED => 'info',
+            BridgeRequest::FAILED => 'error',
             default => 'warn',
         };
 
@@ -105,12 +139,20 @@ class BridgeRelayCommand extends Command
             $request->error_message ? '  error='.$request->error_message : '',
         ));
 
-        return $request->status === 'completed' ? self::SUCCESS : self::FAILURE;
+        return $request->isCompleted() ? self::SUCCESS : self::FAILURE;
     }
 
     private function retryAllFailed(): int
     {
-        $failed = BridgeRequest::where('status', 'failed')->orderBy('id')->get();
+        // Everything a retry can still move forward: an outright failure, a
+        // deposit parked for liquidity, and a payout whose wrapper burn is
+        // owed. Not `completed`, and not anything already holding a payout
+        // hash that has nothing left to finish.
+        $failed = BridgeRequest::whereIn('status', [
+            BridgeRequest::FAILED,
+            BridgeRequest::AWAITING_LIQUIDITY,
+            BridgeRequest::BURN_PENDING,
+        ])->orderBy('id')->get();
 
         if ($failed->isEmpty()) {
             $this->info('No failed bridge requests.');
@@ -142,7 +184,14 @@ class BridgeRelayCommand extends Command
 
     private function showStuckList(): void
     {
-        $stuck = BridgeRequest::whereIn('status', ['pending', 'processing', 'failed'])
+        $stuck = BridgeRequest::whereIn('status', [
+            BridgeRequest::PENDING,
+            BridgeRequest::PROCESSING,
+            BridgeRequest::AWAITING_LIQUIDITY,
+            BridgeRequest::PAYING_OUT,
+            BridgeRequest::BURN_PENDING,
+            BridgeRequest::FAILED,
+        ])
             ->orderByDesc('id')
             ->limit(50)
             ->get(['id', 'direction', 'token', 'status', 'amount', 'sender_address', 'recipient_address', 'source_tx_hash', 'error_message', 'created_at']);
@@ -172,5 +221,6 @@ class BridgeRelayCommand extends Command
         $this->newLine();
         $this->line('Run with id to retry one:   <fg=cyan>php artisan bridge:relay {id}</>');
         $this->line('Or retry every failure:     <fg=cyan>php artisan bridge:relay --all-failed</>');
+        $this->line('A row holding a payout hash is never paid twice, --force included.');
     }
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import Linked from '@/components/console/Linked.vue';
 import Rule from '@/components/console/Rule.vue';
+import { useConsoleBeat } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import { age, num, plural, secondsSince, shortTime } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
@@ -97,6 +99,8 @@ const props = defineProps<{
     older: number | null;
     before: number | null;
     unreadFrom: number;
+    /* The server's clock when this window was read; handed back on polling. */
+    at: string;
     people: Person[];
     recentFiles: FileRow[];
     fileCount: number;
@@ -146,13 +150,25 @@ const switchNote = ref<string | null>(null);
 const scroller = ref<HTMLElement | null>(null);
 const input = ref<HTMLTextAreaElement | null>(null);
 
+/*
+ * The server's clock as of this browser's last read of the room. Handed back
+ * on every poll to ask what changed since — our own clock rather than this
+ * machine's, which may be minutes out and would silently drop edits.
+ */
+const seenAt = ref(props.at);
+
+/* One poll at a time: a slow answer must not race the next one into the list. */
+let refreshing = false;
+
 const errors = computed(
     () => (page.props.errors ?? {}) as Record<string, string>,
 );
 const latestId = computed(() =>
     list.value.length === 0 ? 0 : list.value[list.value.length - 1].id,
 );
-const operators = computed(() => people.value.filter((p) => p.kind !== 'lainos'));
+const operators = computed(() =>
+    people.value.filter((p) => p.kind !== 'lainos'),
+);
 const lastAt = computed(() =>
     list.value.length === 0 ? null : list.value[list.value.length - 1].at,
 );
@@ -162,6 +178,9 @@ watch(
     () => props.messages,
     (incoming) => {
         list.value = [...incoming];
+        // A re-read of the page is a fresh look at the room: the poll asks
+        // what changed since *this* moment, not since the tab was opened.
+        seenAt.value = props.at;
     },
 );
 watch(
@@ -306,19 +325,58 @@ async function toBottom(): Promise<void> {
     }
 }
 
-/**
- * What has been said since. The room is the one lens two people read at once,
- * so it keeps itself current instead of waiting for a reload.
- */
-async function refresh(): Promise<void> {
-    if (document.hidden || props.before !== null) {
+/** Start a visit at the first unread line; a fully read room starts at now. */
+async function toFirstUnreadOrBottom(): Promise<void> {
+    await nextTick();
+
+    const marker =
+        scroller.value?.querySelector<HTMLElement>('[data-chat-unread]');
+
+    if (marker && scroller.value) {
+        scroller.value.scrollTop = Math.max(0, marker.offsetTop - 12);
+
         return;
     }
 
+    await toBottom();
+}
+
+/**
+ * Catch the room up.
+ *
+ * Three things happen to a conversation and all three arrive here: lines are
+ * said, lines change under the reader (an answer lands on the call that asked
+ * for it, a line becomes a task) and lines are taken back. A poll that only
+ * appended the first left the other two on screen until somebody reloaded.
+ *
+ * The scroll is the reason the room does this instead of re-rendering the
+ * whole window: somebody reading yesterday's argument does not get dragged to
+ * the bottom because a file landed, and somebody who *is* at the bottom
+ * follows the conversation.
+ */
+async function refresh(): Promise<void> {
+    if (document.hidden || props.before !== null || refreshing) {
+        return;
+    }
+
+    refreshing = true;
+
     try {
+        const first = list.value.length > 0 ? list.value[0].id : latestId.value;
+
         const response = await fetch(
-            chat.since.url({ query: { after: latestId.value } }),
-            { credentials: 'same-origin', headers: { Accept: 'application/json' } },
+            chat.since.url({
+                query: {
+                    after: latestId.value,
+                    from: first,
+                    held: list.value.length,
+                    at: seenAt.value,
+                },
+            }),
+            {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' },
+            },
         );
 
         if (!response.ok) {
@@ -327,24 +385,50 @@ async function refresh(): Promise<void> {
 
         const data = (await response.json()) as {
             messages: Message[];
+            changed: Message[];
+            present: number[] | null;
+            at: string;
             people: Person[];
             fileCount: number;
         };
 
+        seenAt.value = data.at;
         people.value = data.people;
         fileCount.value = data.fileCount;
 
+        const follow = atBottom();
+        let next = list.value;
+
+        // Taken back: the server sends the ids that still exist in the window
+        // this browser holds, and only when the two counts disagree.
+        if (data.present !== null) {
+            const alive = new Set(data.present);
+            next = next.filter((message) => alive.has(message.id));
+        }
+
+        // Changed in place: same row, new state. Replaced rather than
+        // re-ordered, because its position in the day is where it was said.
+        if (data.changed.length > 0) {
+            const edits = new Map(data.changed.map((m) => [m.id, m]));
+            next = next.map((message) => edits.get(message.id) ?? message);
+        }
+
         if (data.messages.length > 0) {
-            const follow = atBottom();
+            next = [...next, ...data.messages];
+        }
 
-            list.value = [...list.value, ...data.messages];
+        if (next !== list.value) {
+            list.value = next;
+        }
 
-            if (follow) {
-                void toBottom();
-            }
+        if (data.messages.length > 0 && follow) {
+            void toBottom();
         }
     } catch {
-        // A poll that failed is a poll; the next one is six seconds away.
+        // A poll that failed is a poll; the console's heartbeat brings the
+        // next one, and the top bar counts the ones that fail.
+    } finally {
+        refreshing = false;
     }
 }
 
@@ -364,7 +448,15 @@ function send(): void {
             forceFormData: true,
             preserveScroll: true,
             preserveState: true,
-            only: ['messages', 'older', 'recentFiles', 'fileCount', 'people', 'errors'],
+            only: [
+                'messages',
+                'older',
+                'at',
+                'recentFiles',
+                'fileCount',
+                'people',
+                'errors',
+            ],
             onSuccess: () => {
                 draft.value = '';
                 attachments.value = [];
@@ -416,7 +508,7 @@ async function ask(id: number): Promise<void> {
         asking.value = null;
         // The answer and the call's new state are both rows on the server;
         // re-reading them is the only way this page learns what happened.
-        router.reload({ only: ['messages', 'older'] });
+        router.reload({ only: ['messages', 'older', 'at', 'console'] });
     }
 }
 
@@ -424,7 +516,11 @@ function toTask(message: Message): void {
     router.post(
         chat.task.url(message.id),
         {},
-        { preserveScroll: true, preserveState: true, only: ['messages'] },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['messages', 'at'],
+        },
     );
 }
 
@@ -436,7 +532,7 @@ function remove(message: Message): void {
     router.delete(chat.destroy.url(message.id), {
         preserveScroll: true,
         preserveState: true,
-        only: ['messages', 'recentFiles', 'fileCount'],
+        only: ['messages', 'at', 'recentFiles', 'fileCount'],
     });
 }
 
@@ -569,17 +665,17 @@ async function switchProvider(kind: string, name: string): Promise<void> {
     }
 }
 
-let timer: ReturnType<typeof setInterval> | null = null;
+/*
+ * The room rides the console's heartbeat rather than a timer of its own, and
+ * asks its own question on every beat instead of waiting to be told that
+ * something moved: a version is a count and a whole-second timestamp, and the
+ * room is the one lens where two writes inside one second would be visible.
+ * `refresh` already declines when this window is history.
+ */
+useConsoleBeat(() => void refresh());
 
 onMounted(() => {
-    void toBottom();
-    timer = setInterval(() => void refresh(), 6000);
-});
-
-onBeforeUnmount(() => {
-    if (timer) {
-        clearInterval(timer);
-    }
+    void toFirstUnreadOrBottom();
 });
 </script>
 
@@ -589,7 +685,9 @@ onBeforeUnmount(() => {
     <div style="display: flex; align-items: baseline; gap: 12px">
         <h1 class="mk-h1">{{ t('chat.title') }}</h1>
         <span class="mk-m mk-t3" style="font-size: 12px">
-            {{ t('chat.room', { who: operators.map((p) => p.name).join(', ') }) }}
+            {{
+                t('chat.room', { who: operators.map((p) => p.name).join(', ') })
+            }}
             ·
             <template v-if="lastAt">{{
                 t('chat.last', { ago: ago(lastAt) ?? '—' })
@@ -631,7 +729,11 @@ onBeforeUnmount(() => {
             <div ref="scroller" class="mk-chat-scroll">
                 <div
                     v-if="older"
-                    style="display: flex; justify-content: center; padding: 6px 0"
+                    style="
+                        display: flex;
+                        justify-content: center;
+                        padding: 6px 0;
+                    "
                 >
                     <Link
                         :href="chat.index.url({ query: { before: older } })"
@@ -691,6 +793,7 @@ onBeforeUnmount(() => {
 
                     <div
                         v-else-if="row.kind === 'unread'"
+                        data-chat-unread
                         style="
                             display: flex;
                             align-items: center;
@@ -757,7 +860,9 @@ onBeforeUnmount(() => {
                                 >
                             </div>
 
-                            <p v-if="row.message.body">{{ row.message.body }}</p>
+                            <p v-if="row.message.body">
+                                <Linked :text="row.message.body" />
+                            </p>
                             <p v-else class="mk-t3" style="font-style: italic">
                                 {{ t('chat.noCaption') }}
                             </p>
@@ -850,7 +955,11 @@ onBeforeUnmount(() => {
                                             background: var(--mk-accent);
                                         "
                                     />
-                                    {{ t('chat.task', { id: row.message.task.id }) }}
+                                    {{
+                                        t('chat.task', {
+                                            id: row.message.task.id,
+                                        })
+                                    }}
                                 </Link>
                             </div>
 
@@ -919,7 +1028,10 @@ onBeforeUnmount(() => {
                                         </p>
                                         <p
                                             class="mk-m mk-t3"
-                                            style="margin: 4px 0 0; font-size: 11.5px"
+                                            style="
+                                                margin: 4px 0 0;
+                                                font-size: 11.5px;
+                                            "
                                         >
                                             {{
                                                 row.message.call.state ===
@@ -975,7 +1087,9 @@ onBeforeUnmount(() => {
                                         </p>
                                     </div>
                                     <button
-                                        v-if="row.message.call.note !== 'disabled'"
+                                        v-if="
+                                            row.message.call.note !== 'disabled'
+                                        "
                                         type="button"
                                         class="mk-btn mk-act"
                                         style="height: 26px"
@@ -1163,7 +1277,9 @@ onBeforeUnmount(() => {
                                         ago: ago(person.seenAt) ?? '—',
                                     })
                                 }}</template>
-                                <template v-else>{{ t('chat.unseen') }}</template>
+                                <template v-else>{{
+                                    t('chat.unseen')
+                                }}</template>
                             </span>
                         </div>
                     </div>
@@ -1192,7 +1308,10 @@ onBeforeUnmount(() => {
                                 <a
                                     :href="chat.download.url(file.id)"
                                     class="mk-clip"
-                                    style="font-size: 12.5px; color: var(--mk-body)"
+                                    style="
+                                        font-size: 12.5px;
+                                        color: var(--mk-body);
+                                    "
                                     >{{ file.name }}</a
                                 >
                                 <span
@@ -1377,7 +1496,11 @@ onBeforeUnmount(() => {
                         <span class="mk-hatch" />
                         <p
                             class="mk-m mk-t3"
-                            style="margin: 0; padding: 10px 12px; font-size: 11.5px"
+                            style="
+                                margin: 0;
+                                padding: 10px 12px;
+                                font-size: 11.5px;
+                            "
                         >
                             {{ t('chat.lainos.unreadable') }}
                         </p>
@@ -1398,10 +1521,13 @@ onBeforeUnmount(() => {
                             type="button"
                             class="mk-btn"
                             :class="{
-                                'mk-act':
-                                    lainos.provider?.kind === choice.kind,
+                                'mk-act': lainos.provider?.kind === choice.kind,
                             }"
-                            style="height: 24px; padding: 0 8px; font-size: 11px"
+                            style="
+                                height: 24px;
+                                padding: 0 8px;
+                                font-size: 11px;
+                            "
                             :title="choice.desc"
                             :disabled="
                                 switching !== null ||
@@ -1460,7 +1586,9 @@ onBeforeUnmount(() => {
                         >
                             <span
                                 class="mk-dot"
-                                :style="{ background: `var(--mk-${item.tone})` }"
+                                :style="{
+                                    background: `var(--mk-${item.tone})`,
+                                }"
                             />
                             <span style="font-size: 12.5px">{{
                                 item.label

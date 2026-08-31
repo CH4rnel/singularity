@@ -779,3 +779,135 @@
         display: none;
     }
 }
+
+/* ---------------------------------------------------- one person's dossier */
+
+/*
+ * The copy button, which is the same object wherever an address is drawn: a
+ * value on this screen is almost always shortened, and shortened is exactly
+ * what makes it unusable. It stays quiet until the pointer is on the row —
+ * a panel of seven rows with seven live icons in it reads as seven controls.
+ */
+.mk-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--mk-fainter);
+    cursor: pointer;
+    transition:
+        color 0.12s ease,
+        opacity 0.12s ease;
+}
+
+.mk-copy:hover {
+    color: var(--mk-dim);
+}
+
+.mk-hair:hover .mk-copy,
+.mk-copy:focus-visible {
+    color: var(--mk-dim);
+}
+
+/* Confirmed in place. The tick is the accent because it is the only moment
+   this control has anything to say. */
+.mk-copy.mk-copied,
+.mk-hair:hover .mk-copy.mk-copied {
+    color: var(--mk-accent);
+}
+
+/*
+ * A link inside a written line — in the room, on a task, in a correspondence.
+ * Underlined rather than only coloured: these sit inside body text, where
+ * colour alone is a weak signal and a wrong one for anybody reading the
+ * console on a bad monitor at three in the morning.
+ */
+.mk-link {
+    color: var(--mk-accent);
+    text-decoration: underline;
+    text-decoration-color: rgba(0, 229, 209, 0.4);
+    text-underline-offset: 2px;
+    overflow-wrap: anywhere;
+}
+
+.mk-link:hover {
+    color: #6cf3e6;
+    text-decoration-color: currentColor;
+}
+
+/*
+ * The correspondence. Not the room's transcript: there, every line is ours
+ * and the spine is who said it; here there are exactly two sides, and which
+ * one spoke is the first thing to read. So a line is a rail plus a body —
+ * ours in accent, theirs in the flat colour — and never a bubble, because
+ * bubbles are a chat client's furniture and this is still a dossier.
+ */
+.mk-line {
+    display: flex;
+    gap: 12px;
+    padding: 9px 0;
+}
+
+.mk-line-rail {
+    width: 2px;
+    flex: 0 0 2px;
+    background: var(--mk-flat);
+}
+
+.mk-line.mk-ours .mk-line-rail {
+    background: rgba(0, 229, 209, 0.45);
+}
+
+.mk-line-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.mk-line-body p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--mk-body);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.mk-line-head {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    font-family: var(--mk-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mk-faint);
+}
+
+.mk-line .mk-line-drop {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.mk-line:hover .mk-line-drop,
+.mk-line:focus-within .mk-line-drop {
+    opacity: 1;
+}
+
+/* The thread scrolls inside the dossier rather than pushing the panels down
+   the page: the conversation is long and the record beside it is not. It
+   grows with what is in it and stops — a composer pinned to the bottom of a
+   tall column with four lines above it reads as a page that failed to load
+   the rest. */
+.mk-thread {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 46vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--mk-flat) transparent;
+}

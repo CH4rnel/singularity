@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Concerns;
 
+use App\Support\CrmContactUrl;
 use App\Support\Handles;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
@@ -27,20 +28,43 @@ trait ContactHandles
             // X allows letters, digits and underscore up to fifteen; anything
             // else was a URL we failed to read rather than a handle.
             'x_handle' => ['nullable', 'string', 'regex:/^[A-Za-z0-9_]{1,15}$/', $this->unclaimed('x_handle', $ignore)],
-            'evm_address' => ['nullable', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/', $this->unclaimed('evm_address', $ignore)],
-            'solana_address' => ['nullable', 'string', 'regex:/^[1-9A-HJ-NP-Za-km-z]{32,44}$/', $this->unclaimed('solana_address', $ignore)],
+            // No `unclaimed` on either address, deliberately — see below.
+            'evm_address' => ['nullable', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
+            'solana_address' => ['nullable', 'string', 'regex:/^[1-9A-HJ-NP-Za-km-z]{32,44}$/'],
             'tags' => ['nullable', 'array'],
             'tags.*' => ['string', 'max:50'],
+            'contact_link_url' => [
+                'nullable',
+                'string',
+                'max:2048',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value !== null && CrmContactUrl::normalise($value) === null) {
+                        $fail('Use an http(s), mailto or tel contact link.');
+                    }
+                },
+            ],
+            'contact_link_label' => ['nullable', 'string', 'max:80'],
         ];
     }
 
     /**
-     * Nobody on the books answers to this already.
+     * Nobody on the books answers to this already — for handles only.
      *
-     * A handle and an address each name exactly one person, so a second
-     * record carrying one is a duplicate of the first — which is easy to
-     * create when a base of hundreds is being added to by hand, and hard to
-     * notice afterwards, since the two halves of the person then age apart.
+     * A handle is an account and an account is one person: `@fomo_person`
+     * typed onto a second record is the first record again, which is easy to
+     * do when a base of hundreds is entered by hand and hard to notice
+     * afterwards, since the two halves then age apart.
+     *
+     * **An address is not that.** It is a place value can sit, and more than
+     * one person can stand behind it: an exchange deposit address, a shared
+     * or custodial wallet, a treasury several people are filed against, a
+     * whale whose leads are tracked separately. Refusing the second record
+     * there refuses a fact about the world — and the console already has the
+     * right instrument for saying "these are one person": the identity graph,
+     * which joins records through the address they share and prints them on
+     * the dossier as such, with the evidence, instead of forbidding the entry
+     * and losing it.
+     *
      * Soft-deleted rows are ignored: a record somebody deleted is not a
      * person they may not add again.
      */
@@ -59,8 +83,6 @@ trait ContactHandles
         return [
             'telegram.unique' => 'Somebody with this Telegram is already on the books.',
             'x_handle.unique' => 'Somebody with this X handle is already on the books.',
-            'evm_address.unique' => 'Somebody with this EVM address is already on the books.',
-            'solana_address.unique' => 'Somebody with this Solana address is already on the books.',
         ];
     }
 
@@ -81,6 +103,18 @@ trait ContactHandles
 
         if ($this->has('x_handle')) {
             $normalised['x_handle'] = Handles::x($this->input('x_handle'));
+        }
+
+        if ($this->has('contact_link_url')) {
+            $rawUrl = trim((string) $this->input('contact_link_url'));
+            $normalised['contact_link_url'] = $rawUrl === ''
+                ? null
+                : (CrmContactUrl::normalise($rawUrl) ?? $rawUrl);
+        }
+
+        if ($this->has('contact_link_label')) {
+            $label = trim((string) $this->input('contact_link_label'));
+            $normalised['contact_link_label'] = $label === '' ? null : $label;
         }
 
         foreach (['name', 'email', 'evm_address', 'solana_address'] as $field) {

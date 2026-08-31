@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Actions\Wallet\ReadCyberSolBalance;
 use App\Models\BridgeRequest;
 use App\Models\CrmContact;
+use App\Models\CrmSync;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -23,21 +24,61 @@ use Illuminate\Support\Facades\Schema;
  */
 class CrmSyncService
 {
+    /**
+     * How the last holder scan went, for the run record.
+     *
+     * The scan is the one source that can fail on its own (a public RPC that
+     * rate-limits answers with an empty result, not with an error), and it is
+     * also the only one that can tell that somebody stopped holding. Both
+     * facts belong to the run, so they are carried out of it rather than
+     * being re-derived by a second scan.
+     *
+     * @var array{read: bool, sold: int}
+     */
+    private array $lastHolderScan = ['read' => false, 'sold' => 0];
+
     public function __construct(private ReadCyberSolBalance $readCyberSol) {}
 
     /**
-     * Run every importer and return per-source counts.
+     * Run every importer, record the run, and return per-source counts.
      *
-     * @return array{platform: int, bridge: int, holders: int, whales: int}
+     * The record is what lets the console print how old the base is. It is
+     * written whatever happens: a run that read three sources out of four is
+     * a fact an operator needs, and a date with nothing behind it is worse
+     * than no date at all.
+     *
+     * @return array{platform: int, bridge: int, holders: int, whales: int, added: int, sold: int}
      */
-    public function syncAll(): array
+    public function syncAll(string $trigger = 'schedule'): array
     {
-        return [
+        $run = CrmSync::create(['trigger' => $trigger, 'started_at' => now()]);
+        $before = CrmContact::query()->count();
+        $this->lastHolderScan = ['read' => false, 'sold' => 0];
+
+        $counts = [
             'platform' => $this->importPlatformUsers(),
             'bridge' => $this->importBridgeUsers(),
             'holders' => $this->importHolders(),
             'whales' => $this->importWhales(),
         ];
+
+        $added = max(0, CrmContact::query()->count() - $before);
+
+        $run->update([
+            'finished_at' => now(),
+            'counts' => $counts,
+            'added' => $added,
+            'sold' => $this->lastHolderScan['sold'],
+            'note' => $this->lastHolderScan['read'] ? null : CrmSync::NOTE_HOLDERS_UNREADABLE,
+        ]);
+
+        return $counts + ['added' => $added, 'sold' => $this->lastHolderScan['sold']];
+    }
+
+    /** The last recorded run, or null when the base has never been imported. */
+    public function lastRun(): ?CrmSync
+    {
+        return CrmSync::query()->latest('id')->first();
     }
 
     /**
@@ -226,6 +267,7 @@ class CrmSyncService
             $byOwner[$owner] = bcadd($byOwner[$owner] ?? '0', (string) $amount, 0);
         }
 
+        $holders = [];
         $count = 0;
         foreach ($byOwner as $owner => $raw) {
             if (bccomp($raw, '0', 0) <= 0) {
@@ -233,10 +275,72 @@ class CrmSyncService
             }
             $amount = bcdiv($raw, bcpow('10', (string) $decimals), $decimals);
             $this->upsertHolder($owner, $amount, $this->shouldBeWhale((float) $amount, $threshold));
+            $holders[$owner] = true;
             $count++;
         }
 
+        $this->lastHolderScan = ['read' => true, 'sold' => $this->markSellers($holders)];
+
         return $count;
+    }
+
+    /**
+     * Write down the people who stopped holding.
+     *
+     * Selling used to be invisible: the scan lists the accounts that exist,
+     * an emptied one is simply absent, and the contact kept the balance and
+     * the whale tier it had on the day it was last seen — so the base slowly
+     * filled with whales who hold nothing. Deleting them is not the answer
+     * either; somebody who sold is a person we know, and the fact that they
+     * sold is the most interesting thing on their record. They become a
+     * **lead** whose status is **sold**, with the balance zeroed.
+     *
+     * Two guards, and both matter more than the feature:
+     *
+     * - **Nothing happens on an empty read.** A rate-limited RPC answers with
+     *   an empty result rather than an error, and a market where literally
+     *   everybody sold on the same afternoon has never happened. An empty
+     *   scan means we did not look, not that nobody is there.
+     * - **Only somebody who was actually seen holding.** A recorded balance
+     *   above zero is the only evidence of holding this app keeps; a platform
+     *   user typed `holder` for owning a wallet never held anything, and
+     *   marking them as having sold would invent a story.
+     *
+     * A record an operator wrote off by hand keeps its status: `lost` is a
+     * judgement about the person, `sold` is a fact about their balance, and
+     * the judgement is the one a machine should not overwrite.
+     *
+     * @param  array<string, bool>  $holders  every address that holds right now
+     * @return int how many people were written down as having sold
+     */
+    private function markSellers(array $holders): int
+    {
+        if ($holders === []) {
+            return 0;
+        }
+
+        $sold = 0;
+
+        CrmContact::query()
+            ->whereNotNull('solana_address')
+            ->where('cyber_sol_balance', '>', 0)
+            ->chunkById(500, function ($contacts) use ($holders, &$sold) {
+                foreach ($contacts as $contact) {
+                    if (isset($holders[$contact->solana_address])) {
+                        continue;
+                    }
+
+                    $contact->update([
+                        'cyber_sol_balance' => '0',
+                        'type' => 'lead',
+                        'status' => $contact->status === 'lost' ? 'lost' : 'sold',
+                        'last_synced_at' => now(),
+                    ]);
+                    $sold++;
+                }
+            });
+
+        return $sold;
     }
 
     /**

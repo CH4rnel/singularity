@@ -2,18 +2,28 @@
 
 namespace App\Services;
 
+use App\Support\BridgeCapacity;
 use App\Support\TokenAmount;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
  * How much of a token the relayer can actually pay out to a destination chain
- * right now — the live withdrawal capacity shown in the bridge UI.
+ * right now — the live withdrawal capacity behind every admission decision.
  *
  * With unified wrappers (one USDC across Solana + Base, one USDT across Solana
  * + BNB, …) a token's Cyberia supply is NOT tied to any single chain's reserve,
  * so the per-chain limit is enforced here from the relayer's live inventory on
  * the destination chain instead of by minting a separate wrapper per chain.
+ *
+ * Two rules this file exists to keep:
+ *
+ *  1. **Fail closed.** Every answer is a {@see BridgeCapacity}. A failed read
+ *     is `unavailable`, which covers nothing; only a destination the relayer
+ *     genuinely mints into is `unlimited`. They are never the same value.
+ *  2. **Deliverable, not merely held.** A balance that cannot pay for its own
+ *     transaction is not inventory. An ERC20 reserve with no gas coin, or an
+ *     SPL reserve on a hot wallet with no lamports, reports zero.
  */
 class BridgeInventoryService
 {
@@ -23,12 +33,121 @@ class BridgeInventoryService
     ) {}
 
     /**
-     * Live max the user can withdraw of $token via $direction right now, in
-     * human token units (string). null = effectively unlimited (the relayer
-     * mints on the home chain) or capacity can't be determined (leave the UI
-     * uncapped rather than block on a flaky read).
+     * Live deliverable capacity for a route + token, as raw integer units in
+     * the destination entry's own decimals.
+     */
+    public function capacity(string $direction, string $token): BridgeCapacity
+    {
+        $context = $this->destinationContext($direction, $token);
+
+        if ($context === null) {
+            return BridgeCapacity::unavailable('route or token is not configured');
+        }
+
+        [$chain, $entry, $chainKey] = $context;
+        $decimals = (int) ($entry['decimals'] ?? 18);
+
+        if ($this->mintsOnDestination($token, $chainKey, $entry)) {
+            return BridgeCapacity::unlimited($decimals);
+        }
+
+        $type = (string) ($chain['type'] ?? '');
+
+        if (! in_array($type, (array) config('bridge.inventory.measured_chain_types', []), true)) {
+            return BridgeCapacity::unmeasured(
+                $decimals,
+                "inventory on '{$chainKey}' is held in manual reserves and is not read by this server",
+            );
+        }
+
+        return match ($type) {
+            'evm' => $this->evmCapacity($direction, $token, $chain, $entry),
+            'solana' => $this->solanaCapacity($chain, $entry),
+            'ton' => $this->tonCapacity($direction, $token, $chain, $entry),
+            default => BridgeCapacity::unavailable("no inventory reader for chain type '{$type}'", $decimals),
+        };
+    }
+
+    /**
+     * Identity of the balance a payout spends: destination chain + the exact
+     * asset on it. Two corridors landing on the same balance (USDC arriving on
+     * Solana from Cyberia and from Base) share one pool and therefore one lock
+     * and one reservation ledger; two different assets never do.
+     */
+    public function poolKey(string $direction, string $token): ?string
+    {
+        $context = $this->destinationContext($direction, $token);
+
+        if ($context === null) {
+            return null;
+        }
+
+        [, $entry, $chainKey] = $context;
+
+        $asset = match (true) {
+            ($entry['native'] ?? false) === true => 'native',
+            is_string($entry['address'] ?? null) && $entry['address'] !== '' => strtolower((string) $entry['address']),
+            is_string($entry['mint'] ?? null) && $entry['mint'] !== '' => (string) $entry['mint'],
+            is_string($entry['master'] ?? null) && $entry['master'] !== '' => (string) $entry['master'],
+            default => $token,
+        };
+
+        return $chainKey.':'.$asset;
+    }
+
+    /**
+     * Decimals the payout is denominated in on the destination chain. Every
+     * raw-unit comparison in the admission path is scaled by this and never by
+     * the source side's decimals (Cyberia USDC is 6, BSC USDT is 18).
+     */
+    public function destinationDecimals(string $direction, string $token): ?int
+    {
+        $context = $this->destinationContext($direction, $token);
+
+        return $context === null ? null : (int) ($context[1]['decimals'] ?? 18);
+    }
+
+    /**
+     * Legacy display shim: the human capacity string, or null when there is no
+     * finite number. **Never branch on this for an admission decision** — null
+     * here still conflates "unlimited" with "we could not read it". Use
+     * {@see capacity()}.
      */
     public function destinationCapacity(string $direction, string $token): ?string
+    {
+        return $this->capacity($direction, $token)->availableAmount();
+    }
+
+    /**
+     * A destination the relayer mints into on demand has no inventory ceiling:
+     * on the home chain it mints the wrapper ('mint') or CyberBridge mints on
+     * release ('native'); an 'owned' entry (bridged CYBER on Robinhood) is the
+     * same relayer-owned mint-on-demand wrapper on a non-home chain.
+     *
+     * Exception: a native-entry payout (bridged CYBER coming home) spends the
+     * relayer's own coin balance, so it IS inventory-capped.
+     *
+     * @param  array<string, mixed>  $entry
+     */
+    private function mintsOnDestination(string $token, string $chainKey, array $entry): bool
+    {
+        $tokenConfig = config('bridge.tokens', [])[$token] ?? [];
+        $model = $tokenConfig['model'] ?? 'direct';
+
+        if ($entry['native'] ?? false) {
+            return false;
+        }
+
+        $mintingHome = $chainKey === config('bridge.home_chain', 'cyberia')
+            && in_array($model, ['mint', 'native'], true);
+
+        return $mintingHome || ($model === 'mint' && ($entry['owned'] ?? false));
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>, 2: string}|null
+     */
+    private function destinationContext(string $direction, string $token): ?array
     {
         $route = config('bridge.routes', [])[$direction] ?? null;
 
@@ -46,76 +165,85 @@ class BridgeInventoryService
 
         $entry = $tokenConfig['chains'][$chainKey] ?? null;
 
-        if (! is_array($entry)) {
-            return null;
-        }
-
-        // A minting destination has no inventory cap: on the home chain the
-        // relayer mints the wrapper on demand ('mint') or the CyberBridge
-        // contract mints on release ('native'); an 'owned' entry (bridged
-        // CYBER on Robinhood) is the same relayer-owned mint-on-demand
-        // wrapper on a non-home chain. Exception: a native-entry payout
-        // (bridged CYBER coming home) spends the relayer's own coin balance,
-        // so it IS inventory-capped below.
-        $mintingHome = $chainKey === config('bridge.home_chain', 'cyberia')
-            && in_array($tokenConfig['model'] ?? 'direct', ['mint', 'native'], true);
-        $ownedWrapper = ($tokenConfig['model'] ?? 'direct') === 'mint'
-            && ($entry['owned'] ?? false);
-
-        if (($mintingHome || $ownedWrapper) && ! ($entry['native'] ?? false)) {
-            return null;
-        }
-
-        return match ($chain['type'] ?? '') {
-            'evm' => $this->evmCapacity($direction, $token, $chain, $entry),
-            'solana' => $this->solanaCapacity($chain, $entry),
-            'ton' => $this->tonCapacity($direction, $token, $chain, $entry),
-            default => null, // Yenten: not computed (manual reserves)
-        };
+        return is_array($entry) ? [$chain, $entry, $chainKey] : null;
     }
 
     /**
      * @param  array<string, mixed>  $chain
      * @param  array<string, mixed>  $entry
      */
-    private function evmCapacity(string $direction, string $token, array $chain, array $entry): ?string
+    private function evmCapacity(string $direction, string $token, array $chain, array $entry): BridgeCapacity
     {
         $relayer = $this->relayer->evmAddress();
         $rpc = (string) ($chain['rpc_url'] ?? '');
         $decimals = (int) ($entry['decimals'] ?? 18);
 
         if ($relayer === null || $rpc === '') {
-            return null;
+            return BridgeCapacity::unavailable('relayer address or RPC url is not configured', $decimals);
+        }
+
+        $balanceRaw = $this->evmCall($rpc, 'eth_getBalance', [$relayer, 'latest']);
+
+        if ($balanceRaw === null) {
+            return BridgeCapacity::unavailable('relayer native balance could not be read', $decimals);
         }
 
         // Native-coin payout (e.g. ETH on Base, BNB on BSC): balance minus the
         // gas the payout retains, so the shown max is actually deliverable.
         if ($entry['native'] ?? false) {
-            $balanceRaw = $this->evmCall($rpc, 'eth_getBalance', [$relayer, 'latest']);
-
-            if ($balanceRaw === null) {
-                return null;
-            }
-
             $reserveRaw = TokenAmount::toRaw($this->fee->nativePayoutFee($direction, $token), $decimals);
-            $available = bccomp($balanceRaw, $reserveRaw, 0) > 0
-                ? bcsub($balanceRaw, $reserveRaw, 0)
-                : '0';
 
-            return TokenAmount::fromRaw($available, $decimals);
+            return BridgeCapacity::available(bcsub($balanceRaw, $reserveRaw, 0), $decimals);
         }
 
-        // ERC20 payout from relayer inventory: balanceOf(relayer).
+        // ERC20 payout from relayer inventory: balanceOf(relayer), but only if
+        // the relayer can pay for the transfer. Tokens it cannot move are not
+        // deliverable inventory — that is the "USDC and no CYBER" failure the
+        // wallet already names, seen from the relayer's side.
         $address = (string) ($entry['address'] ?? '');
 
         if ($address === '') {
-            return null;
+            return BridgeCapacity::unavailable('token has no contract address on this chain', $decimals);
+        }
+
+        if (bccomp($balanceRaw, $this->evmTransferGasCostWei($chain), 0) < 0) {
+            Log::warning('Bridge inventory: relayer cannot pay destination gas', [
+                'chain' => $chain['key'] ?? null,
+                'token' => $token,
+            ]);
+
+            return BridgeCapacity::available('0', $decimals);
         }
 
         $data = '0x70a08231'.str_pad(substr($relayer, 2), 64, '0', STR_PAD_LEFT);
-        $balanceRaw = $this->evmCall($rpc, 'eth_call', [['to' => $address, 'data' => $data], 'latest']);
+        $tokenRaw = $this->evmCall($rpc, 'eth_call', [['to' => $address, 'data' => $data], 'latest']);
 
-        return $balanceRaw === null ? null : TokenAmount::fromRaw($balanceRaw, $decimals);
+        return $tokenRaw === null
+            ? BridgeCapacity::unavailable('relayer token balance could not be read', $decimals)
+            : BridgeCapacity::available($tokenRaw, $decimals);
+    }
+
+    /**
+     * Worst-case gas a token payout costs on this chain, in wei. Uses the
+     * configured floor rather than a live quote: this is a solvency check on
+     * the relayer, and a floor that fails closed beats an RPC round trip that
+     * can itself fail.
+     *
+     * @param  array<string, mixed>  $chain
+     */
+    private function evmTransferGasCostWei(array $chain): string
+    {
+        $floorWei = bcmul(
+            (string) config('bridge.fee.native_gas_price_floor_gwei', '3'),
+            '1000000000',
+            0,
+        );
+        $gasLimit = (string) config('bridge.inventory.token_transfer_gas_limit', 120000);
+        $multiplierBps = (string) config('bridge.fee.native_gas_multiplier_bps', 20000);
+
+        unset($chain);
+
+        return bcdiv(bcmul(bcmul($floorWei, $gasLimit, 0), $multiplierBps, 0), '10000', 0);
     }
 
     /**
@@ -153,24 +281,61 @@ class BridgeInventoryService
     /**
      * TON hot-wallet inventory via tonapi: native Toncoin balance for TON
      * payouts (minus the retained fee reserve), jetton balance for jetton
-     * payouts.
+     * payouts (zero unless the wallet can also pay the message fee).
      *
      * @param  array<string, mixed>  $chain
      * @param  array<string, mixed>  $entry
      */
-    private function tonCapacity(string $direction, string $token, array $chain, array $entry): ?string
+    private function tonCapacity(string $direction, string $token, array $chain, array $entry): BridgeCapacity
     {
         $hotWallet = (string) ($chain['deposit_address'] ?? '');
-        $apiUrl = rtrim((string) ($chain['api_url'] ?? 'https://tonapi.io'), '/');
         $decimals = (int) ($entry['decimals'] ?? 9);
 
         if ($hotWallet === '') {
-            return null;
+            return BridgeCapacity::unavailable('TON hot wallet is not configured', $decimals);
         }
 
-        $path = ($entry['native'] ?? false)
-            ? '/v2/accounts/'.rawurlencode($hotWallet)
-            : '/v2/accounts/'.rawurlencode($hotWallet).'/jettons/'.rawurlencode((string) ($entry['master'] ?? ''));
+        $native = $this->tonBalance($chain, '/v2/accounts/'.rawurlencode($hotWallet));
+
+        if ($native === null) {
+            return BridgeCapacity::unavailable('TON hot-wallet balance could not be read', $decimals);
+        }
+
+        if ($entry['native'] ?? false) {
+            $reserveRaw = TokenAmount::toRaw($this->fee->nativePayoutFee($direction, $token), $decimals);
+
+            return BridgeCapacity::available(bcsub($native, $reserveRaw, 0), $decimals);
+        }
+
+        $master = (string) ($entry['master'] ?? '');
+
+        if ($master === '') {
+            return BridgeCapacity::unavailable('jetton master is not configured', $decimals);
+        }
+
+        // Toncoin is what carries a jetton transfer: no gas, no inventory.
+        $feeReserve = TokenAmount::toRaw((string) config('bridge.inventory.ton_fee_reserve', '0.1'), 9);
+
+        if (bccomp($native, $feeReserve, 0) < 0) {
+            return BridgeCapacity::available('0', $decimals);
+        }
+
+        $jetton = $this->tonBalance(
+            $chain,
+            '/v2/accounts/'.rawurlencode($hotWallet).'/jettons/'.rawurlencode($master),
+        );
+
+        return $jetton === null
+            ? BridgeCapacity::unavailable('jetton balance could not be read', $decimals)
+            : BridgeCapacity::available($jetton, $decimals);
+    }
+
+    /**
+     * @param  array<string, mixed>  $chain
+     */
+    private function tonBalance(array $chain, string $path): ?string
+    {
+        $apiUrl = rtrim((string) ($chain['api_url'] ?? 'https://tonapi.io'), '/');
 
         try {
             $request = Http::timeout(8)->acceptJson();
@@ -187,24 +352,9 @@ class BridgeInventoryService
 
             $balanceRaw = (string) $response->json('balance');
 
-            if (! ctype_digit($balanceRaw)) {
-                return null;
-            }
-
-            if ($entry['native'] ?? false) {
-                // Keep back the flat payout fee reserve so the shown max is
-                // actually deliverable.
-                $reserveRaw = TokenAmount::toRaw($this->fee->nativePayoutFee($direction, $token), $decimals);
-                $balanceRaw = bccomp($balanceRaw, $reserveRaw, 0) > 0
-                    ? bcsub($balanceRaw, $reserveRaw, 0)
-                    : '0';
-            }
-
-            return TokenAmount::fromRaw($balanceRaw, $decimals);
+            return ctype_digit($balanceRaw) ? $balanceRaw : null;
         } catch (\Throwable $e) {
-            Log::warning('Bridge inventory: ton read failed', [
-                'error' => $e->getMessage(),
-            ]);
+            Log::warning('Bridge inventory: ton read failed', ['error' => $e->getMessage()]);
 
             return null;
         }
@@ -214,24 +364,46 @@ class BridgeInventoryService
      * @param  array<string, mixed>  $chain
      * @param  array<string, mixed>  $entry
      */
-    private function solanaCapacity(array $chain, array $entry): ?string
+    private function solanaCapacity(array $chain, array $entry): BridgeCapacity
     {
         $hotWallet = (string) ($chain['deposit_address'] ?? '');
         $mint = (string) ($entry['mint'] ?? '');
         $rpc = (string) ($chain['rpc_url'] ?? '');
+        $decimals = (int) ($entry['decimals'] ?? 9);
 
         if ($hotWallet === '' || $rpc === '') {
-            return null;
+            return BridgeCapacity::unavailable('Solana hot wallet or RPC url is not configured', $decimals);
         }
 
-        // Native SOL payout: hot-wallet lamports minus a reserve that keeps
-        // the account rent-exempt and covers transaction fees.
+        // 0.01 SOL held back: rent-exempt minimum (~0.00089 SOL) plus headroom
+        // for the payout fee and one recipient ATA creation.
+        $reserveRaw = TokenAmount::toRaw(
+            (string) config('bridge.inventory.solana_fee_reserve_sol', '0.01'),
+            9,
+        );
+        $lamports = $this->solanaLamports($hotWallet, $rpc);
+
+        if ($lamports === null) {
+            return BridgeCapacity::unavailable('Solana hot-wallet lamports could not be read', $decimals);
+        }
+
+        // Native SOL payout: lamports minus the reserve that keeps the account
+        // rent-exempt and covers transaction fees.
         if ($entry['native'] ?? false) {
-            return $this->solanaNativeCapacity($hotWallet, $rpc, (int) ($entry['decimals'] ?? 9));
+            return BridgeCapacity::available(bcsub($lamports, $reserveRaw, 0), $decimals);
         }
 
         if ($mint === '') {
-            return null;
+            return BridgeCapacity::unavailable('token has no mint on Solana', $decimals);
+        }
+
+        // An SPL balance the hot wallet cannot pay to move is not inventory.
+        if (bccomp($lamports, $reserveRaw, 0) < 0) {
+            Log::warning('Bridge inventory: Solana hot wallet cannot pay payout fees', [
+                'mint' => $mint,
+            ]);
+
+            return BridgeCapacity::available('0', $decimals);
         }
 
         try {
@@ -248,8 +420,8 @@ class BridgeInventoryService
 
             $accounts = $response->json('result.value');
 
-            if (! is_array($accounts)) {
-                return null;
+            if (! $response->successful() || ! is_array($accounts)) {
+                return BridgeCapacity::unavailable('Solana token accounts could not be read', $decimals);
             }
 
             $total = '0';
@@ -258,27 +430,28 @@ class BridgeInventoryService
                 $raw = $account['account']['data']['parsed']['info']['tokenAmount']['amount'] ?? null;
                 $dec = $account['account']['data']['parsed']['info']['tokenAmount']['decimals'] ?? null;
 
-                if (is_string($raw) && is_int($dec)) {
-                    $total = bcadd($total, TokenAmount::fromRaw($raw, $dec), 18);
+                if (! is_string($raw) || ! ctype_digit($raw) || ! is_int($dec)) {
+                    // A malformed account entry is a read failure, not a zero:
+                    // silently skipping it would understate — or, with every
+                    // entry malformed, invent — the reserve.
+                    return BridgeCapacity::unavailable('Solana token account entry was malformed', $decimals);
                 }
+
+                // Scale each account into the destination entry's decimals;
+                // the mint decides them, not the wrapper on the other side.
+                $total = bcadd($total, $this->rescaleRaw($raw, $dec, $decimals), 0);
             }
 
-            return $total;
+            return BridgeCapacity::available($total, $decimals);
         } catch (\Throwable $e) {
-            Log::warning('Bridge inventory: solana read failed', [
-                'error' => $e->getMessage(),
-            ]);
+            Log::warning('Bridge inventory: solana read failed', ['error' => $e->getMessage()]);
 
-            return null;
+            return BridgeCapacity::unavailable('Solana RPC read failed', $decimals);
         }
     }
 
-    private function solanaNativeCapacity(string $hotWallet, string $rpc, int $decimals): ?string
+    private function solanaLamports(string $hotWallet, string $rpc): ?string
     {
-        // 0.01 SOL held back: rent-exempt minimum (~0.00089 SOL) plus
-        // headroom for SPL payout fees from the same hot wallet.
-        $reserveRaw = TokenAmount::toRaw('0.01', $decimals);
-
         try {
             $response = Http::timeout(8)->post($rpc, [
                 'jsonrpc' => '2.0',
@@ -289,22 +462,34 @@ class BridgeInventoryService
 
             $lamports = $response->json('result.value');
 
-            if (! is_int($lamports) && ! is_string($lamports)) {
+            if (! $response->successful()) {
                 return null;
             }
 
-            $balanceRaw = (string) $lamports;
-            $available = bccomp($balanceRaw, $reserveRaw, 0) > 0
-                ? bcsub($balanceRaw, $reserveRaw, 0)
-                : '0';
+            if (is_int($lamports)) {
+                return (string) $lamports;
+            }
 
-            return TokenAmount::fromRaw($available, $decimals);
+            return is_string($lamports) && ctype_digit($lamports) ? $lamports : null;
         } catch (\Throwable $e) {
-            Log::warning('Bridge inventory: solana native read failed', [
-                'error' => $e->getMessage(),
-            ]);
+            Log::warning('Bridge inventory: solana native read failed', ['error' => $e->getMessage()]);
 
             return null;
         }
+    }
+
+    /**
+     * Raw integer rescale between two decimal scales, truncating downwards so
+     * a rescale can never conjure a unit that is not there.
+     */
+    private function rescaleRaw(string $raw, int $from, int $to): string
+    {
+        if ($from === $to) {
+            return $raw;
+        }
+
+        return $from < $to
+            ? bcmul($raw, bcpow('10', (string) ($to - $from)), 0)
+            : bcdiv($raw, bcpow('10', (string) ($from - $to)), 0);
     }
 }

@@ -1,20 +1,41 @@
 <script setup lang="ts">
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, nextTick, ref } from 'vue';
+import { Head, router, useForm } from '@inertiajs/vue3';
+import { computed, nextTick, ref, watch } from 'vue';
+import ContactWays, {
+    type ContactWay,
+} from '@/components/console/ContactWays.vue';
 import Rule from '@/components/console/Rule.vue';
 import Spark from '@/components/console/Spark.vue';
+import { useConsoleLive } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
-import { age, num, plural, secondsSince, toneColor, usd } from '@/lib/console';
+import {
+    age,
+    dateTime,
+    num,
+    plural,
+    secondsSince,
+    toneColor,
+} from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
 
 /**
- * "Люди" — contacts read as what happened to them.
+ * "Лиды" — contacts read as what happened to them.
  *
- * The filter bar is gone. A filter is a question re-asked by hand every time;
- * a segment is that question saved with its rule visible, and the rule is on
- * the row so an empty segment can be told from a broken definition. The middle
- * of each row is the person's freshest signal rather than their database
- * columns, because that is what decides whether anybody writes to them today.
+ * Segments carry the questions worth re-asking: a filter is a question typed
+ * out by hand every time, a segment is that question saved with its rule
+ * visible, and the rule is on the row so an empty segment can be told from a
+ * broken definition. The middle of each row is the person's freshest signal
+ * rather than their database columns, because that is what decides whether
+ * anybody writes to them today.
+ *
+ * The narrow strip above the table is not that question coming back. It
+ * answers a different task — **finding one person you know exists** — which
+ * segments are the wrong shape for: type, status, a search box that reads
+ * `@handle` and a profile URL the way they are pasted, and an order. The
+ * order is the load-bearing one. Every row here is stamped by the half-hourly
+ * balance refresh, so "newest first" means "in sync order", and a lead
+ * entered by hand yesterday sinks under every whale re-read this morning —
+ * which is exactly how somebody ends up on the books and unfindable.
  */
 type Signal = {
     key: string;
@@ -29,11 +50,16 @@ type Row = {
     handle: string | null;
     type: string;
     status: string;
+    bought_usd: string | null;
+    sold_usd: string | null;
     usd: number | null;
+    /* When the record was written down; shown when the list is sorted by it. */
+    added: string | null;
     signal: Signal;
     spark: number[];
     /* Where a message to this person would go, or null when nowhere does. */
     write: string | null;
+    write_ways: ContactWay[];
     action: string;
 };
 
@@ -46,12 +72,94 @@ const props = defineProps<{
     limit: number;
     more: boolean;
     search: string | null;
-    options: { types: string[]; statuses: string[] };
+    /* The narrowing inside the segment, and the order it is read in. */
+    type: string | null;
+    status: string | null;
+    sort: string;
+    options: { types: string[]; statuses: string[]; sorts: string[] };
+    /* The last recorded import: how old this screen is. */
+    sync: {
+        at: string;
+        trigger: string;
+        added: number;
+        sold: number;
+        running: boolean;
+        partial: boolean;
+    } | null;
 }>();
 
-const { locale, t } = useLocale(consoleMessages);
+const { locale, t, tag } = useLocale(consoleMessages);
 
 const query = ref(props.search ?? '');
+const tradeAmounts = ref<Record<number, string>>(
+    Object.fromEntries(
+        props.rows.map((row) => [
+            row.id,
+            row.status === 'sold'
+                ? (row.sold_usd ?? '')
+                : (row.bought_usd ?? row.sold_usd ?? ''),
+        ]),
+    ),
+);
+const savingTrade = ref<number | null>(null);
+
+function recordTrade(row: Row, kind: 'bought' | 'sold') {
+    const amount = tradeAmounts.value[row.id]?.trim() ?? '';
+    const numericAmount = Number(amount);
+
+    if (
+        savingTrade.value !== null ||
+        amount === '' ||
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+    ) {
+        return;
+    }
+
+    savingTrade.value = row.id;
+    router.put(
+        `/crm/${row.id}`,
+        {
+            status: kind === 'bought' ? 'customer' : 'sold',
+            [kind === 'bought' ? 'bought_usd' : 'sold_usd']: amount,
+        },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onFinish: () => {
+                savingTrade.value = null;
+            },
+        },
+    );
+}
+
+watch(
+    () => props.rows,
+    (rows) => {
+        for (const row of rows) {
+            if (tradeAmounts.value[row.id] === undefined) {
+                tradeAmounts.value[row.id] =
+                    row.status === 'sold'
+                        ? (row.sold_usd ?? '')
+                        : (row.bought_usd ?? row.sold_usd ?? '');
+            }
+        }
+    },
+);
+
+/*
+ * The lens two operators fill in together.
+ *
+ * A person written down on one desk — or a balance the half-hourly sync just
+ * refreshed — appears here without a reload, and the segment counts move with
+ * it. The search box and the composer are local state and survive the
+ * re-read: this replaces the row, never what somebody is typing.
+ */
+useConsoleLive('people', () =>
+    router.reload({
+        only: ['segments', 'rows', 'total', 'shown', 'more', 'sync', 'console'],
+    }),
+);
 
 /*
  * Putting somebody on the books.
@@ -64,6 +172,8 @@ const query = ref(props.search ?? '');
  */
 const adding = ref(false);
 const nameField = ref<HTMLInputElement | null>(null);
+const linkField = ref<HTMLInputElement | null>(null);
+const addTab = ref<'details' | 'link'>('details');
 
 const draft = useForm({
     name: '',
@@ -75,6 +185,8 @@ const draft = useForm({
     tags: '',
     type: 'lead',
     status: 'new',
+    contact_link_url: '',
+    contact_link_label: '',
 });
 
 /*
@@ -91,6 +203,7 @@ const named = computed(() =>
         draft.email,
         draft.evm_address,
         draft.solana_address,
+        draft.contact_link_url,
     ].some((value) => value.trim() !== ''),
 );
 
@@ -100,6 +213,13 @@ function openAdd() {
     if (adding.value) {
         void nextTick(() => nameField.value?.focus());
     }
+}
+
+function pickAddTab(tab: 'details' | 'link') {
+    addTab.value = tab;
+    void nextTick(() =>
+        tab === 'details' ? nameField.value?.focus() : linkField.value?.focus(),
+    );
 }
 
 function create() {
@@ -132,16 +252,125 @@ function create() {
         });
 }
 
+/*
+ * Loading what the ecosystem knows and this base does not.
+ *
+ * It runs in the request, not on a queue — this host is not guaranteed a
+ * worker — so it can take a while, and a button that looks untouched for
+ * thirty seconds gets pressed four more times. The state is on the button,
+ * and the date beside it is what the press is for.
+ */
+const syncing = ref(false);
+
+function loadNew() {
+    if (syncing.value) {
+        return;
+    }
+
+    syncing.value = true;
+    router.post(
+        '/crm/sync',
+        {},
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onFinish: () => {
+                syncing.value = false;
+            },
+        },
+    );
+}
+
+/**
+ * How old the base is, in a sentence.
+ *
+ * A run that read nothing off the chain still has a date, and printing that
+ * date on its own would say the base is fresh when a quarter of it was not
+ * looked at — so `partial` is said out loud, and in amber.
+ */
+const freshness = computed(() => {
+    if (props.sync === null) {
+        return { text: t('people.syncNever'), tone: 'flat', brought: null };
+    }
+
+    const seconds = secondsSince(props.sync.at);
+    const value = age(seconds);
+    const ago =
+        value === null
+            ? ''
+            : `${value.value} ${plural(locale.value, value.count, t(value.unit))}`;
+
+    return {
+        text: props.sync.running
+            ? t('people.syncRunning', { ago })
+            : t('people.syncAt', { ago }),
+        tone: props.sync.partial
+            ? 'warning'
+            : (seconds ?? 0) > 60 * 60 * 36
+              ? 'warning'
+              : 'flat',
+        brought:
+            props.sync.added || props.sync.sold
+                ? t('people.syncBrought', {
+                      added: props.sync.added,
+                      sold: props.sync.sold,
+                  })
+                : null,
+    };
+});
+
 const silenceDays = 30;
 
 function rule(key: string): string {
     return t(`rule.${key}`, { days: silenceDays });
 }
 
-function go(segment: string) {
+/*
+ * Everything that narrows the list lives in the address.
+ *
+ * A segment is the saved question; type, status, the search box and the order
+ * are what an operator does inside it while looking for one person. Keeping
+ * them in the URL means the answer can be bookmarked and pasted to the other
+ * desk — and means the back button undoes a filter, which is what everybody
+ * tries first.
+ */
+function go(
+    segment: string = props.segment,
+    changes: Record<string, string | undefined> = {},
+) {
     router.get(
         '/crm/people',
-        { segment, q: query.value || undefined },
+        {
+            segment,
+            q: query.value || undefined,
+            type: props.type ?? undefined,
+            status: props.status ?? undefined,
+            sort: props.sort === 'signal' ? undefined : props.sort,
+            ...changes,
+        },
+        { preserveState: true, preserveScroll: true },
+    );
+}
+
+/** A select that puts itself into the address. `''` is "no filter". */
+function pick(key: 'type' | 'status' | 'sort', value: string) {
+    go(props.segment, { [key]: value === '' ? undefined : value });
+}
+
+/** Whether anything is narrowing the list beyond the segment itself. */
+const narrowed = computed(
+    () =>
+        props.type !== null ||
+        props.status !== null ||
+        (props.search ?? '') !== '' ||
+        props.sort !== 'signal',
+);
+
+function clearFilters() {
+    query.value = '';
+    router.get(
+        '/crm/people',
+        { segment: props.segment },
         { preserveState: true, preserveScroll: true },
     );
 }
@@ -169,15 +398,7 @@ function signalText(signal: Signal): string {
 }
 
 function more40() {
-    router.get(
-        '/crm/people',
-        {
-            segment: props.segment,
-            q: query.value || undefined,
-            rows: props.limit + 40,
-        },
-        { preserveState: true, preserveScroll: true },
-    );
+    go(props.segment, { rows: String(props.limit + 40) });
 }
 
 function open(row: Row) {
@@ -202,7 +423,7 @@ const currentSegment = computed(
 </script>
 
 <template>
-    <Head title="Пульт · Люди" />
+    <Head title="Пульт · Лиды" />
 
     <div
         style="
@@ -306,32 +527,152 @@ const currentSegment = computed(
                     {{ num(currentSegment?.count ?? total) }} ·
                     {{ rule(segment) }}
                 </span>
-                <div style="margin-left: auto; display: flex; gap: 8px">
-                    <input
-                        v-model="query"
-                        class="mk-input"
-                        :placeholder="t('people.search')"
-                        @keyup.enter="go(segment)"
-                    />
-                    <Link
-                        href="/crm/sync"
-                        method="post"
-                        as="button"
-                        class="mk-btn mk-ghost"
-                        >{{ t('people.sync') }}</Link
+                <!-- The controls, and under them the one fact they are
+                     answerable for: how old everything below this line is. -->
+                <div
+                    style="
+                        margin-left: auto;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: flex-end;
+                        gap: 7px;
+                    "
+                >
+                    <div style="display: flex; gap: 8px">
+                        <input
+                            v-model="query"
+                            class="mk-input"
+                            :placeholder="t('people.search')"
+                            @keyup.enter="go(segment)"
+                        />
+                        <button
+                            type="button"
+                            class="mk-btn mk-ghost"
+                            :disabled="syncing"
+                            :title="t('people.syncNote')"
+                            @click="loadNew"
+                        >
+                            {{
+                                syncing ? t('people.syncing') : t('people.sync')
+                            }}
+                        </button>
+                        <a href="/crm/export" class="mk-btn">{{
+                            t('people.export')
+                        }}</a>
+                        <button
+                            type="button"
+                            class="mk-btn"
+                            :class="adding ? 'mk-ghost' : 'mk-act'"
+                            @click="openAdd"
+                        >
+                            {{
+                                adding ? t('people.addClose') : t('people.add')
+                            }}
+                        </button>
+                    </div>
+
+                    <span
+                        class="mk-m"
+                        style="font-size: 11px; text-align: right"
+                        :style="{
+                            color:
+                                freshness.tone === 'warning'
+                                    ? 'var(--mk-warning)'
+                                    : 'var(--mk-faint)',
+                        }"
+                        :title="sync ? dateTime(sync.at, tag) : ''"
                     >
-                    <a href="/crm/export" class="mk-btn">{{
-                        t('people.export')
-                    }}</a>
-                    <button
-                        type="button"
-                        class="mk-btn"
-                        :class="adding ? 'mk-ghost' : 'mk-act'"
-                        @click="openAdd"
-                    >
-                        {{ adding ? t('people.addClose') : t('people.add') }}
-                    </button>
+                        {{ freshness.text
+                        }}<template v-if="freshness.brought">
+                            · {{ freshness.brought }}</template
+                        ><template v-if="sync?.partial">
+                            · {{ t('people.syncPartial') }}</template
+                        >
+                    </span>
                 </div>
+            </div>
+
+            <!-- Narrowing inside the segment. A segment is the saved
+                 question; this is the ordinary one an operator asks while
+                 hunting for a person they know exists — and the order, which
+                 is what "I added them yesterday" needs, since everything on
+                 this screen is stamped by the sync rather than by anybody. -->
+            <div
+                style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                "
+            >
+                <span class="mk-k">{{ t('people.filters') }}</span>
+
+                <select
+                    class="mk-input"
+                    style="width: auto"
+                    :value="type ?? ''"
+                    @change="
+                        pick('type', ($event.target as HTMLSelectElement).value)
+                    "
+                >
+                    <option value="">{{ t('people.anyType') }}</option>
+                    <option
+                        v-for="value in options.types"
+                        :key="value"
+                        :value="value"
+                    >
+                        {{ t(`crm.type.${value}`) }}
+                    </option>
+                </select>
+
+                <select
+                    class="mk-input"
+                    style="width: auto"
+                    :value="status ?? ''"
+                    @change="
+                        pick(
+                            'status',
+                            ($event.target as HTMLSelectElement).value,
+                        )
+                    "
+                >
+                    <option value="">{{ t('people.anyStatus') }}</option>
+                    <option
+                        v-for="value in options.statuses"
+                        :key="value"
+                        :value="value"
+                    >
+                        {{ t(`crm.status.${value}`) }}
+                    </option>
+                </select>
+
+                <span class="mk-k">{{ t('people.sort') }}</span>
+
+                <select
+                    class="mk-input"
+                    style="width: auto"
+                    :value="sort"
+                    @change="
+                        pick('sort', ($event.target as HTMLSelectElement).value)
+                    "
+                >
+                    <option
+                        v-for="value in options.sorts"
+                        :key="value"
+                        :value="value"
+                    >
+                        {{ t(`sort.${value}`) }}
+                    </option>
+                </select>
+
+                <button
+                    v-if="narrowed"
+                    type="button"
+                    class="mk-btn mk-ghost"
+                    @click="clearFilters"
+                >
+                    {{ t('people.clear') }}
+                </button>
             </div>
 
             <!-- The way somebody gets onto the books by hand. Sync writes the
@@ -353,6 +694,34 @@ const currentSegment = computed(
                 </p>
 
                 <div
+                    role="tablist"
+                    :aria-label="t('people.addTitle')"
+                    style="margin-top: 12px; display: flex; gap: 6px"
+                >
+                    <button
+                        type="button"
+                        role="tab"
+                        class="mk-pick"
+                        :class="{ 'mk-on': addTab === 'details' }"
+                        :aria-selected="addTab === 'details'"
+                        @click="pickAddTab('details')"
+                    >
+                        {{ t('people.addDetails') }}
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        class="mk-pick"
+                        :class="{ 'mk-on': addTab === 'link' }"
+                        :aria-selected="addTab === 'link'"
+                        @click="pickAddTab('link')"
+                    >
+                        {{ t('people.addLinkTab') }}
+                    </button>
+                </div>
+
+                <div
+                    v-if="addTab === 'details'"
                     style="
                         margin-top: 12px;
                         display: grid;
@@ -398,6 +767,33 @@ const currentSegment = computed(
                         v-model="draft.tags"
                         class="mk-input"
                         :placeholder="`${t('person.tags')} · ${t('person.tagsPlaceholder')}`"
+                    />
+                </div>
+
+                <div
+                    v-else
+                    style="
+                        margin-top: 12px;
+                        display: grid;
+                        grid-template-columns: repeat(
+                            auto-fit,
+                            minmax(196px, 1fr)
+                        );
+                        gap: 8px;
+                    "
+                >
+                    <input
+                        ref="linkField"
+                        v-model="draft.contact_link_url"
+                        class="mk-input"
+                        inputmode="url"
+                        autocomplete="url"
+                        :placeholder="t('people.linkUrl')"
+                    />
+                    <input
+                        v-model="draft.contact_link_label"
+                        class="mk-input"
+                        :placeholder="t('people.linkLabel')"
                     />
                 </div>
 
@@ -524,31 +920,73 @@ const currentSegment = computed(
                             style="margin-top: 2px; font-size: 11.5px"
                         >
                             {{ ago(row.signal.at) }}
+                            <!-- Reading by when somebody was written down: say
+                                 the date being sorted on, or the order looks
+                                 arbitrary against a column of signals. -->
+                            <template v-if="sort === 'added' && row.added">
+                                ·
+                                {{
+                                    t('people.addedAgo', {
+                                        ago: ago(row.added) || '—',
+                                    })
+                                }}
+                            </template>
                         </div>
                     </div>
                     <div class="mk-wide" style="width: 132px; flex: 0 0 132px">
                         <Spark :values="row.spark" :tone="row.signal.tone" />
                     </div>
-                    <div
-                        style="width: 110px; flex: 0 0 110px; text-align: right"
-                    >
-                        <div class="mk-num" style="font-size: 14px">
-                            {{ usd(row.usd) }}
+                    <div class="lead-trade" @click.stop>
+                        <div class="lead-trade__amount">
+                            <span>$</span>
+                            <input
+                                v-model="tradeAmounts[row.id]"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputmode="decimal"
+                                :aria-label="t('people.tradeAmount')"
+                                placeholder="0"
+                            />
                         </div>
-                        <div class="mk-k" style="margin-top: 3px">
-                            {{ t(`crm.status.${row.status}`) }}
-                        </div>
+                        <button
+                            type="button"
+                            class="lead-trade__button lead-trade__button--bought"
+                            :class="{
+                                'lead-trade__button--active':
+                                    row.status === 'customer' &&
+                                    row.bought_usd !== null,
+                            }"
+                            :disabled="
+                                savingTrade !== null ||
+                                Number(tradeAmounts[row.id]) <= 0
+                            "
+                            @click="recordTrade(row, 'bought')"
+                        >
+                            {{ t('people.bought') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="lead-trade__button lead-trade__button--sold"
+                            :class="{
+                                'lead-trade__button--active':
+                                    row.status === 'sold' &&
+                                    row.sold_usd !== null,
+                            }"
+                            :disabled="
+                                savingTrade !== null ||
+                                Number(tradeAmounts[row.id]) <= 0
+                            "
+                            @click="recordTrade(row, 'sold')"
+                        >
+                            {{ t('people.sold') }}
+                        </button>
                     </div>
-                    <a
-                        v-if="row.write"
-                        :href="row.write"
-                        target="_blank"
-                        rel="noreferrer"
-                        class="mk-btn mk-act"
-                        style="width: 108px"
-                        @click.stop
-                        >{{ t('person.write') }}</a
-                    >
+                    <ContactWays
+                        v-if="row.write_ways.length"
+                        :ways="row.write_ways"
+                        :label="t('person.write')"
+                    />
                     <span v-else class="mk-btn" style="width: 108px">{{
                         t('action.openPerson')
                     }}</span>
@@ -576,3 +1014,73 @@ const currentSegment = computed(
         </div>
     </div>
 </template>
+
+<style scoped>
+.lead-trade {
+    display: grid;
+    grid-template-columns: 72px 54px 58px;
+    gap: 4px;
+    flex: 0 0 192px;
+}
+
+.lead-trade__amount {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid rgba(232, 236, 236, 0.16);
+    color: var(--mk-dim);
+    background: rgba(232, 236, 236, 0.035);
+    font-family: var(--mk-mono);
+    font-size: 11px;
+}
+
+.lead-trade__amount:focus-within {
+    border-color: color-mix(in srgb, var(--mk-accent) 55%, transparent);
+}
+
+.lead-trade__amount input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    color: var(--mk-body);
+    background: transparent;
+    font: inherit;
+}
+
+.lead-trade__amount input::-webkit-inner-spin-button {
+    appearance: none;
+}
+
+.lead-trade__button {
+    height: 28px;
+    padding: 0 7px;
+    border: 1px solid currentColor;
+    background: transparent;
+    font-family: var(--mk-mono);
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.lead-trade__button--bought {
+    color: var(--mk-ok);
+}
+
+.lead-trade__button--sold {
+    color: var(--mk-critical);
+}
+
+.lead-trade__button:hover:not(:disabled),
+.lead-trade__button:focus-visible,
+.lead-trade__button--active {
+    background: rgba(232, 236, 236, 0.08);
+    outline: none;
+}
+
+.lead-trade__button:disabled {
+    cursor: default;
+    opacity: 0.34;
+}
+</style>

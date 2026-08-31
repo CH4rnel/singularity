@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\BridgeRequest;
+use App\Support\BridgeCapacity;
 use App\Support\Environment;
 use App\Support\TokenAmount;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -532,50 +533,48 @@ class BridgeService
      * Direct/mint-model relay, config-driven: the route's source and
      * destination chains (config/bridge.php) pick the verification and payout
      * strategies, so adding an EVM chain is a config-only change.
+     *
+     * The order below is the whole fix for bridge request #68. It used to be
+     * verify → burn → pay, so a destination that could not pay was discovered
+     * with the user's wrapper already destroyed and nothing to hand back. It
+     * is now:
+     *
+     *   verify → capacity (under the destination pool's lock) → pay → record
+     *   the hash durably → confirm → burn
+     *
+     * Every step before the payout is reversible, and every step after it is
+     * idempotent. The state "wrapper burned, payout impossible" has no path
+     * left that reaches it.
      */
     public function processDirectRelay(BridgeRequest $request): bool
     {
-        if (! $request->isPending()) {
+        if (! in_array($request->status, [
+            BridgeRequest::PENDING,
+            BridgeRequest::PROCESSING,
+            BridgeRequest::AWAITING_LIQUIDITY,
+            BridgeRequest::PAYING_OUT,
+            BridgeRequest::BURN_PENDING,
+        ], true)) {
             return false;
         }
 
-        $tokenConfig = config('bridge.tokens', [])[$request->token] ?? null;
+        $context = $this->relayContext($request);
 
-        if (! is_array($tokenConfig)) {
-            $request->markFailed("Unknown token: {$request->token}");
-
+        if ($context === null) {
             return false;
         }
 
-        $route = config('bridge.routes', [])[$request->direction] ?? null;
-
-        if (! is_array($route)) {
-            $request->markFailed("Unknown direction: {$request->direction}");
-
-            return false;
+        if ($request->status !== BridgeRequest::PROCESSING) {
+            $request->markProcessing();
         }
-
-        $sourceChain = config('bridge.chains', [])[$route['source_chain']] ?? null;
-        $destinationChain = config('bridge.chains', [])[$route['destination_chain']] ?? null;
-
-        if (! is_array($sourceChain) || ! is_array($destinationChain)) {
-            $request->markFailed("Route {$request->direction} references an unknown chain");
-
-            return false;
-        }
-
-        $sourceToken = $tokenConfig['chains'][$sourceChain['key']] ?? null;
-        $destinationToken = $tokenConfig['chains'][$destinationChain['key']] ?? null;
-
-        if (! is_array($sourceToken) || ! is_array($destinationToken)) {
-            $request->markFailed("Token {$request->token} is not configured for route {$request->direction}");
-
-            return false;
-        }
-
-        $request->markProcessing();
 
         try {
+            // A request that has already spent money never re-enters the
+            // payout branch, whatever state it was picked up in.
+            if ($request->hasPayout()) {
+                return $this->resumeAfterPayout($request, $context);
+            }
+
             $feeAmount = (string) ($request->fee_amount ?: '0');
             $nativeGasFee = app(BridgeFeeService::class)->nativePayoutFee(
                 $request->direction,
@@ -590,15 +589,18 @@ class BridgeService
             $netAmount = bcsub((string) $request->amount, $feeAmount, 18);
 
             if (bccomp($netAmount, '0', 18) <= 0) {
-                $request->markFailed('Net amount after fee is zero or negative');
+                $this->failRelay($request, 'Net amount after fee is zero or negative');
 
                 return false;
             }
 
+            $sourceChain = $context['source_chain'];
+            $sourceToken = $context['source_token'];
+
             $verified = $this->verifySourceDeposit($request, $sourceChain, $sourceToken);
 
             if ($verified === null) {
-                $request->markFailed("Could not verify {$sourceChain['label']} deposit transaction");
+                $this->failRelay($request, "Could not verify {$sourceChain['label']} deposit transaction");
 
                 return false;
             }
@@ -625,44 +627,23 @@ class BridgeService
                 $netAmount = bcsub($verifiedAmount, $feeAmount, 18);
 
                 if (bccomp($netAmount, '0', 18) <= 0) {
-                    $request->markFailed('Net amount after fee is zero or negative');
+                    $this->failRelay($request, 'Net amount after fee is zero or negative');
 
                     return false;
                 }
             }
 
-            // Leaving a chain where the deposit is a relayer-owned wrapper
-            // (the home chain, or an 'owned' entry like bridged CYBER on
-            // Robinhood) with a mint-model token: destroy the wrapper the
-            // user deposited so supply stays backed by the destination-side
-            // reserve. Deposits on external EVM chains (e.g. canonical USDT
-            // on BSC) are reserves — never burn. Idempotent: a retry after a
-            // failed payout must not burn again — the wrapper is already gone.
-            if (($sourceChain['type'] ?? '') === 'evm'
-                && ($sourceChain['key'] === config('bridge.home_chain', 'cyberia')
-                    || ($sourceToken['owned'] ?? false))
-                && ($tokenConfig['model'] ?? 'direct') === 'mint'
-                && ! ($sourceToken['native'] ?? false)
-                && ! $request->wrapper_burned) {
-                $burned = $this->burnEvmWrapper(
-                    (string) $sourceToken['address'],
-                    $claimedRaw,
-                    $request->id,
-                    $sourceChain,
-                );
+            // The deposit is real: from here the bridge owes this payout and
+            // the obligation is never released by a failure or a retry. The
+            // ledger entry is written here as well as at submit, so a transfer
+            // that reached the relayer by any other road is still counted
+            // against the destination reserve.
+            $request->markSourceVerified();
+            app(BridgeAdmissionService::class)->commit($request, null);
 
-                if (! $burned) {
-                    $request->markFailed('Failed to burn wrapped EVM tokens after user deposit');
-
-                    return false;
-                }
-
-                $request->update(['wrapper_burned' => true]);
-            }
-
-            return $this->payoutDestination($request, $destinationChain, $destinationToken, $tokenConfig, $netAmount);
+            return $this->deliver($request, $context, $netAmount, $claimedRaw);
         } catch (\Throwable $e) {
-            $request->markFailed($e->getMessage());
+            $this->failRelay($request, $e->getMessage());
             Log::error('Bridge: direct relay failed', [
                 'id' => $request->id,
                 'error' => $e->getMessage(),
@@ -670,6 +651,277 @@ class BridgeService
 
             return false;
         }
+    }
+
+    /**
+     * Capacity check and payout, both inside the destination pool's lock.
+     *
+     * Holding one lock across "read the balance" and "spend the balance" is
+     * what stops two payouts from each believing they are the last one the
+     * inventory covers. The read is deliberately re-done here rather than
+     * trusted from submit time: minutes may have passed, and the answer is
+     * about the world.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function deliver(BridgeRequest $request, array $context, string $netAmount, string $claimedRaw): bool
+    {
+        $admission = app(BridgeAdmissionService::class);
+        $inventory = app(BridgeInventoryService::class);
+        $pool = $inventory->poolKey($request->direction, $request->token);
+
+        if ($pool === null) {
+            $this->failRelay($request, "Route {$request->direction} has no destination inventory pool");
+
+            return false;
+        }
+
+        $lock = $admission->poolLock($pool);
+
+        if (! $lock->block((int) config('bridge.inventory.pool_lock_wait_seconds', 5), fn () => true)) {
+            // Somebody else is paying out of this balance. Nothing has been
+            // burned or sent, so parking is free and the retry is safe.
+            $request->markAwaitingLiquidity('Another payout is using the destination reserve — retrying shortly');
+
+            return false;
+        }
+
+        try {
+            $decimals = $inventory->destinationDecimals($request->direction, $request->token) ?? 18;
+            $netRaw = TokenAmount::toRaw($netAmount, $decimals);
+            $capacity = $admission->capacityForPayout($request);
+
+            if (! $capacity->covers($netRaw)) {
+                $request->markAwaitingLiquidity($this->liquidityReason($capacity, $netRaw, $decimals));
+
+                Log::warning('Bridge: payout parked awaiting liquidity', [
+                    'id' => $request->id,
+                    'pool' => $pool,
+                    'capacity' => $capacity->state,
+                    'needed_raw' => $netRaw,
+                    'available_raw' => $capacity->availableRaw,
+                ]);
+
+                return false;
+            }
+
+            $confirmed = $this->payoutDestination(
+                $request,
+                $context['destination_chain'],
+                $context['destination_token'],
+                $context['token_config'],
+                $netAmount,
+            );
+
+            if (! $confirmed) {
+                // A payout that broadcast but was not confirmed keeps its hash
+                // and its state: the retry reconciles that hash instead of
+                // sending a second one. Either way the wrapper is untouched.
+                if (! $request->hasPayout()) {
+                    $this->failRelay($request, $request->error_message ?: 'Destination payout failed');
+                }
+
+                return false;
+            }
+
+            $request->update(['payout_confirmed_at' => now()]);
+
+            return $this->burnAndComplete($request, $context, $claimedRaw);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * Picked up with a payout hash already on the row: reconcile it, never
+     * send a second one.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function resumeAfterPayout(BridgeRequest $request, array $context): bool
+    {
+        $hash = (string) $request->destination_tx_hash;
+
+        if ($request->payout_confirmed_at === null) {
+            $status = $this->payoutSucceeded($context['destination_chain'], $hash);
+
+            if ($status === false) {
+                // Definitively reverted: nothing moved, so the payout may be
+                // attempted again. Clearing the hash is the only place in this
+                // service where that is allowed, and it is on chain evidence.
+                Log::warning('Bridge: recorded payout reverted on chain, allowing a fresh attempt', [
+                    'id' => $request->id,
+                    'tx' => $hash,
+                ]);
+                $request->update([
+                    'destination_tx_hash' => null,
+                    'payout_broadcast_at' => null,
+                    'status' => BridgeRequest::PENDING,
+                ]);
+
+                return $this->processDirectRelay($request->refresh());
+            }
+
+            if ($status === null) {
+                // Unknown: the transaction was broadcast and we cannot see it
+                // yet. Waiting costs a delay; guessing costs a double payout.
+                $request->update([
+                    'status' => BridgeRequest::PAYING_OUT,
+                    'error_message' => 'Payout broadcast; waiting for confirmation on the destination chain',
+                ]);
+
+                return false;
+            }
+
+            $request->update(['payout_confirmed_at' => now()]);
+        }
+
+        $claimedRaw = TokenAmount::toRaw(
+            (string) $request->amount,
+            (int) ($context['source_token']['decimals'] ?? 18),
+        );
+
+        return $this->burnAndComplete($request, $context, $claimedRaw);
+    }
+
+    /**
+     * The last step, and the only destructive one.
+     *
+     * Leaving a chain where the deposit is a relayer-owned wrapper (the home
+     * chain, or an 'owned' entry like bridged CYBER on Robinhood) with a
+     * mint-model token: destroy the wrapper the user deposited so supply stays
+     * backed by the destination-side reserve. Deposits on external EVM chains
+     * (e.g. canonical USDT on BSC) are reserves — never burn.
+     *
+     * It happens only after the recipient has been paid, so a burn that fails
+     * leaves the request in `burn_pending` — an accounting job for a retry,
+     * not a lost transfer.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function burnAndComplete(BridgeRequest $request, array $context, string $claimedRaw): bool
+    {
+        app(BridgeAdmissionService::class)->settle($request);
+
+        if ($this->needsWrapperBurn($request, $context)) {
+            $burned = $this->burnEvmWrapper(
+                (string) $context['source_token']['address'],
+                $claimedRaw,
+                $request->id,
+                $context['source_chain'],
+            );
+
+            if (! $burned) {
+                $request->markBurnPending(
+                    'Payout delivered; burning the deposited wrapper failed and will be retried',
+                );
+
+                Log::error('Bridge: payout delivered but wrapper burn failed', [
+                    'id' => $request->id,
+                    'tx' => $request->destination_tx_hash,
+                ]);
+
+                return false;
+            }
+
+            $request->update(['wrapper_burned' => true]);
+        }
+
+        $request->markCompleted((string) $request->destination_tx_hash);
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function needsWrapperBurn(BridgeRequest $request, array $context): bool
+    {
+        $sourceChain = $context['source_chain'];
+        $sourceToken = $context['source_token'];
+
+        return ($sourceChain['type'] ?? '') === 'evm'
+            && ($sourceChain['key'] === config('bridge.home_chain', 'cyberia')
+                || ($sourceToken['owned'] ?? false))
+            && ($context['token_config']['model'] ?? 'direct') === 'mint'
+            && ! ($sourceToken['native'] ?? false)
+            && ! $request->wrapper_burned;
+    }
+
+    /**
+     * Resolve every config lookup a relay needs, marking the request failed
+     * with the precise reason when one is missing.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function relayContext(BridgeRequest $request): ?array
+    {
+        $tokenConfig = config('bridge.tokens', [])[$request->token] ?? null;
+
+        if (! is_array($tokenConfig)) {
+            $this->failRelay($request, "Unknown token: {$request->token}");
+
+            return null;
+        }
+
+        $route = config('bridge.routes', [])[$request->direction] ?? null;
+
+        if (! is_array($route)) {
+            $this->failRelay($request, "Unknown direction: {$request->direction}");
+
+            return null;
+        }
+
+        $sourceChain = config('bridge.chains', [])[$route['source_chain']] ?? null;
+        $destinationChain = config('bridge.chains', [])[$route['destination_chain']] ?? null;
+
+        if (! is_array($sourceChain) || ! is_array($destinationChain)) {
+            $this->failRelay($request, "Route {$request->direction} references an unknown chain");
+
+            return null;
+        }
+
+        $sourceToken = $tokenConfig['chains'][$sourceChain['key']] ?? null;
+        $destinationToken = $tokenConfig['chains'][$destinationChain['key']] ?? null;
+
+        if (! is_array($sourceToken) || ! is_array($destinationToken)) {
+            $this->failRelay($request, "Token {$request->token} is not configured for route {$request->direction}");
+
+            return null;
+        }
+
+        return [
+            'token_config' => $tokenConfig,
+            'route' => $route,
+            'source_chain' => $sourceChain,
+            'destination_chain' => $destinationChain,
+            'source_token' => $sourceToken,
+            'destination_token' => $destinationToken,
+        ];
+    }
+
+    /**
+     * Terminal failure. The reservation is returned to the pool only when the
+     * source transfer was never confirmed — after that the promise stands.
+     */
+    private function failRelay(BridgeRequest $request, string $error): void
+    {
+        $request->markFailed($error);
+        app(BridgeAdmissionService::class)->releaseFor($request, 'request failed before a verified deposit');
+    }
+
+    private function liquidityReason(BridgeCapacity $capacity, string $netRaw, int $decimals): string
+    {
+        if ($capacity->isUnavailable()) {
+            return 'Destination inventory could not be read, so the payout is held rather than guessed'
+                .($capacity->reason ? ' ('.$capacity->reason.')' : '');
+        }
+
+        return sprintf(
+            'Awaiting liquidity on the destination chain: %s needed, %s available',
+            TokenAmount::fromRaw($netRaw, $decimals),
+            $capacity->availableAmount() ?? '0',
+        );
     }
 
     /**
@@ -795,6 +1047,10 @@ class BridgeService
     /**
      * Pay out the net amount on the destination chain.
      *
+     * Returns true only when the payout is CONFIRMED. A false with a hash on
+     * the request means "broadcast, not yet confirmed" — a state the caller
+     * must never treat as a failure, because retrying it double-pays.
+     *
      * @param  array<string, mixed>  $chain
      * @param  array<string, mixed>  $tokenEntry
      * @param  array<string, mixed>  $tokenConfig
@@ -813,6 +1069,79 @@ class BridgeService
             'yenten' => $this->payoutYenten($request, $chain, $tokenEntry, $netAmount),
             default => tap(false, fn () => $request->markFailed("No payout strategy for chain type '{$chain['type']}'")),
         };
+    }
+
+    /**
+     * On-chain verdict on a payout hash we already recorded:
+     *   true  = it happened,
+     *   false = it is on chain and reverted (nothing moved),
+     *   null  = we cannot tell — never re-pay on this answer.
+     *
+     * @param  array<string, mixed>  $chain
+     */
+    private function payoutSucceeded(array $chain, string $txHash): ?bool
+    {
+        return match ($chain['type'] ?? '') {
+            'evm' => $this->evmTxSucceeded((string) $chain['rpc_url'], $txHash),
+            'solana' => $this->solanaTxSucceeded((string) $chain['rpc_url'], $txHash),
+            // TON and Yenten payouts carry a query_id / request id and their
+            // relay scripts reconcile a lost broadcast themselves; we cannot
+            // add a cheaper check here than re-running them, so an unknown
+            // stays unknown rather than becoming a second transfer.
+            default => null,
+        };
+    }
+
+    /**
+     * Signature status for a recorded Solana payout. `getSignatureStatuses`
+     * with history search is the one read that answers "did this signature
+     * ever land" without needing the transaction to still be in the recent
+     * cache.
+     */
+    private function solanaTxSucceeded(string $rpcUrl, string $signature): ?bool
+    {
+        try {
+            $response = Http::timeout(15)->post($rpcUrl, [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'getSignatureStatuses',
+                'params' => [[$signature], ['searchTransactionHistory' => true]],
+            ]);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $status = $response->json('result.value.0');
+
+            if (! is_array($status)) {
+                return null;
+            }
+
+            return ($status['err'] ?? null) === null;
+        } catch (\Throwable $e) {
+            Log::warning('Bridge: solana signature status check failed', [
+                'signature' => $signature,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Record a payout hash the moment it is known — before any receipt wait,
+     * before any confirmation. Everything that keeps a crashed process from
+     * paying twice hangs off this one write.
+     */
+    private function recordBroadcast(?BridgeRequest $request, ?string $hash): void
+    {
+        if ($request === null || $hash === null || $hash === '' || $request->hasPayout()) {
+            return;
+        }
+
+        $request->markPayoutBroadcast($hash);
+        app(BridgeAdmissionService::class)->settle($request);
     }
 
     /**
@@ -851,17 +1180,17 @@ class BridgeService
             $args = ['scripts/relay-erc20-transfer.ts', (string) $tokenEntry['address'], $request->recipient_address, $amountRaw, $gasDropWei];
         }
 
-        $txHash = $this->runEvmRelayScript($args, $chain, $request->id);
+        $outcome = $this->runEvmRelayScript($args, $chain, $request->id, $request);
 
-        if ($txHash === null) {
+        if ($outcome['hash'] === null) {
             $request->markFailed('Relay failed on '.$chain['label']);
 
             return false;
         }
 
-        $request->markCompleted($txHash);
+        $this->recordBroadcast($request, $outcome['hash']);
 
-        return true;
+        return $outcome['confirmed'];
     }
 
     /**
@@ -898,13 +1227,43 @@ class BridgeService
                 (string) ($tokenEntry['token_program'] ?? 'token'),
             ];
 
-        $result = Process::path($scriptDir)
-            ->env([
-                'ANCHOR_PROVIDER_URL' => (string) $chain['rpc_url'],
-                'ANCHOR_WALLET' => $walletPath,
-            ])
-            ->timeout(120)
-            ->run(['npx', 'ts-node', '--transpile-only', ...$args]);
+        // The relay scripts print {"broadcastTxHash":…} the moment the
+        // signature exists and before they wait for confirmation, so the
+        // signature is on the row even if this process dies waiting. A Solana
+        // signature is not recoverable from anywhere else — losing it means
+        // the only way to find the payout is a human reading an explorer.
+        $captured = '';
+
+        try {
+            $result = Process::path($scriptDir)
+                ->env([
+                    'ANCHOR_PROVIDER_URL' => (string) $chain['rpc_url'],
+                    'ANCHOR_WALLET' => $walletPath,
+                ])
+                ->timeout((int) config('bridge.relay.solana_timeout_seconds', 120))
+                ->run(
+                    ['npx', 'ts-node', '--transpile-only', ...$args],
+                    function (string $type, string $buffer) use (&$captured, $request) {
+                        $captured .= $buffer;
+                        $this->recordBroadcast($request, $this->extractRelayTxHash($captured));
+                    },
+                );
+        } catch (ProcessTimedOutException) {
+            $broadcast = $this->extractRelayTxHash($captured);
+            $this->recordBroadcast($request, $broadcast);
+
+            Log::warning('Bridge relay payout solana timed out', [
+                'id' => $request->id,
+                'broadcast_tx_hash' => $broadcast,
+                'output' => $captured,
+            ]);
+
+            if ($broadcast === null) {
+                $request->markFailed('Solana relay timed out before broadcasting');
+            }
+
+            return false;
+        }
 
         Log::info('Bridge relay payout solana', [
             'id' => $request->id,
@@ -913,8 +1272,13 @@ class BridgeService
             'exit' => $result->exitCode(),
         ]);
 
+        $broadcast = $this->extractRelayTxHash($result->output());
+        $this->recordBroadcast($request, $broadcast);
+
         if ($result->exitCode() !== 0) {
-            $request->markFailed('Solana relay failed: '.$result->errorOutput());
+            if ($broadcast === null) {
+                $request->markFailed('Solana relay failed: '.$result->errorOutput());
+            }
 
             return false;
         }
@@ -922,12 +1286,14 @@ class BridgeService
         $json = $this->lastJsonLine($result->output());
 
         if (! $json || empty($json['txHash'])) {
-            $request->markFailed('Could not parse Solana relay output');
+            if ($broadcast === null) {
+                $request->markFailed('Could not parse Solana relay output');
+            }
 
             return false;
         }
 
-        $request->markCompleted((string) $json['txHash']);
+        $this->recordBroadcast($request, (string) $json['txHash']);
 
         return true;
     }
@@ -952,6 +1318,7 @@ class BridgeService
         }
 
         $amountRaw = TokenAmount::toRaw($netAmount, (int) $tokenEntry['decimals']);
+        $captured = '';
 
         $scriptDir = Environment::isProduction()
             ? '/singularity/crypto/ton'
@@ -980,8 +1347,11 @@ class BridgeService
                 'TONAPI_URL' => (string) ($chain['api_url'] ?? 'https://tonapi.io'),
                 'TONAPI_KEY' => (string) ($chain['api_key'] ?? ''),
             ])
-            ->timeout(240)
-            ->run(['npx', 'tsx', ...$args]);
+            ->timeout((int) config('bridge.relay.ton_timeout_seconds', 240))
+            ->run(['npx', 'tsx', ...$args], function (string $type, string $buffer) use (&$captured, $request) {
+                $captured .= $buffer;
+                $this->recordBroadcast($request, $this->extractRelayTxHash($captured));
+            });
 
         Log::info('Bridge relay payout ton', [
             'id' => $request->id,
@@ -991,7 +1361,9 @@ class BridgeService
         ]);
 
         if ($result->exitCode() !== 0) {
-            $request->markFailed('TON relay failed: '.$result->errorOutput());
+            if (! $request->hasPayout()) {
+                $request->markFailed('TON relay failed: '.$result->errorOutput());
+            }
 
             return false;
         }
@@ -999,12 +1371,14 @@ class BridgeService
         $json = $this->lastJsonLine($result->output());
 
         if (! $json || empty($json['txHash'])) {
-            $request->markFailed('Could not parse TON relay output');
+            if (! $request->hasPayout()) {
+                $request->markFailed('Could not parse TON relay output');
+            }
 
             return false;
         }
 
-        $request->markCompleted((string) $json['txHash']);
+        $this->recordBroadcast($request, (string) $json['txHash']);
 
         return true;
     }
@@ -1032,6 +1406,7 @@ class BridgeService
         }
 
         $amountRaw = TokenAmount::toRaw($netAmount, (int) $tokenEntry['decimals']);
+        $captured = '';
         $scriptDir = Environment::isProduction()
             ? '/singularity/crypto/yenten'
             : base_path('/../../crypto/yenten');
@@ -1044,13 +1419,16 @@ class BridgeService
             ])
             // Generous: the relay script retries slow light-wallet API reads
             // and reconciles a lost /broadcast response by polling the txid.
-            ->timeout(300)
+            ->timeout((int) config('bridge.relay.yenten_timeout_seconds', 300))
             ->run([
                 'npm', 'run', '--silent', 'relay', '--',
                 $request->recipient_address,
                 $amountRaw,
                 (string) $request->id,
-            ]);
+            ], function (string $type, string $buffer) use (&$captured, $request) {
+                $captured .= $buffer;
+                $this->recordBroadcast($request, $this->extractRelayTxHash($captured));
+            });
 
         Log::info('Bridge relay payout yenten', [
             'id' => $request->id,
@@ -1060,7 +1438,9 @@ class BridgeService
         ]);
 
         if ($result->exitCode() !== 0) {
-            $request->markFailed('Yenten relay failed: '.$result->errorOutput());
+            if (! $request->hasPayout()) {
+                $request->markFailed('Yenten relay failed: '.$result->errorOutput());
+            }
 
             return false;
         }
@@ -1068,7 +1448,9 @@ class BridgeService
         $json = $this->lastJsonLine($result->output());
 
         if (! $json || empty($json['txHash'])) {
-            $request->markFailed('Could not parse Yenten relay output');
+            if (! $request->hasPayout()) {
+                $request->markFailed('Could not parse Yenten relay output');
+            }
 
             return false;
         }
@@ -1078,7 +1460,7 @@ class BridgeService
             BridgeRequest::where('deposit_address', $address)->update(['swept' => true]);
         }
 
-        $request->markCompleted((string) $json['txHash']);
+        $this->recordBroadcast($request, (string) $json['txHash']);
 
         return true;
     }
@@ -1136,11 +1518,21 @@ class BridgeService
      * lets the caller record the request completed instead of failing it; a
      * blind retry would send the payout a second time.
      *
+     * `$request`, when given, has the broadcast hash written onto it the
+     * instant the script prints it — from inside the output stream, before the
+     * process has even exited. That is what a crash between the broadcast and
+     * the DB write survives.
+     *
      * @param  array<int, string>  $args  script path + its arguments
      * @param  array<string, mixed>  $chain
+     * @return array{hash: string|null, confirmed: bool}
      */
-    private function runEvmRelayScript(array $args, array $chain, int $requestId): ?string
-    {
+    private function runEvmRelayScript(
+        array $args,
+        array $chain,
+        int $requestId,
+        ?BridgeRequest $request = null,
+    ): array {
         $hardhatDir = Environment::isProduction()
             ? '/singularity/crypto/hardhat'
             : base_path('/../../crypto/hardhat');
@@ -1156,12 +1548,14 @@ class BridgeService
                     'CYBERIA_RPC_URL' => (string) $chain['rpc_url'],
                     'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
                 ])
-                ->timeout(120)
-                ->run(['npx', 'tsx', ...$args], function (string $type, string $buffer) use (&$captured) {
+                ->timeout($this->relayScriptTimeout())
+                ->run(['npx', 'tsx', ...$args], function (string $type, string $buffer) use (&$captured, $request) {
                     $captured .= $buffer;
+                    $this->recordBroadcast($request, $this->extractRelayTxHash($captured));
                 });
         } catch (ProcessTimedOutException $e) {
             $broadcastHash = $this->extractRelayTxHash($captured);
+            $this->recordBroadcast($request, $broadcastHash);
 
             Log::warning('Bridge relay evm script timed out waiting for receipt', [
                 'id' => $requestId,
@@ -1172,7 +1566,7 @@ class BridgeService
             ]);
 
             // null when it timed out before broadcasting — safe to retry then.
-            return $broadcastHash;
+            return ['hash' => $broadcastHash, 'confirmed' => false];
         }
 
         Log::info('Bridge relay evm script', [
@@ -1192,23 +1586,43 @@ class BridgeService
             // it on-chain: recover it unless the chain says it reverted.
             $broadcastHash = $this->extractRelayTxHash($result->output());
 
-            if ($broadcastHash !== null
-                && $this->evmTxSucceeded((string) $chain['rpc_url'], $broadcastHash) !== false) {
-                Log::warning('Bridge relay evm script exited non-zero after broadcasting; recovered hash', [
-                    'id' => $requestId,
-                    'chain' => $chain['key'] ?? null,
-                    'script' => $args[0] ?? null,
-                    'broadcast_tx_hash' => $broadcastHash,
-                    'stderr' => $result->errorOutput(),
-                ]);
-
-                return $broadcastHash;
+            if ($broadcastHash === null) {
+                return ['hash' => null, 'confirmed' => false];
             }
 
-            return null;
+            $onChain = $this->evmTxSucceeded((string) $chain['rpc_url'], $broadcastHash);
+
+            if ($onChain === false) {
+                return ['hash' => null, 'confirmed' => false];
+            }
+
+            $this->recordBroadcast($request, $broadcastHash);
+
+            Log::warning('Bridge relay evm script exited non-zero after broadcasting; recovered hash', [
+                'id' => $requestId,
+                'chain' => $chain['key'] ?? null,
+                'script' => $args[0] ?? null,
+                'broadcast_tx_hash' => $broadcastHash,
+                'stderr' => $result->errorOutput(),
+            ]);
+
+            return ['hash' => $broadcastHash, 'confirmed' => $onChain === true];
         }
 
-        return $this->extractRelayTxHash($result->output());
+        $hash = $this->extractRelayTxHash($result->output());
+        $this->recordBroadcast($request, $hash);
+
+        return ['hash' => $hash, 'confirmed' => $hash !== null];
+    }
+
+    /**
+     * Wall-clock budget for one relay subprocess. The job's own timeout and
+     * the queue's retry_after are both derived from this in config, so a slow
+     * chain can never be handed to a second worker mid-payout.
+     */
+    private function relayScriptTimeout(): int
+    {
+        return max(30, (int) config('bridge.relay.script_timeout_seconds', 120));
     }
 
     /**
@@ -1292,7 +1706,7 @@ class BridgeService
                 'CYBERIA_RPC_URL' => (string) $chain['rpc_url'],
                 'BRIDGE_RELAYER_PRIVATE_KEY' => app(BridgeRelayerService::class)->privateKey() ?? '',
             ])
-            ->timeout(120)
+            ->timeout($this->relayScriptTimeout())
             ->run([
                 'npx', 'tsx', 'scripts/relay-burn.ts',
                 $tokenAddress,
@@ -1331,11 +1745,25 @@ class BridgeService
      */
     public function processSolToEvm(BridgeRequest $request): bool
     {
-        if (! $request->isPending()) {
+        if (! in_array($request->status, BridgeRequest::PROCESSABLE, true)
+            && $request->status !== BridgeRequest::PROCESSING) {
             return false;
         }
 
+        // CyberBridge mints on release, so this destination has no inventory
+        // ceiling — but it still must never pay twice.
+        if ($request->hasPayout()) {
+            Log::warning('Bridge: sol_to_evm already has a payout hash, not re-releasing', [
+                'id' => $request->id,
+                'tx' => $request->destination_tx_hash,
+            ]);
+            $request->markCompleted((string) $request->destination_tx_hash);
+
+            return true;
+        }
+
         $request->markProcessing();
+        $captured = '';
 
         try {
             // Verify the Solana transaction is a real deposit to our hot wallet
@@ -1345,7 +1773,7 @@ class BridgeService
             );
 
             if ($verifiedAmount === null) {
-                $request->markFailed('Could not verify Solana deposit transaction');
+                $this->failRelay($request, 'Could not verify Solana deposit transaction');
 
                 return false;
             }
@@ -1355,6 +1783,8 @@ class BridgeService
                 'verified_amount_raw' => $verifiedAmount,
                 'claimed_amount' => $request->amount,
             ]);
+
+            $request->markSourceVerified();
 
             // Use the per-request fee_amount (computed by BridgeFeeService at
             // submit time). For CYBER.sol this is 0 — only stables carry a
@@ -1395,7 +1825,7 @@ class BridgeService
                     'CYBERSOL_BURN_SWAP_ADDRESS' => (string) config('bridge.convert.burn_swap_address'),
                     'CYBER_SOL_TOKEN_ADDRESS' => (string) (config('bridge.tokens', [])['CYBER.sol']['chains']['cyberia']['address'] ?? ''),
                 ])
-                ->timeout(120)
+                ->timeout($this->relayScriptTimeout())
                 ->run([
                     'npx', 'tsx', 'scripts/relay-bridge.ts',
                     'sol_to_evm',
@@ -1404,7 +1834,10 @@ class BridgeService
                     (string) $request->id,
                     $gasDropWei,
                     $request->convert_to_native ? '1' : '0',
-                ]);
+                ], function (string $type, string $buffer) use (&$captured, $request) {
+                    $captured .= $buffer;
+                    $this->recordBroadcast($request, $this->extractRelayTxHash($captured));
+                });
 
             Log::info('Bridge relay sol_to_evm', [
                 'id' => $request->id,
@@ -1413,8 +1846,12 @@ class BridgeService
                 'exit' => $result->exitCode(),
             ]);
 
+            $this->recordBroadcast($request, $this->extractRelayTxHash($result->output()));
+
             if ($result->exitCode() !== 0) {
-                $request->markFailed('Relay failed: '.$result->errorOutput());
+                if (! $request->hasPayout()) {
+                    $this->failRelay($request, 'Relay failed: '.$result->errorOutput());
+                }
 
                 return false;
             }
@@ -1429,16 +1866,22 @@ class BridgeService
                     $request->update(['converted' => (bool) ($json['converted'] ?? false)]);
                 }
 
-                $request->markCompleted($json['txHash']);
+                $this->recordBroadcast($request, (string) $json['txHash']);
+                $request->markCompleted((string) $json['txHash']);
 
                 return true;
             }
 
-            $request->markFailed('Could not parse relay output');
+            if (! $request->hasPayout()) {
+                $this->failRelay($request, 'Could not parse relay output');
+            }
 
             return false;
         } catch (\Exception $e) {
-            $request->markFailed($e->getMessage());
+            if (! $request->hasPayout()) {
+                $this->failRelay($request, $e->getMessage());
+            }
+
             Log::error('Bridge: SolToEvm failed', ['id' => $request->id, 'error' => $e->getMessage()]);
 
             return false;
@@ -1447,14 +1890,45 @@ class BridgeService
 
     /**
      * Process EVM->Solana: send CYBER SPL tokens from hot wallet to recipient.
+     *
+     * The destructive half of this corridor is not ours: `redeemCyberSol()`
+     * burns the user's CYBER.sol inside their own transaction, before this
+     * server hears about it. So the reservation in the official UI is the only
+     * thing standing between a user and a burn with no payout behind it — and
+     * when one arrives anyway (someone calling the contract directly), the
+     * request parks in `awaiting_liquidity` with the obligation on the books
+     * instead of failing quietly.
+     *
+     * Closing that last gap absolutely is a CONTRACT change, not a server one:
+     * `redeemCyberSol` would have to take a signed reservation — relayer
+     * signature over (sender, amount, recipient, nonce, expiry), replayed
+     * nonces rejected on chain — or the corridor would have to become an
+     * escrow that locks rather than burns, releasing only on the relayer's
+     * confirmation. Both need a deployed contract and a migration of the live
+     * supply, so neither is done here.
      */
     public function processEvmToSol(BridgeRequest $request): bool
     {
-        if (! $request->isPending()) {
+        if (! in_array($request->status, BridgeRequest::PROCESSABLE, true)
+            && $request->status !== BridgeRequest::PROCESSING) {
             return false;
         }
 
+        if ($request->hasPayout()) {
+            Log::warning('Bridge: evm_to_sol already has a payout signature, not re-sending', [
+                'id' => $request->id,
+                'tx' => $request->destination_tx_hash,
+            ]);
+            $request->markCompleted((string) $request->destination_tx_hash);
+
+            return true;
+        }
+
         $request->markProcessing();
+        // The user's tokens are already burned on Cyberia by their own
+        // transaction: this is an obligation from the first moment.
+        $request->markSourceVerified();
+        $captured = '';
 
         try {
             $feeAmount = $request->fee_amount !== null
@@ -1474,55 +1948,92 @@ class BridgeService
             $solanaDecimals = (int) (config('bridge.tokens', [])['CYBER.sol']['chains']['solana']['decimals'] ?? 6);
             $amountRaw = TokenAmount::toRaw($amountAfterFee, $solanaDecimals);
 
-            $scriptDir = Environment::isProduction()
-                ? '/singularity/crypto/anchor'
-                : base_path('/../../crypto/anchor');
+            $admission = app(BridgeAdmissionService::class);
+            $pool = app(BridgeInventoryService::class)->poolKey($request->direction, $request->token);
+            $lock = $pool === null ? null : $admission->poolLock($pool);
 
-            $home = env('HOME', $_SERVER['HOME'] ?? '/home/lain');
-
-            $walletPath = Environment::isProduction()
-                ? '/solana/id.json'
-                : $home.'/.config/solana/id.json';
-
-            $result = Process::path($scriptDir)
-                ->env([
-                    'ANCHOR_PROVIDER_URL' => $this->solanaRpc(),
-                    'ANCHOR_WALLET' => $walletPath,
-                ])
-                ->timeout(120)
-                ->run([
-                    'npx', 'ts-node', '--transpile-only', 'scripts/relay-release-native.ts',
-                    $request->recipient_address,
-                    $amountRaw,
-                ]);
-
-            Log::info('Bridge relay evm_to_sol', [
-                'id' => $request->id,
-                'stdout' => $result->output(),
-                'stderr' => $result->errorOutput(),
-                'exit' => $result->exitCode(),
-            ]);
-
-            if ($result->exitCode() !== 0) {
-                $request->markFailed('Solana relay failed: '.$result->errorOutput());
+            if ($lock !== null && ! $lock->block((int) config('bridge.inventory.pool_lock_wait_seconds', 5), fn () => true)) {
+                $request->markAwaitingLiquidity('Another payout is using the destination reserve — retrying shortly');
 
                 return false;
             }
 
-            $lines = array_filter(explode("\n", trim($result->output())));
-            $json = json_decode(end($lines), true);
+            try {
+                $capacity = $admission->capacityForPayout($request);
 
-            if ($json && isset($json['txHash'])) {
-                $request->markCompleted($json['txHash']);
+                if (! $capacity->covers($amountRaw)) {
+                    $request->markAwaitingLiquidity(
+                        $this->liquidityReason($capacity, $amountRaw, $solanaDecimals),
+                    );
 
-                return true;
+                    return false;
+                }
+
+                $scriptDir = Environment::isProduction()
+                    ? '/singularity/crypto/anchor'
+                    : base_path('/../../crypto/anchor');
+
+                $home = env('HOME', $_SERVER['HOME'] ?? '/home/lain');
+
+                $walletPath = Environment::isProduction()
+                    ? '/solana/id.json'
+                    : $home.'/.config/solana/id.json';
+
+                $result = Process::path($scriptDir)
+                    ->env([
+                        'ANCHOR_PROVIDER_URL' => $this->solanaRpc(),
+                        'ANCHOR_WALLET' => $walletPath,
+                    ])
+                    ->timeout((int) config('bridge.relay.solana_timeout_seconds', 120))
+                    ->run([
+                        'npx', 'ts-node', '--transpile-only', 'scripts/relay-release-native.ts',
+                        $request->recipient_address,
+                        $amountRaw,
+                    ], function (string $type, string $buffer) use (&$captured, $request) {
+                        $captured .= $buffer;
+                        $this->recordBroadcast($request, $this->extractRelayTxHash($captured));
+                    });
+
+                Log::info('Bridge relay evm_to_sol', [
+                    'id' => $request->id,
+                    'stdout' => $result->output(),
+                    'stderr' => $result->errorOutput(),
+                    'exit' => $result->exitCode(),
+                ]);
+
+                $this->recordBroadcast($request, $this->extractRelayTxHash($result->output()));
+
+                if ($result->exitCode() !== 0) {
+                    if (! $request->hasPayout()) {
+                        $request->markFailed('Solana relay failed: '.$result->errorOutput());
+                    }
+
+                    return false;
+                }
+
+                $lines = array_filter(explode("\n", trim($result->output())));
+                $json = json_decode(end($lines), true);
+
+                if ($json && isset($json['txHash'])) {
+                    $this->recordBroadcast($request, (string) $json['txHash']);
+                    $request->markCompleted((string) $json['txHash']);
+
+                    return true;
+                }
+
+                if (! $request->hasPayout()) {
+                    $request->markFailed('Could not parse Solana relay output');
+                }
+
+                return false;
+            } finally {
+                $lock?->release();
+            }
+        } catch (\Exception $e) {
+            if (! $request->hasPayout()) {
+                $request->markFailed($e->getMessage());
             }
 
-            $request->markFailed('Could not parse Solana relay output');
-
-            return false;
-        } catch (\Exception $e) {
-            $request->markFailed($e->getMessage());
             Log::error('Bridge: EvmToSol failed', ['id' => $request->id, 'error' => $e->getMessage()]);
 
             return false;

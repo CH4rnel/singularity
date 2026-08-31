@@ -209,6 +209,32 @@ export const walletMessages: Messages = {
         // Add network
         addNetwork: 'Add network',
         addNetworkHint: 'EVM chain or Bitcoin fork · same seed',
+
+        // The network catalogue
+        networksTile: 'Networks',
+        networksTileHint: '120 shipped · plus your own',
+        networksTitle: 'Networks',
+        networksBody:
+            'Your seed already holds an account on every EVM network here — the same key and the same address. What a switch changes is whether the portfolio draws that network and reads its balance, which is why they start off rather than on.',
+        networksOnLabel: 'Switched on',
+        networksOnCount: '{on} of {total}',
+        networksCost:
+            'Each network switched on is one more balance read on every refresh. Turn on what you use.',
+        networksSearch: 'Name, ticker or chain id',
+        networksFilterAll: 'All',
+        networksFilterOn: 'On',
+        networksFilterIndexed: 'With token index',
+        networksBuiltinHeading: 'Ships switched on',
+        networksCatalogueHeading: 'Shipped, checked, off by default',
+        networksCustomHeading: 'Added by you',
+        networksAlwaysOn: 'Always on',
+        networksChainId: 'chain {id}',
+        networksIndexed: 'balances · tokens · history',
+        networksNoIndex: 'balances only · no keyless index here',
+        networksNoExplorer: 'balances only · no public explorer',
+        networksSwitchOn: 'Switch on',
+        networksSwitchOff: 'On',
+        networksEmpty: 'Nothing in the catalogue matches “{query}”.',
         addNetworkBody:
             'The same seed derives the new account. No key material is created, sent or re-entered.',
         addKindEvm: 'EVM chain',
@@ -619,6 +645,74 @@ export const walletMessages: Messages = {
         plainLanguage: 'Plain language',
         nothingElse: 'Nothing else is authorised by this signature.',
         holdToSign: 'Hold to sign',
+
+        // Cross-chain swaps
+        crossTile: 'Cross-chain swap',
+        crossTileHint: 'Other chains · via a router',
+        crossTitle: 'Cross-chain swap',
+        crossBody:
+            'Cyberia has liquidity on Cyberia. Trading Base ETH for Solana SOL means somebody holding both sides, so this screen asks a router that does: you sign one deposit on the network you are spending from, and the router delivers on the other side. Cyberia never holds the money in between.',
+        crossLoading: 'Asking the router what it can reach…',
+        crossOff: 'Cross-chain swaps are switched off on this host.',
+        crossUnavailable: 'The routing service could not be reached.',
+        crossFeeLabel: "Cyberia's fee",
+        crossFeeBody:
+            'Cyberia takes {percent}% of what you send. It comes out of the input on the source chain, and the exact amount is in the quote below before you sign anything.',
+        crossFeeNone:
+            'This host has no fee address configured, so Cyberia takes nothing on these routes. The router still charges its own fee, and it is in the quote.',
+        crossNoSources:
+            'None of the networks you have switched on can start a route. Switch on one the router serves — Ethereum, Arbitrum, Optimism, Polygon and Avalanche all are.',
+        crossFrom: 'From',
+        crossTo: 'To',
+        crossPickToken: 'change',
+        crossAmount: 'Amount',
+        crossBalance: 'You hold {amount} {symbol}',
+        crossOverBalance: 'More than this account holds.',
+        crossRecipient: 'Recipient address',
+        crossRecipientEmpty: 'Where the swap should arrive.',
+        crossRecipientInvalid: 'Not a valid address on that network.',
+        crossRecipientOwn: 'Your own address on that network.',
+        crossRecipientOther:
+            'Somebody else’s address. Nothing here can recall it.',
+        crossTokenSearch: 'Token name or symbol',
+        crossNativeCoin: 'the network’s own coin',
+        crossTokensLoading: 'Asking the router…',
+        crossTokensEmpty: 'The router lists no token matching that.',
+        crossTokenUnverified: 'unverified',
+        crossQuoteAction: 'Price this route',
+        crossQuoting: 'Pricing…',
+        crossQuoteFailed: 'The route could not be priced.',
+        crossNoAccount: 'This account has no EVM address to spend from.',
+        crossYouGet: 'You receive',
+        crossMinimum: 'At least {amount} {symbol}, or the route does not run',
+        crossFeeCyberia: 'Cyberia',
+        crossFeeRouter: 'Router',
+        crossEta: 'Delivery',
+        crossEtaValue: '≈ {seconds}s',
+        crossSlippage: 'Slippage allowed',
+        crossFeeDeclined:
+            'The router did not apply Cyberia’s fee to this route. You are not being charged it.',
+        crossNoCancel:
+            'One signature starts this. There is no cancel between the deposit and the delivery, and the deposit goes to the router’s contract, not to Cyberia.',
+        crossSigning: 'Signing…',
+        crossSignFailed: 'The deposit was not signed.',
+        crossSteps:
+            'This route takes {count} transaction(s) on the source chain.',
+        crossUnderway: 'Route underway',
+        crossStatusPending: 'Deposited. Waiting for the router to deliver.',
+        crossStatusDone: 'Delivered.',
+        crossStatusFailed: 'The router reports this route as failed.',
+        crossStatusRefunded: 'The router refunded the deposit.',
+        crossStatusNote:
+            'The route belongs to the router now. Closing this screen does not stop it, and the hashes above are how to look it up.',
+        crossAnother: 'Another swap',
+        crossElsewhere:
+            'Networks the router serves but this wallet will not start from',
+        crossReasonNotInWallet: 'not switched on in this wallet',
+        crossOffCount:
+            'The router serves {count} more networks you have not switched on here.',
+        crossReasonNoDeposits: 'the router is not taking deposits here',
+        crossReasonNotEvm: 'the wallet cannot sign a deposit on this chain',
 
         // Transaction status
         txSigningLabel: 'Signing locally',
@@ -1332,6 +1426,32 @@ export const walletMessages: Messages = {
         // Add network
         addNetwork: 'Добавить сеть',
         addNetworkHint: 'EVM-сеть или форк Bitcoin · та же сид-фраза',
+
+        // Каталог сетей
+        networksTile: 'Сети',
+        networksTileHint: '120 готовых · плюс свои',
+        networksTitle: 'Сети',
+        networksBody:
+            'Ваша сид-фраза уже держит счёт в каждой из этих EVM-сетей — тот же ключ и тот же адрес. Переключатель меняет только одно: рисует ли портфель эту сеть и читает ли её баланс. Поэтому по умолчанию они выключены.',
+        networksOnLabel: 'Включено',
+        networksOnCount: '{on} из {total}',
+        networksCost:
+            'Каждая включённая сеть — ещё одно чтение баланса при каждом обновлении. Включайте то, чем пользуетесь.',
+        networksSearch: 'Название, тикер или chain id',
+        networksFilterAll: 'Все',
+        networksFilterOn: 'Включённые',
+        networksFilterIndexed: 'С индексом токенов',
+        networksBuiltinHeading: 'Включены изначально',
+        networksCatalogueHeading: 'Проверены и выключены по умолчанию',
+        networksCustomHeading: 'Добавлены вами',
+        networksAlwaysOn: 'Всегда',
+        networksChainId: 'chain {id}',
+        networksIndexed: 'балансы · токены · история',
+        networksNoIndex: 'только балансы · индекса без ключа здесь нет',
+        networksNoExplorer: 'только балансы · нет публичного обозревателя',
+        networksSwitchOn: 'Включить',
+        networksSwitchOff: 'Вкл.',
+        networksEmpty: 'В каталоге ничего не найдено по запросу «{query}».',
         addNetworkBody:
             'Новый счёт выводится из той же сид-фразы. Никакие ключи не создаются, не отправляются и не вводятся заново.',
         addKindEvm: 'EVM-сеть',
@@ -1733,6 +1853,74 @@ export const walletMessages: Messages = {
         plainLanguage: 'Человеческим языком',
         nothingElse: 'Ничего другого эта подпись не разрешает.',
         holdToSign: 'Удерживайте для подписи',
+
+        // Кроссчейн-свопы
+        crossTile: 'Кроссчейн-своп',
+        crossTileHint: 'Другие сети · через маршрутизатор',
+        crossTitle: 'Кроссчейн-своп',
+        crossBody:
+            'Ликвидность Cyberia — на Cyberia. Обменять ETH в Base на SOL в Solana может только тот, у кого есть обе стороны, поэтому этот экран спрашивает маршрутизатор, у которого они есть: вы подписываете один депозит в сети, из которой тратите, а он выдаёт на другой стороне. Cyberia в промежутке деньги не держит.',
+        crossLoading: 'Спрашиваем маршрутизатор, куда он ходит…',
+        crossOff: 'Кроссчейн-свопы на этом хосте выключены.',
+        crossUnavailable: 'Маршрутизатор недоступен.',
+        crossFeeLabel: 'Комиссия Cyberia',
+        crossFeeBody:
+            'Cyberia берёт {percent}% от отправленного. Она удерживается из входящей суммы в исходной сети, и точная величина видна в расчёте ниже — до того, как вы что-либо подпишете.',
+        crossFeeNone:
+            'На этом хосте не задан адрес для комиссии, поэтому Cyberia на этих маршрутах не берёт ничего. Свою комиссию маршрутизатор всё равно берёт, и она указана в расчёте.',
+        crossNoSources:
+            'Ни одна включённая сеть не может быть началом маршрута. Включите ту, которую маршрутизатор обслуживает, — Ethereum, Arbitrum, Optimism, Polygon и Avalanche подходят.',
+        crossFrom: 'Откуда',
+        crossTo: 'Куда',
+        crossPickToken: 'сменить',
+        crossAmount: 'Сумма',
+        crossBalance: 'У вас {amount} {symbol}',
+        crossOverBalance: 'Больше, чем есть на этом счёте.',
+        crossRecipient: 'Адрес получателя',
+        crossRecipientEmpty: 'Куда должен прийти обмен.',
+        crossRecipientInvalid: 'В этой сети такой адрес недействителен.',
+        crossRecipientOwn: 'Ваш собственный адрес в этой сети.',
+        crossRecipientOther: 'Чужой адрес. Отозвать перевод отсюда нельзя.',
+        crossTokenSearch: 'Название или тикер токена',
+        crossNativeCoin: 'родная монета сети',
+        crossTokensLoading: 'Спрашиваем маршрутизатор…',
+        crossTokensEmpty: 'Маршрутизатор не знает такого токена.',
+        crossTokenUnverified: 'не проверен',
+        crossQuoteAction: 'Рассчитать маршрут',
+        crossQuoting: 'Считаем…',
+        crossQuoteFailed: 'Маршрут рассчитать не удалось.',
+        crossNoAccount:
+            'У этого счёта нет EVM-адреса, с которого можно тратить.',
+        crossYouGet: 'Вы получите',
+        crossMinimum:
+            'Не меньше {amount} {symbol}, иначе маршрут не исполнится',
+        crossFeeCyberia: 'Cyberia',
+        crossFeeRouter: 'Маршрутизатор',
+        crossEta: 'Доставка',
+        crossEtaValue: '≈ {seconds} с',
+        crossSlippage: 'Допустимое проскальзывание',
+        crossFeeDeclined:
+            'Маршрутизатор не применил комиссию Cyberia к этому маршруту. С вас её не берут.',
+        crossNoCancel:
+            'Одна подпись — и процесс пошёл. Между депозитом и выдачей отмены нет, а депозит уходит на контракт маршрутизатора, не в Cyberia.',
+        crossSigning: 'Подписываем…',
+        crossSignFailed: 'Депозит не подписан.',
+        crossSteps: 'Маршрут потребует транзакций в исходной сети: {count}.',
+        crossUnderway: 'Маршрут в работе',
+        crossStatusPending: 'Депозит внесён. Ждём выдачи маршрутизатором.',
+        crossStatusDone: 'Выдано.',
+        crossStatusFailed: 'Маршрутизатор сообщает, что маршрут не исполнен.',
+        crossStatusRefunded: 'Маршрутизатор вернул депозит.',
+        crossStatusNote:
+            'Дальше маршрут — дело маршрутизатора. Закрытие экрана его не остановит, а по хешам выше его можно найти.',
+        crossAnother: 'Ещё обмен',
+        crossElsewhere:
+            'Сети, которые маршрутизатор обслуживает, но кошелёк из них не начинает',
+        crossReasonNotInWallet: 'не включена в этом кошельке',
+        crossOffCount:
+            'Маршрутизатор обслуживает ещё {count} сетей, которые здесь не включены.',
+        crossReasonNoDeposits: 'маршрутизатор здесь не принимает депозиты',
+        crossReasonNotEvm: 'кошелёк не умеет подписывать депозит в этой сети',
 
         // Transaction status
         txSigningLabel: 'Подписываем локально',
@@ -2437,6 +2625,32 @@ export const walletMessages: Messages = {
         // Add network
         addNetwork: '添加网络',
         addNetworkHint: 'EVM 链或比特币分叉 · 同一组助记词',
+
+        // 网络目录
+        networksTile: '网络',
+        networksTileHint: '内置 120 条 · 外加自定义',
+        networksTitle: '网络',
+        networksBody:
+            '您的助记词已经在这里的每一条 EVM 网络上持有账户——同一把密钥、同一个地址。开关改变的只是钱包是否显示该网络并读取其余额，因此它们默认关闭。',
+        networksOnLabel: '已开启',
+        networksOnCount: '{total} 条中的 {on} 条',
+        networksCost:
+            '每开启一条网络，每次刷新就多一次余额读取。只开启您真正使用的。',
+        networksSearch: '名称、代号或 chain id',
+        networksFilterAll: '全部',
+        networksFilterOn: '已开启',
+        networksFilterIndexed: '含代币索引',
+        networksBuiltinHeading: '默认开启',
+        networksCatalogueHeading: '已核验，默认关闭',
+        networksCustomHeading: '您添加的',
+        networksAlwaysOn: '常开',
+        networksChainId: 'chain {id}',
+        networksIndexed: '余额 · 代币 · 历史',
+        networksNoIndex: '仅余额 · 此处没有免密钥索引',
+        networksNoExplorer: '仅余额 · 没有公开浏览器',
+        networksSwitchOn: '开启',
+        networksSwitchOff: '已开',
+        networksEmpty: '目录中没有与“{query}”匹配的网络。',
         addNetworkBody:
             '新账户由同一组助记词派生。不会生成、发送或再次向你索要任何密钥材料。',
         addKindEvm: 'EVM 链',
@@ -2821,6 +3035,69 @@ export const walletMessages: Messages = {
         plainLanguage: '大白话',
         nothingElse: '这个签名不会授权任何别的事情。',
         holdToSign: '按住签名',
+
+        // 跨链兑换
+        crossTile: '跨链兑换',
+        crossTileHint: '其他链 · 经由路由方',
+        crossTitle: '跨链兑换',
+        crossBody:
+            'Cyberia 的流动性在 Cyberia 上。用 Base 的 ETH 换 Solana 的 SOL，需要有人同时持有两端，所以本页向具备这一条件的路由方询价：您在支出所在的网络上签署一笔存入，路由方在另一端交付。中间过程 Cyberia 不持有任何资金。',
+        crossLoading: '正在询问路由方可达的网络…',
+        crossOff: '本主机已关闭跨链兑换。',
+        crossUnavailable: '无法连接路由服务。',
+        crossFeeLabel: 'Cyberia 手续费',
+        crossFeeBody:
+            'Cyberia 收取您发送金额的 {percent}%，从源链的输入金额中扣除；在您签名之前，确切金额已列在下方报价中。',
+        crossFeeNone:
+            '本主机未配置收费地址，因此这些路线上 Cyberia 分文不取。路由方仍会收取自己的费用，报价中已列出。',
+        crossNoSources:
+            '您开启的网络都无法作为路线起点。请开启一条路由方支持的网络——以太坊、Arbitrum、Optimism、Polygon 和 Avalanche 都可以。',
+        crossFrom: '从',
+        crossTo: '到',
+        crossPickToken: '更换',
+        crossAmount: '金额',
+        crossBalance: '您持有 {amount} {symbol}',
+        crossOverBalance: '超过该账户的余额。',
+        crossRecipient: '收款地址',
+        crossRecipientEmpty: '兑换到账的位置。',
+        crossRecipientInvalid: '在该网络上不是有效地址。',
+        crossRecipientOwn: '这是您在该网络上的地址。',
+        crossRecipientOther: '这是他人的地址，此处无法撤回。',
+        crossTokenSearch: '代币名称或代号',
+        crossNativeCoin: '该网络的原生币',
+        crossTokensLoading: '正在询问路由方…',
+        crossTokensEmpty: '路由方没有匹配的代币。',
+        crossTokenUnverified: '未验证',
+        crossQuoteAction: '为该路线报价',
+        crossQuoting: '报价中…',
+        crossQuoteFailed: '无法为该路线报价。',
+        crossNoAccount: '此账户没有可用于支出的 EVM 地址。',
+        crossYouGet: '您将收到',
+        crossMinimum: '至少 {amount} {symbol}，否则路线不会执行',
+        crossFeeCyberia: 'Cyberia',
+        crossFeeRouter: '路由方',
+        crossEta: '交付',
+        crossEtaValue: '约 {seconds} 秒',
+        crossSlippage: '允许滑点',
+        crossFeeDeclined: '路由方未对该路线收取 Cyberia 手续费，您无需支付。',
+        crossNoCancel:
+            '一次签名即启动。存入与交付之间没有取消环节，且存入的去向是路由方的合约，而非 Cyberia。',
+        crossSigning: '签名中…',
+        crossSignFailed: '存入未完成签名。',
+        crossSteps: '该路线需要在源链上完成 {count} 笔交易。',
+        crossUnderway: '路线进行中',
+        crossStatusPending: '已存入，等待路由方交付。',
+        crossStatusDone: '已交付。',
+        crossStatusFailed: '路由方报告该路线失败。',
+        crossStatusRefunded: '路由方已退回存入款项。',
+        crossStatusNote:
+            '接下来由路由方负责。关闭本页不会中止它，上方的哈希即为查询依据。',
+        crossAnother: '再兑换一次',
+        crossElsewhere: '路由方支持、但本钱包不作为起点的网络',
+        crossReasonNotInWallet: '此钱包中未开启',
+        crossOffCount: '路由方还支持 {count} 条您在此未开启的网络。',
+        crossReasonNoDeposits: '路由方在此不接受存入',
+        crossReasonNotEvm: '钱包无法在该链上签署存入',
 
         // Transaction status
         txSigningLabel: '本地签名',

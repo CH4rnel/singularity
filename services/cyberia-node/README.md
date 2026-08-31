@@ -10,6 +10,10 @@ whole point — it adds a redundant copy of the chain and a backup RPC endpoint
 > production validator has not been touched. Bring-up is a deliberate manual
 > step (see below).
 
+The complete operator runbook—including firewall/RPC hardening, sync acceptance
+criteria, monitoring, upgrades, recovery, and troubleshooting—is in
+[`docs/developers/running-a-node.md`](../../docs/developers/running-a-node.md).
+
 ## Why a follower, not a second validator
 
 The live chain runs on **one** validator (IBFT PoA, BLS). With a single
@@ -55,7 +59,8 @@ validator restart — skip it unless you have a reason; it's not required here.)
 
 Prerequisites: Docker + Docker Compose installed; outbound to `2.26.24.177:1337`
 allowed; inbound `1337/tcp` open on this host. Plan for enough disk for the full
-chain (~11.6M blocks and growing).
+chain and its continued growth; use the operator runbook's current sizing and
+disk-monitoring guidance rather than the chain height captured in this file.
 
 ```bash
 # 1. copy this directory onto the host, e.g. /root/cyberia-node, then:

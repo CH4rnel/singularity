@@ -54,6 +54,21 @@
      * can never be mistaken for Solana or Bitcoin at a glance.
      */
     --cw-net-custom: #8b7bf7;
+    /*
+     * Networks switched on from the shipped catalogue share eight hues, picked
+     * by chain id so a network's colour never moves. Eight and not 120: a
+     * per-chain colour would be invented information, while the two letters on
+     * the tile really are unique. All eight stay in the cool half of the wheel
+     * for the same reason the rest do — amber, green and red mean *state*.
+     */
+    --cw-net-cat-1: #5aa9ff;
+    --cw-net-cat-2: #7f8cf0;
+    --cw-net-cat-3: #a880f0;
+    --cw-net-cat-4: #cf7ce0;
+    --cw-net-cat-5: #6fbfd8;
+    --cw-net-cat-6: #8fa6c4;
+    --cw-net-cat-7: #6f7fd8;
+    --cw-net-cat-8: #9ec6e0;
 
     --cw-ok: #5bd6a0;
     --cw-pending: #e8b44a;

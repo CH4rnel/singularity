@@ -123,7 +123,12 @@ export class CodexModelProvider implements ModelProvider {
         const { text, toolCalls } = parseToolReply(raw);
         // The session header codex prints (model: gpt-…) is the receipt of
         // which model actually answered — surface it instead of a guess.
-        return { text, toolCalls, model: observedModel ? `codex/${observedModel}` : (model ?? "codex") };
+        return {
+          text,
+          toolCalls,
+          model: observedModel ? `codex/${observedModel}` : (model ?? "codex"),
+          provider: this.name,
+        };
       } catch (err) {
         lastErr = err;
         if (err instanceof Error && err.message.includes("timed out")) break;

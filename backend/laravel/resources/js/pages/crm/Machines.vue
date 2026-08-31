@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AgeCell from '@/components/console/AgeCell.vue';
 import DayStrip from '@/components/console/DayStrip.vue';
 import Rule from '@/components/console/Rule.vue';
+import { useConsoleLive } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import {
     age,
@@ -101,6 +102,26 @@ const props = defineProps<{
 const { locale, t, tag } = useLocale(consoleMessages);
 
 const onlyProblems = ref(false);
+
+/*
+ * The sweep runs every five minutes whether or not anybody is watching, and
+ * this lens is the one people leave open while something is being fixed. It
+ * re-reads itself when a sweep lands, an incident opens or closes, or a host
+ * reports — so a service coming back says so without a reload.
+ */
+useConsoleLive('machines', () =>
+    router.reload({
+        only: [
+            'services',
+            'summary',
+            'hosts',
+            'incidents',
+            'idle',
+            'strips',
+            'console',
+        ],
+    }),
+);
 
 const GROUPS = ['chain', 'web', 'infra', 'daemon', 'onchain', 'product'];
 

@@ -160,6 +160,8 @@ const statusIcon = (status: string) => {
         case 'failed':
             return XCircle;
         case 'processing':
+        case 'paying_out':
+        case 'burn_pending':
             return Loader2;
         default:
             return Clock;
@@ -173,7 +175,13 @@ const statusColor = (status: string) => {
         case 'failed':
             return 'text-red-500';
         case 'processing':
+        case 'paying_out':
+        case 'burn_pending':
             return 'text-yellow-500 animate-spin';
+        // A confirmed deposit the destination cannot pay yet. Not a failure
+        // and not in flight — the row says "held", because the money is.
+        case 'awaiting_liquidity':
+            return 'text-amber-500';
         default:
             return 'text-muted-foreground';
     }

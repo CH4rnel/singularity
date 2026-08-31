@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import { nftChain } from '@/lib/nftChains';
 import {
     PRIMARY_ACCOUNT_ID,
+    catalogueWalletChains,
     chatPublicKey,
     conversationKey,
     customWalletChain,
@@ -24,12 +25,14 @@ import {
     mergeTokens,
     phraseAccountId,
     readCustomNetworks,
+    readEnabledNetworks,
     readManualTokens,
     sameToken,
     saveVault,
     seedAccountId,
     seedFromMnemonic,
     seedSource,
+    setCatalogueWalletChains,
     setCustomWalletChains,
     unsealVault,
     validateCustomNetwork,
@@ -38,6 +41,7 @@ import {
     withToken,
     withoutToken,
     writeCustomNetworks,
+    writeEnabledNetworks,
     writeManualTokens,
 } from '@/lib/wallet';
 import type {
@@ -59,6 +63,12 @@ import type {
 } from '@/lib/wallet';
 import { lockOnEvm } from '@/lib/wallet/bridge';
 import type { BridgeLock } from '@/lib/wallet/bridge';
+import { executeCrossSwap } from '@/lib/wallet/crosschain';
+import type {
+    CrossQuote,
+    CrossReceipt,
+    CrossStep,
+} from '@/lib/wallet/crosschain';
 import {
     claim as claimReward,
     stake as stakeLp,
@@ -115,6 +125,16 @@ let vault: OpenedVault | null = null;
 const conversationKeys = new Map<string, CryptoKey>();
 
 const customNetworks = ref<CustomNetwork[]>([]);
+
+/**
+ * Catalogue networks this device has switched on, by id.
+ *
+ * Module state for the same reason the custom list is: the chain registry is a
+ * process-wide fact, and an adapter looked up inside `send()` has to see the
+ * same set the portfolio drew.
+ */
+const enabledNetworks = ref<WalletChainId[]>([]);
+let enabledLoaded = false;
 const accounts = ref<WalletAccount[]>([]);
 const accountRecords = ref<WalletAccountRecord[]>([]);
 const activeAccountId = ref<string>(PRIMARY_ACCOUNT_ID);
@@ -277,8 +297,29 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         load();
     };
 
+    /**
+     * Publish the switched-on catalogue networks to the registry and re-derive.
+     *
+     * Rebuilt from ids rather than kept as adapters, exactly like the custom
+     * list: switching a network off has to leave nothing behind that could
+     * still answer a balance read.
+     */
+    const syncEnabledNetworks = (ids: WalletChainId[]): void => {
+        enabledNetworks.value = ids;
+        setCatalogueWalletChains(catalogueWalletChains(ids));
+        load();
+    };
+
     if (customNetworks.value.length === 0) {
         syncCustomNetworks(readCustomNetworks());
+    }
+
+    // Read once per page rather than "when empty": an empty list is the normal
+    // state of a wallet that switched every catalogue network back off, and
+    // re-reading storage on every call would undo that on the next render.
+    if (!enabledLoaded) {
+        enabledLoaded = true;
+        syncEnabledNetworks(readEnabledNetworks());
     }
 
     if (manualTokens.value.length === 0) {
@@ -302,6 +343,33 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         syncCustomNetworks(next);
 
         return null;
+    };
+
+    /**
+     * Switch a shipped network on, so it becomes a card in the portfolio.
+     *
+     * Nothing is derived that was not derivable a second ago — the address is
+     * the same one every EVM network in this wallet shows. What changes is that
+     * one more balance is read on every refresh, which is the whole reason this
+     * is a choice and not a default.
+     */
+    const enableNetwork = (id: WalletChainId): void => {
+        if (enabledNetworks.value.includes(id)) {
+            return;
+        }
+
+        const next = [...enabledNetworks.value, id];
+        writeEnabledNetworks(next);
+        syncEnabledNetworks(next);
+    };
+
+    /** Switch a shipped network off. Removes a card, never an account. */
+    const disableNetwork = (id: WalletChainId): void => {
+        const next = enabledNetworks.value.filter(
+            (candidate) => candidate !== id,
+        );
+        writeEnabledNetworks(next);
+        syncEnabledNetworks(next);
     };
 
     /**
@@ -606,6 +674,11 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         // nothing about them — the accounts themselves come back from the seed.
         writeCustomNetworks([]);
         syncCustomNetworks([]);
+        // Which of the shipped networks were switched on is the same kind of
+        // record — it says which chains this person uses — and it comes back
+        // from the catalogue in one tap.
+        writeEnabledNetworks([]);
+        syncEnabledNetworks([]);
         writeManualTokens([]);
         manualTokens.value = [];
         // What was said to Lain from these accounts is as much a record of this
@@ -1050,6 +1123,37 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     };
 
     /**
+     * A swap that leaves the chain.
+     *
+     * The same shape as `swap()` and deliberately a separate action: this one
+     * signs a route somebody else quoted, on a contract this wallet did not
+     * write, and there is no cancel between the deposit and the delivery. The
+     * origin leg is the only part signed here — everything after it belongs to
+     * the router, which is why the receipt carries a request id rather than
+     * promising an outcome.
+     */
+    const crossSwap = async (
+        chainId: WalletChainId,
+        quote: CrossQuote,
+        onStep?: (step: CrossStep, hash: string) => void,
+    ): Promise<CrossReceipt> => {
+        const source = sourceFor(chainId);
+
+        busy.value = true;
+
+        try {
+            return await executeCrossSwap(source, {
+                quote,
+                chain: chainId,
+                rpcUrl: rpcFor(chainId),
+                onStep,
+            });
+        } finally {
+            busy.value = false;
+        }
+    };
+
+    /**
      * Farming: put an LP position to work, take it back, or take the reward.
      *
      * Three calls rather than one, because they are three different agreements
@@ -1350,6 +1454,10 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         customNetworks: computed(() => customNetworks.value),
         addNetwork,
         removeNetwork,
+        /** Ids of the shipped networks this device has switched on. */
+        enabledNetworks: computed(() => enabledNetworks.value),
+        enableNetwork,
+        disableNetwork,
         tokens: computed(() => tokens.value),
         manualTokens: computed(() => manualTokens.value),
         /** The quote for one asset — the native coin when `token` is null. */
@@ -1368,6 +1476,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         mintNft,
         gasPrice,
         swap,
+        crossSwap,
         farm,
         bridgeDeposit,
         wrap,

@@ -11,6 +11,30 @@ permissions:
   contents: read
 
 jobs:
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build documentation
+        run: npm run build
+
   laravel:
     name: Laravel app
     runs-on: ubuntu-latest
@@ -54,7 +78,9 @@ jobs:
         run: npm run build
 
       - name: Tests
-        run: php artisan test --compact
+        # The suite is large enough that PHP's 128 MB default can die inside
+        # finfo while Flysystem detects an uploaded file's MIME type.
+        run: php -d memory_limit=512M vendor/bin/pest --compact
 
   hardhat:
     name: EVM contracts
@@ -85,7 +111,9 @@ jobs:
 
   deploy:
     name: Deploy to prod
-    needs: laravel
+    needs:
+      - docs
+      - laravel
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: production
@@ -105,6 +133,19 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          script_stop: true
           script: |
+            set -eu
+            repo=/root/singularity
+            docs_template_rel=services/blockscout/docker-compose/proxy/docs.conf.template
+            docs_template="$repo/$docs_template_rel"
+
+            # The docs virtual host existed on production before it became a
+            # tracked repository file. Preserve that one-time local copy so
+            # the first pull can install the reviewed version from Git.
+            if [ -e "$docs_template" ] && ! git -C "$repo" ls-files --error-unmatch -- "$docs_template_rel" >/dev/null 2>&1; then
+              backup="$docs_template.pre-repo.$(date -u +%Y%m%dT%H%M%SZ)"
+              mv "$docs_template" "$backup"
+              echo "preserved pre-repository docs template at $backup"
+            fi
+
             bash /root/singularity/scripts/deploy-prod.sh

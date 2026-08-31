@@ -31,6 +31,14 @@ class CrmSyncCommand extends Command
                 $counts['holders'],
                 $counts['whales'],
             ));
+
+            // The two numbers that are about people rather than about rows
+            // touched: who is new, and who stopped holding.
+            $this->info(sprintf(
+                'New contacts: %d. Written down as sold: %d.',
+                $counts['added'],
+                $counts['sold'],
+            ));
         }
 
         if ($balancesOnly || $this->option('balances')) {

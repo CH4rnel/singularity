@@ -5,6 +5,7 @@ namespace App\Services\Console;
 use App\Models\CrmChatFile;
 use App\Models\CrmChatMessage;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -55,6 +56,11 @@ class ChatRoom
             // nobody types into what looks like the present.
             'before' => $before,
             'unreadFrom' => $this->lastRead($viewer),
+            // The server's clock at the moment this window was read. The page
+            // hands it back on its next poll, which is how "what changed
+            // since I last looked" is answered without trusting the reader's
+            // machine to agree with this one about what time it is.
+            'at' => CarbonImmutable::now()->toIso8601String(),
             'people' => $this->people($viewer),
             'recentFiles' => $this->recentFiles(),
             'fileCount' => CrmChatFile::query()->count(),
@@ -64,16 +70,40 @@ class ChatRoom
     }
 
     /**
-     * Messages newer than $after, for the room's own polling.
+     * What happened to the room since the reader last looked.
      *
-     * The room is the one lens where two operators look at the same thing at
-     * the same time, so it refreshes itself rather than waiting for someone
-     * to reload the page.
+     * Three things can happen to a window of a conversation, and a poll that
+     * only reports the first of them leaves the other two on screen until
+     * somebody reloads: a line is **said** (new), a line **changes** (an
+     * answer lands on the call that asked for it, a line becomes a task), and
+     * a line is **taken back** (deleted, with its files). All three are
+     * answered against the window the reader actually holds — $from..$after,
+     * $held lines inside it — so the cost is bounded by what is on screen and
+     * not by how long the room has existed.
      *
+     * `present` is the exact remedy for a deletion and is sent only when the
+     * count disagrees: the reader drops whatever id is missing from it. On an
+     * agreeing count it is null, which is the ordinary case and costs one
+     * `count(*)` over a range of the primary key.
+     *
+     * @param  int  $after  The newest id the reader holds.
+     * @param  int|null  $from  The oldest id in their window.
+     * @param  int|null  $held  How many lines they hold inside that window.
+     * @param  string|null  $changedAfter  Our own clock, handed back.
      * @return array<string, mixed>
      */
-    public function since(User $viewer, int $after): array
-    {
+    public function since(
+        User $viewer,
+        int $after,
+        ?int $from = null,
+        ?int $held = null,
+        ?string $changedAfter = null,
+    ): array {
+        // Read before the queries, never after: a line written in between
+        // would otherwise fall into the gap between this stamp and the rows
+        // it is supposed to cover, and be missed forever.
+        $at = CarbonImmutable::now();
+
         $messages = CrmChatMessage::query()
             ->with(['sender:id,name', 'files', 'contact:id,name', 'task:id,title'])
             ->where('id', '>', $after)
@@ -81,8 +111,42 @@ class ChatRoom
             ->limit(200)
             ->get();
 
+        $changed = [];
+        $present = null;
+
+        if ($from !== null && $from <= $after) {
+            if ($changedAfter !== null) {
+                $changed = CrmChatMessage::query()
+                    ->with(['sender:id,name', 'files', 'contact:id,name', 'task:id,title'])
+                    ->whereBetween('id', [$from, $after])
+                    // `>=` and not `>`: this column keeps whole seconds, so a
+                    // line changed in the very second of the reader's last
+                    // poll is not "after" it and would be lost for good. The
+                    // cost of the inclusive edge is that one boundary second's
+                    // rows come back one extra time; the cost of the exclusive
+                    // one is an answer nobody ever sees.
+                    ->where('updated_at', '>=', CarbonImmutable::parse($changedAfter))
+                    ->orderBy('id')
+                    ->limit(200)
+                    ->get()
+                    ->map(fn (CrmChatMessage $m) => $this->message($m, $viewer))
+                    ->all();
+            }
+
+            if ($held !== null && CrmChatMessage::query()->whereBetween('id', [$from, $after])->count() !== $held) {
+                $present = CrmChatMessage::query()
+                    ->whereBetween('id', [$from, $after])
+                    ->orderBy('id')
+                    ->pluck('id')
+                    ->all();
+            }
+        }
+
         return [
             'messages' => $messages->map(fn (CrmChatMessage $m) => $this->message($m, $viewer))->all(),
+            'changed' => $changed,
+            'present' => $present,
+            'at' => $at->toIso8601String(),
             'people' => $this->people($viewer),
             'fileCount' => CrmChatFile::query()->count(),
         ];
@@ -222,7 +286,15 @@ class ChatRoom
                     'name' => $operator->name,
                     'kind' => 'operator',
                     'you' => $operator->is($viewer),
-                    'seenAt' => $seen === null ? null : (string) $seen,
+                    // With its offset, always. The column comes back out of
+                    // the driver as a bare "Y-m-d H:i:s" in this server's
+                    // zone, and a browser reads a bare stamp as its own local
+                    // time — which drew somebody who was typing at that
+                    // moment as last seen three hours ago, one whole UTC
+                    // offset into the past.
+                    'seenAt' => $seen === null
+                        ? null
+                        : CarbonImmutable::parse((string) $seen)->toIso8601String(),
                 ];
             })
             ->values()

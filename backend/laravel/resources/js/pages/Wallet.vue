@@ -23,6 +23,7 @@ import WalletBridge from '@/components/wallet/WalletBridge.vue';
 import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
 import WalletChat from '@/components/wallet/WalletChat.vue';
 import WalletContextBar from '@/components/wallet/WalletContextBar.vue';
+import WalletCrossSwap from '@/components/wallet/WalletCrossSwap.vue';
 import WalletDao from '@/components/wallet/WalletDao.vue';
 import WalletEarn from '@/components/wallet/WalletEarn.vue';
 import WalletFeed from '@/components/wallet/WalletFeed.vue';
@@ -33,6 +34,7 @@ import WalletLain from '@/components/wallet/WalletLain.vue';
 import WalletLaunchpad from '@/components/wallet/WalletLaunchpad.vue';
 import WalletLocked from '@/components/wallet/WalletLocked.vue';
 import WalletNetworkDetail from '@/components/wallet/WalletNetworkDetail.vue';
+import WalletNetworks from '@/components/wallet/WalletNetworks.vue';
 import WalletNft from '@/components/wallet/WalletNft.vue';
 import WalletNftMint from '@/components/wallet/WalletNftMint.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
@@ -131,6 +133,7 @@ type Section =
     | 'accounts'
     | 'importAccount'
     | 'network'
+    | 'networks'
     | 'security'
     | 'preferences'
     | 'feed'
@@ -146,6 +149,7 @@ type Section =
     | 'proxy'
     | 'earn'
     | 'bridge'
+    | 'crosschain'
     | 'browse';
 type Overlay = 'send' | 'receive' | 'swap' | 'addNetwork';
 
@@ -195,6 +199,7 @@ const SECTIONS: { id: Section; label: () => string }[] = [
     // Three things done *with* a balance rather than three ways of reading
     // one, which is why they sit apart from the screens above them.
     { id: 'bridge', label: () => t('bridgeTitle') },
+    { id: 'crosschain', label: () => t('crossTile') },
     { id: 'earn', label: () => t('earnTitle') },
     { id: 'browse', label: () => t('browseTitle') },
     { id: 'feed', label: () => t('feed') },
@@ -248,12 +253,14 @@ const TAB_OF: Record<Section, Section> = {
     accounts: 'portfolio',
     importAccount: 'portfolio',
     network: 'portfolio',
+    networks: 'portfolio',
     security: 'portfolio',
     preferences: 'portfolio',
     gas: 'portfolio',
     proxy: 'portfolio',
     earn: 'portfolio',
     bridge: 'portfolio',
+    crosschain: 'portfolio',
     browse: 'browse',
     feed: 'feed',
     profile: 'feed',
@@ -319,12 +326,14 @@ const openProfile = (address: string | null): void => {
  */
 const PARENTS: Partial<Record<Section, Section>> = {
     token: 'tokens',
+    networks: 'portfolio',
     importAccount: 'accounts',
     gas: 'portfolio',
     proxy: 'security',
     preferences: 'portfolio',
     earn: 'portfolio',
     bridge: 'portfolio',
+    crosschain: 'portfolio',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -1076,7 +1085,7 @@ watch(
                     :show-network="showNetworkBar"
                     @pick="chain = $event"
                     @accounts="openSection('accounts')"
-                    @add-network="overlay = 'addNetwork'"
+                    @add-network="openSection('networks')"
                     @refresh="load()"
                 />
 
@@ -1115,7 +1124,7 @@ watch(
                         @back="overlay = null"
                         @pick="chain = $event"
                         @sent="load()"
-                        @add-network="overlay = 'addNetwork'"
+                        @add-network="openSection('networks')"
                     />
 
                     <WalletSwap
@@ -1141,7 +1150,7 @@ watch(
                         @back="overlay = null"
                         @pick="chain = $event"
                         @use-payout="useForPayouts"
-                        @add-network="overlay = 'addNetwork'"
+                        @add-network="openSection('networks')"
                     />
 
                     <!--
@@ -1167,12 +1176,13 @@ watch(
                             @send="openSend()"
                             @swap="openSwap()"
                             @receive="overlay = 'receive'"
-                            @add-network="overlay = 'addNetwork'"
+                            @add-network="openSection('networks')"
                             @tokens="openSection('tokens')"
                             @analytics="openSection('analytics')"
                             @accounts="openSection('accounts')"
                             @security="openSection('security')"
                             @gas="openSection('gas')"
+                            @crosschain="openSection('crosschain')"
                             @earn="openSection('earn')"
                             @bridge="openSection('bridge')"
                             @browse="openSection('browse')"
@@ -1263,6 +1273,19 @@ watch(
                     />
 
                     <!--
+                      The other kind of swap: one this chain has no liquidity
+                      for, routed by somebody who does, for a fee that is in
+                      the quote before anything is signed.
+                    -->
+                    <WalletCrossSwap
+                        v-else-if="section === 'crosschain'"
+                        :wallet="wallet"
+                        :chain="chain"
+                        @back="openSection('portfolio')"
+                        @networks="openSection('networks')"
+                    />
+
+                    <!--
                       A pool position is not a balance: it is money at work,
                       with its own risk and its own unclaimed half.
                     -->
@@ -1280,6 +1303,19 @@ watch(
                         :prices="prices"
                         :token-prices="tokenPrices"
                         @back="openSection('portfolio')"
+                    />
+
+                    <!--
+                      Which of the shipped networks are on. A hundred and
+                      twenty accounts the seed already derives, and the switch
+                      is about what the portfolio reads, never about keys.
+                    -->
+                    <WalletNetworks
+                        v-else-if="section === 'networks'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
+                        @add-network="overlay = 'addNetwork'"
+                        @open="openChain"
                     />
 
                     <WalletNetworkDetail
@@ -1375,7 +1411,7 @@ watch(
                         v-else
                         :wallet="wallet"
                         @locked="section = 'portfolio'"
-                        @add-network="overlay = 'addNetwork'"
+                        @add-network="openSection('networks')"
                         @proxy="openSection('proxy')"
                         @forgotten="
                             restoring = false;
@@ -1433,7 +1469,7 @@ watch(
                     @back="overlay = null"
                     @pick="chain = $event"
                     @sent="load()"
-                    @add-network="overlay = 'addNetwork'"
+                    @add-network="openSection('networks')"
                 />
                 <WalletSwap
                     v-else-if="asideOverlay === 'swap'"
@@ -1457,7 +1493,7 @@ watch(
                     @back="overlay = null"
                     @pick="chain = $event"
                     @use-payout="useForPayouts"
-                    @add-network="overlay = 'addNetwork'"
+                    @add-network="openSection('networks')"
                 />
             </aside>
 

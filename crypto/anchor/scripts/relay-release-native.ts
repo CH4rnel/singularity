@@ -1,4 +1,4 @@
-import { Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import {
   getAssociatedTokenAddress,
   createTransferInstruction,
@@ -65,9 +65,28 @@ async function main() {
     ),
   );
 
-  const sig = await sendAndConfirmTransaction(connection, tx, [relayer], {
-    commitment: "confirmed",
-  });
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = relayer.publicKey;
+  tx.sign(relayer);
+
+  const sig = await connection.sendRawTransaction(tx.serialize(), { maxRetries: 5 });
+  // Signature first, confirmation second: if this process dies while waiting,
+  // the payout still has a durable record on the bridge request and the retry
+  // reconciles it instead of sending a second transfer.
+  console.log(JSON.stringify({ broadcastTxHash: sig }));
+
+  const confirmation = await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+
+  if (confirmation.value.err) {
+    throw new Error(
+      `Solana transfer failed (${sig}): ${JSON.stringify(confirmation.value.err)}`,
+    );
+  }
 
   console.log("TX:", sig);
   console.log(JSON.stringify({ txHash: sig, status: "success" }));

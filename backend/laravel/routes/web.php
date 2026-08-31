@@ -23,10 +23,14 @@ use App\Http\Controllers\ConsoleChatController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
+use App\Http\Controllers\ConsoleStrategyController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
+use App\Http\Controllers\CrmMessageController;
 use App\Http\Controllers\CrmNoteController;
+use App\Http\Controllers\CrmTaskCommentController;
 use App\Http\Controllers\CrmTaskController;
+use App\Http\Controllers\CyberController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\FediverseController;
@@ -171,6 +175,9 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 // {token} accepts a 0x address or a symbol (e.g. /token/CYBER.sol).
 Route::get('/tokens', [TokenController::class, 'index'])->name('tokens.index');
 Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.show');
+// What the coin is for, with the contract behind every claim — and the list of
+// things it deliberately does not do yet. Cited by the token pages and the nav.
+Route::get('/cyber', CyberController::class)->name('cyber');
 Route::get('/changelog', ChangelogController::class)->name('changelog');
 // Where the native apps come from. /download/<platform> is the short link worth
 // pasting into a message; it redirects to the current file for that platform.
@@ -442,6 +449,10 @@ Route::middleware(['auth'])->group(function () {
      */
     Route::prefix('crm')->name('crm.')->middleware(EnsureCrmAdmin::class)->group(function () {
         Route::get('/', [ConsoleController::class, 'index'])->name('index');
+        // The console's heartbeat. Every lens is open on more than one desk,
+        // so each of them asks this one cheap question every few seconds and
+        // re-reads itself only when its own version has moved.
+        Route::get('pulse', [ConsoleController::class, 'pulse'])->name('pulse');
         Route::post('snooze', [ConsoleController::class, 'snooze'])->name('snooze');
         Route::delete('snooze', [ConsoleController::class, 'wake'])->name('snooze.wake');
 
@@ -469,6 +480,13 @@ Route::middleware(['auth'])->group(function () {
         // and renders only its hash and visible prefix.
         Route::get('api-keys', [ConsoleAiKeysController::class, 'index'])->name('ai-keys');
         Route::post('api-keys', [ConsoleAiKeysController::class, 'store'])->name('ai-keys.store');
+
+        // The editable content plan is framed like the frozen mockup, but its
+        // working copy lives on the private disk and changes on an operator action.
+        Route::get('strategy', [ConsoleStrategyController::class, 'index'])->name('strategy');
+        Route::get('strategy/document', [ConsoleStrategyController::class, 'document'])->name('strategy.document');
+        Route::put('strategy', [ConsoleStrategyController::class, 'update'])->name('strategy.update');
+        Route::delete('strategy', [ConsoleStrategyController::class, 'reset'])->name('strategy.reset');
 
         // The design this console was built from, kept where the console is.
         // A canvas link rots and an exported picture loses its text; the
@@ -500,6 +518,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('tasks', [CrmTaskController::class, 'index'])->name('tasks.index');
         Route::post('tasks', [CrmTaskController::class, 'store'])->name('tasks.store');
         Route::put('tasks/{task}', [CrmTaskController::class, 'update'])->name('tasks.update');
+        Route::post('tasks/{task}/comments', [CrmTaskCommentController::class, 'store'])->name('tasks.comments.store');
         Route::post('tasks/{task}/claim', [CrmTaskController::class, 'claim'])->name('tasks.claim');
         Route::delete('tasks/{task}', [CrmTaskController::class, 'destroy'])->name('tasks.destroy');
 
@@ -517,6 +536,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('{contact}', [CrmContactController::class, 'show'])->name('show');
         Route::put('{contact}', [CrmContactController::class, 'update'])->name('update');
         Route::delete('{contact}', [CrmContactController::class, 'destroy'])->name('destroy');
+        Route::post('{contact}/contact-links', [CrmContactController::class, 'storeContactLink'])->name('contact-links.store');
+        Route::delete('{contact}/contact-links/{contactLink}', [CrmContactController::class, 'destroyContactLink'])->name('contact-links.destroy');
         Route::post('{contact}/notes', [CrmNoteController::class, 'store'])->name('notes.store');
         /*
          * Same-person links. A person arrives under an account, an EVM address
@@ -529,6 +550,15 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('identity-links/{link}', [CrmContactController::class, 'unlink'])->name('identity.unlink');
         Route::delete('notes/{note}', [CrmNoteController::class, 'destroy'])->name('notes.destroy');
         Route::post('{contact}/tasks', [CrmTaskController::class, 'store'])->name('tasks.storeForContact');
+        /*
+         * The correspondence. Written down by an operator now, imported from
+         * Telegram and Discord later — the row is the same either way, which
+         * is why this is a log and not a send button: nothing here holds an
+         * operator's Telegram session, and a console that pretends to deliver
+         * is worse than one that only records.
+         */
+        Route::post('{contact}/messages', [CrmMessageController::class, 'store'])->name('messages.store');
+        Route::delete('messages/{message}', [CrmMessageController::class, 'destroy'])->name('messages.destroy');
     });
 
     // Wallet attach/detach
@@ -544,6 +574,11 @@ Route::middleware(['auth'])->group(function () {
 });
 
 // Bridge (public — no auth required, controller handles optional user)
+// Admission: capacity is CLAIMED here, under a server-side lock, before the
+// wallet is ever opened. A UI check is not a gate — see BridgeAdmissionService.
+Route::post('bridge/reserve', [BridgeController::class, 'reserve'])
+    ->middleware('throttle:60,1')
+    ->name('bridge.reserve');
 Route::post('bridge/submit', [BridgeController::class, 'submit'])->name('bridge.submit');
 // Two-phase one-time-address routes (Yenten): prepare commits the recipient
 // and returns a unique deposit address; claim verifies the deposit landed on it.

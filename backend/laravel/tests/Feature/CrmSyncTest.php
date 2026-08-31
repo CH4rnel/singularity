@@ -2,6 +2,7 @@
 
 use App\Models\BridgeRequest;
 use App\Models\CrmContact;
+use App\Models\CrmSync;
 use App\Models\User;
 use App\Services\CrmSyncService;
 use Illuminate\Console\Scheduling\Schedule;
@@ -13,6 +14,30 @@ use Illuminate\Support\Facades\Schema;
 function fakeHolderRpc(array $accounts = []): void
 {
     Http::fake(function ($request) use ($accounts) {
+        $method = $request->data()['method'] ?? '';
+        if ($method === 'getAccountInfo') {
+            return Http::response(['result' => ['value' => ['owner' => 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA']]]);
+        }
+        if ($method === 'getProgramAccounts') {
+            return Http::response(['result' => $accounts]);
+        }
+
+        return Http::response([]);
+    });
+}
+
+/**
+ * The same fake, but reading a holder set that can change between scans.
+ *
+ * `Http::fake()` registers a stub rather than replacing the previous one, so a
+ * test that needs a second, different scan has to change what the first stub
+ * answers instead of installing another.
+ *
+ * @param  array<int, array<string, mixed>>  $accounts
+ */
+function fakeHolderFeed(array &$accounts): void
+{
+    Http::fake(function ($request) use (&$accounts) {
         $method = $request->data()['method'] ?? '';
         if ($method === 'getAccountInfo') {
             return Http::response(['result' => ['value' => ['owner' => 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA']]]);
@@ -127,6 +152,105 @@ test('the sync endpoint runs every importer', function () {
         ->assertSessionHas('success');
 
     $this->assertDatabaseHas('crm_contacts', ['user_id' => $user->id]);
+});
+
+test('a holder who sold is written down, never deleted', function () {
+    // Seen holding on the last run…
+    $accounts = [
+        holderAccount('Wha1eBigggggggggggggggggggggggggggggggggg11', '15000000000000'),
+        holderAccount('Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11', '5000000000'),
+    ];
+    fakeHolderFeed($accounts);
+    app(CrmSyncService::class)->importHolders();
+
+    // …and gone from the mint's accounts on this one.
+    $accounts = [holderAccount('Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11', '5000000000')];
+    app(CrmSyncService::class)->importHolders();
+
+    $sold = CrmContact::where('solana_address', 'Wha1eBigggggggggggggggggggggggggggggggggg11')->first();
+
+    expect($sold)->not->toBeNull()
+        ->and($sold->type)->toBe('lead')
+        ->and($sold->status)->toBe('sold')
+        ->and((float) $sold->cyber_sol_balance)->toBe(0.0);
+
+    // The one who still holds is untouched.
+    $held = CrmContact::where('solana_address', 'Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11')->first();
+    expect($held->status)->toBe('new')->and($held->type)->toBe('holder');
+});
+
+test('an unreadable holder scan marks nobody as having sold', function () {
+    $accounts = [holderAccount('Wha1eBigggggggggggggggggggggggggggggggggg11', '15000000000000')];
+    fakeHolderFeed($accounts);
+    app(CrmSyncService::class)->importHolders();
+
+    // A rate-limited public RPC answers with an empty result, not an error.
+    // Everybody selling on the same afternoon has never happened; not looking
+    // has happened plenty.
+    $accounts = [];
+    app(CrmSyncService::class)->importHolders();
+
+    $this->assertDatabaseHas('crm_contacts', [
+        'solana_address' => 'Wha1eBigggggggggggggggggggggggggggggggggg11',
+        'type' => 'whale',
+    ]);
+});
+
+test('a contact written off by hand keeps that judgement', function () {
+    $accounts = [holderAccount('Wha1eBigggggggggggggggggggggggggggggggggg11', '15000000000000')];
+    fakeHolderFeed($accounts);
+    app(CrmSyncService::class)->importHolders();
+
+    CrmContact::where('solana_address', 'Wha1eBigggggggggggggggggggggggggggggggggg11')
+        ->update(['status' => 'lost']);
+
+    $accounts = [holderAccount('Somebody1sereeeeeeeeeeeeeeeeeeeeeeeeeeee11', '1000000')];
+    app(CrmSyncService::class)->importHolders();
+
+    // The balance is a fact and is corrected; `lost` is a judgement about the
+    // person and is not.
+    $contact = CrmContact::where('solana_address', 'Wha1eBigggggggggggggggggggggggggggggggggg11')->first();
+    expect($contact->status)->toBe('lost')->and((float) $contact->cyber_sol_balance)->toBe(0.0);
+});
+
+test('somebody who never held is not reported as having sold', function () {
+    User::factory()->create([
+        'name' => 'Never held',
+        'solana_wallet_address' => 'NeverHe1dddddddddddddddddddddddddddddddd11',
+    ]);
+    app(CrmSyncService::class)->importPlatformUsers();
+
+    fakeHolderRpc([holderAccount('Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11', '5000000000')]);
+    app(CrmSyncService::class)->importHolders();
+
+    $this->assertDatabaseHas('crm_contacts', [
+        'solana_address' => 'NeverHe1dddddddddddddddddddddddddddddddd11',
+        'status' => 'new',
+    ]);
+});
+
+test('every run records when the base was refreshed and what it brought', function () {
+    fakeHolderRpc([holderAccount('Ho1derSma11rrrrrrrrrrrrrrrrrrrrrrrrrrrrr11', '5000000000')]);
+    User::factory()->create(['wallet_address' => '0x'.str_repeat('c', 40)]);
+
+    $counts = app(CrmSyncService::class)->syncAll('operator');
+
+    $run = CrmSync::latest('id')->first();
+
+    expect($run->trigger)->toBe('operator')
+        ->and($run->finished_at)->not->toBeNull()
+        ->and($run->note)->toBeNull()
+        ->and($run->added)->toBe(2)
+        ->and($counts['added'])->toBe(2);
+});
+
+test('a run that could not read the chain says so instead of dating itself', function () {
+    Http::fake(fn () => Http::response(['error' => ['message' => 'rate limited']], 429));
+
+    app(CrmSyncService::class)->syncAll();
+
+    expect(CrmSync::latest('id')->first()->note)
+        ->toBe(CrmSync::NOTE_HOLDERS_UNREADABLE);
 });
 
 test('the balances-only command skips imports and refreshes the requested batch', function () {

@@ -1,10 +1,24 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
+import CopyValue from '@/components/console/CopyValue.vue';
+import ContactWays, {
+    type ContactWay,
+} from '@/components/console/ContactWays.vue';
+import Linked from '@/components/console/Linked.vue';
 import Rule from '@/components/console/Rule.vue';
+import { useConsoleLive } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
-import { dateTime, num, shortDate, toneColor, usd } from '@/lib/console';
+import {
+    dateTime,
+    num,
+    shortDate,
+    shortTime,
+    toneColor,
+    usd,
+} from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
+import contactLinks from '@/routes/crm/contact-links';
 
 /**
  * One person's dossier.
@@ -14,14 +28,36 @@ import { consoleMessages } from '@/lib/consoleMessages';
  * is the only order in which a story reads. What is deliberately absent is a
  * balance curve — this app keeps no balance history, so the small chart is
  * transfers per week, which is a thing that is actually recorded.
+ *
+ * The stream is read two ways, and the difference is not cosmetic. As a
+ * **feed** it answers "what happened to this person", newest first, filtered
+ * to the touches or to the money. As a **thread** it answers "where does this
+ * conversation stand", oldest first, with our lines and theirs told apart —
+ * and that second reading is why the correspondence is a table of its own
+ * rather than notes with a convention: only a direction makes "we wrote four
+ * days ago and they have not answered" a fact the console can state.
  */
 type Timeline = {
+    group: string;
     kind: string;
+    id: number;
     at: string | null;
     title: string;
     params: Record<string, string | number>;
     body: string | null;
     amount: { value: string; token: string; outbound: boolean } | null;
+};
+
+type Message = {
+    id: number;
+    direction: string;
+    channel: string;
+    body: string;
+    at: string | null;
+    /** The operator who typed it in — never the person who said it. */
+    author: string | null;
+    /** Who said it, when an import knew a name we do not. */
+    said_by: string | null;
 };
 
 const props = defineProps<{
@@ -33,11 +69,20 @@ const props = defineProps<{
         /* Built by the server: a stored handle is not always an address. */
         telegram_url: string | null;
         x_url: string | null;
+        write_ways: ContactWay[];
+        contact_links: {
+            id: number;
+            label: string;
+            kind: string;
+            url: string;
+        }[];
         email: string | null;
         evm_address: string | null;
         solana_address: string | null;
         type: string;
         status: string;
+        bought_usd: string | null;
+        sold_usd: string | null;
         source: string;
         tags: string[];
         created_at: string | null;
@@ -66,6 +111,36 @@ const props = defineProps<{
         assignee: string | null;
     }[];
     timeline: Timeline[];
+    /*
+     * Which slice of the stream is on screen and how much of it is left
+     * underneath. The counts are counts of the record and never of the slice
+     * — a footer that counts what it already holds always says nothing more
+     * is there.
+     */
+    events: {
+        view: string;
+        limit: number;
+        shown: number;
+        total: number;
+        more: number;
+        since: string | null;
+        counts: { all: number; touch: number; money: number };
+    };
+    /*
+     * The correspondence: what was said to this person and what they said
+     * back. Typed in by an operator today, imported from Telegram and Discord
+     * later — the row is the same either way.
+     */
+    conversation: {
+        rows: Message[];
+        total: number;
+        last: { at: string | null; direction: string; channel: string } | null;
+        /** Median minutes to an answer; null when nothing was ever answered. */
+        replies_in: number | null;
+        /** Whole days our last line has stood unanswered, null if it did not. */
+        waiting_days: number | null;
+        options: { channels: string[]; directions: string[] };
+    };
     /*
      * The same human, filed more than once.
      *
@@ -97,12 +172,30 @@ const props = defineProps<{
     options: {
         types: string[];
         statuses: string[];
+        taskPriorities: string[];
+        taskStatuses: string[];
+        views: string[];
+        assignees: { id: number; name: string }[];
     };
 }>();
 
 const { t, tag } = useLocale(consoleMessages);
 
 const note = useForm({ body: '' });
+const contactLink = useForm({ url: '', label: '' });
+
+function addContactLink() {
+    contactLink.post(contactLinks.store.url(props.contact.id), {
+        preserveScroll: true,
+        onSuccess: () => contactLink.reset(),
+    });
+}
+
+function removeContactLink(id: number) {
+    router.delete(contactLinks.destroy.url([props.contact.id, id]), {
+        preserveScroll: true,
+    });
+}
 
 /*
  * Correcting the record.
@@ -117,6 +210,33 @@ const note = useForm({ body: '' });
  */
 const editing = ref(false);
 
+/*
+ * A dossier is read while somebody else is writing in it: a note added, a
+ * task closed, the sync landing a new balance. So it re-reads itself — except
+ * while the told half is open for editing, because replacing the record
+ * under a form that is about to overwrite it is how two operators undo each
+ * other's corrections.
+ */
+useConsoleLive(
+    ['people', 'notes', 'tasks', 'messages'],
+    () =>
+        router.reload({
+            only: [
+                'contact',
+                'money',
+                'activity',
+                'summary',
+                'tasks',
+                'timeline',
+                'events',
+                'conversation',
+                'identity',
+                'console',
+            ],
+        }),
+    { active: () => !editing.value },
+);
+
 const edit = useForm({
     name: '',
     telegram: '',
@@ -127,6 +247,8 @@ const edit = useForm({
     tags: '',
     type: props.contact.type,
     status: props.contact.status,
+    bought_usd: props.contact.bought_usd ?? '',
+    sold_usd: props.contact.sold_usd ?? '',
 });
 
 /* The told half of the record, in the order the read view lists it. */
@@ -176,6 +298,8 @@ function startEditing() {
         tags: props.contact.tags.join(', '),
         type: props.contact.type,
         status: props.contact.status,
+        bought_usd: props.contact.bought_usd ?? '',
+        sold_usd: props.contact.sold_usd ?? '',
     });
     edit.reset();
     edit.clearErrors();
@@ -239,9 +363,217 @@ function withdrawLink(id: number) {
     router.delete(`/crm/identity-links/${id}`, { preserveScroll: true });
 }
 
-const overdue = computed(
-    () => props.tasks.filter((task) => task.overdue).length,
+/*
+ * What next: only what is still owed.
+ *
+ * A closed promise is not "what next" — it is what happened, and the stream
+ * carries it. Leaving done tasks in this panel put a finished job under an
+ * amber rail, which is the colour this console spends on work running out of
+ * time.
+ */
+const openTasks = computed(() =>
+    props.tasks.filter(
+        (task) => task.status !== 'done' && task.status !== 'cancelled',
+    ),
 );
+
+const overdue = computed(
+    () => openTasks.value.filter((task) => task.overdue).length,
+);
+
+/*
+ * Promising something, from the screen where the promise is made.
+ *
+ * The button existed in the design and in the dictionary and led nowhere: a
+ * task about this person had to be typed on the board and pointed back here
+ * with `#name`. It takes the board's own one-line grammar, minus the part
+ * that names the person — that is the page you are standing on.
+ */
+const taskOpen = ref(false);
+const taskInput = useTemplateRef<HTMLInputElement>('taskInput');
+
+const task = useForm({
+    title: '',
+    priority: 'normal',
+    assigned_to_user_id: null as number | null,
+    due_at: '',
+});
+
+function openTask() {
+    taskOpen.value = true;
+    void nextTick(() => taskInput.value?.focus());
+}
+
+function createTask() {
+    if (!task.title.trim() || task.processing) {
+        return;
+    }
+
+    task.transform((data) => ({
+        ...data,
+        due_at: data.due_at === '' ? null : data.due_at,
+    })).post(`/crm/${props.contact.id}/tasks`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            task.reset();
+            taskOpen.value = false;
+        },
+    });
+}
+
+function closeTask(id: number) {
+    router.put(
+        `/crm/tasks/${id}`,
+        { status: 'done' },
+        { preserveScroll: true },
+    );
+}
+
+/*
+ * The stream, and the two ways it is read.
+ *
+ * `feed` is the record; `thread` is the conversation. The switch is not a
+ * filter on the same rows — the orders are opposite and the questions are
+ * different — so it is a switch and not a fourth segment beside the filters.
+ */
+const pane = ref<'feed' | 'thread'>('feed');
+
+const thread = useTemplateRef<HTMLDivElement>('thread');
+
+/** A conversation opens at its end, which is the only part being read. */
+function scrollThread() {
+    void nextTick(() => {
+        if (thread.value) {
+            thread.value.scrollTop = thread.value.scrollHeight;
+        }
+    });
+}
+
+watch(pane, (value) => value === 'thread' && scrollThread());
+watch(() => props.conversation.rows.length, scrollThread);
+
+/*
+ * Which slice, and how much of it — both in the address, so a dossier opened
+ * on the money is a link worth pasting and the back button undoes a filter
+ * instead of leaving the page.
+ */
+function reread(query: Record<string, string | number>) {
+    router.get(`/crm/${props.contact.id}`, query, {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['timeline', 'events'],
+    });
+}
+
+function setView(view: string) {
+    reread({ events: view, rows: 60 });
+}
+
+function showMore() {
+    reread({ events: props.events.view, rows: props.events.limit + 60 });
+}
+
+const viewLabels: Record<string, string> = {
+    all: 'person.viewAll',
+    touch: 'person.viewTouch',
+    money: 'person.viewMoney',
+};
+
+/*
+ * The correspondence composer.
+ *
+ * Direction first, because it is the only field that changes what the line
+ * means. `sent_at` is optional and empty by default: most lines are written
+ * down right after they were said, and a required timestamp on every one of
+ * them is a field nobody fills correctly. It is sent as a full ISO string
+ * with this desk's offset — a bare `Y-m-d H:i` is read by the server in the
+ * app's timezone, which is three hours from here.
+ */
+const message = useForm({
+    body: '',
+    direction: 'out',
+    channel: 'telegram',
+    sent_at: '',
+});
+
+function sendMessage() {
+    if (!message.body.trim() || message.processing) {
+        return;
+    }
+
+    message
+        .transform((data) => ({
+            ...data,
+            sent_at:
+                data.sent_at === ''
+                    ? null
+                    : new Date(data.sent_at).toISOString(),
+        }))
+        .post(`/crm/${props.contact.id}/messages`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                message.reset('body', 'sent_at');
+                scrollThread();
+            },
+        });
+}
+
+function dropMessage(id: number) {
+    router.delete(`/crm/messages/${id}`, { preserveScroll: true });
+}
+
+/** Enter sends, shift+enter is a new line — the room's own convention. */
+function messageKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+/** The day a line was said, printed once above the first line of that day. */
+function dayOf(iso: string | null): string {
+    return iso ? iso.slice(0, 10) : '';
+}
+
+function startsDay(index: number): boolean {
+    const rows = props.conversation.rows;
+
+    return index === 0 || dayOf(rows[index - 1].at) !== dayOf(rows[index].at);
+}
+
+/** How long they usually take, said in the largest unit that is still true. */
+const repliesIn = computed(() => {
+    const minutes = props.conversation.replies_in;
+
+    if (minutes === null) {
+        return t('person.repliesUnknown');
+    }
+
+    if (minutes < 90) {
+        return t('person.repliesMinutes', { count: Math.max(1, minutes) });
+    }
+
+    if (minutes < 60 * 36) {
+        return t('person.repliesHours', { count: Math.round(minutes / 60) });
+    }
+
+    return t('person.repliesDays', { count: Math.round(minutes / 1440) });
+});
+
+/** The last line, and whose it was — the fact a dossier is opened for. */
+const lastContact = computed(() => {
+    const last = props.conversation.last;
+
+    if (last === null) {
+        return t('person.contactNever');
+    }
+
+    return `${shortDate(last.at, tag.value)}, ${
+        last.direction === 'out'
+            ? t('person.contactOurs')
+            : t('person.contactTheirs')
+    }`;
+});
 
 const summaryText = computed(() => {
     const params = { ...props.summary.params };
@@ -279,6 +611,10 @@ function eventText(row: Timeline): string {
 
     if (typeof params.source === 'string') {
         params.source = t(`crm.source.${params.source}`);
+    }
+
+    if (typeof params.channel === 'string') {
+        params.channel = t(`person.channel.${params.channel}`);
     }
 
     return t(row.title, params);
@@ -330,28 +666,105 @@ function remove() {
         >
         <span class="mk-tag">{{ t(`crm.status.${contact.status}`) }}</span>
         <div style="margin-left: auto; display: flex; gap: 8px">
-            <a
-                v-if="contact.telegram_url"
-                :href="contact.telegram_url"
-                target="_blank"
-                rel="noreferrer"
-                class="mk-btn mk-act"
-                >{{ t('person.write') }}</a
-            >
-            <a
-                v-if="contact.x_url"
-                :href="contact.x_url"
-                target="_blank"
-                rel="noreferrer"
-                class="mk-btn"
-                :class="{ 'mk-act': !contact.telegram_url }"
-                >{{ t('person.writeX') }}</a
-            >
+            <ContactWays
+                v-if="contact.write_ways.length"
+                :ways="contact.write_ways"
+                :label="t('person.write')"
+            />
+            <button type="button" class="mk-btn" @click="openTask">
+                {{ t('person.addTask') }}
+            </button>
             <button type="button" class="mk-btn mk-ghost" @click="remove">
                 {{ t('person.delete') }}
             </button>
         </div>
     </div>
+
+    <!-- A promise, made where it is made. One line with the board's own
+         grammar (`@who !when`), and the person is this page. -->
+    <form
+        v-if="taskOpen"
+        style="
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 0 14px;
+            min-height: 48px;
+            border: 1px solid rgba(0, 229, 209, 0.25);
+            background: rgba(0, 229, 209, 0.04);
+        "
+        @submit.prevent="createTask"
+    >
+        <input
+            ref="taskInput"
+            v-model="task.title"
+            class="mk-m"
+            style="
+                flex: 1;
+                min-width: 220px;
+                background: none;
+                border: 0;
+                outline: none;
+                color: var(--mk-body);
+                font-size: 13.5px;
+            "
+            :placeholder="t('person.taskPlaceholder')"
+            @keydown.esc="taskOpen = false"
+        />
+
+        <span
+            v-for="value in options.taskPriorities"
+            :key="value"
+            class="mk-pick"
+            :class="{ 'mk-on': task.priority === value }"
+            role="button"
+            tabindex="0"
+            @click="task.priority = value"
+            @keydown.enter.prevent="task.priority = value"
+            >{{ t(`priority.${value}`) }}</span
+        >
+
+        <select
+            v-model="task.assigned_to_user_id"
+            class="mk-input"
+            style="max-width: 150px"
+        >
+            <option :value="null">{{ t('tasks.nobody') }}</option>
+            <option
+                v-for="operator in options.assignees"
+                :key="operator.id"
+                :value="operator.id"
+            >
+                {{ operator.name }}
+            </option>
+        </select>
+
+        <input
+            v-model="task.due_at"
+            type="date"
+            class="mk-input"
+            style="max-width: 150px"
+            :title="t('tasks.field.due')"
+        />
+
+        <span
+            v-if="Object.keys(task.errors).length"
+            style="font-size: 11.5px; color: var(--mk-critical)"
+            >{{ Object.values(task.errors).join(' · ') }}</span
+        >
+
+        <button
+            type="submit"
+            class="mk-btn mk-act"
+            :disabled="task.processing || !task.title.trim()"
+        >
+            {{ t('person.taskSave') }}
+        </button>
+        <button type="button" class="mk-btn mk-ghost" @click="taskOpen = false">
+            {{ t('person.editCancel') }}
+        </button>
+    </form>
 
     <!-- The one sentence: only what is on the record, in the order that
          decides what to do next. -->
@@ -475,51 +888,73 @@ function remove() {
                     </button>
                 </Rule>
 
-                <!-- Reading. The handles are the addresses this person is
-                     reachable at, so they are links wherever the server could
-                     build one, and plain text wherever it could not. -->
+                <!-- Reading. Every value that is going somewhere else — an
+                     explorer, a message, a support ticket — carries its own
+                     copy button, because what is drawn here is shortened and
+                     shortened is exactly what cannot be pasted. -->
                 <div v-if="!editing" style="margin-top: 10px">
                     <div
                         v-for="row in [
                             {
                                 label: t('person.evm'),
-                                value: short(contact.evm_address),
+                                value: contact.evm_address,
+                                display: short(contact.evm_address),
                                 href: null,
                             },
                             {
                                 label: t('person.solana'),
-                                value: short(contact.solana_address),
+                                value: contact.solana_address,
+                                display: short(contact.solana_address),
                                 href: null,
                             },
                             {
                                 label: t('person.telegram'),
-                                value: contact.telegram ?? t('person.none'),
+                                value: contact.telegram,
+                                display: contact.telegram ?? t('person.none'),
                                 href: contact.telegram_url,
                             },
                             {
                                 label: t('person.x'),
                                 value: contact.x_handle
                                     ? `@${contact.x_handle}`
+                                    : null,
+                                display: contact.x_handle
+                                    ? `@${contact.x_handle}`
                                     : t('person.none'),
                                 href: contact.x_url,
                             },
                             {
                                 label: t('person.email'),
-                                value: contact.email ?? t('person.none'),
+                                value: contact.email,
+                                display: contact.email ?? t('person.none'),
                                 href: contact.email
                                     ? `mailto:${contact.email}`
                                     : null,
                             },
                             {
                                 label: t('person.tags'),
-                                value: contact.tags.length
+                                value: null,
+                                display: contact.tags.length
                                     ? contact.tags.join(' · ')
                                     : t('unit.none'),
                                 href: null,
                             },
                             {
+                                label: t('person.lastContact'),
+                                value: null,
+                                display: lastContact,
+                                href: null,
+                            },
+                            {
+                                label: t('person.replies'),
+                                value: null,
+                                display: repliesIn,
+                                href: null,
+                            },
+                            {
                                 label: t('person.lastSync'),
-                                value: contact.last_synced_at
+                                value: null,
+                                display: contact.last_synced_at
                                     ? dateTime(contact.last_synced_at, tag)
                                     : t('unit.none'),
                                 href: null,
@@ -534,33 +969,111 @@ function remove() {
                             padding: 8px 0;
                         "
                     >
-                        <span class="mk-t3" style="font-size: 12px">{{
-                            row.label
-                        }}</span>
-                        <a
-                            v-if="row.href"
-                            :href="row.href"
-                            target="_blank"
-                            rel="noreferrer"
-                            class="mk-m mk-clip"
+                        <span
+                            class="mk-t3"
                             style="
-                                margin-left: auto;
+                                flex: 0 0 auto;
                                 font-size: 12px;
-                                color: var(--mk-accent);
-                                text-decoration: none;
+                                white-space: nowrap;
                             "
-                            >{{ row.value }}</a
+                            >{{ row.label }}</span
                         >
                         <span
-                            v-else
-                            class="mk-m mk-clip"
                             style="
-                                margin-left: auto;
-                                font-size: 12px;
-                                color: var(--mk-body);
+                                flex: 1;
+                                min-width: 0;
+                                display: flex;
+                                justify-content: flex-end;
                             "
-                            >{{ row.value }}</span
                         >
+                            <CopyValue
+                                :value="row.value"
+                                :display="row.display"
+                                :href="row.href"
+                            />
+                        </span>
+                    </div>
+
+                    <div style="margin-top: 12px">
+                        <p class="mk-k" style="margin: 0 0 7px">
+                            {{ t('person.contactWays') }}
+                        </p>
+                        <div
+                            v-for="way in contact.contact_links"
+                            :key="way.id"
+                            class="mk-hair"
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                padding: 7px 0;
+                            "
+                        >
+                            <a
+                                :href="way.url"
+                                target="_blank"
+                                rel="noreferrer"
+                                class="mk-clip"
+                                style="
+                                    flex: 1;
+                                    min-width: 0;
+                                    color: var(--mk-cyan);
+                                    font-size: 12px;
+                                "
+                                :title="way.url"
+                                >{{ way.label }}</a
+                            >
+                            <button
+                                type="button"
+                                class="mk-btn mk-ghost"
+                                style="height: 22px; padding: 0 6px"
+                                :aria-label="t('person.contactLinkDelete')"
+                                @click="removeContactLink(way.id)"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <form
+                            style="
+                                margin-top: 8px;
+                                display: grid;
+                                grid-template-columns: minmax(0, 1fr) 90px auto;
+                                gap: 6px;
+                            "
+                            @submit.prevent="addContactLink"
+                        >
+                            <input
+                                v-model="contactLink.url"
+                                class="mk-input"
+                                inputmode="url"
+                                :placeholder="t('people.linkUrl')"
+                            />
+                            <input
+                                v-model="contactLink.label"
+                                class="mk-input"
+                                :placeholder="t('people.linkLabel')"
+                            />
+                            <button
+                                type="submit"
+                                class="mk-btn"
+                                :disabled="
+                                    contactLink.processing ||
+                                    !contactLink.url.trim()
+                                "
+                            >
+                                +
+                            </button>
+                        </form>
+                        <p
+                            v-if="Object.keys(contactLink.errors).length"
+                            style="
+                                margin: 6px 0 0;
+                                color: var(--mk-critical);
+                                font-size: 11px;
+                            "
+                        >
+                            {{ Object.values(contactLink.errors).join(' · ') }}
+                        </p>
                     </div>
                 </div>
 
@@ -603,6 +1116,46 @@ function remove() {
                             :placeholder="field.hint"
                         />
                     </label>
+
+                    <div
+                        style="
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            flex-wrap: wrap;
+                        "
+                    >
+                        <label
+                            style="display: flex; align-items: center; gap: 6px"
+                        >
+                            <span class="mk-k"
+                                >{{ t('people.bought') }}, $</span
+                            >
+                            <input
+                                v-model="edit.bought_usd"
+                                class="mk-input"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputmode="decimal"
+                                style="width: 110px"
+                            />
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 6px"
+                        >
+                            <span class="mk-k">{{ t('people.sold') }}, $</span>
+                            <input
+                                v-model="edit.sold_usd"
+                                class="mk-input"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputmode="decimal"
+                                style="width: 110px"
+                            />
+                        </label>
+                    </div>
 
                     <div
                         style="
@@ -859,7 +1412,16 @@ function remove() {
                             ? t('person.overdueCount', { count: overdue })
                             : null
                     "
-                />
+                >
+                    <button
+                        type="button"
+                        class="mk-btn mk-ghost"
+                        style="height: 22px; padding: 0 6px"
+                        @click="openTask"
+                    >
+                        {{ t('person.addTask') }}
+                    </button>
+                </Rule>
                 <div
                     style="
                         margin-top: 10px;
@@ -869,24 +1431,29 @@ function remove() {
                     "
                 >
                     <div
-                        v-for="task in tasks"
-                        :key="task.id"
+                        v-for="item in openTasks"
+                        :key="item.id"
                         class="mk-panel"
                         style="
                             display: flex;
+                            align-items: center;
                             gap: 11px;
                             padding: 11px 13px 11px 0;
                         "
                     >
                         <span
-                            style="width: 2px; flex: 0 0 2px"
+                            style="
+                                width: 2px;
+                                flex: 0 0 2px;
+                                align-self: stretch;
+                            "
                             :style="{
-                                background: task.overdue
+                                background: item.overdue
                                     ? 'var(--mk-critical)'
                                     : 'var(--mk-warning)',
                             }"
                         />
-                        <div>
+                        <div style="flex: 1; min-width: 0">
                             <p
                                 style="
                                     margin: 0;
@@ -894,28 +1461,39 @@ function remove() {
                                     font-weight: 500;
                                 "
                             >
-                                {{ task.title }}
+                                <Linked :text="item.title" />
                             </p>
                             <p
                                 class="mk-m"
                                 style="margin: 5px 0 0; font-size: 11px"
                                 :style="{
-                                    color: task.overdue
+                                    color: item.overdue
                                         ? 'var(--mk-critical)'
                                         : 'var(--mk-faint)',
                                 }"
                             >
-                                {{ task.assignee ?? t('tasks.nobody') }} ·
+                                {{ item.assignee ?? t('tasks.nobody') }} ·
                                 {{
-                                    task.due_at
-                                        ? shortDate(task.due_at, tag)
+                                    item.due_at
+                                        ? shortDate(item.due_at, tag)
                                         : t('tasks.noDue')
                                 }}
                             </p>
                         </div>
+                        <!-- One action, and it is the one that empties the
+                             panel: a promise kept. -->
+                        <button
+                            type="button"
+                            class="mk-btn mk-ghost"
+                            style="padding: 0 8px"
+                            :title="t('person.taskDone')"
+                            @click="closeTask(item.id)"
+                        >
+                            ✓
+                        </button>
                     </div>
                     <p
-                        v-if="!tasks.length"
+                        v-if="!openTasks.length"
                         class="mk-t3"
                         style="font-size: 12px"
                     >
@@ -927,139 +1505,434 @@ function remove() {
 
         <div style="display: flex; flex-direction: column; min-width: 0">
             <Rule
-                :label="t('person.everything')"
-                :note="t('person.everythingNote')"
-            />
-
-            <form
-                style="margin-top: 12px; display: flex; gap: 8px"
-                @submit.prevent="saveNote"
+                :label="
+                    pane === 'feed'
+                        ? t('person.everything')
+                        : t('person.conversation')
+                "
+                :note="
+                    pane === 'feed'
+                        ? t('person.everythingNote')
+                        : t('person.conversationNote')
+                "
             >
-                <input
-                    v-model="note.body"
-                    class="mk-input"
-                    style="flex: 1"
-                    :placeholder="t('person.addNote')"
-                />
-                <button
-                    type="submit"
-                    class="mk-btn mk-act"
-                    :disabled="note.processing || !note.body"
-                >
-                    {{ t('person.saveNote') }}
-                </button>
-            </form>
+                <span style="display: flex; gap: 6px">
+                    <button
+                        type="button"
+                        class="mk-pick"
+                        :class="{ 'mk-on': pane === 'feed' }"
+                        @click="pane = 'feed'"
+                    >
+                        {{ t('person.paneFeed') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="mk-pick"
+                        :class="{ 'mk-on': pane === 'thread' }"
+                        @click="pane = 'thread'"
+                    >
+                        {{ t('person.paneThread') }}
+                        <template v-if="conversation.total">
+                            · {{ conversation.total }}</template
+                        >
+                    </button>
+                </span>
+            </Rule>
 
-            <div style="margin-top: 12px">
+            <!-- The record. -->
+            <template v-if="pane === 'feed'">
+                <form
+                    style="margin-top: 12px; display: flex; gap: 8px"
+                    @submit.prevent="saveNote"
+                >
+                    <input
+                        v-model="note.body"
+                        class="mk-input"
+                        style="flex: 1"
+                        :placeholder="t('person.addNote')"
+                    />
+                    <button
+                        type="submit"
+                        class="mk-btn mk-act"
+                        :disabled="note.processing || !note.body"
+                    >
+                        {{ t('person.saveNote') }}
+                    </button>
+                </form>
+
+                <div style="margin-top: 12px">
+                    <div
+                        v-for="(row, index) in timeline"
+                        :key="`${row.kind}-${row.id}-${index}`"
+                        class="mk-hair"
+                        style="
+                            display: flex;
+                            align-items: flex-start;
+                            gap: 14px;
+                            padding: 12px 2px;
+                        "
+                    >
+                        <span
+                            class="mk-m mk-t3"
+                            style="
+                                width: 108px;
+                                flex: 0 0 108px;
+                                font-size: 11.5px;
+                                padding-top: 2px;
+                            "
+                            >{{ dateTime(row.at, tag) }}</span
+                        >
+                        <span
+                            style="
+                                width: 26px;
+                                flex: 0 0 26px;
+                                height: 26px;
+                                border: 1px solid var(--mk-hair-strong);
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            "
+                            :style="{
+                                color:
+                                    row.kind === 'bridge'
+                                        ? 'var(--mk-warning)'
+                                        : row.kind === 'note'
+                                          ? 'var(--mk-accent)'
+                                          : row.kind === 'said'
+                                            ? 'var(--mk-accent)'
+                                            : row.kind === 'heard'
+                                              ? 'var(--mk-money)'
+                                              : 'var(--mk-faint)',
+                            }"
+                        >
+                            <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.6"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    v-if="row.kind === 'bridge'"
+                                    d="M3 18V9M21 18V9M3 13c5-4.5 13-4.5 18 0"
+                                />
+                                <template v-else-if="row.kind === 'note'">
+                                    <path d="M5 4h14v16H5z" />
+                                    <path d="M8 9h8M8 13h5" />
+                                </template>
+                                <!-- Said and heard are the same envelope
+                                     pointing opposite ways: the direction is
+                                     the whole difference between them. -->
+                                <template v-else-if="row.kind === 'said'">
+                                    <path d="M4 12h13M13 7l5 5-5 5M20 4v16" />
+                                </template>
+                                <template v-else-if="row.kind === 'heard'">
+                                    <path d="M20 12H7M11 7l-5 5 5 5M4 4v16" />
+                                </template>
+                                <template v-else-if="row.kind === 'task'">
+                                    <rect
+                                        x="4"
+                                        y="4"
+                                        width="16"
+                                        height="16"
+                                        rx="2"
+                                    />
+                                    <path d="M8 12l3 3 5-6" />
+                                </template>
+                                <template v-else>
+                                    <circle cx="12" cy="12" r="8" />
+                                    <path d="M12 8v4l3 2" />
+                                </template>
+                            </svg>
+                        </span>
+                        <div style="flex: 1; min-width: 0">
+                            <div style="font-size: 13px; font-weight: 500">
+                                {{ eventText(row) }}
+                            </div>
+                            <div
+                                v-if="row.body"
+                                class="mk-t3"
+                                style="
+                                    margin-top: 3px;
+                                    font-size: 11.5px;
+                                    white-space: pre-wrap;
+                                    overflow-wrap: anywhere;
+                                "
+                            >
+                                <Linked :text="row.body" />
+                            </div>
+                        </div>
+                        <span
+                            v-if="row.amount"
+                            class="mk-num"
+                            style="font-size: 13px"
+                            :style="{
+                                color: row.amount.outbound
+                                    ? 'var(--mk-warning)'
+                                    : 'var(--mk-dim)',
+                            }"
+                        >
+                            {{ row.amount.outbound ? '−' : '+'
+                            }}{{ row.amount.value }}
+                            {{ row.amount.token }}
+                        </span>
+                    </div>
+                    <p
+                        v-if="!timeline.length"
+                        class="mk-t3"
+                        style="font-size: 12px"
+                    >
+                        {{
+                            events.view === 'all'
+                                ? t('person.noHistory')
+                                : t('person.noHistoryHere')
+                        }}
+                    </p>
+                </div>
+
+                <!-- What is left underneath, and the two other readings of the
+                     same stream. The counts are of the record, so a filter
+                     that would show nothing says so before it is pressed. -->
                 <div
-                    v-for="(row, index) in timeline"
-                    :key="index"
-                    class="mk-hair"
                     style="
+                        margin-top: 12px;
                         display: flex;
-                        align-items: flex-start;
-                        gap: 14px;
-                        padding: 12px 2px;
+                        align-items: center;
+                        gap: 12px;
+                        flex-wrap: wrap;
                     "
                 >
-                    <span
-                        class="mk-m mk-t3"
-                        style="
-                            width: 108px;
-                            flex: 0 0 108px;
-                            font-size: 11.5px;
-                            padding-top: 2px;
-                        "
-                        >{{ dateTime(row.at, tag) }}</span
-                    >
-                    <span
-                        style="
-                            width: 26px;
-                            flex: 0 0 26px;
-                            height: 26px;
-                            border: 1px solid var(--mk-hair-strong);
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                        "
-                        :style="{
-                            color:
-                                row.kind === 'bridge'
-                                    ? 'var(--mk-warning)'
-                                    : row.kind === 'note'
-                                      ? 'var(--mk-accent)'
-                                      : 'var(--mk-faint)',
-                        }"
-                    >
-                        <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.6"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
-                            <path
-                                v-if="row.kind === 'bridge'"
-                                d="M3 18V9M21 18V9M3 13c5-4.5 13-4.5 18 0"
-                            />
-                            <template v-else-if="row.kind === 'note'">
-                                <path d="M5 4h14v16H5z" />
-                                <path d="M8 9h8M8 13h5" />
-                            </template>
-                            <template v-else-if="row.kind === 'task'">
-                                <rect
-                                    x="4"
-                                    y="4"
-                                    width="16"
-                                    height="16"
-                                    rx="2"
-                                />
-                                <path d="M8 12l3 3 5-6" />
-                            </template>
-                            <template v-else>
-                                <circle cx="12" cy="12" r="8" />
-                                <path d="M12 8v4l3 2" />
-                            </template>
-                        </svg>
+                    <span class="mk-m mk-t3" style="font-size: 11px">
+                        <template v-if="events.more > 0">
+                            {{
+                                t('person.moreEvents', {
+                                    count: events.more,
+                                    since: shortDate(events.since, tag),
+                                })
+                            }}
+                        </template>
+                        <template v-else>
+                            {{ t('person.allEvents', { count: events.total }) }}
+                        </template>
                     </span>
-                    <div style="flex: 1; min-width: 0">
-                        <div style="font-size: 13px; font-weight: 500">
-                            {{ eventText(row) }}
-                        </div>
-                        <div
-                            v-if="row.body"
-                            class="mk-t3"
-                            style="margin-top: 3px; font-size: 11.5px"
-                        >
-                            {{ row.body }}
-                        </div>
-                    </div>
-                    <span
-                        v-if="row.amount"
-                        class="mk-num"
-                        style="font-size: 13px"
-                        :style="{
-                            color: row.amount.outbound
-                                ? 'var(--mk-warning)'
-                                : 'var(--mk-dim)',
-                        }"
+                    <button
+                        v-if="events.more > 0"
+                        type="button"
+                        class="mk-btn mk-ghost"
+                        @click="showMore"
                     >
-                        {{ row.amount.outbound ? '−' : '+'
-                        }}{{ row.amount.value }}
-                        {{ row.amount.token }}
+                        {{ t('people.more') }}
+                    </button>
+
+                    <span style="margin-left: auto; display: flex; gap: 6px">
+                        <button
+                            v-for="view in options.views"
+                            :key="view"
+                            type="button"
+                            class="mk-pick"
+                            :class="{ 'mk-on': events.view === view }"
+                            @click="setView(view)"
+                        >
+                            {{ t(viewLabels[view] ?? view) }}
+                            <template v-if="view !== 'all'">
+                                ·
+                                {{ events.counts[view as 'touch' | 'money'] }}
+                            </template>
+                        </button>
                     </span>
                 </div>
-                <p
-                    v-if="!timeline.length"
-                    class="mk-t3"
-                    style="font-size: 12px"
-                >
-                    {{ t('person.noHistory') }}
+            </template>
+
+            <!-- The conversation. Oldest first, ours and theirs told apart,
+                 and typed in after the fact — this console holds nobody's
+                 Telegram session, so it records and never sends. -->
+            <template v-else>
+                <div ref="thread" class="mk-thread" style="margin-top: 12px">
+                    <p
+                        v-if="!conversation.rows.length"
+                        class="mk-t3"
+                        style="font-size: 12px"
+                    >
+                        {{ t('person.noConversation') }}
+                    </p>
+
+                    <template
+                        v-for="(line, index) in conversation.rows"
+                        :key="line.id"
+                    >
+                        <div
+                            v-if="startsDay(index)"
+                            class="mk-k"
+                            style="margin: 14px 0 4px"
+                        >
+                            {{ shortDate(line.at, tag) }}
+                        </div>
+
+                        <div
+                            class="mk-line"
+                            :class="{ 'mk-ours': line.direction === 'out' }"
+                        >
+                            <span class="mk-line-rail" />
+                            <div class="mk-line-body">
+                                <div class="mk-line-head">
+                                    <span
+                                        :style="{
+                                            color:
+                                                line.direction === 'out'
+                                                    ? 'var(--mk-accent)'
+                                                    : 'var(--mk-money)',
+                                        }"
+                                        >{{
+                                            line.direction === 'out'
+                                                ? t('person.lineOurs')
+                                                : (line.said_by ?? contact.name)
+                                        }}</span
+                                    >
+                                    <span>{{
+                                        t(`person.channel.${line.channel}`)
+                                    }}</span>
+                                    <span>{{ shortTime(line.at, tag) }}</span>
+                                    <span
+                                        v-if="line.author"
+                                        class="mk-wide"
+                                        style="color: var(--mk-fainter)"
+                                        >{{
+                                            t('person.wroteDown', {
+                                                name: line.author,
+                                            })
+                                        }}</span
+                                    >
+                                    <button
+                                        type="button"
+                                        class="mk-btn mk-ghost mk-line-drop"
+                                        style="
+                                            margin-left: auto;
+                                            height: 20px;
+                                            padding: 0 6px;
+                                        "
+                                        @click="dropMessage(line.id)"
+                                    >
+                                        {{ t('person.lineDrop') }}
+                                    </button>
+                                </div>
+                                <p><Linked :text="line.body" /></p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <form class="mk-composer" @submit.prevent="sendMessage">
+                    <div
+                        style="
+                            flex: 1;
+                            min-width: 0;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 9px;
+                        "
+                    >
+                        <div
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 6px;
+                                flex-wrap: wrap;
+                            "
+                        >
+                            <!-- Direction first: it is the only field that
+                                 changes what the line means. -->
+                            <button
+                                v-for="value in conversation.options.directions"
+                                :key="value"
+                                type="button"
+                                class="mk-pick"
+                                :class="{
+                                    'mk-on': message.direction === value,
+                                }"
+                                @click="message.direction = value"
+                            >
+                                {{
+                                    value === 'out'
+                                        ? t('person.lineOurs')
+                                        : t('person.lineTheirs')
+                                }}
+                            </button>
+
+                            <select
+                                v-model="message.channel"
+                                class="mk-input"
+                                style="max-width: 130px; margin-left: 6px"
+                            >
+                                <option
+                                    v-for="value in conversation.options
+                                        .channels"
+                                    :key="value"
+                                    :value="value"
+                                >
+                                    {{ t(`person.channel.${value}`) }}
+                                </option>
+                            </select>
+
+                            <!-- When it was said. Empty means now, which is
+                                 what it is when a line is written down as it
+                                 happens. -->
+                            <input
+                                v-model="message.sent_at"
+                                type="datetime-local"
+                                class="mk-input"
+                                style="max-width: 200px"
+                                :title="t('person.lineWhen')"
+                            />
+                        </div>
+
+                        <textarea
+                            v-model="message.body"
+                            rows="2"
+                            :placeholder="t('person.linePlaceholder')"
+                            style="
+                                min-height: 42px;
+                                max-height: 160px;
+                                padding: 0;
+                                border: 0;
+                                outline: none;
+                                resize: vertical;
+                                background: transparent;
+                                color: var(--mk-text);
+                                font-family: var(--mk-mono);
+                                font-size: 13.5px;
+                                line-height: 1.5;
+                            "
+                            @keydown="messageKeydown"
+                        />
+
+                        <p
+                            v-if="Object.keys(message.errors).length"
+                            style="
+                                margin: 0;
+                                font-size: 11.5px;
+                                color: var(--mk-critical);
+                            "
+                        >
+                            {{ Object.values(message.errors).join(' · ') }}
+                        </p>
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="mk-btn mk-act"
+                        :disabled="message.processing || !message.body.trim()"
+                    >
+                        {{ t('person.lineSave') }}
+                    </button>
+                </form>
+
+                <p class="mk-t3" style="margin: 8px 0 0; font-size: 11px">
+                    {{ t('person.conversationHint') }}
                 </p>
-            </div>
+            </template>
         </div>
     </div>
 </template>

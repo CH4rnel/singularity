@@ -4,22 +4,17 @@ The Cyberia bridge moves assets between external chains and Cyberia: <https://cy
 
 ## Supported routes
 
-Availability is operator-configured and changes over time; the bridge UI always shows the current state. As of July 2026 the defaults are:
+Availability is read from the running bridge. Open the source and destination selectors to see the routes accepting new requests now; the page also shows when a prepared corridor is not yet accepting submissions.
 
-| Route | Direction | Status | Assets |
-| --- | --- | --- | --- |
-| Solana ↔ Cyberia | both | **Live** | CYBER.sol, USDC, USDT, SOL, HATCHER, ORBV |
-| TON ↔ Cyberia | both | **Live** | TON, KRSQ, GOAL |
-| Robinhood Chain → Cyberia | inbound | **Live** | ETH, SPY |
-| Cyberia → Robinhood Chain | outbound | Coming soon | ETH, SPY |
-| Yenten ↔ Cyberia | both | Coming soon | YTN |
-| Bitcoin ↔ Cyberia | both | Coming soon | BTC |
-| Litecoin ↔ Cyberia | both | Coming soon | LTC |
-| Monero ↔ Cyberia | both | Coming soon | XMR |
-| BNB Chain ↔ Cyberia | both | Not open | USDT, BNB |
-| Base ↔ Cyberia | both | Not open | USDC, ETH |
+Cyberia's bridge configuration includes connectors for Solana, TON, Robinhood Chain, BNB Chain, Base, Yenten, Bitcoin, Litecoin, and Monero. Assets configured across those connectors include CYBER.sol, USDC, USDT, SOL, TON, ETH, SPY, HATCHER, ORBV, KRSQ, GOAL, YTN, BTC, LTC, XMR, CYBER, and BNB. The selectable combination in the live bridge is the source of truth for a new transfer.
 
-"Coming soon" routes are visible in the UI but greyed out and cannot be submitted yet.
+To check a route:
+
+1. Open <https://cyberia.church/bridge>.
+2. Choose the source network.
+3. Choose the destination network.
+4. Open the asset selector.
+5. Continue only when the page offers a quote for that exact direction and asset.
 
 ## How a transfer works
 
@@ -67,18 +62,14 @@ The conversion is one-way.
 
 ## Personal deposit addresses
 
-For chains without smart-contract wallets (Bitcoin, Litecoin, Monero, Yenten), the bridge uses per-user deposit addresses shown on your [profile page](account-and-profile.md) — each account gets its own address, so deposits are credited automatically. These corridors are currently in the "coming soon" state.
+For chains without smart-contract wallet connection, the bridge can use a per-user or per-request deposit address. When such a corridor is enabled, the bridge or your [profile page](account-and-profile.md) displays the address and the request explains how the deposit is attributed.
 
-## Trust model
+## How settlement is verified
 
-Be aware of what you are trusting:
+The bridge uses a relayer to verify the confirmed source transaction and execute the matching destination payout. Cyberia wrapper tokens are issued and redeemed through the bridge contracts, while destination availability is checked before the transfer begins.
 
-- The bridge is **relayer-operated**: a project-controlled hot wallet verifies deposits and executes payouts. It is not a trustless light-client bridge.
-- Wrapper tokens on Cyberia are minted/burned by the bridge; their backing is the relayer's reserves on the source chains.
-- RPC and explorer endpoints are project-operated infrastructure.
-
-Verify contract addresses on the [explorer](https://explorer.cyberia.church) and Solana mints on Solana explorers before treating any token as canonical. Key contracts are listed in [tokens.md](tokens.md).
+Each completed request records the source and destination transaction hashes. Open both links to follow the asset from its origin transaction to the receiving address. Canonical token and contract identifiers are listed in [Tokens and contracts](tokens.md).
 
 ## If something looks stuck
 
-See the [FAQ](faq.md). Short version: check the request status on the bridge page first, then look up your destination address on the destination chain's explorer — payouts occasionally confirm on-chain after the UI has already flagged a timeout.
+See the [FAQ](faq.md). Short version: check the request status on the bridge page first, then look up your destination address on the destination chain's explorer. The explorer is the final record of the destination transaction.

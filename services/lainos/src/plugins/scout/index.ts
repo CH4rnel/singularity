@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fetch as undiciFetch, ProxyAgent, type Dispatcher } from "undici";
 import { createLogger } from "../../logger.js";
+import { TaskKind } from "../../models/tasks.js";
 import {
   ModelTier,
   type Action,
@@ -441,6 +442,9 @@ export class ScoutService implements Service {
       `never write "ничего не найдено", "no relevant news", or any other explanation instead.`;
     const res = await this.runtime.model.generate({
       tier: ModelTier.MEDIUM,
+      // A digest is drudgery by definition — routed by kind, so an operator
+      // can put every one of them on a free model without touching the chat.
+      task: TaskKind.DIGEST,
       system,
       messages: [
         {

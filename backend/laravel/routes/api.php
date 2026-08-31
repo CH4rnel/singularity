@@ -14,9 +14,11 @@ use App\Http\Controllers\Api\SolanaRpcController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAuthController;
+use App\Http\Controllers\Api\WalletCrosschainController;
 use App\Http\Controllers\Api\WalletGasController;
 use App\Http\Controllers\Api\WalletIpfsController;
 use App\Http\Middleware\AuthenticateAiApiKey;
+use App\Http\Middleware\X402Paywall;
 use App\Services\WalletPriceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -42,6 +44,22 @@ Route::prefix('wallet')->group(function () {
     // can only ever arrive at the address that was named. See GasSponsorService.
     Route::get('gas', [WalletGasController::class, 'status'])->middleware('throttle:60,1');
     Route::post('gas/claim', [WalletGasController::class, 'claim'])->middleware('throttle:10,1');
+
+    /*
+     * Cross-chain swaps. Cyberia has no liquidity on other chains and does not
+     * pretend to: a router quotes the whole route and delivers it, and this
+     * host's only part is composing the request — Cyberia's fee is a field in
+     * it, and a field a browser writes is a field a browser can delete. No key
+     * lives behind these routes and nothing here signs.
+     *
+     * The quote is throttled harder than the catalogue: the lists are cached
+     * and identical for every visitor, while a quote is a live call to the
+     * router for one person's amount.
+     */
+    Route::get('crosschain', [WalletCrosschainController::class, 'index'])->middleware('throttle:60,1');
+    Route::get('crosschain/tokens', [WalletCrosschainController::class, 'tokens'])->middleware('throttle:60,1');
+    Route::post('crosschain/quote', [WalletCrosschainController::class, 'quote'])->middleware('throttle:30,1');
+    Route::get('crosschain/status', [WalletCrosschainController::class, 'status'])->middleware('throttle:60,1');
 });
 
 /*
@@ -123,13 +141,22 @@ Route::prefix('ai')->group(function () {
         Route::get('/', [ModelsController::class, 'root'])->middleware('throttle:60,1');
         Route::get('models', [ModelsController::class, 'index'])->middleware('throttle:60,1');
 
-        Route::middleware(AuthenticateAiApiKey::class)->group(function () {
-            Route::get('me', [AiKeyController::class, 'status']);
-            // Per-key limits are enforced in the middleware; this coarse IP
-            // throttle is only there to keep a flood off the database.
-            Route::post('chat/completions', [ChatCompletionsController::class, 'store'])
-                ->middleware('throttle:120,1');
-        });
+        Route::get('me', [AiKeyController::class, 'status'])->middleware(AuthenticateAiApiKey::class);
+
+        /*
+         * Two doors, listed in the order a request meets them: pay for this
+         * call over x402, or present a key and hold what the gate asks. The
+         * order matters and is why this route is not inside a middleware
+         * group — group middleware runs first, and the key door would turn a
+         * paying caller away before the paywall ever saw them. Each stands
+         * aside for the other's callers.
+         *
+         * Per-key limits are enforced in the key middleware and per-payer ones
+         * in the paywall; this coarse IP throttle is only there to keep a
+         * flood off the database.
+         */
+        Route::post('chat/completions', [ChatCompletionsController::class, 'store'])
+            ->middleware(['throttle:120,1', X402Paywall::class, AuthenticateAiApiKey::class]);
     });
 });
 

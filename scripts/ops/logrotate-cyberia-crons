@@ -1,0 +1,21 @@
+# Cyberia host cron logs. distribute-chats.sh runs this policy before each
+# distribution. To rotate an already oversized production log immediately:
+#
+#   logrotate -f --state /var/lib/logrotate/cyberia-crons.status \
+#       /root/singularity/scripts/ops/logrotate-cyberia-crons
+#
+# copytruncate is intentional: root's cron opens the output file before this
+# policy runs, so renaming it would leave the current run writing to the
+# rotated inode. The heartbeat must always find the current path.
+/root/singularity/logs/distribute_chats.log
+/root/singularity/logs/distribute.log
+{
+    daily
+    maxsize 32M
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

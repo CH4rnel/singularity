@@ -58,13 +58,30 @@ class ConsoleChatController extends Controller
      *
      * Two operators look at this lens at the same time — that is the whole
      * point of it — so the page keeps itself current instead of waiting for
-     * someone to press reload.
+     * someone to press reload. New lines, lines that changed under the reader
+     * and lines that were taken back are all answered here, against the
+     * window they actually hold; see `ChatRoom::since`.
      */
     public function since(Request $request): JsonResponse
     {
+        $data = $request->validate([
+            'after' => ['nullable', 'integer', 'min:0'],
+            'from' => ['nullable', 'integer', 'min:0'],
+            'held' => ['nullable', 'integer', 'min:0'],
+            // Our own clock, handed back by the page. Validated all the same:
+            // it arrives from a browser, and everything that arrives from a
+            // browser is somebody's opinion until it parses.
+            'at' => ['nullable', 'date'],
+        ]);
+
         $user = $request->user();
-        $after = $request->integer('after');
-        $payload = $this->room->since($user, $after);
+        $payload = $this->room->since(
+            $user,
+            (int) ($data['after'] ?? 0),
+            isset($data['from']) ? (int) $data['from'] : null,
+            isset($data['held']) ? (int) $data['held'] : null,
+            $data['at'] ?? null,
+        );
 
         $this->room->markRead($user);
 

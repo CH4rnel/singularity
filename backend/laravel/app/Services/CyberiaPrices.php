@@ -28,6 +28,15 @@ class CyberiaPrices
     private const STABLE_SYMBOLS = ['USDC', 'USDT'];
 
     /**
+     * Last walk, keyed by the pool collection it was run over. A token page
+     * asks for the prices and then for one token's route; both are the same
+     * relaxation, and running it twice per request would be pure waste.
+     *
+     * @var array{0: int, 1: array{price: array<string, float>, via: array<string, array{pair: string, token0: string, from: string}>}}|null
+     */
+    private ?array $memo = null;
+
+    /**
      * USD price of every token reachable from a $1 anchor through the DEX pool
      * graph.
      *
@@ -42,12 +51,69 @@ class CyberiaPrices
      */
     public function priceFromPools(Collection $pools): array
     {
+        return $this->walk($pools)['price'];
+    }
+
+    /**
+     * The pools the price walk actually used to price one token, ordered from
+     * that token outward to the $1 anchor it settled on.
+     *
+     * The chart on a token page needs the same route the price came from: a
+     * token's direct pool against a stablecoin is often not the pool its price
+     * is read through (thin pools are skipped by the depth floor), and a chart
+     * drawn on a different route than the headline price would contradict the
+     * number printed above it.
+     *
+     * Null when the token is itself an anchor, or when nothing priced it.
+     *
+     * @param  Collection<int, object>  $pools
+     * @return list<array{pair: string, token0: string, tokenIn: string, tokenOut: string}>|null
+     */
+    public function usdRoute(Collection $pools, string $token): ?array
+    {
+        $via = $this->walk($pools)['via'];
+        $current = strtolower($token);
+        $hops = [];
+
+        // Bounded by the node count: a widest-path predecessor chain cannot
+        // cycle, but a malformed map must not spin here either.
+        for ($step = 0; $step <= count($via); $step++) {
+            $edge = $via[$current] ?? null;
+            if ($edge === null) {
+                break;
+            }
+            $hops[] = [
+                'pair' => $edge['pair'],
+                'token0' => $edge['token0'],
+                'tokenIn' => $current,
+                'tokenOut' => $edge['from'],
+            ];
+            $current = $edge['from'];
+        }
+
+        return $hops === [] ? null : $hops;
+    }
+
+    /**
+     * One pass of the widest-path relaxation, keeping both what each token is
+     * worth and which pool taught it that.
+     *
+     * @param  Collection<int, object>  $pools
+     * @return array{price: array<string, float>, via: array<string, array{pair: string, token0: string, from: string}>}
+     */
+    private function walk(Collection $pools): array
+    {
+        if ($this->memo !== null && $this->memo[0] === spl_object_id($pools)) {
+            return $this->memo[1];
+        }
+
         $floor = (float) config('services.cyberia.price_min_pool_usd');
         if ($floor <= 0) {
             $floor = self::DEFAULT_PRICE_MIN_POOL_USD;
         }
 
-        // Each pool becomes two directed edges (price flows either way).
+        // Each pool becomes two directed edges (price flows either way), each
+        // carrying the pool it came from so the winning chain stays readable.
         $edges = [];
         foreach ($pools as $pool) {
             $r0 = (float) $pool->reserve0;
@@ -57,8 +123,9 @@ class CyberiaPrices
             }
             $t0 = strtolower((string) $pool->token0);
             $t1 = strtolower((string) $pool->token1);
-            $edges[] = [$t0, $r0, $t1, $r1];
-            $edges[] = [$t1, $r1, $t0, $r0];
+            $pair = (string) $pool->pair_address;
+            $edges[] = [$t0, $r0, $t1, $r1, $pair, $t0];
+            $edges[] = [$t1, $r1, $t0, $r0, $pair, $t0];
         }
 
         $price = [];
@@ -81,15 +148,17 @@ class CyberiaPrices
         }
 
         if ($edges === [] || $price === []) {
-            return [];
+            return $this->remember($pools, ['price' => [], 'via' => []]);
         }
+
+        $via = [];
 
         // Bellman-Ford-style: prices settle within (node count) passes; the
         // early break stops as soon as a pass improves nothing.
         $maxPasses = count($edges) + 1;
         for ($pass = 0; $pass < $maxPasses; $pass++) {
             $changed = false;
-            foreach ($edges as [$from, $rFrom, $to, $rTo]) {
+            foreach ($edges as [$from, $rFrom, $to, $rTo, $pair, $token0]) {
                 if (! isset($price[$from])) {
                     continue;
                 }
@@ -101,6 +170,13 @@ class CyberiaPrices
                 if ($candidate > ($confidence[$to] ?? 0.0)) {
                     $confidence[$to] = $candidate;
                     $price[$to] = $price[$from] * $rFrom / $rTo;
+                    // `token0` rides along because a chart reading this pool's
+                    // reserves has to know which side of the pair it is.
+                    $via[$to] = [
+                        'pair' => $pair,
+                        'token0' => $token0,
+                        'from' => $from,
+                    ];
                     $changed = true;
                 }
             }
@@ -109,7 +185,19 @@ class CyberiaPrices
             }
         }
 
-        return $price;
+        return $this->remember($pools, ['price' => $price, 'via' => $via]);
+    }
+
+    /**
+     * @param  Collection<int, object>  $pools
+     * @param  array{price: array<string, float>, via: array<string, array{pair: string, token0: string, from: string}>}  $result
+     * @return array{price: array<string, float>, via: array<string, array{pair: string, token0: string, from: string}>}
+     */
+    private function remember(Collection $pools, array $result): array
+    {
+        $this->memo = [spl_object_id($pools), $result];
+
+        return $result;
     }
 
     /**

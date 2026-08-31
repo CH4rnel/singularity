@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import StrategyWorkspace from '@/components/console/StrategyWorkspace.vue';
+import { useConsolePulse } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
 import {
     age,
@@ -54,6 +56,16 @@ type Console = {
 
 const page = usePage();
 const { locale, t, tag, toggleLocale, nextTag } = useLocale(consoleMessages);
+
+/*
+ * The console's heartbeat, held by the shell rather than by a lens.
+ *
+ * The shell outlives every page inside it, so the timer survives navigation
+ * and five lenses never become five pollers. Its badges are the ones that
+ * must be right on a screen nobody is navigating: the rail is what an
+ * operator glances at while doing something else.
+ */
+const pulse = useConsolePulse();
 
 const console_ = computed(() => page.props.console as Console | null);
 const current = computed(() => page.url.split('?')[0]);
@@ -112,6 +124,13 @@ const LENSES = [
         badge: null,
         phone: false,
     },
+    {
+        key: 'strategy',
+        href: '/crm/strategy',
+        label: 'nav.strategy',
+        badge: null,
+        phone: false,
+    },
     // The design the console was built from. A desk lens: nobody opens a
     // mockup on a phone at three in the morning, and the phone bar is for
     // what is on fire.
@@ -155,18 +174,22 @@ function active(key: string): boolean {
     return url.startsWith(`/crm/${key}`);
 }
 
+/**
+ * What a badge says right now.
+ *
+ * The heartbeat wins over the rendered page: the props were true when this
+ * lens was last read, and a rail that still shows the count from four
+ * minutes ago is the reason somebody presses F5. A count the heartbeat has
+ * not answered yet falls back to the page's own.
+ */
 function badgeCount(badge: string | null): number {
     if (!badge || !console_.value) {
         return 0;
     }
 
-    if (badge === 'attention') {
-        return console_.value.counts.attention;
-    }
+    const key = badge as 'attention' | 'tasks' | 'chat';
 
-    return badge === 'chat'
-        ? console_.value.counts.chat
-        : console_.value.counts.tasks;
+    return pulse.counts.value[key] ?? console_.value.counts[key];
 }
 
 const bannerAge = computed(() => age(console_.value?.banner?.duration_seconds));
@@ -307,6 +330,16 @@ const initials = computed(() =>
                             : t('top.noSweep')
                     }}
                 </span>
+                <!-- A console that quietly stopped updating looks exactly
+                     like a quiet night, so it says which one it is. -->
+                <span
+                    v-if="pulse.stale.value"
+                    class="mk-m"
+                    style="font-size: 11px"
+                    :style="{ color: toneColor('warning') }"
+                >
+                    {{ t('top.stale') }}
+                </span>
             </div>
         </header>
 
@@ -403,6 +436,11 @@ const initials = computed(() =>
                             <circle cx="8" cy="12" r="3.5" />
                             <path d="M11.5 12H21M17 12v3M20 12v2" />
                         </template>
+                        <template v-else-if="lens.key === 'strategy'">
+                            <path d="M5 3.5h11l3 3v14H5z" />
+                            <path d="M8.5 9h7M8.5 12.5h7M8.5 16h4.5" />
+                            <path d="M16 3.5v3h3" />
+                        </template>
                         <template v-else>
                             <rect
                                 x="3.5"
@@ -493,6 +531,11 @@ const initials = computed(() =>
                 >
             </Link>
         </nav>
+
+        <!-- One persistent editor instance: docked on /strategy, teleported
+             above every other lens while pinned. Navigation never destroys
+             the iframe or an unsaved selection. -->
+        <StrategyWorkspace />
     </div>
 </template>
 

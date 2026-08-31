@@ -15,6 +15,27 @@ beforeEach(function () {
     config()->set('bridge.chains.yenten.balance_api_urls', ['https://api.yentencoin.info']);
 });
 
+/**
+ * The relayer now reads its own Solana inventory before it pays, so every
+ * evm_to_sol test has to say what is in the hot wallet. Silence would be
+ * 'unavailable', which is exactly the fail-closed behaviour being tested
+ * elsewhere — here it would just look like an unrelated failure.
+ *
+ * @return array<string, mixed> jsonrpc responses keyed by method
+ */
+function solanaInventory(string $lamports = '500000000', string $splRaw = '1000000000000', int $splDecimals = 6): array
+{
+    return [
+        'getBalance' => ['result' => ['value' => (int) $lamports]],
+        'getTokenAccountsByOwner' => ['result' => ['value' => [[
+            'account' => ['data' => ['parsed' => ['info' => ['tokenAmount' => [
+                'amount' => $splRaw,
+                'decimals' => $splDecimals,
+            ]]]]],
+        ]]]],
+    ];
+}
+
 function makeDirectRequest(array $overrides = []): BridgeRequest
 {
     return BridgeRequest::create(array_merge([
@@ -189,7 +210,14 @@ test('gas drop wei is forwarded to relay script', function () {
 });
 
 test('evm_to_sol direct relay completes via Solana script', function () {
+    $inventory = solanaInventory();
+
     Http::fake([
+        // Destination inventory: the relayer must be able to deliver before
+        // it burns anything.
+        '*helius-rpc.com*' => fn ($request) => Http::response(
+            $inventory[$request->data()['method'] ?? ''] ?? ['result' => null],
+        ),
         // EVM RPC eth_getTransactionReceipt
         'https://rpc.cyberia.church' => Http::response([
             'result' => [
@@ -310,7 +338,13 @@ test('sol_to_evm native SOL fails when the hot wallet lamports do not increase',
 });
 
 test('evm_to_sol native SOL pays out via the system-transfer relay script', function () {
+    // 20 SOL of lamports in the hot wallet, well over the 10 SOL payout.
+    $inventory = solanaInventory(lamports: '20000000000');
+
     Http::fake([
+        '*helius-rpc.com*' => fn ($request) => Http::response(
+            $inventory[$request->data()['method'] ?? ''] ?? ['result' => null],
+        ),
         'https://rpc.cyberia.church' => Http::response([
             'result' => [
                 'status' => '0x1',
@@ -485,8 +519,8 @@ test('a timed-out EVM relay is caught so a broadcast payout is not crashed into 
     $run->setAccessible(true);
 
     // Before the fix this invoke raised the uncaught Laravel timeout exception;
-    // now it is caught and returns null (no hash streamable in the fake, so the
-    // caller marks failed safely rather than the whole job crashing).
+    // now it is caught and reports no hash (nothing streamable in the fake), so
+    // the caller marks failed safely rather than the whole job crashing.
     $result = $run->invoke(
         app(BridgeService::class),
         ['scripts/relay-native-transfer.ts', '0xRecipient', '874000000000000'],
@@ -494,7 +528,7 @@ test('a timed-out EVM relay is caught so a broadcast payout is not crashed into 
         999,
     );
 
-    expect($result)->toBeNull();
+    expect($result)->toBe(['hash' => null, 'confirmed' => false]);
 });
 
 test('an EVM relay that broadcast then exited non-zero recovers the hash iff the tx did not revert on-chain', function () {
@@ -526,15 +560,19 @@ test('an EVM relay that broadcast then exited non-zero recovers the hash iff the
         ->push(['result' => ['status' => '0x0']]),  // mined & reverted
     ]);
 
-    // Confirmed on-chain → recover the hash, mark completed (no retry).
-    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))->toBe($broadcast);
+    // Confirmed on-chain → recover the hash AND report it confirmed.
+    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))
+        ->toBe(['hash' => $broadcast, 'confirmed' => true]);
 
-    // Not mined yet / RPC unreachable → still recover: the tx was broadcast, so
-    // recovering beats a double-paying retry.
-    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))->toBe($broadcast);
+    // Not mined yet / RPC unreachable → recover the hash but do NOT claim it
+    // confirmed: the caller leaves the request in `paying_out` and reconciles
+    // later, which is what keeps a broadcast payout from being sent twice.
+    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))
+        ->toBe(['hash' => $broadcast, 'confirmed' => false]);
 
-    // Reverted on-chain → a real failure, return null (safe to retry).
-    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))->toBeNull();
+    // Reverted on-chain → nothing moved, so no hash and a clean retry.
+    expect($run->invoke(app(BridgeService::class), $args, $chain, 28))
+        ->toBe(['hash' => null, 'confirmed' => false]);
 });
 
 test('evm_to_yenten burns the wrapper and runs the light-wallet payout', function () {

@@ -2,6 +2,7 @@ import {
     analytics,
     bridge,
     convert,
+    cyber,
     download,
     farm,
     feed,
@@ -91,6 +92,7 @@ export const navGroups: Web3NavGroup[] = [
     {
         label: 'Explore',
         items: [
+            { title: '$CYBER', href: cyber().url },
             { title: 'Analytics', href: analytics().url },
             {
                 title: 'Explorer',

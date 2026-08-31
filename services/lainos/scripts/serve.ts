@@ -4,18 +4,21 @@
  *   - HTTP bridge on LAINOS_HTTP_PORT (consumed by the Wired game),
  *   - Telegram bot when TELEGRAM_BOT_TOKEN is set (long polling),
  *   - sentinel alerts pushed to every known Telegram chat,
+ *   - the day's public post, written from the content plan and delivered ready
+ *     to publish (press),
  *   - initiative heartbeat + trader loop (daemon-only, see LAINOS_DAEMON),
  *   - self-restart into freshly forged code after a successful self-upgrade.
  */
 import { resolve } from "node:path";
 import { createHttpServer } from "../src/clients/http.js";
-import { TelegramClient } from "../src/clients/telegram.js";
+import { TelegramClient, isTelegramRefusal } from "../src/clients/telegram.js";
 import { ensureCyberiaStudyGoal, findCyberiaStudyTopic } from "../src/cyberia-study.js";
 import { createAgent } from "../src/index.js";
 import { lain } from "../src/characters/lain.js";
 import type { ChannelWatchService } from "../src/plugins/channel/index.js";
 import type { ForgeService } from "../src/plugins/forge/index.js";
 import type { GithubStreakService } from "../src/plugins/github/index.js";
+import type { PressService } from "../src/plugins/press/index.js";
 import type { ScoutService } from "../src/plugins/scout/index.js";
 import type { SentinelService } from "../src/plugins/sentinel/index.js";
 import type { TraderService } from "../src/plugins/trader/index.js";
@@ -102,6 +105,32 @@ async function main() {
     channels.onEvent((ev) => {
       if (ev.chatId !== undefined) void telegram.sendTo(ev.chatId, ev.text);
       else void telegram.broadcast(ev.text);
+    });
+  }
+
+  // The day's post arrives as two messages: what it is, then the post alone —
+  // so copying the second one copies exactly what gets published.
+  const press = agent.getService<PressService>("press");
+  if (press && telegramUp) {
+    press.onEvent((ev) => {
+      const send = async () => {
+        // `plan_over` carries no post — only the news that there is none.
+        const lines = ev.post ? [ev.header, ev.post] : [ev.header];
+        for (const line of lines) {
+          if (ev.chatId !== undefined) await telegram.sendToOrThrow(ev.chatId, line);
+          else await telegram.broadcastOrThrow(line);
+        }
+      };
+      // A post the transport dropped is a day the operator hears nothing about,
+      // so the press room takes its delivery stamp back and re-sends on the
+      // next sweep. A refusal from Telegram itself (chat not found, blocked) is
+      // final — retrying it forever would only repeat the same answer.
+      void send().catch(async (err) => {
+        if (ev.kind === "draft" && !isTelegramRefusal(err)) {
+          await press.markUndelivered(ev.record.date);
+        }
+        console.error(`[lainos] press delivery failed (${ev.record.date}):`, err);
+      });
     });
   }
 

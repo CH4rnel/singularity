@@ -442,12 +442,29 @@ const blockscoutHistory = async (
         });
 };
 
-type EvmSpec = {
+export type EvmSpec = {
     id: WalletChainId;
     /** Entry in the shared EVM registry this chain's parameters come from. */
     chainId: number;
     label: string;
     mark: WalletMark;
+    /**
+     * Parameters for a chain that is not in `lib/evmChains.ts`.
+     *
+     * That registry is the handful of networks the *site* switches a browser
+     * wallet to — bridge, launchpad, login — and it is short on purpose. The
+     * catalogue behind the wallet's network list is two orders of magnitude
+     * longer and belongs to the wallet alone, so those entries carry their own
+     * parameters here instead of being pushed into a picker they do not belong
+     * in. Both kinds are equally shipped, equally vetted, and equally not
+     * `custom` — see `lib/wallet/catalogue.ts`.
+     */
+    params?: {
+        symbol: string;
+        decimals: number;
+        rpcUrl: string;
+        explorer: string | null;
+    };
     /** Blockscout API root, for the chains that have a keyless one. */
     blockscoutApi?: string;
     /**
@@ -469,22 +486,27 @@ type EvmSpec = {
  * network rather than one per key. What actually differs is the RPC, the
  * explorer, the gas price and what the native coin is worth.
  */
-const evmChain = (spec: EvmSpec): WalletChain => {
+export const evmChain = (spec: EvmSpec): WalletChain => {
     const registry = EVM_CHAINS.find(
         (candidate) => candidate.chainId === spec.chainId,
     );
 
-    if (!registry) {
+    if (!registry && !spec.params) {
         throw new Error(`Chain ${spec.chainId} is not in the EVM registry`);
     }
 
-    const explorer = registry.blockExplorerUrls?.[0] ?? null;
+    const symbol = registry?.nativeCurrency.symbol ?? spec.params!.symbol;
+    const decimals = registry?.nativeCurrency.decimals ?? spec.params!.decimals;
+    const explorer =
+        registry?.blockExplorerUrls?.[0] ?? spec.params?.explorer ?? null;
     const defaultRpc =
-        spec.id === 'cyberia' ? cyberiaReadRpcUrl() : registry.rpcUrls[0];
+        spec.id === 'cyberia'
+            ? cyberiaReadRpcUrl()
+            : (registry?.rpcUrls[0] ?? spec.params!.rpcUrl);
 
     const provider = (rpcUrl?: string): JsonRpcProvider =>
         new JsonRpcProvider(rpcUrl || defaultRpc, {
-            chainId: registry.chainId,
+            chainId: spec.chainId,
             name: spec.id,
         });
 
@@ -532,9 +554,9 @@ const evmChain = (spec: EvmSpec): WalletChain => {
     return {
         id: spec.id,
         label: spec.label,
-        symbol: registry.nativeCurrency.symbol,
-        decimals: registry.nativeCurrency.decimals,
-        chainId: registry.chainId,
+        symbol,
+        decimals,
+        chainId: spec.chainId,
         family: 'evm',
         mark: spec.mark,
         endpoint: defaultRpc,
@@ -1110,13 +1132,36 @@ export const WALLET_CHAINS = BUILTIN_CHAINS;
  */
 let customChains: readonly WalletChain[] = [];
 
+/**
+ * Networks switched on from the shipped catalogue.
+ *
+ * Kept apart from `customChains` because the difference is not cosmetic: these
+ * carry an endpoint this project checked and shipped, a user-added one carries
+ * an endpoint nobody checked, and every screen that draws a network says which
+ * of the two it is looking at. Held the same way, though — as a slot the
+ * registry publishes into rather than an import — so `chains.ts` stays the
+ * bottom of the dependency graph and the catalogue can be built on top of it.
+ */
+let catalogueChains: readonly WalletChain[] = [];
+
 export const setCustomWalletChains = (chains: readonly WalletChain[]): void => {
     customChains = chains;
 };
 
-/** Every network this wallet currently knows, built-in ones first. */
+export const setCatalogueWalletChains = (
+    chains: readonly WalletChain[],
+): void => {
+    catalogueChains = chains;
+};
+
+/**
+ * Every network this wallet currently knows, in the order the portfolio lists
+ * them: what ships switched on, then what was switched on from the catalogue,
+ * then what the user described themselves.
+ */
 export const walletChains = (): readonly WalletChain[] => [
     ...BUILTIN_CHAINS,
+    ...catalogueChains,
     ...customChains,
 ];
 

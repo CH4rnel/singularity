@@ -511,10 +511,10 @@ return [
             'group' => 'daemon',
             'label' => 'Chat token distribution',
             'critical' => false,
-            'note' => 'One-minute host cron. Its log is unrotated and grows without limit.',
-            // A one-minute cron writing to one file with no logrotate has
-            // exactly one ending, and 64 MB is early enough to fix it calmly
-            // rather than at whatever hour the disk fills.
+            'note' => 'One-minute host cron. scripts/ops/logrotate-cyberia-crons keeps its log bounded.',
+            // The wrapper rotates at 32 MB. Reaching 64 MB means that policy
+            // is absent or failing on the host, with enough headroom to fix it
+            // calmly rather than when the disk fills.
             'check' => ['type' => 'heartbeat', 'cron' => 'distribute-chats', 'max_log_mb' => 64],
             'usage' => null,
         ],

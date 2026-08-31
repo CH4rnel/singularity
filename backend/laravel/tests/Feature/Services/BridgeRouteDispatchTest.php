@@ -41,6 +41,19 @@ function makeRequest(array $attributes): BridgeRequest
     ], $attributes));
 }
 
+/**
+ * The relayer reads its destination inventory before it burns anything now, so
+ * a bridge-out test has to stock the destination. Leaving it unstubbed is a
+ * fail-CLOSED park in `awaiting_liquidity`, which is correct behaviour and a
+ * confusing way for an unrelated test to fail.
+ */
+function stockedEvmRpc(string $nativeHex = '0xde0b6b3a7640000', string $tokenHex = '0x8ac7230489e80000'): Closure
+{
+    return fn ($request) => Http::response([
+        'result' => ($request->data()['method'] ?? '') === 'eth_call' ? $tokenHex : $nativeHex,
+    ]);
+}
+
 function erc20TransferLog(string $token, string $from, string $to, string $valueHex): array
 {
     return [
@@ -108,6 +121,9 @@ test('evm_to_ton burns the wrapper and pays out via the TON relay script', funct
     $sender = '0x5555555555555555555555555555555555555555';
 
     Http::fake([
+        // Destination inventory: 100 TON of gas on the hot wallet, and a
+        // jetton balance well over the 1.5 being bridged.
+        '*tonapi.test*' => Http::response(['balance' => '100000000000']),
         '*cyberia-rpc.test*' => Http::response([
             'result' => [
                 'status' => '0x1',
@@ -202,6 +218,8 @@ test('evm_to_bnb burns the unified USDT wrapper on Cyberia and pays out on BSC',
     $sender = '0x7777777777777777777777777777777777777777';
 
     Http::fake([
+        // 1 BNB of gas and 10 USDT of inventory on the destination.
+        '*bsc-rpc.test*' => stockedEvmRpc(),
         '*cyberia-rpc.test*' => Http::response([
             'result' => [
                 'status' => '0x1',
@@ -429,6 +447,7 @@ test('evm_to_ton burns the TON wrapper and pays out native TON minus the flat fe
     $sender = '0x8888888888888888888888888888888888888888';
 
     Http::fake([
+        '*tonapi.test*' => Http::response(['balance' => '100000000000']),
         '*cyberia-rpc.test*' => Http::response([
             'result' => [
                 'status' => '0x1',
