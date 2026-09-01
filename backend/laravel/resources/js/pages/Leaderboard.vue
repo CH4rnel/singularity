@@ -96,11 +96,19 @@ const showOwnRow = computed(
                     </span>
                 </Link>
 
+                <!--
+                  An icon and a number with no label, in a list with no
+                  headers, hidden on the screen most people read this on.
+                  Nobody could tell what it meant — including the person who
+                  asked for it.
+                -->
                 <span
                     v-if="row.current_streak > 1"
+                    :title="t('streakMeaning')"
                     class="hidden shrink-0 items-center gap-1 font-mono text-xs text-muted-foreground sm:flex"
                 >
                     <Flame class="size-3.5" />{{ row.current_streak }}
+                    <span class="hidden md:inline">{{ t('streakDays') }}</span>
                 </span>
 
                 <span class="shrink-0 font-mono text-sm font-bold">
@@ -111,6 +119,14 @@ const showOwnRow = computed(
                 </span>
             </li>
         </ol>
+
+        <p
+            v-if="rows.some((row) => row.current_streak > 1)"
+            class="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground"
+        >
+            <Flame class="size-3.5 shrink-0" />
+            {{ t('streakMeaning') }}
+        </p>
 
         <section
             v-if="showOwnRow && me"

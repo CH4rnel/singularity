@@ -13,7 +13,9 @@ export const progressMessages: Messages = {
         toNextLevel: 'to next level',
         maxLevel: 'Max level reached',
         streak: 'Streak',
-        streakDays: 'day streak',
+        streakDays: 'days in a row',
+        streakMeaning:
+            'Days in a row with something to show for them — a visit, a post, a vote, a swap. It resets the day nothing happens.',
         longestStreak: 'Best',
         activeToday: 'Counted today',
         comeBackToday: 'Come back today to keep it',
@@ -74,6 +76,8 @@ export const progressMessages: Messages = {
         maxLevel: 'Максимальный уровень',
         streak: 'Серия',
         streakDays: 'дней подряд',
+        streakMeaning:
+            'Дней подряд, в которые что-то было: заход, пост, голос, обмен. Обнуляется в день, когда не было ничего.',
         longestStreak: 'Рекорд',
         activeToday: 'Сегодня засчитан',
         comeBackToday: 'Зайдите сегодня, чтобы не прервать',
@@ -134,6 +138,7 @@ export const progressMessages: Messages = {
         maxLevel: '已达最高等级',
         streak: '连续',
         streakDays: '天连续',
+        streakMeaning: '连续有记录的天数：登录、发帖、投票、兑换。空过一天就归零。',
         longestStreak: '最佳',
         activeToday: '今天已计入',
         comeBackToday: '今天回来一趟才能保住',
