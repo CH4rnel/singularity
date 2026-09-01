@@ -90,7 +90,36 @@ it('completes a daily quest and pays its bonus once', function () {
     $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_trade');
 
     expect($quest['completed'])->toBeTrue()
-        ->and(XpEntry::where('user_id', $user->id)->where('source', 'quest')->count())->toBe(1);
+        // Two quests, not one: showing up is itself the daily_visit quest, and
+        // the second swap re-runs both without paying either twice.
+        ->and(XpEntry::where('user_id', $user->id)->where('source', 'quest')->count())->toBe(2);
+});
+
+it('completes the daily visit quest just by showing up', function () {
+    $user = User::factory()->create();
+
+    // Any first action of the day is a visit. Nothing calls recordAction with
+    // 'visit' — the site reports page_view — so this quest is completed from
+    // touch(), which is the only place that knows the day turned over.
+    $this->gamification->recordAction($user, 'page_view', page: '/wallet');
+
+    $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit');
+
+    expect($quest['completed'])->toBeTrue();
+});
+
+it('pays the daily visit quest once a day', function () {
+    $user = User::factory()->create();
+
+    $this->gamification->recordAction($user, 'page_view', page: '/wallet');
+    $this->gamification->recordAction($user, 'page_view', page: '/swap');
+
+    expect(
+        XpEntry::where('user_id', $user->id)
+            ->where('source', 'quest')
+            ->where('reference', 'like', 'daily_visit:%')
+            ->count(),
+    )->toBe(1);
 });
 
 it('counts distinct pages for the exploration quest', function () {

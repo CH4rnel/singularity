@@ -36,7 +36,9 @@ return [
         'decimals' => 18,
         'block_time' => '~1s',
         'consensus' => 'IBFT PoA (polygon-edge)',
-        'rpc' => env('CYBERIA_RPC_URL', 'https://rpc.cyberia.church'),
+        // This value is rendered into a public page. CYBERIA_RPC_URL may point
+        // at the container-only node used by server-side jobs in production.
+        'rpc' => 'https://rpc.cyberia.church',
         'explorer' => rtrim((string) env('CYBERIA_EXPLORER_URL', 'https://explorer.cyberia.church'), '/'),
     ],
 
@@ -64,6 +66,13 @@ return [
         // deployment file calls "CYBER" is over the bridged Solana token and is
         // deliberately not cited here.
         'lending_wcyber_market' => '0x5ea7cFE8971cCbD521F0f9db6Da7E019dBe2Ab8d',
+        // The QuickSwap-fork router every swap and every liquidity change on
+        // this chain goes through, and the contract that turns bridged
+        // CYBER.sol into the native coin. Both are here because achievement
+        // detection reads the address's own transaction history and has to
+        // know which contracts mean which action.
+        'dex_router' => '0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62',
+        'cyber_sol_swap' => '0x69b1614B088F5670E49bcC6fE33F28F2544F7415',
     ],
 
     /*

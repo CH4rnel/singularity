@@ -78,3 +78,9 @@ Schedule::command('analytics:digest --send')
     ->dailyAt(sprintf('%02d:00', (int) config('crm.console.morning_hour', 9)))
     ->timezone((string) config('crm.console.timezone', 'Europe/Moscow'))
     ->withoutOverlapping();
+// Badges nobody is watching for. Detection used to run in exactly two places —
+// claiming a nickname, and a button on /profile nobody knew about — so the last
+// award on prod was 2026-07-30 while a badge earned on 2026-08-22 sat unminted.
+// Bounded per run and rotating, because a badge is not urgent; --alert says so
+// when the mint itself is what failed, which was previously silent.
+Schedule::command('achievements:sync --alert')->hourly()->withoutOverlapping();

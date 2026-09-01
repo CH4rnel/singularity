@@ -117,6 +117,20 @@ class GamificationService
             $granted += $this->award($user, 'streak', $reference, $bonus);
         }
 
+        /*
+         * "Open Cyberia today" is this moment and no other: the first activity
+         * of a UTC day is exactly what a daily visit is, and this is the only
+         * place that knows it.
+         *
+         * Without this the very first quest a new person is shown could never
+         * be completed by anyone. `visit` XP is paid here, but quests were
+         * advanced only from recordAction(), whose sole caller reports
+         * `page_view` — so on prod there were 86 visit awards and not one
+         * daily_visit row. Advancing again from recordAction() is harmless:
+         * a completed quest short-circuits.
+         */
+        $granted += $this->advanceQuests($user, 'visit', $at, null);
+
         return $granted;
     }
 
