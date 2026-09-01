@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AnalyticsUser;
 use App\Models\User;
 use App\Notifications\ProgressNotification;
 use App\Support\VapidHealth;
@@ -38,7 +39,7 @@ class ConsolePushController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'audience' => ['required', 'string', 'in:all,user'],
+            'audience' => ['required', 'string', 'in:all,accounts,installs,user'],
             'user_id' => ['nullable', 'integer', 'exists:users,id', 'required_if:audience,user'],
             'title' => ['required', 'string', 'max:80'],
             'body' => ['required', 'string', 'max:300'],
@@ -53,12 +54,26 @@ class ConsolePushController extends Controller
             return back()->withErrors(['title' => 'Ключи не в порядке: '.implode(' ', $health['problems'])]);
         }
 
-        $recipients = $this->reachable()
-            ->when(
-                $validated['audience'] === 'user',
-                fn ($query) => $query->where('users.id', (int) $validated['user_id']),
-            )
-            ->get();
+        $audience = $validated['audience'];
+
+        $accounts = $audience === 'installs'
+            ? collect()
+            : $this->reachableAccounts()
+                ->when(
+                    $audience === 'user',
+                    fn ($query) => $query->where('users.id', (int) $validated['user_id']),
+                )
+                ->get();
+
+        // Installations are the larger half and the whole reason this is not
+        // just the site's bell: most people running this wallet have no
+        // account, so "everyone" that meant "every account" meant almost
+        // nobody.
+        $installs = in_array($audience, ['all', 'installs'], true)
+            ? $this->reachableInstalls()->get()
+            : collect();
+
+        $recipients = $accounts->concat($installs);
 
         if ($recipients->isEmpty()) {
             return back()->withErrors(['title' => 'Некому отправлять: ни одной подписки.']);
@@ -101,31 +116,37 @@ class ConsolePushController extends Controller
     /** @return array<string, mixed> */
     private function props(): array
     {
-        $recipients = $this->reachable()->get();
+        $accounts = $this->reachableAccounts()->get();
+        $installs = $this->reachableInstalls()->get();
 
         return [
             'health' => VapidHealth::check(),
-            'recipients' => $recipients->map(fn (User $user): array => [
+            'recipients' => $accounts->map(fn (User $user): array => [
                 'id' => $user->id,
                 'name' => $user->onchain_nickname ?: $user->name,
                 'locale' => $user->notification_locale,
                 'devices' => (int) $user->devices,
             ])->values(),
             'coverage' => [
-                'reachable' => $recipients->count(),
-                'accounts' => User::query()->whereNull('merged_into_id')->count(),
-                'devices' => (int) $recipients->sum('devices'),
+                'reachable' => $accounts->count() + $installs->count(),
+                'accounts' => $accounts->count(),
+                'installs' => $installs->count(),
+                // The two denominators, so a reach of three is readable as
+                // three out of what.
+                'total_accounts' => User::query()->whereNull('merged_into_id')->count(),
+                'total_installs' => AnalyticsUser::query()->count(),
+                'devices' => (int) $accounts->sum('devices') + (int) $installs->sum('devices'),
             ],
             'recent' => $this->recent(),
         ];
     }
 
     /**
-     * Everyone with at least one live subscription. This is the denominator
-     * that matters — an account with no subscription cannot be pushed to, and
-     * printing it as a possible recipient would be a lie.
+     * Site accounts with at least one live subscription. An account with no
+     * subscription cannot be pushed to, and printing it as a possible
+     * recipient would be a lie.
      */
-    private function reachable()
+    private function reachableAccounts()
     {
         return User::query()
             ->whereNull('merged_into_id')
@@ -142,6 +163,24 @@ class ConsolePushController extends Controller
                 'devices',
             )
             ->orderBy('users.id');
+    }
+
+    /** Wallet installations with a subscription — people with no account. */
+    private function reachableInstalls()
+    {
+        return AnalyticsUser::query()
+            ->whereExists(fn ($query) => $query->select(DB::raw(1))
+                ->from('push_subscriptions')
+                ->whereColumn('push_subscriptions.subscribable_id', 'analytics_users.id')
+                ->where('push_subscriptions.subscribable_type', AnalyticsUser::class))
+            ->select('analytics_users.*')
+            ->selectSub(
+                DB::table('push_subscriptions')
+                    ->selectRaw('count(*)')
+                    ->whereColumn('push_subscriptions.subscribable_id', 'analytics_users.id')
+                    ->where('push_subscriptions.subscribable_type', AnalyticsUser::class),
+                'devices',
+            );
     }
 
     /**

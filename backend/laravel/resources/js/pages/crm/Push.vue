@@ -30,7 +30,14 @@ const props = defineProps<{
         problems: string[];
     };
     recipients: Recipient[];
-    coverage: { reachable: number; accounts: number; devices: number };
+    coverage: {
+        reachable: number;
+        accounts: number;
+        installs: number;
+        total_accounts: number;
+        total_installs: number;
+        devices: number;
+    };
     recent: Sent[];
 }>();
 
@@ -39,7 +46,7 @@ const page = usePage();
 const showEnglish = ref(false);
 
 const form = useForm({
-    audience: 'all' as 'all' | 'user',
+    audience: 'all' as 'all' | 'accounts' | 'installs' | 'user',
     user_id: props.recipients[0]?.id ?? null,
     title: '',
     body: '',
@@ -133,9 +140,21 @@ function send(): void {
             </div>
         </div>
         <div class="mk-panel" style="padding: 15px">
+            <div class="mk-k">{{ t('push.installs') }}</div>
+            <div class="mk-num" style="margin-top: 8px; font-size: 25px">
+                {{ num(props.coverage.installs) }}
+            </div>
+            <div class="mk-m mk-t3" style="font-size: 11px">
+                {{ t('push.of') }} {{ num(props.coverage.total_installs) }}
+            </div>
+        </div>
+        <div class="mk-panel" style="padding: 15px">
             <div class="mk-k">{{ t('push.accounts') }}</div>
             <div class="mk-num" style="margin-top: 8px; font-size: 25px">
                 {{ num(props.coverage.accounts) }}
+            </div>
+            <div class="mk-m mk-t3" style="font-size: 11px">
+                {{ t('push.of') }} {{ num(props.coverage.total_accounts) }}
             </div>
         </div>
     </div>
@@ -157,7 +176,11 @@ function send(): void {
             <span class="mk-k">{{ t('push.audience') }}</span>
             <select v-model="form.audience" class="mk-input">
                 <option value="all">{{ t('push.audience.all') }} ({{ props.coverage.reachable }})</option>
-                <option value="user">{{ t('push.audience.one') }}</option>
+                <option value="installs">{{ t('push.audience.installs') }} ({{ props.coverage.installs }})</option>
+                <option value="accounts">{{ t('push.audience.accounts') }} ({{ props.coverage.accounts }})</option>
+                <option value="user" :disabled="props.coverage.accounts === 0">
+                    {{ t('push.audience.one') }}
+                </option>
             </select>
         </label>
 

@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Models\AnalyticsUser;
 use App\Models\User;
 use App\Support\Localised;
 use Illuminate\Notifications\Notification;
@@ -40,7 +41,9 @@ class ProgressNotification extends Notification
     /** Named for the notifiable, because Notification::locale() is taken. */
     private function localeOf(object $notifiable): ?string
     {
-        return $notifiable instanceof User ? $notifiable->notification_locale : null;
+        return $notifiable instanceof User || $notifiable instanceof AnalyticsUser
+            ? $notifiable->notification_locale
+            : null;
     }
 
     public function titleFor(object $notifiable): string
@@ -58,10 +61,16 @@ class ProgressNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        /*
+         * An installation has no bell to read, so it gets push and nothing
+         * else. A site account gets both: the row is what the bell shows on
+         * the next visit, and the push is what arrives while nobody is
+         * looking.
+         */
+        $channels = $notifiable instanceof AnalyticsUser ? [] : ['database'];
 
         if (config('webpush.vapid.public_key')
-            && $notifiable instanceof User
+            && ($notifiable instanceof User || $notifiable instanceof AnalyticsUser)
             && $notifiable->pushSubscriptions()->exists()) {
             $channels[] = WebPushChannel::class;
         }

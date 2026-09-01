@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Notifications\Notifiable;
+use NotificationChannels\WebPush\HasPushSubscriptions;
 
 /**
  * One anonymous installation of the wallet.
@@ -20,6 +22,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class AnalyticsUser extends Model
 {
+    /*
+     * An installation can be notified, which is the whole point of it being a
+     * model at all rather than a column.
+     *
+     * The wallet is non-custodial and has no session: Laravel never learns who
+     * is holding it, so a push subscription cannot hang off a user account the
+     * way the site's does — most people running this wallet have no account.
+     * The installation UUID is the only durable name we already have for that
+     * person, it costs them nothing, and it is deliberately not an address:
+     * one person holds several, and notifying an address would either multiply
+     * them or require a signature before anybody has a reason to give one.
+     */
+    use HasPushSubscriptions, Notifiable;
+
     public const UPDATED_AT = null;
 
     protected $table = 'analytics_users';

@@ -747,6 +747,14 @@ export const walletMessages: Messages = {
         autoLockHint: 'locks after inactivity',
         clipboardRow: 'Clear clipboard after copy',
         clipboardHint: '30 seconds, while this tab keeps focus',
+        notificationsRow: 'Notifications',
+        notificationsHint:
+            'Streaks about to break, rewards waiting, transfers that landed. Nothing about your balances leaves the device.',
+        notificationsDenied:
+            'Blocked in this browser — allow notifications for this site in its settings.',
+        notificationsUnsupported: 'This browser cannot receive notifications.',
+        notificationsUnavailable:
+            'Needs anonymous statistics on: there is nothing to attach a subscription to without it.',
         analyticsRow: 'Anonymous usage statistics',
         analyticsHint:
             'Which screens are used and whether actions succeed. Never your seed phrase, keys, password, addresses or amounts.',
@@ -1955,6 +1963,14 @@ export const walletMessages: Messages = {
         autoLockHint: 'блокируется после простоя',
         clipboardRow: 'Очищать буфер после копирования',
         clipboardHint: '30 секунд, пока вкладка остаётся активной',
+        notificationsRow: 'Уведомления',
+        notificationsHint:
+            'Серия вот-вот прервётся, награда ждёт, перевод дошёл. Ничего о ваших балансах устройство не покидает.',
+        notificationsDenied:
+            'Заблокировано в браузере — разрешите уведомления для этого сайта в его настройках.',
+        notificationsUnsupported: 'Этот браузер не умеет получать уведомления.',
+        notificationsUnavailable:
+            'Нужна включённая анонимная статистика: без неё подписку не к чему привязать.',
         analyticsRow: 'Анонимная статистика использования',
         analyticsHint:
             'Какими экранами пользуются и удаются ли действия. Никогда — сид-фраза, ключи, пароль, адреса и суммы.',
@@ -3129,6 +3145,12 @@ export const walletMessages: Messages = {
         autoLockHint: '闲置一段时间后锁定',
         clipboardRow: '复制后清空剪贴板',
         clipboardHint: '30 秒，前提是这个标签页保持在前台',
+        notificationsRow: '通知',
+        notificationsHint:
+            '连续记录即将中断、奖励在等待、转账已到账。余额信息绝不离开设备。',
+        notificationsDenied: '已在浏览器中屏蔽 — 请在设置中允许本站发送通知。',
+        notificationsUnsupported: '此浏览器无法接收通知。',
+        notificationsUnavailable: '需要开启匿名统计：否则订阅无处可依。',
         analyticsRow: '匿名使用统计',
         analyticsHint:
             '记录使用了哪些界面以及操作是否成功。绝不包含助记词、私钥、密码、地址或金额。',

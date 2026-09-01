@@ -1,10 +1,12 @@
 <?php
 
+use App\Models\AnalyticsUser;
 use App\Models\User;
 use App\Notifications\ProgressNotification;
 use App\Support\VapidHealth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /**
@@ -32,6 +34,26 @@ function pushOperator(): User
     config()->set('crm.admin_user_ids', [$user->id]);
 
     return $user;
+}
+
+function pushInstall(?string $locale = 'ru'): AnalyticsUser
+{
+    $install = AnalyticsUser::create([
+        'id' => (string) Str::uuid(),
+        'created_at' => now(),
+        'first_seen_at' => now(),
+        'last_seen_at' => now(),
+        'platform' => 'pwa',
+        'notification_locale' => $locale,
+    ]);
+
+    $install->updatePushSubscription(
+        'https://push.test/i/'.$install->id,
+        'BPjjy6m75glPkZPm05g6itPT9AZhJkrsbBtC75-XOCa6RJvH7z0M9yG7chy90mfqGpyW_woG0cRpVUh02B6a5XU',
+        'aysn5PMyEtD377c-cxXE-g',
+    );
+
+    return $install;
 }
 
 function pushSubscriber(?string $locale = 'ru'): User
@@ -95,6 +117,51 @@ it('counts only people who can actually receive something', function () {
             ->component('crm/Push')
             ->where('coverage.reachable', 1)
             ->where('health.ok', true));
+});
+
+it('reaches wallet installations, which is most of everybody', function () {
+    Notification::fake();
+    $operator = pushOperator();
+    $account = pushSubscriber();
+    $install = pushInstall();
+
+    $this->actingAs($operator)->post('/crm/push', [
+        'audience' => 'all',
+        'title' => 'Заголовок',
+        'body' => 'Текст',
+    ])->assertRedirect();
+
+    Notification::assertSentTo($account, ProgressNotification::class);
+    Notification::assertSentTo($install, ProgressNotification::class);
+});
+
+it('can write to installations alone', function () {
+    Notification::fake();
+    $operator = pushOperator();
+    $account = pushSubscriber();
+    $install = pushInstall();
+
+    $this->actingAs($operator)->post('/crm/push', [
+        'audience' => 'installs',
+        'title' => 'Заголовок',
+        'body' => 'Текст',
+    ])->assertRedirect();
+
+    Notification::assertSentTo($install, ProgressNotification::class);
+    Notification::assertNotSentTo($account, ProgressNotification::class);
+});
+
+it('counts installations and accounts apart', function () {
+    $operator = pushOperator();
+    pushSubscriber();
+    pushInstall();
+    pushInstall();
+
+    $this->actingAs($operator)->get('/crm/push')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('coverage.accounts', 1)
+            ->where('coverage.installs', 2)
+            ->where('coverage.reachable', 3));
 });
 
 it('sends to everyone subscribed', function () {
