@@ -73,15 +73,23 @@ def _waiting():
 
 
 def _message(symbol: str, people: int, total: int) -> str:
+    """Russian, because these rooms are.
+
+    Every other message this bot sends is English, and it has cost nothing so
+    far because they are all answers to a command somebody typed. This one is
+    the opposite: it is the message that has to persuade 742 people who never
+    asked for it, and it is the only one whose language decides whether it
+    works.
+    """
     whole = total // 10**18
     return (
-        f"{people} of you have {symbol} waiting — {whole} {symbol} in total.\n\n"
-        f"It has been accruing quietly while you talked here. Nothing was sent "
-        f"on-chain for it, and nothing will be until you ask:\n\n"
-        f"1. /claim — I will tell you what you have.\n"
-        f"2. /set_wallet <address> if you have not linked one.\n"
-        f"3. No wallet? One takes a few seconds: {WALLET_URL}\n\n"
-        f"Your balance keeps growing either way. Claiming just brings it to you."
+        f"У {people} из вас накоплен {symbol} — всего {whole} {symbol}.\n\n"
+        f"Он копился, пока вы тут общались. В блокчейн за него ничего не "
+        f"отправлялось и не отправится, пока вы сами не попросите:\n\n"
+        f"1. /claim — покажу, сколько у вас.\n"
+        f"2. /set_wallet <адрес> — если кошелёк ещё не привязан.\n"
+        f"3. Нет кошелька? Он делается за минуту: {WALLET_URL}\n\n"
+        f"Баланс растёт в любом случае. Claim просто забирает его себе."
     )
 
 
