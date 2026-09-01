@@ -98,14 +98,31 @@ it('completes a daily quest and pays its bonus once', function () {
 it('completes the daily visit quest just by showing up', function () {
     $user = User::factory()->create();
 
-    // Any first action of the day is a visit. Nothing calls recordAction with
-    // 'visit' — the site reports page_view — so this quest is completed from
-    // touch(), which is the only place that knows the day turned over.
+    // Nothing calls recordAction with 'visit' — the site reports page_view.
     $this->gamification->recordAction($user, 'page_view', page: '/wallet');
 
     $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit');
 
     expect($quest['completed'])->toBeTrue();
+});
+
+it('still completes the visit quest when the day was already marked active', function () {
+    $user = User::factory()->create();
+
+    // touch() returns early once the day is stamped, so a quest advanced from
+    // there is lost for anybody whose first action of the day happened before
+    // it existed — with no way to earn it back until midnight.
+    $this->gamification->touch($user);
+
+    expect(
+        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit')['completed'],
+    )->toBeFalse();
+
+    $this->gamification->recordAction($user, 'page_view', page: '/wallet');
+
+    expect(
+        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit')['completed'],
+    )->toBeTrue();
 });
 
 it('pays the daily visit quest once a day', function () {

@@ -76,6 +76,27 @@ class GamificationService
         }
 
         $granted += $this->touch($user, $at);
+
+        /*
+         * "Open Cyberia today" is satisfied by *any* action, and must not
+         * depend on this being the first one.
+         *
+         * Nothing ever calls this with `visit` — the site reports `page_view`
+         * — so the quest was never advanced at all, and 86 visit awards had
+         * produced zero daily_visit rows. Advancing it from touch() looked
+         * right (that is the method that knows the day turned over) and was
+         * still wrong: touch() returns early once the day is already marked,
+         * so anybody whose first action of the day happened before this code
+         * shipped lost the quest until midnight, with no way to earn it back.
+         *
+         * Here it is idempotent instead of positional: a completed quest
+         * short-circuits, so running it on every action costs a lookup and
+         * heals a day that started without it.
+         */
+        if ($action !== 'visit') {
+            $granted += $this->advanceQuests($user, 'visit', $at, null);
+        }
+
         $granted += $this->advanceQuests($user, $action, $at, $page);
 
         return $granted;
@@ -117,20 +138,6 @@ class GamificationService
             $reference = $stats->streak_started_on->toDateString().':'.$stats->current_streak;
             $granted += $this->award($user, 'streak', $reference, $bonus);
         }
-
-        /*
-         * "Open Cyberia today" is this moment and no other: the first activity
-         * of a UTC day is exactly what a daily visit is, and this is the only
-         * place that knows it.
-         *
-         * Without this the very first quest a new person is shown could never
-         * be completed by anyone. `visit` XP is paid here, but quests were
-         * advanced only from recordAction(), whose sole caller reports
-         * `page_view` — so on prod there were 86 visit awards and not one
-         * daily_visit row. Advancing again from recordAction() is harmless:
-         * a completed quest short-circuits.
-         */
-        $granted += $this->advanceQuests($user, 'visit', $at, null);
 
         return $granted;
     }
