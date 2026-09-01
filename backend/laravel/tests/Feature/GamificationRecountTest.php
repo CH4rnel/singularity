@@ -44,10 +44,27 @@ it('reports without writing on a dry run', function () {
 
     $this->artisan('gamification:recount --prune --dry-run')
         ->expectsOutputToContain('Would delete')
+        // The projection has to be the total the delete would leave, not the
+        // one that is there while the rows still exist.
+        ->expectsOutputToContain('500     → 400')
         ->assertSuccessful();
 
     expect(XpEntry::where('user_id', $user->id)->count())->toBe(2)
         ->and(UserStat::where('user_id', $user->id)->value('xp'))->toBe(500);
+});
+
+it('projects the fall from a deleted quest too, not just from a dead source', function () {
+    $user = User::factory()->create();
+    ledgerEntry($user, 'swap', 400);
+    XpEntry::query()->create([
+        'user_id' => $user->id, 'source' => 'quest',
+        'reference' => 'daily_explore:2026-09-01', 'amount' => 100, 'created_at' => now(),
+    ]);
+    withStats($user, 500);
+
+    $this->artisan('gamification:recount --prune --dry-run')
+        ->expectsOutputToContain('500     → 400')
+        ->assertSuccessful();
 });
 
 it('drops what no longer pays and rebuilds the total', function () {

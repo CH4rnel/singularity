@@ -48,15 +48,25 @@ class GamificationRecountCommand extends Command
          */
         $live = array_column((array) config('gamification.quests', []), 'key');
 
-        $stale = XpEntry::query()->where(fn ($query) => $query
-            ->whereNotIn('source', $paying)
-            ->orWhere(fn ($quests) => $quests
-                ->where('source', 'quest')
-                ->where(function ($dead) use ($live) {
+        /*
+         * One definition of "stale", used by the delete and by the dry run's
+         * projection alike. They diverged once — the projection filtered on
+         * `source` only, so it under-reported the fall for anybody holding a
+         * bonus from a deleted quest, which is the worst way for a dry run to
+         * be wrong.
+         */
+        $isStale = function ($query) use ($paying, $live) {
+            $query->whereNotIn('source', $paying)
+                ->orWhere(function ($quests) use ($live) {
+                    $quests->where('source', 'quest');
+
                     foreach ($live as $key) {
-                        $dead->where('reference', 'not like', $key.':%');
+                        $quests->where('reference', 'not like', $key.':%');
                     }
-                })));
+                });
+        };
+
+        $stale = XpEntry::query()->where($isStale);
         $staleTotal = (int) (clone $stale)->sum('amount');
         $staleCount = (clone $stale)->count();
 
@@ -88,8 +98,12 @@ class GamificationRecountCommand extends Command
         foreach (UserStat::query()->with('user')->get() as $stats) {
             $ledger = (int) XpEntry::query()
                 ->where('user_id', $stats->user_id)
-                ->when($this->option('prune') && $this->option('dry-run'),
-                    fn ($query) => $query->whereIn('source', $paying))
+                // On a dry run the rows are still there, so project the total
+                // the delete would leave rather than the one that exists.
+                ->when(
+                    $this->option('prune') && $this->option('dry-run'),
+                    fn ($query) => $query->whereNot($isStale),
+                )
                 ->sum('amount');
 
             $level = $gamification->levelFor($ledger);
