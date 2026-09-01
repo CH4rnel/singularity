@@ -180,3 +180,60 @@ it('credits governance activity when a vote is recorded', function () {
 
     expect(XpEntry::where('user_id', $user->id)->where('source', 'vote')->count())->toBe(1);
 });
+
+/**
+ * A streak that nobody is keeping.
+ *
+ * `current_streak` is a stored counter that only moves inside `touch()`, so
+ * somebody who stops coming back keeps the number they walked away with —
+ * breaking a streak is the *absence* of an event, and nothing runs on absence.
+ * User 38 was showing five consecutive days on the leaderboard a week after
+ * their last one.
+ */
+it('shows a streak only while it is still alive', function () {
+    $g = $this->gamification;
+    $now = Carbon::parse('2026-09-01 12:00', 'UTC');
+
+    expect($g->liveStreak('2026-09-01 10:00:00', 5, $now))->toBe(5)
+        // Yesterday counts: the day is not over, so it is alive and at risk —
+        // which is exactly what the reminder writes to people about.
+        ->and($g->liveStreak('2026-08-31 23:00:00', 5, $now))->toBe(5)
+        // Two days ago is a streak that ended and nothing was there to say so.
+        ->and($g->liveStreak('2026-08-30 12:00:00', 5, $now))->toBe(0)
+        ->and($g->liveStreak('2026-08-25 15:12:11', 5, $now))->toBe(0);
+});
+
+it('treats a missing or empty last-active date as no streak', function () {
+    expect($this->gamification->liveStreak(null, 5))->toBe(0)
+        ->and($this->gamification->liveStreak('', 5))->toBe(0)
+        ->and($this->gamification->liveStreak('2026-09-01', 0))->toBe(0);
+});
+
+it('does not put a dead streak on the leaderboard', function () {
+    $user = User::factory()->create();
+    $this->gamification->award($user, 'swap', 'x', 500);
+
+    UserStat::where('user_id', $user->id)->update([
+        'current_streak' => 5,
+        'longest_streak' => 5,
+        'last_active_on' => Carbon::now('UTC')->subWeek(),
+    ]);
+
+    $row = collect($this->gamification->leaderboard(10))->firstWhere('user_id', $user->id);
+
+    expect($row['current_streak'])->toBe(0)
+        // The record stands: it happened, it is just over.
+        ->and(UserStat::where('user_id', $user->id)->value('longest_streak'))->toBe(5);
+});
+
+it('does not put a dead streak on a public profile', function () {
+    $user = User::factory()->create();
+    $this->gamification->award($user, 'swap', 'x', 500);
+
+    UserStat::where('user_id', $user->id)->update([
+        'current_streak' => 5,
+        'last_active_on' => Carbon::now('UTC')->subWeek(),
+    ]);
+
+    expect($this->gamification->publicProgressFor($user)['current_streak'])->toBe(0);
+});

@@ -428,7 +428,7 @@ class GamificationService
             'progress_pct' => $ceiling === null || $ceiling === $floor
                 ? 100
                 : (int) round(($stats->xp - $floor) / ($ceiling - $floor) * 100),
-            'current_streak' => $stats->current_streak,
+            'current_streak' => $this->liveStreak($stats->last_active_on, (int) $stats->current_streak),
             'longest_streak' => $stats->longest_streak,
             'last_active_on' => $stats->last_active_on?->toDateString(),
             'active_today' => $stats->last_active_on?->toDateString() === Carbon::now('UTC')->toDateString(),
@@ -474,7 +474,7 @@ class GamificationService
             'xp' => $stats->xp,
             'level' => $stats->level,
             'title' => $this->titleFor($stats->level),
-            'current_streak' => $stats->current_streak,
+            'current_streak' => $this->liveStreak($stats->last_active_on, (int) $stats->current_streak),
             'longest_streak' => $stats->longest_streak,
             'rank' => $this->rankOf($stats),
         ];
@@ -504,6 +504,7 @@ class GamificationService
                 'user_stats.xp',
                 'user_stats.level',
                 'user_stats.current_streak',
+                'user_stats.last_active_on',
             ])
             ->values()
             ->map(fn ($row, int $index) => [
@@ -521,7 +522,7 @@ class GamificationService
                 'xp' => (int) $row->xp,
                 'level' => (int) $row->level,
                 'title' => $this->titleFor((int) $row->level),
-                'current_streak' => (int) $row->current_streak,
+                'current_streak' => $this->liveStreak($row->last_active_on, (int) $row->current_streak),
             ])
             ->all();
     }
@@ -787,6 +788,46 @@ class GamificationService
         }
 
         return $granted;
+    }
+
+    /**
+     * The streak as it stands *today*, rather than as it was last left.
+     *
+     * `current_streak` is a stored counter that only ever moves inside
+     * `touch()`, so a person who stops coming back keeps the number they
+     * walked away with — user 38 was showing five consecutive days on the
+     * leaderboard a week after their last one. Nothing ever ran to break it,
+     * because breaking a streak is the absence of an event.
+     *
+     * Yesterday still counts: the day is not over, so somebody who was here
+     * yesterday has a streak that is alive and at risk, which is exactly what
+     * `gamification:remind` writes to them about.
+     */
+    public function liveStreak(mixed $lastActiveOn, int $stored, ?CarbonInterface $at = null): int
+    {
+        $day = $this->day($lastActiveOn);
+
+        if ($day === null || $stored <= 0) {
+            return 0;
+        }
+
+        $now = $this->utc($at);
+
+        return in_array($day, [$now->toDateString(), $now->copy()->subDay()->toDateString()], true)
+            ? $stored
+            : 0;
+    }
+
+    /** The date part of whatever shape a timestamp arrived in. */
+    private function day(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->toDateString();
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : mb_substr($value, 0, 10);
     }
 
     /** Normalise an optional instant to UTC, defaulting to now. */
