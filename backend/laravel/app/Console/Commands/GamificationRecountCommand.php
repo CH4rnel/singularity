@@ -8,7 +8,6 @@ use App\Services\GamificationService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Rebuild every balance from the ledger, and drop XP nothing pays for any more.
@@ -39,15 +38,36 @@ class GamificationRecountCommand extends Command
         // though `quest` is not itself an action anybody performs.
         $paying[] = 'quest';
 
-        $stale = XpEntry::query()->whereNotIn('source', $paying);
+        /*
+         * Except the ones whose quest is gone. `daily_explore` paid 20 XP for
+         * opening three pages and accounts for most of the quest bonuses ever
+         * awarded; keeping them because their *source* is still called `quest`
+         * would leave exactly the browser-earned currency this is removing.
+         * The reference is `<quest key>:<period>`, which is how they are told
+         * apart.
+         */
+        $live = array_column((array) config('gamification.quests', []), 'key');
+
+        $stale = XpEntry::query()->where(fn ($query) => $query
+            ->whereNotIn('source', $paying)
+            ->orWhere(fn ($quests) => $quests
+                ->where('source', 'quest')
+                ->where(function ($dead) use ($live) {
+                    foreach ($live as $key) {
+                        $dead->where('reference', 'not like', $key.':%');
+                    }
+                })));
         $staleTotal = (int) (clone $stale)->sum('amount');
         $staleCount = (clone $stale)->count();
 
         $this->line('Sources that no longer pay:');
 
-        foreach ((clone $stale)->select('source', DB::raw('count(*) as c'), DB::raw('sum(amount) as amt'))
-            ->groupBy('source')->orderByDesc('amt')->get() as $row) {
-            $this->line(sprintf('  %-12s %-6s %s XP', $row->source, $row->c, $row->amt));
+        foreach ((clone $stale)->get(['source', 'reference', 'amount'])
+            ->groupBy(fn (XpEntry $entry): string => $entry->source === 'quest'
+                ? 'quest:'.explode(':', (string) $entry->reference)[0]
+                : $entry->source)
+            ->sortByDesc(fn ($group) => $group->sum('amount')) as $label => $group) {
+            $this->line(sprintf('  %-26s %-6s %s XP', $label, $group->count(), $group->sum('amount')));
         }
 
         if ($staleCount === 0) {

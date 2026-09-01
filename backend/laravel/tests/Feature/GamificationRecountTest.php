@@ -64,15 +64,34 @@ it('drops what no longer pays and rebuilds the total', function () {
         ->and(UserStat::where('user_id', $user->id)->value('xp'))->toBe(400);
 });
 
-it('keeps quest bonuses, which are earned by the chain work behind them', function () {
+it('keeps a bonus for a quest that still exists', function () {
     $user = User::factory()->create();
     ledgerEntry($user, 'swap', 400);
-    ledgerEntry($user, 'quest', 40);
+    XpEntry::query()->create([
+        'user_id' => $user->id, 'source' => 'quest',
+        'reference' => 'daily_trade:2026-09-01', 'amount' => 40, 'created_at' => now(),
+    ]);
     withStats($user, 440);
 
     $this->artisan('gamification:recount --prune')->assertSuccessful();
 
     expect(UserStat::where('user_id', $user->id)->value('xp'))->toBe(440);
+});
+
+it('drops a bonus for a quest that is gone', function () {
+    $user = User::factory()->create();
+    ledgerEntry($user, 'swap', 400);
+    // 20 XP for opening three pages. Its source is still called `quest`, so
+    // only the reference tells it apart from a bonus somebody earned.
+    XpEntry::query()->create([
+        'user_id' => $user->id, 'source' => 'quest',
+        'reference' => 'daily_explore:2026-09-01', 'amount' => 20, 'created_at' => now(),
+    ]);
+    withStats($user, 420);
+
+    $this->artisan('gamification:recount --prune')->assertSuccessful();
+
+    expect(UserStat::where('user_id', $user->id)->value('xp'))->toBe(400);
 });
 
 it('repairs a running total that drifted from its ledger', function () {
