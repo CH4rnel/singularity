@@ -7,6 +7,7 @@ use App\Models\Proposal;
 use App\Models\ProposalComment;
 use App\Models\Reaction;
 use App\Services\Dao\DaoNotifier;
+use App\Services\GamificationService;
 use Illuminate\Http\RedirectResponse;
 
 class ReactionController extends Controller
@@ -17,7 +18,10 @@ class ReactionController extends Controller
         'comment' => ProposalComment::class,
     ];
 
-    public function __construct(private DaoNotifier $notifier) {}
+    public function __construct(
+        private DaoNotifier $notifier,
+        private GamificationService $gamification,
+    ) {}
 
     public function toggle(ToggleReactionRequest $request): RedirectResponse
     {
@@ -42,6 +46,10 @@ class ReactionController extends Controller
         $reaction = Reaction::create($attributes);
 
         $this->notifier->reactionAdded($reaction);
+
+        // Keyed by the reaction, so removing one and adding it back does not
+        // pay again — the row is new but the ledger entry is not.
+        $this->gamification->recordAction($request->user(), 'reaction', (string) $reaction->getKey());
 
         return back();
     }

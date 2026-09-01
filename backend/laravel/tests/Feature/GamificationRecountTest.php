@@ -6,12 +6,13 @@ use App\Models\XpEntry;
 use App\Services\GamificationService;
 
 /**
- * Taking back XP that nothing pays for any more.
+ * Rebuilding balances from the ledger, and taking back XP nothing pays for.
  *
- * XP became a currency, so what is in circulation has to mean one thing —
- * otherwise the first purchases here were partly bought with points somebody
- * got for loading a URL. The destructive half is opt-in and the dry run has to
- * be honest about what it would do, because levels fall.
+ * Most of what this could reach is now paid for again — the DAO and the wall
+ * count, and so does showing up — so what is left is narrow: bonuses for
+ * quests that no longer exist. The destructive half stays opt-in and the dry
+ * run has to project honestly, because it is the only thing between a
+ * decision and a command that deletes other people's XP.
  */
 function ledgerEntry(User $user, string $source, int $amount): void
 {
@@ -39,7 +40,7 @@ function withStats(User $user, int $xp): void
 it('reports without writing on a dry run', function () {
     $user = User::factory()->create();
     ledgerEntry($user, 'swap', 400);
-    ledgerEntry($user, 'visit', 100);
+    ledgerEntry($user, 'ghost_source', 100);
     withStats($user, 500);
 
     $this->artisan('gamification:recount --prune --dry-run')
@@ -67,13 +68,31 @@ it('projects the fall from a deleted quest too, not just from a dead source', fu
         ->assertSuccessful();
 });
 
-it('drops what no longer pays and rebuilds the total', function () {
+it('keeps everything that still pays', function () {
+    $user = User::factory()->create();
+
+    // The DAO, the wall and simply turning up all count again: what XP buys is
+    // access to this project, so farming it takes nothing from anybody.
+    // `streak` has no entry in the XP table — it is priced in
+    // `streak_bonuses` — and deriving the list from that table alone once
+    // deleted every streak bonus ever paid.
+    foreach (['swap' => 400, 'visit' => 10, 'streak' => 25, 'comment' => 15, 'post' => 20] as $source => $amount) {
+        ledgerEntry($user, $source, $amount);
+    }
+
+    withStats($user, 470);
+
+    $this->artisan('gamification:recount --prune')->assertSuccessful();
+
+    expect(XpEntry::where('user_id', $user->id)->count())->toBe(5)
+        ->and(UserStat::where('user_id', $user->id)->value('xp'))->toBe(470);
+});
+
+it('drops a source nothing pays for any more', function () {
     $user = User::factory()->create();
     ledgerEntry($user, 'swap', 400);
-    ledgerEntry($user, 'visit', 100);
-    ledgerEntry($user, 'streak', 50);
-    ledgerEntry($user, 'comment', 15);
-    withStats($user, 565);
+    ledgerEntry($user, 'ghost_source', 100);
+    withStats($user, 500);
 
     $this->artisan('gamification:recount --prune')->assertSuccessful();
 
@@ -126,7 +145,7 @@ it('repairs a running total that drifted from its ledger', function () {
 it('lowers the level when the total falls', function () {
     $user = User::factory()->create();
     ledgerEntry($user, 'swap', 100);
-    ledgerEntry($user, 'visit', 900);
+    ledgerEntry($user, 'ghost_source', 900);
     withStats($user, 1000);
 
     expect(UserStat::where('user_id', $user->id)->value('level'))->toBe(5);

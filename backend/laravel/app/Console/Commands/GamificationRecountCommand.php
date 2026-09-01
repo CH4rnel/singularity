@@ -33,10 +33,16 @@ class GamificationRecountCommand extends Command
     public function handle(GamificationService $gamification): int
     {
         $paying = array_keys((array) config('gamification.xp', []));
-        // Quest bonuses are paid for completing quests, and every quest now
-        // requires a transaction — so they are earned by chain work even
-        // though `quest` is not itself an action anybody performs.
+
+        /*
+         * Two sources are real and have no entry in the XP table, because
+         * neither is an action anybody performs: `quest` is a completion bonus
+         * priced per quest, and `streak` is a milestone priced in
+         * `streak_bonuses`. Deriving the list from `config('gamification.xp')`
+         * alone deleted every streak bonus ever paid.
+         */
         $paying[] = 'quest';
+        $paying[] = 'streak';
 
         /*
          * Except the ones whose quest is gone. `daily_explore` paid 20 XP for

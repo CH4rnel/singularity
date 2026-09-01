@@ -19,10 +19,17 @@ export const progressMessages: Messages = {
         comeBackToday: 'Come back today to keep it',
         rank: 'Rank',
         unranked: 'Unranked',
+        gameLocked: 'Not yours yet',
+        gameLockedBody:
+            'NO CARRIER is unlocked with experience. Take part anywhere on Cyberia — the chain, the DAO, the wall — and it adds up.',
+        gameToProfile: 'Open your profile',
+        gameMissing: 'The build is not on this host',
+        gameMissingBody:
+            'You have unlocked it and nothing is wrong on your side. The export has not been uploaded yet — it will be here.',
         enchantTitle: 'Spend experience',
         enchantBalance: 'To spend',
         enchantIntro:
-            'XP is paid only for what the chain can vouch for — swaps, bridges, staking, lending, liquidity, governance. What you buy is permanent; your level and rank never fall.',
+            'Everything you do here earns it — the chain, the DAO, the wall, just showing up. What you buy is permanent, and your level and rank never fall when you spend.',
         enchantOwned: 'Yours.',
         enchantNeedsLevel: 'Needs level {level}.',
         enchantNeedsXp: '{xp} more to spend.',
@@ -72,10 +79,17 @@ export const progressMessages: Messages = {
         comeBackToday: 'Зайдите сегодня, чтобы не прервать',
         rank: 'Место',
         unranked: 'Вне рейтинга',
+        gameLocked: 'Пока не ваша',
+        gameLockedBody:
+            'NO CARRIER открывается за опыт. Участвуйте где угодно в Cyberia — цепь, ДАО, стена — всё складывается.',
+        gameToProfile: 'Открыть профиль',
+        gameMissing: 'Сборки нет на этом хосте',
+        gameMissingBody:
+            'Вы её открыли, и с вашей стороны всё в порядке. Экспорт ещё не загружен — он тут будет.',
         enchantTitle: 'Потратить опыт',
         enchantBalance: 'Доступно',
         enchantIntro:
-            'Опыт начисляется только за то, что подтверждает цепь — обмены, мост, стейкинг, лендинг, ликвидность, управление. Купленное остаётся навсегда, а уровень и место в рейтинге не падают.',
+            'Опыт даёт всё, что вы здесь делаете — цепь, ДАО, стена, просто визит. Купленное остаётся навсегда, а уровень и место в рейтинге при трате не падают.',
         enchantOwned: 'Куплено.',
         enchantNeedsLevel: 'Нужен уровень {level}.',
         enchantNeedsXp: 'Не хватает {xp}.',
@@ -125,10 +139,16 @@ export const progressMessages: Messages = {
         comeBackToday: '今天回来一趟才能保住',
         rank: '排名',
         unranked: '未上榜',
+        gameLocked: '尚未解锁',
+        gameLockedBody:
+            'NO CARRIER 用经验解锁。在 Cyberia 的任何地方参与——链上、DAO、留言墙——都会累积。',
+        gameToProfile: '打开个人页',
+        gameMissing: '此主机上没有构建',
+        gameMissingBody: '你已解锁，你这边没有问题。导出尚未上传，稍后就会在这里。',
         enchantTitle: '消耗经验',
         enchantBalance: '可用',
         enchantIntro:
-            '经验只为链上可验证的行为发放：兑换、跨链、质押、借贷、流动性、治理。所购买的永久有效，等级与排名不会下降。',
+            '你在这里做的一切都会累积经验：链上、DAO、留言墙，甚至只是打开。所购买的永久有效，消耗时等级与排名不会下降。',
         enchantOwned: '已拥有。',
         enchantNeedsLevel: '需要等级 {level}。',
         enchantNeedsXp: '还差 {xp}。',

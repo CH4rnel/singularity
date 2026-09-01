@@ -1,10 +1,8 @@
 <?php
 
-use App\Models\AiApiKey;
 use App\Models\User;
 use App\Models\XpEnchantment;
 use App\Services\GamificationService;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Buying, over HTTP.
@@ -13,10 +11,9 @@ use Illuminate\Support\Facades\DB;
  * do: being submitted twice, and being submitted for something the person
  * cannot have.
  */
-function buyer(int $xp = 5000): User
+function buyer(int $xp = 50_000): User
 {
-    $user = User::factory()->create(['wallet_address' => '0x'.str_repeat('a', 40)]);
-
+    $user = User::factory()->create();
     app(GamificationService::class)->award($user, 'swap', 'swap:'.uniqid('', true), $xp);
 
     return $user;
@@ -25,9 +22,9 @@ function buyer(int $xp = 5000): User
 it('buys one', function () {
     $user = buyer();
 
-    $this->actingAs($user)->post('/profile/enchant', ['key' => 'route_i'])
+    $this->actingAs($user)->post('/profile/enchant', ['key' => 'nocarrier'])
         ->assertRedirect()
-        ->assertSessionHas('status', 'enchant-bought:route_i');
+        ->assertSessionHas('status', 'enchant-bought:nocarrier');
 
     expect(XpEnchantment::where('user_id', $user->id)->count())->toBe(1);
 });
@@ -35,45 +32,35 @@ it('buys one', function () {
 it('does not charge a second time for a resubmitted form', function () {
     $user = buyer();
 
-    $this->actingAs($user)->post('/profile/enchant', ['key' => 'route_i']);
-    $this->actingAs($user)->post('/profile/enchant', ['key' => 'route_i'])
+    $this->actingAs($user)->post('/profile/enchant', ['key' => 'nocarrier']);
+    $this->actingAs($user)->post('/profile/enchant', ['key' => 'nocarrier'])
         ->assertSessionHas('status', 'enchant-owned')
         ->assertSessionHasNoErrors();
 
-    expect(XpEnchantment::where('user_id', $user->id)->sum('cost'))->toBe(400);
+    expect(XpEnchantment::where('user_id', $user->id)->sum('cost'))->toBe(5000);
 });
 
 it('names the refusal rather than failing vaguely', function () {
-    $user = buyer(300);
+    // Level 6: the balance is short too, and the level is what is reported,
+    // because saving does not fix it.
+    $user = buyer(1600);
 
-    $this->actingAs($user)->post('/profile/enchant', ['key' => 'lain_key'])
+    $this->actingAs($user)->post('/profile/enchant', ['key' => 'nocarrier'])
         ->assertSessionHasErrors(['enchant' => 'level']);
 
     expect(XpEnchantment::where('user_id', $user->id)->count())->toBe(0);
 });
 
-it('refuses an enchantment nobody offers', function () {
+it('says when the balance is the thing that is short', function () {
+    $this->actingAs(buyer(4500))->post('/profile/enchant', ['key' => 'nocarrier'])
+        ->assertSessionHasErrors(['enchant' => 'xp']);
+});
+
+it('refuses an unlock nobody offers', function () {
     $this->actingAs(buyer())->post('/profile/enchant', ['key' => 'sharpness_v'])
         ->assertSessionHasErrors(['enchant' => 'unknown']);
 });
 
-it('hands over an inference key exactly once, in the response that bought it', function () {
-    $user = buyer(20_000);
-
-    $response = $this->actingAs($user)->post('/profile/enchant', ['key' => 'lain_key']);
-
-    $status = session('status');
-
-    expect($status)->toStartWith('enchant-key:')
-        // The plaintext token exists in this response and nowhere else; the
-        // row keeps only its hash.
-        ->and(AiApiKey::where('address', $user->wallet_address)->first()?->gate_exempt)->toBeTrue()
-        ->and(DB::table('ai_api_keys')->where('address', $user->wallet_address)->value('token_hash'))
-        ->not->toContain(substr($status, strlen('enchant-key:')));
-
-    $response->assertRedirect();
-});
-
 it('is closed to a guest', function () {
-    $this->post('/profile/enchant', ['key' => 'route_i'])->assertRedirect('/login');
+    $this->post('/profile/enchant', ['key' => 'nocarrier'])->assertRedirect('/login');
 });

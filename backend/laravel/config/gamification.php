@@ -54,17 +54,20 @@ return [
 
     'xp' => [
         /*
-         * Every source here is credited from ground truth — the indexer, the
-         * bridge table, the DAO tables — and none of them can be moved by a
-         * browser saying so.
+         * Everything a person does here, on the chain and off it.
          *
-         * `visit` and `comment` used to be on this list and are gone. They
-         * were harmless while XP was a scoreboard and became untenable the
-         * moment XP was spendable: opening a page is not work, and paying for
-         * it meant a script could buy things. Removing them also removed the
-         * need to carry two numbers and explain the difference, which was the
-         * real cost.
+         * There was briefly a rule that only chain-verified sources may pay,
+         * because XP was about to discount a real fee and a browser can move
+         * `visit`. The rule was right and the premise was wrong: experience
+         * buys *access to this project* — a room, a game, the right to write a
+         * quest for somebody else — and none of that is worth farming. So the
+         * DAO and the wall pay again, and nothing XP unlocks is allowed to be
+         * serious enough to care that they do.
          */
+        'visit' => 10,
+        'post' => 20,
+        'reaction' => 5,
+        'comment' => 15,
         'swap' => 25,
         'liquidity' => 60,
         'lending' => 40,
@@ -79,84 +82,53 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Enchantments: what experience is spent on
+    | Unlocks: what experience is spent on
     |--------------------------------------------------------------------------
     |
-    | Experience here works the way it works in a game: it is a currency, not a
-    | rank. You accumulate it, you spend it on something permanent, and the
-    | balance goes back down.
+    | Experience works the way it works in a game: a currency, not a rank. You
+    | gather it, you spend it on something permanent, and the balance goes back
+    | down. `xp` stays whole — it is the leaderboard, a record of taking part
+    | that never falls — and only the *spendable* balance moves.
     |
-    | Two numbers do two jobs and neither can do the other's. `xp` counts
-    | everything and is the leaderboard — a record of taking part that is never
-    | spent and never falls. **Spendable** is proven XP minus what has already
-    | been spent, and it is the only thing an enchantment costs.
+    | Everything here is **access to this project**, and that is the rule
+    | rather than the current contents. XP is handed out for opening a page and
+    | can be farmed, so it must never decide anything that moves money: no fee
+    | discounts, no inference credits, nothing another person pays for. There
+    | was a version of this list that discounted a real cross-chain fee, and it
+    | forced the whole system to carry two kinds of XP to defend itself. Spend
+    | it on rooms, games and the right to build something for other people
+    | instead, where a farmed balance takes nothing from anybody.
     |
-    | `level` gates which enchantments are offered at all, and it is computed
-    | from *lifetime* proven XP rather than from the balance. That is a
-    | deliberate departure: spending should not take back the standing that
-    | earned the right to spend, or somebody who buys the thing they qualified
-    | for would immediately stop qualifying for it.
-    |
-    | `requires` names an enchantment that must already be owned, so a ladder
-    | is climbed rather than skipped.
-    |
-    | Every effect here is something this server actually controls. Cyberia's
-    | cut of a cross-chain swap is composed on this host; the inference API's
-    | gate is a column on a key this host issues. Nothing promises a discount
-    | on somebody else's costs.
+    | `level` gates what is offered; the balance is what it costs. Spending
+    | must not take back the standing that earned the right to spend, so the
+    | gate reads the lifetime number and the price reads the balance.
     |
     */
 
-    'enchantments' => [
+    /*
+    | Where the NO CARRIER web export lives on this host.
+    |
+    | Outside `public/` on purpose: the controller serves it, so the unlock
+    | covers the whole game rather than its front door. Not in the repository
+    | either — it is a 40 MB Godot export, and committing that to serve twenty
+    | people is the wrong trade. Unset or missing is a supported state and the
+    | page says so.
+    */
+
+    'nocarrier_path' => (string) env('NOCARRIER_BUILD_PATH', storage_path('app/private/nocarrier')),
+
+    'unlocks' => [
         [
-            'key' => 'route_i',
-            'cost' => 400,
-            'level' => 2,
-            'title' => ['en' => 'Clean Route I', 'ru' => 'Чистый маршрут I', 'zh' => '净路 I'],
-            'description' => [
-                'en' => 'A quarter off Cyberia’s cut of every cross-chain swap. Permanent.',
-                'ru' => 'Четверть от комиссии Cyberia на каждом кроссчейн-обмене. Навсегда.',
-                'zh' => '永久减免 Cyberia 跨链兑换抽成的四分之一。',
-            ],
-            'effects' => ['crosschain_fee_discount' => 25],
-        ],
-        [
-            'key' => 'route_ii',
-            'cost' => 1200,
-            'level' => 6,
-            'requires' => 'route_i',
-            'title' => ['en' => 'Clean Route II', 'ru' => 'Чистый маршрут II', 'zh' => '净路 II'],
-            'description' => [
-                'en' => 'Three fifths off Cyberia’s cut. Replaces the first.',
-                'ru' => 'Три пятых от комиссии Cyberia. Заменяет первый уровень.',
-                'zh' => '减免抽成的五分之三，取代第一级。',
-            ],
-            'effects' => ['crosschain_fee_discount' => 60],
-        ],
-        [
-            'key' => 'route_iii',
-            'cost' => 3600,
-            'level' => 12,
-            'requires' => 'route_ii',
-            'title' => ['en' => 'Clean Route III', 'ru' => 'Чистый маршрут III', 'zh' => '净路 III'],
-            'description' => [
-                'en' => 'Cyberia takes nothing from your cross-chain swaps. Ever.',
-                'ru' => 'Cyberia больше не берёт ничего с ваших кроссчейн-обменов. Никогда.',
-                'zh' => 'Cyberia 不再从你的跨链兑换中抽成。',
-            ],
-            'effects' => ['crosschain_fee_discount' => 100],
-        ],
-        [
-            'key' => 'lain_key',
-            'cost' => 2000,
+            'key' => 'nocarrier',
+            'cost' => 5000,
             'level' => 8,
-            'title' => ['en' => 'Key to Lain', 'ru' => 'Ключ к Лейн', 'zh' => '通向 Lain 的钥匙'],
+            'title' => ['en' => 'NO CARRIER', 'ru' => 'NO CARRIER', 'zh' => 'NO CARRIER'],
             'description' => [
-                'en' => 'An inference API key that needs no $LAIN holding. Yours to keep.',
-                'ru' => 'Ключ к Inference API, которому не нужен холдинг $LAIN. Остаётся у вас.',
-                'zh' => '无需持有 $LAIN 的推理 API 密钥，永久归你。',
+                'en' => 'The netstalking sim, playable in the browser. Yours for good.',
+                'ru' => 'Симулятор нетсталкинга, играется в браузере. Остаётся навсегда.',
+                'zh' => '可在浏览器中游玩的网络潜行模拟器，永久解锁。',
             ],
-            'effects' => ['ai_access' => 1],
+            'effects' => ['nocarrier' => 1],
         ],
     ],
 
@@ -165,19 +137,23 @@ return [
     | Streak milestones
     |--------------------------------------------------------------------------
     |
-    | Empty, and deliberately still here.
+    | Bonus XP the first time a consecutive-day streak reaches each length.
     |
-    | A streak is worth showing — it is the one number on the profile about
-    | persistence rather than volume — but it is earned by opening the app, and
-    | XP is now a currency. Paying for attendance would put spendable value in
-    | reach of anybody who can run a browser.
-    |
-    | Fill this in only if the streak is ever redefined to count days with an
-    | on-chain action, which is a different and better thing to measure.
+    | Attendance pays here, and that is a deliberate choice rather than an
+    | oversight: coming back is the behaviour this whole system exists to
+    | encourage, and what the XP buys is access to parts of the project rather
+    | than anything a farmed balance could take from somebody else.
     |
     */
 
-    'streak_bonuses' => [],
+    'streak_bonuses' => [
+        3 => 25,
+        7 => 75,
+        14 => 200,
+        30 => 500,
+        60 => 1000,
+        100 => 2000,
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -191,11 +167,41 @@ return [
     */
 
     'quests' => [
-        /*
-         * `daily_visit` and `daily_streak_keeper` used to sit here. Both paid
-         * for showing up, which is exactly what stopped being worth paying
-         * for. Every row on this board now costs a transaction.
-         */
+        [
+            'key' => 'daily_visit',
+            'period' => 'daily',
+            'title' => ['en' => 'Jack in', 'ru' => 'Подключиться', 'zh' => '接入'],
+            'description' => ['en' => 'Open Cyberia today.', 'ru' => 'Зайти в Cyberia сегодня.', 'zh' => '今天打开 Cyberia。'],
+            'actions' => ['visit'],
+            'target' => 1,
+            'xp' => 10,
+        ],
+        [
+            'key' => 'daily_streak_keeper',
+            'period' => 'daily',
+            'title' => ['en' => 'Hold the line', 'ru' => 'Удержать линию', 'zh' => '守住连续'],
+            'description' => [
+                'en' => 'Come back two days running.',
+                'ru' => 'Зайти два дня подряд.',
+                'zh' => '连续两天回来。',
+            ],
+            'actions' => ['streak_day'],
+            'target' => 1,
+            'xp' => 15,
+        ],
+        [
+            'key' => 'daily_wall',
+            'period' => 'daily',
+            'title' => ['en' => 'Say something', 'ru' => 'Сказать что-нибудь', 'zh' => '说点什么'],
+            'description' => [
+                'en' => 'Post on the wall or react to somebody.',
+                'ru' => 'Написать на стену или отреагировать на кого-то.',
+                'zh' => '在墙上发帖或给别人一个反应。',
+            ],
+            'actions' => ['post', 'reaction', 'comment'],
+            'target' => 1,
+            'xp' => 20,
+        ],
         [
             'key' => 'daily_onchain',
             'period' => 'daily',
@@ -241,10 +247,7 @@ return [
             'period' => 'weekly',
             'title' => ['en' => 'Have a say', 'ru' => 'Влиять на решения', 'zh' => '说得上话'],
             'description' => ['en' => 'Take 3 governance actions.', 'ru' => 'Совершить 3 действия в управлении.', 'zh' => '完成 3 次治理操作。'],
-            // `comment` is gone: it is free to produce and the quest bonus
-            // is spendable, so a governance quest a comment could finish would
-            // be a way to mint currency by typing.
-            'actions' => ['vote', 'proposal'],
+            'actions' => ['vote', 'comment', 'proposal'],
             'target' => 3,
             'xp' => 100,
         ],

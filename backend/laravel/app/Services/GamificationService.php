@@ -14,7 +14,6 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 /**
  * Off-chain progression: XP, levels, daily streaks and repeating quests.
@@ -78,6 +77,25 @@ class GamificationService
 
         $granted += $this->touch($user, $at);
 
+        /*
+         * "Open Cyberia today" is satisfied by *any* action and must not depend
+         * on this being the first one. Nothing ever calls this with `visit` —
+         * the site reports `page_view` — and advancing it from touch() looked
+         * right and was wrong, because touch() returns early once the day is
+         * already marked. Here it is idempotent instead of positional: a
+         * completed quest short-circuits, so it costs a lookup and heals a day
+         * that started without it.
+         */
+        if ($action !== 'visit') {
+            $granted += $this->advanceQuests($user, 'visit', $at, null);
+        }
+
+        // A streak is a fact about the account rather than a thing anybody
+        // does, so nothing would ever report it as an action.
+        if ($action !== 'streak_day' && $this->statsFor($user)->current_streak >= 2) {
+            $granted += $this->advanceQuests($user, 'streak_day', $at, null);
+        }
+
         $granted += $this->advanceQuests($user, $action, $at, $page);
 
         return $granted;
@@ -109,24 +127,15 @@ class GamificationService
         $stats->last_active_on = $at;
         $stats->save();
 
-        /*
-         * The streak is updated and nothing is paid for it.
-         *
-         * XP is a currency now, and a streak is earned by opening the app —
-         * paying for attendance would put spendable value in reach of anybody
-         * who can run a browser. The streak stays because it is worth showing;
-         * `streak_bonuses` is empty rather than deleted, so redefining it to
-         * count on-chain days later is a config edit.
-         */
-        $granted = 0;
+        $granted = $this->award($user, 'visit', 'd:'.$today, (int) config('gamification.xp.visit', 0));
 
-        foreach ((array) config('gamification.streak_bonuses', []) as $length => $bonus) {
-            if ((int) $length === $stats->current_streak && (int) $bonus > 0) {
-                // Keyed by the run it belongs to, so a rebuilt streak can earn
-                // the same milestone again — that is the point of restarting.
-                $reference = $stats->streak_started_on->toDateString().':'.$stats->current_streak;
-                $granted += $this->award($user, 'streak', $reference, (int) $bonus);
-            }
+        $bonus = (int) (config('gamification.streak_bonuses')[$stats->current_streak] ?? 0);
+
+        if ($bonus > 0) {
+            // Keyed by the run it belongs to, so a rebuilt streak can earn the
+            // same milestone again — that is the point of restarting one.
+            $reference = $stats->streak_started_on->toDateString().':'.$stats->current_streak;
+            $granted += $this->award($user, 'streak', $reference, $bonus);
         }
 
         return $granted;
@@ -181,11 +190,11 @@ class GamificationService
     /**
      * Where somebody stands and what they can spend.
      *
-     * One number, because every source that pays XP is now credited from
-     * ground truth. There used to be two — everything, and the subset the
-     * chain would vouch for — and carrying both meant explaining on every
-     * screen why the big number bought nothing. Removing the sources that
-     * could not be trusted removed the need for the distinction as well.
+     * One number, deliberately. There was briefly a second — the subset the
+     * chain would vouch for — because XP was about to discount a real fee and
+     * a browser can move `visit`. What XP buys is access to parts of this
+     * project instead, so a farmed balance takes nothing from anybody and the
+     * distinction stopped earning the cost of explaining it on every screen.
      *
      * @return array{xp: int, level: int, title: string, spendable: int, perks: array<string, int>}
      */
@@ -225,11 +234,10 @@ class GamificationService
     }
 
     /**
-     * The effects of everything this user has bought.
+     * What this user has unlocked, as effect flags.
      *
-     * A later rung *replaces* an earlier one rather than stacking, so owning
-     * both halves of a ladder is worth the better half and not their sum — the
-     * highest value for each effect wins.
+     * The highest value for each effect wins, so a ladder that ever grows one
+     * is worth its best rung rather than the sum of them.
      *
      * @return array<string, int>
      */
@@ -254,7 +262,7 @@ class GamificationService
     /** @return array<int, array<string, mixed>> */
     public function catalogue(): array
     {
-        return (array) config('gamification.enchantments', []);
+        return (array) config('gamification.unlocks', []);
     }
 
     /**
@@ -349,31 +357,6 @@ class GamificationService
 
             return ['ok' => true, 'reason' => 'ok', 'enchantment' => $enchantment];
         });
-    }
-
-    /**
-     * The perks of whoever holds this EVM address, for the endpoints that have
-     * an address and no session — which is most of the wallet.
-     *
-     * An address nobody has claimed has no standing, which is the right answer
-     * rather than an error: the fee it is asked to pay is simply the full one.
-     *
-     * @return array<string, int>
-     */
-    public function perksForAddress(?string $address): array
-    {
-        $address = Str::lower(trim((string) $address));
-
-        if ($address === '') {
-            return [];
-        }
-
-        $user = User::query()
-            ->whereNull('merged_into_id')
-            ->whereRaw('lower(wallet_address) = ?', [$address])
-            ->first();
-
-        return $user === null ? [] : $this->perksFor($user);
     }
 
     public function levelFor(int $xp): int
