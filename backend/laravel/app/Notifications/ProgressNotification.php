@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\User;
+use App\Support\Localised;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
@@ -14,15 +15,43 @@ use NotificationChannels\WebPush\WebPushMessage;
  * and only ever fire it on real progress.
  *
  * Sent synchronously (not ShouldQueue): production runs no queue worker.
+ *
+ * Title and body are locale maps, not strings. A notification is the one
+ * surface that speaks to somebody who is not looking at a browser, so it
+ * cannot borrow the page's language the way every other surface does — it
+ * writes in whatever the browser said when it registered for push, and falls
+ * back to English exactly like `t()` does.
  */
 class ProgressNotification extends Notification
 {
+    /**
+     * @param  array<string, string>  $title
+     * @param  array<string, string>  $body
+     * @param  array<string, string|int>  $replace
+     */
     public function __construct(
         public string $type,
-        public string $title,
-        public string $body,
+        public array $title,
+        public array $body,
         public string $url,
+        public array $replace = [],
     ) {}
+
+    /** Named for the notifiable, because Notification::locale() is taken. */
+    private function localeOf(object $notifiable): ?string
+    {
+        return $notifiable instanceof User ? $notifiable->notification_locale : null;
+    }
+
+    public function titleFor(object $notifiable): string
+    {
+        return Localised::pick($this->title, $this->localeOf($notifiable), $this->replace);
+    }
+
+    public function bodyFor(object $notifiable): string
+    {
+        return Localised::pick($this->body, $this->localeOf($notifiable), $this->replace);
+    }
 
     /**
      * @return array<int, string>
@@ -47,8 +76,8 @@ class ProgressNotification extends Notification
     {
         return [
             'type' => $this->type,
-            'title' => $this->title,
-            'body' => $this->body,
+            'title' => $this->titleFor($notifiable),
+            'body' => $this->bodyFor($notifiable),
             'url' => $this->url,
         ];
     }
@@ -56,8 +85,8 @@ class ProgressNotification extends Notification
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
         return (new WebPushMessage)
-            ->title($this->title)
-            ->body($this->body)
+            ->title($this->titleFor($notifiable))
+            ->body($this->bodyFor($notifiable))
             ->icon('/apple-touch-icon.png')
             ->data(['url' => $this->url]);
     }

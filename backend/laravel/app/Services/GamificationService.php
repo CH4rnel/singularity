@@ -8,6 +8,7 @@ use App\Models\UserQuest;
 use App\Models\UserStat;
 use App\Models\XpEntry;
 use App\Notifications\ProgressNotification;
+use App\Support\Localised;
 use App\Support\ProfileHandle;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
@@ -456,9 +457,18 @@ class GamificationService
     {
         $user->notify(new ProgressNotification(
             type: 'progress.level_up',
-            title: "Level {$level} — ".$this->titleFor($level),
-            body: 'Your Cyberia rank went up. Keep the streak alive.',
+            title: [
+                'en' => 'Level {level} — {rank}',
+                'ru' => 'Уровень {level} — {rank}',
+                'zh' => '等级 {level} — {rank}',
+            ],
+            body: [
+                'en' => 'Your Cyberia rank went up. Keep the streak alive.',
+                'ru' => 'Ранг в Cyberia вырос. Не теряйте серию.',
+                'zh' => '你的 Cyberia 等级提升了。保持连续记录。',
+            ],
             url: '/profile',
+            replace: ['level' => $level, 'rank' => $this->titleFor($level)],
         ));
     }
 
@@ -469,9 +479,23 @@ class GamificationService
     {
         $user->notify(new ProgressNotification(
             type: 'progress.quest_completed',
-            title: 'Quest complete: '.($quest['title']['en'] ?? $quest['key']),
-            body: '+'.$quest['xp'].' XP',
+            title: [
+                'en' => 'Quest complete: {quest}',
+                'ru' => 'Задание выполнено: {quest}',
+                'zh' => '任务完成：{quest}',
+            ],
+            body: ['en' => '+{xp} XP'],
             url: '/profile',
+            replace: [
+                // Quest titles already ship in all three languages in
+                // config/gamification.php, so the right one is picked here
+                // rather than being folded into the sentence above.
+                'quest' => Localised::pick(
+                    is_array($quest['title'] ?? null) ? $quest['title'] : ['en' => $quest['key']],
+                    $user->notification_locale,
+                ),
+                'xp' => $quest['xp'],
+            ],
         ));
     }
 

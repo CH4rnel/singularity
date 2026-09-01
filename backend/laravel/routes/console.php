@@ -84,3 +84,12 @@ Schedule::command('analytics:digest --send')
 // Bounded per run and rotating, because a badge is not urgent; --alert says so
 // when the mint itself is what failed, which was previously silent.
 Schedule::command('achievements:sync --alert')->hourly()->withoutOverlapping();
+// The one notification that brings anybody back. Everything else the
+// gamification system sends is a receipt for something already done, which is
+// why nobody remembers the quests exist. Once a day, in the evening, in the
+// timezone the people here live in — that is also the entire quiet-hours
+// policy, since a setting nobody opens protects nobody.
+Schedule::command('gamification:remind')
+    ->dailyAt('19:00')
+    ->timezone((string) config('crm.console.timezone', 'Europe/Moscow'))
+    ->withoutOverlapping();

@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
+import { useLocale } from '@/composables/useLocale';
 import { apiFetch } from '@/lib/http';
 import {
     destroy as pushDestroy,
@@ -22,6 +23,8 @@ const error = ref<string | null>(null);
 
 export function useWebPush() {
     const page = usePage();
+
+    const { locale } = useLocale();
 
     const vapidPublicKey = computed(
         () => (page.props.vapidPublicKey as string | undefined) ?? null,
@@ -72,7 +75,12 @@ export function useWebPush() {
 
             await apiFetch(pushStore().url, {
                 method: 'POST',
-                body: JSON.stringify(subscription.toJSON()),
+                // The server cannot ask a browser what language to write in
+                // when it sends the notification days later, so tell it now.
+                body: JSON.stringify({
+                    ...subscription.toJSON(),
+                    locale: locale.value,
+                }),
             });
 
             isSubscribed.value = true;
