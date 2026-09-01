@@ -120,7 +120,17 @@ return [
     // skipped, which is a supported deploy, not a broken one.
     'telegram_ops' => [
         'bot_token' => env('TELEGRAM_OPS_BOT_TOKEN'),
+        // A list, because there is more than one operator. Commas, spaces or
+        // newlines all separate; every entry is a numeric chat id, since
+        // Telegram resolves @name for channels and never for a private chat.
+        // A person appears here only after they have started the bot —
+        // `php artisan telegram:whoami` reads the id off getUpdates.
         'chat_id' => env('TELEGRAM_OPS_CHAT_ID'),
+        // Who gets the daily product report. Unset means "the same people who
+        // get the alerts": reports and incidents are different kinds of
+        // message and can want different rooms, but defaulting them apart
+        // would mean a deploy that alerts nobody about anything.
+        'analytics_chat_id' => env('TELEGRAM_ANALYTICS_CHAT_ID'),
     ],
 
     'bridge' => [

@@ -69,3 +69,12 @@ Schedule::command('services:check --alert')->everyFiveMinutes()->withoutOverlapp
 // Thirty services swept every five minutes is ten thousand rows a day: a
 // rolling uptime window, never an archive.
 Schedule::command('services:prune')->dailyAt('04:10')->withoutOverlapping();
+// The product report, delivered rather than published. /crm/numbers has
+// answered these questions for weeks and nobody opens it — a dashboard is a
+// place you must decide to go to. Sent at the same hour the console wakes its
+// snoozed rows, in the timezone the operators live in, so the day starts with
+// the numbers instead of with a decision to go and look at them.
+Schedule::command('analytics:digest --send')
+    ->dailyAt(sprintf('%02d:00', (int) config('crm.console.morning_hour', 9)))
+    ->timezone((string) config('crm.console.timezone', 'Europe/Moscow'))
+    ->withoutOverlapping();
