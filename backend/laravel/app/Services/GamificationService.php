@@ -78,33 +78,6 @@ class GamificationService
 
         $granted += $this->touch($user, $at);
 
-        /*
-         * "Open Cyberia today" is satisfied by *any* action, and must not
-         * depend on this being the first one.
-         *
-         * Nothing ever calls this with `visit` — the site reports `page_view`
-         * — so the quest was never advanced at all, and 86 visit awards had
-         * produced zero daily_visit rows. Advancing it from touch() looked
-         * right (that is the method that knows the day turned over) and was
-         * still wrong: touch() returns early once the day is already marked,
-         * so anybody whose first action of the day happened before this code
-         * shipped lost the quest until midnight, with no way to earn it back.
-         *
-         * Here it is idempotent instead of positional: a completed quest
-         * short-circuits, so running it on every action costs a lookup and
-         * heals a day that started without it.
-         */
-        if ($action !== 'visit') {
-            $granted += $this->advanceQuests($user, 'visit', $at, null);
-        }
-
-        // A streak is a fact about the account rather than a thing anybody
-        // does, so nothing would ever report it as an action. Emitted here so
-        // a quest can be written about it at all.
-        if ($action !== 'streak_day' && $this->statsFor($user)->current_streak >= 2) {
-            $granted += $this->advanceQuests($user, 'streak_day', $at, null);
-        }
-
         $granted += $this->advanceQuests($user, $action, $at, $page);
 
         return $granted;
@@ -136,15 +109,24 @@ class GamificationService
         $stats->last_active_on = $at;
         $stats->save();
 
-        $granted = $this->award($user, 'visit', 'd:'.$today, (int) config('gamification.xp.visit', 0));
+        /*
+         * The streak is updated and nothing is paid for it.
+         *
+         * XP is a currency now, and a streak is earned by opening the app —
+         * paying for attendance would put spendable value in reach of anybody
+         * who can run a browser. The streak stays because it is worth showing;
+         * `streak_bonuses` is empty rather than deleted, so redefining it to
+         * count on-chain days later is a config edit.
+         */
+        $granted = 0;
 
-        $bonus = (int) (config('gamification.streak_bonuses')[$stats->current_streak] ?? 0);
-
-        if ($bonus > 0) {
-            // Keyed by the run it belongs to, so a rebuilt streak can earn the
-            // same milestone again — that is the point of restarting one.
-            $reference = $stats->streak_started_on->toDateString().':'.$stats->current_streak;
-            $granted += $this->award($user, 'streak', $reference, $bonus);
+        foreach ((array) config('gamification.streak_bonuses', []) as $length => $bonus) {
+            if ((int) $length === $stats->current_streak && (int) $bonus > 0) {
+                // Keyed by the run it belongs to, so a rebuilt streak can earn
+                // the same milestone again — that is the point of restarting.
+                $reference = $stats->streak_started_on->toDateString().':'.$stats->current_streak;
+                $granted += $this->award($user, 'streak', $reference, (int) $bonus);
+            }
         }
 
         return $granted;
@@ -197,51 +179,27 @@ class GamificationService
      * Highest level whose cumulative XP requirement is met.
      */
     /**
-     * The XP a level may be built on, and what that level is worth.
+     * Where somebody stands and what they can spend.
      *
-     * Two numbers, kept apart on purpose. `xp` counts everything and is the
-     * leaderboard: a record of taking part, which nobody can spend. **Proven**
-     * XP counts only what the chain, the bridge table or the DAO tables
-     * vouched for, and it is the only number a perk is allowed to read.
+     * One number, because every source that pays XP is now credited from
+     * ground truth. There used to be two — everything, and the subset the
+     * chain would vouch for — and carrying both meant explaining on every
+     * screen why the big number bought nothing. Removing the sources that
+     * could not be trusted removed the need for the distinction as well.
      *
-     * The distinction exists because a perk is money. `visit` XP is credited
-     * on the browser's word — harmless while a level was a scoreboard, and an
-     * open faucet the moment a level discounts a fee, since a script that
-     * opens pages would earn one. Nothing here can be moved without a
-     * transaction somebody paid for.
-     *
-     * @return array{xp: int, level: int, title: string, proven_xp: int, proven_level: int, perks: array<string, int>}
+     * @return array{xp: int, level: int, title: string, spendable: int, perks: array<string, int>}
      */
     public function standing(User $user): array
     {
         $stats = $this->statsFor($user);
-        $proven = $this->provenXp($user);
-        $provenLevel = $this->levelFor($proven);
 
         return [
             'xp' => (int) $stats->xp,
             'level' => (int) $stats->level,
             'title' => $this->titleFor((int) $stats->level),
-            'proven_xp' => $proven,
-            'proven_level' => $provenLevel,
             'spendable' => $this->spendable($user),
             'perks' => $this->perksFor($user),
         ];
-    }
-
-    /** XP from sources the client cannot move. */
-    public function provenXp(User $user): int
-    {
-        $sources = (array) config('gamification.proven_sources', []);
-
-        if ($sources === []) {
-            return 0;
-        }
-
-        return (int) XpEntry::query()
-            ->where('user_id', $user->id)
-            ->whereIn('source', $sources)
-            ->sum('amount');
     }
 
     /**
@@ -254,7 +212,7 @@ class GamificationService
     {
         $spent = (int) XpEnchantment::query()->where('user_id', $user->id)->sum('cost');
 
-        return max(0, $this->provenXp($user) - $spent);
+        return max(0, (int) $this->statsFor($user)->xp - $spent);
     }
 
     /** @return array<int, string> */
@@ -313,7 +271,7 @@ class GamificationService
     {
         $owned = $this->owned($user);
         $balance = $this->spendable($user);
-        $level = $this->levelFor($this->provenXp($user));
+        $level = (int) $this->statsFor($user)->level;
 
         return array_map(function (array $enchantment) use ($owned, $balance, $level): array {
             $has = in_array($enchantment['key'], $owned, true);
@@ -374,7 +332,7 @@ class GamificationService
                 return ['ok' => false, 'reason' => 'requires', 'enchantment' => null];
             }
 
-            if ($this->levelFor($this->provenXp($user)) < (int) $enchantment['level']) {
+            if ((int) $this->statsFor($user)->level < (int) $enchantment['level']) {
                 return ['ok' => false, 'reason' => 'level', 'enchantment' => null];
             }
 
@@ -462,8 +420,6 @@ class GamificationService
         $max = (int) config('gamification.max_level', 50);
         $floor = $this->xpForLevel($level);
         $ceiling = $level >= $max ? null : $this->xpForLevel($level + 1);
-        $proven = $this->provenXp($user);
-        $provenLevel = $this->levelFor($proven);
 
         return [
             'xp' => $stats->xp,
@@ -480,15 +436,10 @@ class GamificationService
             'active_today' => $stats->last_active_on?->toDateString() === Carbon::now('UTC')->toDateString(),
             'rank' => $this->rankOf($stats),
             /*
-             * What the level is actually worth, and the number it is computed
-             * from. Both are on the panel because they are different claims:
-             * `xp` is a record of taking part, `proven_xp` is what the chain
-             * will vouch for, and only the second one buys anything. A person
-             * whose level is mostly visits should be able to see why the perk
-             * has not arrived.
+             * What is left to spend, and what has been bought with it. One
+             * number: every source that pays XP is credited from ground
+             * truth, so there is no longer a bigger figure that buys nothing.
              */
-            'proven_xp' => $proven,
-            'proven_level' => $provenLevel,
             'spendable' => $this->spendable($user),
             'perks' => $this->perksFor($user),
             'enchantments' => $this->enchantments($user),

@@ -53,7 +53,18 @@ return [
     */
 
     'xp' => [
-        'visit' => 10,
+        /*
+         * Every source here is credited from ground truth — the indexer, the
+         * bridge table, the DAO tables — and none of them can be moved by a
+         * browser saying so.
+         *
+         * `visit` and `comment` used to be on this list and are gone. They
+         * were harmless while XP was a scoreboard and became untenable the
+         * moment XP was spendable: opening a page is not work, and paying for
+         * it meant a script could buy things. Removing them also removed the
+         * need to carry two numbers and explain the difference, which was the
+         * real cost.
+         */
         'swap' => 25,
         'liquidity' => 60,
         'lending' => 40,
@@ -61,43 +72,9 @@ return [
         'bridge' => 90,
         'proposal' => 70,
         'vote' => 30,
-        'comment' => 15,
         'staking' => 50,
         'onchain_profile' => 100,
         'launchpad' => 150,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Standing: the XP a level may be built on
-    |--------------------------------------------------------------------------
-    |
-    | A level is about to be worth money, so it stops being a count of
-    | everything and becomes a count of what the chain can vouch for.
-    |
-    | The browser can move `visit` and the exploration quest, which was
-    | harmless while XP was a scoreboard and is not harmless the moment a level
-    | discounts a fee: a script that opens pages would earn a discount. So
-    | perks key off **proven** XP only — the sources credited from the
-    | indexer, the bridge table and the DAO tables, never from a client's word.
-    |
-    | `xp` and the leaderboard are untouched: they still count everything,
-    | because they are a record of participation rather than a claim on
-    | anything.
-    |
-    */
-
-    'proven_sources' => [
-        'swap',
-        'liquidity',
-        'lending',
-        'convert',
-        'bridge',
-        'staking',
-        'launchpad',
-        'proposal',
-        'vote',
-        'onchain_profile',
     ],
 
     /*
@@ -188,18 +165,19 @@ return [
     | Streak milestones
     |--------------------------------------------------------------------------
     |
-    | Bonus XP the first time a consecutive-day streak reaches each length.
+    | Empty, and deliberately still here.
+    |
+    | A streak is worth showing — it is the one number on the profile about
+    | persistence rather than volume — but it is earned by opening the app, and
+    | XP is now a currency. Paying for attendance would put spendable value in
+    | reach of anybody who can run a browser.
+    |
+    | Fill this in only if the streak is ever redefined to count days with an
+    | on-chain action, which is a different and better thing to measure.
     |
     */
 
-    'streak_bonuses' => [
-        3 => 25,
-        7 => 75,
-        14 => 200,
-        30 => 500,
-        60 => 1000,
-        100 => 2000,
-    ],
+    'streak_bonuses' => [],
 
     /*
     |--------------------------------------------------------------------------
@@ -213,21 +191,10 @@ return [
     */
 
     'quests' => [
-        [
-            'key' => 'daily_visit',
-            'period' => 'daily',
-            'title' => ['en' => 'Jack in', 'ru' => 'Подключиться', 'zh' => '接入'],
-            'description' => ['en' => 'Open Cyberia today.', 'ru' => 'Зайти в Cyberia сегодня.', 'zh' => '今天打开 Cyberia。'],
-            'actions' => ['visit'],
-            'target' => 1,
-            'xp' => 10,
-        ],
         /*
-         * `daily_explore` used to live here: visit three sections. It was the
-         * one quest a browser could complete by wandering, it paid XP for
-         * nothing anybody valued, and it made the board look busy while
-         * asking for nothing. What replaced it asks for one real act a day,
-         * from a list wide enough that most people already do one of them.
+         * `daily_visit` and `daily_streak_keeper` used to sit here. Both paid
+         * for showing up, which is exactly what stopped being worth paying
+         * for. Every row on this board now costs a transaction.
          */
         [
             'key' => 'daily_onchain',
@@ -241,19 +208,6 @@ return [
             'actions' => ['swap', 'bridge', 'staking', 'lending', 'liquidity', 'convert'],
             'target' => 1,
             'xp' => 30,
-        ],
-        [
-            'key' => 'daily_streak_keeper',
-            'period' => 'daily',
-            'title' => ['en' => 'Hold the line', 'ru' => 'Удержать линию', 'zh' => '守住连续'],
-            'description' => [
-                'en' => 'Come back two days running.',
-                'ru' => 'Зайти два дня подряд.',
-                'zh' => '连续两天回来。',
-            ],
-            'actions' => ['streak_day'],
-            'target' => 1,
-            'xp' => 15,
         ],
         [
             'key' => 'daily_trade',
@@ -287,9 +241,38 @@ return [
             'period' => 'weekly',
             'title' => ['en' => 'Have a say', 'ru' => 'Влиять на решения', 'zh' => '说得上话'],
             'description' => ['en' => 'Take 3 governance actions.', 'ru' => 'Совершить 3 действия в управлении.', 'zh' => '完成 3 次治理操作。'],
-            'actions' => ['vote', 'comment', 'proposal'],
+            // `comment` is gone: it is free to produce and the quest bonus
+            // is spendable, so a governance quest a comment could finish would
+            // be a way to mint currency by typing.
+            'actions' => ['vote', 'proposal'],
             'target' => 3,
             'xp' => 100,
+        ],
+        [
+            'key' => 'daily_lend',
+            'period' => 'daily',
+            'title' => ['en' => 'Lend a hand', 'ru' => 'Дать взаймы', 'zh' => '出借一手'],
+            'description' => [
+                'en' => 'Supply, borrow or repay in the lending market.',
+                'ru' => 'Внести, занять или вернуть в лендинге.',
+                'zh' => '在借贷市场存入、借出或偿还。',
+            ],
+            'actions' => ['lending'],
+            'target' => 1,
+            'xp' => 50,
+        ],
+        [
+            'key' => 'daily_stake',
+            'period' => 'daily',
+            'title' => ['en' => 'Lock it up', 'ru' => 'Запереть', 'zh' => '锁仓'],
+            'description' => [
+                'en' => 'Stake into a pool.',
+                'ru' => 'Застейкать в пул.',
+                'zh' => '质押到一个池子。',
+            ],
+            'actions' => ['staking'],
+            'target' => 1,
+            'xp' => 50,
         ],
         [
             'key' => 'weekly_lender',

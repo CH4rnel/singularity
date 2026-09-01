@@ -22,7 +22,7 @@ export const progressMessages: Messages = {
         enchantTitle: 'Spend experience',
         enchantBalance: 'To spend',
         enchantIntro:
-            'Only XP the chain can vouch for is spendable — swaps, bridges, staking, lending, liquidity, governance. What you buy is permanent; your level and rank never fall.',
+            'XP is paid only for what the chain can vouch for — swaps, bridges, staking, lending, liquidity, governance. What you buy is permanent; your level and rank never fall.',
         enchantOwned: 'Yours.',
         enchantNeedsLevel: 'Needs level {level}.',
         enchantNeedsXp: '{xp} more to spend.',
@@ -75,7 +75,7 @@ export const progressMessages: Messages = {
         enchantTitle: 'Потратить опыт',
         enchantBalance: 'Доступно',
         enchantIntro:
-            'Тратится только опыт, который подтверждает цепь — обмены, мост, стейкинг, лендинг, ликвидность, управление. Купленное остаётся навсегда, а уровень и место в рейтинге не падают.',
+            'Опыт начисляется только за то, что подтверждает цепь — обмены, мост, стейкинг, лендинг, ликвидность, управление. Купленное остаётся навсегда, а уровень и место в рейтинге не падают.',
         enchantOwned: 'Куплено.',
         enchantNeedsLevel: 'Нужен уровень {level}.',
         enchantNeedsXp: 'Не хватает {xp}.',
@@ -128,7 +128,7 @@ export const progressMessages: Messages = {
         enchantTitle: '消耗经验',
         enchantBalance: '可用',
         enchantIntro:
-            '只有链上可验证的经验才能消耗：兑换、跨链、质押、借贷、流动性、治理。所购买的永久有效，等级与排名不会下降。',
+            '经验只为链上可验证的行为发放：兑换、跨链、质押、借贷、流动性、治理。所购买的永久有效，等级与排名不会下降。',
         enchantOwned: '已拥有。',
         enchantNeedsLevel: '需要等级 {level}。',
         enchantNeedsXp: '还差 {xp}。',

@@ -20,47 +20,52 @@ beforeEach(function () {
     config()->set('crosschain.fee.address', '0x'.str_repeat('f', 40));
 });
 
+/** Award through the service, so user_stats stays the one source of truth. */
 function withXp(User $user, string $source, int $amount): void
 {
-    DB::table('xp_entries')->insert([
-        'user_id' => $user->id,
-        'source' => $source,
-        'reference' => $source.':'.uniqid('', true),
-        'amount' => $amount,
-        'created_at' => now(),
-    ]);
+    app(GamificationService::class)->award($user, $source, $source.':'.uniqid('', true), $amount);
 }
 
-function trader(int $provenXp = 5000, ?string $address = null): User
+function trader(int $xp = 5000, ?string $address = null): User
 {
     $user = User::factory()->create([
         'wallet_address' => $address ?? '0x'.substr(md5(uniqid('', true)), 0, 40),
     ]);
 
-    withXp($user, 'swap', $provenXp);
+    withXp($user, 'swap', $xp);
 
     return $user;
 }
 
 /* ------------------------------------------------------------- standing -- */
 
-it('does not count browser-reported xp as something to spend', function () {
+it('pays nothing for opening a page', function () {
     $user = User::factory()->create();
 
-    // Enough to be level 10 on the leaderboard, all of it from opening pages.
-    withXp($user, 'visit', 5000);
+    // The one action a browser can produce on its own. It used to be worth 10
+    // XP, which was harmless while XP was a scoreboard and a mint once XP
+    // became spendable.
+    app(GamificationService::class)->recordAction($user, 'page_view', page: '/wallet');
 
+    expect(app(GamificationService::class)->spendable($user))->toBe(0);
+});
+
+it('pays nothing for coming back', function () {
+    $user = User::factory()->create();
     $g = app(GamificationService::class);
 
-    expect($g->provenXp($user))->toBe(0)
+    // Two days running: a streak forms and buys nothing.
+    $g->touch($user, now('UTC')->subDay());
+    $g->touch($user, now('UTC'));
+
+    expect($g->statsFor($user)->current_streak)->toBe(2)
         ->and($g->spendable($user))->toBe(0);
 });
 
-it('counts xp the chain vouched for', function () {
+it('counts what the chain vouched for', function () {
     $user = User::factory()->create();
     withXp($user, 'swap', 300);
     withXp($user, 'bridge', 200);
-    withXp($user, 'visit', 900);
 
     expect(app(GamificationService::class)->spendable($user))->toBe(500);
 });
@@ -73,8 +78,8 @@ it('spends the balance and keeps the leaderboard', function () {
 
     expect($g->enchant($user, 'route_i')['ok'])->toBeTrue()
         ->and($g->spendable($user))->toBe(4600)
-        // Lifetime XP is a record of taking part and is never spent.
-        ->and($g->provenXp($user))->toBe(5000);
+        // Lifetime XP is the leaderboard and never falls when it is spent.
+        ->and($g->statsFor($user)->xp)->toBe(5000);
 });
 
 it('refuses what the balance cannot cover', function () {

@@ -3,6 +3,7 @@
 use App\Models\AiApiKey;
 use App\Models\User;
 use App\Models\XpEnchantment;
+use App\Services\GamificationService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -12,17 +13,11 @@ use Illuminate\Support\Facades\DB;
  * do: being submitted twice, and being submitted for something the person
  * cannot have.
  */
-function buyer(int $provenXp = 5000): User
+function buyer(int $xp = 5000): User
 {
     $user = User::factory()->create(['wallet_address' => '0x'.str_repeat('a', 40)]);
 
-    DB::table('xp_entries')->insert([
-        'user_id' => $user->id,
-        'source' => 'swap',
-        'reference' => 'swap:'.uniqid('', true),
-        'amount' => $provenXp,
-        'created_at' => now(),
-    ]);
+    app(GamificationService::class)->award($user, 'swap', 'swap:'.uniqid('', true), $xp);
 
     return $user;
 }

@@ -19,7 +19,6 @@ import type { Enchantment } from '@/types/progress';
 const props = defineProps<{
     enchantments: Enchantment[];
     spendable: number;
-    provenLevel: number;
 }>();
 
 const { t, locale } = useLocale(progressMessages);

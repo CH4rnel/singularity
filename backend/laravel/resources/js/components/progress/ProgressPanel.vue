@@ -92,7 +92,6 @@ const streakHint = computed(() =>
             <EnchantTable
                 :enchantments="progress.enchantments"
                 :spendable="progress.spendable"
-                :proven-level="progress.proven_level"
             />
         </div>
 

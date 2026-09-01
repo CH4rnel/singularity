@@ -50,25 +50,26 @@ it('extends a streak on consecutive days and restarts it after a gap', function 
         ->and($stats->longest_streak)->toBe(3);
 });
 
-it('is idempotent within a single day', function () {
+it('marks a day active only once', function () {
     $user = User::factory()->create();
 
-    $granted = $this->gamification->touch($user, Carbon::parse('2026-07-01 10:00', 'UTC'));
-    $again = $this->gamification->touch($user, Carbon::parse('2026-07-01 22:00', 'UTC'));
+    $this->gamification->touch($user, Carbon::parse('2026-07-01 10:00', 'UTC'));
+    $this->gamification->touch($user, Carbon::parse('2026-07-01 22:00', 'UTC'));
 
-    expect($granted)->toBeGreaterThan(0)
-        ->and($again)->toBe(0)
-        ->and($this->gamification->statsFor($user)->fresh()->current_streak)->toBe(1);
+    expect($this->gamification->statsFor($user)->fresh()->current_streak)->toBe(1);
 });
 
-it('pays a streak milestone bonus once per run', function () {
+it('pays nothing at all for showing up', function () {
     $user = User::factory()->create();
 
     foreach (range(1, 3) as $day) {
         $this->gamification->touch($user, Carbon::parse('2026-07-0'.$day.' 10:00', 'UTC'));
     }
 
-    expect(XpEntry::where('user_id', $user->id)->where('source', 'streak')->count())->toBe(1);
+    // A streak forms and is worth showing; it is not worth XP, because XP is
+    // spendable and attendance is free to produce.
+    expect($this->gamification->statsFor($user)->fresh()->current_streak)->toBe(3)
+        ->and(XpEntry::where('user_id', $user->id)->count())->toBe(0);
 });
 
 it('levels up as xp accumulates', function () {
@@ -88,54 +89,19 @@ it('completes a daily quest and pays its bonus once', function () {
     $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_trade');
 
     expect($quest['completed'])->toBeTrue()
-        // Three, not one: a swap is also showing up (daily_visit) and also
-        // touching the chain (daily_onchain). The second swap re-runs all of
-        // them and pays none of them twice.
-        ->and(XpEntry::where('user_id', $user->id)->where('source', 'quest')->count())->toBe(3);
+        // Two, not one: a swap is also touching the chain (daily_onchain).
+        // The second swap re-runs both and pays neither twice.
+        ->and(XpEntry::where('user_id', $user->id)->where('source', 'quest')->count())->toBe(2);
 });
 
-it('completes the daily visit quest just by showing up', function () {
+it('pays nothing for a page view', function () {
     $user = User::factory()->create();
 
-    // Nothing calls recordAction with 'visit' — the site reports page_view.
+    // The site's only client-side entry point. It advances no quest and pays
+    // no XP: there is no longer anything a browser alone can earn.
     $this->gamification->recordAction($user, 'page_view', page: '/wallet');
 
-    $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit');
-
-    expect($quest['completed'])->toBeTrue();
-});
-
-it('still completes the visit quest when the day was already marked active', function () {
-    $user = User::factory()->create();
-
-    // touch() returns early once the day is stamped, so a quest advanced from
-    // there is lost for anybody whose first action of the day happened before
-    // it existed — with no way to earn it back until midnight.
-    $this->gamification->touch($user);
-
-    expect(
-        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit')['completed'],
-    )->toBeFalse();
-
-    $this->gamification->recordAction($user, 'page_view', page: '/wallet');
-
-    expect(
-        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit')['completed'],
-    )->toBeTrue();
-});
-
-it('pays the daily visit quest once a day', function () {
-    $user = User::factory()->create();
-
-    $this->gamification->recordAction($user, 'page_view', page: '/wallet');
-    $this->gamification->recordAction($user, 'page_view', page: '/swap');
-
-    expect(
-        XpEntry::where('user_id', $user->id)
-            ->where('source', 'quest')
-            ->where('reference', 'like', 'daily_visit:%')
-            ->count(),
-    )->toBe(1);
+    expect(XpEntry::where('user_id', $user->id)->count())->toBe(0);
 });
 
 it('closes the on-chain quest on any real action, not just a swap', function () {

@@ -59,13 +59,9 @@ export type Enchantment = {
 /** The signed-in user's own progress, as served to /profile. */
 export type Progress = PublicProgress & {
     /**
-     * XP the chain vouched for, and the level built on it. Perks read this
-     * rather than `xp`, because `visit` XP is credited on the browser's word
-     * and a level that discounts a fee cannot be earned by opening pages.
+     * Lifetime XP minus what has already been spent. `xp` itself is the
+     * leaderboard and never falls; only this does.
      */
-    proven_xp: number;
-    proven_level: number;
-    /** Proven XP minus what has already been spent. */
     spendable: number;
     perks: Perks;
     enchantments: Enchantment[];
