@@ -90,6 +90,20 @@ it('refuses an unlock that does not exist', function () {
     expect(app(GamificationService::class)->enchant(player(), 'sharpness_v')['reason'])->toBe('unknown');
 });
 
+it('stops charging for an unlock that was withdrawn', function () {
+    $user = player(5200);
+    DB::table('xp_enchantments')->insert([
+        'user_id' => $user->id,
+        'key' => 'route_i',   // sold for two hours, then withdrawn
+        'cost' => 400,
+        'created_at' => now(),
+    ]);
+
+    // A price change is one thing and the goods vanishing is another: holding
+    // the charge would mean paying for something we took away.
+    expect(app(GamificationService::class)->spendable($user))->toBe(5200);
+});
+
 it('keeps a price change from putting anybody in debt', function () {
     $user = player(6000);
     app(GamificationService::class)->enchant($user, 'nocarrier');

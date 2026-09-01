@@ -214,12 +214,27 @@ class GamificationService
     /**
      * What is left to spend.
      *
-     * Proven XP minus what has already been spent. Never negative: a price cut
-     * after somebody bought at the old price must not put them in debt.
+     * Lifetime XP minus what has been spent on unlocks that still exist.
+     *
+     * That last clause is a refund rule and it is load-bearing. Prices are
+     * recorded at purchase so a later change cannot rewrite what somebody
+     * paid — but an unlock being *withdrawn* is not a price change, it is the
+     * goods disappearing, and continuing to hold the charge would mean
+     * somebody paying for something we took away. One operator is already in
+     * that position: a cross-chain fee discount was on sale for two hours
+     * before the rule against XP touching money was settled.
+     *
+     * Never negative, so a price rise after the fact cannot put anybody in
+     * debt either.
      */
     public function spendable(User $user): int
     {
-        $spent = (int) XpEnchantment::query()->where('user_id', $user->id)->sum('cost');
+        $offered = array_column($this->catalogue(), 'key');
+
+        $spent = (int) XpEnchantment::query()
+            ->where('user_id', $user->id)
+            ->whereIn('key', $offered)
+            ->sum('cost');
 
         return max(0, (int) $this->statsFor($user)->xp - $spent);
     }
