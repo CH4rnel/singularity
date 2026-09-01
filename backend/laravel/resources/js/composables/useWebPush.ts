@@ -39,6 +39,34 @@ export function useWebPush() {
             !!vapidPublicKey.value,
     );
 
+    /**
+     * Whether a browser subscription was made with the key the server is
+     * signing with now.
+     *
+     * A subscription is bound to the VAPID public key it was created with, and
+     * the push service silently refuses anything signed by a different one. So
+     * a rotated key leaves a subscription that looks perfectly healthy on both
+     * sides and delivers nothing — which is exactly what happened the first
+     * time these keys were regenerated.
+     */
+    function matchesCurrentKey(subscription: PushSubscription): boolean {
+        const applied = subscription.options?.applicationServerKey;
+
+        if (!applied || !vapidPublicKey.value) {
+            // Nothing to compare against: assume it is fine rather than
+            // dropping a working subscription on a browser that hides this.
+            return true;
+        }
+
+        const current = urlBase64ToUint8Array(vapidPublicKey.value);
+        const existing = new Uint8Array(applied);
+
+        return (
+            existing.length === current.length &&
+            existing.every((byte, i) => byte === current[i])
+        );
+    }
+
     onMounted(() => {
         if (!isSupported.value) {
             return;
@@ -48,7 +76,8 @@ export function useWebPush() {
             .getRegistration('/sw.js')
             .then((registration) => registration?.pushManager.getSubscription())
             .then((subscription) => {
-                isSubscribed.value = !!subscription;
+                isSubscribed.value =
+                    !!subscription && matchesCurrentKey(subscription);
             })
             .catch(() => undefined);
     });
@@ -65,6 +94,17 @@ export function useWebPush() {
             const registration =
                 await navigator.serviceWorker.register('/sw.js');
             await navigator.serviceWorker.ready;
+
+            // A subscription made with a previous VAPID key cannot be replaced
+            // in place — pushManager.subscribe() rejects with InvalidStateError
+            // while a different applicationServerKey is held. Drop it first, so
+            // rotating the server's keys costs the user one click instead of
+            // silently ending their notifications forever.
+            const existing = await registration.pushManager.getSubscription();
+
+            if (existing && !matchesCurrentKey(existing)) {
+                await existing.unsubscribe();
+            }
 
             const subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,

@@ -23,6 +23,7 @@ use App\Http\Controllers\ConsoleChatController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
+use App\Http\Controllers\ConsolePushController;
 use App\Http\Controllers\ConsoleStrategyController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
@@ -480,6 +481,13 @@ Route::middleware(['auth'])->group(function () {
         // and renders only its hash and visible prefix.
         Route::get('api-keys', [ConsoleAiKeysController::class, 'index'])->name('ai-keys');
         Route::post('api-keys', [ConsoleAiKeysController::class, 'store'])->name('ai-keys.store');
+
+        // Saying something to somebody, as opposed to what the schedule says
+        // on its own. Carries the key health check with it, because "why did
+        // nothing arrive" was the first question push ever raised and the
+        // answer lived in a tinker session.
+        Route::get('push', [ConsolePushController::class, 'index'])->name('push');
+        Route::post('push', [ConsolePushController::class, 'store'])->name('push.send');
 
         // The editable content plan is framed like the frozen mockup, but its
         // working copy lives on the private disk and changes on an operator action.

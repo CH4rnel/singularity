@@ -124,6 +124,15 @@ const LENSES = [
         badge: null,
         phone: false,
     },
+    // Saying something to somebody. A desk lens: writing to everyone at once
+    // is not a thing to do one-handed on a phone.
+    {
+        key: 'push',
+        href: '/crm/push',
+        label: 'nav.push',
+        badge: null,
+        phone: false,
+    },
     {
         key: 'strategy',
         href: '/crm/strategy',
