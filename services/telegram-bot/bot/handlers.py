@@ -206,6 +206,37 @@ def mini_app_markup(is_private: bool) -> InlineKeyboardMarkup:
     )
 
 
+def swap_markup(is_private: bool, tokens) -> InlineKeyboardMarkup | None:
+    """One [Swap] button per chat token, opening the wallet on that token.
+
+    The bot has no private key and must never have one, so it cannot trade on
+    anybody's behalf. What it can do is hand the person to the wallet with the
+    token already chosen — the mini app *is* the wallet, with the vault in its
+    own storage, and it reads `?swap=<contract>` on the way in.
+
+    `web_app` is legal only in a private chat; Telegram rejects the whole
+    message otherwise, so a group gets ordinary links to the same page. Both
+    land in the same place and neither tells the bot anything about what
+    happens there.
+
+    Telegram allows at most 100 buttons and a row of them stops being readable
+    long before that, so this caps at a handful.
+    """
+    rows = []
+
+    for symbol, token_address in list(tokens)[:6]:
+        url = f"{WALLET_MINI_APP_URL}?swap={token_address}"
+        rows.append([
+            InlineKeyboardButton(
+                f"🔄 Swap {symbol}",
+                web_app=WebAppInfo(url=url) if is_private else None,
+                url=None if is_private else url,
+            )
+        ])
+
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
 def _is_private(update: Update) -> bool:
     chat = update.effective_chat
     return chat is not None and chat.type == "private"
@@ -1393,10 +1424,37 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     tail = f"\n{failed} token(s) could not be sent and are still waiting." if failed else ""
 
+    # The claim is only half of what somebody wanted; the other half is doing
+    # something with it. The button is offered here because this is the one
+    # moment we know for certain the balance is on-chain.
+    claimed_tokens = [
+        (symbol, addr)
+        for symbol, addr in _token_addresses(totals.keys())
+    ]
+
     await context.bot.send_message(
         chat_id=user.id,
         text=f"Claimed {minted} to {address}.{tail}",
+        # Always private: this message is a direct message by construction.
+        reply_markup=swap_markup(True, claimed_tokens),
     )
+
+
+def _token_addresses(symbols):
+    """(symbol, address) for chat tokens, in the order asked for."""
+    wanted = list(symbols)
+
+    if not wanted:
+        return []
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT symbol, token_address FROM chat_tokens WHERE token_address IS NOT NULL"),
+        ).fetchall()
+
+    by_symbol = {symbol: address for symbol, address in rows}
+
+    return [(s, by_symbol[s]) for s in wanted if s in by_symbol]
 
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1444,6 +1502,7 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     address = row[0] if row else None
     lines = []
+    swappable: list[tuple[str, str]] = []
 
     if address:
         lines.append(f"Wallet: {address}")
@@ -1487,6 +1546,11 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     bal = c.functions.balanceOf(checksum).call() / 10**18
                     lines.append(f"  {symbol}: {bal:g}")
+                    # A [Swap] button under a zero balance is a button that
+                    # opens a screen with nothing to trade, so it is offered
+                    # for what the person actually holds and nothing else.
+                    if bal > 0:
+                        swappable.append((symbol, token_address))
                 except Exception as e:
                     logger.exception(
                         f"balance: chat-token read failed for {symbol} ({token_address}): {e}"
@@ -1517,7 +1581,10 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "that has a reward token, then wait for its next payout tick."
             )
 
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text(
+        "\n".join(lines),
+        reply_markup=swap_markup(_is_private(update), swappable),
+    )
 
 
 async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

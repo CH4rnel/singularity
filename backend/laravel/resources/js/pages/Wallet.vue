@@ -386,6 +386,55 @@ const openSwapContract = (contract: string): void => {
 };
 
 /**
+ * A token somebody was sent here to buy.
+ *
+ * `/wallet?swap=0x…` is how the Telegram bot hands a chat-token holder to the
+ * swap screen: the bot has no key and must never have one, so it opens the
+ * mini app — which is this page, with the vault in its own browser storage —
+ * rather than trying to trade on anybody's behalf.
+ *
+ * Two things this has to survive. The vault is usually locked when the link
+ * lands, so the request waits rather than being dropped on the floor. And the
+ * parameter is removed from the address immediately: a reload should not
+ * re-open the composer, and a contract address has no business sitting in the
+ * history of a wallet.
+ */
+const requestedSwap = ref<string | null>(null);
+
+const takeSwapRequest = (): void => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const url = new URL(window.location.href);
+    const requested = url.searchParams.get('swap');
+
+    if (requested === null) {
+        return;
+    }
+
+    url.searchParams.delete('swap');
+    window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+
+    // Anything that is not an address is somebody's typo or somebody's probe;
+    // the swap screen reads the contract from the chain either way, but there
+    // is no reason to open a composer over a string that cannot be one.
+    if (/^0x[0-9a-fA-F]{40}$/.test(requested)) {
+        requestedSwap.value = requested;
+    }
+};
+
+const applySwapRequest = (): void => {
+    if (requestedSwap.value === null || !wallet.unlocked.value) {
+        return;
+    }
+
+    const contract = requestedSwap.value;
+    requestedSwap.value = null;
+    openSwapContract(contract);
+};
+
+/**
  * A CID the mint screen should open with.
  *
  * Publishing a file and minting a token that points at it are two acts, and
@@ -763,6 +812,8 @@ const trackConnection = (): void => {
 };
 
 onMounted(() => {
+    takeSwapRequest();
+    applySwapRequest();
     trackConnection();
     window.addEventListener('online', trackConnection);
     window.addEventListener('offline', trackConnection);
@@ -816,6 +867,7 @@ watch(
 
         if (unlocked) {
             resetHistoryNotifications();
+            applySwapRequest();
             void load();
         } else {
             resetHistoryNotifications();
