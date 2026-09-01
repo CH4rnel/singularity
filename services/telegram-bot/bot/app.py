@@ -35,7 +35,7 @@ from bot.nft import (
 )
 from bot.handlers import (
     start_command, help_command, set_wallet_command, unset_wallet_command,
-    wallet_command, cancel_command, balance_command, token_command,
+    wallet_command, cancel_command, balance_command, claim_command, token_command,
     github_command, website_command, app_command, open_command, create_token_command,
     set_rewards_interval_command, reward_now_command, whois_command,
     whale_command, x_command, ca_command, stats_command,
@@ -64,6 +64,7 @@ async def post_init(application: Application):
             BotCommand("unset_wallet", "Unlink your wallet (keep pending)"),
             BotCommand("wallet", "Show your linked wallet"),
             BotCommand("balance", "Show TG, chat tokens, and pending rewards"),
+            BotCommand("claim", "Collect your accrued chat-token rewards"),
             BotCommand("token", "Show this chat's reward token"),
             BotCommand("cancel", "Cancel an interactive prompt"),
             BotCommand("github", "Link GitHub for GITHUB airdrop"),
@@ -235,6 +236,7 @@ def run_dispatcher():
     application.add_handler(CommandHandler("wallet", wallet_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CommandHandler("balance", balance_command))
+    application.add_handler(CommandHandler("claim", claim_command))
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("github", github_command))
     application.add_handler(CommandHandler("website", website_command))

@@ -1,12 +1,19 @@
 """
-Distribute per-chat Telegram reward tokens.
+Accrue per-chat Telegram reward tokens.
 
 For each row in `chat_tokens`:
   * skip if `token_address` is NULL (deployment in-flight)
   * skip if `last_payout_at + rewards_interval` is still in the future
-  * otherwise bump `last_payout_at` (the tick is consumed even if minting
-    fails) and mint `reward_amount` to every registered wallet in
-    `tg_wallets` for members of that chat.
+  * otherwise consume the tick and credit `reward_amount` to every member of
+    that chat in `pending_rewards`.
+
+**This script writes nothing to the chain.** It used to mint on every tick to
+every member who had linked a wallet, which across eight tokens on an hourly
+interval was hundreds of unrequested transactions a day -- and the people
+receiving them were not interested enough to sell what arrived. Minting now
+happens once, when a person asks for it (`/claim` in the bot, or the flush on
+`/set_wallet`), so a reward is something you collect rather than something
+that silently happens to you, and the chain records a transfer somebody wanted.
 
 Intended to be run by cron / systemd timer as frequently as the shortest
 desired rewards interval (e.g. every minute).
@@ -19,7 +26,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
-from web3 import Web3
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -32,29 +38,12 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get(
     "DB_PATH", "/home/lain/random/singularity/backend/laravel/database/database.sqlite"
 )
-DEPLOYER_PK = os.environ.get("DEPLOYER_PK")
-if not DEPLOYER_PK:
-    raise ValueError("DEPLOYER_PK not set")
-
-RPC_URL = os.environ.get("RPC_URL", "https://rpc.cyberia.church")
-CHAIN_ID = int(os.environ.get("CHAIN_ID", "49406"))
-
-CHAT_TOKEN_ABI = [
-    {
-        "inputs": [
-            {"name": "to", "type": "address"},
-            {"name": "amount", "type": "uint256"},
-        ],
-        "name": "mint",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-]
-
+# No key, no RPC, no ABI. This job runs from cron every minute and now only
+# adds rows to a table, so it has no business holding a private key that can
+# mint tokens -- the minting half moved to /claim, which is the only place it
+# is wanted. Removing DEPLOYER_PK from here shrinks the number of processes on
+# this host that can sign anything.
 engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
-w3 = Web3(Web3.HTTPProvider(RPC_URL))
-account = w3.eth.account.from_key(DEPLOYER_PK)
 
 
 def _parse_ts(value):
@@ -121,27 +110,26 @@ def distribute():
                 {"t": now.strftime("%Y-%m-%d %H:%M:%S"), "c": chat_id},
             )
 
-        # Two cohorts:
-        #   wallets  -- chat members with a linked wallet (mint on-chain now)
-        #   pending  -- chat members without a wallet (credit pending_rewards
-        #               so they can claim everything as soon as they /set_wallet)
-        # `chat_members` is maintained by the bot, `tg_wallets` is global.
+        # One cohort: everybody who has been seen in this chat. Rewards accrue
+        # off-chain and are minted only when somebody asks for them (/claim).
+        #
+        # This used to be two cohorts, and members with a linked wallet were
+        # minted to on every tick. Eight tokens times an hourly interval times
+        # every wallet-holding member is hundreds of transactions a day that
+        # nobody requested, in a chain everybody can read -- and the people
+        # receiving them were not interested enough to sell what they got. The
+        # off-chain half of that design was already the right one; it was just
+        # reserved for the people who were not yet users.
+        #
+        # Accruing for everyone also makes the reward something you act to
+        # collect rather than something that silently happens to you, which is
+        # the entire point of a claim.
         with engine.connect() as conn:
-            wallets = conn.execute(
-                text("""
-                    SELECT cm.user_id, w.address
-                    FROM chat_members cm
-                    JOIN tg_wallets w ON w.user_id = cm.user_id
-                    WHERE cm.chat_id = :c
-                """),
-                {"c": chat_id},
-            ).fetchall()
-            pending_members = conn.execute(
+            members = conn.execute(
                 text("""
                     SELECT cm.user_id
                     FROM chat_members cm
-                    LEFT JOIN tg_wallets w ON w.user_id = cm.user_id
-                    WHERE cm.chat_id = :c AND w.user_id IS NULL
+                    WHERE cm.chat_id = :c
                 """),
                 {"c": chat_id},
             ).fetchall()
@@ -155,9 +143,9 @@ def distribute():
         # accumulated in Python: SQLite integers are signed 64-bit, so adding via
         # CAST(amount AS INTEGER) overflows past ~9.2e18 (a handful of tokens),
         # silently promotes the sum to a lossy REAL, and caps the running total.
-        if pending_members:
+        if members:
             with engine.begin() as conn:
-                for (uid,) in pending_members:
+                for (uid,) in members:
                     row = conn.execute(
                         text("SELECT amount FROM pending_rewards WHERE chat_id = :c AND user_id = :u"),
                         {"c": chat_id, "u": uid},
@@ -174,85 +162,16 @@ def distribute():
                         {"c": chat_id, "u": uid, "amt": new_amount},
                     )
             logger.info(
-                "chat %s (%s): credited pending %s to %d wallet-less members",
-                chat_id, symbol, reward_amount, len(pending_members),
+                "chat %s (%s): credited %s to %d members (claimable)",
+                chat_id, symbol, reward_amount, len(members),
             )
 
-        if not wallets:
-            continue
-
         if not started:
-            logger.info("Starting chat-token distribution")
+            logger.info("Starting chat-token accrual")
             started = True
 
-        logger.info(
-            "chat %s (%s): minting to %d wallets (%s each)",
-            chat_id, symbol, len(wallets), reward_amount,
-        )
-
-        contract = w3.eth.contract(
-            address=Web3.to_checksum_address(token_address), abi=CHAT_TOKEN_ABI
-        )
-        # `amount` is already set above (same int(reward_amount) used for pending).
-        nonce = w3.eth.get_transaction_count(account.address, "pending")
-        success_count = 0
-        failed_count = 0
-
-        for user_id, address in wallets:
-            try:
-                to = Web3.to_checksum_address(address)
-                mint_fn = contract.functions.mint(to, amount)
-                mint_fn.call({"from": account.address})
-                estimated_gas = mint_fn.estimate_gas({"from": account.address})
-                tx = mint_fn.build_transaction({
-                    "from": account.address,
-                    "nonce": nonce,
-                    "gas": max(int(estimated_gas * 1.2), 180_000),
-                    "gasPrice": w3.eth.gas_price,
-                    "chainId": CHAIN_ID,
-                })
-                signed = account.sign_transaction(tx)
-                tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-                receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-                if receipt.status != 1:
-                    failed_count += 1
-                    logger.error(
-                        "chat %s: mint failed %s (%s) -> %s tx=%s block=%s status=%s",
-                        chat_id,
-                        reward_amount,
-                        symbol,
-                        address,
-                        tx_hash.hex(),
-                        receipt.blockNumber,
-                        receipt.status,
-                    )
-                else:
-                    success_count += 1
-                    logger.info(
-                        "chat %s: minted %s (%s) -> %s tx=%s block=%s",
-                        chat_id,
-                        reward_amount,
-                        symbol,
-                        address,
-                        tx_hash.hex(),
-                        receipt.blockNumber,
-                    )
-                nonce += 1
-            except Exception as e:
-                failed_count += 1
-                logger.error("chat %s: mint to %s failed: %s", chat_id, address, e)
-                nonce += 1
-
-        logger.info(
-            "chat %s (%s): distribution complete, %d succeeded, %d failed",
-            chat_id,
-            symbol,
-            success_count,
-            failed_count,
-        )
-
     if started:
-        logger.info("Distribution complete")
+        logger.info("Accrual complete -- nothing was minted; /claim does that")
 
 
 if __name__ == "__main__":
