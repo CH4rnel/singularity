@@ -390,6 +390,9 @@ Route::middleware(['auth'])->group(function () {
     // Throttled — each hit can cost a relayer transaction on Cyberia.
     Route::patch('profile/nickname', [ProfileController::class, 'updateNickname'])
         ->middleware('throttle:6,1')->name('profile.nickname');
+    // Spending experience. A POST because it is the one place on this profile
+    // where a number goes down and something permanent appears.
+    Route::post('profile/enchant', [ProfileController::class, 'enchant'])->name('profile.enchant');
     Route::post('profile/achievements/check', [ProfileController::class, 'checkAchievements'])
         ->middleware('throttle:6,1')->name('profile.achievements.check');
     Route::post('posts', [PostController::class, 'store'])

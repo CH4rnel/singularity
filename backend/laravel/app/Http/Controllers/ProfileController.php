@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateAvatarRequest;
 use App\Http\Requests\UpdateNicknameRequest;
+use App\Models\User;
 use App\Services\AchievementService;
+use App\Services\Ai\AiKeyService;
 use App\Services\BridgeConfigService;
 use App\Services\GamificationService;
 use App\Services\ProfileOnchainService;
@@ -120,6 +122,78 @@ class ProfileController extends Controller
         $achievements->check($user);
 
         return back()->with('status', 'nickname-updated');
+    }
+
+    /**
+     * Spend experience on something permanent.
+     *
+     * Every refusal is named rather than collapsed into one, because they are
+     * different things to do about it: `level` means go and use the chain,
+     * `xp` means the standing is fine and the balance is not, `requires` means
+     * the rung below is unbought, and `owned` means it already happened —
+     * which a double-submitted form will produce and which is not an error
+     * worth alarming anybody about.
+     */
+    public function enchant(
+        Request $request,
+        GamificationService $gamification,
+        AiKeyService $keys,
+    ): RedirectResponse {
+        $key = (string) $request->validate([
+            'key' => ['required', 'string', 'max:64'],
+        ])['key'];
+
+        $result = $gamification->enchant($request->user(), $key);
+
+        if (! $result['ok']) {
+            return $result['reason'] === 'owned'
+                ? back()->with('status', 'enchant-owned')
+                : back()->withErrors(['enchant' => $result['reason']]);
+        }
+
+        // One effect needs something issued rather than merely recorded. It is
+        // done after the spend and its failure is reported rather than
+        // rolled back: the enchantment is owned either way, and an operator
+        // re-issuing a key is a smaller problem than a charge that vanished.
+        if (($result['enchantment']['effects']['ai_access'] ?? 0) > 0) {
+            $token = $this->issueInferenceKey($request->user(), $keys);
+
+            if ($token !== null) {
+                return back()->with('status', 'enchant-key:'.$token);
+            }
+        }
+
+        return back()->with('status', 'enchant-bought:'.$key);
+    }
+
+    /**
+     * A gate-exempt inference key for somebody who paid for one.
+     *
+     * `AiHolderGate` otherwise re-reads a $LAIN holding on every request, so
+     * the exemption is the whole product here. The plaintext token leaves in
+     * this one response and is never recoverable — the same contract the
+     * console's issuance already makes.
+     */
+    private function issueInferenceKey(User $user, AiKeyService $keys): ?string
+    {
+        if (! $user->wallet_address) {
+            return null;
+        }
+
+        try {
+            // CLIENT_API, not CLIENT_LAINOS: a LainOS key is bound to an
+            // installation UUID and is what an operator issues at the console.
+            // This one belongs to a person.
+            return $keys->issue(
+                address: $user->wallet_address,
+                name: 'Key to Lain',
+                gateExempt: true,
+            )['token'] ?? null;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\User;
 use App\Models\UserQuest;
 use App\Models\UserStat;
+use App\Models\XpEnchantment;
 use App\Models\XpEntry;
 use App\Notifications\ProgressNotification;
 use App\Support\Localised;
@@ -223,32 +224,9 @@ class GamificationService
             'title' => $this->titleFor((int) $stats->level),
             'proven_xp' => $proven,
             'proven_level' => $provenLevel,
-            'perks' => $this->perksFor($provenLevel),
+            'spendable' => $this->spendable($user),
+            'perks' => $this->perksFor($user),
         ];
-    }
-
-    /**
-     * The next rung and what it costs, so the ladder is a thing you can climb
-     * rather than a thing that happens to you.
-     *
-     * @return array{level: int, xp: int, perks: array<string, int>}|null
-     */
-    public function nextPerk(int $level): ?array
-    {
-        $ladder = array_keys((array) config('gamification.perks', []));
-        sort($ladder);
-
-        foreach ($ladder as $rung) {
-            if ($level < (int) $rung) {
-                return [
-                    'level' => (int) $rung,
-                    'xp' => $this->xpForLevel((int) $rung),
-                    'perks' => (array) config('gamification.perks')[$rung],
-                ];
-            }
-        }
-
-        return null;
     }
 
     /** XP from sources the client cannot move. */
@@ -267,23 +245,152 @@ class GamificationService
     }
 
     /**
-     * What this level unlocks. Highest threshold at or below the level wins,
-     * the same lookup `titles` uses, so a ladder can be extended by adding a
-     * row rather than by restating every one below it.
+     * What is left to spend.
+     *
+     * Proven XP minus what has already been spent. Never negative: a price cut
+     * after somebody bought at the old price must not put them in debt.
+     */
+    public function spendable(User $user): int
+    {
+        $spent = (int) XpEnchantment::query()->where('user_id', $user->id)->sum('cost');
+
+        return max(0, $this->provenXp($user) - $spent);
+    }
+
+    /** @return array<int, string> */
+    public function owned(User $user): array
+    {
+        return XpEnchantment::query()
+            ->where('user_id', $user->id)
+            ->pluck('key')
+            ->all();
+    }
+
+    /**
+     * The effects of everything this user has bought.
+     *
+     * A later rung *replaces* an earlier one rather than stacking, so owning
+     * both halves of a ladder is worth the better half and not their sum — the
+     * highest value for each effect wins.
      *
      * @return array<string, int>
      */
-    public function perksFor(int $level): array
+    public function perksFor(User $user): array
     {
-        $earned = [];
+        $owned = $this->owned($user);
+        $effects = [];
 
-        foreach ((array) config('gamification.perks', []) as $from => $perks) {
-            if ($level >= (int) $from) {
-                $earned = [...$earned, ...(array) $perks];
+        foreach ($this->catalogue() as $enchantment) {
+            if (! in_array($enchantment['key'], $owned, true)) {
+                continue;
+            }
+
+            foreach ((array) ($enchantment['effects'] ?? []) as $name => $value) {
+                $effects[$name] = max($effects[$name] ?? 0, (int) $value);
             }
         }
 
-        return $earned;
+        return $effects;
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function catalogue(): array
+    {
+        return (array) config('gamification.enchantments', []);
+    }
+
+    /**
+     * The table, as somebody standing at it sees it.
+     *
+     * Four states and they are not the same refusal: owned, affordable,
+     * `level` (standing too low, so no amount of saving helps yet), and `xp`
+     * (standing is fine, the balance is not). A single "unavailable" would
+     * hide which of the two a person should go and do something about.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function enchantments(User $user): array
+    {
+        $owned = $this->owned($user);
+        $balance = $this->spendable($user);
+        $level = $this->levelFor($this->provenXp($user));
+
+        return array_map(function (array $enchantment) use ($owned, $balance, $level): array {
+            $has = in_array($enchantment['key'], $owned, true);
+            $needs = $enchantment['requires'] ?? null;
+
+            $state = match (true) {
+                $has => 'owned',
+                $needs !== null && ! in_array($needs, $owned, true) => 'requires',
+                $level < (int) $enchantment['level'] => 'level',
+                $balance < (int) $enchantment['cost'] => 'xp',
+                default => 'ready',
+            };
+
+            return [
+                'key' => $enchantment['key'],
+                'title' => $enchantment['title'],
+                'description' => $enchantment['description'],
+                'cost' => (int) $enchantment['cost'],
+                'level' => (int) $enchantment['level'],
+                'requires' => $needs,
+                'effects' => (array) ($enchantment['effects'] ?? []),
+                'state' => $state,
+            ];
+        }, $this->catalogue());
+    }
+
+    /**
+     * Buy one. Returns the enchantment, or null with a reason it refused.
+     *
+     * The whole thing is one transaction over a locked balance, and the unique
+     * index is the last word: two clicks that both pass the balance check
+     * still result in one purchase and one charge, because the second insert
+     * cannot land.
+     *
+     * @return array{ok: bool, reason: string, enchantment: ?array<string, mixed>}
+     */
+    public function enchant(User $user, string $key): array
+    {
+        $enchantment = collect($this->catalogue())->firstWhere('key', $key);
+
+        if ($enchantment === null) {
+            return ['ok' => false, 'reason' => 'unknown', 'enchantment' => null];
+        }
+
+        return DB::transaction(function () use ($user, $key, $enchantment): array {
+            // Lock the person, not the row that does not exist yet.
+            User::query()->whereKey($user->id)->lockForUpdate()->first();
+
+            $owned = $this->owned($user);
+
+            if (in_array($key, $owned, true)) {
+                return ['ok' => false, 'reason' => 'owned', 'enchantment' => null];
+            }
+
+            $needs = $enchantment['requires'] ?? null;
+
+            if ($needs !== null && ! in_array($needs, $owned, true)) {
+                return ['ok' => false, 'reason' => 'requires', 'enchantment' => null];
+            }
+
+            if ($this->levelFor($this->provenXp($user)) < (int) $enchantment['level']) {
+                return ['ok' => false, 'reason' => 'level', 'enchantment' => null];
+            }
+
+            if ($this->spendable($user) < (int) $enchantment['cost']) {
+                return ['ok' => false, 'reason' => 'xp', 'enchantment' => null];
+            }
+
+            XpEnchantment::query()->create([
+                'user_id' => $user->id,
+                'key' => $key,
+                'cost' => (int) $enchantment['cost'],
+                'created_at' => Carbon::now('UTC'),
+            ]);
+
+            return ['ok' => true, 'reason' => 'ok', 'enchantment' => $enchantment];
+        });
     }
 
     /**
@@ -308,7 +415,7 @@ class GamificationService
             ->whereRaw('lower(wallet_address) = ?', [$address])
             ->first();
 
-        return $user === null ? [] : $this->perksFor($this->levelFor($this->provenXp($user)));
+        return $user === null ? [] : $this->perksFor($user);
     }
 
     public function levelFor(int $xp): int
@@ -382,8 +489,9 @@ class GamificationService
              */
             'proven_xp' => $proven,
             'proven_level' => $provenLevel,
-            'perks' => $this->perksFor($provenLevel),
-            'next_perk' => $this->nextPerk($provenLevel),
+            'spendable' => $this->spendable($user),
+            'perks' => $this->perksFor($user),
+            'enchantments' => $this->enchantments($user),
             'quests' => $this->questBoard($user),
             'recent' => XpEntry::query()
                 ->where('user_id', $user->id)

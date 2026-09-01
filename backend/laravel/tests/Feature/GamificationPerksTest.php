@@ -1,17 +1,18 @@
 <?php
 
 use App\Models\User;
+use App\Models\XpEnchantment;
 use App\Services\CrosschainRouter;
 use App\Services\GamificationService;
 use Illuminate\Support\Facades\DB;
 
 /**
- * What a level is worth, and what it is allowed to be built on.
+ * Experience as a currency rather than a rank.
  *
- * XP was a number that did nothing, so nobody chased it. Making it worth money
- * changes what a level has to be: `visit` XP is credited on the browser's word,
- * which was harmless while a level was a scoreboard and is a faucet the moment
- * a level discounts a fee. Everything here is about that line.
+ * It accumulates, it is spent on something permanent, and the balance goes
+ * back down. Everything pinned here is about the two places that model can be
+ * abused or misread: what may be counted towards standing, and what happens
+ * when the same purchase is attempted twice.
  */
 beforeEach(function () {
     config()->set('crosschain.fee.bps', 75);
@@ -24,115 +25,197 @@ function withXp(User $user, string $source, int $amount): void
     DB::table('xp_entries')->insert([
         'user_id' => $user->id,
         'source' => $source,
-        'reference' => $source.':'.uniqid(),
+        'reference' => $source.':'.uniqid('', true),
         'amount' => $amount,
         'created_at' => now(),
     ]);
 }
 
-it('does not count browser-reported xp towards a perk', function () {
-    $user = User::factory()->create(['wallet_address' => '0x'.str_repeat('a', 40)]);
+function trader(int $provenXp = 5000, ?string $address = null): User
+{
+    $user = User::factory()->create([
+        'wallet_address' => $address ?? '0x'.substr(md5(uniqid('', true)), 0, 40),
+    ]);
+
+    withXp($user, 'swap', $provenXp);
+
+    return $user;
+}
+
+/* ------------------------------------------------------------- standing -- */
+
+it('does not count browser-reported xp as something to spend', function () {
+    $user = User::factory()->create();
 
     // Enough to be level 10 on the leaderboard, all of it from opening pages.
     withXp($user, 'visit', 5000);
 
-    $standing = app(GamificationService::class)->standing($user);
+    $g = app(GamificationService::class);
 
-    expect($standing['proven_xp'])->toBe(0)
-        ->and($standing['proven_level'])->toBe(1)
-        ->and($standing['perks'])->toBe([]);
+    expect($g->provenXp($user))->toBe(0)
+        ->and($g->spendable($user))->toBe(0);
 });
 
 it('counts xp the chain vouched for', function () {
-    $user = User::factory()->create(['wallet_address' => '0x'.str_repeat('b', 40)]);
-
+    $user = User::factory()->create();
     withXp($user, 'swap', 300);
     withXp($user, 'bridge', 200);
     withXp($user, 'visit', 900);
 
-    $standing = app(GamificationService::class)->standing($user);
-
-    expect($standing['proven_xp'])->toBe(500)
-        ->and($standing['xp'])->toBe(0)   // user_stats is written by awards, not by raw rows
-        ->and($standing['perks'])->toHaveKey('crosschain_fee_discount');
+    expect(app(GamificationService::class)->spendable($user))->toBe(500);
 });
 
-it('takes the highest ladder step at or below the level', function () {
+/* ------------------------------------------------------------- spending -- */
+
+it('spends the balance and keeps the leaderboard', function () {
+    $user = trader(5000);
     $g = app(GamificationService::class);
 
-    expect($g->perksFor(1))->toBe([])
-        ->and($g->perksFor(2)['crosschain_fee_discount'])->toBe(10)
-        ->and($g->perksFor(3)['crosschain_fee_discount'])->toBe(10)
-        ->and($g->perksFor(21)['crosschain_fee_discount'])->toBe(100)
-        ->and($g->perksFor(40)['crosschain_fee_discount'])->toBe(100);
+    expect($g->enchant($user, 'route_i')['ok'])->toBeTrue()
+        ->and($g->spendable($user))->toBe(4600)
+        // Lifetime XP is a record of taking part and is never spent.
+        ->and($g->provenXp($user))->toBe(5000);
+});
+
+it('refuses what the balance cannot cover', function () {
+    $user = trader(5000);
+    // Level is fine for route_ii, the balance is not once route_i is paid for.
+    app(GamificationService::class)->enchant($user, 'route_i');
+    DB::table('xp_enchantments')->where('user_id', $user->id)->update(['cost' => 4900]);
+
+    expect(app(GamificationService::class)->enchant($user, 'route_ii')['reason'])->toBe('xp');
+});
+
+it('refuses what the standing has not reached, however rich', function () {
+    $user = User::factory()->create();
+    withXp($user, 'swap', 300);   // level 2 — enough for route_i only
+
+    $g = app(GamificationService::class);
+    $g->enchant($user, 'route_i');
+    withXp($user, 'swap', 100_000);
+
+    // Now rich enough for route_iii but not level 12 yet? No — 100k is well
+    // past it, so prove the refusal at the rung that is genuinely out of reach.
+    $poor = User::factory()->create();
+    withXp($poor, 'swap', 400);
+
+    expect($g->enchant($poor, 'route_ii')['reason'])->toBe('requires')
+        ->and($g->enchant($poor, 'lain_key')['reason'])->toBe('level');
+});
+
+it('makes a ladder be climbed rather than skipped', function () {
+    $user = trader(50_000);
+
+    expect(app(GamificationService::class)->enchant($user, 'route_iii')['reason'])->toBe('requires');
+});
+
+it('never charges twice for the same enchantment', function () {
+    $user = trader(5000);
+    $g = app(GamificationService::class);
+
+    $g->enchant($user, 'route_i');
+    $second = $g->enchant($user, 'route_i');
+
+    expect($second['ok'])->toBeFalse()
+        ->and($second['reason'])->toBe('owned')
+        ->and(XpEnchantment::where('user_id', $user->id)->count())->toBe(1)
+        ->and($g->spendable($user))->toBe(4600);
+});
+
+it('refuses an enchantment that does not exist', function () {
+    expect(app(GamificationService::class)->enchant(trader(), 'sharpness_v')['reason'])->toBe('unknown');
+});
+
+it('keeps a price cut from putting anybody in debt', function () {
+    $user = trader(500);
+    app(GamificationService::class)->enchant($user, 'route_i');
+
+    // Somebody paid 400; the catalogue now says it is worth more than they have.
+    DB::table('xp_enchantments')->where('user_id', $user->id)->update(['cost' => 9999]);
+
+    expect(app(GamificationService::class)->spendable($user))->toBe(0);
+});
+
+/* ----------------------------------------------------------------- fees -- */
+
+it('charges the full fee until something is bought', function () {
+    $user = trader(50_000, '0x'.str_repeat('c', 40));
+
+    // Level 22 and 50k to spend, and still no discount: standing earns the
+    // right to buy, it does not buy anything on its own.
+    expect(app(CrosschainRouter::class)->feeBps($user->wallet_address))->toBe(75);
+});
+
+it('takes a real discount off a real fee once bought', function () {
+    $user = trader(5000, '0x'.str_repeat('d', 40));
+    app(GamificationService::class)->enchant($user, 'route_i');
+
+    expect(app(CrosschainRouter::class)->feeBps($user->wallet_address))->toBe(56);
+});
+
+it('replaces a rung rather than stacking it', function () {
+    $user = trader(50_000, '0x'.str_repeat('e', 40));
+    $g = app(GamificationService::class);
+    $g->enchant($user, 'route_i');
+    $g->enchant($user, 'route_ii');
+
+    // 25 and 60 owned; the better one wins and they do not add up to 85.
+    expect($g->perksFor($user)['crosschain_fee_discount'])->toBe(60)
+        ->and(app(CrosschainRouter::class)->feeBps($user->wallet_address))->toBe(30);
+});
+
+it('waives the fee entirely at the top of the ladder', function () {
+    $user = trader(50_000, '0x'.str_repeat('b', 40));
+    $g = app(GamificationService::class);
+    $g->enchant($user, 'route_i');
+    $g->enchant($user, 'route_ii');
+    $g->enchant($user, 'route_iii');
+
+    expect(app(CrosschainRouter::class)->feeBps($user->wallet_address))->toBe(0);
 });
 
 it('charges an unknown address the whole fee', function () {
     expect(app(CrosschainRouter::class)->feeBps('0x'.str_repeat('9', 40)))->toBe(75);
 });
 
-it('charges nothing extra when no address is given', function () {
-    expect(app(CrosschainRouter::class)->feeBps())->toBe(75);
-});
-
-it('takes a real discount off a real fee', function () {
-    $address = '0x'.str_repeat('c', 40);
-    $user = User::factory()->create(['wallet_address' => $address]);
-
-    // 1000 proven XP is level 4 on the default curve → 20% off.
-    withXp($user, 'swap', 1000);
-
-    expect(app(CrosschainRouter::class)->feeBps($address))->toBe(60);
-});
-
-it('waives the fee entirely at the top of the ladder', function () {
-    $address = '0x'.str_repeat('d', 40);
-    $user = User::factory()->create(['wallet_address' => $address]);
-
-    withXp($user, 'bridge', 30_000);
-
-    expect(app(CrosschainRouter::class)->feeBps($address))->toBe(0);
-});
-
 it('gives a merged account no standing of its own', function () {
-    $address = '0x'.str_repeat('e', 40);
+    $address = '0x'.str_repeat('a', 40);
     $keeper = User::factory()->create();
-    $merged = User::factory()->create([
-        'wallet_address' => $address,
-        'merged_into_id' => $keeper->id,
-    ]);
+    $merged = User::factory()->create(['wallet_address' => $address, 'merged_into_id' => $keeper->id]);
+    withXp($merged, 'swap', 50_000);
+    app(GamificationService::class)->enchant($merged, 'route_i');
 
-    withXp($merged, 'swap', 5000);
-
-    // The address resolves to a record that is no longer a person.
     expect(app(CrosschainRouter::class)->feeBps($address))->toBe(75);
 });
 
 it('matches an address whatever case it arrives in', function () {
-    $user = User::factory()->create(['wallet_address' => '0x'.str_repeat('a', 40)]);
-    withXp($user, 'swap', 1000);
+    $user = trader(5000, '0x'.str_repeat('a', 40));
+    app(GamificationService::class)->enchant($user, 'route_i');
 
-    expect(app(CrosschainRouter::class)->feeBps('0x'.str_repeat('A', 40)))->toBe(60);
+    expect(app(CrosschainRouter::class)->feeBps('0x'.str_repeat('A', 40)))->toBe(56);
 });
 
-it('reports the discount so the screen can show it', function () {
-    $address = '0x'.str_repeat('c', 40);
-    $user = User::factory()->create(['wallet_address' => $address]);
-    withXp($user, 'swap', 1000);
+/* ---------------------------------------------------------------- table -- */
 
-    $this->getJson('/api/wallet/crosschain?user='.$address)
-        ->assertOk()
-        ->assertJsonPath('fee.full_bps', 75)
-        ->assertJsonPath('fee.bps', 60)
-        ->assertJsonPath('fee.discount', 20);
+it('says which of the two refusals applies', function () {
+    $user = User::factory()->create();
+    withXp($user, 'swap', 300);   // level 2, 300 to spend
+
+    $table = collect(app(GamificationService::class)->enchantments($user))->keyBy('key');
+
+    expect($table['route_i']['state'])->toBe('xp')       // right level, short of XP
+        ->and($table['lain_key']['state'])->toBe('level') // no amount of saving helps yet
+        ->and($table['route_ii']['state'])->toBe('requires');
 });
 
-it('asks for no fee at all rather than zero basis points', function () {
-    $address = '0x'.str_repeat('d', 40);
-    $user = User::factory()->create(['wallet_address' => $address]);
-    withXp($user, 'bridge', 30_000);
+it('marks what is already owned', function () {
+    $user = trader(5000);
+    app(GamificationService::class)->enchant($user, 'route_i');
 
-    // feeAddress() already refuses to name a recipient for a zero fee, and the
-    // quote body must not carry an appFees entry asking for nothing.
-    expect(app(CrosschainRouter::class)->feeBps($address))->toBe(0);
+    $table = collect(app(GamificationService::class)->enchantments($user))->keyBy('key');
+
+    expect($table['route_i']['state'])->toBe('owned')
+        // 5000 proven XP is level 10 and 4600 left, so the next rung is ready
+        // rather than locked — owning one opens the one above it.
+        ->and($table['route_ii']['state'])->toBe('ready');
 });

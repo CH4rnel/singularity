@@ -12,9 +12,10 @@ import { analytics } from '@/lib/analytics';
 import {
     disablePush,
     enablePush,
-    pushState,
-    type PushState,
+    pushState
+    
 } from '@/lib/wallet/push';
+import type {PushState} from '@/lib/wallet/push';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**

@@ -102,33 +102,85 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | What a level is worth
+    | Enchantments: what experience is spent on
     |--------------------------------------------------------------------------
     |
-    | Keyed by the first proven level that earns the perk; lookup takes the
-    | highest key that is <= the level, exactly like `titles`.
+    | Experience here works the way it works in a game: it is a currency, not a
+    | rank. You accumulate it, you spend it on something permanent, and the
+    | balance goes back down.
     |
-    | `crosschain_fee_discount_bps` comes off Cyberia's own cut of a
-    | cross-chain swap, which this server composes and therefore controls
-    | completely. It is deliberately the first perk: it is money, it is
-    | recurring, it costs nothing that was not earned by the same person's
-    | trading, and it cannot be faked into existence because the standing
-    | behind it is chain-verified.
+    | Two numbers do two jobs and neither can do the other's. `xp` counts
+    | everything and is the leaderboard — a record of taking part that is never
+    | spent and never falls. **Spendable** is proven XP minus what has already
+    | been spent, and it is the only thing an enchantment costs.
     |
-    | The discount is a proportion of our fee, never of the trade — at 100 the
-    | swap is free of *our* cut, and the router's own costs are untouched
-    | because they were never ours to waive.
+    | `level` gates which enchantments are offered at all, and it is computed
+    | from *lifetime* proven XP rather than from the balance. That is a
+    | deliberate departure: spending should not take back the standing that
+    | earned the right to spend, or somebody who buys the thing they qualified
+    | for would immediately stop qualifying for it.
+    |
+    | `requires` names an enchantment that must already be owned, so a ladder
+    | is climbed rather than skipped.
+    |
+    | Every effect here is something this server actually controls. Cyberia's
+    | cut of a cross-chain swap is composed on this host; the inference API's
+    | gate is a column on a key this host issues. Nothing promises a discount
+    | on somebody else's costs.
     |
     */
 
-    'perks' => [
-        2 => ['crosschain_fee_discount' => 10],
-        4 => ['crosschain_fee_discount' => 20],
-        6 => ['crosschain_fee_discount' => 35],
-        9 => ['crosschain_fee_discount' => 50],
-        12 => ['crosschain_fee_discount' => 65],
-        16 => ['crosschain_fee_discount' => 80],
-        21 => ['crosschain_fee_discount' => 100],
+    'enchantments' => [
+        [
+            'key' => 'route_i',
+            'cost' => 400,
+            'level' => 2,
+            'title' => ['en' => 'Clean Route I', 'ru' => 'Чистый маршрут I', 'zh' => '净路 I'],
+            'description' => [
+                'en' => 'A quarter off Cyberia’s cut of every cross-chain swap. Permanent.',
+                'ru' => 'Четверть от комиссии Cyberia на каждом кроссчейн-обмене. Навсегда.',
+                'zh' => '永久减免 Cyberia 跨链兑换抽成的四分之一。',
+            ],
+            'effects' => ['crosschain_fee_discount' => 25],
+        ],
+        [
+            'key' => 'route_ii',
+            'cost' => 1200,
+            'level' => 6,
+            'requires' => 'route_i',
+            'title' => ['en' => 'Clean Route II', 'ru' => 'Чистый маршрут II', 'zh' => '净路 II'],
+            'description' => [
+                'en' => 'Three fifths off Cyberia’s cut. Replaces the first.',
+                'ru' => 'Три пятых от комиссии Cyberia. Заменяет первый уровень.',
+                'zh' => '减免抽成的五分之三，取代第一级。',
+            ],
+            'effects' => ['crosschain_fee_discount' => 60],
+        ],
+        [
+            'key' => 'route_iii',
+            'cost' => 3600,
+            'level' => 12,
+            'requires' => 'route_ii',
+            'title' => ['en' => 'Clean Route III', 'ru' => 'Чистый маршрут III', 'zh' => '净路 III'],
+            'description' => [
+                'en' => 'Cyberia takes nothing from your cross-chain swaps. Ever.',
+                'ru' => 'Cyberia больше не берёт ничего с ваших кроссчейн-обменов. Никогда.',
+                'zh' => 'Cyberia 不再从你的跨链兑换中抽成。',
+            ],
+            'effects' => ['crosschain_fee_discount' => 100],
+        ],
+        [
+            'key' => 'lain_key',
+            'cost' => 2000,
+            'level' => 8,
+            'title' => ['en' => 'Key to Lain', 'ru' => 'Ключ к Лейн', 'zh' => '通向 Lain 的钥匙'],
+            'description' => [
+                'en' => 'An inference API key that needs no $LAIN holding. Yours to keep.',
+                'ru' => 'Ключ к Inference API, которому не нужен холдинг $LAIN. Остаётся у вас.',
+                'zh' => '无需持有 $LAIN 的推理 API 密钥，永久归你。',
+            ],
+            'effects' => ['ai_access' => 1],
+        ],
     ],
 
     /*
