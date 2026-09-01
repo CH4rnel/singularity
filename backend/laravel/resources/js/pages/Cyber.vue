@@ -69,6 +69,14 @@ const usd = (value: number | null): string =>
         >
             <template #actions>
                 <a
+                    href="https://docs.cyberia.church/user-guide/cyber"
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex items-center gap-1 rounded border border-border px-3 py-1.5 text-sm transition hover:border-input"
+                >
+                    Documentation <ExternalLink class="h-3.5 w-3.5" />
+                </a>
+                <a
                     :href="chain.explorer"
                     target="_blank"
                     rel="noopener"
