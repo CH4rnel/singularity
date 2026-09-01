@@ -34,8 +34,20 @@ export type PublicProgress = {
     rank: number | null;
 };
 
+/** What a level has actually unlocked, keyed by perk name. */
+export type Perks = { crosschain_fee_discount?: number };
+
 /** The signed-in user's own progress, as served to /profile. */
 export type Progress = PublicProgress & {
+    /**
+     * XP the chain vouched for, and the level built on it. Perks read this
+     * rather than `xp`, because `visit` XP is credited on the browser's word
+     * and a level that discounts a fee cannot be earned by opening pages.
+     */
+    proven_xp: number;
+    proven_level: number;
+    perks: Perks;
+    next_perk: { level: number; xp: number; perks: Perks } | null;
     level_floor_xp: number;
     /** Cumulative XP for the next level; null at max level. */
     next_level_xp: number | null;

@@ -34,13 +34,28 @@ class WalletCrosschainController extends Controller
      * address is published for the same reason: it is where their money goes,
      * and it is visible on chain regardless.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        /*
+         * The address is optional here and the answer is honest without it:
+         * no address means the full fee, which is what an unclaimed address
+         * pays anyway. With one, the screen can say what this person's level
+         * has already taken off — a discount nobody is told about is the same
+         * as no discount.
+         */
+        $sender = (string) $request->query('user', '');
+        $sender = preg_match('/^0x[0-9a-fA-F]{40}$/', $sender) === 1 ? $sender : null;
+
+        $full = $this->router->feeAddress() === null ? 0 : $this->router->feeBps();
+        $yours = $this->router->feeAddress() === null ? 0 : $this->router->feeBps($sender);
+
         return response()->json([
             'enabled' => $this->router->enabled(),
             'fee' => [
                 'address' => $this->router->feeAddress(),
-                'bps' => $this->router->feeAddress() === null ? 0 : $this->router->feeBps(),
+                'bps' => $yours,
+                'full_bps' => $full,
+                'discount' => $full > 0 ? (int) round(100 - ($yours / $full * 100)) : 0,
             ],
             'chains' => $this->router->chains(),
         ]);

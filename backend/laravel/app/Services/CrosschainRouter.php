@@ -70,13 +70,40 @@ class CrosschainRouter
         return $address;
     }
 
-    /** Basis points this app asks for, clamped to the ceiling in config. */
-    public function feeBps(): int
+    /**
+     * Basis points this app asks for, clamped to the ceiling in config and
+     * reduced by whatever the sender's level has earned.
+     *
+     * The discount is a proportion of *our* cut, never of the trade: at 100%
+     * the swap is free of Cyberia's fee and the router's own costs are
+     * untouched, because those were never ours to waive.
+     *
+     * It reads standing from the address, not from a session — this endpoint
+     * has no session and never will. An address nobody has claimed simply pays
+     * the full fee, which is the right answer rather than an error.
+     *
+     * The reduction happens here, on the server, for the same reason the fee
+     * itself is composed here: a discount a caller could ask for is a discount
+     * every caller would ask for.
+     */
+    public function feeBps(?string $sender = null): int
     {
         $bps = (int) config('crosschain.fee.bps', 0);
         $max = (int) config('crosschain.fee.max_bps', 300);
+        $asked = max(0, min($bps, $max));
 
-        return max(0, min($bps, $max));
+        if ($asked === 0 || $sender === null) {
+            return $asked;
+        }
+
+        $discount = (int) (app(GamificationService::class)
+            ->perksForAddress($sender)['crosschain_fee_discount'] ?? 0);
+
+        if ($discount <= 0) {
+            return $asked;
+        }
+
+        return (int) floor($asked * (100 - min(100, $discount)) / 100);
     }
 
     /**
@@ -282,11 +309,15 @@ class CrosschainRouter
         }
 
         $fee = $this->feeAddress();
+        $bps = $this->feeBps($request['user'] ?? null);
 
-        if ($fee !== null) {
+        // A discount that takes the fee to zero is no fee at all, and asking a
+        // router for 0 bps to an address is a request it has no reason to
+        // honour cleanly.
+        if ($fee !== null && $bps > 0) {
             $body['appFees'] = [[
                 'recipient' => $fee,
-                'fee' => (string) $this->feeBps(),
+                'fee' => (string) $bps,
             ]];
         }
 

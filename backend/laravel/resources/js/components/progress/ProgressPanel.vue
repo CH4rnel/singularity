@@ -16,6 +16,28 @@ const { t } = useLocale(progressMessages);
 const streakHint = computed(() =>
     props.progress.active_today ? t('activeToday') : t('comeBackToday'),
 );
+
+/**
+ * What the level is worth right now, and what the next one adds.
+ *
+ * Shown together on purpose: a perk with no next rung reads as a ceiling, and
+ * a next rung with nothing already earned reads as a promise. The pair reads
+ * as a ladder.
+ */
+const discount = computed(
+    () => props.progress.perks.crosschain_fee_discount ?? 0,
+);
+
+const nextDiscount = computed(
+    () => props.progress.next_perk?.perks.crosschain_fee_discount ?? null,
+);
+
+/** How much proven XP is still owed for the next rung. */
+const provenToGo = computed(() =>
+    props.progress.next_perk === null
+        ? 0
+        : Math.max(0, props.progress.next_perk.xp - props.progress.proven_xp),
+);
 </script>
 
 <template>
@@ -80,6 +102,52 @@ const streakHint = computed(() =>
                 </dd>
             </div>
         </dl>
+
+        <!--
+          The reason a level exists. Without this the panel is a scoreboard,
+          which is what it was: a number that went up and bought nothing.
+        -->
+        <div
+            class="mt-5 rounded-lg border p-4"
+            :class="
+                discount > 0
+                    ? 'border-brand-cyan/40 bg-brand-cyan/5'
+                    : 'border-border/70'
+            "
+        >
+            <div class="flex items-baseline justify-between gap-3">
+                <span
+                    class="text-xs tracking-widest text-muted-foreground uppercase"
+                >
+                    {{ t('perksTitle') }}
+                </span>
+                <span class="text-xs text-muted-foreground">
+                    {{ t('provenXp') }}: {{ progress.proven_xp }}
+                </span>
+            </div>
+
+            <p v-if="discount > 0" class="mt-2 text-sm">
+                <span class="font-bold text-brand-cyan"
+                    >−{{ discount }}%</span
+                >
+                {{ t('perkCrosschainFee') }}
+            </p>
+            <p v-else class="mt-2 text-sm text-muted-foreground">
+                {{ t('perksNone') }}
+            </p>
+
+            <p
+                v-if="nextDiscount !== null"
+                class="mt-2 text-xs text-muted-foreground"
+            >
+                {{
+                    t('perkNext')
+                        .replace('{level}', String(progress.next_perk!.level))
+                        .replace('{discount}', String(nextDiscount))
+                        .replace('{xp}', String(provenToGo))
+                }}
+            </p>
+        </div>
 
         <div class="mt-6">
             <h3 class="mb-3 text-sm font-bold">{{ t('quests') }}</h3>

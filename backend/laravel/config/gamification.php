@@ -69,6 +69,70 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Standing: the XP a level may be built on
+    |--------------------------------------------------------------------------
+    |
+    | A level is about to be worth money, so it stops being a count of
+    | everything and becomes a count of what the chain can vouch for.
+    |
+    | The browser can move `visit` and the exploration quest, which was
+    | harmless while XP was a scoreboard and is not harmless the moment a level
+    | discounts a fee: a script that opens pages would earn a discount. So
+    | perks key off **proven** XP only — the sources credited from the
+    | indexer, the bridge table and the DAO tables, never from a client's word.
+    |
+    | `xp` and the leaderboard are untouched: they still count everything,
+    | because they are a record of participation rather than a claim on
+    | anything.
+    |
+    */
+
+    'proven_sources' => [
+        'swap',
+        'liquidity',
+        'lending',
+        'convert',
+        'bridge',
+        'staking',
+        'launchpad',
+        'proposal',
+        'vote',
+        'onchain_profile',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | What a level is worth
+    |--------------------------------------------------------------------------
+    |
+    | Keyed by the first proven level that earns the perk; lookup takes the
+    | highest key that is <= the level, exactly like `titles`.
+    |
+    | `crosschain_fee_discount_bps` comes off Cyberia's own cut of a
+    | cross-chain swap, which this server composes and therefore controls
+    | completely. It is deliberately the first perk: it is money, it is
+    | recurring, it costs nothing that was not earned by the same person's
+    | trading, and it cannot be faked into existence because the standing
+    | behind it is chain-verified.
+    |
+    | The discount is a proportion of our fee, never of the trade — at 100 the
+    | swap is free of *our* cut, and the router's own costs are untouched
+    | because they were never ours to waive.
+    |
+    */
+
+    'perks' => [
+        2 => ['crosschain_fee_discount' => 10],
+        4 => ['crosschain_fee_discount' => 20],
+        6 => ['crosschain_fee_discount' => 35],
+        9 => ['crosschain_fee_discount' => 50],
+        12 => ['crosschain_fee_discount' => 65],
+        16 => ['crosschain_fee_discount' => 80],
+        21 => ['crosschain_fee_discount' => 100],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Streak milestones
     |--------------------------------------------------------------------------
     |
@@ -93,7 +157,6 @@ return [
     | `period` is daily (resets at UTC midnight) or weekly (ISO week).
     | `actions` lists the action keys that advance the quest; `target` is how
     | many are needed, `xp` the completion bonus on top of per-action XP.
-    | `distinct_pages` quests count separate pages visited, not raw hits.
     |
     */
 
@@ -107,15 +170,38 @@ return [
             'target' => 1,
             'xp' => 10,
         ],
+        /*
+         * `daily_explore` used to live here: visit three sections. It was the
+         * one quest a browser could complete by wandering, it paid XP for
+         * nothing anybody valued, and it made the board look busy while
+         * asking for nothing. What replaced it asks for one real act a day,
+         * from a list wide enough that most people already do one of them.
+         */
         [
-            'key' => 'daily_explore',
+            'key' => 'daily_onchain',
             'period' => 'daily',
-            'title' => ['en' => 'Walk the wired', 'ru' => 'Пройтись по сети', 'zh' => '走一遍线路'],
-            'description' => ['en' => 'Visit 3 different sections.', 'ru' => 'Посетить 3 разных раздела.', 'zh' => '访问 3 个不同的板块。'],
-            'actions' => ['page_view'],
-            'target' => 3,
-            'xp' => 20,
-            'distinct_pages' => true,
+            'title' => ['en' => 'Touch the chain', 'ru' => 'Тронуть цепь', 'zh' => '触碰链上'],
+            'description' => [
+                'en' => 'Do one thing on-chain: swap, bridge, stake, lend or add liquidity.',
+                'ru' => 'Сделать одно действие в цепи: обмен, мост, стейкинг, лендинг или ликвидность.',
+                'zh' => '完成一次链上操作：兑换、跨链、质押、借贷或添加流动性。',
+            ],
+            'actions' => ['swap', 'bridge', 'staking', 'lending', 'liquidity', 'convert'],
+            'target' => 1,
+            'xp' => 30,
+        ],
+        [
+            'key' => 'daily_streak_keeper',
+            'period' => 'daily',
+            'title' => ['en' => 'Hold the line', 'ru' => 'Удержать линию', 'zh' => '守住连续'],
+            'description' => [
+                'en' => 'Come back two days running.',
+                'ru' => 'Зайти два дня подряд.',
+                'zh' => '连续两天回来。',
+            ],
+            'actions' => ['streak_day'],
+            'target' => 1,
+            'xp' => 15,
         ],
         [
             'key' => 'daily_trade',
@@ -152,6 +238,32 @@ return [
             'actions' => ['vote', 'comment', 'proposal'],
             'target' => 3,
             'xp' => 100,
+        ],
+        [
+            'key' => 'weekly_lender',
+            'period' => 'weekly',
+            'title' => ['en' => 'Put it to work', 'ru' => 'Заставить работать', 'zh' => '让它生息'],
+            'description' => [
+                'en' => 'Supply, borrow or repay in the lending market.',
+                'ru' => 'Внести, занять или вернуть в лендинге.',
+                'zh' => '在借贷市场存入、借出或偿还。',
+            ],
+            'actions' => ['lending'],
+            'target' => 1,
+            'xp' => 140,
+        ],
+        [
+            'key' => 'weekly_staker',
+            'period' => 'weekly',
+            'title' => ['en' => 'Stand behind it', 'ru' => 'Встать за него', 'zh' => '为它背书'],
+            'description' => [
+                'en' => 'Stake into a pool.',
+                'ru' => 'Застейкать в пул.',
+                'zh' => '质押到一个池子。',
+            ],
+            'actions' => ['staking'],
+            'target' => 1,
+            'xp' => 130,
         ],
         [
             'key' => 'weekly_bridge',

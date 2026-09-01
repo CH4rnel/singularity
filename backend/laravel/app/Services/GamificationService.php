@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\SiteEvent;
 use App\Models\User;
 use App\Models\UserQuest;
 use App\Models\UserStat;
@@ -14,6 +13,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Off-chain progression: XP, levels, daily streaks and repeating quests.
@@ -95,6 +95,13 @@ class GamificationService
          */
         if ($action !== 'visit') {
             $granted += $this->advanceQuests($user, 'visit', $at, null);
+        }
+
+        // A streak is a fact about the account rather than a thing anybody
+        // does, so nothing would ever report it as an action. Emitted here so
+        // a quest can be written about it at all.
+        if ($action !== 'streak_day' && $this->statsFor($user)->current_streak >= 2) {
+            $granted += $this->advanceQuests($user, 'streak_day', $at, null);
         }
 
         $granted += $this->advanceQuests($user, $action, $at, $page);
@@ -188,6 +195,122 @@ class GamificationService
     /**
      * Highest level whose cumulative XP requirement is met.
      */
+    /**
+     * The XP a level may be built on, and what that level is worth.
+     *
+     * Two numbers, kept apart on purpose. `xp` counts everything and is the
+     * leaderboard: a record of taking part, which nobody can spend. **Proven**
+     * XP counts only what the chain, the bridge table or the DAO tables
+     * vouched for, and it is the only number a perk is allowed to read.
+     *
+     * The distinction exists because a perk is money. `visit` XP is credited
+     * on the browser's word — harmless while a level was a scoreboard, and an
+     * open faucet the moment a level discounts a fee, since a script that
+     * opens pages would earn one. Nothing here can be moved without a
+     * transaction somebody paid for.
+     *
+     * @return array{xp: int, level: int, title: string, proven_xp: int, proven_level: int, perks: array<string, int>}
+     */
+    public function standing(User $user): array
+    {
+        $stats = $this->statsFor($user);
+        $proven = $this->provenXp($user);
+        $provenLevel = $this->levelFor($proven);
+
+        return [
+            'xp' => (int) $stats->xp,
+            'level' => (int) $stats->level,
+            'title' => $this->titleFor((int) $stats->level),
+            'proven_xp' => $proven,
+            'proven_level' => $provenLevel,
+            'perks' => $this->perksFor($provenLevel),
+        ];
+    }
+
+    /**
+     * The next rung and what it costs, so the ladder is a thing you can climb
+     * rather than a thing that happens to you.
+     *
+     * @return array{level: int, xp: int, perks: array<string, int>}|null
+     */
+    public function nextPerk(int $level): ?array
+    {
+        $ladder = array_keys((array) config('gamification.perks', []));
+        sort($ladder);
+
+        foreach ($ladder as $rung) {
+            if ($level < (int) $rung) {
+                return [
+                    'level' => (int) $rung,
+                    'xp' => $this->xpForLevel((int) $rung),
+                    'perks' => (array) config('gamification.perks')[$rung],
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /** XP from sources the client cannot move. */
+    public function provenXp(User $user): int
+    {
+        $sources = (array) config('gamification.proven_sources', []);
+
+        if ($sources === []) {
+            return 0;
+        }
+
+        return (int) XpEntry::query()
+            ->where('user_id', $user->id)
+            ->whereIn('source', $sources)
+            ->sum('amount');
+    }
+
+    /**
+     * What this level unlocks. Highest threshold at or below the level wins,
+     * the same lookup `titles` uses, so a ladder can be extended by adding a
+     * row rather than by restating every one below it.
+     *
+     * @return array<string, int>
+     */
+    public function perksFor(int $level): array
+    {
+        $earned = [];
+
+        foreach ((array) config('gamification.perks', []) as $from => $perks) {
+            if ($level >= (int) $from) {
+                $earned = [...$earned, ...(array) $perks];
+            }
+        }
+
+        return $earned;
+    }
+
+    /**
+     * The perks of whoever holds this EVM address, for the endpoints that have
+     * an address and no session — which is most of the wallet.
+     *
+     * An address nobody has claimed has no standing, which is the right answer
+     * rather than an error: the fee it is asked to pay is simply the full one.
+     *
+     * @return array<string, int>
+     */
+    public function perksForAddress(?string $address): array
+    {
+        $address = Str::lower(trim((string) $address));
+
+        if ($address === '') {
+            return [];
+        }
+
+        $user = User::query()
+            ->whereNull('merged_into_id')
+            ->whereRaw('lower(wallet_address) = ?', [$address])
+            ->first();
+
+        return $user === null ? [] : $this->perksFor($this->levelFor($this->provenXp($user)));
+    }
+
     public function levelFor(int $xp): int
     {
         $step = max(1, (int) config('gamification.level_step', 50));
@@ -232,6 +355,8 @@ class GamificationService
         $max = (int) config('gamification.max_level', 50);
         $floor = $this->xpForLevel($level);
         $ceiling = $level >= $max ? null : $this->xpForLevel($level + 1);
+        $proven = $this->provenXp($user);
+        $provenLevel = $this->levelFor($proven);
 
         return [
             'xp' => $stats->xp,
@@ -247,6 +372,18 @@ class GamificationService
             'last_active_on' => $stats->last_active_on?->toDateString(),
             'active_today' => $stats->last_active_on?->toDateString() === Carbon::now('UTC')->toDateString(),
             'rank' => $this->rankOf($stats),
+            /*
+             * What the level is actually worth, and the number it is computed
+             * from. Both are on the panel because they are different claims:
+             * `xp` is a record of taking part, `proven_xp` is what the chain
+             * will vouch for, and only the second one buys anything. A person
+             * whose level is mostly visits should be able to see why the perk
+             * has not arrived.
+             */
+            'proven_xp' => $proven,
+            'proven_level' => $provenLevel,
+            'perks' => $this->perksFor($provenLevel),
+            'next_perk' => $this->nextPerk($provenLevel),
             'quests' => $this->questBoard($user),
             'recent' => XpEntry::query()
                 ->where('user_id', $user->id)
@@ -387,9 +524,7 @@ class GamificationService
                 continue;
             }
 
-            $row->progress = ($quest['distinct_pages'] ?? false)
-                ? $this->distinctPagesToday($user, $at, $page)
-                : $row->progress + 1;
+            $row->progress++;
 
             if ($row->progress >= $row->target) {
                 $row->progress = $row->target;
@@ -405,32 +540,6 @@ class GamificationService
         }
 
         return $granted;
-    }
-
-    /**
-     * How many different pages the user has opened today. Counted from
-     * site_events rather than a per-quest counter so a reload of the same page
-     * never advances the quest.
-     */
-    private function distinctPagesToday(User $user, CarbonInterface $at, ?string $page): int
-    {
-        $pages = SiteEvent::query()
-            ->where('user_id', $user->id)
-            ->whereNotNull('page')
-            ->whereBetween('created_at', [
-                $this->utc($at)->startOfDay(),
-                $this->utc($at)->endOfDay(),
-            ])
-            ->distinct()
-            ->pluck('page')
-            ->all();
-
-        // The event that triggered this call may not be committed yet.
-        if ($page !== null && ! in_array($page, $pages, true)) {
-            $pages[] = $page;
-        }
-
-        return count($pages);
     }
 
     private function periodKey(string $period, CarbonInterface $at): string

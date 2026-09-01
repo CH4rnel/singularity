@@ -1,14 +1,12 @@
 <?php
 
 use App\Models\Proposal;
-use App\Models\SiteEvent;
 use App\Models\User;
 use App\Models\UserStat;
 use App\Models\XpEntry;
 use App\Services\Dao\ActivityRecorder;
 use App\Services\GamificationService;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
 
 beforeEach(function () {
     $this->gamification = app(GamificationService::class);
@@ -90,9 +88,10 @@ it('completes a daily quest and pays its bonus once', function () {
     $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_trade');
 
     expect($quest['completed'])->toBeTrue()
-        // Two quests, not one: showing up is itself the daily_visit quest, and
-        // the second swap re-runs both without paying either twice.
-        ->and(XpEntry::where('user_id', $user->id)->where('source', 'quest')->count())->toBe(2);
+        // Three, not one: a swap is also showing up (daily_visit) and also
+        // touching the chain (daily_onchain). The second swap re-runs all of
+        // them and pays none of them twice.
+        ->and(XpEntry::where('user_id', $user->id)->where('source', 'quest')->count())->toBe(3);
 });
 
 it('completes the daily visit quest just by showing up', function () {
@@ -139,25 +138,17 @@ it('pays the daily visit quest once a day', function () {
     )->toBe(1);
 });
 
-it('counts distinct pages for the exploration quest', function () {
+it('closes the on-chain quest on any real action, not just a swap', function () {
     $user = User::factory()->create();
 
-    foreach (['/swap', '/swap', '/bridge'] as $page) {
-        SiteEvent::create([
-            'session_id' => (string) Str::uuid(),
-            'user_id' => $user->id,
-            'event' => 'page_view',
-            'page' => $page,
-            'created_at' => now(),
-        ]);
-        $this->gamification->recordAction($user, 'page_view', page: $page);
-    }
+    // The quest this replaced could be finished by opening three pages. This
+    // one needs something that cost a transaction — and accepts any of them,
+    // so most people finish it without going out of their way.
+    $this->gamification->recordAction($user, 'staking', '0xstake');
 
-    $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_explore');
-
-    // Two distinct pages out of the three required, despite three page views.
-    expect($quest['progress'])->toBe(2)
-        ->and($quest['completed'])->toBeFalse();
+    expect(
+        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_onchain')['completed'],
+    )->toBeTrue();
 });
 
 it('ranks the leaderboard by xp and skips merged accounts', function () {
