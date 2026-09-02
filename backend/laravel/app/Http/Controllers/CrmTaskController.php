@@ -39,7 +39,7 @@ class CrmTaskController extends Controller
         $done = CrmTask::query()
             ->where('status', 'done')
             ->where('completed_at', '>=', now()->subDays(7))
-            ->get(['id', 'created_at', 'completed_at']);
+            ->get(['id', 'external_id', 'created_at', 'completed_at']);
 
         $closed = CrmTask::query()
             ->where('status', 'done')
@@ -225,6 +225,11 @@ class CrmTaskController extends Controller
     private function medianDays(Collection $done): ?float
     {
         $lives = $done
+            // Records LainOS filed are skipped: they arrive already finished,
+            // so their life is however long the daemon's outbox held them,
+            // and a dozen of those a day would drag this number to zero and
+            // stop it saying anything about the work people actually do.
+            ->filter(fn (CrmTask $task) => $task->external_id === null)
             ->filter(fn (CrmTask $task) => $task->completed_at !== null && $task->created_at !== null)
             ->map(fn (CrmTask $task) => (float) $task->created_at->diffInDays($task->completed_at, true))
             ->sort()

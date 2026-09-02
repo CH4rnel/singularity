@@ -152,4 +152,33 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | The ingest — where a task comes from when nobody typed it.
+    |--------------------------------------------------------------------------
+    | LainOS does most of its work while nobody is watching: it forges wishes,
+    | takes profit on journaled positions, fires balance watches and brings
+    | back research digests. None of that reached the board that is supposed
+    | to say what this project is doing, so the daemon now files each of them
+    | as a task over POST /api/crm/tasks.
+    |
+    | Gated on a shared token compared in constant time, and an unset token
+    | means the route 404s — same rule as the host heartbeat. This one writes
+    | rather than reads, so an open ingest would be a way for anyone to put
+    | words on the operators' board.
+    |
+    | It accepts facts and never instructions: a title, a detail, whether it
+    | is already done, and an id the sender minted. It cannot assign anybody,
+    | cannot touch an existing task, and cannot reach a contact.
+    */
+
+    'ingest' => [
+        'token' => (string) env('CRM_INGEST_TOKEN', ''),
+
+        // Longest single record. A daemon that pastes a stack trace into a
+        // task title is a daemon that made the board unreadable.
+        'max_title' => 200,
+        'max_detail' => 4000,
+    ],
+
 ];

@@ -15,6 +15,7 @@ import { FileMemoryStore } from "./memory/store.js";
 import { createModelProvider } from "./models/index.js";
 import { bootstrapPlugin } from "./plugins/bootstrap/index.js";
 import { channelPlugin } from "./plugins/channel/index.js";
+import { crmPlugin } from "./plugins/crm/index.js";
 import { cyberiaPlugin } from "./plugins/cyberia/index.js";
 import { forgePlugin } from "./plugins/forge/index.js";
 import { githubPlugin } from "./plugins/github/index.js";
@@ -144,6 +145,8 @@ export {
 export type { Commit, ContentPlan, PostRecord, PostSlot, PressEvent } from "./plugins/press/index.js";
 export { traderPlugin, TraderService } from "./plugins/trader/index.js";
 export type { TraderEvent } from "./plugins/trader/index.js";
+export { crmPlugin, CrmService } from "./plugins/crm/index.js";
+export type { CrmRecord, CrmStatus } from "./plugins/crm/index.js";
 export { TradeJournal, applyBuy, applySell } from "./plugins/cyberia/journal.js";
 export type { LiquidityRecord, Position, TradeRecord } from "./plugins/cyberia/journal.js";
 export { lain } from "./characters/lain.js";
@@ -167,6 +170,7 @@ const BUILTIN_PLUGINS: Record<string, Plugin> = {
   presence: presencePlugin,
   press: pressPlugin,
   study: studyPlugin,
+  crm: crmPlugin,
 };
 
 export interface CreateAgentOptions {

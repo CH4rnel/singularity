@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
+ * @property string|null $external_id
  * @property int|null $crm_contact_id
  * @property int|null $assigned_to_user_id
  * @property int|null $created_by_user_id
@@ -37,6 +38,7 @@ class CrmTask extends Model
     public const PRIORITIES = ['low', 'normal', 'high'];
 
     protected $fillable = [
+        'external_id',
         'crm_contact_id',
         'assigned_to_user_id',
         'created_by_user_id',

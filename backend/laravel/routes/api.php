@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Ai\ModelsController;
 use App\Http\Controllers\Api\AnalyticsIngestController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
+use App\Http\Controllers\Api\CrmTaskIngestController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\NFTController;
 use App\Http\Controllers\Api\OpsHeartbeatController;
@@ -185,3 +186,11 @@ Route::post('rpc/cyberia', function (Request $request) {
 // token — with none configured the route 404s, because an open heartbeat lets
 // anyone declare a dead host healthy.
 Route::post('ops/heartbeat', OpsHeartbeatController::class)->middleware('throttle:120,1');
+
+// What LainOS did while nobody was watching. The daemon forges wishes, takes
+// profit, fires watches and brings back digests on the host, and none of it
+// reached the board that is supposed to say what this project is doing. Same
+// gate as the heartbeat — a shared token, and no token means a 404 — but this
+// one writes, so it accepts facts only: a title, a detail, whether it is
+// already finished, and an id the sender minted so a retry cannot double-file.
+Route::post('crm/tasks', CrmTaskIngestController::class)->middleware('throttle:120,1');

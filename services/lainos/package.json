@@ -24,13 +24,14 @@
     "study:cyberia": "tsx scripts/study-cyberia.ts",
     "smoke": "tsx scripts/smoke.ts",
     "wired:smoke": "tsx scripts/wired-smoke.ts",
-    "test": "npm run typecheck && npm run keys:smoke && npm run markdown:smoke && npm run tasks:smoke && npm run press:smoke && npm run tui:smoke",
+    "test": "npm run typecheck && npm run keys:smoke && npm run markdown:smoke && npm run tasks:smoke && npm run press:smoke && npm run crm:smoke && npm run tui:smoke",
     "dev": "tsx watch scripts/chat.ts",
     "tui:smoke": "FORCE_COLOR=3 tsx scripts/tui-smoke.tsx",
     "keys:smoke": "tsx scripts/keys-smoke.ts",
     "markdown:smoke": "tsx scripts/markdown-smoke.ts",
     "tasks:smoke": "tsx scripts/tasks-smoke.ts",
     "press:smoke": "tsx scripts/press-smoke.ts",
+    "crm:smoke": "tsx scripts/crm-smoke.ts",
     "tasks": "tsx scripts/tasks.ts"
   },
   "dependencies": {
