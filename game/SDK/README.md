@@ -1,7 +1,8 @@
 # Cyberia Arcade SDK
 
 Reusable infrastructure for blockchain games on Cyberia Network. The first
-reference game will be Rock–Paper–Scissors with commit–reveal moves.
+reference game is Rock–Paper–Scissors with commit–reveal moves, escrowed native
+CYBER stakes, timeout forfeits and pull-based payouts.
 
 ## Requirements
 
@@ -23,3 +24,7 @@ uses chain ID `49406` and `https://rpc.cyberia.church` unless
 `CYBERIA_PRIVATE_KEY` only when a script needs to sign a transaction.
 
 Never commit `.env` or a private key.
+
+The contract lifecycle, commitment encoding and payout rules are documented in
+[`docs/RPS_SPEC.md`](docs/RPS_SPEC.md). Phase 2 is implemented and locally
+tested; deployment is the next roadmap phase.

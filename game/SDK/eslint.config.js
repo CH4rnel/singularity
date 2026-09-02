@@ -10,6 +10,7 @@ export default defineConfig(
       "coverage/**",
       "dist/**",
       "node_modules/**",
+      "types/**",
     ],
   },
   eslint.configs.recommended,

@@ -12,6 +12,9 @@ pnpm lint
 `pnpm build` compiles Solidity with Hardhat and type-checks the TypeScript
 configuration and scripts. `pnpm test` runs the Hardhat test runner.
 
+Contracts target the `paris` EVM instruction set for compatibility with the
+current Cyberia node instead of assuming newer Cancun opcodes.
+
 ## Networks
 
 | Network          | Chain ID | Purpose                         |

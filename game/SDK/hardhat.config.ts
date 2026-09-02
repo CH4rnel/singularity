@@ -1,18 +1,24 @@
 import "dotenv/config";
 
+import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
 import { defineConfig } from "hardhat/config";
 
 const cyberiaPrivateKey = process.env.CYBERIA_PRIVATE_KEY;
 
 export default defineConfig({
+  plugins: [hardhatToolboxMochaEthersPlugin],
   solidity: {
     profiles: {
       default: {
         version: "0.8.28",
+        settings: {
+          evmVersion: "paris",
+        },
       },
       production: {
         version: "0.8.28",
         settings: {
+          evmVersion: "paris",
           optimizer: {
             enabled: true,
             runs: 200,
