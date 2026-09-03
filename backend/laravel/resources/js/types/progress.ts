@@ -34,8 +34,37 @@ export type PublicProgress = {
     rank: number | null;
 };
 
+/** What the enchantments somebody bought are worth, keyed by effect. */
+export type Perks = { crosschain_fee_discount?: number; ai_access?: number };
+
+/**
+ * One row at the table.
+ *
+ * Four states and they are different things to do about it: `owned` is done,
+ * `ready` is affordable now, `level` means no amount of saving helps yet, `xp`
+ * means the standing is fine and the balance is not, and `requires` means the
+ * rung below is unbought.
+ */
+export type Enchantment = {
+    key: string;
+    title: LocalizedText;
+    description: LocalizedText;
+    cost: number;
+    level: number;
+    requires: string | null;
+    effects: Perks;
+    state: 'owned' | 'ready' | 'level' | 'xp' | 'requires';
+};
+
 /** The signed-in user's own progress, as served to /profile. */
 export type Progress = PublicProgress & {
+    /**
+     * Lifetime XP minus what has already been spent. `xp` itself is the
+     * leaderboard and never falls; only this does.
+     */
+    spendable: number;
+    perks: Perks;
+    enchantments: Enchantment[];
     level_floor_xp: number;
     /** Cumulative XP for the next level; null at max level. */
     next_level_xp: number | null;

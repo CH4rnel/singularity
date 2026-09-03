@@ -13,6 +13,8 @@ test('the landing centers Cyberia liquidity and links the whitepaper', function 
 
     expect($landing)
         ->toContain('<a href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">Whitepaper</a>')
+        ->toContain('<a href="/cyber">CYBER</a>')
+        ->toContain('<a href="https://docs.cyberia.church" target="_blank" rel="noopener noreferrer">Docs</a>')
         ->toContain('The liquidity home of the Cyberia ecosystem')
         ->toContain('About 90% of Ritual liquidity is concentrated on Cyberia')
         ->toContain('Robinhood Chain is natively supported')

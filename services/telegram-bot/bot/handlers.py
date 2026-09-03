@@ -27,7 +27,7 @@ from bot.config import (
 from bot.db import engine
 from bot.utils import (
     is_valid_eth_address, parse_interval, format_interval, slugify_symbol,
-    _format_window,
+    _format_window, _format_token_amount,
 )
 from bot.announcers import _build_digest_text, _cyber_price_line, _SQLITE_TS
 
@@ -121,6 +121,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/github <username> <address> - link GitHub for GITHUB token airdrop",
         "/whale - verify CYBER.sol holdings to join the whales chat",
         "/create_token [name] [interval] - (admins) create a chat reward token",
+        "/claim - collect the chat-token rewards you have accrued",
         "/set_rewards_interval <interval> - (admins) change payout interval",
         "/reward_now - (admins) trigger an extra payout right now",
         "Reply \"thank you\" or \"thanks\" to someone's message to reward them with this chat's token",
@@ -163,7 +164,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/create_token [name] [interval] - (admins) create a chat reward token\n"
         "   (prompts for missing arguments; use /cancel to abort)\n"
         "   e.g. /create_token MyChatToken 1h\n"
-        "/set_rewards_interval <interval> - (admins) change payout interval\n"
+        "/claim - collect the chat-token rewards you have accrued\n"
+    "/set_rewards_interval <interval> - (admins) change payout interval\n"
         "/reward_now - (admins) trigger an extra payout right now\n"
         "Reply \"thank you\" or \"thanks\" to someone's message to reward them with this chat's token\n"
         "/github <username> <address> - link GitHub for GITHUB token airdrop\n"
@@ -202,6 +204,37 @@ def mini_app_markup(is_private: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("👛 Open wallet", url=WALLET_MINI_APP_URL)]]
     )
+
+
+def swap_markup(is_private: bool, tokens) -> InlineKeyboardMarkup | None:
+    """One [Swap] button per chat token, opening the wallet on that token.
+
+    The bot has no private key and must never have one, so it cannot trade on
+    anybody's behalf. What it can do is hand the person to the wallet with the
+    token already chosen — the mini app *is* the wallet, with the vault in its
+    own storage, and it reads `?swap=<contract>` on the way in.
+
+    `web_app` is legal only in a private chat; Telegram rejects the whole
+    message otherwise, so a group gets ordinary links to the same page. Both
+    land in the same place and neither tells the bot anything about what
+    happens there.
+
+    Telegram allows at most 100 buttons and a row of them stops being readable
+    long before that, so this caps at a handful.
+    """
+    rows = []
+
+    for symbol, token_address in list(tokens)[:6]:
+        url = f"{WALLET_MINI_APP_URL}?swap={token_address}"
+        rows.append([
+            InlineKeyboardButton(
+                f"🔄 Swap {symbol}",
+                web_app=WebAppInfo(url=url) if is_private else None,
+                url=None if is_private else url,
+            )
+        ])
+
+    return InlineKeyboardMarkup(rows) if rows else None
 
 
 def _is_private(update: Update) -> bool:
@@ -982,7 +1015,7 @@ def _claim_pending_rewards(user_id: int, address: str):
                 FROM pending_rewards p
                 JOIN chat_tokens t ON t.chat_id = p.chat_id
                 WHERE p.user_id = :u
-                  AND CAST(p.amount AS INTEGER) > 0
+                  AND p.amount NOT IN ('', '0')
                   AND t.token_address IS NOT NULL
             """),
             {"u": user_id},
@@ -1089,7 +1122,7 @@ async def _process_set_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
                 FROM pending_rewards p
                 JOIN chat_tokens t ON t.chat_id = p.chat_id
                 WHERE p.user_id = :u
-                  AND CAST(p.amount AS INTEGER) > 0
+                  AND p.amount NOT IN ('', '0')
                   AND t.token_address IS NOT NULL
             """),
             {"u": user_id},
@@ -1305,6 +1338,139 @@ BALANCE_OF_ABI = [{
 }]
 
 
+def _pending_for(user_id: int):
+    """Rows this user could claim right now: (symbol, amount as int)."""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT t.symbol, p.amount
+                FROM pending_rewards p
+                JOIN chat_tokens t ON t.chat_id = p.chat_id
+                WHERE p.user_id = :u
+                  AND p.amount NOT IN ('', '0')
+                  AND t.token_address IS NOT NULL
+            """),
+            {"u": user_id},
+        ).fetchall()
+    out = []
+    for symbol, amount in rows:
+        try:
+            value = int(amount)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            out.append((symbol, value))
+    return out
+
+
+async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """`/claim` -- mint everything this user has accrued, on request.
+
+    Rewards accrue off-chain on every tick and reach the chain only here. That
+    ordering is the point: it stops the payout job writing hundreds of
+    transactions nobody asked for, and it makes collecting a reward an action
+    the person took, which is the only version of this that anybody values.
+
+    Answering in the group would publish somebody's wallet and spam the room,
+    so this always replies privately and leaves a pointer behind when it was
+    called in a chat.
+    """
+    user = update.effective_user
+    chat = update.effective_chat
+    if user is None:
+        return
+
+    # Same proof-of-presence rule /balance uses: without admin rights the bot
+    # never sees silent members, so asking is how you get on the list.
+    if chat is not None and chat.type in ("group", "supergroup"):
+        try:
+            _record_chat_member(chat.id, user.id)
+        except Exception as e:
+            logger.debug(f"claim member tracking failed: {e}")
+
+    pending = _pending_for(user.id)
+
+    if not pending:
+        await update.effective_message.reply_text(
+            "Nothing to claim yet. Take part in a chat that has a token and "
+            "rewards will accrue -- then /claim brings them on-chain."
+        )
+        return
+
+    owed = ", ".join(
+        f"{_format_token_amount(amount, 18)} {symbol}" for symbol, amount in pending
+    )
+
+    address = _wallet_for_user(user.id)
+
+    if not address:
+        await update.effective_message.reply_text(
+            f"You have {owed} waiting.\n\n"
+            "Set a wallet to receive it: /set_wallet <address>\n"
+            f"No wallet yet? Create one in seconds: {WALLET_MINI_APP_URL}"
+        )
+        return
+
+    if chat is not None and chat.type in ("group", "supergroup"):
+        await update.effective_message.reply_text(
+            f"Claiming {owed} -- sending you the result privately."
+        )
+
+    try:
+        claimed, failed, totals = _claim_pending_rewards(user.id, address)
+    except Exception as e:
+        logger.error("claim_command: failed user=%s: %s", user.id, e)
+        await context.bot.send_message(
+            chat_id=user.id,
+            text="The claim did not go through. Your balance is safe -- try /claim again shortly.",
+        )
+        return
+
+    if claimed == 0:
+        await context.bot.send_message(
+            chat_id=user.id,
+            text="The claim did not go through. Your balance is safe -- try /claim again shortly.",
+        )
+        return
+
+    minted = ", ".join(
+        f"{_format_token_amount(amount, 18)} {symbol}" for symbol, amount in totals.items()
+    )
+    tail = f"\n{failed} token(s) could not be sent and are still waiting." if failed else ""
+
+    # The claim is only half of what somebody wanted; the other half is doing
+    # something with it. The button is offered here because this is the one
+    # moment we know for certain the balance is on-chain.
+    claimed_tokens = [
+        (symbol, addr)
+        for symbol, addr in _token_addresses(totals.keys())
+    ]
+
+    await context.bot.send_message(
+        chat_id=user.id,
+        text=f"Claimed {minted} to {address}.{tail}",
+        # Always private: this message is a direct message by construction.
+        reply_markup=swap_markup(True, claimed_tokens),
+    )
+
+
+def _token_addresses(symbols):
+    """(symbol, address) for chat tokens, in the order asked for."""
+    wanted = list(symbols)
+
+    if not wanted:
+        return []
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT symbol, token_address FROM chat_tokens WHERE token_address IS NOT NULL"),
+        ).fetchall()
+
+    by_symbol = {symbol: address for symbol, address in rows}
+
+    return [(s, by_symbol[s]) for s in wanted if s in by_symbol]
+
+
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show: linked wallet, global TG balance, every chat-token balance the user
     is eligible for, and any pending (claimable on /set_wallet) amounts."""
@@ -1343,18 +1509,19 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 FROM pending_rewards p
                 JOIN chat_tokens t ON t.chat_id = p.chat_id
                 WHERE p.user_id = :u
-                  AND CAST(p.amount AS INTEGER) > 0
+                  AND p.amount NOT IN ('', '0')
             """),
             {"u": user_id},
         ).fetchall()
 
     address = row[0] if row else None
     lines = []
+    swappable: list[tuple[str, str]] = []
 
     if address:
         lines.append(f"Wallet: {address}")
     else:
-        lines.append("Wallet: not set -- use /set_wallet <address> to claim pending rewards.")
+        lines.append("Wallet: not set -- use /set_wallet <address>, then /claim.")
 
     if address:
         try:
@@ -1393,6 +1560,11 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     bal = c.functions.balanceOf(checksum).call() / 10**18
                     lines.append(f"  {symbol}: {bal:g}")
+                    # A [Swap] button under a zero balance is a button that
+                    # opens a screen with nothing to trade, so it is offered
+                    # for what the person actually holds and nothing else.
+                    if bal > 0:
+                        swappable.append((symbol, token_address))
                 except Exception as e:
                     logger.exception(
                         f"balance: chat-token read failed for {symbol} ({token_address}): {e}"
@@ -1401,7 +1573,7 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if pending:
         lines.append("")
-        lines.append("Pending (claim by setting a wallet):")
+        lines.append("Waiting for you (/claim to collect):")
         for symbol, amount_str in pending:
             human = int(amount_str) / 10**18
             lines.append(f"  {human:g} {symbol}")
@@ -1423,7 +1595,10 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "that has a reward token, then wait for its next payout tick."
             )
 
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text(
+        "\n".join(lines),
+        reply_markup=swap_markup(_is_private(update), swappable),
+    )
 
 
 async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1516,7 +1691,7 @@ def _whois_collect(user_id: int) -> dict:
                 FROM pending_rewards p
                 JOIN chat_tokens t ON t.chat_id = p.chat_id
                 WHERE p.user_id = :u
-                  AND CAST(p.amount AS INTEGER) > 0
+                  AND p.amount NOT IN ('', '0')
             """),
             {"u": user_id},
         ).fetchall()

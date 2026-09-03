@@ -235,6 +235,16 @@ const identity = (): { id: string; fresh: boolean } | null => {
     return { id, fresh: true };
 };
 
+/**
+ * The installation's id, if it already has one.
+ *
+ * Deliberately never mints: push notifications must not be the thing that
+ * creates an analytics identity for somebody who declined tracking. No id
+ * means no subscription, and the wallet says so rather than quietly making
+ * one.
+ */
+export const installationId = (): string | null => read(UID_KEY);
+
 type StoredSession = { id: string; last: number };
 
 const session = (): string | null => {

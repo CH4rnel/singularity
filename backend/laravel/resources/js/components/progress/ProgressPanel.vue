@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import { Flame, Trophy } from 'lucide-vue-next';
 import { computed } from 'vue';
+import EnchantTable from '@/components/progress/EnchantTable.vue';
 import LevelBar from '@/components/progress/LevelBar.vue';
 import QuestList from '@/components/progress/QuestList.vue';
 import { useLocale } from '@/composables/useLocale';
@@ -16,6 +17,7 @@ const { t } = useLocale(progressMessages);
 const streakHint = computed(() =>
     props.progress.active_today ? t('activeToday') : t('comeBackToday'),
 );
+
 </script>
 
 <template>
@@ -80,6 +82,18 @@ const streakHint = computed(() =>
                 </dd>
             </div>
         </dl>
+
+        <!--
+          The reason experience exists at all. Without this the panel is a
+          scoreboard, which is what it was: a number that went up and bought
+          nothing.
+        -->
+        <div class="mt-6">
+            <EnchantTable
+                :enchantments="progress.enchantments"
+                :spendable="progress.spendable"
+            />
+        </div>
 
         <div class="mt-6">
             <h3 class="mb-3 text-sm font-bold">{{ t('quests') }}</h3>

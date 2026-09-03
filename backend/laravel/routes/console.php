@@ -69,3 +69,27 @@ Schedule::command('services:check --alert')->everyFiveMinutes()->withoutOverlapp
 // Thirty services swept every five minutes is ten thousand rows a day: a
 // rolling uptime window, never an archive.
 Schedule::command('services:prune')->dailyAt('04:10')->withoutOverlapping();
+// The product report, delivered rather than published. /crm/numbers has
+// answered these questions for weeks and nobody opens it — a dashboard is a
+// place you must decide to go to. Sent at the same hour the console wakes its
+// snoozed rows, in the timezone the operators live in, so the day starts with
+// the numbers instead of with a decision to go and look at them.
+Schedule::command('analytics:digest --send')
+    ->dailyAt(sprintf('%02d:00', (int) config('crm.console.morning_hour', 9)))
+    ->timezone((string) config('crm.console.timezone', 'Europe/Moscow'))
+    ->withoutOverlapping();
+// Badges nobody is watching for. Detection used to run in exactly two places —
+// claiming a nickname, and a button on /profile nobody knew about — so the last
+// award on prod was 2026-07-30 while a badge earned on 2026-08-22 sat unminted.
+// Bounded per run and rotating, because a badge is not urgent; --alert says so
+// when the mint itself is what failed, which was previously silent.
+Schedule::command('achievements:sync --alert')->hourly()->withoutOverlapping();
+// The one notification that brings anybody back. Everything else the
+// gamification system sends is a receipt for something already done, which is
+// why nobody remembers the quests exist. Once a day, in the evening, in the
+// timezone the people here live in — that is also the entire quiet-hours
+// policy, since a setting nobody opens protects nobody.
+Schedule::command('gamification:remind')
+    ->dailyAt('19:00')
+    ->timezone((string) config('crm.console.timezone', 'Europe/Moscow'))
+    ->withoutOverlapping();

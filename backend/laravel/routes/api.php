@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\WalletAuthController;
 use App\Http\Controllers\Api\WalletCrosschainController;
 use App\Http\Controllers\Api\WalletGasController;
 use App\Http\Controllers\Api\WalletIpfsController;
+use App\Http\Controllers\Api\WalletPushController;
 use App\Http\Middleware\AuthenticateAiApiKey;
 use App\Http\Middleware\X402Paywall;
 use App\Services\WalletPriceService;
@@ -74,6 +75,16 @@ Route::prefix('wallet')->group(function () {
  */
 Route::prefix('analytics')->group(function () {
     Route::post('events', [AnalyticsIngestController::class, 'store'])->middleware('throttle:120,1');
+    /*
+     * Being notified without having an account. The site's bell hangs off a
+     * signed-in user and lives in a header the wallet's own layout does not
+     * render, so until this existed push could reach the handful of site
+     * accounts and none of the installations. Keyed by the same installation
+     * UUID as the events above — see WalletPushController for why not an
+     * address.
+     */
+    Route::post('push', [WalletPushController::class, 'store'])->middleware('throttle:20,1');
+    Route::delete('push', [WalletPushController::class, 'destroy'])->middleware('throttle:20,1');
     // The one call that carries an address, kept apart from the event stream
     // so no ordinary event can ever be the thing that leaked one.
     Route::post('funding', [AnalyticsIngestController::class, 'funding'])->middleware('throttle:20,1');

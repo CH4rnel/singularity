@@ -23,6 +23,7 @@ use App\Http\Controllers\ConsoleChatController;
 use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
+use App\Http\Controllers\ConsolePushController;
 use App\Http\Controllers\ConsoleStrategyController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
@@ -38,6 +39,7 @@ use App\Http\Controllers\LainChatController;
 use App\Http\Controllers\LeaderboardController;
 use App\Http\Controllers\LinkController;
 use App\Http\Controllers\LiquidityController;
+use App\Http\Controllers\NoCarrierController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\ProductAnalyticsController;
@@ -399,6 +401,21 @@ Route::middleware(['auth'])->group(function () {
     // Throttled — each hit can cost a relayer transaction on Cyberia.
     Route::patch('profile/nickname', [ProfileController::class, 'updateNickname'])
         ->middleware('throttle:6,1')->name('profile.nickname');
+    // Spending experience. A POST because it is the one place on this profile
+    // where a number goes down and something permanent appears.
+    Route::post('profile/enchant', [ProfileController::class, 'enchant'])->name('profile.enchant');
+
+    /*
+     * NO CARRIER, behind an unlock. Served through the app rather than from
+     * public/, so the gate covers the whole export and not just its entry —
+     * an asset path anybody could guess would make the price a formality.
+     * The shell asks for its siblings by relative name and Laravel normalises
+     * the trailing slash away, so the served page carries a <base>.
+     */
+    Route::get('game/nocarrier', [NoCarrierController::class, 'show'])->name('nocarrier');
+    Route::get('game/nocarrier/{file}', [NoCarrierController::class, 'asset'])
+        ->where('file', '[A-Za-z0-9._-]+')
+        ->name('nocarrier.asset');
     Route::post('profile/achievements/check', [ProfileController::class, 'checkAchievements'])
         ->middleware('throttle:6,1')->name('profile.achievements.check');
     Route::post('posts', [PostController::class, 'store'])
@@ -490,6 +507,13 @@ Route::middleware(['auth'])->group(function () {
         // and renders only its hash and visible prefix.
         Route::get('api-keys', [ConsoleAiKeysController::class, 'index'])->name('ai-keys');
         Route::post('api-keys', [ConsoleAiKeysController::class, 'store'])->name('ai-keys.store');
+
+        // Saying something to somebody, as opposed to what the schedule says
+        // on its own. Carries the key health check with it, because "why did
+        // nothing arrive" was the first question push ever raised and the
+        // answer lived in a tinker session.
+        Route::get('push', [ConsolePushController::class, 'index'])->name('push');
+        Route::post('push', [ConsolePushController::class, 'store'])->name('push.send');
 
         // The editable content plan is framed like the frozen mockup, but its
         // working copy lives on the private disk and changes on an operator action.

@@ -45,6 +45,33 @@ type Props = {
         votes: number;
         comments: number;
     };
+    /** Badges held on CyberiaProfile — permanent, and true about all history. */
+    achievements: {
+        id: number;
+        key: string;
+        title: string;
+        description: string;
+        icon: string;
+    }[];
+    /**
+     * What the indexer saw this address do. Forward-only — the announcer feed
+     * starts where it started — so these are recent actions, not a lifetime
+     * record, and the page says so.
+     */
+    onchain: {
+        events: {
+            kind: string;
+            usd: number | null;
+            in: string | null;
+            out: string | null;
+            tx: string;
+            at: string;
+        }[];
+        kinds: Record<string, number>;
+        since: string | null;
+    };
+    /** Parts of the project this person has unlocked with experience. */
+    unlocks: string[];
     posts: Paginated<Post>;
     activities: Paginated<Activity>;
     /** Level, rank and streak — public standing, no quest board. */
@@ -144,6 +171,33 @@ if (typeof window !== 'undefined') {
         { immediate: true },
     );
 }
+
+/** Human names for what the indexer calls things. */
+const KIND_LABELS: Record<string, string> = {
+    swap: 'Swaps',
+    bridge: 'Bridges',
+    convert: 'Conversions',
+    liq_add: 'Liquidity added',
+    liq_remove: 'Liquidity removed',
+    lend_supplied: 'Supplied',
+    lend_borrowed: 'Borrowed',
+    lend_repaid: 'Repaid',
+    lend_withdrew: 'Withdrew',
+    pumpfun_buy: 'CYBER.sol buys',
+};
+
+const kindLabel = (kind: string): string =>
+    KIND_LABELS[kind] ?? kind.replace(/_/g, ' ');
+
+const onchainTotal = computed(() =>
+    Object.values(props.onchain.kinds).reduce((sum, n) => sum + n, 0),
+);
+
+const sinceDate = computed(() =>
+    props.onchain.since === null
+        ? null
+        : new Date(props.onchain.since.replace(' ', 'T') + 'Z').toLocaleDateString(),
+);
 
 const statTiles = computed(() => [
     { label: 'XP', value: props.progress.xp.toLocaleString() },
@@ -251,6 +305,88 @@ const statTiles = computed(() => [
                 </p>
             </div>
         </div>
+
+        <!--
+          The chain. This page used to show a wall and a DAO feed on a platform
+          whose whole point is what happens on-chain, so somebody with hundreds
+          of swaps looked like they had done nothing.
+        -->
+        <section v-if="props.achievements.length > 0" class="mb-8 space-y-3">
+            <h2
+                class="text-sm font-semibold tracking-widest text-muted-foreground uppercase"
+            >
+                Achievements
+            </h2>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div
+                    v-for="badge in props.achievements"
+                    :key="badge.id"
+                    class="rounded-lg border border-brand-cyan/40 bg-brand-cyan/5 p-3"
+                >
+                    <p class="text-sm font-bold">{{ badge.title }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ badge.description }}
+                    </p>
+                </div>
+            </div>
+            <p class="text-xs text-muted-foreground">
+                Minted on CyberiaProfile. Anyone can verify them on-chain.
+            </p>
+        </section>
+
+        <section v-if="onchainTotal > 0" class="mb-8 space-y-3">
+            <h2
+                class="text-sm font-semibold tracking-widest text-muted-foreground uppercase"
+            >
+                On-chain
+            </h2>
+
+            <div class="flex flex-wrap gap-2">
+                <Badge
+                    v-for="(count, kind) in props.onchain.kinds"
+                    :key="kind"
+                    variant="outline"
+                >
+                    {{ kindLabel(kind) }}: {{ count }}
+                </Badge>
+            </div>
+
+            <ul class="divide-y divide-border/70 rounded-lg border border-border/70">
+                <li
+                    v-for="event in props.onchain.events"
+                    :key="event.tx"
+                    class="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-3 text-sm"
+                >
+                    <span class="font-medium">{{ kindLabel(event.kind) }}</span>
+                    <span v-if="event.in" class="text-muted-foreground">
+                        {{ event.in }}<template v-if="event.out">
+                            → {{ event.out }}</template
+                        >
+                    </span>
+                    <span v-if="event.usd" class="font-mono text-xs">
+                        ${{ event.usd.toLocaleString() }}
+                    </span>
+                    <a
+                        :href="`https://explorer.cyberia.church/tx/${event.tx}`"
+                        target="_blank"
+                        rel="noopener"
+                        class="ml-auto font-mono text-xs text-brand-cyan hover:underline"
+                    >
+                        tx
+                    </a>
+                </li>
+            </ul>
+
+            <!--
+              Said out loud: the announcer feed is forward-only, so these
+              counts are "since it started watching" and not a lifetime total.
+              Implying otherwise would understate everybody who was here first.
+            -->
+            <p v-if="sinceDate" class="text-xs text-muted-foreground">
+                Recorded since {{ sinceDate }} — earlier activity is not in
+                this feed, though the achievements above cover all of it.
+            </p>
+        </section>
 
         <!-- Wall -->
         <section class="mb-8 space-y-3">

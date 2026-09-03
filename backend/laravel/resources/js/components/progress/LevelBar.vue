@@ -41,9 +41,11 @@ const remaining = computed(() =>
                         : 'text-muted-foreground'
                 "
                 :title="
-                    progress.active_today
+                    t('streakMeaning') +
+                    ' ' +
+                    (progress.active_today
                         ? t('activeToday')
-                        : t('comeBackToday')
+                        : t('comeBackToday'))
                 "
             >
                 <Flame class="size-4" />

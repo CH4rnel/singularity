@@ -70,7 +70,15 @@ class CrosschainRouter
         return $address;
     }
 
-    /** Basis points this app asks for, clamped to the ceiling in config. */
+    /**
+     * Basis points this app asks for, clamped to the ceiling in config.
+     *
+     * Deliberately not a function of anybody's standing. XP briefly discounted
+     * this, and the objection that killed it is decisive: XP is handed out for
+     * opening a page and can be farmed, so it must not be allowed to decide
+     * anything that moves money. What experience buys is access to parts of
+     * this project, where a farmed balance takes nothing from anybody.
+     */
     public function feeBps(): int
     {
         $bps = (int) config('crosschain.fee.bps', 0);

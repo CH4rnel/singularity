@@ -1,14 +1,12 @@
 <?php
 
 use App\Models\Proposal;
-use App\Models\SiteEvent;
 use App\Models\User;
 use App\Models\UserStat;
 use App\Models\XpEntry;
 use App\Services\Dao\ActivityRecorder;
 use App\Services\GamificationService;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
 
 beforeEach(function () {
     $this->gamification = app(GamificationService::class);
@@ -90,28 +88,64 @@ it('completes a daily quest and pays its bonus once', function () {
     $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_trade');
 
     expect($quest['completed'])->toBeTrue()
-        ->and(XpEntry::where('user_id', $user->id)->where('source', 'quest')->count())->toBe(1);
+        // Three: a swap is also showing up (daily_visit) and also touching the
+        // chain (daily_onchain). The second swap re-runs all of them and pays
+        // none of them twice.
+        ->and(XpEntry::where('user_id', $user->id)->where('source', 'quest')->count())->toBe(3);
 });
 
-it('counts distinct pages for the exploration quest', function () {
+it('completes the daily visit quest just by showing up', function () {
     $user = User::factory()->create();
 
-    foreach (['/swap', '/swap', '/bridge'] as $page) {
-        SiteEvent::create([
-            'session_id' => (string) Str::uuid(),
-            'user_id' => $user->id,
-            'event' => 'page_view',
-            'page' => $page,
-            'created_at' => now(),
-        ]);
-        $this->gamification->recordAction($user, 'page_view', page: $page);
-    }
+    // Nothing calls recordAction with 'visit' — the site reports page_view.
+    $this->gamification->recordAction($user, 'page_view', page: '/wallet');
 
-    $quest = collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_explore');
+    expect(
+        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit')['completed'],
+    )->toBeTrue();
+});
 
-    // Two distinct pages out of the three required, despite three page views.
-    expect($quest['progress'])->toBe(2)
-        ->and($quest['completed'])->toBeFalse();
+it('still completes the visit quest when the day was already marked active', function () {
+    $user = User::factory()->create();
+
+    // touch() returns early once the day is stamped, so a quest advanced from
+    // there is lost for anybody whose first action of the day happened before
+    // it existed — with no way to earn it back until midnight.
+    $this->gamification->touch($user);
+
+    expect(
+        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit')['completed'],
+    )->toBeFalse();
+
+    $this->gamification->recordAction($user, 'page_view', page: '/wallet');
+
+    expect(
+        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_visit')['completed'],
+    )->toBeTrue();
+});
+
+it('pays the wall, which used to be worth less than opening a page', function () {
+    $user = User::factory()->create();
+
+    $this->gamification->recordAction($user, 'post', '42');
+
+    expect(XpEntry::where('user_id', $user->id)->where('source', 'post')->sum('amount'))->toBe(20)
+        ->and(
+            collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_wall')['completed'],
+        )->toBeTrue();
+});
+
+it('closes the on-chain quest on any real action, not just a swap', function () {
+    $user = User::factory()->create();
+
+    // The quest this replaced could be finished by opening three pages. This
+    // one needs something that cost a transaction — and accepts any of them,
+    // so most people finish it without going out of their way.
+    $this->gamification->recordAction($user, 'staking', '0xstake');
+
+    expect(
+        collect($this->gamification->questBoard($user))->firstWhere('key', 'daily_onchain')['completed'],
+    )->toBeTrue();
 });
 
 it('ranks the leaderboard by xp and skips merged accounts', function () {
@@ -145,4 +179,61 @@ it('credits governance activity when a vote is recorded', function () {
     $recorder->record('vote.cast', $user, $proposal);
 
     expect(XpEntry::where('user_id', $user->id)->where('source', 'vote')->count())->toBe(1);
+});
+
+/**
+ * A streak that nobody is keeping.
+ *
+ * `current_streak` is a stored counter that only moves inside `touch()`, so
+ * somebody who stops coming back keeps the number they walked away with —
+ * breaking a streak is the *absence* of an event, and nothing runs on absence.
+ * User 38 was showing five consecutive days on the leaderboard a week after
+ * their last one.
+ */
+it('shows a streak only while it is still alive', function () {
+    $g = $this->gamification;
+    $now = Carbon::parse('2026-09-01 12:00', 'UTC');
+
+    expect($g->liveStreak('2026-09-01 10:00:00', 5, $now))->toBe(5)
+        // Yesterday counts: the day is not over, so it is alive and at risk —
+        // which is exactly what the reminder writes to people about.
+        ->and($g->liveStreak('2026-08-31 23:00:00', 5, $now))->toBe(5)
+        // Two days ago is a streak that ended and nothing was there to say so.
+        ->and($g->liveStreak('2026-08-30 12:00:00', 5, $now))->toBe(0)
+        ->and($g->liveStreak('2026-08-25 15:12:11', 5, $now))->toBe(0);
+});
+
+it('treats a missing or empty last-active date as no streak', function () {
+    expect($this->gamification->liveStreak(null, 5))->toBe(0)
+        ->and($this->gamification->liveStreak('', 5))->toBe(0)
+        ->and($this->gamification->liveStreak('2026-09-01', 0))->toBe(0);
+});
+
+it('does not put a dead streak on the leaderboard', function () {
+    $user = User::factory()->create();
+    $this->gamification->award($user, 'swap', 'x', 500);
+
+    UserStat::where('user_id', $user->id)->update([
+        'current_streak' => 5,
+        'longest_streak' => 5,
+        'last_active_on' => Carbon::now('UTC')->subWeek(),
+    ]);
+
+    $row = collect($this->gamification->leaderboard(10))->firstWhere('user_id', $user->id);
+
+    expect($row['current_streak'])->toBe(0)
+        // The record stands: it happened, it is just over.
+        ->and(UserStat::where('user_id', $user->id)->value('longest_streak'))->toBe(5);
+});
+
+it('does not put a dead streak on a public profile', function () {
+    $user = User::factory()->create();
+    $this->gamification->award($user, 'swap', 'x', 500);
+
+    UserStat::where('user_id', $user->id)->update([
+        'current_streak' => 5,
+        'last_active_on' => Carbon::now('UTC')->subWeek(),
+    ]);
+
+    expect($this->gamification->publicProgressFor($user)['current_streak'])->toBe(0);
 });

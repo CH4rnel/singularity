@@ -27,10 +27,14 @@ it('renders without the indexer and reports unknown figures as null', function (
         ->assertInertia(fn (Assert $page) => $page
             ->component('Cyber')
             ->where('chain.id', 49406)
+            ->where('chain.rpc', 'https://rpc.cyberia.church')
             ->where('market.price', null)
             ->where('market.pools', null)
             ->where('market.locked', null)
             ->where('market.locked_usd', null));
+
+    expect(file_get_contents(resource_path('js/pages/Cyber.vue')))
+        ->toContain('https://docs.cyberia.church/user-guide/cyber');
 });
 
 it('counts only the coin side of the pools quoted against it', function () {

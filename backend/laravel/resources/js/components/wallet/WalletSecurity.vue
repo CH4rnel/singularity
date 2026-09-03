@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { usePage } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
@@ -8,6 +9,13 @@ import {
     useSecureClipboard,
 } from '@/composables/useSecureClipboard';
 import { analytics } from '@/lib/analytics';
+import {
+    disablePush,
+    enablePush,
+    pushState
+    
+} from '@/lib/wallet/push';
+import type {PushState} from '@/lib/wallet/push';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -29,8 +37,63 @@ const emit = defineEmits<{
     proxy: [];
 }>();
 
-const { t } = useLocale(walletMessages);
+const { t, locale } = useLocale(walletMessages);
 const clipboard = useSecureClipboard();
+
+/**
+ * Notifications, offered here because this is the only screen most people
+ * running this wallet will ever see.
+ *
+ * The site has a bell in its header; this app does not render that header, and
+ * neither does the PWA, the native shells or the Telegram mini app — so until
+ * this row existed, somebody who installed the wallet had no button anywhere
+ * to allow notifications at all.
+ *
+ * Four states rather than a checkbox, because three of them are refusals the
+ * person can act on and one is a refusal they cannot: a browser that blocked
+ * the permission has to be changed in the browser, and a switch that silently
+ * does nothing is worse than a sentence saying so.
+ */
+const vapidKey = computed(
+    () => (usePage().props.vapidPublicKey as string | undefined) ?? null,
+);
+const push = ref<PushState>('unsupported');
+const pushBusy = ref(false);
+
+onMounted(async () => {
+    push.value = await pushState(vapidKey.value);
+});
+
+const setPush = async (on: boolean): Promise<void> => {
+    if (pushBusy.value || vapidKey.value === null) {
+        return;
+    }
+
+    pushBusy.value = true;
+
+    try {
+        push.value = on
+            ? await enablePush(vapidKey.value, locale.value)
+            : await disablePush();
+    } catch {
+        push.value = await pushState(vapidKey.value);
+    } finally {
+        pushBusy.value = false;
+    }
+};
+
+const pushHint = computed(() => {
+    switch (push.value) {
+        case 'denied':
+            return t('notificationsDenied');
+        case 'unsupported':
+            return t('notificationsUnsupported');
+        case 'unavailable':
+            return t('notificationsUnavailable');
+        default:
+            return t('notificationsHint');
+    }
+});
 
 const password = ref('');
 const phrase = ref<string | null>(null);
@@ -338,6 +401,55 @@ onBeforeUnmount(() => {
                         setAnalytics(
                             ($event.target as HTMLInputElement).checked,
                         )
+                    "
+                />
+            </label>
+
+            <label
+                style="
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 16px;
+                    cursor: pointer;
+                "
+            >
+                <span>
+                    <span
+                        style="
+                            display: block;
+                            font: 400 14px/1.3 var(--cw-sans);
+                            color: var(--cw-text);
+                        "
+                        >{{ t('notificationsRow') }}</span
+                    >
+                    <span
+                        style="
+                            display: block;
+                            margin-top: 3px;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-dim);
+                        "
+                        >{{ pushHint }}</span
+                    >
+                </span>
+                <input
+                    :checked="push === 'on'"
+                    :disabled="
+                        pushBusy ||
+                        push === 'denied' ||
+                        push === 'unsupported' ||
+                        push === 'unavailable'
+                    "
+                    type="checkbox"
+                    style="
+                        width: 20px;
+                        height: 20px;
+                        flex: none;
+                        accent-color: var(--cw-accent);
+                    "
+                    @change="
+                        setPush(($event.target as HTMLInputElement).checked)
                     "
                 />
             </label>

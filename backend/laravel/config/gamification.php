@@ -53,7 +53,21 @@ return [
     */
 
     'xp' => [
+        /*
+         * Everything a person does here, on the chain and off it.
+         *
+         * There was briefly a rule that only chain-verified sources may pay,
+         * because XP was about to discount a real fee and a browser can move
+         * `visit`. The rule was right and the premise was wrong: experience
+         * buys *access to this project* — a room, a game, the right to write a
+         * quest for somebody else — and none of that is worth farming. So the
+         * DAO and the wall pay again, and nothing XP unlocks is allowed to be
+         * serious enough to care that they do.
+         */
         'visit' => 10,
+        'post' => 20,
+        'reaction' => 5,
+        'comment' => 15,
         'swap' => 25,
         'liquidity' => 60,
         'lending' => 40,
@@ -61,10 +75,61 @@ return [
         'bridge' => 90,
         'proposal' => 70,
         'vote' => 30,
-        'comment' => 15,
         'staking' => 50,
         'onchain_profile' => 100,
         'launchpad' => 150,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Unlocks: what experience is spent on
+    |--------------------------------------------------------------------------
+    |
+    | Experience works the way it works in a game: a currency, not a rank. You
+    | gather it, you spend it on something permanent, and the balance goes back
+    | down. `xp` stays whole — it is the leaderboard, a record of taking part
+    | that never falls — and only the *spendable* balance moves.
+    |
+    | Everything here is **access to this project**, and that is the rule
+    | rather than the current contents. XP is handed out for opening a page and
+    | can be farmed, so it must never decide anything that moves money: no fee
+    | discounts, no inference credits, nothing another person pays for. There
+    | was a version of this list that discounted a real cross-chain fee, and it
+    | forced the whole system to carry two kinds of XP to defend itself. Spend
+    | it on rooms, games and the right to build something for other people
+    | instead, where a farmed balance takes nothing from anybody.
+    |
+    | `level` gates what is offered; the balance is what it costs. Spending
+    | must not take back the standing that earned the right to spend, so the
+    | gate reads the lifetime number and the price reads the balance.
+    |
+    */
+
+    /*
+    | Where the NO CARRIER web export lives on this host.
+    |
+    | Outside `public/` on purpose: the controller serves it, so the unlock
+    | covers the whole game rather than its front door. Not in the repository
+    | either — it is a 40 MB Godot export, and committing that to serve twenty
+    | people is the wrong trade. Unset or missing is a supported state and the
+    | page says so.
+    */
+
+    'nocarrier_path' => (string) env('NOCARRIER_BUILD_PATH', storage_path('app/private/nocarrier')),
+
+    'unlocks' => [
+        [
+            'key' => 'nocarrier',
+            'cost' => 5000,
+            'level' => 8,
+            'title' => ['en' => 'NO CARRIER', 'ru' => 'NO CARRIER', 'zh' => 'NO CARRIER'],
+            'description' => [
+                'en' => 'The netstalking sim, playable in the browser. Yours for good.',
+                'ru' => 'Симулятор нетсталкинга, играется в браузере. Остаётся навсегда.',
+                'zh' => '可在浏览器中游玩的网络潜行模拟器，永久解锁。',
+            ],
+            'effects' => ['nocarrier' => 1],
+        ],
     ],
 
     /*
@@ -73,6 +138,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | Bonus XP the first time a consecutive-day streak reaches each length.
+    |
+    | Attendance pays here, and that is a deliberate choice rather than an
+    | oversight: coming back is the behaviour this whole system exists to
+    | encourage, and what the XP buys is access to parts of the project rather
+    | than anything a farmed balance could take from somebody else.
     |
     */
 
@@ -93,7 +163,6 @@ return [
     | `period` is daily (resets at UTC midnight) or weekly (ISO week).
     | `actions` lists the action keys that advance the quest; `target` is how
     | many are needed, `xp` the completion bonus on top of per-action XP.
-    | `distinct_pages` quests count separate pages visited, not raw hits.
     |
     */
 
@@ -108,14 +177,43 @@ return [
             'xp' => 10,
         ],
         [
-            'key' => 'daily_explore',
+            'key' => 'daily_streak_keeper',
             'period' => 'daily',
-            'title' => ['en' => 'Walk the wired', 'ru' => 'Пройтись по сети', 'zh' => '走一遍线路'],
-            'description' => ['en' => 'Visit 3 different sections.', 'ru' => 'Посетить 3 разных раздела.', 'zh' => '访问 3 个不同的板块。'],
-            'actions' => ['page_view'],
-            'target' => 3,
+            'title' => ['en' => 'Hold the line', 'ru' => 'Удержать линию', 'zh' => '守住连续'],
+            'description' => [
+                'en' => 'Come back two days running.',
+                'ru' => 'Зайти два дня подряд.',
+                'zh' => '连续两天回来。',
+            ],
+            'actions' => ['streak_day'],
+            'target' => 1,
+            'xp' => 15,
+        ],
+        [
+            'key' => 'daily_wall',
+            'period' => 'daily',
+            'title' => ['en' => 'Say something', 'ru' => 'Сказать что-нибудь', 'zh' => '说点什么'],
+            'description' => [
+                'en' => 'Post on the wall or react to somebody.',
+                'ru' => 'Написать на стену или отреагировать на кого-то.',
+                'zh' => '在墙上发帖或给别人一个反应。',
+            ],
+            'actions' => ['post', 'reaction', 'comment'],
+            'target' => 1,
             'xp' => 20,
-            'distinct_pages' => true,
+        ],
+        [
+            'key' => 'daily_onchain',
+            'period' => 'daily',
+            'title' => ['en' => 'Touch the chain', 'ru' => 'Тронуть цепь', 'zh' => '触碰链上'],
+            'description' => [
+                'en' => 'Do one thing on-chain: swap, bridge, stake, lend or add liquidity.',
+                'ru' => 'Сделать одно действие в цепи: обмен, мост, стейкинг, лендинг или ликвидность.',
+                'zh' => '完成一次链上操作：兑换、跨链、质押、借贷或添加流动性。',
+            ],
+            'actions' => ['swap', 'bridge', 'staking', 'lending', 'liquidity', 'convert'],
+            'target' => 1,
+            'xp' => 30,
         ],
         [
             'key' => 'daily_trade',
@@ -152,6 +250,58 @@ return [
             'actions' => ['vote', 'comment', 'proposal'],
             'target' => 3,
             'xp' => 100,
+        ],
+        [
+            'key' => 'daily_lend',
+            'period' => 'daily',
+            'title' => ['en' => 'Lend a hand', 'ru' => 'Дать взаймы', 'zh' => '出借一手'],
+            'description' => [
+                'en' => 'Supply, borrow or repay in the lending market.',
+                'ru' => 'Внести, занять или вернуть в лендинге.',
+                'zh' => '在借贷市场存入、借出或偿还。',
+            ],
+            'actions' => ['lending'],
+            'target' => 1,
+            'xp' => 50,
+        ],
+        [
+            'key' => 'daily_stake',
+            'period' => 'daily',
+            'title' => ['en' => 'Lock it up', 'ru' => 'Запереть', 'zh' => '锁仓'],
+            'description' => [
+                'en' => 'Stake into a pool.',
+                'ru' => 'Застейкать в пул.',
+                'zh' => '质押到一个池子。',
+            ],
+            'actions' => ['staking'],
+            'target' => 1,
+            'xp' => 50,
+        ],
+        [
+            'key' => 'weekly_lender',
+            'period' => 'weekly',
+            'title' => ['en' => 'Put it to work', 'ru' => 'Заставить работать', 'zh' => '让它生息'],
+            'description' => [
+                'en' => 'Supply, borrow or repay in the lending market.',
+                'ru' => 'Внести, занять или вернуть в лендинге.',
+                'zh' => '在借贷市场存入、借出或偿还。',
+            ],
+            'actions' => ['lending'],
+            'target' => 1,
+            'xp' => 140,
+        ],
+        [
+            'key' => 'weekly_staker',
+            'period' => 'weekly',
+            'title' => ['en' => 'Stand behind it', 'ru' => 'Встать за него', 'zh' => '为它背书'],
+            'description' => [
+                'en' => 'Stake into a pool.',
+                'ru' => 'Застейкать в пул.',
+                'zh' => '质押到一个池子。',
+            ],
+            'actions' => ['staking'],
+            'target' => 1,
+            'xp' => 130,
         ],
         [
             'key' => 'weekly_bridge',

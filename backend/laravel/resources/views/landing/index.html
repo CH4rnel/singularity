@@ -906,6 +906,9 @@
   }
 
   /* ====== Responsive ====== */
+  @media (max-width: 1180px){
+    .nav-links{gap:clamp(16px,2vw,24px)}
+  }
   @media (max-width: 880px){
     .nav-inner{padding:18px 22px;gap:18px}
     .nav-links{gap:18px;flex-wrap:wrap;justify-content:flex-end}
@@ -1166,6 +1169,8 @@ function Nav(){
         <nav className="nav-links">
           <a href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">Whitepaper</a>
           <a href="/download">Get the app</a>
+          <a href="/cyber">CYBER</a>
+          <a href="https://docs.cyberia.church" target="_blank" rel="noopener noreferrer">Docs</a>
           <a href="/bridge">Bridge</a>
           <a href="/swap">DEX</a>
           <a href="/staking">Staking</a>

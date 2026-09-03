@@ -5,6 +5,19 @@ use App\Models\Dao;
 use App\Models\Proposal;
 use App\Models\ProposalComment;
 use App\Models\User;
+use App\Notifications\DaoActivityNotification;
+
+/**
+ * Only the DAO's own notifications. Acting in a DAO is also activity, so the
+ * actor may collect a gamification notice in the same request — counting every
+ * unread row made these assertions quietly depend on the quest board.
+ */
+function daoUnread(User $user): int
+{
+    return $user->fresh()->unreadNotifications()
+        ->where('type', DaoActivityNotification::class)
+        ->count();
+}
 
 test('a new proposal notifies prior dao participants but not the author', function () {
     $author = User::factory()->create();
@@ -22,10 +35,11 @@ test('a new proposal notifies prior dao participants but not the author', functi
         'title' => 'Notify me',
     ]);
 
-    expect($participant->fresh()->unreadNotifications()->count())->toBe(1)
-        ->and($author->fresh()->unreadNotifications()->count())->toBe(0);
+    expect(daoUnread($participant))->toBe(1)
+        ->and(daoUnread($author))->toBe(0);
 
-    $data = $participant->fresh()->unreadNotifications()->first()->data;
+    $data = $participant->fresh()->unreadNotifications()
+        ->where('type', DaoActivityNotification::class)->first()->data;
     expect($data['type'])->toBe('proposal.created');
 });
 
@@ -38,7 +52,7 @@ test('a comment notifies the proposal author', function () {
         'body' => 'ping',
     ]);
 
-    expect($author->fresh()->unreadNotifications()->count())->toBe(1);
+    expect(daoUnread($author))->toBe(1);
 });
 
 test('a reply notifies the parent comment author too', function () {
@@ -56,9 +70,9 @@ test('a reply notifies the parent comment author too', function () {
         'parent_id' => $parent->id,
     ]);
 
-    expect($parentAuthor->fresh()->unreadNotifications()->count())->toBe(1)
-        ->and($proposalAuthor->fresh()->unreadNotifications()->count())->toBe(1)
-        ->and($replier->fresh()->unreadNotifications()->count())->toBe(0);
+    expect(daoUnread($parentAuthor))->toBe(1)
+        ->and(daoUnread($proposalAuthor))->toBe(1)
+        ->and(daoUnread($replier))->toBe(0);
 });
 
 test('a vote notifies the proposal author', function () {
@@ -71,7 +85,7 @@ test('a vote notifies the proposal author', function () {
         'support' => true,
     ]);
 
-    expect($author->fresh()->unreadNotifications()->count())->toBe(1);
+    expect(daoUnread($author))->toBe(1);
 });
 
 test('a reaction notifies the content author but not self-reactions', function () {
@@ -91,6 +105,6 @@ test('a reaction notifies the content author but not self-reactions', function (
         'emoji' => '👍',
     ]);
 
-    expect($author->fresh()->unreadNotifications()->count())->toBe(1)
-        ->and($reactor->fresh()->unreadNotifications()->count())->toBe(0);
+    expect(daoUnread($author))->toBe(1)
+        ->and(daoUnread($reactor))->toBe(0);
 });

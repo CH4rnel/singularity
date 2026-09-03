@@ -2,12 +2,13 @@
 
 namespace App\Services;
 
-use App\Models\SiteEvent;
 use App\Models\User;
 use App\Models\UserQuest;
 use App\Models\UserStat;
+use App\Models\XpEnchantment;
 use App\Models\XpEntry;
 use App\Notifications\ProgressNotification;
+use App\Support\Localised;
 use App\Support\ProfileHandle;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
@@ -75,6 +76,26 @@ class GamificationService
         }
 
         $granted += $this->touch($user, $at);
+
+        /*
+         * "Open Cyberia today" is satisfied by *any* action and must not depend
+         * on this being the first one. Nothing ever calls this with `visit` —
+         * the site reports `page_view` — and advancing it from touch() looked
+         * right and was wrong, because touch() returns early once the day is
+         * already marked. Here it is idempotent instead of positional: a
+         * completed quest short-circuits, so it costs a lookup and heals a day
+         * that started without it.
+         */
+        if ($action !== 'visit') {
+            $granted += $this->advanceQuests($user, 'visit', $at, null);
+        }
+
+        // A streak is a fact about the account rather than a thing anybody
+        // does, so nothing would ever report it as an action.
+        if ($action !== 'streak_day' && $this->statsFor($user)->current_streak >= 2) {
+            $granted += $this->advanceQuests($user, 'streak_day', $at, null);
+        }
+
         $granted += $this->advanceQuests($user, $action, $at, $page);
 
         return $granted;
@@ -166,6 +187,193 @@ class GamificationService
     /**
      * Highest level whose cumulative XP requirement is met.
      */
+    /**
+     * Where somebody stands and what they can spend.
+     *
+     * One number, deliberately. There was briefly a second — the subset the
+     * chain would vouch for — because XP was about to discount a real fee and
+     * a browser can move `visit`. What XP buys is access to parts of this
+     * project instead, so a farmed balance takes nothing from anybody and the
+     * distinction stopped earning the cost of explaining it on every screen.
+     *
+     * @return array{xp: int, level: int, title: string, spendable: int, perks: array<string, int>}
+     */
+    public function standing(User $user): array
+    {
+        $stats = $this->statsFor($user);
+
+        return [
+            'xp' => (int) $stats->xp,
+            'level' => (int) $stats->level,
+            'title' => $this->titleFor((int) $stats->level),
+            'spendable' => $this->spendable($user),
+            'perks' => $this->perksFor($user),
+        ];
+    }
+
+    /**
+     * What is left to spend.
+     *
+     * Lifetime XP minus what has been spent on unlocks that still exist.
+     *
+     * That last clause is a refund rule and it is load-bearing. Prices are
+     * recorded at purchase so a later change cannot rewrite what somebody
+     * paid — but an unlock being *withdrawn* is not a price change, it is the
+     * goods disappearing, and continuing to hold the charge would mean
+     * somebody paying for something we took away. One operator is already in
+     * that position: a cross-chain fee discount was on sale for two hours
+     * before the rule against XP touching money was settled.
+     *
+     * Never negative, so a price rise after the fact cannot put anybody in
+     * debt either.
+     */
+    public function spendable(User $user): int
+    {
+        $offered = array_column($this->catalogue(), 'key');
+
+        $spent = (int) XpEnchantment::query()
+            ->where('user_id', $user->id)
+            ->whereIn('key', $offered)
+            ->sum('cost');
+
+        return max(0, (int) $this->statsFor($user)->xp - $spent);
+    }
+
+    /** @return array<int, string> */
+    public function owned(User $user): array
+    {
+        return XpEnchantment::query()
+            ->where('user_id', $user->id)
+            ->pluck('key')
+            ->all();
+    }
+
+    /**
+     * What this user has unlocked, as effect flags.
+     *
+     * The highest value for each effect wins, so a ladder that ever grows one
+     * is worth its best rung rather than the sum of them.
+     *
+     * @return array<string, int>
+     */
+    public function perksFor(User $user): array
+    {
+        $owned = $this->owned($user);
+        $effects = [];
+
+        foreach ($this->catalogue() as $enchantment) {
+            if (! in_array($enchantment['key'], $owned, true)) {
+                continue;
+            }
+
+            foreach ((array) ($enchantment['effects'] ?? []) as $name => $value) {
+                $effects[$name] = max($effects[$name] ?? 0, (int) $value);
+            }
+        }
+
+        return $effects;
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function catalogue(): array
+    {
+        return (array) config('gamification.unlocks', []);
+    }
+
+    /**
+     * The table, as somebody standing at it sees it.
+     *
+     * Four states and they are not the same refusal: owned, affordable,
+     * `level` (standing too low, so no amount of saving helps yet), and `xp`
+     * (standing is fine, the balance is not). A single "unavailable" would
+     * hide which of the two a person should go and do something about.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function enchantments(User $user): array
+    {
+        $owned = $this->owned($user);
+        $balance = $this->spendable($user);
+        $level = (int) $this->statsFor($user)->level;
+
+        return array_map(function (array $enchantment) use ($owned, $balance, $level): array {
+            $has = in_array($enchantment['key'], $owned, true);
+            $needs = $enchantment['requires'] ?? null;
+
+            $state = match (true) {
+                $has => 'owned',
+                $needs !== null && ! in_array($needs, $owned, true) => 'requires',
+                $level < (int) $enchantment['level'] => 'level',
+                $balance < (int) $enchantment['cost'] => 'xp',
+                default => 'ready',
+            };
+
+            return [
+                'key' => $enchantment['key'],
+                'title' => $enchantment['title'],
+                'description' => $enchantment['description'],
+                'cost' => (int) $enchantment['cost'],
+                'level' => (int) $enchantment['level'],
+                'requires' => $needs,
+                'effects' => (array) ($enchantment['effects'] ?? []),
+                'state' => $state,
+            ];
+        }, $this->catalogue());
+    }
+
+    /**
+     * Buy one. Returns the enchantment, or null with a reason it refused.
+     *
+     * The whole thing is one transaction over a locked balance, and the unique
+     * index is the last word: two clicks that both pass the balance check
+     * still result in one purchase and one charge, because the second insert
+     * cannot land.
+     *
+     * @return array{ok: bool, reason: string, enchantment: ?array<string, mixed>}
+     */
+    public function enchant(User $user, string $key): array
+    {
+        $enchantment = collect($this->catalogue())->firstWhere('key', $key);
+
+        if ($enchantment === null) {
+            return ['ok' => false, 'reason' => 'unknown', 'enchantment' => null];
+        }
+
+        return DB::transaction(function () use ($user, $key, $enchantment): array {
+            // Lock the person, not the row that does not exist yet.
+            User::query()->whereKey($user->id)->lockForUpdate()->first();
+
+            $owned = $this->owned($user);
+
+            if (in_array($key, $owned, true)) {
+                return ['ok' => false, 'reason' => 'owned', 'enchantment' => null];
+            }
+
+            $needs = $enchantment['requires'] ?? null;
+
+            if ($needs !== null && ! in_array($needs, $owned, true)) {
+                return ['ok' => false, 'reason' => 'requires', 'enchantment' => null];
+            }
+
+            if ((int) $this->statsFor($user)->level < (int) $enchantment['level']) {
+                return ['ok' => false, 'reason' => 'level', 'enchantment' => null];
+            }
+
+            if ($this->spendable($user) < (int) $enchantment['cost']) {
+                return ['ok' => false, 'reason' => 'xp', 'enchantment' => null];
+            }
+
+            XpEnchantment::query()->create([
+                'user_id' => $user->id,
+                'key' => $key,
+                'cost' => (int) $enchantment['cost'],
+                'created_at' => Carbon::now('UTC'),
+            ]);
+
+            return ['ok' => true, 'reason' => 'ok', 'enchantment' => $enchantment];
+        });
+    }
+
     public function levelFor(int $xp): int
     {
         $step = max(1, (int) config('gamification.level_step', 50));
@@ -220,11 +428,19 @@ class GamificationService
             'progress_pct' => $ceiling === null || $ceiling === $floor
                 ? 100
                 : (int) round(($stats->xp - $floor) / ($ceiling - $floor) * 100),
-            'current_streak' => $stats->current_streak,
+            'current_streak' => $this->liveStreak($stats->last_active_on, (int) $stats->current_streak),
             'longest_streak' => $stats->longest_streak,
             'last_active_on' => $stats->last_active_on?->toDateString(),
             'active_today' => $stats->last_active_on?->toDateString() === Carbon::now('UTC')->toDateString(),
             'rank' => $this->rankOf($stats),
+            /*
+             * What is left to spend, and what has been bought with it. One
+             * number: every source that pays XP is credited from ground
+             * truth, so there is no longer a bigger figure that buys nothing.
+             */
+            'spendable' => $this->spendable($user),
+            'perks' => $this->perksFor($user),
+            'enchantments' => $this->enchantments($user),
             'quests' => $this->questBoard($user),
             'recent' => XpEntry::query()
                 ->where('user_id', $user->id)
@@ -258,7 +474,7 @@ class GamificationService
             'xp' => $stats->xp,
             'level' => $stats->level,
             'title' => $this->titleFor($stats->level),
-            'current_streak' => $stats->current_streak,
+            'current_streak' => $this->liveStreak($stats->last_active_on, (int) $stats->current_streak),
             'longest_streak' => $stats->longest_streak,
             'rank' => $this->rankOf($stats),
         ];
@@ -288,6 +504,7 @@ class GamificationService
                 'user_stats.xp',
                 'user_stats.level',
                 'user_stats.current_streak',
+                'user_stats.last_active_on',
             ])
             ->values()
             ->map(fn ($row, int $index) => [
@@ -305,7 +522,7 @@ class GamificationService
                 'xp' => (int) $row->xp,
                 'level' => (int) $row->level,
                 'title' => $this->titleFor((int) $row->level),
-                'current_streak' => (int) $row->current_streak,
+                'current_streak' => $this->liveStreak($row->last_active_on, (int) $row->current_streak),
             ])
             ->all();
     }
@@ -365,9 +582,7 @@ class GamificationService
                 continue;
             }
 
-            $row->progress = ($quest['distinct_pages'] ?? false)
-                ? $this->distinctPagesToday($user, $at, $page)
-                : $row->progress + 1;
+            $row->progress++;
 
             if ($row->progress >= $row->target) {
                 $row->progress = $row->target;
@@ -383,32 +598,6 @@ class GamificationService
         }
 
         return $granted;
-    }
-
-    /**
-     * How many different pages the user has opened today. Counted from
-     * site_events rather than a per-quest counter so a reload of the same page
-     * never advances the quest.
-     */
-    private function distinctPagesToday(User $user, CarbonInterface $at, ?string $page): int
-    {
-        $pages = SiteEvent::query()
-            ->where('user_id', $user->id)
-            ->whereNotNull('page')
-            ->whereBetween('created_at', [
-                $this->utc($at)->startOfDay(),
-                $this->utc($at)->endOfDay(),
-            ])
-            ->distinct()
-            ->pluck('page')
-            ->all();
-
-        // The event that triggered this call may not be committed yet.
-        if ($page !== null && ! in_array($page, $pages, true)) {
-            $pages[] = $page;
-        }
-
-        return count($pages);
     }
 
     private function periodKey(string $period, CarbonInterface $at): string
@@ -442,9 +631,18 @@ class GamificationService
     {
         $user->notify(new ProgressNotification(
             type: 'progress.level_up',
-            title: "Level {$level} — ".$this->titleFor($level),
-            body: 'Your Cyberia rank went up. Keep the streak alive.',
+            title: [
+                'en' => 'Level {level} — {rank}',
+                'ru' => 'Уровень {level} — {rank}',
+                'zh' => '等级 {level} — {rank}',
+            ],
+            body: [
+                'en' => 'Your Cyberia rank went up. Keep the streak alive.',
+                'ru' => 'Ранг в Cyberia вырос. Не теряйте серию.',
+                'zh' => '你的 Cyberia 等级提升了。保持连续记录。',
+            ],
             url: '/profile',
+            replace: ['level' => $level, 'rank' => $this->titleFor($level)],
         ));
     }
 
@@ -455,9 +653,23 @@ class GamificationService
     {
         $user->notify(new ProgressNotification(
             type: 'progress.quest_completed',
-            title: 'Quest complete: '.($quest['title']['en'] ?? $quest['key']),
-            body: '+'.$quest['xp'].' XP',
+            title: [
+                'en' => 'Quest complete: {quest}',
+                'ru' => 'Задание выполнено: {quest}',
+                'zh' => '任务完成：{quest}',
+            ],
+            body: ['en' => '+{xp} XP'],
             url: '/profile',
+            replace: [
+                // Quest titles already ship in all three languages in
+                // config/gamification.php, so the right one is picked here
+                // rather than being folded into the sentence above.
+                'quest' => Localised::pick(
+                    is_array($quest['title'] ?? null) ? $quest['title'] : ['en' => $quest['key']],
+                    $user->notification_locale,
+                ),
+                'xp' => $quest['xp'],
+            ],
         ));
     }
 
@@ -576,6 +788,46 @@ class GamificationService
         }
 
         return $granted;
+    }
+
+    /**
+     * The streak as it stands *today*, rather than as it was last left.
+     *
+     * `current_streak` is a stored counter that only ever moves inside
+     * `touch()`, so a person who stops coming back keeps the number they
+     * walked away with — user 38 was showing five consecutive days on the
+     * leaderboard a week after their last one. Nothing ever ran to break it,
+     * because breaking a streak is the absence of an event.
+     *
+     * Yesterday still counts: the day is not over, so somebody who was here
+     * yesterday has a streak that is alive and at risk, which is exactly what
+     * `gamification:remind` writes to them about.
+     */
+    public function liveStreak(mixed $lastActiveOn, int $stored, ?CarbonInterface $at = null): int
+    {
+        $day = $this->day($lastActiveOn);
+
+        if ($day === null || $stored <= 0) {
+            return 0;
+        }
+
+        $now = $this->utc($at);
+
+        return in_array($day, [$now->toDateString(), $now->copy()->subDay()->toDateString()], true)
+            ? $stored
+            : 0;
+    }
+
+    /** The date part of whatever shape a timestamp arrived in. */
+    private function day(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->toDateString();
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : mb_substr($value, 0, 10);
     }
 
     /** Normalise an optional instant to UTC, defaulting to now. */

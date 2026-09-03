@@ -35,8 +35,8 @@ from bot.nft import (
 )
 from bot.handlers import (
     start_command, help_command, set_wallet_command, unset_wallet_command,
-    wallet_command, cancel_command, balance_command, token_command,
-    github_command, website_command, app_command, open_command, arena_command, create_token_command,
+    wallet_command, cancel_command, balance_command, claim_command, token_command,
+    github_command, website_command, app_command, open_command, create_token_command,
     set_rewards_interval_command, reward_now_command, whois_command,
     whale_command, x_command, ca_command, stats_command,
     pending_input_handler, pending_create_token_handler, track_chat_member,
@@ -64,13 +64,13 @@ async def post_init(application: Application):
             BotCommand("unset_wallet", "Unlink your wallet (keep pending)"),
             BotCommand("wallet", "Show your linked wallet"),
             BotCommand("balance", "Show TG, chat tokens, and pending rewards"),
+            BotCommand("claim", "Collect your accrued chat-token rewards"),
             BotCommand("token", "Show this chat's reward token"),
             BotCommand("cancel", "Cancel an interactive prompt"),
             BotCommand("github", "Link GitHub for GITHUB airdrop"),
             BotCommand("website", "Open the project website"),
             BotCommand("app", "Download the Cyberia wallet app"),
             BotCommand("open", "Open the wallet inside Telegram"),
-            BotCommand("arena", "Play Cyberia Arena"),
             BotCommand("x", "Show X (Twitter) and Telegram links"),
             BotCommand("ca", "Show the CYBER contract address"),
             BotCommand("stats", "On-chain activity digest (default 24h)"),
@@ -236,12 +236,12 @@ def run_dispatcher():
     application.add_handler(CommandHandler("wallet", wallet_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CommandHandler("balance", balance_command))
+    application.add_handler(CommandHandler("claim", claim_command))
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("github", github_command))
     application.add_handler(CommandHandler("website", website_command))
     application.add_handler(CommandHandler("app", app_command))
     application.add_handler(CommandHandler("open", open_command))
-    application.add_handler(CommandHandler("arena", arena_command))
     application.add_handler(CommandHandler("create_token", create_token_command))
     application.add_handler(CommandHandler("set_rewards_interval", set_rewards_interval_command))
     application.add_handler(CommandHandler("reward_now", reward_now_command))
