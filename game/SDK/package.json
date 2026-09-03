@@ -14,7 +14,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "clean": "hardhat clean"
+    "clean": "hardhat clean",
+    "deploy:cyberia": "hardhat run scripts/deploy.ts --network cyberia --build-profile production"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

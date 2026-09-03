@@ -254,6 +254,24 @@ export {
 export type { CatalogueNetwork } from '@/lib/wallet/catalogue';
 export type { UtxoAddressType } from '@/lib/wallet/utxo';
 export {
+    ARENA_ABI,
+    arenaCommitment,
+    arenaHasOpponent,
+    commitArenaMove,
+    createArenaGame,
+    createArenaSecret,
+    joinArenaGame,
+    readArenaGame,
+    revealArenaMove,
+    settleArenaGame,
+} from '@/lib/wallet/arena';
+export type {
+    ArenaGame,
+    ArenaMove,
+    ArenaResult,
+    ArenaState,
+} from '@/lib/wallet/arena';
+export {
     ERC20_TRANSFER_GAS_CAP,
     blockscoutTokens,
     erc20Balance,
@@ -352,4 +370,8 @@ export {
     seedFromMnemonic,
     unsealVault,
 } from '@/lib/wallet/vault';
-export type { OpenedVault, VaultContents } from '@/lib/wallet/vault';
+export type {
+    ArenaSecretRecord,
+    OpenedVault,
+    VaultContents,
+} from '@/lib/wallet/vault';

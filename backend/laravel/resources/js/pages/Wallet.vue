@@ -19,6 +19,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import WalletAccounts from '@/components/wallet/WalletAccounts.vue';
 import WalletAddNetwork from '@/components/wallet/WalletAddNetwork.vue';
 import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
+import WalletArena from '@/components/wallet/WalletArena.vue';
 import WalletBridge from '@/components/wallet/WalletBridge.vue';
 import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
 import WalletChat from '@/components/wallet/WalletChat.vue';
@@ -97,6 +98,12 @@ const props = defineProps<{
         tokenAddress: string;
         minimumShareBps: number;
     };
+    arena: {
+        enabled: boolean;
+        contractAddress: string;
+        rpcUrl: string;
+        explorerUrl: string;
+    };
     /** Which bridge corridors exist, which are open, and where deposits go. */
     bridge: BridgeConfig;
     /** The limits this server pins under, so the screens can say them first. */
@@ -150,10 +157,16 @@ type Section =
     | 'earn'
     | 'bridge'
     | 'crosschain'
+    | 'arena'
     | 'browse';
 type Overlay = 'send' | 'receive' | 'swap' | 'addNetwork';
 
-const section = ref<Section>('portfolio');
+const requestedScreen = new URLSearchParams(window.location.search).get(
+    'screen',
+);
+const section = ref<Section>(
+    requestedScreen === 'arena' ? 'arena' : 'portfolio',
+);
 const overlay = ref<Overlay | null>(null);
 const chain = ref<WalletChainId>('cyberia');
 const prices = ref(props.quotes.prices);
@@ -201,6 +214,7 @@ const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'bridge', label: () => t('bridgeTitle') },
     { id: 'crosschain', label: () => t('crossTile') },
     { id: 'earn', label: () => t('earnTitle') },
+    { id: 'arena', label: () => 'Arena' },
     { id: 'browse', label: () => t('browseTitle') },
     { id: 'feed', label: () => t('feed') },
     { id: 'launchpad', label: () => t('launchpad') },
@@ -261,6 +275,7 @@ const TAB_OF: Record<Section, Section> = {
     earn: 'portfolio',
     bridge: 'portfolio',
     crosschain: 'portfolio',
+    arena: 'portfolio',
     browse: 'browse',
     feed: 'feed',
     profile: 'feed',
@@ -334,6 +349,7 @@ const PARENTS: Partial<Record<Section, Section>> = {
     earn: 'portfolio',
     bridge: 'portfolio',
     crosschain: 'portfolio',
+    arena: 'portfolio',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -1185,6 +1201,7 @@ watch(
                             @crosschain="openSection('crosschain')"
                             @earn="openSection('earn')"
                             @bridge="openSection('bridge')"
+                            @arena="openSection('arena')"
                             @browse="openSection('browse')"
                             @preferences="openSection('preferences')"
                         />
@@ -1194,6 +1211,13 @@ watch(
                         v-else-if="section === 'chat'"
                         :wallet="wallet"
                         @unread="refreshUnread"
+                    />
+
+                    <WalletArena
+                        v-else-if="section === 'arena'"
+                        :wallet="wallet"
+                        :config="props.arena"
+                        @back="openSection('portfolio')"
                     />
 
                     <WalletAccounts

@@ -55,6 +55,7 @@ const emit = defineEmits<{
     bridge: [];
     earn: [];
     browse: [];
+    arena: [];
     preferences: [];
 }>();
 
@@ -505,6 +506,18 @@ const recent = computed(() =>
                 }}</span>
             </button>
         </div>
+
+        <button
+            type="button"
+            class="cw-card cw-card-button"
+            style="margin: 10px 0; padding: 14px 16px"
+            @click="emit('arena')"
+        >
+            <span class="cw-row"
+                ><span>CYBERIA ARENA</span
+                ><span class="cw-label">PLAY ON-CHAIN →</span></span
+            >
+        </button>
 
         <!--
           A second row, and the difference from the first is what they are
