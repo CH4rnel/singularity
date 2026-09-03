@@ -3,6 +3,8 @@ import { formatEther, parseEther } from 'ethers';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useLocale } from '@/composables/useLocale';
+import { arenaMessages } from '@/lib/arenaMessages';
 import { arenaHasOpponent, readArenaGame } from '@/lib/wallet';
 import type { ArenaGame, ArenaMove } from '@/lib/wallet';
 
@@ -16,8 +18,25 @@ const props = defineProps<{
     };
 }>();
 const emit = defineEmits<{ back: [] }>();
+const { t } = useLocale(arenaMessages);
 
 const query = new URLSearchParams(window.location.search);
+const selectedGame = ref(query.has('game'));
+const tab = ref<'about' | 'play' | 'community'>('about');
+const feedback = ref('');
+const savedFeedback = ref<string[]>(
+    JSON.parse(localStorage.getItem('cyberia-arena-feedback') ?? '[]'),
+);
+const saveFeedback = (): void => {
+    const value = feedback.value.trim();
+    if (!value) return;
+    savedFeedback.value.unshift(value);
+    localStorage.setItem(
+        'cyberia-arena-feedback',
+        JSON.stringify(savedFeedback.value.slice(0, 20)),
+    );
+    feedback.value = '';
+};
 const gameId = ref(query.get('game') ?? '');
 const stake = ref('0.01');
 const move = ref<ArenaMove>(1);
@@ -54,19 +73,19 @@ const revealed = computed(
 const expired = computed(
     () => !!game.value && Date.now() / 1000 > game.value.deadline,
 );
-const states = [
+const states = computed(() => [
     '—',
-    'Waiting for opponent',
-    'Commit moves',
-    'Reveal moves',
-    'Resolved',
-    'Cancelled',
-];
-const moves: { id: ArenaMove; glyph: string; name: string }[] = [
-    { id: 1, glyph: '◆', name: 'Rock' },
-    { id: 2, glyph: '▰', name: 'Paper' },
-    { id: 3, glyph: '✂', name: 'Scissors' },
-];
+    t('state1'),
+    t('state2'),
+    t('state3'),
+    t('state4'),
+    t('state5'),
+]);
+const moves = computed<{ id: ArenaMove; glyph: string; name: string }[]>(() => [
+    { id: 1, glyph: '◆', name: t('rock') },
+    { id: 2, glyph: '▰', name: t('paper') },
+    { id: 3, glyph: '✂', name: t('scissors') },
+]);
 
 const refresh = async (): Promise<void> => {
     if (!props.config.enabled || !gameId.value || !account.value) return;
@@ -80,8 +99,7 @@ const refresh = async (): Promise<void> => {
         );
         message.value = '';
     } catch (error) {
-        message.value =
-            error instanceof Error ? error.message : 'Unable to read game';
+        message.value = error instanceof Error ? error.message : t('readError');
     } finally {
         loading.value = false;
     }
@@ -97,8 +115,7 @@ const run = async (
         message.value = success;
         await refresh();
     } catch (error) {
-        message.value =
-            error instanceof Error ? error.message : 'Transaction failed';
+        message.value = error instanceof Error ? error.message : t('txError');
     } finally {
         loading.value = false;
     }
@@ -117,7 +134,7 @@ const create = () =>
                 `/wallet?screen=arena&game=${gameId.value}`,
             );
         }
-    }, 'Game created. Share its number with an opponent.');
+    }, t('created'));
 const join = () =>
     run(
         () =>
@@ -126,7 +143,7 @@ const join = () =>
                 BigInt(gameId.value),
                 game.value!.stake,
             ),
-        'Joined. Both players can now seal a move.',
+        t('joined'),
     );
 const commit = () =>
     run(
@@ -137,7 +154,7 @@ const commit = () =>
                 account.value,
                 move.value,
             ),
-        'Move sealed on Cyberia; its reveal secret remains encrypted in this vault.',
+        t('sealed'),
     );
 const reveal = () =>
     run(
@@ -147,7 +164,7 @@ const reveal = () =>
                 BigInt(gameId.value),
                 account.value,
             ),
-        'Move revealed.',
+        t('revealed'),
     );
 const settle = (method: 'resolveGame' | 'cancelExpiredGame' | 'claimPayout') =>
     run(
@@ -157,7 +174,7 @@ const settle = (method: 'resolveGame' | 'cancelExpiredGame' | 'claimPayout') =>
                 BigInt(gameId.value),
                 method,
             ),
-        method === 'claimPayout' ? 'Payout claimed.' : 'Game settled.',
+        method === 'claimPayout' ? t('claimed') : t('settled'),
     );
 let timer = 0;
 onMounted(() => {
@@ -169,181 +186,399 @@ onBeforeUnmount(() => window.clearInterval(timer));
 
 <template>
     <section>
-        <button class="cw-back" type="button" @click="emit('back')">
-            ← Wallet
-        </button>
-        <p class="cw-eyebrow">CYBERIA ARENA · PROTOTYPE 01</p>
-        <h1 class="cw-title">Rock · Paper · Scissors</h1>
-        <p class="cw-note">
-            A real two-player duel settled by the Cyberia chain. Moves remain
-            hidden until both commitments are recorded.
-        </p>
+        <template v-if="!selectedGame">
+            <p class="cw-eyebrow">{{ t('eyebrow') }}</p>
+            <h1 class="cw-title">{{ t('title') }}</h1>
+            <p class="cw-note">{{ t('intro') }}</p>
+            <p class="cw-label" style="margin: 26px 0 10px">
+                {{ t('featured') }}
+            </p>
+            <button
+                type="button"
+                class="arena-feature cw-card"
+                @click="selectedGame = true"
+            >
+                <img src="/images/arena/rps-cover.png" alt="" />
+                <span class="arena-feature-copy">
+                    <span class="cw-label" style="color: var(--cw-accent)">{{
+                        t('live')
+                    }}</span>
+                    <strong>{{ t('rps') }}</strong>
+                    <span class="cw-note">{{ t('rpsDesc') }}</span>
+                    <span class="arena-meta"
+                        ><span>{{ t('players') }}</span
+                        ><span>{{ t('minutes') }}</span
+                        ><span>{{ t('chain') }}</span></span
+                    >
+                    <span class="cw-btn cw-btn-primary">{{ t('play') }} →</span>
+                </span>
+            </button>
+            <div class="arena-grid">
+                <article class="cw-card arena-panel">
+                    <span class="cw-label">{{ t('update') }}</span
+                    ><strong>v0.1 · COMMIT / REVEAL</strong>
+                    <p class="cw-note">{{ t('updateText') }}</p>
+                </article>
+                <article class="cw-card arena-panel">
+                    <span class="cw-label">{{ t('community') }}</span
+                    ><strong>{{ t('positive') }}</strong>
+                    <p class="cw-note">{{ t('localOnly') }}</p>
+                </article>
+            </div>
+            <p class="cw-label" style="margin: 26px 0 10px">
+                {{ t('allGames') }}
+            </p>
+            <article class="cw-card arena-coming">
+                <span class="cw-label">{{ t('coming') }}</span
+                ><strong>{{ t('soonTitle') }}</strong>
+                <p class="cw-note">{{ t('soonDesc') }}</p>
+            </article>
+        </template>
 
-        <div
-            v-if="!config.enabled"
-            class="cw-card"
-            style="margin-top: 20px; padding: 18px"
-        >
-            Interface ready. Set <code>ARENA_CONTRACT_ADDRESS</code> after
-            deploying the contract to enable play.
-        </div>
         <template v-else>
-            <div class="cw-card" style="margin-top: 20px; padding: 18px">
-                <label class="cw-label">GAME ID</label>
-                <div style="display: flex; gap: 8px; margin-top: 8px">
-                    <input
-                        v-model="gameId"
-                        class="cw-input"
-                        inputmode="numeric"
-                        placeholder="1"
-                    /><button
-                        class="cw-btn cw-btn-secondary"
-                        :disabled="loading"
-                        @click="refresh"
-                    >
-                        Open
-                    </button>
-                </div>
-                <template v-if="game">
-                    <div class="cw-row" style="margin-top: 16px">
-                        <span>{{ states[game.state] }}</span
-                        ><span>{{ formatEther(game.stake) }} CYBER</span>
-                    </div>
-                    <p class="cw-note">
-                        P1 {{ game.playerOne }}<br />P2
-                        {{
-                            arenaHasOpponent(game) ? game.playerTwo : 'waiting…'
-                        }}
-                    </p>
-                </template>
-            </div>
-
-            <div
-                v-if="!game"
-                class="cw-card"
-                style="margin-top: 10px; padding: 18px"
-            >
-                <label class="cw-label">STAKE, CYBER</label
-                ><input
-                    v-model="stake"
-                    class="cw-input"
-                    style="margin: 8px 0 14px"
-                    inputmode="decimal"
-                />
-                <p class="cw-note">
-                    You will escrow {{ stake }} CYBER to create a public duel.
-                </p>
-                <HoldButton
-                    label="HOLD TO CREATE GAME"
-                    :disabled="loading"
-                    @complete="create"
-                />
-            </div>
-
-            <div
-                v-else-if="game.state === 1 && !isPlayer"
-                class="cw-card"
-                style="margin-top: 10px; padding: 18px"
-            >
-                <p class="cw-note">
-                    Joining escrows exactly {{ formatEther(game.stake) }} CYBER.
-                </p>
-                <HoldButton
-                    label="HOLD TO JOIN"
-                    :disabled="loading"
-                    @complete="join"
-                />
-            </div>
-
-            <div
-                v-else-if="game.state === 2 && isPlayer"
-                class="cw-card"
-                style="margin-top: 10px; padding: 18px"
-            >
-                <p class="cw-label">CHOOSE A CARD</p>
-                <div
-                    style="
-                        display: grid;
-                        grid-template-columns: repeat(3, 1fr);
-                        gap: 8px;
-                        margin: 12px 0;
-                    "
-                >
-                    <button
-                        v-for="card in moves"
-                        :key="card.id"
-                        type="button"
-                        class="cw-tile"
-                        :style="
-                            move === card.id
-                                ? { borderColor: 'var(--cw-accent)' }
-                                : {}
-                        "
-                        @click="move = card.id"
-                    >
-                        <strong style="font-size: 24px">{{ card.glyph }}</strong
-                        ><span>{{ card.name }}</span>
-                    </button>
-                </div>
-                <p class="cw-note">
-                    The move and random reveal secret are encrypted locally
-                    before signing.
-                </p>
-                <HoldButton
-                    label="HOLD TO SEAL MOVE"
-                    :disabled="loading || !!committed"
-                    @complete="commit"
-                />
-            </div>
-
-            <div
-                v-else-if="game.state === 3 && isPlayer"
-                class="cw-card"
-                style="margin-top: 10px; padding: 18px"
-            >
-                <p class="cw-note">
-                    Reveal the move stored in this encrypted vault.
-                </p>
-                <HoldButton
-                    label="HOLD TO REVEAL"
-                    :disabled="loading || !!revealed"
-                    @complete="reveal"
-                />
+            <button class="cw-back" type="button" @click="selectedGame = false">
+                ← {{ t('back') }}
+            </button>
+            <img class="arena-hero" src="/images/arena/rps-cover.png" alt="" />
+            <p class="cw-eyebrow">{{ t('live') }} · {{ t('chain') }}</p>
+            <h1 class="cw-title">{{ t('rps') }}</h1>
+            <div class="arena-tabs">
                 <button
-                    v-if="game.playerOneMove && game.playerTwoMove"
-                    class="cw-btn cw-btn-secondary"
-                    style="margin-top: 8px; width: 100%"
-                    @click="settle('resolveGame')"
+                    v-for="item in ['about', 'play', 'community'] as const"
+                    :key="item"
+                    type="button"
+                    :class="{ active: tab === item }"
+                    @click="tab = item"
                 >
-                    Resolve duel
+                    {{ t(`tab${item[0].toUpperCase()}${item.slice(1)}`) }}
                 </button>
             </div>
-            <button
-                v-if="expired && (game?.state ?? 5) < 4"
-                class="cw-btn cw-btn-secondary"
-                style="margin-top: 10px; width: 100%"
-                @click="settle('cancelExpiredGame')"
+
+            <template v-if="tab === 'about'"
+                ><p class="cw-note">{{ t('rpsDesc') }}</p>
+                <article class="cw-card arena-panel" style="margin-top: 12px">
+                    <span class="cw-label">{{ t('update') }}</span
+                    ><strong>v0.1 · COMMIT / REVEAL</strong>
+                    <p class="cw-note">{{ t('updateText') }}</p>
+                </article></template
             >
-                Settle expired phase
-            </button>
-            <div
-                v-if="(game?.payout ?? 0n) > 0n"
-                class="cw-card"
-                style="margin-top: 10px; padding: 18px"
+            <template v-else-if="tab === 'community'"
+                ><div class="cw-card arena-panel">
+                    <span class="cw-label"
+                        >{{ t('reviews') }} · {{ t('positive') }}</span
+                    ><textarea
+                        v-model="feedback"
+                        class="cw-input"
+                        :placeholder="t('commentPlaceholder')"
+                        rows="3"
+                    /><button
+                        class="cw-btn cw-btn-primary"
+                        @click="saveFeedback"
+                    >
+                        {{ t('publish') }}
+                    </button>
+                    <p class="cw-note">{{ t('localOnly') }}</p>
+                    <p
+                        v-for="(item, index) in savedFeedback"
+                        :key="index"
+                        class="arena-review"
+                    >
+                        {{ item }}
+                    </p>
+                </div></template
             >
-                <p class="cw-note">
-                    Available payout:
-                    {{ formatEther(game?.payout ?? 0n) }} CYBER
+            <template v-else>
+                <div
+                    v-if="!config.enabled"
+                    class="cw-card"
+                    style="margin-top: 20px; padding: 18px"
+                >
+                    {{ t('unavailable') }}
+                </div>
+                <template v-else>
+                    <div
+                        class="cw-card"
+                        style="margin-top: 20px; padding: 18px"
+                    >
+                        <label class="cw-label">{{ t('gameId') }}</label>
+                        <div style="display: flex; gap: 8px; margin-top: 8px">
+                            <input
+                                v-model="gameId"
+                                class="cw-input"
+                                inputmode="numeric"
+                                placeholder="1"
+                            /><button
+                                class="cw-btn cw-btn-secondary"
+                                :disabled="loading"
+                                @click="refresh"
+                            >
+                                {{ t('open') }}
+                            </button>
+                        </div>
+                        <template v-if="game">
+                            <div class="cw-row" style="margin-top: 16px">
+                                <span>{{ states[game.state] }}</span
+                                ><span
+                                    >{{ formatEther(game.stake) }} CYBER</span
+                                >
+                            </div>
+                            <p class="cw-note">
+                                P1 {{ game.playerOne }}<br />P2
+                                {{
+                                    arenaHasOpponent(game)
+                                        ? game.playerTwo
+                                        : t('waiting')
+                                }}
+                            </p>
+                        </template>
+                    </div>
+
+                    <div
+                        v-if="!game"
+                        class="cw-card"
+                        style="margin-top: 10px; padding: 18px"
+                    >
+                        <label class="cw-label">{{ t('stake') }}</label
+                        ><input
+                            v-model="stake"
+                            class="cw-input"
+                            style="margin: 8px 0 14px"
+                            inputmode="decimal"
+                        />
+                        <p class="cw-note">
+                            {{ t('createHint', { stake }) }}
+                        </p>
+                        <HoldButton
+                            :label="t('create')"
+                            :disabled="loading"
+                            @complete="create"
+                        />
+                    </div>
+
+                    <div
+                        v-else-if="game.state === 1 && !isPlayer"
+                        class="cw-card"
+                        style="margin-top: 10px; padding: 18px"
+                    >
+                        <p class="cw-note">
+                            {{
+                                t('joinHint', {
+                                    stake: formatEther(game.stake),
+                                })
+                            }}
+                        </p>
+                        <HoldButton
+                            :label="t('join')"
+                            :disabled="loading"
+                            @complete="join"
+                        />
+                    </div>
+
+                    <div
+                        v-else-if="game.state === 2 && isPlayer"
+                        class="cw-card"
+                        style="margin-top: 10px; padding: 18px"
+                    >
+                        <p class="cw-label">{{ t('choose') }}</p>
+                        <div
+                            style="
+                                display: grid;
+                                grid-template-columns: repeat(3, 1fr);
+                                gap: 8px;
+                                margin: 12px 0;
+                            "
+                        >
+                            <button
+                                v-for="card in moves"
+                                :key="card.id"
+                                type="button"
+                                class="cw-tile"
+                                :style="
+                                    move === card.id
+                                        ? { borderColor: 'var(--cw-accent)' }
+                                        : {}
+                                "
+                                @click="move = card.id"
+                            >
+                                <strong style="font-size: 24px">{{
+                                    card.glyph
+                                }}</strong
+                                ><span>{{ card.name }}</span>
+                            </button>
+                        </div>
+                        <p class="cw-note">
+                            {{ t('sealHint') }}
+                        </p>
+                        <HoldButton
+                            :label="t('seal')"
+                            :disabled="loading || !!committed"
+                            @complete="commit"
+                        />
+                    </div>
+
+                    <div
+                        v-else-if="game.state === 3 && isPlayer"
+                        class="cw-card"
+                        style="margin-top: 10px; padding: 18px"
+                    >
+                        <p class="cw-note">
+                            {{ t('revealHint') }}
+                        </p>
+                        <HoldButton
+                            :label="t('reveal')"
+                            :disabled="loading || !!revealed"
+                            @complete="reveal"
+                        />
+                        <button
+                            v-if="game.playerOneMove && game.playerTwoMove"
+                            class="cw-btn cw-btn-secondary"
+                            style="margin-top: 8px; width: 100%"
+                            @click="settle('resolveGame')"
+                        >
+                            {{ t('resolve') }}
+                        </button>
+                    </div>
+                    <button
+                        v-if="expired && (game?.state ?? 5) < 4"
+                        class="cw-btn cw-btn-secondary"
+                        style="margin-top: 10px; width: 100%"
+                        @click="settle('cancelExpiredGame')"
+                    >
+                        {{ t('expire') }}
+                    </button>
+                    <div
+                        v-if="(game?.payout ?? 0n) > 0n"
+                        class="cw-card"
+                        style="margin-top: 10px; padding: 18px"
+                    >
+                        <p class="cw-note">
+                            {{
+                                t('payout', {
+                                    amount: formatEther(game?.payout ?? 0n),
+                                })
+                            }}
+                        </p>
+                        <HoldButton
+                            :label="t('claim')"
+                            :disabled="loading"
+                            @complete="settle('claimPayout')"
+                        />
+                    </div>
+                </template>
+                <p v-if="message" class="cw-note" style="margin-top: 12px">
+                    {{ message }}
                 </p>
-                <HoldButton
-                    label="HOLD TO CLAIM"
-                    :disabled="loading"
-                    @complete="settle('claimPayout')"
-                />
-            </div>
+            </template>
         </template>
-        <p v-if="message" class="cw-note" style="margin-top: 12px">
-            {{ message }}
-        </p>
     </section>
 </template>
+
+<style scoped>
+.arena-feature {
+    width: 100%;
+    padding: 0;
+    display: grid;
+    grid-template-columns: minmax(240px, 1.25fr) minmax(260px, 1fr);
+    overflow: hidden;
+    text-align: left;
+    cursor: pointer;
+    border-color: var(--cw-border);
+}
+.arena-feature img,
+.arena-hero {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.arena-feature-copy {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 13px;
+}
+.arena-feature-copy strong {
+    font: 600 clamp(20px, 3vw, 32px)/1.1 var(--cw-sans);
+    color: var(--cw-text);
+}
+.arena-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font: 500 9px/1 var(--cw-mono);
+    color: var(--cw-dim);
+}
+.arena-meta span {
+    border: 1px solid var(--cw-border);
+    padding: 7px 9px;
+}
+.arena-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+.arena-panel,
+.arena-coming {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.arena-panel strong,
+.arena-coming strong {
+    color: var(--cw-text);
+}
+.arena-coming {
+    min-height: 140px;
+    justify-content: center;
+    background: linear-gradient(120deg, rgba(0, 255, 225, 0.04), transparent);
+}
+.arena-hero {
+    height: 220px;
+    margin: 12px 0 20px;
+    border: 1px solid var(--cw-border);
+}
+.arena-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--cw-border);
+    margin: 16px 0;
+}
+.arena-tabs button {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 10px 14px;
+    background: none;
+    color: var(--cw-dim);
+    cursor: pointer;
+}
+.arena-tabs button.active {
+    border-color: var(--cw-accent);
+    color: var(--cw-text);
+}
+.arena-review {
+    margin: 0;
+    padding: 10px 0;
+    border-top: 1px solid var(--cw-border-soft);
+    color: var(--cw-text);
+}
+textarea.cw-input {
+    resize: vertical;
+    margin: 10px 0;
+}
+@media (max-width: 720px) {
+    .arena-feature {
+        grid-template-columns: 1fr;
+    }
+    .arena-feature img {
+        height: 190px;
+    }
+    .arena-grid {
+        grid-template-columns: 1fr;
+    }
+    .arena-hero {
+        height: 180px;
+    }
+}
+</style>

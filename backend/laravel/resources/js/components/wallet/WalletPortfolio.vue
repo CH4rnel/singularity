@@ -4,6 +4,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import StatusPill from '@/components/wallet/StatusPill.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
+import { arenaMessages } from '@/lib/arenaMessages';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { canOpenProxySettings, openProxySettings } from '@/lib/native';
 import { WALLET_FAMILY_GROUPS, formatUnits, walletChain } from '@/lib/wallet';
@@ -60,6 +61,7 @@ const emit = defineEmits<{
 }>();
 
 const { locale, t } = useLocale(walletMessages);
+const { t: arenaT } = useLocale(arenaMessages);
 
 const activeRecord = computed(() => props.wallet.activeAccount.value);
 
@@ -514,8 +516,8 @@ const recent = computed(() =>
             @click="emit('arena')"
         >
             <span class="cw-row"
-                ><span>CYBERIA ARENA</span
-                ><span class="cw-label">PLAY ON-CHAIN →</span></span
+                ><span>{{ arenaT('tile') }}</span
+                ><span class="cw-label">{{ arenaT('tileHint') }}</span></span
             >
         </button>
 

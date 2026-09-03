@@ -54,6 +54,7 @@ import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
 import { analytics } from '@/lib/analytics';
+import { arenaMessages } from '@/lib/arenaMessages';
 import { isNativeShell, nativeShell } from '@/lib/native';
 import {
     hideMainButton,
@@ -115,6 +116,7 @@ const props = defineProps<{
 }>();
 
 const { nextTag, toggleLocale, t } = useLocale(walletMessages);
+const { t: arenaT } = useLocale(arenaMessages);
 
 // Only Solana takes an override: the server picks that endpoint, while every
 // other chain carries its own public default in the registry.
@@ -214,7 +216,7 @@ const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'bridge', label: () => t('bridgeTitle') },
     { id: 'crosschain', label: () => t('crossTile') },
     { id: 'earn', label: () => t('earnTitle') },
-    { id: 'arena', label: () => 'Arena' },
+    { id: 'arena', label: () => arenaT('nav') },
     { id: 'browse', label: () => t('browseTitle') },
     { id: 'feed', label: () => t('feed') },
     { id: 'launchpad', label: () => t('launchpad') },
@@ -349,7 +351,6 @@ const PARENTS: Partial<Record<Section, Section>> = {
     earn: 'portfolio',
     bridge: 'portfolio',
     crosschain: 'portfolio',
-    arena: 'portfolio',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -905,9 +906,6 @@ watch(
                     );
                 "
             />
-            <span class="cw-label" style="letter-spacing: 0.14em">{{
-                t('subtitle')
-            }}</span>
             <button type="button" class="cw-ghost" @click="toggleLocale">
                 <Languages :size="14" aria-hidden="true" />
                 {{ nextTag }}
