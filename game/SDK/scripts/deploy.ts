@@ -12,7 +12,9 @@ if (!deployer) {
   throw new Error("Set CYBERIA_PRIVATE_KEY in game/SDK/.env before deployment");
 }
 
-console.log(`Deploying Cyberia Arena from ${deployer.address} (phase ${phaseDuration}s)`);
+console.log(
+  `Deploying Cyberia Arena from ${deployer.address} (phase ${phaseDuration}s)`,
+);
 const arena = await ethers.deployContract("RockPaperScissors", [phaseDuration]);
 await arena.waitForDeployment();
 console.log(`ARENA_CONTRACT_ADDRESS=${await arena.getAddress()}`);
