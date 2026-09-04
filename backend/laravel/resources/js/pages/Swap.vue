@@ -762,8 +762,12 @@ const amountOut = ref('');
 const mode = ref<'in' | 'out'>('in');
 const decIn = ref(18);
 const decOut = ref(18);
-const balIn = ref<bigint>(0n);
-const balOut = ref<bigint>(0n);
+// A balance is `null` while it is unknown — no wallet yet, or a node that did
+// not answer — and never 0n for it. The two read the same on screen and mean
+// opposite things to a swap: "you have nothing" refuses the trade, "we could
+// not look" must not.
+const balIn = ref<bigint | null>(null);
+const balOut = ref<bigint | null>(null);
 
 type Quote = {
     path: string[];
@@ -807,6 +811,40 @@ const maxSpent = computed(() =>
     quote.value
         ? (quote.value.amountIn * BigInt(10000 + slippageBps.value)) / 10000n
         : 0n,
+);
+
+/**
+ * The amount the router is allowed to pull from the wallet: what was typed on
+ * an exact-input trade, and the slippage ceiling on an exact-output one, since
+ * that is the number the transaction actually authorises.
+ */
+const spendIn = computed<bigint>(() =>
+    mode.value === 'in'
+        ? (quote.value?.amountIn ?? amountInBn.value)
+        : maxSpent.value,
+);
+
+/**
+ * Refusing a trade the wallet cannot pay for is this page's job, not the
+ * router's: the router says `TransferHelper::transferFrom: transferFrom
+ * failed`, which names neither the token nor the balance and reads as a broken
+ * DEX. Only a balance that was actually read can refuse anything — `null` is
+ * "not looked up", and blocking on it would strand every swap behind one
+ * unanswered RPC call.
+ */
+const insufficientIn = computed(
+    () =>
+        balIn.value !== null &&
+        spendIn.value > 0n &&
+        spendIn.value > balIn.value,
+);
+
+/** The refusal in the two numbers that caused it, for screen and for error. */
+const insufficientMessage = computed(
+    () =>
+        `Not enough ${symbolOf(tokenIn.value)}: this trade spends ` +
+        `${fmt(spendIn.value, decIn.value, 8)} and this address holds ` +
+        `${fmt(balIn.value ?? 0n, decIn.value, 8)}.`,
 );
 
 // Uniswap V2 keeps 0.3% of the in-side amount per hop for LP holders.
@@ -1175,23 +1213,24 @@ watch(chainEdges, () => {
 });
 
 // --- balances ---------------------------------------------------------------
-const loadBalance = async (token: string): Promise<bigint> => {
+const loadBalance = async (token: string): Promise<bigint | null> => {
     const me = wallet.address.value;
 
     if (!me || !token) {
-        return 0n;
-    }
-
-    if (token === NATIVE) {
-        return readProvider.getBalance(me);
+        return null;
     }
 
     try {
-        return (await new Contract(token, ERC20_ABI, readProvider).balanceOf(
-            me,
-        )) as bigint;
+        return token === NATIVE
+            ? await readProvider.getBalance(me)
+            : ((await new Contract(
+                  token,
+                  ERC20_ABI,
+                  readProvider,
+              ).balanceOf(me)) as bigint);
     } catch {
-        return 0n;
+        // A node that did not answer has told us nothing about the balance.
+        return null;
     }
 };
 
@@ -1200,9 +1239,9 @@ const loadSide = async (side: 'in' | 'out'): Promise<void> => {
 
     if (!token) {
         if (side === 'in') {
-            balIn.value = 0n;
+            balIn.value = null;
         } else {
-            balOut.value = 0n;
+            balOut.value = null;
         }
 
         return;
@@ -1258,9 +1297,42 @@ const flip = (): void => {
     quote.value = null;
 };
 
-const setMaxIn = (): void => {
-    amountIn.value =
-        balIn.value > 0n ? formatUnits(balIn.value, decIn.value) : '';
+/** Gas one swap can burn; the ceiling `max` holds back on the coin side. */
+const SWAP_GAS_UNITS = 300_000n;
+
+/**
+ * What selling the coin has to leave behind to be mined at all. Unreadable
+ * fee data reserves nothing rather than guessing a number — the balance check
+ * below still refuses the trade if the coin runs out.
+ */
+const nativeGasReserve = async (): Promise<bigint> => {
+    try {
+        const fee = await readProvider.getFeeData();
+        const price = fee.maxFeePerGas ?? fee.gasPrice;
+
+        return price ? price * SWAP_GAS_UNITS : 0n;
+    } catch {
+        return 0n;
+    }
+};
+
+const setMaxIn = async (): Promise<void> => {
+    const bal = balIn.value;
+
+    if (bal === null || bal <= 0n) {
+        amountIn.value = '';
+        mode.value = 'in';
+        scheduleQuote();
+
+        return;
+    }
+
+    // A token is spendable whole — its fee comes out of the coin. The coin
+    // pays for its own transaction, so the whole of it is one gas short.
+    const spendable =
+        tokenIn.value === NATIVE ? bal - (await nativeGasReserve()) : bal;
+
+    amountIn.value = spendable > 0n ? formatUnits(spendable, decIn.value) : '';
     mode.value = 'in';
     scheduleQuote();
 };
@@ -1298,6 +1370,36 @@ const approveIfNeeded = async (
     await tx.wait();
 };
 
+/**
+ * A router revert says what the contract checked, never what the user did.
+ * The three that have an everyday cause are answered in the user's terms; the
+ * rest are passed through unchanged rather than guessed at.
+ */
+const swapError = (e: unknown): string => {
+    const msg = (e as Error)?.message ?? String(e);
+
+    if (msg.includes('transferFrom failed')) {
+        return (
+            `The router could not take your ${symbolOf(tokenIn.value)} — the ` +
+            'balance or the approval is smaller than the trade. The balances ' +
+            'above have been re-read.'
+        );
+    }
+
+    if (msg.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
+        return (
+            'The price moved past your slippage tolerance before the swap ' +
+            'was mined. Quote it again, or raise the tolerance.'
+        );
+    }
+
+    if (msg.includes('EXPIRED')) {
+        return 'The quote expired before the swap was mined. Try again.';
+    }
+
+    return msg;
+};
+
 const doSwap = async (): Promise<void> => {
     if (!wallet.isConnected.value) {
         await wallet.connect();
@@ -1311,6 +1413,12 @@ const doSwap = async (): Promise<void> => {
 
     if (!q || q.amountIn === 0n) {
         error.value = 'Enter an amount and wait for a quote';
+
+        return;
+    }
+
+    if (insufficientIn.value) {
+        error.value = insufficientMessage.value;
 
         return;
     }
@@ -1426,8 +1534,12 @@ const doSwap = async (): Promise<void> => {
             syncMarketReserves(),
         ]);
     } catch (e) {
-        error.value = (e as Error).message ?? String(e);
+        error.value = swapError(e);
         status.value = null;
+        // Whatever the node refused, the numbers on screen are older than its
+        // answer — read the two balances again so the page stops arguing.
+        void loadSide('in');
+        void loadSide('out');
     } finally {
         busy.value = false;
     }
@@ -1844,9 +1956,10 @@ onBeforeUnmount(() => {
                         </Select>
                         <button
                             class="text-xs text-muted-foreground hover:underline"
-                            @click="setMaxIn"
+                            @click="void setMaxIn()"
                         >
-                            Balance: {{ fmt(balIn, decIn) }} (max)
+                            Balance:
+                            {{ balIn === null ? '—' : fmt(balIn, decIn) }} (max)
                         </button>
                     </div>
                     <Input
@@ -1913,7 +2026,8 @@ onBeforeUnmount(() => {
                             </SelectContent>
                         </Select>
                         <span class="text-xs text-muted-foreground">
-                            Balance: {{ fmt(balOut, decOut) }}
+                            Balance:
+                            {{ balOut === null ? '—' : fmt(balOut, decOut) }}
                         </span>
                     </div>
                     <div class="relative">
@@ -1994,9 +2108,16 @@ onBeforeUnmount(() => {
                     amount.
                 </p>
 
+                <p
+                    v-if="insufficientIn"
+                    class="rounded-md bg-red-500/10 p-2 text-xs text-red-500"
+                >
+                    {{ insufficientMessage }}
+                </p>
+
                 <Button
                     class="w-full"
-                    :disabled="busy || quoting || !quote"
+                    :disabled="busy || quoting || !quote || insufficientIn"
                     @click="doSwap"
                 >
                     <Loader2 v-if="busy" class="mr-2 h-4 w-4 animate-spin" />
