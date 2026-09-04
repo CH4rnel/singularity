@@ -155,3 +155,28 @@ it('carries the board and the base', function () {
     expect($text)->toContain('Задачи: активных 1')
         ->and($text)->toContain('whale 1');
 });
+
+it('blames the sweep only when the whole registry is silent', function () {
+    // Six silent reporters under a sweep that ran four minutes ago are six
+    // dead reporters. Saying "the sweep stopped" there is the same kind of lie
+    // this briefing exists not to tell.
+    ServiceCheck::create([
+        'service' => 'site',
+        'status' => 'up',
+        'latency_ms' => 90,
+        'detail' => [],
+        'checked_at' => now(),
+    ]);
+
+    $text = briefingText();
+
+    expect($text)->toContain('Молчат 1: Cyberia RPC')
+        ->and($text)->toContain('молчание репортёра')
+        ->and($text)->not->toContain('встал сам обход');
+});
+
+it('says the monitor stopped when nothing at all answered it', function () {
+    $text = briefingText();
+
+    expect($text)->toContain('Молчат все 2 — встал сам обход');
+});

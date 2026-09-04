@@ -201,6 +201,7 @@ class ConsoleBriefing
     private function machines(): array
     {
         $latest = $this->latestChecks();
+        $registered = count($this->registry->all());
         $lines = [];
         $bad = [];
         $silent = [];
@@ -237,14 +238,22 @@ class ConsoleBriefing
         $sweep = DB::table('service_checks')->max('checked_at');
         $lines[] = 'Последний обход: '.$this->since($sweep ? CarbonImmutable::parse($sweep)->toIso8601String() : null).'.';
 
-        // What is wrong gets named. What is *silent* gets named only while the
-        // list is short: when the whole registry reads unknown the monitor
-        // stopped, and printing forty-six names says that worse than one line
-        // does — and none of them is an outage.
-        if ($silent !== [] && count($silent) <= 3) {
-            $lines[] = 'Молчат: '.implode(', ', $silent).' — это молчание репортёра, а не падение сервиса.';
+        /*
+         * What is wrong gets named, and so does what is *silent* — but they
+         * are two different statements and only one of them is an outage.
+         *
+         * The whole registry reading unknown is the monitor having stopped,
+         * and it is the only case where that is worth saying: six silent
+         * reporters under a sweep that ran four minutes ago is six dead
+         * reporters, and blaming the sweep for them is the same kind of lie
+         * this briefing exists not to tell.
+         */
+        if ($silent !== [] && count($silent) === $registered) {
+            $lines[] = 'Молчат все '.$registered.' — встал сам обход, а не сервисы.';
         } elseif ($silent !== []) {
-            $lines[] = 'Молчат '.count($silent).' сервисов — похоже, встал сам обход, а не они.';
+            $lines[] = 'Молчат '.count($silent).': '.implode(', ', array_slice($silent, 0, 8))
+                .(count($silent) > 8 ? ' и ещё '.(count($silent) - 8) : '')
+                .' — это молчание репортёра, а не падение сервиса.';
         }
 
         return ['title' => 'Машины', 'lines' => [...$lines, ...array_slice($bad, 0, 12)]];
