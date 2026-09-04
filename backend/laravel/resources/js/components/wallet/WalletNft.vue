@@ -31,6 +31,7 @@ const emit = defineEmits<{
     mint: [];
     ipfs: [];
     torrents: [];
+    tracker: [];
 }>();
 
 const { t } = useLocale(walletMessages);
@@ -132,7 +133,11 @@ watch(
                 {{ detail.collection }} · #{{ detail.tokenId }}
             </div>
 
-            <p v-if="detail.description" class="cw-prose" style="margin-top: 14px">
+            <p
+                v-if="detail.description"
+                class="cw-prose"
+                style="margin-top: 14px"
+            >
                 {{ detail.description }}
             </p>
 
@@ -223,9 +228,19 @@ watch(
             </button>
 
             <!--
-              The two things a token needs before it can be minted: somewhere
-              for the file to live, and a way to have the file at all.
+              The three things around a token: somewhere for the file to live,
+              a way to have the file at all, and the index where a file that
+              was minted becomes something other people can find.
             -->
+            <button
+                type="button"
+                class="cw-btn cw-btn-secondary"
+                style="height: 44px; margin-top: 12px"
+                @click="emit('tracker')"
+            >
+                {{ t('trackerTitle') }}
+            </button>
+
             <div class="cw-tiles" style="margin-top: 12px">
                 <button type="button" class="cw-tile" @click="emit('ipfs')">
                     <span style="font: 500 12px/1 var(--cw-sans)">{{
@@ -296,9 +311,7 @@ watch(
                         type="button"
                         class="cw-card cw-card-button"
                         style="padding: 0; overflow: hidden; text-align: left"
-                        @click="
-                            selected = `${item.contract}:${item.tokenId}`
-                        "
+                        @click="selected = `${item.contract}:${item.tokenId}`"
                     >
                         <img
                             v-if="item.imageUrl"

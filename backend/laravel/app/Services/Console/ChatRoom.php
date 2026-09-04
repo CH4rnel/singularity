@@ -381,6 +381,10 @@ class ChatRoom
             'maxChars' => (int) config('crm.chat.max_chars', 8000),
             'retentionDays' => (int) config('crm.chat.files.retention_days', 180),
             'contextMessages' => (int) config('crm.chat.lainos.context_messages', 20),
+            // Whether the state of the project goes up with a call. The panel
+            // that lists what LainOS sees reads this, because a promise about
+            // what it may see must come from the same switch that decides it.
+            'briefing' => (bool) config('crm.chat.lainos.briefing', true),
         ];
     }
 }

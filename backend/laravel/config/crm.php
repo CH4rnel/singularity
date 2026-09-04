@@ -143,6 +143,17 @@ return [
             // attached to the line that called LainOS.
             'file_bytes' => (int) env('CRM_CHAT_LAINOS_FILE_BYTES', 8000),
 
+            // Whether the state of the project goes up with the question.
+            //
+            // On by default, because the room's first version handed LainOS
+            // twenty chat lines and then told it not to invent numbers, which
+            // is a correspondent that can only ever answer "посмотри в линзе".
+            // The briefing is composed from the caches the lenses already
+            // render (ConsoleBriefing), so it costs a chat call nothing and
+            // cannot disagree with the screen beside it. Off means the room
+            // goes back to seeing only itself — and says so in the stamp.
+            'briefing' => (bool) env('CRM_CHAT_LAINOS_BRIEFING', true),
+
             // Answering with the tool-less persona when the daemon is
             // unreachable. Off means an unreachable daemon is reported as
             // exactly that: two correspondents are not interchangeable, and
@@ -150,6 +161,35 @@ return [
             // anything.
             'fallback' => (bool) env('CRM_CHAT_LAINOS_FALLBACK', true),
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | The ingest — where a task comes from when nobody typed it.
+    |--------------------------------------------------------------------------
+    | LainOS does most of its work while nobody is watching: it forges wishes,
+    | takes profit on journaled positions, fires balance watches and brings
+    | back research digests. None of that reached the board that is supposed
+    | to say what this project is doing, so the daemon now files each of them
+    | as a task over POST /api/crm/tasks.
+    |
+    | Gated on a shared token compared in constant time, and an unset token
+    | means the route 404s — same rule as the host heartbeat. This one writes
+    | rather than reads, so an open ingest would be a way for anyone to put
+    | words on the operators' board.
+    |
+    | It accepts facts and never instructions: a title, a detail, whether it
+    | is already done, and an id the sender minted. It cannot assign anybody,
+    | cannot touch an existing task, and cannot reach a contact.
+    */
+
+    'ingest' => [
+        'token' => (string) env('CRM_INGEST_TOKEN', ''),
+
+        // Longest single record. A daemon that pastes a stack trace into a
+        // task title is a daemon that made the board unreadable.
+        'max_title' => 200,
+        'max_detail' => 4000,
     ],
 
 ];

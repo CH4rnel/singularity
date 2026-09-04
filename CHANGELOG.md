@@ -12,6 +12,8 @@ vYYYY.MM.DD
 
 ### Added
 
+- Tracker (`/tracker`): a BitTorrent tracker where every release is minted as an NFT. The token is the publication — the index reads the owner and the description off the chain, refuses to announce a swarm nobody minted, and hides rather than deletes. Publishing, downloading and seeding all happen from the wallet; the desktop app creates the torrent and seeds it, which a browser tab cannot.
+- A video and music player in the wallet: plays a release's pinned sample anywhere, and its files straight out of the swarm in the desktop app, with a playlist, seeking and a plain sentence for the containers no browser decodes.
 - Cyberia Wallet browser extension (`frontend/extension`): Manifest V3 wallet with its own encrypted vault and an EIP-1193 provider for dapps, built for both Chromium and Firefox, published with the apps and offered at `/download`.
 - LainOS: autonomous AI agent framework with a Cyberia chain plugin (`services/lainos`).
 - Wired: 3D on-chain Godot game whose NPCs think via LainOS (`game/wired`).
@@ -24,11 +26,13 @@ vYYYY.MM.DD
 
 ### Changed
 
+- The operators' console room now tells LainOS the state of the project before it asks it anything: the queue, the machines, the chain (head, indexer lag, prices, the pool snapshot, the gas tank), the bridge ledger, the thirty-day numbers and the board — composed from the same caches the lenses render, dated, and with anything unreadable said rather than zeroed. The two backends are told different things about it: the daemon that it is a starting point for its own tools, the tool-less persona that it is the end of the line.
 - Documentation now matches the actual tree: README repository map, "What Works Now" table, and architecture diagram cover `game/wired`, `services/lainos`, `services/telegram-bot`, and `services/cyberia-node`; `AGENTS.md` and `CLAUDE.md` document the second node. The gitignored `logs/` entry was dropped from the repository map.
 - Refactored the Telegram bot and the analytics surface.
 
 ### Fixed
 
+- The console's gas-tank row compared the station's figure, which is in wei, against a floor written in CYBER — so it could only ever fire once the tank was under sixty wei, which is to say never.
 - Analytics and DCA bot fixes.
 
 ### Removed

@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import { Head, Link as InertiaLink, useForm, usePage } from '@inertiajs/vue3';
 import {
+    Head,
+    Link as InertiaLink,
+    router,
+    useForm,
+    usePage,
+} from '@inertiajs/vue3';
+import {
+    Gavel,
     MessageSquare,
     Plus,
     ThumbsDown,
@@ -18,6 +25,7 @@ import WalletAvatar from '@/components/web3/WalletAvatar.vue';
 import { profileUrl } from '@/lib/profileUrl';
 import { store as proposalStore } from '@/routes/dao/proposals';
 import {
+    close as proposalClose,
     destroy as proposalDestroy,
     show as proposalShow,
     update as proposalUpdate,
@@ -38,12 +46,23 @@ const isAuthenticated = computed(() => !!authUser.value);
 const showForm = ref(false);
 const editingProposal = ref<Proposal | null>(null);
 
-function defaultDeadline(): string {
-    const date = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    // datetime-local wants "YYYY-MM-DDTHH:MM" in local time.
+// datetime-local speaks local wall time and carries no zone; the server
+// stores UTC. Both directions are converted explicitly, or a deadline set in
+// Moscow lands three hours away from the one that was typed.
+function toDeadlineInput(value: string | Date): string {
+    const date = value instanceof Date ? value : new Date(value);
     const pad = (n: number) => String(n).padStart(2, '0');
 
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Empty stays empty so the server reports the missing deadline, not a NaN. */
+function fromDeadlineInput(value: string): string {
+    return value ? new Date(value).toISOString() : '';
+}
+
+function defaultDeadline(): string {
+    return toDeadlineInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 }
 
 const form = useForm({
@@ -67,8 +86,8 @@ function openEdit(proposal: Proposal) {
     form.title = proposal.title;
     form.description = proposal.description || '';
     form.ends_at = proposal.ends_at
-        ? proposal.ends_at.slice(0, 16)
-        : '';
+        ? toDeadlineInput(proposal.ends_at)
+        : defaultDeadline();
     form.clearErrors();
     showForm.value = true;
 }
@@ -83,10 +102,23 @@ function submit() {
         },
     };
 
+    form.transform((data) => ({
+        ...data,
+        ends_at: fromDeadlineInput(data.ends_at),
+    }));
+
     if (editingProposal.value) {
         form.put(proposalUpdate(editingProposal.value.id).url, options);
     } else {
         form.post(proposalStore(props.dao.id).url, options);
+    }
+}
+
+function closeProposal(proposal: Proposal) {
+    if (confirm(`End the voting on "${proposal.title}" now?`)) {
+        router.post(proposalClose(proposal.id).url, {}, {
+            preserveScroll: true,
+        });
     }
 }
 
@@ -100,6 +132,24 @@ function deleteProposal(proposal: Proposal) {
 
 function canManage(proposal: Proposal): boolean {
     return !!authUser.value && proposal.user_id === authUser.value.id;
+}
+
+// Ending a vote reaches wider than editing it — the DAO's owner and an
+// operator can too, which is the only lever most of these DAOs have: they
+// were registered before ownership was recorded. Mirrors ProposalPolicy.
+const canModerate = computed(
+    () =>
+        !!authUser.value &&
+        (page.props.auth?.canAccessCrm === true ||
+            (props.dao.user_id != null &&
+                props.dao.user_id === authUser.value.id)),
+);
+
+function canClose(proposal: Proposal): boolean {
+    return (
+        proposal.status === 'open' &&
+        (canManage(proposal) || canModerate.value)
+    );
 }
 
 function formatPower(power: string | undefined): string {
@@ -180,10 +230,11 @@ function formatPower(power: string | undefined): string {
                     v-model="form.ends_at"
                     type="datetime-local"
                     class="mt-1 w-fit"
+                    required
                 />
                 <p class="mt-1 text-xs text-muted-foreground">
-                    Voting closes automatically at this time. Leave empty to
-                    keep it open indefinitely.
+                    Voting closes automatically at this time. You can also end
+                    it earlier from the proposal.
                 </p>
                 <InputError :message="form.errors.ends_at" />
             </div>
@@ -262,20 +313,35 @@ function formatPower(power: string | undefined): string {
                     </div>
                 </div>
 
+                <!-- Always visible: these used to appear on hover only, so
+                     on a touch screen there was no way to reach them at all. -->
                 <div
-                    v-if="canManage(proposal)"
-                    class="hidden shrink-0 items-center gap-1 group-hover:flex"
+                    v-if="canManage(proposal) || canClose(proposal)"
+                    class="flex shrink-0 items-center gap-1"
                 >
                     <Button
+                        v-if="canClose(proposal)"
                         variant="ghost"
                         size="icon-sm"
+                        title="End voting now"
+                        @click="closeProposal(proposal)"
+                    >
+                        <Gavel class="h-4 w-4" />
+                    </Button>
+                    <Button
+                        v-if="canManage(proposal)"
+                        variant="ghost"
+                        size="icon-sm"
+                        title="Edit"
                         @click="openEdit(proposal)"
                     >
                         <Pencil class="h-4 w-4" />
                     </Button>
                     <Button
+                        v-if="canManage(proposal)"
                         variant="ghost"
                         size="icon-sm"
+                        title="Delete"
                         @click="deleteProposal(proposal)"
                     >
                         <Trash2 class="h-4 w-4" />

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Link as InertiaLink } from '@inertiajs/vue3';
 import { useTimeAgo } from '@vueuse/core';
-import { MessageSquare, ScrollText, Vote } from 'lucide-vue-next';
+import { Gavel, MessageSquare, ScrollText, Vote } from 'lucide-vue-next';
 import { computed } from 'vue';
 import MarkdownContent from '@/components/dao/MarkdownContent.vue';
 import WalletAvatar from '@/components/web3/WalletAvatar.vue';
@@ -29,6 +29,18 @@ const meta = computed(() => {
                 title: proposal?.title ?? '[deleted]',
                 url: proposal ? proposalShow(proposal.id).url : null,
                 bodyHtml: proposal?.description_html ?? null,
+            };
+        }
+        case 'proposal.closed': {
+            const proposal = subject as Proposal | null;
+
+            return {
+                icon: Gavel,
+                iconClass: 'text-muted-foreground',
+                action: 'closed the voting on',
+                title: proposal?.title ?? '[deleted]',
+                url: proposal ? proposalShow(proposal.id).url : null,
+                bodyHtml: null,
             };
         }
         case 'vote.cast': {

@@ -16,8 +16,10 @@ const { test } = require('node:test');
 const {
     MAX_READ_BYTES,
     MAX_TORRENTS,
+    announceUrlFor,
     etaSeconds,
     resolveDownloadDir,
+    sanitizeIndex,
     sanitizeSource,
     summarize,
 } = require('../src/torrent-rules');
@@ -110,7 +112,7 @@ test('status distinguishes paused, seeding and stopped', () => {
     assert.equal(failed.error, 'no route to host');
 });
 
-test('a summary carries numbers and names, never paths or peers', () => {
+test('a summary carries numbers and names, never disk paths or peers', () => {
     const summary = summarize(
         torrent({ path: '/home/lain/Downloads/Cyberia', _peers: ['1.2.3.4'] }),
     );
@@ -123,6 +125,7 @@ test('a summary carries numbers and names, never paths or peers', () => {
         'files',
         'infoHash',
         'length',
+        'magnet',
         'name',
         'peers',
         'progress',
@@ -130,9 +133,46 @@ test('a summary carries numbers and names, never paths or peers', () => {
         'uploadSpeed',
         'uploaded',
     ]);
+
+    // Where this machine keeps the file is the shell's business. What crosses
+    // is the path *inside the torrent*, which is part of the torrent's own
+    // metadata and is what a release's file list is made of.
+    assert.equal(JSON.stringify(summary).includes('/home/lain'), false);
     assert.deepEqual(summary.files, [
-        { name: 'debian.iso', length: 1024, progress: 0.5 },
+        { name: 'debian.iso', path: 'debian.iso', length: 1024, progress: 0.5 },
     ]);
+});
+
+test('a file inside a folder keeps its path, with separators normalised', () => {
+    const summary = summarize(
+        torrent({
+            files: [
+                { name: '01.flac', path: 'Album\\01.flac', length: 8, progress: 1 },
+            ],
+        }),
+    );
+
+    assert.equal(summary.files[0].path, 'Album/01.flac');
+});
+
+test('the tracker a new torrent announces to comes from the shell, not a page', () => {
+    // Derived from the site this shell was pointed at. A page naming a tracker
+    // would be a page deciding who this client talks to.
+    assert.equal(
+        announceUrlFor('https://cyberia.church/wallet?x=1'),
+        'https://cyberia.church/announce',
+    );
+    assert.equal(announceUrlFor('http://localhost:8000'), 'http://localhost:8000/announce');
+    assert.equal(announceUrlFor('not a url'), '');
+});
+
+test('a file index from the page is an index into that torrent or nothing', () => {
+    assert.equal(sanitizeIndex(0, 3), 0);
+    assert.equal(sanitizeIndex('2', 3), 2);
+    assert.equal(sanitizeIndex(3, 3), null);
+    assert.equal(sanitizeIndex(-1, 3), null);
+    assert.equal(sanitizeIndex(1.5, 3), null);
+    assert.equal(sanitizeIndex('../../etc/passwd', 3), null);
 });
 
 test('an ETA exists only while there is one to have', () => {

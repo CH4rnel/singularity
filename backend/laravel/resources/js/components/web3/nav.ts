@@ -20,6 +20,7 @@ import {
 import { index as daoIndex } from '@/routes/dao';
 import { index as lainIndex } from '@/routes/lain';
 import { index as tokensIndex } from '@/routes/tokens';
+import { index as trackerIndex } from '@/routes/tracker';
 
 export type Web3NavItem = {
     title: string;
@@ -85,6 +86,7 @@ export const navGroups: Web3NavGroup[] = [
             { title: 'Leaderboard', href: leaderboard().url },
             { title: 'NFT Market', href: market().url },
             { title: 'Pixels', href: pixels().url },
+            { title: 'Tracker', href: trackerIndex().url },
             { title: 'Predictions', href: predictions().url },
             { title: 'Talk to Lain', href: lainIndex().url },
         ],

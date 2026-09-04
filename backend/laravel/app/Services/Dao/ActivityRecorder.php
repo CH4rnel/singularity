@@ -26,7 +26,10 @@ class ActivityRecorder
      * so it is also where those actions are paid: XP is keyed by the subject
      * row id, making a replayed request worth nothing.
      *
-     * @param  string  $type  proposal.created | vote.cast | comment.posted
+     * Not every entry pays: proposal.closed is moderation rather than a
+     * contribution, and closing your own proposal repeatedly is not work.
+     *
+     * @param  string  $type  proposal.created | proposal.closed | vote.cast | comment.posted
      */
     public function record(string $type, User $actor, Model $subject, ?Dao $dao = null): Activity
     {

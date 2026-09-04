@@ -82,7 +82,9 @@ const pin = async (url: string, body: FormData | string): Promise<Pinned> => {
         const first = Object.values(data.errors ?? {})[0]?.[0];
 
         throw new Error(
-            first ?? data.message ?? 'Nothing was pinned — the node is unreachable.',
+            first ??
+                data.message ??
+                'Nothing was pinned — the node is unreachable.',
         );
     }
 
@@ -96,10 +98,17 @@ const pin = async (url: string, body: FormData | string): Promise<Pinned> => {
 };
 
 /** Pin a file the user chose. Images, audio, an archive — all bytes. */
-export const pinFile = async (file: File | Blob, name?: string): Promise<Pinned> => {
+export const pinFile = async (
+    file: File | Blob,
+    name?: string,
+): Promise<Pinned> => {
     const form = new FormData();
 
-    form.append('file', file, name ?? (file instanceof File ? file.name : 'file'));
+    form.append(
+        'file',
+        file,
+        name ?? (file instanceof File ? file.name : 'file'),
+    );
 
     return pin('/api/wallet/ipfs/file', form);
 };
@@ -150,13 +159,19 @@ export const ipfsHttpUrl = (
     return /^https?:\/\//.test(value) ? value : null;
 };
 
-/** Bytes as something a human reads, for a file about to be pinned. */
+/**
+ * Bytes as something a human reads.
+ *
+ * Shared rather than per-screen: a file about to be pinned, a torrent's size
+ * and a release on the tracker are all the same number, and two formatters
+ * eventually disagree about the same file.
+ */
 export const formatBytes = (bytes: number): string => {
     if (bytes < 1024) {
         return `${bytes} B`;
     }
 
-    const units = ['KB', 'MB', 'GB'];
+    const units = ['KB', 'MB', 'GB', 'TB'];
     let value = bytes / 1024;
     let unit = 0;
 

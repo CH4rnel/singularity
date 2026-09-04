@@ -22,6 +22,10 @@ beforeEach(function () {
 
     config()->set('crm.admin_wallets', ['0x00000000000000000000000000000000000000aa']);
     config()->set('crm.console.cache_seconds', 0);
+    // The queue reads the live gas station, and this box's .env names a real
+    // one — so without this the tests below are ordering a row they never
+    // asked for, and each of them costs an eth_call.
+    config()->set('wallet.sponsor.station', null);
     config()->set('monitoring.services', [
         'queue' => [
             'group' => 'infra',

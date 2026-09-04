@@ -13,6 +13,11 @@ class StoreProposalRequest extends FormRequest
     }
 
     /**
+     * A deadline is required, and that is the whole of how a proposal closes:
+     * status is computed from it at read time, so a proposal written without
+     * one would be open forever with nothing to end it. Seven of them were,
+     * until 2026_09_01_040000.
+     *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
@@ -21,7 +26,7 @@ class StoreProposalRequest extends FormRequest
             'dao_id' => 'required|exists:daos,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'ends_at' => 'nullable|date|after:now',
+            'ends_at' => 'required|date|after:now',
         ];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Services\Console;
 use App\Models\CrmChatFile;
 use App\Models\CrmChatMessage;
 use App\Services\LainChatService;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -24,13 +25,24 @@ use Throwable;
  * of producing an answer nobody stands behind.
  *
  * What goes up is deliberately narrow and is printed under every answer:
- * the last N lines of the room, the names and sizes of their files, and the
- * contents of a text file only when it is attached to the line that called.
+ * the last N lines of the room, the names and sizes of their files, the
+ * contents of a text file only when it is attached to the line that called —
+ * and the console's own state of the project (ConsoleBriefing): the queue, the
+ * machines, the chain, the bridge, the thirty-day numbers and the board. That
+ * last one is new because the first version of this room was narrow to the
+ * point of uselessness: a correspondent instructed not to invent numbers and
+ * handed none can only ever answer «посмотри в линзе». The briefing is composed
+ * from the same caches the lenses render, so the room and the screen beside it
+ * cannot quote different numbers, and it is dated in the answer's stamp.
+ *
  * Nothing here reads .env, a key, a wallet or another surface's messages.
  */
 class LainOsRoom
 {
-    public function __construct(private LainChatService $persona) {}
+    public function __construct(
+        private LainChatService $persona,
+        private ConsoleBriefing $briefing,
+    ) {}
 
     /** How long a reading of the daemon's live provider is reused. */
     private const PROVIDER_TTL = 60;
@@ -209,7 +221,7 @@ class LainOsRoom
     /**
      * The daemon: one flat message, because that is its whole protocol.
      *
-     * @param  array{lines: list<string>, files: list<string>, quoted: string|null, count: int}  $context
+     * @param  array{lines: list<string>, files: list<string>, quoted: string|null, count: int, briefing: string|null, briefingAt: string|null}  $context
      * @return array{text: string, meta: array<string, mixed>}|null
      */
     private function askDaemon(array $context, string $asked, string $who, CrmChatMessage $call, array &$attempts): ?array
@@ -226,7 +238,7 @@ class LainOsRoom
                 ->post(rtrim((string) $this->daemonUrl(), '/').'/chat', [
                     'roomId' => (string) config('services.lainos.room', 'cyberia-console'),
                     'userId' => 'console:'.($call->user_id ?? 0),
-                    'text' => $this->prompt($context, $asked, $who),
+                    'text' => $this->prompt($context, $asked, $who, 'daemon'),
                 ]);
 
             if (! $response->successful()) {
@@ -275,7 +287,7 @@ class LainOsRoom
      * The persona: the same conversation as a message list, which is what an
      * OpenAI-shaped endpoint wants.
      *
-     * @param  array{lines: list<string>, files: list<string>, quoted: string|null, count: int}  $context
+     * @param  array{lines: list<string>, files: list<string>, quoted: string|null, count: int, briefing: string|null, briefingAt: string|null}  $context
      * @return array{text: string, meta: array<string, mixed>}|null
      */
     private function askPersona(array $context, string $asked, string $who, array &$attempts): ?array
@@ -284,7 +296,7 @@ class LainOsRoom
 
         try {
             $reply = $this->persona->replyForConsole(
-                $this->prompt($context, $asked, $who),
+                $this->prompt($context, $asked, $who, 'persona'),
             );
         } catch (Throwable $exception) {
             Log::warning('LainOS room: persona failed', ['error' => $exception->getMessage()]);
@@ -348,7 +360,7 @@ class LainOsRoom
      * source is recorded, because "which model answered" is the question this
      * stamp exists for.
      *
-     * @param  array{lines: list<string>, files: list<string>, quoted: string|null, count: int}  $context
+     * @param  array{lines: list<string>, files: list<string>, quoted: string|null, count: int, briefing: string|null, briefingAt: string|null}  $context
      * @param  array{provider?: array<string, mixed>|null}|null  $reading
      * @return array<string, mixed>
      */
@@ -373,6 +385,10 @@ class LainOsRoom
                 'messages' => $context['count'],
                 'files' => $context['files'],
                 'quoted' => $context['quoted'],
+                // When the state of the project went up with the question, and
+                // null when it did not — an answer composed without it is a
+                // different answer and must not be read as one that had it.
+                'briefing' => $context['briefingAt'],
             ],
         ];
     }
@@ -380,13 +396,37 @@ class LainOsRoom
     /**
      * Everything the call is allowed to see, in one block.
      *
-     * @param  array{lines: list<string>, files: list<string>, quoted: string|null, count: int}  $context
+     * The opening instruction differs by backend and that is the point: the
+     * daemon has tools and the persona does not, so telling both of them "this
+     * is all you have" made the one correspondent that could go and look
+     * behave like the one that cannot. The daemon is told the briefing is a
+     * starting point; the persona is told it is the end of the line.
+     *
+     * @param  array{lines: list<string>, files: list<string>, quoted: string|null, count: int, briefing: string|null, briefingAt: string|null}  $context
+     * @param  'daemon'|'persona'  $backend
      */
-    private function prompt(array $context, string $asked, string $who): string
+    private function prompt(array $context, string $asked, string $who, string $backend): string
     {
+        $briefed = $context['briefing'] !== null;
+
         $parts = [
             'Ты — LainOS в рабочей комнате пульта Cyberia. В комнате только операторы проекта; отвечай коротко и по делу, на языке вопроса.',
-            'Ты видишь ровно то, что ниже: последние сообщения комнаты и, если файл приложен к вопросу, его начало. Ничего другого у тебя нет — не выдумывай числа, балансы и состояние сервисов, а говори, где их посмотреть.',
+            match (true) {
+                $backend === 'daemon' && $briefed => 'Ниже — сводка пульта: то, что этот сервер знает о проекте прямо сейчас. Это точка отсчёта, а не предел: инструменты у тебя есть, и если нужного числа в сводке нет (баланс адреса, транзакция, состояние контракта, файл в репозитории) — сходи и посмотри сам, а не отправляй оператора в линзу. Числа из сводки называй как есть, не пересчитывай их на глаз и не путай со своими показаниями.',
+                $backend === 'daemon' => 'Сводку пульта собрать не удалось, так что из этой комнаты ты видишь только сообщения ниже. Инструменты у тебя есть: если вопрос про цепь, сервисы, мост или деньги — сходи и посмотри сам, а не отправляй оператора в линзу.',
+                $briefed => 'Ниже — сводка пульта и последние сообщения комнаты. Это всё, что у тебя есть: инструментов на этой поверхности нет, сходить и посмотреть ты не можешь. Числа бери только из сводки и из сообщений; чего в них нет — так и скажи и назови линзу пульта, где это смотрят.',
+                default => 'Ты видишь ровно то, что ниже: последние сообщения комнаты и, если файл приложен к вопросу, его начало. Сводку состояния проекта собрать не удалось, инструментов на этой поверхности нет — не выдумывай числа, балансы и состояние сервисов, а говори, где их посмотреть.',
+            },
+        ];
+
+        if ($briefed) {
+            $parts[] = '';
+            $parts[] = '# Состояние проекта (сводка пульта, собрана '.$this->clock($context['briefingAt']).')';
+            $parts[] = $context['briefing'];
+        }
+
+        $parts = [
+            ...$parts,
             '',
             '# Последние сообщения',
             ...$context['lines'],
@@ -412,10 +452,10 @@ class LainOsRoom
     }
 
     /**
-     * The room as LainOS gets it: the last N lines, their files, and the
-     * text of a file attached to the call itself.
+     * The room as LainOS gets it: the state of the project, the last N lines,
+     * their files, and the text of a file attached to the call itself.
      *
-     * @return array{lines: list<string>, files: list<string>, quoted: string|null, count: int}
+     * @return array{lines: list<string>, files: list<string>, quoted: string|null, count: int, briefing: string|null, briefingAt: string|null}
      */
     private function context(CrmChatMessage $call): array
     {
@@ -447,12 +487,55 @@ class LainOsRoom
             }
         }
 
+        $briefing = $this->stateOfProject();
+
         return [
             'lines' => $lines,
             'files' => array_values(array_unique($files)),
             'quoted' => $this->quote($call),
             'count' => $messages->count(),
+            'briefing' => $briefing['text'],
+            'briefingAt' => $briefing['at'],
         ];
+    }
+
+    /**
+     * The console's state of the project, or nothing at all.
+     *
+     * Wrapped because a briefing is an improvement to an answer and never a
+     * precondition for one: a collector that throws must cost the room its
+     * numbers, not its reply. When it fails the stamp says the answer went out
+     * without a briefing, which is the difference between a quiet degradation
+     * and a lie.
+     *
+     * @return array{text: string|null, at: string|null}
+     */
+    private function stateOfProject(): array
+    {
+        if (! (bool) config('crm.chat.lainos.briefing', true)) {
+            return ['text' => null, 'at' => null];
+        }
+
+        try {
+            $briefing = $this->briefing->cached();
+            $text = trim($this->briefing->toText($briefing));
+
+            return $text === ''
+                ? ['text' => null, 'at' => null]
+                : ['text' => $text, 'at' => $briefing['at']];
+        } catch (Throwable $exception) {
+            Log::warning('LainOS room: briefing unreadable', ['error' => $exception->getMessage()]);
+
+            return ['text' => null, 'at' => null];
+        }
+    }
+
+    /** An instant as the console's own clock reads it. */
+    private function clock(?string $iso): string
+    {
+        return $iso === null
+            ? 'только что'
+            : CarbonImmutable::parse($iso)->timezone(config('crm.console.timezone'))->format('H:i');
     }
 
     /**

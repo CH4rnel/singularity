@@ -17,11 +17,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, dialog, ipcMain, shell, utilityProcess } = require('electron');
+const { app, dialog, ipcMain, net, shell, utilityProcess } = require('electron');
 const {
     ENGINE_VERSION,
     MAX_READ_BYTES,
+    MAX_SEED_FILES,
     MAX_TORRENTS,
+    STREAM_SCHEME,
+    announceUrlFor,
     resolveDownloadDir,
 } = require('./torrent-rules');
 
@@ -37,7 +40,12 @@ let nextId = 1;
 const pending = new Map();
 
 /** Set by `register`, so this module never reaches for a window of its own. */
-let context = { getWindow: () => null, getContents: () => null, isTrusted: () => false };
+let context = {
+    getWindow: () => null,
+    getContents: () => null,
+    isTrusted: () => false,
+    appUrl: '',
+};
 
 function consentPath() {
     return path.join(app.getPath('userData'), CONSENT_FILE);
@@ -223,6 +231,95 @@ async function ensureConsent() {
 }
 
 /**
+ * Ask before creating a torrent, which is a different act from downloading one.
+ *
+ * Downloading is a decision about this machine; seeding publishes a list of
+ * files under a name that will be handed to strangers, and the person doing it
+ * should have read that sentence at least once.
+ */
+async function confirmSeed(paths) {
+    const window = context.getWindow();
+    const { response } = await dialog.showMessageBox(window ?? undefined, {
+        type: 'warning',
+        title: 'Create a torrent',
+        message: `Share ${paths.length === 1 ? 'this' : `these ${paths.length}`} from this computer?`,
+        detail:
+            'A torrent is made from the files you picked and this computer starts sharing them. '
+            + 'Nothing is uploaded to a server — peers connect to you directly and see your IP address, '
+            + 'and the app’s proxy setting does not cover that traffic.\n\n'
+            + 'The files stay where they are. Sharing stops when you remove the torrent or close the app.',
+        buttons: ['Cancel', 'Create and share'],
+        defaultId: 1,
+        cancelId: 0,
+        noLink: true,
+    });
+
+    return response === 1;
+}
+
+/**
+ * The window's answer to `cyberia-media://torrent/<info hash>/<index>`.
+ *
+ * The page is served over https and a media element on it cannot load
+ * `http://127.0.0.1` — that is mixed content, blocked with no visible error.
+ * So the shell registers a scheme of its own and this proxies it to the
+ * engine's loopback server, forwarding the one header that matters: `Range`,
+ * without which seeking does not exist and the player has to buffer a film
+ * from the beginning to reach the end.
+ *
+ * The port is never in a URL the page sees, and the only things addressable
+ * through here are files inside torrents this client already holds.
+ */
+async function streamResponse(request) {
+    let target;
+
+    try {
+        const url = new URL(request.url);
+        const [hash, index] = url.pathname.replace(/^\/+/, '').split('/');
+
+        if (url.hostname !== 'torrent' || !hash) {
+            return new Response('Not found', { status: 404 });
+        }
+
+        const stream = await call('streamUrl', [hash, Number(index)]);
+        target = stream.url;
+    } catch (error) {
+        return new Response(String(error?.message ?? error), { status: 404 });
+    }
+
+    const headers = {};
+    const range = request.headers.get('Range');
+
+    if (range) {
+        headers.Range = range;
+    }
+
+    const upstream = await net.fetch(target, {
+        method: request.method === 'HEAD' ? 'HEAD' : 'GET',
+        headers,
+    });
+
+    // A deliberate subset. The engine's server sets a content security policy
+    // meant for its own index pages, and passing that through to a media
+    // element is noise at best.
+    const passed = new Headers();
+
+    for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges']) {
+        const value = upstream.headers.get(name);
+
+        if (value !== null) {
+            passed.set(name, value);
+        }
+    }
+
+    return new Response(upstream.body, {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        headers: passed,
+    });
+}
+
+/**
  * Wire the bridge up.
  *
  * `isTrusted` decides which frames may speak to the engine at all: the offline
@@ -230,8 +327,8 @@ async function ensureConsent() {
  * business starting a download. `getWindow` is only ever a dialog's parent;
  * `getContents` is where progress is pushed.
  */
-function register({ getWindow, getContents, isTrusted }) {
-    context = { getWindow, getContents, isTrusted };
+function register({ getWindow, getContents, isTrusted, appUrl }) {
+    context = { getWindow, getContents, isTrusted, appUrl: String(appUrl ?? '') };
 
     const guard = (handler) => async (event, ...args) => {
         if (!context.isTrusted(event.senderFrame?.url ?? '')) {
@@ -248,6 +345,8 @@ function register({ getWindow, getContents, isTrusted }) {
             downloadDir: downloadDir(),
             maxReadBytes: MAX_READ_BYTES,
             maxTorrents: MAX_TORRENTS,
+            maxSeedFiles: MAX_SEED_FILES,
+            announceUrl: announceUrlFor(context.appUrl),
             consented: readConsent(),
         })),
     );
@@ -283,6 +382,73 @@ function register({ getWindow, getContents, isTrusted }) {
         guard((hash, index) => call('read', [hash, index])),
     );
 
+    /**
+     * Create a torrent from files on this disk and start seeding it.
+     *
+     * The page asks for a dialog, not for a path: it says whether it wants
+     * files or a folder and the person in front of the machine chooses. That
+     * is the whole reason this is here rather than in the page — remote
+     * content naming a path is a read primitive, and remote content naming a
+     * tracker is an instruction about who this client talks to.
+     */
+    ipcMain.handle(
+        'torrent:seed',
+        guard(async (mode) => {
+            if (!(await ensureConsent())) {
+                throw new Error('Sharing was not started');
+            }
+
+            const window = context.getWindow();
+            const { canceled, filePaths } = await dialog.showOpenDialog(window ?? undefined, {
+                title: mode === 'folder' ? 'Choose a folder to share' : 'Choose files to share',
+                properties:
+                    mode === 'folder'
+                        ? ['openDirectory']
+                        : ['openFile', 'multiSelections'],
+            });
+
+            if (canceled || filePaths.length === 0) {
+                return null;
+            }
+
+            if (!(await confirmSeed(filePaths))) {
+                return null;
+            }
+
+            await ensureEngine();
+
+            return call('seed', [filePaths, announceUrlFor(context.appUrl)]);
+        }),
+    );
+
+    // Playing from a swarm. What comes back is the shell's own scheme, never
+    // the loopback port behind it.
+    ipcMain.handle(
+        'torrent:stream',
+        guard(async (hash, index) => {
+            const stream = await call('streamUrl', [hash, index]);
+
+            return {
+                url: `${STREAM_SCHEME}://torrent/${encodeURIComponent(String(hash))}/${Number(index)}`,
+                name: stream.name,
+                length: stream.length,
+            };
+        }),
+    );
+
+    // For the formats no browser has ever decoded — Matroska above all, which
+    // is most of what a film in a swarm actually is.
+    ipcMain.handle(
+        'torrent:openFile',
+        guard(async (hash, index) => {
+            const target = await call('filePath', [hash, index]);
+
+            await shell.openPath(target);
+
+            return true;
+        }),
+    );
+
     ipcMain.handle(
         'torrent:reveal',
         guard(async () => {
@@ -304,4 +470,4 @@ function shutdown() {
     }
 }
 
-module.exports = { register, shutdown };
+module.exports = { register, shutdown, streamResponse };

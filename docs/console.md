@@ -142,7 +142,28 @@ it was handed. Every answer is stamped with which one gave it and with what it
 was allowed to see, and when neither can be reached the room prints a hatched
 "LainOS не отвечает" with a retry rather than a sentence nobody stands behind.
 
-What goes up is narrow and is printed under the answer: the last
+**It is told the state of the project before it is asked anything.** The room's
+first version handed LainOS twenty lines of chat and then instructed it not to
+invent numbers — two correct halves that together made a correspondent which
+could only ever answer «посмотри в линзе». So every call now carries a briefing
+(`ConsoleBriefing`): the queue as the badge and the banner have it, the machine
+states from the last sweep, the chain (head, indexer lag, CYBER and the token
+prices, the pool snapshot, the gas station's tank in CYBER), the bridge ledger,
+the thirty-day tiles and the board. It is composed from the caches the lenses
+already render, so LainOS and the operator reading the screen beside it cannot
+quote different numbers at each other, and it makes no chain call of its own —
+the head is the one the monitor fetched, the prices are the wallet's own
+five-minute quotes. Every figure carries its age, and anything unreadable says
+so rather than becoming a zero. `CRM_CHAT_LAINOS_BRIEFING=false` takes it back
+out, and the stamp under the answer says which way it went.
+
+**The two backends are told different things about that briefing**, because
+they are not equally able: the daemon is told it is a starting point and that
+anything missing (a balance, a transaction, a contract's state) is its own to
+go and read; the persona is told it is the end of the line and to name the lens
+instead of estimating.
+
+What else goes up is narrow and is printed under the answer: the last
 `crm.chat.lainos.context_messages` lines, the names and sizes of their files,
 and the text of a file **only when it is attached to the line that called**.
 The call runs in a request of its own (`POST /crm/chat/{message}/answer`,
@@ -414,6 +435,7 @@ what happened, and the stream carries it.
 | `app/Services/Console/ConsolePulse.php` | The heartbeat: one version per lens, and the rail's counts |
 | `resources/js/composables/useConsolePulse.ts` | The browser half: one timer for the console, `useConsoleLive` per lens, `useConsoleBeat` for the room |
 | `app/Services/Console/LainOsRoom.php` | One call to LainOS: which backend answered, and what it was allowed to see |
+| `app/Services/Console/ConsoleBriefing.php` | The state of the project in words: queue, machines, chain, bridge, numbers, board |
 | `app/Services/Console/ServiceStrips.php` | A day per service, one cell an hour |
 | `app/Services/Console/Mockup.php` | The canvas manifest: fourteen artboards and four annotations out of `resources/console-mockup/` |
 | `resources/js/lib/consoleMessages.ts` | Every word, en/ru |
@@ -480,6 +502,10 @@ never be assigned to somebody who cannot open the page it is on.
 - **The room never invents an answer.** An unreachable LainOS is a hatched
   stripe with a retry; a swapped backend is named under the answer. "LainOS
   said so" has to keep meaning something.
+- **And it is never asked to answer blind.** The state of the project goes up
+  with the question, dated, out of the same caches the lenses draw — a
+  correspondent told it may not invent numbers and handed none can only send
+  people back to the screen they came from.
 - **A lens that stopped updating says so.** Liveness is a poll, it is paused
   while nobody is looking, and after three failed beats the top bar admits it
   — silence that is indistinguishable from a quiet night is the one failure

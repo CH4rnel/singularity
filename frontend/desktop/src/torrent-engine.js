@@ -20,13 +20,18 @@
 
 const {
     MAX_READ_BYTES,
+    MAX_SEED_FILES,
     MAX_TORRENTS,
+    STREAM_PATHNAME,
     UPDATE_INTERVAL_MS,
+    sanitizeIndex,
     sanitizeSource,
     summarize,
 } = require('./torrent-rules');
 
 const dns = require('node:dns').promises;
+const fs = require('node:fs');
+const nodePath = require('node:path');
 
 const port = process.parentPort;
 
@@ -79,6 +84,23 @@ const downloadDir = process.argv[2] ?? '';
 
 let client = null;
 
+/**
+ * The streaming server, started the first time something is played.
+ *
+ * It is an ordinary http server on a loopback port, and the window cannot
+ * reach it: the page is on https, and `http://127.0.0.1` from an https page is
+ * mixed content. The main process proxies its own scheme to this, which is
+ * also what keeps the port out of the page — see `torrent.js`.
+ *
+ * It exists because playing from a swarm is not the same as playing a file: a
+ * download in progress is a sparse file full of holes, and reading it off disk
+ * gives silence and garbage. The server waits for the pieces the player is
+ * actually asking for, which is what makes seeking work before the download
+ * has finished.
+ */
+let server = null;
+let serverPort = 0;
+
 /** Why a torrent stopped, by info hash. Cleared when it is removed. */
 const failures = new Map();
 
@@ -102,6 +124,49 @@ async function ensureClient() {
     });
 
     return client;
+}
+
+async function ensureServer() {
+    if (serverPort !== 0) {
+        return serverPort;
+    }
+
+    const engine = await ensureClient();
+
+    server = engine.createServer(
+        // `hostname` makes the server refuse any request whose Host header is
+        // not the loopback address it listens on, which is what stops a page
+        // in any browser on this machine from reaching it by DNS rebinding.
+        { pathname: STREAM_PATHNAME, hostname: '127.0.0.1' },
+        'node',
+    );
+
+    await new Promise((resolve, reject) => {
+        server.server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+    });
+
+    serverPort = server.server.address().port;
+
+    return serverPort;
+}
+
+/**
+ * Where a selection of files should be seeded from.
+ *
+ * The torrent's name comes from what was picked — one folder is a folder,
+ * several files are several files — and the store has to be the directory that
+ * *contains* it, or the client would look for the content one level too deep
+ * and immediately start re-downloading what is already on the disk.
+ */
+function seedRoot(paths) {
+    const first = paths[0];
+
+    if (paths.length === 1 && fs.statSync(first).isDirectory()) {
+        return nodePath.dirname(first);
+    }
+
+    return nodePath.dirname(first);
 }
 
 function list() {
@@ -207,6 +272,107 @@ const actions = {
      * the page names an index, never a path, so there is no way to ask this
      * for a file it did not download.
      */
+    /**
+     * Create a torrent out of files on this disk and start seeding it.
+     *
+     * This is the half of the tracker a browser cannot be. Every byte is
+     * hashed here, the tracker the shell was pointed at is written into the
+     * torrent, and what comes back is a summary carrying the info hash, the
+     * magnet and the file list — which is exactly what the wallet needs to
+     * mint the release. Nothing is uploaded anywhere: the files stay where
+     * they are, and what is published is a link to them.
+     */
+    async seed(paths, announceUrl) {
+        const chosen = (Array.isArray(paths) ? paths : [])
+            .map((entry) => String(entry))
+            .filter((entry) => entry !== '' && nodePath.isAbsolute(entry));
+
+        if (chosen.length === 0) {
+            throw new Error('Nothing was selected');
+        }
+
+        if (chosen.length > MAX_SEED_FILES) {
+            throw new Error(`This creates torrents from up to ${MAX_SEED_FILES} files at a time`);
+        }
+
+        const engine = await ensureClient();
+
+        if (engine.torrents.length >= MAX_TORRENTS) {
+            throw new Error(`This client holds ${MAX_TORRENTS} torrents at a time`);
+        }
+
+        const announce = String(announceUrl ?? '');
+
+        const torrent = await new Promise((resolve, reject) => {
+            const created = engine.seed(
+                chosen,
+                {
+                    path: seedRoot(chosen),
+                    // The tracker goes in as the torrent's own announce list,
+                    // so anybody who takes this magnet finds the swarm without
+                    // waiting on the DHT — and so the release, once minted,
+                    // reports to the index it is listed on.
+                    announceList: announce === '' ? [] : [[announce]],
+                },
+                () => resolve(created),
+            );
+
+            created.on('error', (error) => reject(new Error(String(error?.message ?? error))));
+        });
+
+        return summarize(torrent, null);
+    },
+
+    /**
+     * A URL the window can put in a media element.
+     *
+     * Selecting the file is the point: it tells the client which pieces the
+     * person is actually waiting for, so a film in the middle of a download
+     * starts playing from the beginning instead of whenever the rarest piece
+     * happens to arrive.
+     */
+    async streamUrl(infoHash, index) {
+        const torrent = await torrentFor(infoHash);
+        const position = sanitizeIndex(index, torrent.files.length);
+
+        if (position === null) {
+            throw new Error('That torrent has no such file');
+        }
+
+        const file = torrent.files[position];
+
+        file.select();
+
+        const port = await ensureServer();
+        const inside = String(file.path ?? file.name).replace(/\\/g, '/');
+
+        return {
+            url: `http://127.0.0.1:${port}${STREAM_PATHNAME}/${torrent.infoHash}/${encodeURIComponent(inside)}`,
+            name: String(file.name ?? ''),
+            length: Number(file.length ?? 0),
+        };
+    },
+
+    /**
+     * Where one file actually is, for handing to the system's own player.
+     *
+     * The answer never reaches the page — the main process opens the path and
+     * tells the window nothing — because a disk path in remote content is the
+     * beginning of a read primitive.
+     */
+    async filePath(infoHash, index) {
+        const torrent = await torrentFor(infoHash);
+        const position = sanitizeIndex(index, torrent.files.length);
+
+        if (position === null) {
+            throw new Error('That torrent has no such file');
+        }
+
+        const file = torrent.files[position];
+
+        return nodePath.join(String(torrent.path ?? ''), String(file.path ?? file.name));
+    },
+
     async read(infoHash, index) {
         const torrent = await torrentFor(infoHash);
         const file = torrent.files[Number(index)];

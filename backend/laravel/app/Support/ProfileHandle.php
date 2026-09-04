@@ -6,6 +6,25 @@ final class ProfileHandle
 {
     public const PATTERN = '[a-z0-9_]{3,20}';
 
+    /**
+     * The pattern the root profile route matches on.
+     *
+     * The same shape as PATTERN with the reserved handles cut out of it, so a
+     * request for one of them falls through to whatever route actually owns
+     * that path instead of being swallowed here and answered as a missing
+     * profile. That matters for any route registered *after* this one — the
+     * tracker's `/announce` and `/scrape` are outside every middleware group
+     * and therefore registered last.
+     */
+    public static function routePattern(): string
+    {
+        $reserved = array_map(preg_quote(...), self::reserved());
+
+        return $reserved === []
+            ? self::PATTERN
+            : '(?!(?:'.implode('|', $reserved).')$)'.self::PATTERN;
+    }
+
     public static function isCanonical(?string $handle): bool
     {
         return is_string($handle)

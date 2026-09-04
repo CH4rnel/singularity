@@ -4,6 +4,7 @@ use App\Models\CrmChatFile;
 use App\Models\CrmChatMessage;
 use App\Models\CrmContact;
 use App\Models\CrmTask;
+use App\Models\ServiceIncident;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -451,4 +452,78 @@ it('serves the room itself with its people and its limits', function () {
             ->where('lainos.backend', null)
             ->where('limits.maxMb', 25)
             ->etc());
+});
+
+/*
+ * What LainOS is actually told.
+ *
+ * The room's first version handed it twenty chat lines and then instructed it
+ * not to invent numbers — two correct halves that together made a
+ * correspondent which could only ever answer "посмотри в линзе". The state of
+ * the project now goes up with the question, composed from the same caches the
+ * lenses render, and the two backends are told different things about it: the
+ * daemon that it is a starting point, the persona that it is the end of the
+ * line.
+ */
+it('hands LainOS the state of the project, not just the room', function () {
+    config()->set('services.lainos.url', 'http://127.0.0.1:7777');
+    config()->set('wallet.sponsor.station', null);
+
+    ServiceIncident::create([
+        'service' => 'cyberia-rpc',
+        'status' => 'down',
+        'reason' => 'stale-head',
+        'started_at' => now()->subHour(),
+    ]);
+
+    Http::fake([
+        '127.0.0.1:7777/provider' => Http::response(['provider' => null], 500),
+        '127.0.0.1:7777/chat' => Http::response(['text' => 'нода не пилит блоки'], 200),
+    ]);
+
+    $operator = chatOperator();
+    $this->actingAs($operator)->post('/crm/chat', ['body' => '@lainos что у нас происходит?']);
+    $call = CrmChatMessage::query()->sole();
+
+    $this->actingAs($operator)->post("/crm/chat/{$call->id}/answer")->assertOk();
+
+    Http::assertSent(function ($request) {
+        $sent = str_contains($request->url(), '/chat') ? (string) $request['text'] : '';
+
+        return str_contains($sent, '# Состояние проекта')
+            && str_contains($sent, 'Требуют человека')
+            && str_contains($sent, 'stale-head')
+            // The daemon has tools; telling it otherwise is what made the one
+            // correspondent that can go and look behave like the one that cannot.
+            && str_contains($sent, 'инструменты у тебя есть');
+    });
+
+    $answer = CrmChatMessage::query()->where('author', CrmChatMessage::AUTHOR_LAINOS)->sole();
+
+    // The stamp records that the answer had the briefing, and when it was
+    // composed: an answer given without one is a different answer.
+    expect($answer->meta['context']['briefing'])->toBeString();
+});
+
+it('says on the answer when it went out without the state of the project', function () {
+    config()->set('services.lainos.url', 'http://127.0.0.1:7777');
+    config()->set('crm.chat.lainos.briefing', false);
+
+    Http::fake([
+        '127.0.0.1:7777/provider' => Http::response(['provider' => null], 500),
+        '127.0.0.1:7777/chat' => Http::response(['text' => 'не знаю'], 200),
+    ]);
+
+    $operator = chatOperator();
+    $this->actingAs($operator)->post('/crm/chat', ['body' => '@lainos как дела?']);
+    $call = CrmChatMessage::query()->sole();
+
+    $this->actingAs($operator)->post("/crm/chat/{$call->id}/answer")->assertOk();
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), '/chat')
+        && str_contains((string) $request['text'], '# Состояние проекта'));
+
+    $answer = CrmChatMessage::query()->where('author', CrmChatMessage::AUTHOR_LAINOS)->sole();
+
+    expect($answer->meta['context']['briefing'])->toBeNull();
 });

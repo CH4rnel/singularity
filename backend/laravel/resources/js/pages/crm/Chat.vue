@@ -65,6 +65,9 @@ type Message = {
             messages?: number;
             files?: string[];
             quoted?: string | null;
+            /* When the console's state of the project was composed, or null
+               when the answer went out without one. */
+            briefing?: string | null;
         };
     } | null;
 };
@@ -120,6 +123,7 @@ const props = defineProps<{
         maxChars: number;
         retentionDays: number;
         contextMessages: number;
+        briefing: boolean;
     };
 }>();
 
@@ -593,6 +597,15 @@ function stamp(message: Message): string {
     let line = t('chat.lainos.context', {
         messages: context.messages ?? 0,
     });
+
+    // Whether the state of the project went up with the question, and when it
+    // was composed. An answer given without it is a different answer — a
+    // briefing that quietly failed must not be read as one that was there.
+    line += context.briefing
+        ? t('chat.lainos.contextBriefing', {
+              at: shortTime(context.briefing, tag.value),
+          })
+        : t('chat.lainos.contextNoBriefing');
 
     if ((context.files ?? []).length > 0) {
         line += t('chat.lainos.contextFiles', {
@@ -1557,6 +1570,15 @@ onMounted(() => {
                     <div style="margin-top: 6px">
                         <div
                             v-for="item in [
+                                {
+                                    label: t('chat.lainos.seesBriefing'),
+                                    note: limits.briefing
+                                        ? t('chat.lainos.always')
+                                        : t('chat.lainos.never'),
+                                    tone: limits.briefing
+                                        ? 'accent'
+                                        : 'warning',
+                                },
                                 {
                                     label: t('chat.lainos.seesMessages', {
                                         count: limits.contextMessages,

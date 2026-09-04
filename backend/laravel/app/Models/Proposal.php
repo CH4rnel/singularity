@@ -69,6 +69,12 @@ class Proposal extends Model
     /**
      * Voting status derived from the deadline — open while ends_at is null or
      * in the future. Computed at read time so no scheduler is needed.
+     *
+     * A deadline is required on create and cannot be emptied on update, so
+     * the null branch is unreachable through the app. It stays because it is
+     * the safer way to be wrong: a missing deadline reads as a vote still
+     * running, which somebody can end (ProposalController::close), rather
+     * than as one silently declared over.
      */
     protected function status(): Attribute
     {

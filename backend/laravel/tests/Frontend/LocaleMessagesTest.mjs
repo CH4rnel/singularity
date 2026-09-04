@@ -4,6 +4,7 @@ import test from 'node:test';
 import { consoleMessages } from '@/lib/consoleMessages';
 import { downloadMessages } from '@/lib/downloadMessages';
 import { progressMessages } from '@/lib/progressMessages';
+import { trackerMessages } from '@/lib/trackerMessages';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -20,6 +21,7 @@ const DICTS = {
     walletMessages,
     downloadMessages,
     progressMessages,
+    trackerMessages,
     // Operator-facing and therefore en/ru only, but the failure mode is the
     // same one: a Russian console with an English cell in the middle of it.
     consoleMessages,

@@ -49,9 +49,21 @@ contextBridge.exposeInMainWorld('cyberiaNative', {
             ipcRenderer.invoke('shell:set-startup', Boolean(enabled)),
     },
     torrent: {
-        version: 1,
+        // 2 — seeding, streaming and per-file paths. The page reads this
+        // rather than assuming the desktop app has everything: an older shell
+        // is a real thing to run into, and calling a method that is not there
+        // is worse than drawing a screen without the button.
+        version: 2,
         info: () => ipcRenderer.invoke('torrent:info'),
         add: (source) => ipcRenderer.invoke('torrent:add', String(source)),
+        // The page asks for a picker, never for a path: what it gets back is a
+        // torrent that already exists and is already being shared.
+        seed: (mode) =>
+            ipcRenderer.invoke('torrent:seed', mode === 'folder' ? 'folder' : 'files'),
+        stream: (infoHash, fileIndex) =>
+            ipcRenderer.invoke('torrent:stream', String(infoHash), Number(fileIndex)),
+        openFile: (infoHash, fileIndex) =>
+            ipcRenderer.invoke('torrent:openFile', String(infoHash), Number(fileIndex)),
         list: () => ipcRenderer.invoke('torrent:list'),
         pause: (infoHash) => ipcRenderer.invoke('torrent:pause', String(infoHash)),
         resume: (infoHash) => ipcRenderer.invoke('torrent:resume', String(infoHash)),

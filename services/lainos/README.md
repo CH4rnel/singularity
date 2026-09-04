@@ -670,6 +670,55 @@ and secret values loaded from the environment.
   only for characters that list `"system"` in their `plugins` (Lain does); drop
   it from a character's plugins to take the capability away.
 
+- **crm** — everything she does, filed on the operators' board.
+
+  Almost all of this agent's work happens while nobody is talking to her: the
+  forge builds a holder's wish at four in the morning, the trader takes profit
+  on a position, a balance watch fires, a digest comes back. All of it landed
+  in exactly one place — a Telegram message that scrolled away — so the board
+  that is supposed to answer *what is this project doing* answered only for the
+  work three people typed in by hand.
+
+  This plugin is the other half of that sentence. Each task-shaped thing
+  becomes one record posted over plain HTTP: `{id, title, detail, status, at}`.
+  Cyberia's console is the intended reader (`POST /api/crm/tasks`, token in
+  `X-Crm-Token`), but nothing here knows that — the endpoint is a setting, so
+  any CRM that accepts JSON can be the destination.
+
+  Two kinds of record and no third. **`open`** is something a person still has
+  to do: a wish (it stays open after the forge builds it, because nothing here
+  pushes — a built wish is waiting on somebody to read the commit and publish
+  it), a watch that fired, a reminder, the day's post. **`done`** is something
+  already finished and is a log line under the board: a trade, a completed
+  forge job, a digest. A record that needs nobody and finished nothing is a
+  record that should not have been sent.
+
+  Three properties make it safe to leave running. It is **off unless
+  configured** — no `LAINOS_CRM_URL`, no traffic and no queue. **The id is
+  ours**: every record carries a namespaced id the sender mints
+  (`lainos:trade:0x…`), so a delivery retried after a timeout is the same
+  record and not a second one — nothing else can make this idempotent, because
+  the daemon cannot see whether the request it never got an answer to actually
+  landed. And the **outbox is durable** (`data/crm.json`): records wait there
+  until the CRM acknowledges them, drain oldest-first, and an evening the site
+  was down is not an evening missing from the board. A record the server
+  refuses outright (4xx that is not a 404) is dropped rather than left to wedge
+  everything queued behind it; a 404 — which is what the ingest answers when
+  its own token is unset — is retried, because that is a state somebody fixes.
+
+  It reads the streams the other plugins already publish (forge, sentinel,
+  scout, github, channel, press) plus a sweep over the two things that are
+  state rather than events: the wishboard and the trade journal, which is how a
+  trade Lain made herself is filed beside one the trader loop made. Switching
+  it on for the first time **adopts** everything already there as seen and
+  files none of it — the board starts the day it is wired up, not with a year
+  of history nobody asked for.
+
+  `log_crm_task` is the manual door, for a finding or a decision nothing else
+  announces. Tune with `LAINOS_CRM_URL`, `LAINOS_CRM_TOKEN`, `LAINOS_CRM=0`,
+  `LAINOS_CRM_INTERVAL_MS` (5 min), `LAINOS_CRM_PROXY`. Covered by
+  `npm run crm:smoke`.
+
 ## Semantic memory
 
 Memory persists to `data/memory.json` (episodic, per-room) plus durable learned
@@ -787,11 +836,13 @@ src/
   plugins/press/      the press room: the day's post, written from the plan
                       (plan.ts = calendar + brief, commits.ts = the material)
   plugins/system/     terminal + filesystem skills (sandboxed workspace)
+  plugins/crm/        files every task-shaped thing onto the operators' board
+                      (durable outbox in data/crm.json, sender-minted ids)
   clients/            cli.ts (REPL) | http.ts (bridge) | telegram.ts (bot) | tui/
   characters/lain.ts  the resident mind of Cyberia
 content-plan.json     the 28-day content calendar the press room writes from
 scripts/              chat.ts | tui.ts | serve.ts | smoke.ts | tasks-smoke.ts
-                      | press-smoke.ts
+                      | press-smoke.ts | crm-smoke.ts
 ```
 
 ## Safety
