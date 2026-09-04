@@ -302,8 +302,12 @@ class ConsoleFeed
             return [];
         }
 
-        $tank = (float) ($summary['tank'] ?? 0);
-        $drip = (float) ($summary['drip'] ?? 0);
+        // The station answers in wei. The floor is written in CYBER, the way
+        // an operator says it, so the two are put in the same unit here —
+        // before this, the row compared 9.9e17 against 60 and stayed silent
+        // no matter how the tank was doing.
+        $tank = (float) $this->gas->cyber((string) ($summary['tank'] ?? '0'));
+        $drip = (float) $this->gas->cyber((string) ($summary['drip'] ?? '0'));
         $floor = (float) config('crm.console.gas_tank_floor', 60);
 
         if ($tank > $floor) {
@@ -319,7 +323,7 @@ class ConsoleFeed
             params: [
                 'tank' => round($tank, 2),
                 'drips' => $drip > 0 ? (int) floor($tank / $drip) : 0,
-                'dailyCap' => (float) ($summary['dailyCap'] ?? 0),
+                'dailyCap' => (float) $this->gas->cyber((string) ($summary['dailyCap'] ?? '0')),
             ],
             // The tank has no "since": it did not enter this state at a
             // moment anything recorded, so the row shows the level instead of

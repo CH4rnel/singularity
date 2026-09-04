@@ -447,6 +447,21 @@ class GasSponsorService
     }
 
     /**
+     * One of the station's wei figures, as CYBER.
+     *
+     * Every amount `summary()` returns is wei, because that is what the
+     * contract answers and rounding it there would be rounding it once for
+     * every reader. Public because the mistake this exists to prevent has
+     * already been made: the console's tank row compared the raw integer
+     * against a floor of sixty *CYBER*, so it could only ever fire once the
+     * tank was under sixty wei — that is, never.
+     */
+    public function cyber(string $wei, int $scale = 6): string
+    {
+        return rtrim(rtrim(bcdiv($wei, bcpow('10', '18'), $scale), '0'), '.') ?: '0';
+    }
+
+    /**
      * The operator EOA, derived from the sponsor key.
      *
      * Worth knowing separately from the tank: this key pays the gas that

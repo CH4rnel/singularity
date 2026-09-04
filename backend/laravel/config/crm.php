@@ -143,6 +143,17 @@ return [
             // attached to the line that called LainOS.
             'file_bytes' => (int) env('CRM_CHAT_LAINOS_FILE_BYTES', 8000),
 
+            // Whether the state of the project goes up with the question.
+            //
+            // On by default, because the room's first version handed LainOS
+            // twenty chat lines and then told it not to invent numbers, which
+            // is a correspondent that can only ever answer "посмотри в линзе".
+            // The briefing is composed from the caches the lenses already
+            // render (ConsoleBriefing), so it costs a chat call nothing and
+            // cannot disagree with the screen beside it. Off means the room
+            // goes back to seeing only itself — and says so in the stamp.
+            'briefing' => (bool) env('CRM_CHAT_LAINOS_BRIEFING', true),
+
             // Answering with the tool-less persona when the daemon is
             // unreachable. Off means an unreachable daemon is reported as
             // exactly that: two correspondents are not interchangeable, and
