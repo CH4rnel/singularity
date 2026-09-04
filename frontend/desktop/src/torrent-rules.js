@@ -15,8 +15,12 @@ const path = require('node:path');
 /**
  * Bumped when the bridge's shape changes, so the wallet can tell an old shell
  * from a missing feature instead of calling a function that is not there.
+ *
+ * 2 — seeding, streaming and per-file paths. The page can now create a torrent
+ * from files the person picks in a native dialog, play one out of a live swarm
+ * through the shell's own scheme, and hand a file to the system player.
  */
-const ENGINE_VERSION = 1;
+const ENGINE_VERSION = 2;
 
 /** Torrents allowed at once. A swarm each, and each one costs sockets. */
 const MAX_TORRENTS = 8;
@@ -32,6 +36,28 @@ const MAX_READ_BYTES = 10 * 1024 * 1024;
 
 /** How often progress is pushed to the window. */
 const UPDATE_INTERVAL_MS = 1000;
+
+/**
+ * Files one `seed` may take.
+ *
+ * Creating a torrent hashes every byte of every file, in this process. The cap
+ * is not about disk or memory but about the dialog: somebody who selects a
+ * whole music library should be told that is more than this will do, rather
+ * than watching a window that appears to have frozen.
+ */
+const MAX_SEED_FILES = 500;
+
+/**
+ * Where the streaming server lives inside its own http server, and the scheme
+ * the page is handed instead of that server's address.
+ *
+ * The page is on https and cannot load `http://127.0.0.1` — that is mixed
+ * content, blocked with no visible error. So the shell registers a scheme of
+ * its own, marked secure, and proxies it to the local server; the page never
+ * learns a port and never talks to one.
+ */
+const STREAM_PATHNAME = '/stream';
+const STREAM_SCHEME = 'cyberia-media';
 
 const HEX_HASH = /^[0-9a-f]{40}$/i;
 const BASE32_HASH = /^[a-z2-7]{32}$/i;
@@ -84,6 +110,31 @@ function resolveDownloadDir(env, downloads) {
     return path.join(downloads, 'Cyberia');
 }
 
+/**
+ * The tracker every torrent created here announces to.
+ *
+ * Derived from the site the shell is pointed at rather than taken from the
+ * page: a URL from remote content is a URL this client would then announce to,
+ * and the whole reason the shell owns the engine is that the page does not get
+ * to choose who it talks to.
+ */
+function announceUrlFor(appUrl) {
+    try {
+        return `${new URL(String(appUrl)).origin}/announce`;
+    } catch {
+        return '';
+    }
+}
+
+/** A file index from the page, or null. Never an index into something else. */
+function sanitizeIndex(value, count) {
+    const index = Number(value);
+
+    return Number.isInteger(index) && index >= 0 && index < Number(count)
+        ? index
+        : null;
+}
+
 /** Seconds left at the current rate, or null when there is no honest answer. */
 function etaSeconds(torrent) {
     const remaining = Number(torrent.timeRemaining);
@@ -121,6 +172,9 @@ function summarize(torrent, error = null) {
     return {
         infoHash: String(torrent.infoHash ?? ''),
         name: String(torrent.name ?? ''),
+        // The link that lets somebody else join this swarm — the whole of what
+        // publishing a release hands to the page.
+        magnet: String(torrent.magnetURI ?? ''),
         status,
         progress: Number(torrent.progress ?? 0),
         length: Number(torrent.length ?? 0),
@@ -132,6 +186,10 @@ function summarize(torrent, error = null) {
         eta: etaSeconds(torrent),
         files: (torrent.files ?? []).map((file) => ({
             name: String(file.name ?? ''),
+            // The path *inside the torrent*, not on this disk: it is part of
+            // the torrent's own metadata, it is what a release's file list is
+            // made of, and it is how the stream server addresses a file.
+            path: String(file.path ?? file.name ?? '').replace(/\\/g, '/'),
             length: Number(file.length ?? 0),
             progress: Number(file.progress ?? 0),
         })),
@@ -142,10 +200,15 @@ function summarize(torrent, error = null) {
 module.exports = {
     ENGINE_VERSION,
     MAX_READ_BYTES,
+    MAX_SEED_FILES,
     MAX_TORRENTS,
+    STREAM_PATHNAME,
+    STREAM_SCHEME,
     UPDATE_INTERVAL_MS,
+    announceUrlFor,
     etaSeconds,
     resolveDownloadDir,
+    sanitizeIndex,
     sanitizeSource,
     summarize,
 };

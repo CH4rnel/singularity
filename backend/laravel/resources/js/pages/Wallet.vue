@@ -38,6 +38,7 @@ import WalletNetworks from '@/components/wallet/WalletNetworks.vue';
 import WalletNft from '@/components/wallet/WalletNft.vue';
 import WalletNftMint from '@/components/wallet/WalletNftMint.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
+import WalletPlayer from '@/components/wallet/WalletPlayer.vue';
 import WalletPortfolio from '@/components/wallet/WalletPortfolio.vue';
 import WalletPreferences from '@/components/wallet/WalletPreferences.vue';
 import WalletProfile from '@/components/wallet/WalletProfile.vue';
@@ -49,6 +50,8 @@ import WalletSwap from '@/components/wallet/WalletSwap.vue';
 import WalletToken from '@/components/wallet/WalletToken.vue';
 import WalletTokens from '@/components/wallet/WalletTokens.vue';
 import WalletTorrent from '@/components/wallet/WalletTorrent.vue';
+import WalletTracker from '@/components/wallet/WalletTracker.vue';
+import WalletTrackerPublish from '@/components/wallet/WalletTrackerPublish.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useWalletAuth } from '@/composables/useWalletAuth';
@@ -64,6 +67,8 @@ import { formatUnits, unreadChatCount, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import type { BridgeConfig } from '@/lib/wallet/bridge';
 import { announceWalletEvent } from '@/lib/wallet/notifications';
+import type { PlayerTrack } from '@/lib/wallet/player';
+import { canStream, torrentBridge } from '@/lib/wallet/torrent';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -145,6 +150,9 @@ type Section =
     | 'nftMint'
     | 'ipfs'
     | 'torrent'
+    | 'tracker'
+    | 'trackerPublish'
+    | 'player'
     | 'gas'
     | 'proxy'
     | 'earn'
@@ -205,6 +213,7 @@ const SECTIONS: { id: Section; label: () => string }[] = [
     { id: 'feed', label: () => t('feed') },
     { id: 'launchpad', label: () => t('launchpad') },
     { id: 'nft', label: () => t('nftTitle') },
+    { id: 'tracker', label: () => t('trackerTitle') },
     { id: 'dao', label: () => t('dao') },
     // Listed even for wallets that hold no $LAIN: the room says what it wants
     // and what this account has, which is the only way to know it exists.
@@ -271,6 +280,9 @@ const TAB_OF: Record<Section, Section> = {
     nftMint: 'nft',
     ipfs: 'nft',
     torrent: 'nft',
+    tracker: 'nft',
+    trackerPublish: 'nft',
+    player: 'nft',
 };
 
 const activeTab = computed(() => TAB_OF[section.value]);
@@ -338,6 +350,8 @@ const PARENTS: Partial<Record<Section, Section>> = {
     nftMint: 'nft',
     ipfs: 'nft',
     torrent: 'nft',
+    trackerPublish: 'tracker',
+    player: 'tracker',
 };
 
 const current = computed<Section>(
@@ -446,6 +460,50 @@ const mintPreset = ref<string | null>(null);
 const openMint = (uri: string | null): void => {
     mintPreset.value = uri;
     openSection('nftMint');
+};
+
+/**
+ * What the player is playing, and where it came from.
+ *
+ * Held here rather than inside the tracker screen because a playlist can be
+ * opened from more than one place — a release, and eventually anything else
+ * that turns out to have media in it — and because the player is a
+ * destination: going back from it should return to the screen that opened it,
+ * not unmount the audio.
+ */
+const playerQueue = ref<{
+    tracks: PlayerTrack[];
+    heading: string;
+    poster: string | null;
+    infoHash: string | null;
+}>({ tracks: [], heading: '', poster: null, infoHash: null });
+
+const openPlayer = (payload: typeof playerQueue.value): void => {
+    playerQueue.value = payload;
+    openSection('player');
+};
+
+/**
+ * Hand one track to the system's own player.
+ *
+ * The answer for Matroska and AVI, which no browser has ever decoded and which
+ * are most of what a film in a swarm actually is. Only the desktop shell can
+ * do it, and only for a file it is already holding.
+ */
+const playExternally = async (track: PlayerTrack): Promise<void> => {
+    const bridge = torrentBridge();
+    const [infoHash, index] = track.id.split(':');
+
+    if (!bridge?.openFile || infoHash === undefined || index === undefined) {
+        return;
+    }
+
+    try {
+        await bridge.openFile(infoHash, Number(index));
+    } catch (failure) {
+        error.value =
+            failure instanceof Error ? failure.message : String(failure);
+    }
 };
 
 const openChain = (next: WalletChainId): void => {
@@ -1414,6 +1472,7 @@ watch(
                         @mint="openMint(null)"
                         @ipfs="openSection('ipfs')"
                         @torrents="openSection('torrent')"
+                        @tracker="openSection('tracker')"
                     />
 
                     <WalletNftMint
@@ -1436,6 +1495,41 @@ watch(
                         v-else-if="section === 'torrent'"
                         @back="openSection('nft')"
                         @mint="openMint"
+                    />
+
+                    <!--
+                      The tracker: releases that exist because somebody minted
+                      them. Reading needs nothing; publishing is a mint, and
+                      making the torrent in the first place needs the desktop
+                      shell — each of those is said on the screen that needs it.
+                    -->
+                    <WalletTracker
+                        v-else-if="section === 'tracker'"
+                        :address="
+                            wallet.accounts.value.find(
+                                (account) => account.family === 'evm',
+                            )?.address ?? null
+                        "
+                        @back="openSection('nft')"
+                        @publish="openSection('trackerPublish')"
+                        @play="openPlayer"
+                    />
+
+                    <WalletTrackerPublish
+                        v-else-if="section === 'trackerPublish'"
+                        :wallet="wallet"
+                        :ipfs="props.ipfs"
+                        @back="openSection('tracker')"
+                    />
+
+                    <WalletPlayer
+                        v-else-if="section === 'player'"
+                        :tracks="playerQueue.tracks"
+                        :heading="playerQueue.heading"
+                        :poster="playerQueue.poster"
+                        :can-open-externally="canStream(torrentBridge())"
+                        @back="openSection('tracker')"
+                        @open-externally="playExternally"
                     />
 
                     <WalletLain

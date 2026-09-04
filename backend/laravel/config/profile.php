@@ -13,6 +13,11 @@ return [
     'reserved_handles' => [
         'admin',
         'analytics',
+        // The BitTorrent tracker's own endpoints. They are registered outside
+        // every middleware group and therefore *after* this route, so the
+        // reservation is what keeps them reachable as well as unclaimable —
+        // see ProfileHandle::routePattern().
+        'announce',
         'api',
         'auth',
         'bridge',
@@ -48,6 +53,7 @@ return [
         'reactions',
         'register',
         'sanctum',
+        'scrape',
         'settings',
         'slots',
         'staking',
@@ -57,6 +63,7 @@ return [
         'thesis',
         'token',
         'tokens',
+        'tracker',
         'u',
         'up',
         'user',

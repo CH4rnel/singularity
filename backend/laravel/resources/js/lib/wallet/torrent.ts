@@ -16,6 +16,14 @@
 /** One file inside a torrent. */
 export type TorrentFile = {
     name: string;
+    /**
+     * The path *inside the torrent* — never on this disk.
+     *
+     * It is part of the torrent's own metadata, which is why it may cross to
+     * the page at all: it is what a release's file list is made of, and it is
+     * how the player names the file it wants streamed.
+     */
+    path: string;
     /** Bytes, as the torrent's own metadata declares them. */
     length: number;
     /** Fraction of this file that is on disk, 0–1. */
@@ -34,6 +42,8 @@ export type TorrentSummary = {
     /** The torrent's identity — 40 hex characters, the same everywhere. */
     infoHash: string;
     name: string;
+    /** The link that lets somebody else join this swarm. */
+    magnet: string;
     status: TorrentStatus;
     /** 0–1. Stays 0 while the engine is still fetching the metadata. */
     progress: number;
@@ -60,8 +70,20 @@ export type TorrentEngineInfo = {
     maxReadBytes: number;
     /** Torrents allowed at once. */
     maxTorrents: number;
+    /** Files one `seed` may take, since hashing them all happens in the shell. */
+    maxSeedFiles: number;
+    /** The tracker a torrent created here announces to. Chosen by the shell. */
+    announceUrl: string;
     /** Whether the user has agreed to run a peer-to-peer client at all. */
     consented: boolean;
+};
+
+/** One file, ready to be played out of a live swarm. */
+export type TorrentStream = {
+    /** A URL a media element can load. Not http — see `torrent.js`. */
+    url: string;
+    name: string;
+    length: number;
 };
 
 /** A file handed back from disk, for pinning it to IPFS. */
@@ -77,6 +99,18 @@ export type TorrentBridge = {
     version: number;
     info: () => Promise<TorrentEngineInfo>;
     add: (source: string) => Promise<TorrentSummary>;
+    /**
+     * Create a torrent from files on this machine and start sharing them.
+     *
+     * The page asks for a picker, never for a path: the person in front of the
+     * machine chooses, and what comes back is a torrent that already exists.
+     * `null` means they cancelled, which is not a failure.
+     */
+    seed?: (mode: 'files' | 'folder') => Promise<TorrentSummary | null>;
+    /** One file as something playable, prioritised in the swarm on the way. */
+    stream?: (infoHash: string, fileIndex: number) => Promise<TorrentStream>;
+    /** Hand one file to the system's own player, for what no browser decodes. */
+    openFile?: (infoHash: string, fileIndex: number) => Promise<void>;
     list: () => Promise<TorrentSummary[]>;
     pause: (infoHash: string) => Promise<void>;
     resume: (infoHash: string) => Promise<void>;
@@ -105,6 +139,20 @@ export const torrentBridge = (): TorrentBridge | null => {
 
     return bridge && typeof bridge.add === 'function' ? bridge : null;
 };
+
+/**
+ * Whether this shell can create a torrent and play one out of a swarm.
+ *
+ * Feature-detected per method rather than compared against a version number:
+ * a shell that shipped before seeding existed is a real thing to be running,
+ * and the honest answer on it is a screen without the button rather than a
+ * button that throws.
+ */
+export const canSeed = (bridge: TorrentBridge | null): boolean =>
+    typeof bridge?.seed === 'function';
+
+export const canStream = (bridge: TorrentBridge | null): boolean =>
+    typeof bridge?.stream === 'function';
 
 const HEX_HASH = /^[0-9a-f]{40}$/i;
 const BASE32_HASH = /^[a-z2-7]{32}$/i;
@@ -184,7 +232,10 @@ export const formatEta = (seconds: number | null): string | null => {
 };
 
 /** Base64 from the bridge as a Blob the pin endpoint can take. */
-export const bytesToBlob = (file: TorrentFileBytes, type = 'application/octet-stream'): Blob => {
+export const bytesToBlob = (
+    file: TorrentFileBytes,
+    type = 'application/octet-stream',
+): Blob => {
     const binary = atob(file.base64);
     const bytes = new Uint8Array(binary.length);
 

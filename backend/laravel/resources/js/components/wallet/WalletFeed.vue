@@ -42,6 +42,7 @@ const failure = ref(false);
  */
 const ACTIVITY: Record<string, string> = {
     'proposal.created': 'feedProposalCreated',
+    'proposal.closed': 'feedProposalClosed',
     'vote.cast': 'feedVoteCast',
     'comment.posted': 'feedCommentPosted',
 };

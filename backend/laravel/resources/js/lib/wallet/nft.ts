@@ -1,4 +1,4 @@
-import { Contract, JsonRpcProvider, getAddress } from 'ethers';
+import { Contract, Interface, JsonRpcProvider, getAddress } from 'ethers';
 import { nftReadRpcUrl } from '@/lib/nftChains';
 import type { NftChain } from '@/lib/nftChains';
 import { ipfsHttpUrl } from '@/lib/wallet/ipfs';
@@ -25,6 +25,10 @@ const NFT_ABI = [
     'function tokenURI(uint256 tokenId) view returns (string)',
     'function ownerOf(uint256 tokenId) view returns (address)',
     'function nextId() view returns (uint256)',
+    // The id a mint produced, which the transaction's return value cannot give
+    // a browser: `eth_sendTransaction` answers with a hash, and the value a
+    // contract returns is only readable from the log it emitted.
+    'event Minted(uint256 indexed tokenId, address indexed creator, string uri)',
 ];
 
 /**
@@ -103,7 +107,9 @@ export const buildMetadata = (fields: {
     }
 
     const attributes = (fields.attributes ?? [])
-        .filter((entry) => entry.trait.trim() !== '' && entry.value.trim() !== '')
+        .filter(
+            (entry) => entry.trait.trim() !== '' && entry.value.trim() !== '',
+        )
         .map((entry) => ({
             trait_type: entry.trait.trim(),
             value: entry.value.trim(),
@@ -167,7 +173,9 @@ export const fetchOwnedNfts = async (
     limit = 60,
 ): Promise<WalletNft[]> => {
     const url = `${target.explorerUrl}/api/v2/addresses/${owner}/nft?type=ERC-721%2CERC-1155`;
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    const response = await fetch(url, {
+        headers: { Accept: 'application/json' },
+    });
 
     if (!response.ok) {
         throw new Error(`Explorer returned ${response.status}`);
@@ -217,7 +225,10 @@ export const fetchOwnedNfts = async (
                             ? [
                                   {
                                       trait: text(attribute.trait_type, 40),
-                                      value: String(attribute.value).slice(0, 60),
+                                      value: String(attribute.value).slice(
+                                          0,
+                                          60,
+                                      ),
                                   },
                               ]
                             : [],
@@ -262,19 +273,20 @@ export const quoteMint = async (
     const contract = new Contract(target.collection, NFT_ABI, rpc);
 
     const [estimate, feeData] = await Promise.all([
-        (contract.mint.estimateGas(uri, { from: minter }) as Promise<bigint>).catch(
-            (error: unknown) => {
-                // The common failure is an empty account, and the node says so
-                // in a sentence about gas that reads like a bug in the wallet.
-                const message = error instanceof Error ? error.message : String(error);
+        (
+            contract.mint.estimateGas(uri, { from: minter }) as Promise<bigint>
+        ).catch((error: unknown) => {
+            // The common failure is an empty account, and the node says so
+            // in a sentence about gas that reads like a bug in the wallet.
+            const message =
+                error instanceof Error ? error.message : String(error);
 
-                throw new Error(
-                    /insufficient funds/i.test(message)
-                        ? 'This account has no coin to pay for the mint.'
-                        : `The network refused to price this mint: ${message}`,
-                );
-            },
-        ),
+            throw new Error(
+                /insufficient funds/i.test(message)
+                    ? 'This account has no coin to pay for the mint.'
+                    : `The network refused to price this mint: ${message}`,
+            );
+        }),
         rpc.getFeeData(),
     ]);
 
@@ -335,7 +347,10 @@ export const mintNft = async (
         // Only the refusal above is a reason to stop. A node that answers
         // eth_estimateGas unreliably has already been paid for by the cap the
         // user agreed to, so an unreadable estimate changes nothing they were told.
-        if (error instanceof Error && error.message.startsWith('This mint now costs')) {
+        if (
+            error instanceof Error &&
+            error.message.startsWith('This mint now costs')
+        ) {
             throw error;
         }
     }
@@ -346,6 +361,60 @@ export const mintNft = async (
     });
 
     return tx.hash as string;
+};
+
+/**
+ * Which token a mint produced.
+ *
+ * A wallet that mints and then has to *say* what it minted needs the id, and
+ * the id does not come back from sending the transaction — a contract's return
+ * value is invisible outside the EVM, so the number lives in the `Minted` log.
+ * Reading `nextId()` instead would be a race with everyone else minting into
+ * the same shared collection.
+ *
+ * Times out rather than waiting forever: a transaction that has not been mined
+ * in three minutes on a one-second chain is a transaction to go and look at on
+ * the explorer, and the caller is told the hash rather than left on a spinner.
+ */
+export const waitForMintedToken = async (
+    hash: string,
+    target: NftChain,
+    rpcUrl?: string,
+): Promise<string> => {
+    if (target.collection === null) {
+        throw new Error('Nothing to mint into on this network');
+    }
+
+    const rpc = provider(target, rpcUrl);
+    const receipt = await rpc.waitForTransaction(hash, 1, 180_000);
+
+    if (receipt === null) {
+        throw new Error('The mint has not been mined yet.');
+    }
+
+    if (receipt.status === 0) {
+        throw new Error('The mint transaction failed on chain.');
+    }
+
+    const contract = target.collection.toLowerCase();
+    const abi = new Interface(NFT_ABI);
+
+    for (const log of receipt.logs) {
+        if (log.address.toLowerCase() !== contract) {
+            continue;
+        }
+
+        const parsed = abi.parseLog({
+            topics: [...log.topics],
+            data: log.data,
+        });
+
+        if (parsed?.name === 'Minted') {
+            return (parsed.args[0] as bigint).toString();
+        }
+    }
+
+    throw new Error('The mint was mined but did not say which token it made.');
 };
 
 /** Where a freshly minted token can be looked at, before any index has it. */

@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaRpcController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
 use App\Http\Controllers\Api\TgWhaleController;
+use App\Http\Controllers\Api\TrackerController;
 use App\Http\Controllers\Api\WalletAuthController;
 use App\Http\Controllers\Api\WalletCrosschainController;
 use App\Http\Controllers\Api\WalletGasController;
@@ -120,6 +121,24 @@ Route::prefix('slots')->group(function () {
     Route::get('pool', [SlotsController::class, 'pool']);
     Route::post('spin/prepare', [SlotsController::class, 'prepare'])->middleware('throttle:6,1');
     Route::post('spin/confirm', [SlotsController::class, 'confirm'])->middleware('throttle:30,1');
+});
+
+/*
+ * The tracker's index. Reading is open to anyone; publishing is a mint — the
+ * body of a registration is a chain and a token id, and every other field on
+ * the release is read by this server from the chain and from the document that
+ * token points at. See App\Services\Tracker\ReleaseRegistrar.
+ *
+ * The announce and scrape endpoints torrent clients speak to are not here:
+ * they answer in bencode and live outside every middleware group, in
+ * routes/tracker.php.
+ */
+Route::prefix('tracker')->group(function () {
+    Route::get('releases', [TrackerController::class, 'index'])->middleware('throttle:120,1');
+    Route::get('releases/{infoHash}', [TrackerController::class, 'show'])
+        ->where('infoHash', '[0-9a-fA-F]{40}')
+        ->middleware('throttle:120,1');
+    Route::post('releases', [TrackerController::class, 'store'])->middleware('throttle:20,1');
 });
 
 // NFT metadata pin (image + ERC-721 JSON) → tokenURI

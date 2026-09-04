@@ -93,3 +93,11 @@ Schedule::command('gamification:remind')
     ->dailyAt('19:00')
     ->timezone((string) config('crm.console.timezone', 'Europe/Moscow'))
     ->withoutOverlapping();
+// Peers that stopped announcing, and the swarm counts on releases nobody is
+// announcing to any more. An empty swarm is never announced to again, so
+// without this a release keeps showing the seeders it had the day the last one
+// closed their client.
+Schedule::command('tracker:prune')->hourly()->withoutOverlapping();
+// Who owns each release. The token is transferable and a sold release moves
+// with it; everything else on the row is fixed by the CID it was minted from.
+Schedule::command('tracker:sync')->dailyAt('05:20')->withoutOverlapping();

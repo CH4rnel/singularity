@@ -53,6 +53,7 @@ use App\Http\Controllers\ServiceMonitorController;
 use App\Http\Controllers\StakingController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
+use App\Http\Controllers\TrackerController;
 use App\Http\Controllers\UserFollowController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Middleware\EnsureBridgeAdmin;
@@ -216,6 +217,13 @@ Route::get('/launchpad/sites/{address}', [LaunchpadController::class, 'showSite'
     ->name('launchpad.site');
 Route::inertia('/slots', 'Slots')->name('slots');
 Route::inertia('/predictions', 'Predictions')->name('predictions');
+// The tracker. A release is a torrent that exists on the index because a token
+// on Cyberia names it, so these pages are a view over the chain and every row
+// carries the token it was minted as. Clients talk to /announce (routes/tracker.php).
+Route::get('/tracker', [TrackerController::class, 'index'])->name('tracker.index');
+Route::get('/tracker/{infoHash}', [TrackerController::class, 'show'])
+    ->where('infoHash', '[0-9a-fA-F]{40}')
+    ->name('tracker.show');
 Route::get('dao', [DaoController::class, 'index'])->name('dao.index');
 Route::get('dao/{dao}', [DaoController::class, 'show'])->name('dao.show');
 Route::get('proposals/{proposal}', [ProposalController::class, 'show'])->name('proposals.show');
@@ -433,6 +441,9 @@ Route::middleware(['auth'])->group(function () {
 
     // Proposal detail
     Route::put('proposals/{proposal}', [ProposalController::class, 'update'])->name('proposals.update');
+    // Ends the vote now rather than at the deadline; wider than update, see
+    // ProposalPolicy::close.
+    Route::post('proposals/{proposal}/close', [ProposalController::class, 'close'])->name('proposals.close');
     Route::delete('proposals/{proposal}', [ProposalController::class, 'destroy'])->name('proposals.destroy');
 
     // Comments on proposals
@@ -621,5 +632,5 @@ require __DIR__.'/settings.php';
 // Public profile handles live at the root, so this constrained route must stay
 // after every application, settings and Fortify route.
 Route::get('{user:onchain_nickname}', [UserProfileController::class, 'show'])
-    ->where('user', ProfileHandle::PATTERN)
+    ->where('user', ProfileHandle::routePattern())
     ->name('users.show');

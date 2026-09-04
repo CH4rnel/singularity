@@ -30,6 +30,7 @@ const {
     ipcMain,
     net,
     nativeImage,
+    protocol,
     session,
     shell,
 } = require('electron');
@@ -50,12 +51,38 @@ const { commandForInput, usesFramelessWindow, zoomLevel } = require('./frame');
 const { createAutostart } = require('./autostart');
 const { loadProxySetting, saveProxySetting } = require('./proxy-settings');
 const torrent = require('./torrent');
+const { STREAM_SCHEME } = require('./torrent-rules');
 const { loadWindowState, trackWindowState } = require('./window-state');
 
 const APP_URL = resolveAppUrl(process.env, process.argv);
 const START_URL = resolveStartUrl(process.env, process.argv);
 const APP_HOST = new URL(APP_URL).hostname;
 const OFFLINE_PAGE = path.join(__dirname, 'offline.html');
+
+/*
+ * The scheme the wallet plays torrents through.
+ *
+ * This has to be declared before the app is ready, and it has to be declared
+ * `secure`: the site is https, and a media element on an https page will not
+ * load `http://127.0.0.1` — that is mixed content, blocked with no visible
+ * error and no event. `stream` is what makes range requests and therefore
+ * seeking work; `corsEnabled` is what lets the page's own scripts touch it.
+ *
+ * It resolves only to files inside torrents this client already holds — see
+ * `streamResponse` in torrent.js.
+ */
+protocol.registerSchemesAsPrivileged([
+    {
+        scheme: STREAM_SCHEME,
+        privileges: {
+            standard: true,
+            secure: true,
+            stream: true,
+            supportFetchAPI: true,
+            corsEnabled: true,
+        },
+    },
+]);
 const PROXY_PAGE = path.join(__dirname, 'proxy.html');
 
 const IS_MAC = process.platform === 'darwin';
@@ -561,6 +588,12 @@ function watchKeys(contents) {
 async function configureSession() {
     shellSession = session.fromPartition(PARTITION);
 
+    // Registered on the shell's own session rather than globally: nothing but
+    // the site's own page has any business asking for a stream.
+    shellSession.protocol.handle(STREAM_SCHEME, (request) =>
+        torrent.streamResponse(request),
+    );
+
     proxySetting = loadProxySetting();
 
     const decision = resolveProxyDecision(process.env, process.argv, proxySetting);
@@ -983,6 +1016,9 @@ if (!app.requestSingleInstanceLock()) {
             getWindow: () => mainWindow,
             getContents: () => pageContents(),
             isTrusted: (url) => isNavigable(url, APP_HOST),
+            // The tracker a torrent created here announces to is this app's
+            // own site, derived rather than accepted from the page.
+            appUrl: APP_URL,
         });
 
         ipcMain.handle('proxy:state', () => proxyState());
