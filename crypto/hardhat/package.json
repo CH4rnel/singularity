@@ -16,6 +16,11 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.9.5",
+    "@openzeppelin/contracts-upgradeable-v3": "npm:@openzeppelin/contracts-upgradeable@^3.4.2-solc-0.7",
+    "@openzeppelin/contracts-v3": "npm:@openzeppelin/contracts@^3.4.2-solc-0.7",
+    "@uniswap/lib": "^4.0.1-alpha",
+    "@uniswap/v2-core": "^1.0.1",
+    "base64-sol": "^1.0.1",
     "dotenv": "^17.4.1",
     "ethers": "^6.16.0"
   }
