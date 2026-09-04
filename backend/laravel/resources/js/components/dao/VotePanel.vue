@@ -2,6 +2,7 @@
 import { Link as InertiaLink, router, usePage } from '@inertiajs/vue3';
 import { useTimeAgo } from '@vueuse/core';
 import {
+    Gavel,
     Loader2,
     ThumbsDown,
     ThumbsUp,
@@ -17,6 +18,7 @@ import WalletAvatar from '@/components/web3/WalletAvatar.vue';
 import { useSolanaWallet } from '@/composables/useSolanaWallet';
 import { useWallet } from '@/composables/useWallet';
 import { profileUrl } from '@/lib/profileUrl';
+import { close as proposalClose } from '@/routes/proposals';
 import { store as voteStore } from '@/routes/proposals/votes';
 import type { Proposal, ProposalVote, User } from '@/types';
 
@@ -72,6 +74,72 @@ const powerAgainst = computed(() =>
     parseFloat(props.proposal.power_against || '0'),
 );
 const totalPower = computed(() => powerFor.value + powerAgainst.value);
+
+/**
+ * What a closed vote came to. Stated as which side ended ahead and by how
+ * much, and never as "passed": there is no quorum and no threshold in this
+ * DAO, so a verdict would be claiming a rule that does not exist.
+ */
+const outcome = computed(() => {
+    if (isOpen.value) {
+        return null;
+    }
+
+    if (totalPower.value === 0) {
+        return 'Nobody voted.';
+    }
+
+    const tally = `${formatPower(powerFor.value)} for vs ${formatPower(powerAgainst.value)} against`;
+
+    if (powerFor.value === powerAgainst.value) {
+        return `It ended tied — ${tally}.`;
+    }
+
+    return powerFor.value > powerAgainst.value
+        ? `For came out ahead — ${tally}.`
+        : `Against came out ahead — ${tally}.`;
+});
+
+/**
+ * Ending the vote early. Author, DAO owner or operator — the same three the
+ * server checks in ProposalPolicy::close; this only decides whether the
+ * button is drawn.
+ */
+const canClose = computed(() => {
+    const user = authUser.value;
+
+    if (!user || !isOpen.value) {
+        return false;
+    }
+
+    return (
+        props.proposal.user_id === user.id ||
+        page.props.auth?.canAccessCrm === true ||
+        (props.proposal.dao?.user_id != null &&
+            props.proposal.dao.user_id === user.id)
+    );
+});
+
+const isClosing = ref(false);
+
+function closeVoting() {
+    if (!confirm('End the voting now? The discussion stays open.')) {
+        return;
+    }
+
+    isClosing.value = true;
+
+    router.post(
+        proposalClose(props.proposal.id).url,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                isClosing.value = false;
+            },
+        },
+    );
+}
 
 async function castVote(support: boolean) {
     voteError.value = null;
@@ -295,8 +363,9 @@ function formatAddress(address: string): string {
             </p>
         </div>
 
-        <div v-else-if="!isOpen" class="text-sm text-muted-foreground">
-            Voting is closed. The discussion below stays open.
+        <div v-else-if="!isOpen" class="space-y-1 text-sm text-muted-foreground">
+            <p class="font-medium text-foreground">Voting is closed.</p>
+            <p>{{ outcome }} The discussion below stays open.</p>
         </div>
 
         <div v-else class="text-sm text-muted-foreground">
@@ -304,6 +373,25 @@ function formatAddress(address: string): string {
             <InertiaLink href="/wallet-login" class="font-medium underline">
                 Sign in
             </InertiaLink>
+        </div>
+
+        <!-- Ending it early. The deadline closes a proposal on its own; this
+             is for the ones it cannot answer. -->
+        <div v-if="canClose" class="border-t border-border/70 pt-4">
+            <Button
+                variant="outline"
+                size="sm"
+                :disabled="isClosing"
+                @click="closeVoting"
+            >
+                <Loader2 v-if="isClosing" class="mr-1 h-4 w-4 animate-spin" />
+                <Gavel v-else class="mr-1 h-4 w-4" />
+                End voting now
+            </Button>
+            <p class="mt-1.5 text-xs text-muted-foreground">
+                Votes are kept and the discussion stays open. To give it more
+                time instead, move the deadline in the DAO.
+            </p>
         </div>
 
         <!-- Voters -->

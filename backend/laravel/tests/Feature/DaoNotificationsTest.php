@@ -33,6 +33,7 @@ test('a new proposal notifies prior dao participants but not the author', functi
     $this->actingAs($author)->post("/dao/{$dao->id}/proposals", [
         'dao_id' => $dao->id,
         'title' => 'Notify me',
+        'ends_at' => now()->addWeek()->toIso8601String(),
     ]);
 
     expect(daoUnread($participant))->toBe(1)

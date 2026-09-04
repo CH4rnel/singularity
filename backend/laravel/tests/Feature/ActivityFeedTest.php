@@ -14,6 +14,7 @@ test('creating a proposal records a feed activity', function () {
     $this->actingAs($user)->post("/dao/{$dao->id}/proposals", [
         'dao_id' => $dao->id,
         'title' => 'Feed me',
+        'ends_at' => now()->addWeek()->toIso8601String(),
     ]);
 
     $this->assertDatabaseHas('activities', [

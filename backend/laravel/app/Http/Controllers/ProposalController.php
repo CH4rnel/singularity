@@ -9,6 +9,7 @@ use App\Models\Proposal;
 use App\Services\Dao\ActivityRecorder;
 use App\Services\Dao\DaoNotifier;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 
@@ -78,6 +79,36 @@ class ProposalController extends Controller
         $proposal->update($request->validated());
 
         return back()->with('success', 'Proposal updated');
+    }
+
+    /**
+     * End the vote now, without waiting for the deadline.
+     *
+     * The deadline closes a proposal on its own; this is the lever for the
+     * cases it cannot answer — a question that was settled early, one nobody
+     * is voting on any more, and the proposals that predate deadlines
+     * entirely. It only ever moves the end *closer*: a proposal that has
+     * already closed is left exactly as it is, so pressing this twice cannot
+     * rewrite when the vote ended.
+     */
+    public function close(Request $request, Proposal $proposal): RedirectResponse
+    {
+        Gate::authorize('close', $proposal);
+
+        if (! $proposal->isOpen()) {
+            return back()->with('success', 'Voting was already closed');
+        }
+
+        $proposal->update(['ends_at' => now()]);
+
+        $this->activityRecorder->record(
+            'proposal.closed',
+            $request->user(),
+            $proposal,
+            $proposal->dao,
+        );
+
+        return back()->with('success', 'Voting closed');
     }
 
     public function destroy(Proposal $proposal): RedirectResponse

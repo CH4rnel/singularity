@@ -29,6 +29,7 @@ test('authenticated users can create a proposal', function () {
         'dao_id' => $dao->id,
         'title' => 'Test Proposal',
         'description' => 'Some description',
+        'ends_at' => now()->addWeek()->toIso8601String(),
     ]);
 
     $response->assertRedirect();
@@ -39,12 +40,38 @@ test('authenticated users can create a proposal', function () {
     ]);
 });
 
+test('a proposal cannot be created without a deadline', function () {
+    $user = User::factory()->create();
+    $dao = Dao::factory()->create();
+
+    $response = $this->actingAs($user)->post("/dao/{$dao->id}/proposals", [
+        'dao_id' => $dao->id,
+        'title' => 'Open forever',
+    ]);
+
+    $response->assertSessionHasErrors('ends_at');
+    $this->assertDatabaseCount('proposals', 0);
+});
+
+test('a proposal cannot have its deadline emptied', function () {
+    $user = User::factory()->create();
+    $proposal = Proposal::factory()->open()->create(['user_id' => $user->id]);
+
+    $response = $this->actingAs($user)->put("/proposals/{$proposal->id}", [
+        'ends_at' => null,
+    ]);
+
+    $response->assertSessionHasErrors('ends_at');
+    expect($proposal->fresh()->ends_at)->not->toBeNull();
+});
+
 test('proposal creation requires title', function () {
     $user = User::factory()->create();
     $dao = Dao::factory()->create();
 
     $response = $this->actingAs($user)->post("/dao/{$dao->id}/proposals", [
         'dao_id' => $dao->id,
+        'ends_at' => now()->addWeek()->toIso8601String(),
     ]);
 
     $response->assertSessionHasErrors('title');
@@ -57,6 +84,7 @@ test('proposal creation requires valid dao_id', function () {
     $response = $this->actingAs($user)->post("/dao/{$dao->id}/proposals", [
         'dao_id' => 99999,
         'title' => 'Test',
+        'ends_at' => now()->addWeek()->toIso8601String(),
     ]);
 
     $response->assertSessionHasErrors('dao_id');

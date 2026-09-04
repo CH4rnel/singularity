@@ -69,7 +69,11 @@ export type ProposalVote = {
     updated_at: string;
 };
 
-export type ActivityType = 'proposal.created' | 'vote.cast' | 'comment.posted';
+export type ActivityType =
+    | 'proposal.created'
+    | 'proposal.closed'
+    | 'vote.cast'
+    | 'comment.posted';
 
 export type Activity = {
     id: number;
