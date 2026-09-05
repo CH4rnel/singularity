@@ -2003,8 +2003,15 @@ async def whale_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = f"{WHALE_VERIFY_URL}?t={token}"
     await update.message.reply_text(
         f"To join the whales chat you must hold at least {WHALE_MIN_CYBER_SOL:,} CYBER.sol.\n\n"
-        f"Open this link, connect Phantom and sign (valid {WHALE_LINK_TTL_MINUTES} min):\n{url}\n\n"
-        "Once verified I'll DM you a one-time invite."
+        f"Connect Phantom and sign — valid {WHALE_LINK_TTL_MINUTES} min:\n{url}\n\n"
+        "On a phone the page will offer \"Open in Phantom\" — take it. Neither "
+        "Telegram's browser nor Chrome/Safari has a wallet inside it, so signing "
+        "only works in Phantom's own browser.\n\n"
+        "Once verified I'll DM you a one-time invite.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🐳 Verify CYBER.sol", url=url)],
+        ]),
+        disable_web_page_preview=True,
     )
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
