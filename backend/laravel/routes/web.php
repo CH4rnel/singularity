@@ -60,6 +60,7 @@ use App\Http\Controllers\TokenController;
 use App\Http\Controllers\TrackerController;
 use App\Http\Controllers\UserFollowController;
 use App\Http\Controllers\UserProfileController;
+use App\Http\Controllers\WhitepaperController;
 use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
@@ -185,6 +186,10 @@ Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.sho
 // What the coin is for, with the contract behind every claim — and the list of
 // things it deliberately does not do yet. Cited by the token pages and the nav.
 Route::get('/cyber', CyberController::class)->name('cyber');
+// The roadmap, rendered rather than downloaded: a .docx behind a nav link is a
+// document nobody reads on a phone and nobody can quote a line of. The original
+// file stays in public/ and the page links to it.
+Route::get('/whitepaper', WhitepaperController::class)->name('whitepaper');
 Route::get('/changelog', ChangelogController::class)->name('changelog');
 // Where the native apps come from. /download/<platform> is the short link worth
 // pasting into a message; it redirects to the current file for that platform.
