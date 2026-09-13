@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\BridgeRequest;
+use App\Services\Bitcoin\EsploraApiService;
+use App\Services\Bitcoin\UtxoPool;
 use App\Services\Monero\MoneroWalletRpc;
 use App\Support\BridgeCapacity;
 use App\Support\Environment;
@@ -966,7 +968,8 @@ class BridgeService
             // and its committed recipient. No amount or tx hash needed, which
             // is the only shape a Monero deposit can have at all: nobody
             // outside this wallet can look one up.
-            'yenten', 'monero' => app(BridgeDepositWatcher::class)->confirmedBalance($request, $chain),
+            'yenten', 'monero', 'bitcoin', 'litecoin' => app(BridgeDepositWatcher::class)
+                ->confirmedBalance($request, $chain),
             default => null,
         };
     }
@@ -1069,6 +1072,7 @@ class BridgeService
             'ton' => $this->payoutTon($request, $chain, $tokenEntry, $netAmount),
             'yenten' => $this->payoutYenten($request, $chain, $tokenEntry, $netAmount),
             'monero' => $this->payoutMonero($request, $tokenEntry, $netAmount),
+            'bitcoin', 'litecoin' => $this->payoutUtxo($request, $chain, $tokenEntry, $netAmount),
             default => tap(false, fn () => $request->markFailed("No payout strategy for chain type '{$chain['type']}'")),
         };
     }
@@ -1089,6 +1093,12 @@ class BridgeService
             // The wallet that sent it is the only thing that can be asked
             // about a Monero transaction, and it is right here.
             'monero' => app(MoneroWalletRpc::class)->payoutSucceeded($txHash),
+            // A Bitcoin-family payout cannot revert: it is in a block, in the
+            // mempool, or nowhere yet. The index therefore answers true or
+            // "cannot tell", and never false — a broadcast that has not
+            // surfaced may still be in flight.
+            'bitcoin', 'litecoin' => app(EsploraApiService::class)
+                ->transactionExists((string) ($chain['key'] ?? ''), $txHash),
             // TON and Yenten payouts carry a query_id / request id and their
             // relay scripts reconcile a lost broadcast themselves; we cannot
             // add a cheaper check here than re-running them, so an unknown
@@ -1530,6 +1540,101 @@ class BridgeService
      *
      * @param  array<string, mixed>  $tokenEntry
      */
+    /**
+     * Bitcoin and Litecoin, signed by the relay in crypto/utxo.
+     *
+     * The same arrangement as Yenten, because it is the same problem: the
+     * pool is a set of addresses rather than one wallet, the recipient must
+     * receive the net figure exactly, and the miner's fee comes out of the
+     * flat bridge fee this corridor retained upstream. What differs is only
+     * where the chain is read — a keyless Esplora index, the one both of these
+     * chains have and Yenten does not.
+     *
+     * The hash is recorded as it is printed, before the broadcast, so a
+     * process killed between sending and reporting still leaves a row that
+     * names the transaction it sent.
+     *
+     * @param  array<string, mixed>  $chain
+     * @param  array<string, mixed>  $tokenEntry
+     */
+    private function payoutUtxo(BridgeRequest $request, array $chain, array $tokenEntry, string $netAmount): bool
+    {
+        $chainKey = (string) ($chain['key'] ?? '');
+        $wifs = app(UtxoPool::class)->wifs($chainKey);
+
+        if ($wifs === []) {
+            $request->markFailed(strtoupper($chainKey).' payout key is not configured on this server');
+
+            return false;
+        }
+
+        $amountRaw = TokenAmount::toRaw($netAmount, (int) $tokenEntry['decimals']);
+        $captured = '';
+        $scriptDir = Environment::isProduction()
+            ? '/singularity/crypto/utxo'
+            : base_path('/../../crypto/utxo');
+
+        $result = Process::path($scriptDir)
+            ->env(array_filter([
+                'UTXO_RELAYER_WIFS' => json_encode(array_values($wifs)),
+                'UTXO_CHANGE_ADDRESS' => (string) ($chain['deposit_address'] ?? ''),
+                'UTXO_ESPLORA_URL' => (string) ($chain['esplora_url'] ?? ''),
+                'UTXO_FEE_TARGET_BLOCKS' => (string) ($chain['fee_target_blocks'] ?? ''),
+                'UTXO_MAX_FEE_RATE' => (string) ($chain['max_fee_rate'] ?? ''),
+            ], fn (string $value) => $value !== ''))
+            // Generous: the relay retries a rate-limited index and, if the
+            // broadcast's answer is lost, spends up to forty seconds asking
+            // whether the transaction it already signed is visible.
+            ->timeout((int) config('bridge.relay.utxo_timeout_seconds', 300))
+            ->run([
+                'npm', 'run', '--silent', 'relay', '--',
+                $chainKey,
+                (string) $request->recipient_address,
+                $amountRaw,
+                (string) $request->id,
+            ], function (string $type, string $buffer) use (&$captured, $request) {
+                $captured .= $buffer;
+                $this->recordBroadcast($request, $this->extractRelayTxHash($captured));
+            });
+
+        Log::info('Bridge relay payout utxo', [
+            'id' => $request->id,
+            'chain' => $chainKey,
+            'stdout' => $result->output(),
+            'stderr' => $result->errorOutput(),
+            'exit' => $result->exitCode(),
+        ]);
+
+        if ($result->exitCode() !== 0) {
+            if (! $request->hasPayout()) {
+                $request->markFailed(strtoupper($chainKey).' relay failed: '.$result->errorOutput());
+            }
+
+            return false;
+        }
+
+        $json = $this->lastJsonLine($result->output());
+
+        if (! $json || empty($json['txHash'])) {
+            if (! $request->hasPayout()) {
+                $request->markFailed('Could not parse the '.$chainKey.' relay output');
+            }
+
+            return false;
+        }
+
+        // The deposit addresses whose coins funded this payout are spent now;
+        // leaving them unswept would have the next payout read them again and
+        // find nothing.
+        foreach ((array) ($json['spentAddresses'] ?? []) as $address) {
+            BridgeRequest::where('deposit_address', $address)->update(['swept' => true]);
+        }
+
+        $this->recordBroadcast($request, (string) $json['txHash']);
+
+        return true;
+    }
+
     private function payoutMonero(BridgeRequest $request, array $tokenEntry, string $netAmount): bool
     {
         $wallet = app(MoneroWalletRpc::class);

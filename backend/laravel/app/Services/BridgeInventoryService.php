@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\Bitcoin\EsploraApiService;
+use App\Services\Bitcoin\UtxoPool;
 use App\Services\Monero\MoneroWalletRpc;
 use App\Support\BridgeCapacity;
 use App\Support\TokenAmount;
@@ -66,6 +68,7 @@ class BridgeInventoryService
             'solana' => $this->solanaCapacity($chain, $entry),
             'ton' => $this->tonCapacity($direction, $token, $chain, $entry),
             'monero' => $this->moneroCapacity($entry),
+            'bitcoin', 'litecoin' => $this->utxoCapacity($chainKey, $entry),
             default => BridgeCapacity::unavailable("no inventory reader for chain type '{$type}'", $decimals),
         };
     }
@@ -349,6 +352,60 @@ class BridgeInventoryService
      *
      * @param  array<string, mixed>  $entry
      */
+    /**
+     * Bitcoin and Litecoin, read from a keyless public index.
+     *
+     * Two things are subtracted from the raw pool before it is advertised.
+     * The obvious one is a reserve for the miner's fee, which on these chains
+     * is charged on top of what is sent and moves with demand — a pool that
+     * exactly covers a payout does not cover it. The less obvious one is the
+     * unconfirmed part: `spendableBalance()` counts only outputs in a block,
+     * because the relay refuses to build on anything else, and capacity that
+     * the payout would then decline is worse than capacity that is a little
+     * behind.
+     *
+     * @param  array<string, mixed>  $entry
+     */
+    private function utxoCapacity(string $chainKey, array $entry): BridgeCapacity
+    {
+        $decimals = (int) ($entry['decimals'] ?? 8);
+        $pool = app(UtxoPool::class)->addresses($chainKey);
+
+        if ($pool === []) {
+            return BridgeCapacity::unmeasured(
+                $decimals,
+                "no {$chainKey} wallet address is configured on this server; the reserve is held manually",
+            );
+        }
+
+        $esplora = app(EsploraApiService::class);
+
+        if (! $esplora->supports($chainKey)) {
+            return BridgeCapacity::unmeasured(
+                $decimals,
+                "no index is configured for {$chainKey}; the reserve is held manually",
+            );
+        }
+
+        $spendable = $esplora->spendableBalance($chainKey, $pool);
+
+        if ($spendable === null) {
+            return BridgeCapacity::unavailable("{$chainKey} balance could not be read", $decimals);
+        }
+
+        $reserve = TokenAmount::toRaw(
+            (string) config("bridge.chains.{$chainKey}.fee_reserve", '0'),
+            $decimals,
+        );
+
+        $available = bcsub($spendable, $reserve, 0);
+
+        return BridgeCapacity::available(
+            bccomp($available, '0', 0) > 0 ? $available : '0',
+            $decimals,
+        );
+    }
+
     private function moneroCapacity(array $entry): BridgeCapacity
     {
         $decimals = (int) ($entry['decimals'] ?? 12);

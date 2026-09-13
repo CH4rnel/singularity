@@ -34,6 +34,7 @@ singularity/
 ├── frontend/extension/   # Cyberia Wallet browser extension (MV3, own vault, EIP-1193)
 ├── crypto/hardhat/       # EVM contracts, Hardhat 3 + viem
 ├── crypto/anchor/        # Solana/Anchor bridge contracts and scripts
+├── crypto/utxo/          # Bitcoin/Litecoin bridge payouts (bitcoinjs-lib over Esplora): the only half of those corridors that needs a key
 ├── crypto/quickswap-core/ # Legacy QuickSwap/Uniswap v2 core contracts
 ├── services/blockscout/  # Cyberia explorer: Blockscout docker-compose deploy config (official images)
 ├── services/cyberia-node/ # Cyberia L1 second node (polygon-edge follower/RPC); prepared, not deployed
@@ -452,6 +453,7 @@ Use the smallest relevant checks:
 - Ritual change: `cd frontend/ritual && npx eslint <changed files>`; for deploy artifact use the build command noted above.
 - Hardhat change: `cd crypto/hardhat && npx hardhat test`
 - Anchor change: `cd crypto/anchor && anchor test` or at least `anchor build`
+- Bitcoin/Litecoin relay change: `cd crypto/utxo && npm test && npm run typecheck`; the corridor's PHP half is `tests/Feature/Api/BridgeUtxoCorridorTest.php`
 - Jekyll change: `cd frontend/jekyll && bundle exec jekyll build`
 - Desktop shell change: `cd frontend/desktop && npm test`; add `npm run pack` when the Electron main process changed.
 - Mobile shell change: `cd frontend/mobile && npm test && npm run sync`

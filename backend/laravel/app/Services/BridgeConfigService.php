@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\Bitcoin\BitcoinDepositDeriver;
+use App\Services\Bitcoin\EsploraApiService;
 use App\Services\Monero\MoneroWalletRpc;
 
 /**
@@ -359,6 +361,15 @@ class BridgeConfigService
                 continue;
             }
 
+            // Bitcoin and Litecoin are the same exception for a different
+            // reason: the address a user deposits to is derived per request,
+            // so the configured one is the *payout* wallet and matters only
+            // in the outbound direction. Both directions are checked below,
+            // each against the thing it actually needs.
+            if (in_array($chain['type'] ?? '', ['bitcoin', 'litecoin'], true)) {
+                continue;
+            }
+
             if (in_array($chain['wallet'] ?? '', ['manual', 'ton'], true)
                 && $this->depositAddress($chain['key']) === null) {
                 return false;
@@ -378,6 +389,37 @@ class BridgeConfigService
         if (($source['type'] ?? '') === 'monero' || ($destination['type'] ?? '') === 'monero') {
             if (! app(MoneroWalletRpc::class)->configured()) {
                 return false;
+            }
+        }
+
+        // A UTXO corridor needs two unrelated things in its two directions,
+        // and neither implies the other: a seed, to hand out an address that
+        // belongs to one request and to nobody else, and a spending key with
+        // somewhere for change to land. A public index is required either way
+        // — without one this server cannot see a deposit or price a fee.
+        foreach (['bitcoin', 'litecoin'] as $utxoChain) {
+            $isSource = ($source['key'] ?? '') === $utxoChain;
+            $isDestination = ($destination['key'] ?? '') === $utxoChain;
+
+            if (! $isSource && ! $isDestination) {
+                continue;
+            }
+
+            if (! app(EsploraApiService::class)->supports($utxoChain)) {
+                return false;
+            }
+
+            if ($isSource && BitcoinDepositDeriver::forChain($utxoChain) === null) {
+                return false;
+            }
+
+            if ($isDestination) {
+                $chain = $this->chain($utxoChain) ?? [];
+
+                if (trim((string) ($chain['relayer_wif'] ?? '')) === ''
+                    || trim((string) ($chain['deposit_address'] ?? '')) === '') {
+                    return false;
+                }
             }
         }
 
