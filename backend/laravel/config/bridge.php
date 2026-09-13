@@ -139,6 +139,19 @@ return [
         // monero-wallet-rpc builds, signs and relays inside the one `transfer`
         // call, and a wallet with many outputs takes its time about it.
         'monero_timeout_seconds' => (int) env('BRIDGE_RELAY_MONERO_TIMEOUT', 240),
+
+        /*
+         * How long a credited request may sit in `pending` before
+         * `bridge:sweep-deposits` relays it itself. This is the gap between
+         * taking somebody's coins and starting their payout: normally it is
+         * milliseconds, because the same call does both, but a failure in
+         * between used to leave the request there forever — nothing else looks
+         * at `pending`. Longer than the slowest payout so a relay still in
+         * flight is never duplicated (it could not be paid twice anyway —
+         * `hasPayout()` sees to that — but a second read of the destination
+         * chain for nothing is still worth avoiding).
+         */
+        'resume_after_minutes' => (int) env('BRIDGE_RELAY_RESUME_AFTER_MINUTES', 10),
         // One request can run a payout AND a burn, so the job must outlive
         // two of the slowest scripts back to back.
         'job_timeout_seconds' => (int) env('BRIDGE_RELAY_JOB_TIMEOUT', 660),

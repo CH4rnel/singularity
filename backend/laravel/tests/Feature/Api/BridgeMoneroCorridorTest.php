@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\BridgeRequest;
+use App\Services\BridgeAdmissionService;
 use App\Services\BridgeConfigService;
 use App\Services\BridgeInventoryService;
 use App\Services\BridgeService;
@@ -183,6 +184,79 @@ test('a deposit is credited with nobody watching', function () {
     expect($request->status)->toBe('completed')
         ->and((float) $request->amount)->toBe(0.25)
         ->and($request->destination_tx_hash)->toBe('0xsweptmint');
+});
+
+test('a credit interrupted before the relay is picked up by the next sweep', function () {
+    fakeMoneroWallet([
+        'create_address' => ['address' => XMR_PAYOUT_ADDRESS, 'address_index' => 3],
+        'get_transfers' => moneroDeposit('250000000000'),
+    ]);
+    Process::fake(['*relay-mint*' => Process::result(output: json_encode(['txHash' => '0xresumed']))]);
+
+    $prepared = prepareMonero();
+
+    // The state a failure between "take the coins" and "start the payout"
+    // leaves behind: credited, on the books, and watched by nothing — the
+    // sweep above only looks at awaiting_deposit.
+    BridgeRequest::whereKey($prepared['id'])->update([
+        'status' => 'pending',
+        'amount' => '0.25',
+        'updated_at' => now()->subMinutes(30),
+    ]);
+
+    $this->artisan('bridge:sweep-deposits --chain=monero')->assertSuccessful();
+
+    $request = BridgeRequest::find($prepared['id']);
+
+    expect($request->status)->toBe('completed')
+        ->and($request->destination_tx_hash)->toBe('0xresumed');
+});
+
+test('a relay that has only just started is left alone', function () {
+    fakeMoneroWallet([
+        'create_address' => ['address' => XMR_PAYOUT_ADDRESS, 'address_index' => 3],
+        'get_transfers' => moneroDeposit('250000000000'),
+    ]);
+    Process::fake(['*relay-mint*' => Process::result(output: json_encode(['txHash' => '0xtooearly']))]);
+
+    $prepared = prepareMonero();
+
+    BridgeRequest::whereKey($prepared['id'])->update([
+        'status' => 'pending',
+        'amount' => '0.25',
+        'updated_at' => now()->subMinute(),
+    ]);
+
+    $this->artisan('bridge:sweep-deposits --chain=monero')->assertSuccessful();
+
+    // A payout running inside the request that started it is not a stranded
+    // one, and two relays for a transfer that can only be paid once are worth
+    // avoiding even where the second could not pay.
+    expect(BridgeRequest::find($prepared['id'])->status)->toBe('pending');
+});
+
+test('an obligation that cannot be written leaves the deposit where the sweep will find it', function () {
+    fakeMoneroWallet([
+        'create_address' => ['address' => XMR_PAYOUT_ADDRESS, 'address_index' => 3],
+        'get_transfers' => moneroDeposit('250000000000'),
+    ]);
+
+    $prepared = prepareMonero();
+
+    $this->partialMock(
+        BridgeAdmissionService::class,
+        fn ($mock) => $mock->shouldReceive('commit')->andThrow(new RuntimeException('database is locked')),
+    );
+
+    try {
+        $this->artisan('bridge:sweep-deposits --chain=monero')->run();
+    } catch (Throwable) {
+        // The write failed; what matters is the state it failed into.
+    }
+
+    // Still awaiting its deposit, which is true — the coins are on the
+    // request's own subaddress and the next sweep reads them again.
+    expect(BridgeRequest::find($prepared['id'])->status)->toBe('awaiting_deposit');
 });
 
 /** An EVM deposit of the XMR wrapper into the relayer, as the receipt shows it. */

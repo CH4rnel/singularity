@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\ProcessBridgeRequest;
 use App\Models\BridgeRequest;
 use App\Services\BridgeDepositCredit;
 use App\Services\BridgeDepositWatcher;
@@ -62,6 +63,11 @@ class BridgeSweepDepositsCommand extends Command
         if ($requests->isEmpty()) {
             $this->info('No deposit addresses are being watched.');
 
+            // Still run the resume pass: a request that was credited is no
+            // longer awaiting a deposit, so an empty watch list above says
+            // nothing about whether one is stuck below.
+            $this->resumeStranded($chains);
+
             return self::SUCCESS;
         }
 
@@ -88,8 +94,56 @@ class BridgeSweepDepositsCommand extends Command
             $this->line("#{$request->id} {$request->source_chain}: {$outcome->message}");
         }
 
-        $this->info("Looked at {$requests->count()}: {$credited} credited, {$expired} expired.");
+        $resumed = $this->resumeStranded($chains);
+
+        $this->info("Looked at {$requests->count()}: {$credited} credited, {$expired} expired, {$resumed} resumed.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Requests whose deposit was credited and whose relay never started.
+     *
+     * Crediting is three writes and a relay, and the relay is the part that
+     * talks to another chain — so there is a window where the coins are taken,
+     * the obligation is on the books, and the payout has not begun. Nothing
+     * else looks at `pending`: the sweep above watches `awaiting_deposit`,
+     * `bridge:relay` is a command somebody types, and the browser that started
+     * it may be closed. On 2026-09-13 that window swallowed a real transfer
+     * for an hour, and only because somebody was watching the spinner.
+     *
+     * Re-running the relay is safe by construction: `hasPayout()` makes a
+     * second payout unreachable, so the worst a needless resume costs is one
+     * read of the destination chain.
+     *
+     * @param  array<int, string>  $chains
+     */
+    private function resumeStranded(array $chains): int
+    {
+        // Old enough that a relay still running inside the request that
+        // started it is not interrupted — a Monero payout alone is allowed
+        // four minutes.
+        $idleMinutes = max(1, (int) config('bridge.relay.resume_after_minutes', 10));
+
+        $stranded = BridgeRequest::query()
+            ->where('status', BridgeRequest::PENDING)
+            ->whereIn('source_chain', $chains)
+            ->whereNotNull('deposit_address')
+            ->where('updated_at', '<=', now()->subMinutes($idleMinutes))
+            // A handful per run: each one relays inline, and a queue of them
+            // must not hold the two-minute schedule open.
+            ->oldest('id')
+            ->limit(3)
+            ->get();
+
+        foreach ($stranded as $request) {
+            $this->warn("#{$request->id} {$request->source_chain}: credited but never relayed — resuming.");
+
+            ProcessBridgeRequest::dispatchSync($request->id);
+
+            $this->line("#{$request->id}: now {$request->fresh()->status}");
+        }
+
+        return $stranded->count();
     }
 }
