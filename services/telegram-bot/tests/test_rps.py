@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import create_engine, text
 
-from bot import db, rps
+from bot import db, rps, stakes
 
 
 class RpsTests(unittest.TestCase):
@@ -17,7 +17,8 @@ class RpsTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.engine = create_engine(f"sqlite:///{Path(self.directory.name) / 'test.sqlite'}")
         self.addCleanup(self.engine.dispose)
-        for module in (db, rps):
+        # transaction() now lives in bot.stakes, so it needs the test engine too.
+        for module in (db, rps, stakes):
             mock = patch.object(module, 'engine', self.engine)
             mock.start()
             self.addCleanup(mock.stop)

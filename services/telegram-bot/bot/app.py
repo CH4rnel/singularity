@@ -31,6 +31,10 @@ from bot.config import (
     WALLET_MINI_APP_URL, WALLET_MINI_APP_MENU,
 )
 from bot.rps import rps_command, rps_callback, expiry_loop, ensure_schema as ensure_rps_schema
+from bot.slots import (
+    slots_command, slots_bank_command,
+    sweep_loop as slots_sweep_loop, ensure_schema as ensure_slots_schema,
+)
 from bot.db import ensure_schema
 from bot.nft import (
     channel_post_handler, set_channel_wallet_command, channel_wallet_command,
@@ -68,6 +72,8 @@ async def post_init(application: Application):
             BotCommand("wallet", "Show your linked wallet"),
             BotCommand("balance", "Show TG, chat tokens, and pending rewards"),
             BotCommand("rps", "Камень–ножницы–бумага на токены чата"),
+            BotCommand("slots", "🎰 Слоты на токены чата"),
+            BotCommand("slots_bank", "🎰 Касса автомата этого чата"),
             BotCommand("claim", "Collect your accrued chat-token rewards"),
             BotCommand("token", "Show this chat's reward token"),
             BotCommand("cancel", "Cancel an interactive prompt"),
@@ -92,6 +98,7 @@ async def post_init(application: Application):
         ]
     )
     application.create_task(expiry_loop(application))
+    application.create_task(slots_sweep_loop(application))
     logger.info("Bot commands published to Telegram")
 
     # The ☰ beside the input box becomes the wallet. This is the entry point
@@ -253,6 +260,8 @@ def run_dispatcher():
     application.add_handler(CommandHandler("claim", claim_command))
     application.add_handler(CommandHandler("rps", rps_command))
     application.add_handler(CallbackQueryHandler(rps_callback, pattern=r"^rps:"))
+    application.add_handler(CommandHandler("slots", slots_command))
+    application.add_handler(CommandHandler("slots_bank", slots_bank_command))
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("github", github_command))
     application.add_handler(CommandHandler("website", website_command))
@@ -380,6 +389,7 @@ def main() -> None:
     logger.info("Starting bot...")
     ensure_schema()
     ensure_rps_schema()
+    ensure_slots_schema()
     if "--snapshot-once" in sys.argv:
         run_snapshot_once()
     else:

@@ -133,6 +133,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help - show available commands",
         "/wallet - show your linked wallet and explorer link",
         "/rps <stake> - play rock-paper-scissors with this chat’s accrued tokens",
+        "/slots <stake> - pull the chat’s 🎰 slot machine with accrued tokens",
         "/balance - show TG, all chat tokens, and pending rewards",
         "/token - show this chat's reward token (group only)",
         "/unset_wallet - unlink your wallet (pending rewards are kept)",
@@ -185,6 +186,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/unset_wallet - unlink your wallet (pending rewards are kept)\n"
         "/wallet - show your linked wallet and explorer link\n"
         "/rps <stake> - play rock-paper-scissors with this chat’s accrued tokens\n"
+        "/slots <stake> - pull the chat’s 🎰 slot machine with accrued tokens\n"
+        "/slots_bank [amount] - show the machine’s till (admins top it up)\n"
         "/balance - show TG, all chat tokens, and pending rewards\n"
         "/token - show this chat's reward token (group only)\n"
         "/cancel - cancel an interactive prompt\n"
