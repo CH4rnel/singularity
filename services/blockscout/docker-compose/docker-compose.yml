@@ -1,17 +1,47 @@
 version: '3.9'
 
+# Log rotation, applied to every service below.
+#
+# 2026-09-13: the host filled to 100% and the chain stopped sealing for two
+# hours. One container — polygon-edge — held a 48 GB json log, because Docker's
+# json-file driver keeps every byte forever unless it is told not to, and
+# nothing here told it. Only `backend` had ever carried a `logging:` block.
+#
+# Two caps rather than one because the volumes differ by two orders of
+# magnitude: polygon-edge prints ~9 INFO lines per block at one block per
+# second (~215 MB/day), everything else prints on an event.
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "20m"
+    max-file: "3"
+    compress: "true"
+
+# The sealing node. 50m x 3 holds roughly 16 hours of block history, which is
+# what a post-mortem needs; INFO stays on because those lines are the only
+# human-readable proof the chain is still producing.
+x-logging-node: &logging-node
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "3"
+    compress: "true"
+
 services:
   redis-db:
+    logging: *logging
     extends:
       file: ./services/redis.yml
       service: redis-db
 
   db-init:
+    logging: *logging
     extends:
       file: ./services/db.yml
       service: db-init
 
   db:
+    logging: *logging
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -20,6 +50,7 @@ services:
       service: db
 
   backend:
+    logging: *logging
     depends_on:
       - db
       - redis-db
@@ -34,11 +65,6 @@ services:
         ETHEREUM_JSONRPC_TRACE_URL: http://host.docker.internal:8545/
         ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545/
         CHAIN_ID: '49406'
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
 
   # nft_media_handler: removed 2026-08-22.
   #
@@ -55,16 +81,19 @@ services:
   # then NFT_MEDIA_HANDLER_NODES_MAP, and only then this service.
 
   visualizer:
+    logging: *logging
     extends:
       file: ./services/visualizer.yml
       service: visualizer
 
   sig-provider:
+    logging: *logging
     extends:
       file: ./services/sig-provider.yml
       service: sig-provider
 
   frontend:
+    logging: *logging
     depends_on:
       - backend
     extends:
@@ -72,11 +101,13 @@ services:
       service: frontend
 
   stats-db-init:
+    logging: *logging
     extends:
       file: ./services/stats.yml
       service: stats-db-init
 
   stats-db:
+    logging: *logging
     depends_on:
       stats-db-init:
         condition: service_completed_successfully
@@ -85,6 +116,7 @@ services:
       service: stats-db
 
   stats:
+    logging: *logging
     depends_on:
       - stats-db
       - backend
@@ -105,6 +137,7 @@ services:
   # `Error: HTTP error: 200 OK`. 1,088 restarts.
 
   proxy:
+    logging: *logging
     depends_on:
       - backend
       - frontend
@@ -114,12 +147,14 @@ services:
       service: proxy
 
   certbot:
+    logging: *logging
     image: certbot/certbot
     volumes:
       - /root/certbot/conf:/etc/letsencrypt
       - /root/certbot/www:/var/www/certbot
 
   cyberia_church:
+    logging: *logging
     build: /root/singularity/backend/laravel
     container_name: cyberia_church
     restart: unless-stopped
@@ -128,11 +163,18 @@ services:
       - /root/singularity/backend/laravel:/var/www/html
       - /root/singularity:/singularity
       - /root/.config/solana:/solana
+    # The symlink step is deliberately not allowed to fail the boot. On
+    # 2026-09-13 `storage:link --relative` died on a missing symfony/filesystem
+    # (it is a *suggestion* of illuminate/filesystem, and was in no lock file),
+    # the container crash-looped, and the whole site answered 502 — over a
+    # symlink. A missing link costs uploaded files; it must not cost the site.
+    # The dependency is in composer.json now; this keeps the blast radius small
+    # the next time something in that line breaks.
     command: >
       sh -lc "if [ ! -f vendor/autoload.php ]; then
         composer install --no-interaction --prefer-dist --no-progress;
       fi &&
-      php artisan storage:link --relative --force &&
+      php artisan storage:link --relative --force || true;
       php artisan serve --host=0.0.0.0 --port=9001"
     ports:
       - "9001:9001"
@@ -140,6 +182,7 @@ services:
       - /root/singularity/backend/laravel/.env
 
   polygon-edge:
+    logging: *logging-node
     image: 0xpolygon/polygon-edge:latest
     container_name: polygon-edge
     restart: unless-stopped
@@ -166,6 +209,7 @@ services:
       --price-limit=1000000000
 
   ipfs:
+    logging: *logging
     image: ipfs/kubo:latest
     container_name: ipfs
     restart: unless-stopped

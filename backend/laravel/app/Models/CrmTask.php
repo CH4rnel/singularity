@@ -71,6 +71,10 @@ class CrmTask extends Model
                 $task->completed_at = null;
             }
         });
+
+        static::deleting(function (CrmTask $task): void {
+            $task->attachments()->eachById(fn (CrmTaskAttachment $attachment) => $attachment->delete());
+        });
     }
 
     public function contact(): BelongsTo
@@ -92,6 +96,11 @@ class CrmTask extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(CrmTaskComment::class)->oldest();
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(CrmTaskAttachment::class)->oldest();
     }
 
     public function isActive(): bool

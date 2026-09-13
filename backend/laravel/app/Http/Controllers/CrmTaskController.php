@@ -115,6 +115,8 @@ class CrmTaskController extends Controller
             'creator:id,name',
             'contact:id,name,telegram,x_handle',
             'comments.user:id,name',
+            'attachments.uploader:id,name',
+            'attachments.comments.user:id,name',
         ]);
 
         return Inertia::render('crm/Task', [
@@ -125,6 +127,14 @@ class CrmTaskController extends Controller
                 'completed_at' => $task->completed_at?->toIso8601String(),
                 'creator' => $task->creator?->name,
                 'external_id' => $task->external_id,
+                'attachments' => $task->attachments->map(fn ($file) => [
+                    'id' => $file->id, 'name' => $file->name, 'mime' => $file->mime, 'kind' => $file->kind,
+                    'size' => $file->size, 'caption' => $file->caption, 'url' => route('crm.tasks.attachments.show', $file),
+                    'uploader' => $file->uploader?->name, 'created_at' => $file->created_at?->toIso8601String(),
+                    'comments' => $file->comments->map(fn ($comment) => ['id' => $comment->id, 'body' => $comment->body,
+                        'author' => $comment->user?->name ?? '—', 'is_mine' => $comment->user_id === $request->user()?->id,
+                        'created_at' => $comment->created_at?->toIso8601String()])->all(),
+                ])->all(),
             ],
             'options' => [
                 'statuses' => CrmTask::STATUSES,

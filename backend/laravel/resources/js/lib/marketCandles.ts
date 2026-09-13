@@ -360,14 +360,148 @@ export const loadMarketHistory = async (
         .map((log) => {
             const amountIn = word(log.data, baseIsToken0 ? 0 : 1);
             const amountOut = word(log.data, baseIsToken0 ? 2 : 3);
-            const volume =
-                Number(amountIn + amountOut) / 10 ** baseHop.decIn;
+            const volume = Number(amountIn + amountOut) / 10 ** baseHop.decIn;
 
             return { ts: log.ts, volume };
         })
         .filter((trade) => trade.volume > 0);
 
     return { observations, trades, coverageFrom };
+};
+
+/* -------------------------------------------------- concentrated pools -- */
+
+/**
+ * The other kind of pool, and the reason this file grew a second reader.
+ *
+ * A Uniswap V2 pool announces its whole state on every trade — `Sync` carries
+ * the reserves, and the reserves *are* the price — which is what everything
+ * above replays. A concentrated pool announces no such thing: liquidity is
+ * spread over ticks, there are no reserves to read, and `Sync` is never
+ * emitted. What it does emit, on every trade, is `Swap`, and that log carries
+ * `sqrtPriceX96` — the price the pool ended the trade at, exactly, as an
+ * integer. So the same series can be rebuilt from it, one log per trade
+ * instead of one per state change, with no reserve arithmetic at all.
+ *
+ * Only a single pool and never a route: this exists to draw the market an
+ * asset actually has, which on those venues is one deep pool against the
+ * chain's dollar. A multi-hop concentrated route is a different question and
+ * the quoter — not a chart — is what answers it.
+ */
+const V3_SWAP_TOPIC =
+    '0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67';
+
+/**
+ * A 32-byte word read as two's complement.
+ *
+ * A v3 `Swap` states both amounts from the *pool's* point of view, so one of
+ * them is always negative — the side it paid out. Read unsigned, that amount
+ * comes back as a number near 2^256 and a volume bar the height of the screen.
+ */
+export const signedWord = (data: string, i: number): bigint => {
+    const raw = word(data, i);
+
+    return raw >= 1n << 255n ? raw - (1n << 256n) : raw;
+};
+
+/**
+ * The price a `sqrtPriceX96` stands for, as token1 per token0.
+ *
+ * Q64.96 square root: square it, shift back, and correct for the two tokens'
+ * decimals. Floating point, because this answer is for a screen — never route
+ * a traded amount through it, which is what the quoter is for.
+ */
+export const priceFromSqrtX96 = (
+    sqrtPriceX96: bigint,
+    decimals0: number,
+    decimals1: number,
+): number => {
+    if (sqrtPriceX96 <= 0n) {
+        return 0;
+    }
+
+    const ratio = Number(sqrtPriceX96) / 2 ** 96;
+
+    return ratio * ratio * 10 ** (decimals0 - decimals1);
+};
+
+/** One concentrated pool, reduced to what pricing it needs. */
+export type ConcentratedMarket = {
+    /** The pool's own address — what its logs are addressed by. */
+    pool: string;
+    decimals0: number;
+    decimals1: number;
+    /**
+     * Whether the token being charted is the pool's token0.
+     *
+     * The pool prices token1 per token0 and knows nothing about which side a
+     * reader calls the base; getting this backwards inverts every price on the
+     * screen rather than failing, which is why it is stated rather than
+     * guessed from symbols.
+     */
+    baseIsToken0: boolean;
+};
+
+/**
+ * Replay one concentrated pool's trades into the same series shape.
+ *
+ * Every observation is still an on-chain fact with a block timestamp, so the
+ * chart moves only when the pool moved. The difference from the routed reader
+ * is that a quiet market emits nothing at all here — there is no periodic
+ * state change to sample — and `buildCandles` already carries the last close
+ * forward across gaps, which is exactly right for a pool nobody traded in.
+ */
+export const loadConcentratedHistory = async (
+    explorer: string,
+    market: ConcentratedMarket,
+    signal?: AbortSignal,
+): Promise<MarketHistory> => {
+    const logs = await fetchPairLogs(
+        explorer,
+        market.pool,
+        V3_SWAP_TOPIC,
+        signal,
+    );
+
+    const observations: PriceObservation[] = [];
+    const trades: TradePoint[] = [];
+    let previous: number | null = null;
+
+    for (const log of logs) {
+        const price0In1 = priceFromSqrtX96(
+            word(log.data, 2),
+            market.decimals0,
+            market.decimals1,
+        );
+
+        if (price0In1 <= 0) {
+            continue;
+        }
+
+        const price = market.baseIsToken0 ? price0In1 : 1 / price0In1;
+
+        // The same price twice is not a second observation; the chart draws
+        // the gap flat either way and the array stays honest about movement.
+        if (previous === null || price !== previous) {
+            observations.push({ ts: log.ts, price });
+            previous = price;
+        }
+
+        const amount = signedWord(log.data, market.baseIsToken0 ? 0 : 1);
+        const volume =
+            Number(amount < 0n ? -amount : amount) /
+            10 ** (market.baseIsToken0 ? market.decimals0 : market.decimals1);
+
+        if (volume > 0) {
+            trades.push({ ts: log.ts, volume });
+        }
+    }
+
+    return {
+        observations,
+        trades,
+        coverageFrom: observations.length > 0 ? observations[0].ts : null,
+    };
 };
 
 /**
@@ -448,6 +582,25 @@ export const buildCandles = (
     for (let t = bucketOf(from); t <= bucketOf(to); t += bucketSec) {
         const points = byBucket.get(t) ?? [];
         const volume = volumeByBucket.get(t);
+
+        /*
+         * A bucket where nothing happened is not drawn.
+         *
+         * It used to be, as a flat candle at the carried price, and on a pool
+         * that trades a few times a month that is what the chart became: seven
+         * hundred one-pixel bars at one price, two real candles somewhere in
+         * them, and a dotted line joining the lot. The price did not sit still
+         * for thirty days — nobody looked at it, and those are different facts
+         * that a flat candle prints identically.
+         *
+         * `carry` still moves forward, so the next real candle opens where the
+         * last one closed and the line stays continuous. The time axis becomes
+         * uneven, which is the honest shape: a market with gaps has gaps.
+         */
+        if (points.length === 0 && volume === undefined) {
+            continue;
+        }
+
         const open = carry;
         let high = open;
         let low = open;
@@ -474,7 +627,22 @@ export const buildCandles = (
     const last = candles[candles.length - 1];
     const spot = opts.spot;
 
-    if (last && spot !== null && spot !== undefined && spot > 0) {
+    /*
+     * The live price belongs to the *current* period and only there.
+     *
+     * While every bucket was drawn, the last candle was always the newest one,
+     * so folding the spot into it was folding it into now. With empty buckets
+     * gone the last candle can be a month old, and writing today's price into
+     * a month-old candle would date the present wrongly — the one thing a
+     * chart is read for.
+     */
+    if (
+        last &&
+        last.time === (bucketOf(to) as UTCTimestamp) &&
+        spot !== null &&
+        spot !== undefined &&
+        spot > 0
+    ) {
         last.close = spot;
         last.high = Math.max(last.high, spot);
         last.low = Math.min(last.low, spot);

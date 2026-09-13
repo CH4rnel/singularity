@@ -39,10 +39,21 @@
 # half-truth this bridge refuses — keep BRIDGE_ROUTE_XMR_*_COMING_SOON true
 # until `docker compose exec monerod monerod status` says it is synced.
 
+# Log rotation. Docker's json-file driver keeps every byte forever unless it is
+# told not to; on 2026-09-13 that filled the production host to 100% and
+# stopped the chain sealing for two hours. Every service here carries a cap.
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "20m"
+    max-file: "3"
+    compress: "true"
+
 services:
   monerod:
     image: sethsimmons/simple-monerod:v0.18.3.4
     container_name: cyberia-monerod
+    logging: *logging
     restart: unless-stopped
     volumes:
       - monero_data:/home/monero/.bitmonero
@@ -68,6 +79,7 @@ services:
   wallet:
     image: sethsimmons/simple-monero-wallet-rpc:v0.18.3.4
     container_name: cyberia-monero-wallet
+    logging: *logging
     restart: unless-stopped
     # Deliberately no `depends_on`: the wallet retries its daemon on its own,
     # and a host with no room for 60 GB of blockchain runs `docker compose up

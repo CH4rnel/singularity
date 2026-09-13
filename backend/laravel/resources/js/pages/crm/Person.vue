@@ -713,8 +713,8 @@ function remove() {
             flex-wrap: wrap;
             padding: 0 14px;
             min-height: 48px;
-            border: 1px solid rgba(0, 229, 209, 0.25);
-            background: rgba(0, 229, 209, 0.04);
+            border: 1px solid rgba(var(--mk-accent-rgb), 0.25);
+            background: rgba(var(--mk-accent-rgb), 0.04);
         "
         @submit.prevent="createTask"
     >

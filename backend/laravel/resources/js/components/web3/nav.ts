@@ -16,6 +16,7 @@ import {
     staking,
     swap,
     wallet,
+    whitepaper,
 } from '@/routes';
 import { index as daoIndex } from '@/routes/dao';
 import { index as lainIndex } from '@/routes/lain';
@@ -95,6 +96,7 @@ export const navGroups: Web3NavGroup[] = [
         label: 'Explore',
         items: [
             { title: '$CYBER', href: cyber().url },
+            { title: 'Whitepaper', href: whitepaper().url },
             { title: 'Analytics', href: analytics().url },
             {
                 title: 'Explorer',

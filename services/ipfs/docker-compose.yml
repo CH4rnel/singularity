@@ -22,6 +22,14 @@ services:
     image: ipfs/kubo:v0.30.0
     container_name: cyberia-ipfs
     restart: unless-stopped
+    # Docker's json-file driver keeps every byte forever unless it is told not
+    # to; on 2026-09-13 that filled the production host to 100%. Cap it here.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+        compress: "true"
     ports:
       - "127.0.0.1:5001:5001" # HTTP API (privileged — localhost only)
       - "127.0.0.1:8080:8080" # read-only gateway (localhost)

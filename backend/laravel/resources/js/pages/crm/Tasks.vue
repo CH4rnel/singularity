@@ -304,8 +304,8 @@ const footer = computed(() =>
                 gap: 14px;
                 padding: 0 16px;
                 height: 52px;
-                border: 1px solid rgba(0, 229, 209, 0.25);
-                background: rgba(0, 229, 209, 0.04);
+                border: 1px solid rgba(var(--mk-accent-rgb), 0.25);
+                background: rgba(var(--mk-accent-rgb), 0.04);
             "
             @submit.prevent="submit"
         >
@@ -437,7 +437,7 @@ const footer = computed(() =>
                         align-items: center;
                         gap: 9px;
                         padding-bottom: 10px;
-                        border-bottom: 1px solid rgba(232, 236, 236, 0.09);
+                        border-bottom: 1px solid rgba(var(--mk-ink-rgb), 0.09);
                     "
                 >
                     <span
@@ -845,7 +845,7 @@ const footer = computed(() =>
     align-items: center;
     gap: 10px;
     padding-bottom: 10px;
-    border-bottom: 1px solid rgba(232, 236, 236, 0.09);
+    border-bottom: 1px solid rgba(var(--mk-ink-rgb), 0.09);
 }
 
 .task-completed__grid {
@@ -891,7 +891,7 @@ const footer = computed(() =>
 .task-unowned-card {
     min-width: 0;
     padding: 12px 14px;
-    border: 1px dashed rgba(232, 236, 236, 0.16);
+    border: 1px dashed rgba(var(--mk-ink-rgb), 0.16);
     overflow-wrap: anywhere;
 }
 
@@ -921,7 +921,7 @@ const footer = computed(() =>
 
 .task-assignee--mine {
     color: var(--mk-accent) !important;
-    background: rgba(0, 229, 209, 0.1);
+    background: rgba(var(--mk-accent-rgb), 0.1);
 }
 
 .task-card--in-progress {
@@ -1007,10 +1007,10 @@ const footer = computed(() =>
 
 .task-edit__control {
     min-width: 0;
-    border: 1px solid rgba(232, 236, 236, 0.14);
+    border: 1px solid rgba(var(--mk-ink-rgb), 0.14);
     border-radius: 0;
     padding: 7px 9px;
-    background: rgba(232, 236, 236, 0.03);
+    background: rgba(var(--mk-ink-rgb), 0.03);
     color: var(--mk-body);
     font: inherit;
 }
@@ -1044,12 +1044,12 @@ const footer = computed(() =>
     gap: 8px;
     margin-top: 12px;
     padding-top: 10px;
-    border-top: 1px solid rgba(232, 236, 236, 0.08);
+    border-top: 1px solid rgba(var(--mk-ink-rgb), 0.08);
 }
 
 .task-comment {
     padding-left: 9px;
-    border-left: 2px solid rgba(0, 229, 209, 0.22);
+    border-left: 2px solid rgba(var(--mk-accent-rgb), 0.22);
 }
 
 .task-comment p {

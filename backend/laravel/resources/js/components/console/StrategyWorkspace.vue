@@ -621,9 +621,9 @@ onBeforeUnmount(() => {
     bottom: 18px;
     height: 30px;
     padding: 0 12px;
-    border: 1px solid rgba(0, 229, 209, 0.45);
+    border: 1px solid rgba(var(--mk-accent-rgb), 0.45);
     background: rgba(6, 12, 15, 0.94);
-    box-shadow: 0 0 18px rgba(0, 229, 209, 0.12);
+    box-shadow: 0 0 18px rgba(var(--mk-accent-rgb), 0.12);
     color: var(--mk-accent);
     font: 10px var(--mk-mono);
     letter-spacing: 0.09em;
@@ -631,7 +631,7 @@ onBeforeUnmount(() => {
     cursor: pointer;
 }
 .strategy-reopen:hover {
-    box-shadow: 0 0 24px rgba(0, 229, 209, 0.3);
+    box-shadow: 0 0 24px rgba(var(--mk-accent-rgb), 0.3);
 }
 .strategy-windowbar {
     display: flex;
@@ -639,7 +639,7 @@ onBeforeUnmount(() => {
     gap: 8px;
     min-height: 28px;
     padding: 0 7px 0 10px;
-    border-bottom: 1px solid rgba(0, 229, 209, 0.16);
+    border-bottom: 1px solid rgba(var(--mk-accent-rgb), 0.16);
     background: rgba(4, 9, 12, 0.98);
     color: var(--mk-faint);
     font-size: 9px;
@@ -677,13 +677,13 @@ onBeforeUnmount(() => {
 .strategy-pin:hover,
 .strategy-pin:focus-visible,
 .strategy-pin--on {
-    border-color: rgba(0, 229, 209, 0.35);
+    border-color: rgba(var(--mk-accent-rgb), 0.35);
     color: var(--mk-accent);
     text-shadow: 0 0 8px var(--mk-accent);
     outline: none;
 }
 .strategy-pin--on {
-    background: rgba(0, 229, 209, 0.08);
+    background: rgba(var(--mk-accent-rgb), 0.08);
 }
 .strategy-close {
     font-size: 15px;
@@ -713,16 +713,16 @@ onBeforeUnmount(() => {
     flex-direction: column;
     min-height: 0;
     padding: 1px;
-    border: 1px solid rgba(0, 229, 209, 0.3);
+    border: 1px solid rgba(var(--mk-accent-rgb), 0.3);
     background: linear-gradient(
         135deg,
-        rgba(0, 229, 209, 0.09),
+        rgba(var(--mk-accent-rgb), 0.09),
         transparent 18%,
         transparent 82%,
         rgba(255, 43, 214, 0.08)
     );
     box-shadow:
-        0 0 34px rgba(0, 229, 209, 0.06),
+        0 0 34px rgba(var(--mk-accent-rgb), 0.06),
         inset 0 0 28px rgba(0, 0, 0, 0.35);
 }
 .strategy-shell::before {
@@ -764,22 +764,22 @@ onBeforeUnmount(() => {
     gap: 7px;
     min-height: 48px;
     padding: 7px 9px;
-    border-bottom: 1px solid rgba(0, 229, 209, 0.2);
+    border-bottom: 1px solid rgba(var(--mk-accent-rgb), 0.2);
     background: rgba(6, 12, 15, 0.96);
     flex-wrap: wrap;
 }
 .strategy-toolbar__group {
     display: flex;
     align-items: center;
-    border: 1px solid rgba(232, 236, 236, 0.11);
+    border: 1px solid rgba(var(--mk-ink-rgb), 0.11);
 }
 .strategy-toolbar button,
 .strategy-toolbar select,
 .strategy-toolbar label {
     height: 28px;
     border: 0;
-    border-right: 1px solid rgba(232, 236, 236, 0.1);
-    background: rgba(232, 236, 236, 0.025);
+    border-right: 1px solid rgba(var(--mk-ink-rgb), 0.1);
+    background: rgba(var(--mk-ink-rgb), 0.025);
     color: var(--mk-dim);
     font: 11px var(--mk-mono);
     cursor: pointer;
@@ -792,7 +792,7 @@ onBeforeUnmount(() => {
 .strategy-toolbar button:focus-visible,
 .strategy-toolbar select:hover {
     color: var(--mk-accent);
-    background: rgba(0, 229, 209, 0.09);
+    background: rgba(var(--mk-accent-rgb), 0.09);
     outline: none;
 }
 .strategy-toolbar select {
@@ -827,7 +827,7 @@ onBeforeUnmount(() => {
     width: 100%;
     height: auto;
     min-height: 0;
-    background: #101315;
+    background: var(--mk-panel);
 }
 .strategy-frame {
     display: block;
@@ -841,7 +841,7 @@ onBeforeUnmount(() => {
     inset: 0;
     display: grid;
     place-items: center;
-    background: #101315;
+    background: var(--mk-panel);
     color: var(--mk-faint);
     font-size: 11px;
     letter-spacing: 0.1em;
@@ -864,10 +864,10 @@ onBeforeUnmount(() => {
     max-width: calc(100vw - 16px);
     max-height: calc(100vh - 16px);
     overflow: hidden;
-    background: #070c0f;
+    background: var(--mk-bg);
     box-shadow:
         0 22px 80px rgba(0, 0, 0, 0.72),
-        0 0 38px rgba(0, 229, 209, 0.15);
+        0 0 38px rgba(var(--mk-accent-rgb), 0.15);
 }
 .strategy-shell--pinned .strategy-toolbar,
 .strategy-shell--pinned .strategy-error {

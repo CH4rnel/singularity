@@ -259,8 +259,8 @@ function toggleInternal() {
                                 background: step.waiting
                                     ? 'rgba(224,165,22,.4)'
                                     : step.done
-                                      ? 'rgba(0,229,209,.4)'
-                                      : 'rgba(232,236,236,.1)',
+                                      ? 'rgba(var(--mk-accent-rgb), .4)'
+                                      : 'rgba(var(--mk-ink-rgb), .1)',
                             }"
                         />
                         <span
@@ -379,7 +379,7 @@ function toggleInternal() {
                             class="mk-tag"
                             style="
                                 margin-left: 9px;
-                                border-color: rgba(0, 229, 209, 0.4);
+                                border-color: rgba(var(--mk-accent-rgb), 0.4);
                                 color: var(--mk-accent);
                             "
                             >{{ t('install.milestoneTag') }}</span

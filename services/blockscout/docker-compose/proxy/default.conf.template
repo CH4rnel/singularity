@@ -35,12 +35,11 @@ server {
     ssl_certificate /etc/letsencrypt/live/cyberia.church/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/cyberia.church/privkey.pem;
 
-    # The console's room (/crm/chat) takes files up to crm.chat.files.max_mb
-    # (25 MB), up to crm.chat.files.max_per_message (5) at a time, and refuses
-    # anything bigger in its own words. nginx defaults to 1m, which turned a
-    # 1.8 MB drop into a bare 413 with none of those reasons — so every layer
-    # under the room has to allow more than the room does. Scoped to this
-    # server: the explorer and the RPC have no business taking 128 MB bodies.
+    # CRM uploads include chat batches (5 x 25 MB) and task batches (8 x 5 MB).
+    # nginx defaults to 1m, which returns its own bare 413 before Laravel can
+    # validate an individual file. Keep enough multipart headroom for the
+    # largest supported batch. Scoped to this server: the explorer and the RPC
+    # have no business taking 128 MB bodies.
     client_max_body_size 128m;
 
     location / {
