@@ -5,6 +5,7 @@ use App\Models\ServiceHeartbeat;
 use App\Models\ServiceIncident;
 use App\Services\Monitoring\ServiceMonitor;
 use App\Services\Monitoring\ServiceStatus;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -534,4 +535,123 @@ it('asks the supervisor about a supervised daemon', function () {
 
     $report(null);
     expect(sweep(alert: false)['agent']->reason)->toBe('unit-unreported');
+});
+
+/*
+ * The bridge's Monero wallet. Its failure modes are not the usual ones: it is
+ * a thin client, so the wallet can be perfectly alive while the chain it reads
+ * is gone, and an unattached wallet is a corridor that does not exist rather
+ * than a service that is down.
+ */
+
+/** The wallet's answer to `get_height` — null to refuse the connection. */
+function walletHeight(?int $set = null, bool $refuse = false): ?int
+{
+    static $height = 100;
+    static $down = false;
+
+    if ($refuse) {
+        $down = true;
+    }
+
+    if ($set !== null) {
+        $height = $set;
+        $down = false;
+    }
+
+    return $down ? null : $height;
+}
+
+function fakeWalletNetwork(): void
+{
+    Http::fake(function ($request) {
+        if (str_contains($request->url(), 'api.telegram.org')) {
+            return Http::response(['ok' => true]);
+        }
+
+        $height = walletHeight();
+
+        if ($height === null) {
+            throw new ConnectionException('connection refused');
+        }
+
+        return Http::response(['id' => '0', 'jsonrpc' => '2.0', 'result' => ['height' => $height]]);
+    });
+}
+
+function monitorMoneroWallet(): void
+{
+    config()->set('monitoring.services', [
+        'monero-wallet' => [
+            'group' => 'onchain',
+            'label' => 'Monero bridge wallet',
+            'check' => ['type' => 'monero-wallet', 'stale_seconds' => 1200],
+            'usage' => null,
+        ],
+    ]);
+
+    config()->set('bridge.chains.monero.wallet_rpc_url', 'http://wallet.test:18083');
+}
+
+it('reports an unattached Monero wallet as off rather than down', function () {
+    monitorMoneroWallet();
+    config()->set('bridge.chains.monero.wallet_rpc_url', '');
+    fakeWalletNetwork();
+
+    $result = sweep(alert: false)['monero-wallet'];
+
+    // No wallet is a decision, not an outage: BridgeConfigService hides both
+    // XMR routes, so there is nothing broken for anyone to see.
+    expect($result->status)->toBe(ServiceStatus::Off)
+        ->and($result->reason)->toBe('no-wallet')
+        ->and(ServiceIncident::count())->toBe(0);
+});
+
+it('reports a Monero wallet Laravel cannot reach as down', function () {
+    monitorMoneroWallet();
+    walletHeight(refuse: true);
+    fakeWalletNetwork();
+
+    $result = sweep(alert: false)['monero-wallet'];
+
+    expect($result->status)->toBe(ServiceStatus::Down)
+        ->and($result->reason)->toBe('unreachable');
+});
+
+it('calls a thin client stalled when its height stops moving', function () {
+    monitorMoneroWallet();
+    walletHeight(3_700_000);
+    fakeWalletNetwork();
+
+    // A wallet whose remote node has gone answers every call as usual — this
+    // is the whole reason the probe does not stop at a reply.
+    expect(sweep(alert: false)['monero-wallet']->status)->toBe(ServiceStatus::Up);
+    expect(sweep(alert: false)['monero-wallet']->status)->toBe(ServiceStatus::Up);
+
+    $this->travel(25)->minutes();
+
+    $result = sweep(alert: false)['monero-wallet'];
+
+    expect($result->status)->toBe(ServiceStatus::Degraded)
+        ->and($result->reason)->toBe('daemon-stalled')
+        // Stalled since the sweep that first saw this height, not since now.
+        ->and($result->detail['stalled_since'])->not->toBeNull();
+});
+
+it('clears a stall as soon as blocks arrive again', function () {
+    monitorMoneroWallet();
+    walletHeight(3_700_000);
+    fakeWalletNetwork();
+
+    sweep(alert: false);
+    sweep(alert: false);
+    $this->travel(25)->minutes();
+    expect(sweep(alert: false)['monero-wallet']->status)->toBe(ServiceStatus::Degraded);
+
+    walletHeight(3_700_012);
+
+    $result = sweep(alert: false)['monero-wallet'];
+
+    expect($result->status)->toBe(ServiceStatus::Up)
+        ->and($result->detail)->not->toHaveKey('stalled_since');
 });
