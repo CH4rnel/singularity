@@ -333,7 +333,10 @@ return [
             'enabled' => filter_var(env('BRIDGE_CHAIN_BTC_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
             'explorer_tx' => 'https://mempool.space/tx/{hash}',
             // The central wallet: where change from a payout lands and where
-            // an operator tops the corridor up. Its spending key is below.
+            // an operator tops the corridor up. Its spending key is below, and
+            // this must be that key's **P2PKH** address (`1…`) — the relay
+            // spends a pool of P2PKH addresses and refuses change it could not
+            // spend again, which is the failure a bech32 address here would be.
             'deposit_address' => env('BRIDGE_BTC_DEPOSIT_ADDRESS'),
             // Master seed for deposit addresses — per-user profile ones
             // (namespace 'btc-user', index = user id) and the bridge's

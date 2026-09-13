@@ -133,6 +133,29 @@ test('pins the Litecoin version bytes, which bitcoinjs does not ship', () => {
   assert.equal(LITECOIN_NETWORK.wif, 0xb0);
 });
 
+test('knows which addresses the pool can spend, for the change check', () => {
+  // The relay refuses a change address it holds no key for. Pinning the
+  // derivation here is what makes that check meaningful: the pool's
+  // addresses are the P2PKH form of its keys, and nothing else.
+  const pubkey = Buffer.from(
+    '0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798',
+    'hex',
+  );
+
+  const pool = new Map([
+    [bitcoin.payments.p2pkh({ pubkey, network: CHAINS.bitcoin.network }).address!, 'key'],
+  ]);
+
+  assert.equal(pool.has('1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH'), true);
+  // The same key's bech32 address is a different string, and a pool keyed by
+  // P2PKH does not hold it — which is precisely the misconfiguration the
+  // check exists to catch.
+  assert.equal(
+    pool.has(bitcoin.payments.p2wpkh({ pubkey, network: CHAINS.bitcoin.network }).address!),
+    false,
+  );
+  });
+
 test('rejects an address from the other chain', () => {
   const litecoin = bitcoin.payments.p2pkh({
     pubkey: Buffer.from(

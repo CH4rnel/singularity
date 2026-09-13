@@ -37,7 +37,7 @@ reporting still leaves a row naming the transaction it sent.
 | Variable | What it is |
 |---|---|
 | `UTXO_RELAYER_WIFS` | JSON array of WIFs — the central wallet first, then the deposit addresses of transfers already minted. `UTXO_RELAYER_WIF` takes a single one. |
-| `UTXO_CHANGE_ADDRESS` | Where change goes. Defaults to the first key's address. |
+| `UTXO_CHANGE_ADDRESS` | Where change goes — it must be one of the pool's own addresses, and the relay refuses otherwise. |
 | `UTXO_ESPLORA_URL` | Index base URL. Defaults per chain. |
 | `UTXO_FEE_TARGET_BLOCKS` | Confirmation target to price (default 6). |
 | `UTXO_MIN_FEE_RATE` / `UTXO_MAX_FEE_RATE` | Floor and ceiling in sat/vB (default 1 and 200). |
@@ -45,7 +45,7 @@ reporting still leaves a row naming the transaction it sent.
 Laravel passes all of these from `config/bridge.php`; nothing here reads a
 `.env` of its own.
 
-## The four decisions worth knowing
+## The five decisions worth knowing
 
 **The recipient receives the amount exactly.** The miner's fee comes out of the
 pool, paid for upstream by the flat fee the corridor retains
@@ -64,6 +64,15 @@ retries a broadcast.
 estimate for the configured target, clamped between a floor and a ceiling. Over
 the ceiling the payout fails and a person looks at it — which is better than a
 transfer that costs more than it moves.
+
+**Change comes back to the pool.** The pool's addresses are the **P2PKH** form
+of its keys (`1…` on Bitcoin, `L…` on Litecoin), because that is what the
+bridge derives its deposit addresses as. A central wallet configured as the
+bech32 address of the same key is a different string, so its coins would be
+invisible here and every payout's change would leave the pool — which looks
+like nothing at all until the balance has quietly fallen. The relay refuses a
+change address it holds no key for, rather than discovering this one transfer
+at a time.
 
 **Only confirmed outputs are spent.** Unconfirmed change is skipped, so the
 capacity Laravel advertises (which counts the same way) and what the relay can

@@ -285,6 +285,18 @@ const main = async (): Promise<void> => {
 
   bitcoin.address.toOutputScript(changeAddress, network);
 
+  // Change must come back to an address this pool can spend again. Sending it
+  // anywhere else drains the corridor one payout at a time and looks like
+  // nothing at all: every transfer succeeds, and the balance keeps falling by
+  // more than was paid out. The usual cause is a central address that is not
+  // the P2PKH form of the relayer's own key.
+  if (!keys.has(changeAddress)) {
+    throw new Error(
+      `Change address ${changeAddress} is not one this pool holds a key for; `
+        + 'set UTXO_CHANGE_ADDRESS to the P2PKH address of the relayer WIF',
+    );
+  }
+
   const amount = BigInt(amountArgument);
 
   if (amount <= 0n) {
