@@ -14,9 +14,22 @@
 #
 # The wallet is a HOT wallet with spend keys: it is what pays evm_to_xmr out.
 # Treat 127.0.0.1:18083 as a key — anyone who can reach it can empty it — and
-# never publish that port. Laravel runs in its own container, so
-# BRIDGE_XMR_WALLET_RPC_URL there must be an address that resolves from inside
-# it (host.docker.internal:18083), not the loopback binding below.
+# never publish that port. Laravel runs in its own container, where a host
+# loopback port does not exist, so the two meet on the `cyberia-bridge-monero`
+# network declared by the site's compose and the wallet is addressed by name:
+#
+#   BRIDGE_XMR_WALLET_RPC_URL=http://cyberia-monero-wallet:18083
+#
+# That network is in compose and not in a `docker network connect` run by
+# hand, because the hand-run kind does not survive a container being recreated
+# — on 2026-09-13 a log-rotation pass recreated this wallet, the link was
+# silently gone, and every XMR deposit answered "Could not reach the Monero
+# wallet" while the wallet itself was perfectly healthy.
+#
+# This host runs the wallet as a THIN CLIENT: no local chain, a remote node in
+# MONERO_DAEMON_ADDRESS, keys here. `monerod` below is behind the `fullnode`
+# profile so that `docker compose up -d` cannot start a 60 GB sync on a host
+# that was never meant to hold one.
 #
 # It is started with --wallet-file and deliberately not --wallet-dir: in this
 # mode the RPC cannot create, open or switch wallets, so the endpoint can only
@@ -55,6 +68,11 @@ services:
     container_name: cyberia-monerod
     logging: *logging
     restart: unless-stopped
+    # Opt-in: `docker compose --profile fullnode up -d`. Without this, a plain
+    # `up -d` — the command every operator types — starts a chain sync on a
+    # host chosen precisely because it has no room for one. The wallet is the
+    # service this directory exists for; the node is the optional half.
+    profiles: ["fullnode"]
     volumes:
       - monero_data:/home/monero/.bitmonero
     # The image's entrypoint already prepends `--non-interactive`, and
@@ -82,23 +100,39 @@ services:
     logging: *logging
     restart: unless-stopped
     # Deliberately no `depends_on`: the wallet retries its daemon on its own,
-    # and a host with no room for 60 GB of blockchain runs `docker compose up
-    # -d wallet` alone against a remote node (MONERO_DAEMON_ADDRESS below).
+    # and on this host there is no local daemon to depend on — `docker compose
+    # up -d` brings up the wallet alone, pointed at MONERO_DAEMON_ADDRESS.
     volumes:
       - ./wallet:/wallet
     ports:
       # Localhost only, and that is not a preference: this endpoint can spend
-      # the wallet. Laravel reaches it over the host loopback.
+      # the wallet. This mapping is for an operator with a shell on the host —
+      # Laravel does not use it, it reaches the wallet by name over the
+      # `bridge` network below.
       - "127.0.0.1:18083:18083"
+    networks:
+      # This project's own, where monerod lives when the fullnode profile runs.
+      - default
+      # The two-member network the app is on. `external` because it belongs to
+      # the site's compose, which must be able to start without this stack;
+      # this stack is the one that cannot start without it. On a host running
+      # the wallet alone: `docker network create cyberia-bridge-monero`.
+      - bridge
     command:
       - --wallet-file=/wallet/bridge
       - --password-file=/wallet/password.txt
-      # The node above by default; a remote one where this host cannot hold a
-      # chain. A remote node learns which transactions you ask about and can
-      # lie about the tip — it can never spend, because the keys are here —
-      # so pair it with --untrusted-daemon.
-      - --daemon-address=${MONERO_DAEMON_ADDRESS:-monerod:18081}
-      - ${MONERO_DAEMON_TRUST:---trusted-daemon}
+      # Named, never defaulted: the two modes want different values in both
+      # of the lines below, and guessing one of them wrong is either a chain
+      # sync nobody asked for or a stranger's node marked trusted. A remote
+      # node learns which transactions you ask about and can lie about the
+      # tip; it can never spend, because the keys are here.
+      - --daemon-address=${MONERO_DAEMON_ADDRESS:?set MONERO_DAEMON_ADDRESS in services/monero/.env - monerod:18081 with --profile fullnode, or <host>:18089 for a thin client}
+      # Untrusted unless an operator says otherwise, because the default is the
+      # remote one: a node someone else runs can watch what this wallet asks
+      # about and lie about the tip, and only a node on this host earns
+      # --trusted-daemon. It can never spend either way; the keys are in
+      # ./wallet.
+      - ${MONERO_DAEMON_TRUST:---untrusted-daemon}
       # Left to itself the wallet defaults to `autodetect` here, tries TLS
       # against a plain-HTTP daemon and blocks — and because its RPC is
       # single-threaded, every request queues behind that attempt until it
@@ -119,6 +153,11 @@ services:
       # BRIDGE_XMR_WALLET_RPC_USER/PASSWORD must match this exactly. Kept in
       # ./.env (gitignored) beside this file, never in the repo.
       - --rpc-login=${MONERO_RPC_LOGIN:?set MONERO_RPC_LOGIN in services/monero/.env}
+
+networks:
+  bridge:
+    external: true
+    name: cyberia-bridge-monero
 
 volumes:
   monero_data:
