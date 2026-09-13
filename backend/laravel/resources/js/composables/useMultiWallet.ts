@@ -549,6 +549,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
                     phrase: vault.phrase,
                     accounts: vault.accounts,
                     activeId: vault.activeId,
+                    arenaSecrets: vault.arenaSecrets,
                     backedUp: vault.backedUp,
                 },
                 password,
@@ -570,6 +571,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
             phrase: vault.phrase,
             accounts: vault.accounts,
             activeId: vault.activeId,
+            arenaSecrets: vault.arenaSecrets,
             backedUp: true,
         };
 
