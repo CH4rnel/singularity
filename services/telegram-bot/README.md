@@ -104,11 +104,23 @@ through an aggregator reads like a direct one, and a liquidity deposit (both
 sides moving in) is never mistaken for a buy. The buyer is whoever the coin
 landed with, which stays correct when someone else paid the fee.
 
-USD value, market cap and — unless `PUMPFUN_POOL_ADDRESS` pins one — the pool
-address come from the DexScreener pair feed. Without a readable SOL price the
-tick is deferred rather than posting a buy it cannot size, so nothing is lost.
-On a fresh install the cursor starts at the pool's current head: history is
-never replayed into the chat.
+USD value and — unless `PUMPFUN_POOL_ADDRESS` pins one — the pool address come
+from the DexScreener pair feed. Without a readable SOL price the tick is
+deferred rather than posting a buy it cannot size, so nothing is lost. On a
+fresh install the cursor starts at the pool's current head: history is never
+replayed into the chat.
+
+The market cap is **not** the feed's. DexScreener's `marketCap` prices the coin
+at the last trade's *average fill*, which for a buy always sits below the price
+that same trade ended at, while the pump.fun page the post links to prices it
+off the pool's reserves. Announcing a buy is exactly when the two disagree
+most: a 6.94 SOL buy into an 88 SOL pool read $43.1k on the page while the feed
+still said $39.9k, and the bigger the buy the wider the gap. So the cap is the
+pool's own reserves as the announced trade left them — already present in the
+balances the buy was parsed out of, so it costs no extra call and each buy in a
+batch carries its own figure — times the mint's supply, read from the chain
+every `PUMPFUN_SUPPLY_TTL_SECONDS` (default 3600, since a supply only moves on
+a burn). If either is unreadable the post falls back to the feed's figure.
 
 The loop polls Solana every `PUMPFUN_POLL_SECONDS` (default 30) and makes one
 `getTransaction` call per new pool transaction. The default public RPC is enough

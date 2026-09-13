@@ -214,6 +214,78 @@ class ParseBuyTest(unittest.TestCase):
         self.assertIsNone(buy["position_pct"])
 
 
+class MarketCapTest(unittest.TestCase):
+    """The gap this exists to close, pinned to the trade that exposed it.
+
+    On 2026-09-13 a 6.936224 SOL buy landed in the pool below. The post said
+    $39 917 — DexScreener's marketCap, which prices the coin at that buy's own
+    average fill — while pump.fun's page said $43.1k, pricing it at the
+    reserves the buy left behind. Both are arithmetic on the same trade; only
+    the second is what a reader sees on opening the chart the post links to.
+    """
+
+    # Pool before and after, raw, from signature k7Hmz458…znKj (slot 446770009).
+    BIG_COIN_PRE = 240704572933941
+    BIG_COIN_POST = 223175005135650
+    BIG_SOL_PRE = 88289813669
+    BIG_SOL_POST = 95226037599
+
+    # SOL/USD as the pair quoted it that minute, and the mint's supply on chain.
+    SOL_USD = 101.11
+    SUPPLY = 997917108.037699
+
+    def _big_buy(self):
+        tx = _tx(
+            pre=[
+                _balance(5, MINT, POOL, self.BIG_COIN_PRE, 6),
+                _balance(6, WSOL, POOL, self.BIG_SOL_PRE, 9),
+            ],
+            post=[
+                _balance(4, MINT, BUYER, 17529567798291, 6),
+                _balance(5, MINT, POOL, self.BIG_COIN_POST, 6),
+                _balance(6, WSOL, POOL, self.BIG_SOL_POST, 9),
+            ],
+        )
+        return pumpfun.parse_buy(tx, POOL, MINT)
+
+    def test_reserves_left_by_the_trade_are_carried_on_the_buy(self):
+        buy = self._big_buy()
+        self.assertAlmostEqual(buy["pool_coin"], 223175005.13565, places=5)
+        self.assertAlmostEqual(buy["pool_sol"], 95.226037599, places=9)
+
+    def test_cap_is_the_price_the_buy_ended_at(self):
+        """$43.1k — what pump.fun showed — not the $39.9k the feed showed."""
+        cap = pumpfun.market_cap_after(self._big_buy(), self.SOL_USD, self.SUPPLY)
+        self.assertAlmostEqual(cap, 43053.0, delta=1.0)
+
+    def test_the_feeds_figure_is_the_average_fill_and_undershoots(self):
+        """Why the old post was low: a buy's fill price is below where it ends,
+        and the larger the buy the wider the gap."""
+        buy = self._big_buy()
+        fill = buy["sol_amount"] / buy["token_amount"] * self.SUPPLY * self.SOL_USD
+        cap = pumpfun.market_cap_after(buy, self.SOL_USD, self.SUPPLY)
+        self.assertAlmostEqual(fill, 39924.6, delta=1.0)
+        self.assertGreater(cap / fill, 1.07)
+
+    def test_a_small_buy_barely_moves_it(self):
+        """The same arithmetic on the fixture trade: 0.98 SOL into 81 SOL."""
+        buy = pumpfun.parse_buy(REAL_BUY, POOL, MINT)
+        fill = buy["sol_amount"] / buy["token_amount"] * self.SUPPLY * self.SOL_USD
+        cap = pumpfun.market_cap_after(buy, self.SOL_USD, self.SUPPLY)
+        self.assertLess(cap / fill, 1.02)
+
+    def test_a_missing_number_is_none_never_zero(self):
+        buy = self._big_buy()
+        self.assertIsNone(pumpfun.market_cap_after(buy, None, self.SUPPLY))
+        self.assertIsNone(pumpfun.market_cap_after(buy, self.SOL_USD, None))
+        self.assertIsNone(pumpfun.market_cap_after({}, self.SOL_USD, self.SUPPLY))
+        self.assertIsNone(
+            pumpfun.market_cap_after(
+                dict(buy, pool_coin=0.0), self.SOL_USD, self.SUPPLY
+            )
+        )
+
+
 class FormatBuyTest(unittest.TestCase):
     def test_post_layout(self):
         buy = pumpfun.parse_buy(REAL_BUY, POOL, MINT)
