@@ -96,7 +96,7 @@ return [
     ],
 
     'tasks' => [
-        'files' => ['max_mb' => 25, 'max_per_upload' => 8],
+        'files' => ['max_mb' => 5, 'max_per_upload' => 8],
     ],
 
     /*

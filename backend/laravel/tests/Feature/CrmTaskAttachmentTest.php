@@ -33,6 +33,27 @@ test('task files stay behind the CRM gate and executables are refused', function
     expect(CrmTaskAttachment::count())->toBe(0);
 });
 
+test('task uploads accept groups of files up to five megabytes each', function () {
+    Storage::fake('local');
+    $operator = User::factory()->crmAdmin()->create();
+    $task = CrmTask::factory()->create();
+
+    $this->actingAs($operator)->post(route('crm.tasks.attachments.store', $task), [
+        'files' => [
+            UploadedFile::fake()->create('first.png', 5 * 1024, 'image/png'),
+            UploadedFile::fake()->create('second.png', 5 * 1024, 'image/png'),
+        ],
+    ])->assertSessionHasNoErrors();
+
+    expect(CrmTaskAttachment::count())->toBe(2);
+
+    $this->post(route('crm.tasks.attachments.store', $task), [
+        'files' => [UploadedFile::fake()->create('too-large.png', (5 * 1024) + 1, 'image/png')],
+    ])->assertSessionHasErrors('files.0');
+
+    expect(CrmTaskAttachment::count())->toBe(2);
+});
+
 test('deleting an attachment removes its bytes and comments', function () {
     Storage::fake('local');
     $operator = User::factory()->crmAdmin()->create();
