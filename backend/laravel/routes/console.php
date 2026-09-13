@@ -37,6 +37,11 @@ Schedule::command('launchpad:pin-sites')->hourly()->withoutOverlapping();
 // answer can drift from the question; cheap because a run with nothing to
 // settle is one eth_call and a cached quote, and signs nothing.
 Schedule::command('predictions:resolve')->everyFiveMinutes()->withoutOverlapping();
+// Deposits that land on an address instead of arriving as a signed
+// transaction: nothing notifies this server, so it looks. Every two minutes
+// because that is a Monero block — polling faster asks the same question
+// about the same unconfirmed deposit twice.
+Schedule::command('bridge:sweep-deposits')->everyTwoMinutes()->withoutOverlapping();
 // Capacity holds taken before a wallet prompt that never came back. They stop
 // counting against liquidity the moment they expire — this only closes the
 // row, and it never touches a hold that has a transfer behind it.
@@ -56,6 +61,14 @@ Schedule::command('ai:prune-usage')->daily()->withoutOverlapping();
 // button simply stops working, and nobody reports a wallet that never offered
 // them anything. Reads only, and it shouts at most once every six hours.
 Schedule::command('gas:station --alert')->hourly()->withoutOverlapping();
+
+/*
+ * The wallet's routed swaps take a fee along the route, and the router holds it
+ * as an off-chain balance nobody would otherwise look at. Daily, because this
+ * is a reminder to go and collect money rather than an incident — the command
+ * shouts at most weekly on its own.
+ */
+Schedule::command('crosschain:fees --alert')->dailyAt('09:20')->withoutOverlapping();
 // Funding that the browser never got to report: a wallet funded while closed,
 // a deposit that confirmed after the tab was gone. The activation funnel wants
 // those users most, because a wallet that was funded and never came back is

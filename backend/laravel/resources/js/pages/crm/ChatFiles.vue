@@ -256,8 +256,8 @@ function drop(event: DragEvent): void {
                     gap: 16px;
                     height: 74px;
                     padding: 0 20px;
-                    border: 1px dashed rgba(0, 229, 209, 0.35);
-                    background: rgba(0, 229, 209, 0.03);
+                    border: 1px dashed rgba(var(--mk-accent-rgb), 0.35);
+                    background: rgba(var(--mk-accent-rgb), 0.03);
                     cursor: pointer;
                 "
             >

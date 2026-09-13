@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import StockIcon from '@/components/wallet/StockIcon.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
-import { formatUnits, walletChain } from '@/lib/wallet';
+import { logoForToken } from '@/lib/tokenLogos';
+import { describeReadError, formatUnits, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
@@ -50,6 +52,17 @@ const chain = computed(() => walletChain(props.chain));
 
 const state = computed(() => props.wallet.tokens.value[props.chain]);
 
+/**
+ * A failed read, said in words plus the status it came back with.
+ *
+ * The status used to be the whole sentence — "Explorer returned 429" dropped
+ * into the middle of a Russian one. It is still printed, because it is what an
+ * operator reads off a screenshot, but after the part a person can act on.
+ */
+const readFailure = computed(() =>
+    state.value?.error ? describeReadError(state.value.error, t) : null,
+);
+
 const rows = computed(() =>
     (state.value?.items ?? []).map((token) => ({
         token,
@@ -65,6 +78,18 @@ const rows = computed(() =>
 /** Two letters of the ticker, in the network's own hue — a token is not a chain. */
 const tag = (symbol: string): string =>
     (symbol.replace(/[^A-Za-z0-9]/g, '').slice(0, 2) || '?').toUpperCase();
+
+/**
+ * A company's mark, for the tokens that stand for one.
+ *
+ * Everything else here wears the network's two-letter tag, and that is right
+ * for a token whose whole identity is the chain it is on. A tokenised share is
+ * the exception: what it stands for exists off this chain and is recognised by
+ * its logo before its ticker is read. Asked by address, never by symbol —
+ * a ticker on a permissionless chain is a claim, not an identity.
+ */
+const markFor = (token: WalletTokenBalance): string | undefined =>
+    logoForToken(chain.value.chainId, token.address, token.symbol);
 
 const add = async (): Promise<void> => {
     adding.value = true;
@@ -108,11 +133,18 @@ const add = async (): Promise<void> => {
         </p>
 
         <p
-            v-else-if="state?.error"
+            v-else-if="readFailure"
             class="cw-note cw-note-warn"
             style="margin-bottom: 8px"
         >
-            <span>{{ t('tokensUnavailable', { reason: state.error }) }}</span>
+            <span>
+                {{ t('tokensUnavailable', { reason: readFailure.text }) }}
+                <span
+                    v-if="readFailure.detail"
+                    style="color: var(--cw-faint)"
+                    >{{ readFailure.detail }}</span
+                >
+            </span>
         </p>
 
         <div class="cw-stack" style="gap: 8px">
@@ -128,7 +160,14 @@ const add = async (): Promise<void> => {
                     style="display: flex; align-items: center; gap: 12px"
                     @click="emit('open', row.token)"
                 >
+                    <StockIcon
+                        v-if="markFor(row.token)"
+                        :symbol="row.token.symbol"
+                        :src="markFor(row.token)!"
+                        :size="28"
+                    />
                     <span
+                        v-else
                         :style="{
                             display: 'flex',
                             width: '28px',
@@ -225,8 +264,20 @@ const add = async (): Promise<void> => {
                 </div>
             </div>
 
+            <!--
+              "No tokens here" is a claim about a balance, and it is only ours
+              to make when the index answered. Printed under a read that failed
+              — which is exactly where it appeared, directly below "Tokens
+              could not be listed" — it is the one sentence on this screen that
+              nobody has any basis for.
+            -->
             <p
-                v-if="rows.length === 0 && !state?.loading && !chain.tokensNote"
+                v-if="
+                    rows.length === 0 &&
+                    !state?.loading &&
+                    !state?.error &&
+                    !chain.tokensNote
+                "
                 class="cw-prose"
                 style="padding: 4px 0 8px"
             >

@@ -51,6 +51,7 @@ createInertiaApp({
             case name === 'Download':
             case name === 'Token':
             case name === 'Tracker':
+            case name === 'Whitepaper':
             case name === 'Tokens':
             case name === 'Bridge':
             case name === 'Market':

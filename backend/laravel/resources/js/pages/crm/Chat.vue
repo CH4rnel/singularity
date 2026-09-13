@@ -821,7 +821,7 @@ onMounted(() => {
                             style="
                                 flex: 1;
                                 height: 1px;
-                                background: rgba(0, 229, 209, 0.3);
+                                background: rgba(var(--mk-accent-rgb), 0.3);
                             "
                         />
                     </div>
@@ -955,7 +955,7 @@ onMounted(() => {
                                     href="/crm/tasks"
                                     class="mk-tag"
                                     style="
-                                        border-color: rgba(0, 229, 209, 0.4);
+                                        border-color: rgba(var(--mk-accent-rgb), 0.4);
                                         color: var(--mk-accent);
                                     "
                                 >

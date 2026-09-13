@@ -48,6 +48,7 @@ import WalletProxy from '@/components/wallet/WalletProxy.vue';
 import WalletReceive from '@/components/wallet/WalletReceive.vue';
 import WalletSecurity from '@/components/wallet/WalletSecurity.vue';
 import WalletSend from '@/components/wallet/WalletSend.vue';
+import WalletStocks from '@/components/wallet/WalletStocks.vue';
 import WalletSwap from '@/components/wallet/WalletSwap.vue';
 import WalletToken from '@/components/wallet/WalletToken.vue';
 import WalletTokens from '@/components/wallet/WalletTokens.vue';
@@ -66,7 +67,12 @@ import {
     setMainButton,
     telegramHaptic,
 } from '@/lib/telegram';
-import { formatUnits, unreadChatCount, walletChain } from '@/lib/wallet';
+import {
+    formatUnits,
+    unreadChatCount,
+    walletChain,
+    walletChains,
+} from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import type { BridgeConfig } from '@/lib/wallet/bridge';
 import type { QuestDestination } from '@/lib/wallet/daily';
@@ -129,6 +135,13 @@ const page = usePage();
 /** Signing in adds only the XMR payout binding; the wallet itself needs none. */
 const authenticated = computed(() => !!page.props.auth?.user);
 
+/**
+ * Whether the reader runs the place — the console gate's own flag, shared on
+ * every page. It decides one line on the swap screen and nothing else: what a
+ * trade pays is already net of this project's fee, for everybody.
+ */
+const operator = computed(() => page.props.auth?.canAccessCrm === true);
+
 /** Inside the desktop or mobile app the wallet owns the whole window. */
 const native = isNativeShell();
 
@@ -170,6 +183,7 @@ type Section =
     | 'gas'
     | 'proxy'
     | 'earn'
+    | 'stocks'
     | 'bridge'
     | 'crosschain'
     | 'daily'
@@ -200,44 +214,86 @@ const stage = computed<'onboarding' | 'locked' | 'app'>(() => {
 });
 
 /**
- * On desktop the transfer flow is a third column; on mobile it takes over.
- * Adding a network is a form rather than a composer, so it always takes the
- * body — a 392px column would wrap every one of its paired fields.
+ * Overlays that take the whole body even on a wide screen.
+ *
+ * The third column is for a *composer*: send and receive are one address, one
+ * amount and a button, and having the network's balance still on screen beside
+ * them is the reason the column exists at all.
+ *
+ * Swap stopped being that. It carries a network strip, a pay row, a search
+ * box, a scrolling list of thirty markets and a price chart — in 340 pixels
+ * that is not a column, it is a nightmare, and the body next to it went on
+ * showing an unrelated screen so the wallet was in two places at once: the
+ * title said Обмен, the rail highlighted История, and the chart was a
+ * letterbox. Adding a network was already here for the milder version of the
+ * same reason, and its note is worth keeping: a 392px column wraps every
+ * paired field.
  */
+const BODY_OVERLAYS: Overlay[] = ['addNetwork', 'swap'];
+
+const takesBody = (value: Overlay | null): boolean =>
+    value !== null && BODY_OVERLAYS.includes(value);
+
 const asideOverlay = computed(() =>
-    desktop.value && overlay.value !== 'addNetwork' ? overlay.value : null,
+    desktop.value && !takesBody(overlay.value) ? overlay.value : null,
 );
 
 const bodyOverlay = computed(() =>
-    overlay.value === 'addNetwork' || !desktop.value ? overlay.value : null,
+    takesBody(overlay.value) || !desktop.value ? overlay.value : null,
 );
 
-const SECTIONS: { id: Section; label: () => string }[] = [
-    { id: 'portfolio', label: () => t('navPortfolio') },
-    { id: 'tokens', label: () => t('tokens') },
-    { id: 'markets', label: () => t('markets') },
-    { id: 'analytics', label: () => t('navAnalytics') },
-    { id: 'chat', label: () => t('chatTitle') },
-    { id: 'network', label: () => t('navActivity') },
-    { id: 'accounts', label: () => t('accounts') },
-    // Three things done *with* a balance rather than three ways of reading
-    // one, which is why they sit apart from the screens above them.
-    { id: 'bridge', label: () => t('bridgeTitle') },
-    { id: 'crosschain', label: () => t('crossTile') },
-    { id: 'earn', label: () => t('earnTitle') },
-    { id: 'daily', label: () => t('dailyTitle') },
-    { id: 'browse', label: () => t('browseTitle') },
-    { id: 'feed', label: () => t('feed') },
-    { id: 'launchpad', label: () => t('launchpad') },
-    { id: 'nft', label: () => t('nftTitle') },
-    { id: 'tracker', label: () => t('trackerTitle') },
-    { id: 'dao', label: () => t('dao') },
-    // Listed even for wallets that hold no $LAIN: the room says what it wants
-    // and what this account has, which is the only way to know it exists.
-    { id: 'lain', label: () => t('navLain') },
-    { id: 'security', label: () => t('navSecurity') },
-    { id: 'preferences', label: () => t('navPreferences') },
+type RailEntry = { id: Section; label: () => string };
+
+/**
+ * The rail, in the two groups it always was.
+ *
+ * Read as one flat list of twenty it looked like a second and longer
+ * navigation than the tab bar's seven — History, Accounts, Messages and
+ * Tracker appearing in one and not the other reads as two different apps. The
+ * headings say what is actually true: the same seven destinations a phone has,
+ * plus the places that live *inside* the wallet tab and are reached from the
+ * portfolio there.
+ */
+const RAIL: { heading: () => string; items: RailEntry[] }[] = [
+    {
+        heading: () => t('railInWallet'),
+        items: [
+            { id: 'portfolio', label: () => t('navPortfolio') },
+            { id: 'tokens', label: () => t('tokens') },
+            { id: 'markets', label: () => t('markets') },
+            { id: 'stocks', label: () => t('stocks') },
+            { id: 'analytics', label: () => t('navAnalytics') },
+            { id: 'network', label: () => t('navActivity') },
+            { id: 'accounts', label: () => t('accounts') },
+            // Three things done *with* a balance rather than three ways of
+            // reading one, which is why they sit apart from the screens above.
+            { id: 'bridge', label: () => t('bridgeTitle') },
+            { id: 'crosschain', label: () => t('crossTile') },
+            { id: 'earn', label: () => t('earnTitle') },
+            { id: 'daily', label: () => t('dailyTitle') },
+            { id: 'browse', label: () => t('browseTitle') },
+            { id: 'security', label: () => t('navSecurity') },
+            { id: 'preferences', label: () => t('navPreferences') },
+        ],
+    },
+    {
+        heading: () => t('railSections'),
+        items: [
+            { id: 'chat', label: () => t('chatTitle') },
+            { id: 'feed', label: () => t('feed') },
+            { id: 'launchpad', label: () => t('launchpad') },
+            { id: 'nft', label: () => t('nftTitle') },
+            { id: 'tracker', label: () => t('trackerTitle') },
+            { id: 'dao', label: () => t('dao') },
+            // Listed even for wallets that hold no $LAIN: the room says what it
+            // wants and what this account has, which is the only way to know
+            // it exists.
+            { id: 'lain', label: () => t('navLain') },
+        ],
+    },
 ];
+
+const SECTIONS: RailEntry[] = RAIL.flatMap((group) => group.items);
 
 /**
  * The phone's destinations, and they are what this app is: the wallet, the
@@ -287,6 +343,7 @@ const TAB_OF: Record<Section, Section> = {
     gas: 'portfolio',
     proxy: 'portfolio',
     earn: 'portfolio',
+    stocks: 'portfolio',
     bridge: 'portfolio',
     crosschain: 'portfolio',
     daily: 'portfolio',
@@ -306,6 +363,37 @@ const TAB_OF: Record<Section, Section> = {
 };
 
 const activeTab = computed(() => TAB_OF[section.value]);
+
+/**
+ * What this screen is called — for the browser tab, the history entry, the
+ * bookmark, and for the one `<h1>` the page has.
+ *
+ * Every screen in this app used to be titled "Singularity", which is the name
+ * of the monorepo: the wallet could not be found in a history list, in a
+ * bookmark bar or in a row of tabs by anything it calls itself. `| Cyberia` is
+ * the suffix `app.ts` leaves alone, so the whole title is composed here rather
+ * than half here and half in an env var.
+ */
+const screenTitle = computed(() => {
+    const overlayTitle: Record<Overlay, string> = {
+        send: t('send'),
+        receive: t('receive'),
+        swap: t('swapTitle'),
+        addNetwork: t('addNetwork'),
+    };
+
+    if (overlay.value) {
+        return overlayTitle[overlay.value];
+    }
+
+    return (
+        SECTIONS.find((entry) => entry.id === section.value)?.label() ??
+        t('wallet')
+    );
+});
+
+/** Whether this device's vault was created without a password. */
+const unprotectedVault = computed(() => wallet.protection.value === 'none');
 
 /**
  * Messages waiting, for the badge on the tab bar and the rail.
@@ -365,6 +453,7 @@ const PARENTS: Partial<Record<Section, Section>> = {
     proxy: 'security',
     preferences: 'portfolio',
     earn: 'portfolio',
+    stocks: 'portfolio',
     bridge: 'portfolio',
     crosschain: 'portfolio',
     daily: 'portfolio',
@@ -376,8 +465,20 @@ const PARENTS: Partial<Record<Section, Section>> = {
     player: 'tracker',
 };
 
-const current = computed<Section>(
-    () => PARENTS[section.value] ?? section.value,
+/**
+ * Which rail item is the page you are on — and none of them, when an overlay
+ * has taken the body.
+ *
+ * The rail marks a `Section`, and an overlay is not one: with the swap open in
+ * the middle column the rail went on highlighting whatever section was
+ * underneath, so the window title read Обмен while the rail said История. A
+ * highlight that names the wrong screen is worse than no highlight, because it
+ * is the control people use to find out where they are.
+ */
+const current = computed<Section | null>(() =>
+    bodyOverlay.value !== null
+        ? null
+        : (PARENTS[section.value] ?? section.value),
 );
 
 /** The asset the send screen opens on: a token row, or the network's coin. */
@@ -456,10 +557,22 @@ const openQuest = (destination: QuestDestination): void => {
  * chain, and the swap screen reads the contract itself rather than trusting
  * the row that was tapped for anything but its address.
  */
-const openSwapContract = (contract: string): void => {
+const openSwapContract = (
+    contract: string,
+    on: WalletChainId = 'cyberia',
+): void => {
     swapToken.value = null;
     swapContract.value = contract;
-    chain.value = 'cyberia';
+    /*
+     * The network is part of the request and not an assumption.
+     *
+     * It was Cyberia for as long as the only thing that opened this was a
+     * launch on Cyberia. A tokenised stock is the counter-example that had to
+     * change it: the contract only exists on Robinhood Chain, and opening the
+     * composer on the wrong network reads the address there — where it is
+     * nothing — and refuses the trade.
+     */
+    chain.value = on;
     overlay.value = 'swap';
 };
 
@@ -477,7 +590,9 @@ const openSwapContract = (contract: string): void => {
  * re-open the composer, and a contract address has no business sitting in the
  * history of a wallet.
  */
-const requestedSwap = ref<string | null>(null);
+const requestedSwap = ref<{ contract: string; chain: WalletChainId } | null>(
+    null,
+);
 
 const takeSwapRequest = (): void => {
     if (typeof window === 'undefined') {
@@ -486,19 +601,33 @@ const takeSwapRequest = (): void => {
 
     const url = new URL(window.location.href);
     const requested = url.searchParams.get('swap');
+    /*
+     * The network the contract is on, because a contract address does not
+     * carry one. It was safe to leave out while the only sender was the
+     * Telegram bot handing over a Cyberia launch; a link to a tokenised stock
+     * is the case that made it necessary, and a link naming a network this
+     * wallet does not have falls back rather than opening on nothing.
+     */
+    const on = url.searchParams.get('chain');
 
     if (requested === null) {
         return;
     }
 
     url.searchParams.delete('swap');
+    url.searchParams.delete('chain');
     window.history.replaceState({}, '', url.pathname + url.search + url.hash);
 
     // Anything that is not an address is somebody's typo or somebody's probe;
     // the swap screen reads the contract from the chain either way, but there
     // is no reason to open a composer over a string that cannot be one.
     if (/^0x[0-9a-fA-F]{40}$/.test(requested)) {
-        requestedSwap.value = requested;
+        const known = walletChains().some((entry) => entry.id === on);
+
+        requestedSwap.value = {
+            contract: requested,
+            chain: known ? (on as WalletChainId) : 'cyberia',
+        };
     }
 };
 
@@ -507,9 +636,9 @@ const applySwapRequest = (): void => {
         return;
     }
 
-    const contract = requestedSwap.value;
+    const { contract, chain: on } = requestedSwap.value;
     requestedSwap.value = null;
-    openSwapContract(contract);
+    openSwapContract(contract, on);
 };
 
 /**
@@ -884,13 +1013,14 @@ const networkAdded = (added: WalletChainId): void => {
 
 const adopt = async (
     phrase: string,
-    password: string,
+    password: string | null,
     origin: 'created' | 'imported' = 'created',
+    backedUp = true,
 ): Promise<void> => {
     error.value = null;
 
     try {
-        await wallet.adopt(phrase, password);
+        await wallet.adopt(phrase, password, backedUp);
         restoring.value = false;
         section.value = 'portfolio';
 
@@ -1001,7 +1131,7 @@ watch(
 </script>
 
 <template>
-    <Head :title="t('wallet')" />
+    <Head :title="`${screenTitle} | Cyberia`" />
 
     <!--
       `flex flex-col` is load-bearing and not decoration: `.cw-frame` hands the
@@ -1070,6 +1200,14 @@ watch(
             </a>
         </header>
 
+        <!--
+          The page had no `h1` at all — every screen opened at `h2`, so a
+          screen reader landing here was told the level of a heading with
+          nothing above it. It is not drawn, because each screen already prints
+          its own title where a sighted reader is looking.
+        -->
+        <h1 class="cw-sr">{{ screenTitle }}</h1>
+
         <p v-if="error" class="cw-note cw-note-bad" style="margin-bottom: 16px">
             <span>{{ error }}</span>
         </p>
@@ -1115,30 +1253,37 @@ watch(
                     >
                 </div>
 
-                <div
-                    style="
-                        padding: 0 12px;
-                        display: flex;
-                        flex-direction: column;
-                    "
-                >
-                    <button
-                        v-for="entry in SECTIONS"
-                        :key="entry.id"
-                        type="button"
-                        class="cw-rail-item"
-                        :aria-current="
-                            current === entry.id ? 'page' : undefined
-                        "
-                        @click="openSection(entry.id)"
-                    >
-                        {{ entry.label() }}
-                        <span
-                            v-if="entry.id === 'chat' && unread > 0"
-                            class="cw-badge"
-                            >{{ unread }}</span
+                <div style="display: flex; flex-direction: column">
+                    <template v-for="group in RAIL" :key="group.heading()">
+                        <div class="cw-rail-group">
+                            <span class="cw-label">{{ group.heading() }}</span>
+                        </div>
+                        <div
+                            style="
+                                padding: 0 12px;
+                                display: flex;
+                                flex-direction: column;
+                            "
                         >
-                    </button>
+                            <button
+                                v-for="entry in group.items"
+                                :key="entry.id"
+                                type="button"
+                                class="cw-rail-item"
+                                :aria-current="
+                                    current === entry.id ? 'page' : undefined
+                                "
+                                @click="openSection(entry.id)"
+                            >
+                                {{ entry.label() }}
+                                <span
+                                    v-if="entry.id === 'chat' && unread > 0"
+                                    class="cw-badge"
+                                    >{{ unread }}</span
+                                >
+                            </button>
+                        </div>
+                    </template>
                 </div>
 
                 <div style="margin-top: 28px; padding: 0 20px">
@@ -1192,13 +1337,22 @@ watch(
                                 margin-bottom: 6px;
                             "
                         >
+                            <!--
+                              Green for a sealed vault, amber for one with no
+                              password on it. The rail's one line about the
+                              vault has to be about *this* vault.
+                            -->
                             <span
                                 style="
                                     width: 5px;
                                     height: 5px;
                                     border-radius: 50%;
-                                    background: var(--cw-ok);
                                 "
+                                :style="{
+                                    background: unprotectedVault
+                                        ? 'var(--cw-pending)'
+                                        : 'var(--cw-ok)',
+                                }"
                             />
                             <span
                                 class="cw-label"
@@ -1212,12 +1366,23 @@ watch(
                                 color: var(--cw-faint);
                             "
                         >
-                            {{ t('autoLock') }}
-                            {{ wallet.autoLockMinutes.value }}m ·
-                            {{ t('storageValue') }}
+                            <template v-if="unprotectedVault">
+                                {{ t('noPasswordTitle') }} ·
+                                {{ t('storageValue') }}
+                            </template>
+                            <template v-else>
+                                {{ t('autoLock') }}
+                                {{ wallet.autoLockMinutes.value }}m ·
+                                {{ t('storageValue') }}
+                            </template>
                         </div>
                     </div>
+                    <!--
+                      Nothing to lock without a password, and `lock()` refuses
+                      it — a button that does nothing is worse than no button.
+                    -->
                     <button
+                        v-if="!unprotectedVault"
                         type="button"
                         class="cw-ghost"
                         style="width: 100%; margin-top: 10px"
@@ -1244,6 +1409,7 @@ watch(
                     @pick="chain = $event"
                     @accounts="openSection('accounts')"
                     @add-network="openSection('networks')"
+                    @preferences="openSection('preferences')"
                     @refresh="load()"
                 />
 
@@ -1293,6 +1459,7 @@ watch(
                         :token-prices="tokenPrices"
                         :token="swapToken"
                         :contract="swapContract"
+                        :operator="operator"
                         @back="overlay = null"
                         @pick="chain = $event"
                         @swapped="load()"
@@ -1346,6 +1513,7 @@ watch(
                             @gas="openSection('gas')"
                             @crosschain="openSection('crosschain')"
                             @earn="openSection('earn')"
+                            @stocks="openSection('stocks')"
                             @bridge="openSection('bridge')"
                             @browse="openSection('browse')"
                             @preferences="openSection('preferences')"
@@ -1396,6 +1564,19 @@ watch(
                         :token-prices="tokenPrices"
                         @back="openSection('portfolio')"
                         @open="openChart"
+                    />
+
+                    <!--
+                      Shares, held by a broker and represented on a chain we do
+                      not run. Listed here because the wallet already signs on
+                      that chain and the pools that trade them are already the
+                      ones its swap screen quotes.
+                    -->
+                    <WalletStocks
+                        v-else-if="section === 'stocks'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
+                        @trade="openSwapContract($event, 'robinhood')"
                     />
 
                     <WalletChart
@@ -1712,20 +1893,6 @@ watch(
                     @sent="load()"
                     @add-network="openSection('networks')"
                 />
-                <WalletSwap
-                    v-else-if="asideOverlay === 'swap'"
-                    :wallet="wallet"
-                    :chain="chain"
-                    :prices="prices"
-                    :token-prices="tokenPrices"
-                    :token="swapToken"
-                    :contract="swapContract"
-                    @back="overlay = null"
-                    @pick="chain = $event"
-                    @swapped="load()"
-                    @markets="openSection('markets')"
-                    @daily="openSection('daily')"
-                />
                 <WalletReceive
                     v-else
                     :wallet="wallet"
@@ -1743,15 +1910,6 @@ watch(
             <div class="cw-raster" aria-hidden="true"></div>
             <div class="cw-scan" aria-hidden="true"></div>
         </div>
-
-        <!--
-          What the wallet is, for somebody who has not made one yet. Under a
-          portfolio it is a paragraph explaining the thing you are already
-          holding, and on a phone it was the last 150px of the frame.
-        -->
-        <p v-if="!native && stage !== 'app'" class="cw-intro cw-prose">
-            {{ t('intro') }}
-        </p>
     </div>
 </template>
 

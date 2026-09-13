@@ -12,7 +12,7 @@ test('the landing centers Cyberia liquidity and links the whitepaper', function 
     $landing = file_get_contents(resource_path('views/landing/index.html'));
 
     expect($landing)
-        ->toContain('<a href="/Cyberia_Roadmap.docx" target="_blank" rel="noopener">Whitepaper</a>')
+        ->toContain('<a href="/whitepaper">Whitepaper</a>')
         ->toContain('<a href="/cyber">CYBER</a>')
         ->toContain('<a href="https://docs.cyberia.church" target="_blank" rel="noopener noreferrer">Docs</a>')
         ->toContain('The liquidity home of the Cyberia ecosystem')
@@ -44,7 +44,7 @@ test('the robinhood chain landing exposes only configured bridge routes', functi
                     && $robinhoodRoutes->contains(
                         fn (array $route): bool => $route['direction'] === 'robinhood_to_evm'
                             && $route['operational'] === true
-                            && $route['tokens'] === ['ETH', 'SPY', 'CYBER'],
+                            && $route['tokens'] === ['USDG', 'ETH', 'SPY', 'CYBER'],
                     )
                     && $robinhoodRoutes->contains(
                         fn (array $route): bool => $route['direction'] === 'evm_to_robinhood'

@@ -109,7 +109,7 @@ function send(): void {
         style="margin-top: 18px; padding: 14px 16px"
         :style="
             props.health.ok
-                ? { borderColor: 'rgba(0,229,209,.35)' }
+                ? { borderColor: 'rgba(var(--mk-accent-rgb), .35)' }
                 : { borderColor: 'rgba(255,77,77,.45)' }
         "
     >
@@ -159,7 +159,7 @@ function send(): void {
         </div>
     </div>
 
-    <div v-if="outcome" class="mk-panel" style="margin-top: 14px; padding: 12px 16px; border-color: rgba(0,229,209,.35)">
+    <div v-if="outcome" class="mk-panel" style="margin-top: 14px; padding: 12px 16px; border-color: rgba(var(--mk-accent-rgb), .35)">
         <span class="mk-k" style="color: var(--mk-accent)">
             {{ outcome.sent }} → отправлено<span v-if="outcome.failed">, {{ outcome.failed }} не дошло</span>
         </span>

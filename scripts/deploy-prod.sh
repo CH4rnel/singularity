@@ -15,6 +15,7 @@ set -euo pipefail
 REPO_DIR=${REPO_DIR:-/root/singularity}
 CONTAINER=${CONTAINER:-cyberia_church}
 APP_DIR=${APP_DIR:-/var/www/html}
+COMPOSE_FILE=${COMPOSE_FILE:-$REPO_DIR/services/blockscout/docker-compose/docker-compose.yml}
 
 in_container() {
     docker exec -w "$APP_DIR" "$CONTAINER" "$@"
@@ -38,6 +39,15 @@ else
     echo "==> deploying $before -> $after"
     git --no-pager log --oneline "$before..$after"
     changed() { git diff --name-only "$before" "$after" -- "$@" | grep -q .; }
+fi
+
+# php.ini is baked into the application image rather than the bind-mounted
+# source tree. Rebuild and recreate the app when its image definition changes;
+# pulling those files alone leaves the running PHP limits untouched.
+if changed backend/laravel/Dockerfile backend/laravel/docker/php.ini; then
+    echo "==> rebuild Laravel runtime"
+    docker compose -f "$COMPOSE_FILE" build cyberia_church
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate cyberia_church
 fi
 
 if changed backend/laravel/composer.lock; then
@@ -94,7 +104,7 @@ in_container php artisan queue:restart
 if changed services/blockscout/docker-compose/proxy services/blockscout/docker-compose/services/nginx.yml; then
     echo "==> recreate proxy"
     docker compose \
-        -f "$REPO_DIR/services/blockscout/docker-compose/docker-compose.yml" \
+        -f "$COMPOSE_FILE" \
         up -d --no-deps --force-recreate proxy
     docker exec proxy nginx -t
 fi

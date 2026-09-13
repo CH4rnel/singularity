@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import AddressField from '@/components/wallet/AddressField.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import TokenList from '@/components/wallet/TokenList.vue';
@@ -7,12 +7,18 @@ import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
-import { formatUnits, hasSwap, walletChain } from '@/lib/wallet';
+import {
+    describeReadError,
+    formatUnits,
+    hasSwap,
+    walletChain,
+} from '@/lib/wallet';
 import type {
     WalletChainId,
     WalletTokenBalance,
     WalletTxStatus,
 } from '@/lib/wallet';
+import { isRoutedChain } from '@/lib/wallet/crosschain';
 import { formatUsd, formatUsdPrice, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -50,9 +56,41 @@ const account = computed(() =>
     ),
 );
 
+/**
+ * Whether this network can be traded on at all — by us or by anybody.
+ *
+ * It used to be `hasSwap()`, which asks whether *Cyberia* has deployed an
+ * exchange here. On Solana that is false and always will be, and the answer
+ * the screen drew from it was that there is no trading on Solana: no button,
+ * no sentence, nothing. The trade was reachable the whole time, from a button
+ * on the portfolio two screens away, for whoever thought to switch the network
+ * chip first.
+ *
+ * So the question is the honest one now, and the answer is allowed to arrive
+ * late: the button appears when the router confirms it serves this chain,
+ * because a control that is drawn and then withdrawn is worse than one that
+ * turns up a moment after the balance does.
+ */
+const routed = ref(false);
+
+watch(
+    () => props.chain,
+    async (id) => {
+        routed.value = hasSwap(walletChain(id).chainId)
+            ? true
+            : await isRoutedChain(id);
+    },
+    { immediate: true },
+);
+
 const balance = computed(() => props.wallet.balances.value[props.chain]);
 
 const history = computed(() => props.wallet.history.value[props.chain]);
+
+/** A failed history read, in words, with the status behind it kept separate. */
+const historyFailure = computed(() =>
+    history.value?.error ? describeReadError(history.value.error, t) : null,
+);
 
 const statusLabels = computed<Record<WalletTxStatus, string>>(() => ({
     confirmed: t('statusConfirmed'),
@@ -88,14 +126,25 @@ watch(() => props.chain, load);
                 <div style="font: 500 18px/1.2 var(--cw-sans)">
                     {{ account.label }}
                 </div>
+                <!--
+                  What this network *is*, not how its key was derived.
+                  `m/44'/60'/0'/0/0 · secp256k1` used to sit here — debugging
+                  information in the most looked-at line of the screen, and an
+                  answer to a question nobody standing on this page is asking.
+                  It moved to Security, next to the phrase and the accounts,
+                  where it answers "can I restore this elsewhere".
+                -->
                 <div
                     style="
-                        margin-top: 2px;
-                        font: 400 10px/1.4 var(--cw-mono);
+                        margin-top: 3px;
+                        font: 400 11px/1.4 var(--cw-mono);
                         color: var(--cw-dim);
                     "
                 >
-                    {{ account.path }} · {{ account.curve }}
+                    {{ account.symbol
+                    }}<template v-if="chain.chainId">
+                        · chain {{ chain.chainId }}</template
+                    >
                 </div>
             </div>
         </div>
@@ -212,12 +261,13 @@ watch(() => props.chain, load);
                 {{ t('receive') }}
             </button>
             <!--
-              Only where an exchange is actually deployed: a network with no
-              router has nothing to trade against, and a button that opens a
-              screen to say so is a button that lied.
+              Wherever the trade can actually be filled — our own pools, or a
+              router that serves this chain. Not "wherever we deployed an
+              exchange", which is a fact about this project that used to be
+              rendered as a fact about the network.
             -->
             <button
-                v-if="hasSwap(chain.chainId)"
+                v-if="routed"
                 type="button"
                 class="cw-btn cw-btn-secondary"
                 style="height: 48px"
@@ -259,10 +309,15 @@ watch(() => props.chain, load);
         >
             {{ t('loading') }}
         </p>
-        <p v-else-if="history?.error" class="cw-note cw-note-warn">
-            <span>{{
-                t('historyUnavailable', { reason: history.error })
-            }}</span>
+        <p v-else-if="historyFailure" class="cw-note cw-note-warn">
+            <span>
+                {{ t('historyUnavailable', { reason: historyFailure.text }) }}
+                <span
+                    v-if="historyFailure.detail"
+                    style="color: var(--cw-faint)"
+                    >{{ historyFailure.detail }}</span
+                >
+            </span>
         </p>
         <p
             v-else-if="(history?.items.length ?? 0) === 0"

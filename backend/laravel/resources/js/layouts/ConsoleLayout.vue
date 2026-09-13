@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Link, useHttp, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import StrategyWorkspace from '@/components/console/StrategyWorkspace.vue';
 import { useConsolePulse } from '@/composables/useConsolePulse';
 import { useLocale } from '@/composables/useLocale';
@@ -9,11 +9,11 @@ import {
     grouped,
     num,
     plural,
-    shortTime,
     toneColor,
     usd,
 } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
+import profile from '@/routes/crm/profile';
 
 /**
  * "Пульт" — the shell every lens is drawn inside.
@@ -55,7 +55,25 @@ type Console = {
 };
 
 const page = usePage();
-const { locale, t, tag, toggleLocale, nextTag } = useLocale(consoleMessages);
+type Operator = { display_name: string; avatar: string | null; theme: string };
+const operatorProfile = computed(
+    () => page.props.crmOperator as Operator | null,
+);
+const theme = ref(operatorProfile.value?.theme ?? 'cyberia');
+const themeForm = useHttp<{ theme: string }, { theme: string }>({
+    theme: theme.value,
+});
+async function toggleTheme() {
+    const previous = theme.value;
+    theme.value = theme.value === 'cyberia' ? 'yotsuba' : 'cyberia';
+    themeForm.theme = theme.value;
+    try {
+        await themeForm.submit(profile.theme());
+    } catch {
+        theme.value = previous;
+    }
+}
+const { locale, t, toggleLocale, nextTag } = useLocale(consoleMessages);
 
 /*
  * The console's heartbeat, held by the shell rather than by a lens.
@@ -213,8 +231,10 @@ const bannerColor = computed(() =>
 
 const operator = computed(
     () =>
+        operatorProfile.value?.display_name ??
         (page.props.auth as { user?: { name?: string } } | undefined)?.user
-            ?.name ?? '—',
+            ?.name ??
+        '—',
 );
 
 const initials = computed(() =>
@@ -227,7 +247,7 @@ const initials = computed(() =>
 </script>
 
 <template>
-    <div class="mostik">
+    <div class="mostik" :data-console-theme="theme">
         <header class="mk-top">
             <!-- The alarm. Quiet is a state with its own look, not an absence
                  of the banner: an empty strip is indistinguishable from a
@@ -329,16 +349,7 @@ const initials = computed(() =>
                     usd(console_?.background.bridge_30d_usd ?? null)
                 }}</span>
             </div>
-            <div class="mk-top-cell" style="padding: 0 16px">
-                <span class="mk-m mk-t3" style="font-size: 11px">
-                    {{
-                        console_?.sweep.at
-                            ? t('top.sweep', {
-                                  time: shortTime(console_.sweep.at, tag),
-                              })
-                            : t('top.noSweep')
-                    }}
-                </span>
+            <div class="mk-account-controls">
                 <!-- A console that quietly stopped updating looks exactly
                      like a quiet night, so it says which one it is. -->
                 <span
@@ -349,6 +360,38 @@ const initials = computed(() =>
                 >
                     {{ t('top.stale') }}
                 </span>
+                <button
+                    type="button"
+                    class="mk-theme-toggle"
+                    :class="{ 'mk-on': theme === 'cyberia' }"
+                    :aria-pressed="theme === 'cyberia'"
+                    :disabled="themeForm.processing"
+                    :title="t('profile.theme')"
+                    @click="toggleTheme"
+                >
+                    <svg
+                        width="19"
+                        height="19"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                    >
+                        <path
+                            d="M20.8 13.1A9 9 0 0 1 10.9 3.2 9 9 0 1 0 20.8 13.1Z"
+                        />
+                    </svg>
+                </button>
+                <Link
+                    :href="profile.show()"
+                    class="mk-profile-link"
+                    :title="operator"
+                    ><img
+                        v-if="operatorProfile?.avatar"
+                        :src="operatorProfile.avatar"
+                        alt=""
+                    /><span v-else>{{ initials }}</span></Link
+                >
             </div>
         </header>
 
@@ -436,9 +479,7 @@ const initials = computed(() =>
                             <path d="M7 7.5h.01M7 16.5h.01" />
                         </template>
                         <template v-else-if="lens.key === 'chat'">
-                            <path
-                                d="M3.5 4.5h17v11h-9.8L6 19.5V15.5H3.5z"
-                            />
+                            <path d="M3.5 4.5h17v11h-9.8L6 19.5V15.5H3.5z" />
                             <path d="M7.5 8.5h9M7.5 11.5h5.5" />
                         </template>
                         <template v-else-if="lens.key === 'keys'">

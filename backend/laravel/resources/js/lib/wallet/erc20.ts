@@ -1,5 +1,6 @@
 import { Contract, getAddress, isAddress } from 'ethers';
 import type { JsonRpcProvider, Signer } from 'ethers';
+import { explorerFailure } from '@/lib/wallet/readError';
 
 /**
  * ERC20 assets on an EVM network.
@@ -187,7 +188,7 @@ export const blockscoutTokens = async (
     const response = await fetch(`${apiUrl}?${query}`);
 
     if (!response.ok) {
-        throw new Error(`Explorer returned ${response.status}`);
+        throw explorerFailure(response.status);
     }
 
     const body = (await response.json()) as { result?: unknown };
@@ -227,9 +228,21 @@ export const blockscoutTokens = async (
         });
 };
 
-/** Case-insensitive identity: the same contract written two ways is one token. */
+/**
+ * The same token written two ways.
+ *
+ * Case-insensitive on EVM, where the checksum is decoration over a hex string
+ * and the same contract is routinely written three ways in one afternoon —
+ * and exact everywhere else, because this is now also asked about Solana
+ * mints, and base58 uses upper and lower case as *different characters*. A
+ * lowercased mint is not a quieter spelling of an address; it is a different
+ * address, or none.
+ */
 export const sameToken = (left: string, right: string): boolean =>
-    left.toLowerCase() === right.toLowerCase();
+    left === right ||
+    (left.startsWith('0x') &&
+        right.startsWith('0x') &&
+        left.toLowerCase() === right.toLowerCase());
 
 /**
  * The index's tokens with the user's own on top, de-duplicated.

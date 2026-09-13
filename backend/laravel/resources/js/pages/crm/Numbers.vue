@@ -264,7 +264,7 @@ const answerTone = computed(
                     :style="
                         days === filters.days
                             ? {
-                                  background: 'rgba(232,236,236,.08)',
+                                  background: 'rgba(var(--mk-ink-rgb), .08)',
                                   color: 'var(--mk-text)',
                                   fontWeight: 600,
                               }
@@ -349,7 +349,7 @@ const answerTone = computed(
                         "
                     >
                         <div
-                            style="width: 100%; background: #1b2224"
+                            style="width: 100%; background: var(--mk-flat)"
                             :style="{ height: `${row.totalHeight}px` }"
                         />
                         <div
@@ -379,7 +379,7 @@ const answerTone = computed(
                         style="display: flex; align-items: center; gap: 6px"
                     >
                         <span
-                            style="width: 11px; height: 7px; background: #1b2224"
+                            style="width: 11px; height: 7px; background: var(--mk-flat)"
                         />
                         {{ t(legend(question).total) }}
                     </span>
@@ -427,7 +427,7 @@ const answerTone = computed(
                         style="
                             flex: 1;
                             height: 22px;
-                            background: rgba(232, 236, 236, 0.05);
+                            background: rgba(var(--mk-ink-rgb), 0.05);
                         "
                     >
                         <div
@@ -437,7 +437,7 @@ const answerTone = computed(
                                 background:
                                     index === steps(question).length - 1
                                         ? 'var(--mk-accent)'
-                                        : 'rgba(0,229,209,.35)',
+                                        : 'rgba(var(--mk-accent-rgb), .35)',
                             }"
                         />
                     </div>

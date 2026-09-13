@@ -29,6 +29,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useAppearance } from '@/composables/useAppearance';
 import { useWallet } from '@/composables/useWallet';
 import {
     KNOWN_TOKENS,
@@ -42,13 +43,17 @@ import type { V3Route } from '@/lib/dexV3';
 import {
     v3BestRoute,
     v3BestRouteExactOut,
+    v3AfterFee,
+    v3IntegratorFee,
+    v3PoolsFor,
     v3RouteFeePct,
     v3Swap,
+    sortTokens,
 } from '@/lib/dexV3';
 import { ensureEvmChain } from '@/lib/evmChains';
 import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import {
-    DEFAULT_LIQUIDITY_CHAIN_ID as DEFAULT_DEX_CHAIN_ID,
+    DEFAULT_LIQUIDITY_CHAIN_ID,
     LIQUIDITY_CHAINS as DEX_CHAINS,
     liquidityChainById as dexChainById,
 } from '@/lib/liquidityChains';
@@ -57,17 +62,32 @@ import {
     MARKET_RANGES,
     autoRangeKey,
     buildCandles,
+    loadConcentratedHistory,
     loadMarketHistory,
     marketRange,
+    priceFromSqrtX96,
     routePrice,
 } from '@/lib/marketCandles';
 import type {
+    ConcentratedMarket,
     MarketCandle,
     MarketHistory,
     Reserves,
     RouteHop,
 } from '@/lib/marketCandles';
+import { logoForToken } from '@/lib/tokenLogos';
 import { track } from '@/lib/track';
+import { walletChains } from '@/lib/wallet/chains';
+import type { WalletChainId } from '@/lib/wallet/chains';
+import type { DexPair } from '@/lib/wallet/dexscreener';
+import {
+    busiestPair,
+    dexScreenerChartUrl,
+    fetchDexPairs,
+    fetchDexPairsFor,
+    indexAskOrder,
+    pairPoolFor,
+} from '@/lib/wallet/dexscreener';
 
 // Router/factory/wrapped-native/pools are per-chain (DEX_CHAINS); the page
 // reads, quotes and swaps entirely within the wallet's chain, so Robinhood
@@ -139,11 +159,26 @@ const poolApr = (pairAddress?: string | null): number | null =>
         : null;
 
 const wallet = useWallet();
+const { resolvedAppearance } = useAppearance();
 const page = usePage();
 const authUser = computed(
     () =>
         page.props.auth?.user as { wallet_address?: string | null } | undefined,
 );
+
+/**
+ * Whether the person reading this runs the place.
+ *
+ * The same flag the console gate shares on every page, reused rather than
+ * re-derived: there is one definition of who the operators are and it lives in
+ * `config/crm.php`.
+ *
+ * It hides the *itemised* fee line and nothing else. Every number that decides
+ * the trade stays exactly as true for everyone: the output shown is already net
+ * of the fee, and so is the minimum received — this only stops the breakdown
+ * being printed beside them.
+ */
+const operator = computed(() => page.props.auth?.canAccessCrm === true);
 
 const status = ref<string | null>(null);
 const error = ref<string | null>(null);
@@ -153,6 +188,19 @@ const slippage = ref('0.5');
 // The active DEX chain follows the wallet's network when it is a known DEX
 // chain, else the default (Cyberia). A chain tab lets users browse another
 // chain's markets read-only; swapping prompts a network switch.
+/**
+ * Where this page opens, which is not where `/liquidity` opens.
+ *
+ * The registry's default is Cyberia and stays that way: providing liquidity is
+ * something people do in *our* pools. Trading is not — the deepest markets this
+ * page can reach are the tokenised stocks on Robinhood Chain, and opening on a
+ * chain whose busiest pool sees three dollars a day is opening on the wrong
+ * one. A link still overrides it, and so does switching networks in a wallet.
+ */
+const DEFAULT_DEX_CHAIN_ID =
+    DEX_CHAINS.find((chain) => chain.chainId === 4663)?.chainId ??
+    DEFAULT_LIQUIDITY_CHAIN_ID;
+
 const activeChainId = ref<number>(DEFAULT_DEX_CHAIN_ID);
 const activeChain = computed<DexChainConfig>(() =>
     dexChainById(activeChainId.value),
@@ -289,6 +337,28 @@ const marketReserves = ref<Reserves[]>([]);
 const marketHistory = ref<MarketHistory | null>(null);
 const marketLoading = ref(false);
 const marketError = ref<string | null>(null);
+
+/**
+ * The market drawn when the pair being traded has none of its own.
+ *
+ * A trade like CYBER → SPY has no market anywhere: nobody quotes that pair
+ * directly, the router reaches it through the chain's dollar, and there is no
+ * pool whose history could be replayed into a CYBER/SPY chart. Drawing nothing
+ * is honest but useless — the question behind the screen is what SPY is worth,
+ * and that market exists, is deep, and is a pool this page can read.
+ *
+ * So the chart falls back to the traded asset against the chain's dollar, out
+ * of that pool's own `Swap` logs. It is captioned with the pair it is actually
+ * of, because "CYBER/SPY" and "SPY/USDG" are two different claims and only one
+ * of them is true of these candles.
+ */
+const chartedPool = ref<{
+    market: ConcentratedMarket;
+    base: string;
+    quote: string;
+    /** The pool's price right now, which the routed chart gets from reserves. */
+    spot: number;
+} | null>(null);
 const rangeKey = ref<string>('7D');
 // The range is settled once per market — auto on the first load, or by the
 // user — and then left alone, so nothing reframes the chart under them.
@@ -418,6 +488,81 @@ const loadRouteHistory = async (
     }
 };
 
+/**
+ * The deepest concentrated pool pricing one asset in the chain's dollar.
+ *
+ * Which pool is asked for is derived, never searched: the tiers are known and
+ * a pool's address falls out of its key, so this is one read per tier and no
+ * index in the loop. The deepest of the answers wins, because depth is what
+ * makes a price the market's rather than one trader's.
+ */
+const resolveConcentratedMarket = async (
+    candidates: readonly string[],
+): Promise<void> => {
+    const chain = activeChain.value;
+    const v3 = chain.v3;
+    const dollar = chain.dollar;
+
+    chartedPool.value = null;
+
+    if (!v3 || !dollar) {
+        return;
+    }
+
+    // Both sides are offered, in the pair's own order, and the first one with
+    // a dollar market wins. Which side that is cannot be decided from the
+    // symbols: in CYBER/SPY the asset with a market is the stock, in a stock
+    // pair traded against ether it is the other one, and asking the chain is
+    // cheaper than being clever about it.
+    let deepest = null;
+    let subject = '';
+
+    for (const candidate of candidates) {
+        if (candidate.toLowerCase() === dollar.toLowerCase()) {
+            continue;
+        }
+
+        const pools = await v3PoolsFor(readProvider, v3, candidate, dollar);
+        const best = pools.find((pool) => pool.liquidity > 0n) ?? pools[0];
+
+        if (best) {
+            deepest = best;
+            subject = candidate;
+            break;
+        }
+    }
+
+    if (!deepest) {
+        return;
+    }
+
+    const [token0, token1] = sortTokens(subject, dollar);
+    const baseIsToken0 = token0.toLowerCase() === subject.toLowerCase();
+    const [meta0, meta1] = await Promise.all([
+        tokenMeta(token0),
+        tokenMeta(token1),
+    ]);
+
+    const market: ConcentratedMarket = {
+        pool: deepest.address,
+        decimals0: meta0.decimals,
+        decimals1: meta1.decimals,
+        baseIsToken0,
+    };
+    const price0In1 = priceFromSqrtX96(
+        deepest.sqrtPriceX96,
+        meta0.decimals,
+        meta1.decimals,
+    );
+
+    chartedPool.value = {
+        market,
+        base: baseIsToken0 ? meta0.symbol : meta1.symbol,
+        quote: baseIsToken0 ? meta1.symbol : meta0.symbol,
+        spot: baseIsToken0 ? price0In1 : price0In1 > 0 ? 1 / price0In1 : 0,
+    };
+};
+
 const resolveMarketRoute = async (): Promise<void> => {
     const orientation = chartOrientation.value;
     const seq = ++routeSeq;
@@ -425,6 +570,7 @@ const resolveMarketRoute = async (): Promise<void> => {
     if (!orientation) {
         marketRoute.value = null;
         marketHistory.value = null;
+        chartedPool.value = null;
 
         return;
     }
@@ -450,8 +596,39 @@ const resolveMarketRoute = async (): Promise<void> => {
         }
 
         if (!path) {
+            // No pool pair holds this market, so the pair has no chart of its
+            // own. The asset still has one — against the chain's dollar — and
+            // that is what the panel falls back to, saying so.
             marketRoute.value = null;
             marketHistory.value = null;
+
+            await resolveConcentratedMarket([from, to]);
+
+            if (seq !== routeSeq) {
+                return;
+            }
+
+            const drawn = chartedPool.value;
+
+            if (drawn) {
+                nowSec.value = Math.floor(Date.now() / 1000);
+                marketHistory.value = await loadConcentratedHistory(
+                    activeChain.value.explorer,
+                    drawn.market,
+                );
+
+                if (seq !== routeSeq) {
+                    return;
+                }
+
+                if (!rangePinned.value && marketHistory.value) {
+                    rangeKey.value = autoRangeKey(
+                        marketHistory.value,
+                        nowSec.value,
+                    );
+                    rangePinned.value = true;
+                }
+            }
 
             return;
         }
@@ -465,6 +642,7 @@ const resolveMarketRoute = async (): Promise<void> => {
         const sameRoute =
             routeKeyOf(hops) === routeKeyOf(marketRoute.value) &&
             marketHistory.value !== null;
+        chartedPool.value = null;
         marketRoute.value = hops;
         marketReserves.value = await readHopReserves(hops);
 
@@ -537,7 +715,7 @@ const syncMarketReserves = async (): Promise<void> => {
 const spotPrice = computed(() =>
     marketRoute.value
         ? routePrice(marketRoute.value, marketReserves.value)
-        : null,
+        : (chartedPool.value?.spot ?? null),
 );
 
 const activeRange = computed(() => marketRange(rangeKey.value));
@@ -595,6 +773,20 @@ const volume24h = computed(() => {
         .filter((trade) => trade.ts >= from)
         .reduce((total, trade) => total + trade.volume, 0);
 });
+
+/**
+ * What the candles are of, which is not always the pair in the form.
+ *
+ * Everything under the chart — the heading, the price label, the axis — reads
+ * these rather than the traded pair, so a fallback market cannot be labelled
+ * with the trade that made the page look for it.
+ */
+const drawnBase = computed(
+    () => chartedPool.value?.base ?? symbolOf(chartBase.value),
+);
+const drawnQuote = computed(
+    () => chartedPool.value?.quote ?? symbolOf(chartQuote.value),
+);
 
 // "CYBER → USDT → USDC": makes it obvious the charted price is a routed one.
 const marketRouteSymbols = computed(() =>
@@ -682,6 +874,20 @@ const symbolOf = (addr: string): string => {
         ? activeChain.value.nativeSymbol
         : shortAddr(addr);
 };
+
+/**
+ * The mark beside a ticker, when this chain has one for that contract.
+ *
+ * Address-keyed rather than ticker-keyed, because on Robinhood Chain the
+ * tickers are companies' and companies' tickers are short: `F` is Ford there
+ * and could be anything anywhere else. `logoForToken` answers undefined for
+ * everything it does not recognise, and `TokenIcon` falls back to its lettered
+ * avatar exactly as before.
+ */
+const logoOf = (addr: string | null): string | undefined =>
+    addr === null || addr === NATIVE
+        ? undefined
+        : logoForToken(activeChainId.value, addr, symbolOf(addr));
 
 // --- token metadata cache -----------------------------------------------
 const metaCache = new Map<string, { symbol: string; decimals: number }>();
@@ -902,11 +1108,61 @@ const feeNote = computed(() => {
  * whichever pays better, so it says which one won — a trade that went through
  * a different market than the chart below it is otherwise unaccountable.
  */
-const venueLabel = computed(() =>
-    quote.value?.venue === 'v3'
-        ? 'Cyberia V3 (concentrated)'
-        : 'Ritual DEX (v2)',
+const venueLabel = computed(() => {
+    if (quote.value?.venue !== 'v3') {
+        return 'Ritual DEX (v2)';
+    }
+
+    /*
+     * Whose v3 this is, which is not always ours.
+     *
+     * Cyberia's concentrated pools are a fork this project deployed; Robinhood
+     * Chain's are Uniswap's own, deployed by somebody else, and the stock
+     * tokens live entirely in them. Naming both "Cyberia V3" would credit this
+     * project with a venue it does not run, on the one line whose whole job is
+     * to say where the money actually went.
+     */
+    return activeChain.value.v3?.routerKind === 'swapRouter02'
+        ? 'Uniswap V3 (concentrated)'
+        : 'Cyberia V3 (concentrated)';
+});
+
+/**
+ * What this chain actually offers, said before anything is picked.
+ *
+ * The page used to promise "Ritual (Uniswap V2)" everywhere, which was true of
+ * every chain it served until one of them turned out to have a second venue
+ * with more liquidity in it than ours.
+ */
+const venuesLine = computed(() =>
+    activeChain.value.v3
+        ? 'Trade tokens across both venues — the v2 pools and the concentrated ones, whichever pays better'
+        : 'Trade tokens on Ritual (Uniswap V2)',
 );
+
+/**
+ * This project's own cut, when the winning route pays one.
+ *
+ * Printed as its own line rather than folded into the pool's fee: they are
+ * different money going to different people — the pool's goes to whoever put
+ * the liquidity there, and this goes to Cyberia. `amountOut` above is already
+ * net of it, and a quote that quietly differs from the pool's own is the thing
+ * every fee-taking front end gets wrong.
+ */
+const appFee = computed<{ bps: number; amount: bigint } | null>(() => {
+    const q = quote.value;
+    const cfg = activeChain.value.v3;
+
+    if (!q || q.venue !== 'v3' || !q.v3Route || !cfg || mode.value !== 'in') {
+        return null;
+    }
+
+    const fee = v3IntegratorFee(cfg);
+
+    return fee === null
+        ? null
+        : { bps: fee.bps, amount: q.v3Route.amountOut - q.amountOut };
+});
 
 const routeSymbols = computed(() =>
     quote.value ? quote.value.path.map((a) => symbolOf(a)) : [],
@@ -1135,7 +1391,11 @@ const v3ImpactPct = async (q: {
             return null;
         }
 
-        const execRate = Number(q.amountOut) / Number(q.amountIn);
+        /*
+         * Both sides gross. Pricing the net answer against a gross probe would
+         * read this project's own fee as the market moving against the trade.
+         */
+        const execRate = Number(q.v3Route.amountOut) / Number(q.amountIn);
         const spotRate = Number(probe.amountOut) / Number(probeIn);
         const impact = (1 - execRate / spotRate) * 100;
 
@@ -1260,19 +1520,34 @@ const refreshQuote = async (): Promise<void> => {
 
         // v3 wins only by paying better — a tie stays with v2, whose route the
         // chart and the pool page already understand.
+        const v3Net =
+            v3Route && exactIn && v3
+                ? v3AfterFee(v3, v3Route.amountOut)
+                : (v3Route?.amountOut ?? 0n);
+
         if (
             v3Route &&
             v3Route.amountIn > 0n &&
             v3Route.amountOut > 0n &&
             (!best ||
                 (exactIn
-                    ? v3Route.amountOut > best.amountOut
+                    ? v3Net > best.amountOut
                     : v3Route.amountIn < best.amountIn))
         ) {
             best = {
                 path: v3Route.tokens,
                 amountIn: v3Route.amountIn,
-                amountOut: v3Route.amountOut,
+                /*
+                 * Net of this project's fee on an exact-input trade: it is what
+                 * the user receives, so it is the only figure the other venue
+                 * can honestly be compared against. Exact-output takes no fee
+                 * — the output there is the number that was asked for — and
+                 * `v3AfterFee` is not applied to it.
+                 */
+                amountOut:
+                    exactIn && v3
+                        ? v3AfterFee(v3, v3Route.amountOut)
+                        : v3Route.amountOut,
                 venue: 'v3' as const,
                 v3Route,
             };
@@ -1333,6 +1608,127 @@ const onAmountEdited = (side: 'in' | 'out'): void => {
     scheduleQuote();
 };
 
+/* ------------------------------------------------------- indexed chart -- */
+
+/**
+ * A price history for the pairs this page cannot draw one for.
+ *
+ * The chart above is rebuilt from the v2 pools' own `Sync` events, which works
+ * because this project runs that exchange. A concentrated pool emits no such
+ * event, and the pools holding the tokenised stocks belong to somebody else
+ * entirely — so for those pairs the panel had nothing to show but a sentence
+ * about having nothing to show, directly beside a live quote.
+ *
+ * The venue that does index them draws it, in a frame on its own origin. That
+ * shape is the security argument and not a convenience: a third party's script
+ * tag would run inside this page, and a frame is another origin. `?embed=1` is
+ * load-bearing too — the ordinary page answers a frame with `403` and
+ * `X-Frame-Options: SAMEORIGIN`.
+ */
+const activeWalletChain = computed<WalletChainId | null>(
+    () =>
+        walletChains().find((chain) => chain.chainId === activeChainId.value)
+            ?.id ?? null,
+);
+
+/**
+ * The two sides, as the index addresses them: the coin becomes its wrapper.
+ *
+ * Output first, because that is the token somebody who came here by link is
+ * looking at, and it is the side whose name goes on the panel.
+ */
+const dexSides = computed<{ base: string; quote: string } | null>(() => {
+    const wrapped = activeChain.value.wrappedNative.toLowerCase();
+    const resolve = (token: string | null): string | null =>
+        token === null || token === ''
+            ? null
+            : token === NATIVE
+              ? wrapped
+              : token.toLowerCase();
+
+    const base = resolve(tokenOut.value);
+    const quote = resolve(tokenIn.value);
+
+    return base === null || quote === null || base === quote
+        ? null
+        : { base, quote };
+});
+
+const dexPool = ref<{ pair: DexPair; exact: boolean } | null>(null);
+let dexSeq = 0;
+
+watch(
+    [dexSides, activeChainId],
+    async () => {
+        const seq = ++dexSeq;
+        dexPool.value = null;
+
+        const chain = activeWalletChain.value;
+        const sides = dexSides.value;
+
+        if (!chain || !sides) {
+            return;
+        }
+
+        /*
+         * Asked from the side that can see the answer, and from the other only
+         * if it could not. A pool holding both tokens ends the search; anything
+         * less is kept as a fallback and says so on screen.
+         */
+        const order = indexAskOrder(sides.base, sides.quote, [
+            activeChain.value.dollar ?? '',
+            activeChain.value.wrappedNative,
+        ]);
+
+        let found: ReturnType<typeof pairPoolFor> = null;
+
+        for (const token of order) {
+            const pairs = await fetchDexPairs(chain, token);
+            const chosen = pairPoolFor(pairs, sides.base, sides.quote);
+
+            // A newer pair is on screen; this answer is about a page that no
+            // longer exists.
+            if (seq !== dexSeq) {
+                return;
+            }
+
+            if (chosen?.exact) {
+                found = chosen;
+                break;
+            }
+
+            found ??= chosen;
+        }
+
+        dexPool.value = found;
+    },
+    { immediate: true },
+);
+
+const dexChartUrl = computed<string | null>(() =>
+    dexPool.value
+        ? dexScreenerChartUrl(
+              {
+                  chain: dexPool.value.pair.chain,
+                  pairAddress: dexPool.value.pair.pairAddress,
+              },
+              { theme: resolvedAppearance.value },
+          )
+        : null,
+);
+
+/** Whether the panel is showing somebody else's chart rather than ours. */
+const showsIndexedChart = computed(
+    () => candles.value.length === 0 && dexChartUrl.value !== null,
+);
+
+/** The pair the frame is actually drawing, in the index's own words. */
+const dexPairLabel = computed(() =>
+    dexPool.value
+        ? `${dexPool.value.pair.base.symbol}/${dexPool.value.pair.quote.symbol}`
+        : '',
+);
+
 watch([tokenIn, tokenOut], scheduleQuote);
 watch([tokenIn, tokenOut], () => void resolveLivePairAddress(), {
     immediate: true,
@@ -1375,8 +1771,22 @@ const loadBalance = async (token: string): Promise<bigint | null> => {
     }
 };
 
+/**
+ * One counter per side, so a slow answer cannot land on top of a fast one.
+ *
+ * Two reads of the same side are in flight all the time — a token is picked
+ * while the balance poll is out, a link fills both fields a tick after the
+ * watchers already fired for the defaults — and they resolve in whatever order
+ * the node answers. Without this, the *older* read wins whenever it is slower,
+ * and it carries the previous token's `decimals` with it: a six-decimal
+ * stablecoin's scale applied to an eighteen-decimal token renders the amount a
+ * trillion times too large, on a screen somebody is about to trade from.
+ */
+const sideSeq = { in: 0, out: 0 };
+
 const loadSide = async (side: 'in' | 'out'): Promise<void> => {
     const token = side === 'in' ? tokenIn.value : tokenOut.value;
+    const seq = ++sideSeq[side];
 
     if (!token) {
         if (side === 'in') {
@@ -1392,6 +1802,11 @@ const loadSide = async (side: 'in' | 'out'): Promise<void> => {
         tokenMeta(token),
         loadBalance(token),
     ]);
+
+    // Something newer has already answered for this side; this one is history.
+    if (seq !== sideSeq[side]) {
+        return;
+    }
 
     if (side === 'in') {
         decIn.value = meta.decimals;
@@ -1478,7 +1893,27 @@ const setMaxIn = async (): Promise<void> => {
     scheduleQuote();
 };
 
+/** The network picker's value is a string, as every `Select` here is. */
+const pickChain = (val: unknown): void => {
+    const chainId = Number(val);
+
+    if (Number.isFinite(chainId) && chainId !== activeChainId.value) {
+        switchChain(chainId);
+    }
+};
+
+/**
+ * Whether the pair on screen is the person's own choosing.
+ *
+ * The busiest-market lookup is a network round trip, and a round trip can land
+ * after somebody has already picked a token. This is how it knows to stay out
+ * of the way.
+ */
+let touchedPair = false;
+
 const pickToken = (side: 'in' | 'out', val: unknown): void => {
+    touchedPair = true;
+
     const v = String(val ?? '');
 
     if (side === 'in') {
@@ -1608,10 +2043,21 @@ const doSwap = async (): Promise<void> => {
             }
 
             status.value = 'Confirm the swap in your wallet…';
+            /*
+             * The floor handed to the router is the **gross** one — its fee
+             * hooks test the balance they are holding before taking a share —
+             * so it is derived from the route's own pre-fee output and the
+             * slippage on screen. `minOut` is that same floor after the fee,
+             * which is the number the user was shown.
+             */
             tx = await v3Swap(signer, cfg, {
                 route: q.v3Route,
                 recipient: to,
-                amountOutMinimum: exactIn ? minOut : q.amountOut,
+                amountOutMinimum: exactIn
+                    ? (q.v3Route.amountOut *
+                          BigInt(10000 - slippageBps.value)) /
+                      10000n
+                    : q.amountOut,
                 amountInMaximum: exactIn ? undefined : maxIn,
                 exactIn,
                 nativeIn: tokenIn.value === NATIVE,
@@ -1774,11 +2220,35 @@ const switchChain = (chainId: number): void => {
     void refreshQuote();
 };
 
+/**
+ * Whether the wallet's network still gets to steer this page.
+ *
+ * It does by default, and stops the moment a link says otherwise — see
+ * `takeLinkedPair`. A link is a more specific request than whichever network an
+ * extension happens to be pointing at, and the extension always answers second:
+ * `restore()` reports its chain a beat after the page has loaded, so following
+ * it unconditionally quietly undid every link — the chain and both tokens
+ * snapped back to the defaults with nothing on screen to say why.
+ */
+let followsWallet = false;
+
 // Follow the wallet's network: switching it re-points the page to that chain's
 // DEX (when it is a known DEX chain).
 watch(
     () => wallet.chainId.value,
-    (chainId) => {
+    (chainId, previous) => {
+        /*
+         * The first chain a restoring wallet reports is not somebody switching
+         * networks, it is the page finding out where the wallet already was.
+         * After a link has chosen, that one report is ignored and every real
+         * switch afterwards is followed as before.
+         */
+        if (!followsWallet && previous === null) {
+            followsWallet = true;
+
+            return;
+        }
+
         if (
             chainId !== null &&
             chainId !== activeChainId.value &&
@@ -1789,17 +2259,118 @@ watch(
     },
 );
 
-onMounted(async () => {
-    // Start on the wallet's chain when it is a DEX chain, else the default.
-    if (DEX_CHAINS.some((c) => c.chainId === wallet.chainId.value)) {
-        activeChainId.value = wallet.chainId.value as number;
+/**
+ * A trade somebody was sent here to make: `/swap?chain=4663&out=0x…`.
+ *
+ * The pair is the whole of what a link like this can say, and it is deliberately
+ * not a wallet action — nothing is signed by arriving, the fields are simply
+ * filled in. A network this page does not serve, or an address that is not one,
+ * is ignored rather than half-applied: landing on the wrong chain with the
+ * right contract would quote a token that is not there.
+ *
+ * The parameters are left in the address on purpose, unlike the wallet's — this
+ * one is a page somebody links to and reloading it should still be the link
+ * they followed.
+ */
+const takeLinkedPair = (): boolean => {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const requested = Number(params.get('chain'));
+    let chose = false;
+
+    if (
+        Number.isFinite(requested) &&
+        DEX_CHAINS.some((c) => c.chainId === requested)
+    ) {
+        activeChainId.value = requested;
         readProvider = makeReadProvider(activeChain.value);
         readRouter = new Contract(
             activeChain.value.router,
             ROUTER_ABI,
             readProvider,
         );
+        // The cache is keyed by address alone, and the provider it was read
+        // through has just changed underneath it.
+        metaCache.clear();
         tokenOut.value = defaultTokenOut(activeChain.value);
+        tokenIn.value = NATIVE;
+        chose = true;
+    }
+
+    for (const [key, side] of [
+        ['in', tokenIn],
+        ['out', tokenOut],
+    ] as const) {
+        const address = (params.get(key) ?? '').trim();
+
+        if (/^0x[0-9a-fA-F]{40}$/.test(address)) {
+            side.value = address;
+            chose = true;
+        }
+    }
+
+    return chose;
+};
+
+/**
+ * Open on the market with the most volume behind it.
+ *
+ * Only when nothing in the address said otherwise, and only where the index
+ * carries the chain — on a chain it does not, this is a no-op and the page
+ * keeps the pair it opens with. The tokens asked about are the ones this page
+ * lists, so the answer is "the busiest of the markets we offer" rather than a
+ * venue's own front page.
+ *
+ * Best effort, always: a slow or missing index leaves the default pair alone
+ * rather than an empty form. And it stands down the moment the person picks
+ * something themselves — an answer that lands after a choice was made is an
+ * answer about a page that no longer exists.
+ */
+const openOnBusiestPair = async (): Promise<void> => {
+    const chain = activeWalletChain.value;
+    const config = activeChain.value;
+
+    if (!chain) {
+        return;
+    }
+
+    const pairs = await fetchDexPairsFor(
+        chain,
+        config.tokens.map((token) => token.address),
+    );
+    const busiest = busiestPair(pairs);
+
+    // Somebody has been typing while the index answered; leave them alone.
+    if (busiest === null || touchedPair) {
+        return;
+    }
+
+    const wrapped = config.wrappedNative.toLowerCase();
+    // The coin, where the pool's other side is its wrapper: paying with what
+    // the chain runs on needs no wrapping step and no second balance.
+    const side = (address: string): string =>
+        address.toLowerCase() === wrapped ? NATIVE : address;
+
+    tokenOut.value = side(busiest.base.address);
+    tokenIn.value = side(busiest.quote.address);
+};
+
+onMounted(async () => {
+    /*
+     * A link chooses the pair; failing that, the busiest market does.
+     *
+     * The page used to start on whichever network the wallet happened to be
+     * pointing at, which is not a choice anybody made about *this* page — and
+     * it arrived late enough to overwrite one. What opens instead is the
+     * default network and, when the index can say which it is, the pair with
+     * the most volume behind it: a swap screen that opens on a market nobody
+     * is trading is a screen asking to be re-configured before it is used.
+     */
+    if (!takeLinkedPair()) {
+        void openOnBusiestPair();
     }
 
     await nextTick();
@@ -1835,55 +2406,83 @@ onBeforeUnmount(() => {
 <template>
     <Head :title="`Swap · ${activeChain.evmChain.name}`" />
 
-    <div class="mx-auto max-w-5xl px-4 py-6">
+    <!--
+      Wider than the rest of the site on a big screen, because this page is not
+      a document: the left column is a chart, and a chart is the one thing here
+      that gets better with every pixel it is given. The cap stays, so a very
+      wide monitor does not stretch the form into a line nobody can read.
+    -->
+    <div
+        class="mx-auto max-w-5xl px-4 py-6 xl:max-w-[92rem] 2xl:max-w-[108rem]"
+    >
         <header class="mb-4">
             <h1 class="text-2xl font-bold">Swap</h1>
             <p class="text-sm text-muted-foreground">
-                Trade tokens on Ritual (Uniswap V2) on
-                {{ activeChain.evmChain.name }}. Native
+                {{ venuesLine }} on {{ activeChain.evmChain.name }}. Native
                 {{ activeChain.nativeSymbol }} is supported directly.
             </p>
         </header>
 
-        <!-- CHAIN SWITCHER: markets/balances are per-chain and never mix -->
-        <div class="mb-4 flex flex-wrap items-center gap-2">
-            <button
-                v-for="chain in DEX_CHAINS"
-                :key="chain.chainId"
-                type="button"
-                class="rounded-full border px-4 py-1.5 text-sm font-medium transition"
-                :class="
-                    chain.chainId === activeChainId
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-border bg-card hover:border-foreground/30'
-                "
-                @click="switchChain(chain.chainId)"
-            >
-                {{ chain.evmChain.name }}
-            </button>
-            <div class="ml-auto flex items-center gap-2 text-sm">
-                <span class="text-muted-foreground">Slippage %</span>
-                <Input v-model="slippage" class="w-16" />
-            </div>
-        </div>
-
-        <div class="grid gap-4 lg:grid-cols-[1fr_28rem] lg:items-start">
+        <div
+            class="grid gap-4 lg:grid-cols-[1fr_28rem] lg:items-start xl:gap-6"
+        >
             <section class="space-y-4 rounded-lg border p-4">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
+                        <!--
+                          Two charts and two captions, because they are drawn
+                          by different people. Ours is rebuilt from the pools'
+                          own reserves; the other is somebody else's index of
+                          somebody else's pool, and saying "Ritual market" over
+                          it would take credit for a market this project has
+                          nothing in.
+                        -->
                         <h2 class="font-semibold">
-                            Ritual market
+                            {{ showsIndexedChart ? 'Market' : 'Ritual market' }}
+                            <!--
+                              The pair the chart is *of*, not the pair being
+                              traded. They are usually the same and sometimes
+                              are not: a token's deepest pool is often against
+                              the chain's dollar while the trade goes through
+                              ether, and a heading naming one over a chart of
+                              the other is the mismatch this exists to avoid.
+                            -->
                             <span
-                                v-if="chartPairKey"
+                                v-if="showsIndexedChart"
                                 class="font-mono text-sm text-muted-foreground"
                             >
-                                {{ symbolOf(chartBase) }}/{{
-                                    symbolOf(chartQuote)
-                                }}
+                                {{ dexPairLabel }}
+                            </span>
+                            <span
+                                v-else-if="chartPairKey"
+                                class="font-mono text-sm text-muted-foreground"
+                            >
+                                {{ drawnBase }}/{{ drawnQuote }}
                             </span>
                         </h2>
                         <p class="text-xs text-muted-foreground">
-                            <template v-if="marketRouteSymbols.length > 2">
+                            <template
+                                v-if="showsIndexedChart && dexPool?.exact"
+                            >
+                                This pair trades in concentrated pools, whose
+                                history this page cannot rebuild — the chart
+                                below is the index's own, of the deepest pool
+                                holding both sides.
+                            </template>
+                            <template v-else-if="showsIndexedChart">
+                                No indexed pool holds both sides of this trade,
+                                so the chart below is
+                                {{ symbolOf(chartBase) }}'s deepest pool instead
+                                — a different pair from the one being traded.
+                            </template>
+                            <template v-else-if="chartedPool">
+                                No pool holds both sides of this trade, so
+                                these are {{ drawnBase }}'s own candles against
+                                {{ drawnQuote }} — rebuilt from that pool's
+                                trades, and a different pair from the one being
+                                swapped.
+                            </template>
+                            <template v-else-if="marketRouteSymbols.length > 2">
                                 Routed
                                 {{ marketRouteSymbols.join(' → ') }} — candles
                                 come from the pools' on-chain reserves, so the
@@ -1896,7 +2495,7 @@ onBeforeUnmount(() => {
                         </p>
                     </div>
                     <span
-                        v-if="selectedPoolPairAddress"
+                        v-if="selectedPoolPairAddress && !showsIndexedChart"
                         class="rounded bg-muted px-2 py-1 font-mono text-xs"
                         title="Direct pool for this pair"
                     >
@@ -1913,7 +2512,7 @@ onBeforeUnmount(() => {
                                 <p class="text-muted-foreground">
                                     Price
                                     <span class="font-mono">
-                                        {{ symbolOf(chartQuote) }}
+                                        {{ drawnQuote }}
                                     </span>
                                 </p>
                                 <p class="font-mono text-sm">
@@ -1994,6 +2593,37 @@ onBeforeUnmount(() => {
                             :quote-symbol="symbolOf(chartQuote)"
                         />
                     </template>
+                    <!--
+                      Somebody else's index, for the pools this page cannot
+                      rebuild a history from. Keyed on the pool so a change of
+                      token drops the frame instead of leaving the previous
+                      pair's chart up while a new one loads — the one thing a
+                      price chart must never do.
+                    -->
+                    <div v-else-if="dexChartUrl" class="space-y-2">
+                        <div class="flex items-baseline justify-between px-1">
+                            <h3 class="text-sm font-medium">
+                                {{ dexPairLabel }} · {{ dexPool?.pair.dex }}
+                            </h3>
+                            <a
+                                :href="dexPool?.pair.url ?? undefined"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="text-[0.7rem] text-muted-foreground hover:underline"
+                            >
+                                Chart by DEX Screener ↗
+                            </a>
+                        </div>
+                        <iframe
+                            :key="dexChartUrl"
+                            :src="dexChartUrl"
+                            class="h-[420px] w-full rounded border border-border xl:h-[600px] 2xl:h-[680px]"
+                            loading="lazy"
+                            referrerpolicy="no-referrer"
+                            sandbox="allow-scripts allow-same-origin allow-popups"
+                            title="Price history"
+                        />
+                    </div>
                     <div
                         v-else
                         class="flex h-40 items-center justify-center px-4 text-center text-sm text-muted-foreground"
@@ -2006,6 +2636,19 @@ onBeforeUnmount(() => {
                         </span>
                         <span v-else-if="!chartPairKey">
                             Select two tokens to view their market chart.
+                        </span>
+                        <!--
+                          Only the v2 pools have a history this page can
+                          rebuild: candles come from `Sync` events, and a
+                          concentrated pool does not emit them. So a pair the
+                          swap above just quoted can still have no chart, and
+                          saying "no route" about it would contradict the price
+                          sitting beside it.
+                        -->
+                        <span v-else-if="!marketRoute && activeChain.v3">
+                            No chart for this pair: it trades in the
+                            concentrated pools, whose history this page cannot
+                            rebuild, and no index carries it either.
                         </span>
                         <span v-else-if="!marketRoute">
                             No route between these tokens yet — add liquidity to
@@ -2081,6 +2724,48 @@ onBeforeUnmount(() => {
             </section>
 
             <div class="space-y-3 rounded-lg border p-4">
+                <!--
+                  The network and the slippage belong to the trade, so they sit
+                  in the card that makes one. They used to own a whole row of
+                  their own above the fold — two large pills for two networks —
+                  which spent about fifty pixels of every screen to say
+                  something the page title already said, and pushed the chart
+                  down by exactly that much.
+                -->
+                <div class="flex items-center justify-between gap-2">
+                    <Select
+                        :model-value="String(activeChainId)"
+                        @update:model-value="pickChain($event)"
+                    >
+                        <SelectTrigger
+                            class="h-8 w-auto gap-2 border-0 bg-muted/60 px-2.5 text-xs font-medium shadow-none focus:ring-0"
+                        >
+                            <span class="flex items-center gap-2">
+                                <span
+                                    class="size-1.5 rounded-full bg-primary"
+                                />
+                                {{ activeChain.evmChain.name }}
+                            </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                v-for="chain in DEX_CHAINS"
+                                :key="chain.chainId"
+                                :value="String(chain.chainId)"
+                            >
+                                {{ chain.evmChain.name }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <div
+                        class="flex items-center gap-1.5 text-xs text-muted-foreground"
+                    >
+                        <span>Slippage %</span>
+                        <Input v-model="slippage" class="h-8 w-14 text-xs" />
+                    </div>
+                </div>
+
                 <!-- FROM -->
                 <div class="rounded-md border p-3">
                     <div class="mb-2 flex items-center justify-between text-sm">
@@ -2097,6 +2782,7 @@ onBeforeUnmount(() => {
                                 >
                                     <TokenIcon
                                         :symbol="symbolOf(tokenIn)"
+                                        :logo="logoOf(tokenIn)"
                                         :size="20"
                                     />
                                     {{ symbolOf(tokenIn) }}
@@ -2115,6 +2801,7 @@ onBeforeUnmount(() => {
                                     <span class="flex items-center gap-2">
                                         <TokenIcon
                                             :symbol="t.symbol"
+                                            :logo="logoOf(t.address)"
                                             :size="20"
                                         />
                                         {{ t.symbol }}
@@ -2166,6 +2853,7 @@ onBeforeUnmount(() => {
                                 >
                                     <TokenIcon
                                         :symbol="symbolOf(tokenOut)"
+                                        :logo="logoOf(tokenOut)"
                                         :size="20"
                                     />
                                     {{ symbolOf(tokenOut) }}
@@ -2186,6 +2874,7 @@ onBeforeUnmount(() => {
                                     <span class="flex items-center gap-2">
                                         <TokenIcon
                                             :symbol="t.symbol"
+                                            :logo="logoOf(t.address)"
                                             :size="20"
                                         />
                                         {{ t.symbol }}
@@ -2245,6 +2934,15 @@ onBeforeUnmount(() => {
                             fmt(lpFee, decIn, 8)
                         }}</span>
                         {{ symbolOf(tokenIn) }} ({{ feeNote }})
+                    </p>
+                    <p v-if="appFee && operator">
+                        Cyberia fee:
+                        <span class="font-mono">{{
+                            fmt(appFee.amount, decOut, 8)
+                        }}</span>
+                        {{ symbolOf(tokenOut) }} ({{
+                            (appFee.bps / 100).toFixed(2)
+                        }}% of the output)
                     </p>
                     <p>Venue: {{ venueLabel }}</p>
                     <p v-if="mode === 'in'">
