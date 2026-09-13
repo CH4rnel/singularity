@@ -10,13 +10,24 @@ the bridge holds a wallet, and this directory runs it.
 
 | Container | What it does | Exposed |
 |---|---|---|
-| `monerod` | Syncs the chain, relays transactions | p2p `18080` only |
-| `monero-wallet-rpc` | The bridge's wallet: subaddresses, balances, payouts | `127.0.0.1:18083` |
+| `monero-wallet-rpc` | The bridge's wallet: subaddresses, balances, payouts | the app's container, by name |
+| `monerod` | Optional (`--profile fullnode`): syncs the chain, relays transactions | p2p `18080` only |
 
-`monero-wallet-rpc` holds **spend keys**. Anyone who can reach port 18083 can
-empty it. It is bound to loopback and protected by `--rpc-login`; do not put it
-behind a public reverse proxy, and do not raise the `--rpc-bind-ip` publish
-address to `0.0.0.0` on the host.
+**The production shape is a thin client**: the wallet here, the chain
+somebody else's. `cyber.main` has ~120 GB of disk holding a chain node, an
+explorer, two databases and the site, and a pruned Monero chain is ~60 GB of
+that — so `monerod` sits behind a compose profile and is not started. The
+wallet keeps its own keys and scans blocks itself with its view key; a remote
+node only serves it blocks. What that costs is written down under
+[Running without a node](#running-without-a-node), and it is a real cost, not
+a formality.
+
+`monero-wallet-rpc` holds **spend keys**. Anyone who can reach port 18083 and
+holds its login can empty it, so reachability is kept to two places: the host's
+own loopback (for an operator with a shell) and one two-member docker network
+shared with the app. Do not put it behind a public reverse proxy, do not raise
+the publish address to `0.0.0.0`, and do not attach it to the stack network
+where the explorer and IPFS live.
 
 ## Setup
 
@@ -24,10 +35,13 @@ address to `0.0.0.0` on the host.
 
    ```bash
    docker compose run --rm --entrypoint monero-wallet-cli wallet \
-     --generate-new-wallet /wallet/bridge --daemon-address monerod:18081
+     --generate-new-wallet /wallet/bridge --daemon-address "$MONERO_DAEMON_ADDRESS"
    ```
 
-   Write the 25-word seed down offline. It is the only copy. The RPC is
+   Use the same daemon the RPC will use — a remote one on a thin-client host,
+   `monerod:18081` where the node runs — and see step 6: a wallet created
+   against an unreachable daemon starts life hundreds of thousands of blocks
+   in the past. Write the 25-word seed down offline. It is the only copy. The RPC is
    started with `--wallet-file` rather than `--wallet-dir`, so it cannot
    create, open or switch wallets — it can only operate this one.
 
@@ -45,27 +59,49 @@ address to `0.0.0.0` on the host.
    `docker compose` refuses to start without `MONERO_RPC_LOGIN`, on purpose: a
    wallet RPC with no login is a wallet anyone on the host can spend.
 
-3. **Start it and let the node sync.** Hours to days:
+3. **Start it.** A plain `up -d` is the thin client — the wallet alone,
+   against the node named in `MONERO_DAEMON_ADDRESS`:
 
    ```bash
    docker compose up -d
+   docker compose logs -f wallet
+   ```
+
+   With a local chain instead (hours to days to sync, ~60 GB), say so in
+   `./.env` first — neither line has a default, because the wrong guess is
+   either an unwanted chain sync or a stranger's node marked trusted:
+
+   ```bash
+   # in ./.env
+   MONERO_DAEMON_ADDRESS=monerod:18081
+   MONERO_DAEMON_TRUST=--trusted-daemon
+
+   docker compose --profile fullnode up -d
    docker compose exec monerod monerod status
    ```
 
 4. **Point Laravel at it** (`backend/laravel/.env`). Laravel runs in its own
-   container, and a host loopback port is not reachable from inside one, so put
-   the wallet on the app's network and address it by name — that way the RPC
-   needs no published port at all, which is the safer arrangement anyway:
-
-   ```bash
-   docker network connect docker-compose_default cyberia-monero-wallet
-   ```
+   container, where a host loopback port does not exist, so the two meet on a
+   network and the wallet is addressed by name:
 
    ```
    BRIDGE_XMR_WALLET_RPC_URL=http://cyberia-monero-wallet:18083
    BRIDGE_XMR_WALLET_RPC_USER=bridge
    BRIDGE_XMR_WALLET_RPC_PASSWORD=...
    ```
+
+   That network is `cyberia-bridge-monero`, and it has exactly two members:
+   this wallet and the app. It is declared by the **site's** compose (which
+   creates it) and joined as `external` by this one (which needs it), so the
+   site still starts on a host that never ran this stack, and the wallet — an
+   endpoint that can spend — is never reachable from the explorer front end,
+   IPFS or the proxy.
+
+   Do not wire it with `docker network connect` instead. A hand-run link does
+   not survive the container being recreated: on 2026-09-13 a log-rotation
+   pass recreated this wallet, the link vanished with it, and for ten hours
+   every XMR deposit answered *"Could not reach the Monero wallet"* while the
+   wallet was healthy and synced.
 
    Prod caches its config, so `php artisan config:clear && php artisan
    config:cache` inside the app container or none of this is read.
@@ -95,20 +131,36 @@ address to `0.0.0.0` on the host.
 
 ## Running without a node
 
-A pruned chain is ~60 GB. Where the host cannot hold one, the wallet can talk
-to somebody else's node — it keeps the keys either way, so a remote node can
-watch what you ask about and lie about the tip, but it can never spend:
+This is how `cyber.main` runs, so it is worth being exact about what is given
+up. The wallet holds the keys and scans with its own view key either way — a
+remote node never sees which outputs are yours and can never spend. What it
+does get, and what it can do:
+
+- **It sees what you ask for.** The node learns this server's IP and which
+  blocks it pulls. It does not learn which of them matter.
+- **It can lie by omission.** A node that withholds a block hides a deposit,
+  and the bridge then reads that deposit as *not yet arrived* — a user waits,
+  and the sweeper credits it the moment a truthful answer comes back. That is
+  the safe direction of the same lie, and it is why nothing here treats an
+  unreadable wallet as an empty one.
+- **It can stall.** If the node goes away, the wallet stays up and stops
+  advancing. `get_height` is the check: compare it with a public explorer's
+  tip. The wallet RPC is single-threaded, so a dead daemon also makes calls
+  queue behind a refresh that will not finish.
+- **It cannot be trusted for fees or tip.** Hence `--untrusted-daemon`, which
+  is the default in the compose file: only a node on this host earns
+  `--trusted-daemon`.
 
 ```bash
 # in ./.env
 MONERO_DAEMON_ADDRESS=<host>:18089
-MONERO_DAEMON_TRUST=--untrusted-daemon
-docker compose up -d wallet          # the node service is simply not started
+MONERO_DAEMON_TRUST=--untrusted-daemon    # the default; say it anyway
+docker compose up -d                      # monerod is behind --profile fullnode
 ```
 
-This is a development shape, not a production one: a bridge that cannot see
-its own deposits without a stranger's cooperation is a bridge with a
-dependency nobody signed up for.
+Pick a node run by someone who has no idea this bridge exists, and change it if
+it starts answering slowly — the swap of one line and a `docker compose up -d`
+is the whole migration, because nothing about the wallet lives in the node.
 
 ## Three things that will bite
 
@@ -152,7 +204,7 @@ dependency nobody signed up for.
 
 ```bash
 docker compose logs -f wallet                 # what the wallet is doing
-docker compose exec monerod monerod status    # sync height
+docker compose exec monerod monerod status    # sync height (fullnode profile only)
 php artisan bridge:sweep-deposits             # credit deposits now, verbosely
 php artisan bridge:relay <id>                 # retry one request
 ```

@@ -95,6 +95,17 @@ class BridgeFeeService
             return (string) config('bridge.fee.monero_payout_fee_xmr', '0.0005');
         }
 
+        // Bitcoin and Litecoin: the miner's fee is paid by the pool on top of
+        // the amount, and it is the one fee here that moves by an order of
+        // magnitude within a day. The reserve is sized for a busy mempool
+        // rather than a quiet one, and the difference accrues to the pool —
+        // the alternative, quoting the fee live at the moment of the transfer,
+        // would mean the figure a person agreed to and the figure they are
+        // charged were read minutes apart.
+        if (in_array($chain['type'] ?? null, ['bitcoin', 'litecoin'], true)) {
+            return (string) config("bridge.chains.{$chainKey}.payout_fee", '0');
+        }
+
         // A native EVM payout: the token's destination entry is flagged native
         // (checked above), so the payout IS this chain's native coin regardless
         // of the wrapper's symbol. Do NOT gate on native_currency symbol ==

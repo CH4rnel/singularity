@@ -550,6 +550,21 @@ return [
             'usage' => null,
         ],
 
+        'monero-wallet' => [
+            'group' => 'onchain',
+            'label' => 'Monero bridge wallet',
+            'critical' => false,
+            'note' => 'services/monero, a thin client: the keys are here, the chain is a node somebody else runs. Unattached, both XMR routes vanish from the bridge.',
+            // Not an HTTP check. `monero-wallet-rpc` answers a version request
+            // with no daemon at all, so reachability and health are different
+            // questions here and the probe asks the second one.
+            'check' => ['type' => 'monero-wallet', 'stale_seconds' => 1200],
+            // Deliberately unmeasured: `bridge_requests` is already counted by
+            // the bridge service, and counting the XMR rows again would put one
+            // quiet corridor on the idle list as if it were a second service.
+            'usage' => null,
+        ],
+
         'predictions' => [
             'group' => 'onchain',
             'label' => 'Prediction markets',

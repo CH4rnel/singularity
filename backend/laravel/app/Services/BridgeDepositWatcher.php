@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\BridgeRequest;
+use App\Services\Bitcoin\BitcoinDepositDeriver;
+use App\Services\Bitcoin\EsploraApiService;
 use App\Services\Monero\MoneroWalletRpc;
 use App\Services\Yenten\YentenAddressDeriver;
 
@@ -29,7 +31,7 @@ use App\Services\Yenten\YentenAddressDeriver;
 final class BridgeDepositWatcher
 {
     /** Chain types whose deposits are bound to an address instead of a hash. */
-    public const ONE_TIME_ADDRESS_TYPES = ['yenten', 'monero'];
+    public const ONE_TIME_ADDRESS_TYPES = ['yenten', 'monero', 'bitcoin', 'litecoin'];
 
     public function __construct(private readonly MoneroWalletRpc $monero) {}
 
@@ -56,6 +58,7 @@ final class BridgeDepositWatcher
         return match ((string) ($chain['type'] ?? '')) {
             'yenten' => $this->issueYenten($request),
             'monero' => $this->issueMonero($request),
+            'bitcoin', 'litecoin' => $this->issueBitcoinFamily($request, (string) ($chain['key'] ?? '')),
             default => 'This route does not use a prepared deposit address.',
         };
     }
@@ -77,6 +80,14 @@ final class BridgeDepositWatcher
 
         return match ((string) ($chain['type'] ?? '')) {
             'yenten' => app(YentenApiService::class)->addressBalances($address),
+            // Bitcoin and Litecoin are read from a keyless public index, so
+            // the depth of each output has to be measured rather than taken
+            // on trust: a balance is not a confirmation count.
+            'bitcoin', 'litecoin' => app(EsploraApiService::class)->addressBalances(
+                (string) ($chain['key'] ?? ''),
+                $address,
+                max(1, (int) ($chain['minimum_confirmations'] ?? 3)),
+            ),
             'monero' => $request->deposit_index === null
                 ? null
                 : $this->monero->incoming(
@@ -112,6 +123,31 @@ final class BridgeDepositWatcher
     private function issueYenten(BridgeRequest $request): ?string
     {
         $deriver = YentenAddressDeriver::fromConfig();
+
+        $request->update([
+            'deposit_address' => $deriver->depositAddress($request->id),
+            'deposit_wif' => $deriver->childWif($request->id),
+        ]);
+
+        return null;
+    }
+
+    /**
+     * A fresh P2PKH address for one request, derived from this chain's seed.
+     *
+     * The spending key is stored beside it, exactly as Yenten does: the pool
+     * that pays outbound transfers is the central wallet plus the deposit
+     * addresses of transfers already minted, and it can only spend what it
+     * has a key for. A subaddress needs no key because the wallet that made
+     * it holds one; a derived address is not that.
+     */
+    private function issueBitcoinFamily(BridgeRequest $request, string $chainKey): ?string
+    {
+        $deriver = BitcoinDepositDeriver::forChain($chainKey);
+
+        if ($deriver === null) {
+            return 'This corridor has no deposit seed configured on this server yet.';
+        }
 
         $request->update([
             'deposit_address' => $deriver->depositAddress($request->id),

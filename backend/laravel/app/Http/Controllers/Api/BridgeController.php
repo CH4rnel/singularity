@@ -498,6 +498,11 @@ class BridgeController extends Controller
             'direction' => $bridgeRequest->direction,
             'source_chain' => $bridgeRequest->source_chain,
             'source_tx_hash' => $bridgeRequest->source_tx_hash,
+            // Address-bound corridors (Monero, Yenten) never have a source
+            // hash: the deposit is identified by the address it landed on, and
+            // on Monero nobody outside this wallet could look one up anyway.
+            // The tracker shows this instead of an explorer link to nowhere.
+            'deposit_address' => $bridgeRequest->deposit_address,
             'sender_address' => $bridgeRequest->sender_address,
             'recipient_address' => $bridgeRequest->recipient_address,
             'amount' => $bridgeRequest->amount,
