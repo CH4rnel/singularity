@@ -163,11 +163,18 @@ services:
       - /root/singularity/backend/laravel:/var/www/html
       - /root/singularity:/singularity
       - /root/.config/solana:/solana
+    # The symlink step is deliberately not allowed to fail the boot. On
+    # 2026-09-13 `storage:link --relative` died on a missing symfony/filesystem
+    # (it is a *suggestion* of illuminate/filesystem, and was in no lock file),
+    # the container crash-looped, and the whole site answered 502 — over a
+    # symlink. A missing link costs uploaded files; it must not cost the site.
+    # The dependency is in composer.json now; this keeps the blast radius small
+    # the next time something in that line breaks.
     command: >
       sh -lc "if [ ! -f vendor/autoload.php ]; then
         composer install --no-interaction --prefer-dist --no-progress;
       fi &&
-      php artisan storage:link --relative --force &&
+      php artisan storage:link --relative --force || true;
       php artisan serve --host=0.0.0.0 --port=9001"
     ports:
       - "9001:9001"
