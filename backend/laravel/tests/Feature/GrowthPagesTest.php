@@ -44,7 +44,7 @@ test('the robinhood chain landing exposes only configured bridge routes', functi
                     && $robinhoodRoutes->contains(
                         fn (array $route): bool => $route['direction'] === 'robinhood_to_evm'
                             && $route['operational'] === true
-                            && $route['tokens'] === ['ETH', 'SPY', 'CYBER'],
+                            && $route['tokens'] === ['USDG', 'ETH', 'SPY', 'CYBER'],
                     )
                     && $robinhoodRoutes->contains(
                         fn (array $route): bool => $route['direction'] === 'evm_to_robinhood'
