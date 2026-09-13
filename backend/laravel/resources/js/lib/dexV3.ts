@@ -13,6 +13,7 @@ import type {
     ContractTransactionResponse,
     Signer,
 } from 'ethers';
+import { priceFromSqrtX96 } from '@/lib/marketCandles';
 
 /**
  * Trading through the Cyberia V3 pools (the PancakeSwap V3 fork).
@@ -608,24 +609,16 @@ export const v3BestRouteExactOut = async (
 /**
  * The price a pool is sitting at, as token1 per token0.
  *
- * `sqrtPriceX96` is a Q64.96 square root, so this squares it and shifts back —
- * in floating point, because the answer is for a screen. Never round-trip a
- * traded amount through this number; that is what the quoter is for.
+ * The arithmetic lives in `lib/marketCandles.ts` because the chart replays the
+ * same number out of `Swap` logs, and two copies of a price formula is two
+ * chances to invert a market. Never round-trip a traded amount through it;
+ * that is what the quoter is for.
  */
 export const v3PriceFromSqrt = (
     sqrtPriceX96: bigint,
     decimals0: number,
     decimals1: number,
-): number => {
-    if (sqrtPriceX96 <= 0n) {
-        return 0;
-    }
-
-    const ratio = Number(sqrtPriceX96) / 2 ** 96;
-    const price = ratio * ratio;
-
-    return price * 10 ** (decimals0 - decimals1);
-};
+): number => priceFromSqrtX96(sqrtPriceX96, decimals0, decimals1);
 
 /**
  * What a swap through this route costs a trader, as a percentage of the input.

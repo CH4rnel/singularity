@@ -45,8 +45,10 @@ import {
     v3BestRouteExactOut,
     v3AfterFee,
     v3IntegratorFee,
+    v3PoolsFor,
     v3RouteFeePct,
     v3Swap,
+    sortTokens,
 } from '@/lib/dexV3';
 import { ensureEvmChain } from '@/lib/evmChains';
 import { getSelectedEvmProvider } from '@/lib/evmProvider';
@@ -60,11 +62,14 @@ import {
     MARKET_RANGES,
     autoRangeKey,
     buildCandles,
+    loadConcentratedHistory,
     loadMarketHistory,
     marketRange,
+    priceFromSqrtX96,
     routePrice,
 } from '@/lib/marketCandles';
 import type {
+    ConcentratedMarket,
     MarketCandle,
     MarketHistory,
     Reserves,
@@ -332,6 +337,28 @@ const marketReserves = ref<Reserves[]>([]);
 const marketHistory = ref<MarketHistory | null>(null);
 const marketLoading = ref(false);
 const marketError = ref<string | null>(null);
+
+/**
+ * The market drawn when the pair being traded has none of its own.
+ *
+ * A trade like CYBER → SPY has no market anywhere: nobody quotes that pair
+ * directly, the router reaches it through the chain's dollar, and there is no
+ * pool whose history could be replayed into a CYBER/SPY chart. Drawing nothing
+ * is honest but useless — the question behind the screen is what SPY is worth,
+ * and that market exists, is deep, and is a pool this page can read.
+ *
+ * So the chart falls back to the traded asset against the chain's dollar, out
+ * of that pool's own `Swap` logs. It is captioned with the pair it is actually
+ * of, because "CYBER/SPY" and "SPY/USDG" are two different claims and only one
+ * of them is true of these candles.
+ */
+const chartedPool = ref<{
+    market: ConcentratedMarket;
+    base: string;
+    quote: string;
+    /** The pool's price right now, which the routed chart gets from reserves. */
+    spot: number;
+} | null>(null);
 const rangeKey = ref<string>('7D');
 // The range is settled once per market — auto on the first load, or by the
 // user — and then left alone, so nothing reframes the chart under them.
@@ -461,6 +488,81 @@ const loadRouteHistory = async (
     }
 };
 
+/**
+ * The deepest concentrated pool pricing one asset in the chain's dollar.
+ *
+ * Which pool is asked for is derived, never searched: the tiers are known and
+ * a pool's address falls out of its key, so this is one read per tier and no
+ * index in the loop. The deepest of the answers wins, because depth is what
+ * makes a price the market's rather than one trader's.
+ */
+const resolveConcentratedMarket = async (
+    candidates: readonly string[],
+): Promise<void> => {
+    const chain = activeChain.value;
+    const v3 = chain.v3;
+    const dollar = chain.dollar;
+
+    chartedPool.value = null;
+
+    if (!v3 || !dollar) {
+        return;
+    }
+
+    // Both sides are offered, in the pair's own order, and the first one with
+    // a dollar market wins. Which side that is cannot be decided from the
+    // symbols: in CYBER/SPY the asset with a market is the stock, in a stock
+    // pair traded against ether it is the other one, and asking the chain is
+    // cheaper than being clever about it.
+    let deepest = null;
+    let subject = '';
+
+    for (const candidate of candidates) {
+        if (candidate.toLowerCase() === dollar.toLowerCase()) {
+            continue;
+        }
+
+        const pools = await v3PoolsFor(readProvider, v3, candidate, dollar);
+        const best = pools.find((pool) => pool.liquidity > 0n) ?? pools[0];
+
+        if (best) {
+            deepest = best;
+            subject = candidate;
+            break;
+        }
+    }
+
+    if (!deepest) {
+        return;
+    }
+
+    const [token0, token1] = sortTokens(subject, dollar);
+    const baseIsToken0 = token0.toLowerCase() === subject.toLowerCase();
+    const [meta0, meta1] = await Promise.all([
+        tokenMeta(token0),
+        tokenMeta(token1),
+    ]);
+
+    const market: ConcentratedMarket = {
+        pool: deepest.address,
+        decimals0: meta0.decimals,
+        decimals1: meta1.decimals,
+        baseIsToken0,
+    };
+    const price0In1 = priceFromSqrtX96(
+        deepest.sqrtPriceX96,
+        meta0.decimals,
+        meta1.decimals,
+    );
+
+    chartedPool.value = {
+        market,
+        base: baseIsToken0 ? meta0.symbol : meta1.symbol,
+        quote: baseIsToken0 ? meta1.symbol : meta0.symbol,
+        spot: baseIsToken0 ? price0In1 : price0In1 > 0 ? 1 / price0In1 : 0,
+    };
+};
+
 const resolveMarketRoute = async (): Promise<void> => {
     const orientation = chartOrientation.value;
     const seq = ++routeSeq;
@@ -468,6 +570,7 @@ const resolveMarketRoute = async (): Promise<void> => {
     if (!orientation) {
         marketRoute.value = null;
         marketHistory.value = null;
+        chartedPool.value = null;
 
         return;
     }
@@ -493,8 +596,39 @@ const resolveMarketRoute = async (): Promise<void> => {
         }
 
         if (!path) {
+            // No pool pair holds this market, so the pair has no chart of its
+            // own. The asset still has one — against the chain's dollar — and
+            // that is what the panel falls back to, saying so.
             marketRoute.value = null;
             marketHistory.value = null;
+
+            await resolveConcentratedMarket([from, to]);
+
+            if (seq !== routeSeq) {
+                return;
+            }
+
+            const drawn = chartedPool.value;
+
+            if (drawn) {
+                nowSec.value = Math.floor(Date.now() / 1000);
+                marketHistory.value = await loadConcentratedHistory(
+                    activeChain.value.explorer,
+                    drawn.market,
+                );
+
+                if (seq !== routeSeq) {
+                    return;
+                }
+
+                if (!rangePinned.value && marketHistory.value) {
+                    rangeKey.value = autoRangeKey(
+                        marketHistory.value,
+                        nowSec.value,
+                    );
+                    rangePinned.value = true;
+                }
+            }
 
             return;
         }
@@ -508,6 +642,7 @@ const resolveMarketRoute = async (): Promise<void> => {
         const sameRoute =
             routeKeyOf(hops) === routeKeyOf(marketRoute.value) &&
             marketHistory.value !== null;
+        chartedPool.value = null;
         marketRoute.value = hops;
         marketReserves.value = await readHopReserves(hops);
 
@@ -580,7 +715,7 @@ const syncMarketReserves = async (): Promise<void> => {
 const spotPrice = computed(() =>
     marketRoute.value
         ? routePrice(marketRoute.value, marketReserves.value)
-        : null,
+        : (chartedPool.value?.spot ?? null),
 );
 
 const activeRange = computed(() => marketRange(rangeKey.value));
@@ -638,6 +773,20 @@ const volume24h = computed(() => {
         .filter((trade) => trade.ts >= from)
         .reduce((total, trade) => total + trade.volume, 0);
 });
+
+/**
+ * What the candles are of, which is not always the pair in the form.
+ *
+ * Everything under the chart — the heading, the price label, the axis — reads
+ * these rather than the traded pair, so a fallback market cannot be labelled
+ * with the trade that made the page look for it.
+ */
+const drawnBase = computed(
+    () => chartedPool.value?.base ?? symbolOf(chartBase.value),
+);
+const drawnQuote = computed(
+    () => chartedPool.value?.quote ?? symbolOf(chartQuote.value),
+);
 
 // "CYBER → USDT → USDC": makes it obvious the charted price is a routed one.
 const marketRouteSymbols = computed(() =>
@@ -2308,9 +2457,7 @@ onBeforeUnmount(() => {
                                 v-else-if="chartPairKey"
                                 class="font-mono text-sm text-muted-foreground"
                             >
-                                {{ symbolOf(chartBase) }}/{{
-                                    symbolOf(chartQuote)
-                                }}
+                                {{ drawnBase }}/{{ drawnQuote }}
                             </span>
                         </h2>
                         <p class="text-xs text-muted-foreground">
@@ -2327,6 +2474,13 @@ onBeforeUnmount(() => {
                                 so the chart below is
                                 {{ symbolOf(chartBase) }}'s deepest pool instead
                                 — a different pair from the one being traded.
+                            </template>
+                            <template v-else-if="chartedPool">
+                                No pool holds both sides of this trade, so
+                                these are {{ drawnBase }}'s own candles against
+                                {{ drawnQuote }} — rebuilt from that pool's
+                                trades, and a different pair from the one being
+                                swapped.
                             </template>
                             <template v-else-if="marketRouteSymbols.length > 2">
                                 Routed
@@ -2358,7 +2512,7 @@ onBeforeUnmount(() => {
                                 <p class="text-muted-foreground">
                                     Price
                                     <span class="font-mono">
-                                        {{ symbolOf(chartQuote) }}
+                                        {{ drawnQuote }}
                                     </span>
                                 </p>
                                 <p class="font-mono text-sm">
