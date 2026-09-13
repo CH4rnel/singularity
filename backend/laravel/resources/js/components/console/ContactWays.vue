@@ -82,7 +82,7 @@ const glyph: Record<string, string> = {
     gap: 4px;
     width: max-content;
     padding: 8px 6px 6px;
-    border: 1px solid rgba(232, 236, 236, 0.18);
+    border: 1px solid rgba(var(--mk-ink-rgb), 0.18);
     background: color-mix(in srgb, var(--mk-panel) 96%, transparent);
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
     opacity: 0;
@@ -104,9 +104,9 @@ const glyph: Record<string, string> = {
     width: 28px;
     height: 28px;
     place-items: center;
-    border: 1px solid rgba(232, 236, 236, 0.12);
+    border: 1px solid rgba(var(--mk-ink-rgb), 0.12);
     color: var(--mk-dim);
-    background: rgba(232, 236, 236, 0.035);
+    background: rgba(var(--mk-ink-rgb), 0.035);
     text-decoration: none;
     transition:
         border-color 100ms ease,

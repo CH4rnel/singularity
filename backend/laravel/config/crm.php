@@ -95,6 +95,10 @@ return [
         ),
     ],
 
+    'tasks' => [
+        'files' => ['max_mb' => 25, 'max_per_upload' => 8],
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | The room ("Чат") — one conversation, and the files that came with it.

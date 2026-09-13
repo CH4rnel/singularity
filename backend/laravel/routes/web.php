@@ -30,6 +30,9 @@ use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CrmMessageController;
 use App\Http\Controllers\CrmNoteController;
+use App\Http\Controllers\CrmProfileController;
+use App\Http\Controllers\CrmTaskAttachmentCommentController;
+use App\Http\Controllers\CrmTaskAttachmentController;
 use App\Http\Controllers\CrmTaskCommentController;
 use App\Http\Controllers\CrmTaskController;
 use App\Http\Controllers\CyberController;
@@ -497,6 +500,10 @@ Route::middleware(['auth'])->group(function () {
      * {contact} wildcard so they take precedence.
      */
     Route::prefix('crm')->name('crm.')->middleware(EnsureCrmAdmin::class)->group(function () {
+        Route::get('profile', [CrmProfileController::class, 'show'])->name('profile.show');
+        Route::post('profile', [CrmProfileController::class, 'update'])->name('profile.update');
+        Route::patch('profile/theme', [CrmProfileController::class, 'theme'])->name('profile.theme');
+        Route::get('profile/avatar', [CrmProfileController::class, 'avatar'])->name('profile.avatar');
         Route::get('/', [ConsoleController::class, 'index'])->name('index');
         // The console's heartbeat. Every lens is open on more than one desk,
         // so each of them asks this one cheap question every few seconds and
@@ -576,6 +583,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('tasks/{task}', [CrmTaskController::class, 'show'])->name('tasks.show');
         Route::put('tasks/{task}', [CrmTaskController::class, 'update'])->name('tasks.update');
         Route::post('tasks/{task}/comments', [CrmTaskCommentController::class, 'store'])->name('tasks.comments.store');
+        Route::post('tasks/{task}/attachments', [CrmTaskAttachmentController::class, 'store'])->name('tasks.attachments.store');
+        Route::get('task-attachments/{attachment}', [CrmTaskAttachmentController::class, 'show'])->name('tasks.attachments.show');
+        Route::delete('task-attachments/{attachment}', [CrmTaskAttachmentController::class, 'destroy'])->name('tasks.attachments.destroy');
+        Route::post('task-attachments/{attachment}/comments', [CrmTaskAttachmentCommentController::class, 'store'])->name('tasks.attachments.comments.store');
+        Route::delete('task-attachment-comments/{comment}', [CrmTaskAttachmentCommentController::class, 'destroy'])->name('tasks.attachments.comments.destroy');
         Route::post('tasks/{task}/claim', [CrmTaskController::class, 'claim'])->name('tasks.claim');
         Route::delete('tasks/{task}', [CrmTaskController::class, 'destroy'])->name('tasks.destroy');
 

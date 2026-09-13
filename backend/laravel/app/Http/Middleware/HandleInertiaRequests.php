@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\CrmOperatorProfile;
 use App\Services\Console\ConsoleHeader;
 use App\Support\Changelog;
 use Illuminate\Http\Request;
@@ -77,6 +78,12 @@ class HandleInertiaRequests extends Middleware
             'console' => fn () => $request->routeIs('crm.*') && EnsureCrmAdmin::allows($user)
                 ? app(ConsoleHeader::class)->build($user)
                 : null,
+            'crmOperator' => fn () => $request->routeIs('crm.*') && EnsureCrmAdmin::allows($user) ? (function () use ($user): array {
+                $profile = CrmOperatorProfile::where('user_id', $user->id)->first();
+
+                return ['display_name' => $profile?->display_name ?: $user->name, 'theme' => $profile?->theme ?: 'cyberia',
+                    'avatar' => $profile?->avatar_path ? route('crm.profile.avatar', ['v' => basename($profile->avatar_path)]) : $user->avatar];
+            })() : null,
             'vapidPublicKey' => config('webpush.vapid.public_key'),
             'flash' => [
                 'status' => fn () => $request->session()->get('status'),

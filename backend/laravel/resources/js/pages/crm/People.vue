@@ -1081,9 +1081,9 @@ const currentSegment = computed(
     align-items: center;
     height: 28px;
     padding: 0 6px;
-    border: 1px solid rgba(232, 236, 236, 0.16);
+    border: 1px solid rgba(var(--mk-ink-rgb), 0.16);
     color: var(--mk-dim);
-    background: rgba(232, 236, 236, 0.035);
+    background: rgba(var(--mk-ink-rgb), 0.035);
     font-family: var(--mk-mono);
     font-size: 11px;
 }
@@ -1128,7 +1128,7 @@ const currentSegment = computed(
 .lead-trade__button:hover:not(:disabled),
 .lead-trade__button:focus-visible,
 .lead-trade__button--active {
-    background: rgba(232, 236, 236, 0.08);
+    background: rgba(var(--mk-ink-rgb), 0.08);
     outline: none;
 }
 
