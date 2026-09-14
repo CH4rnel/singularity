@@ -9,9 +9,15 @@ in. That is why a buy routed through an aggregator or an arbitrage bot is
 reported exactly like one made on pump.fun itself, and why a liquidity deposit —
 both sides moving in — is never mistaken for one.
 
-USD value, market cap and (unless pinned) the pool address come from the
-DexScreener pair feed. A price that cannot be read is None, never 0: the caller
-holds its cursor and retries rather than announcing a buy it cannot size.
+SOL/USD and (unless pinned) the pool address come from the DexScreener pair
+feed. A price that cannot be read is None, never 0: the caller holds its cursor
+and retries rather than announcing a buy it cannot size.
+
+Market cap is *not* taken from that feed. DexScreener quotes the last trade's
+average fill, which for a buy always sits below the price that same trade ended
+at, while the pump.fun page the post links to quotes the pool's reserves. So
+the cap is computed here from the reserves the announced buy left behind — see
+market_cap_after().
 """
 import html
 import json
@@ -23,7 +29,7 @@ from bot.config import (
     SOLSCAN_URL, CYBER_SOL_MINT,
     DEXSCREENER_API_URL,
     PUMPFUN_RPC_TIMEOUT, PUMPFUN_SIG_LIMIT, PUMPFUN_MAX_PAGES,
-    PUMPFUN_MARKET_TTL_SECONDS,
+    PUMPFUN_MARKET_TTL_SECONDS, PUMPFUN_SUPPLY_TTL_SECONDS,
     PUMPFUN_TOKEN_LABEL, PUMPFUN_TOKEN_SYMBOL, PUMPFUN_TOKEN_URL,
     PUMPFUN_BUY_EMOJI, PUMPFUN_EMOJI_USD, PUMPFUN_EMOJI_MAX,
     PUMPFUN_MIN_POSITION_PCT, PUMPFUN_CHART_URL, PUMPFUN_TRADE_URL,
@@ -42,6 +48,10 @@ SOL_DECIMALS = 9
 # next buy off a slightly stale quote instead of dropping it.
 _market_cache: dict | None = None
 _market_fetched_at: float = 0.0
+
+# mint -> (supply, monotonic time it was read). A supply only moves when
+# somebody burns, so this is read rarely and the last answer outlives a blip.
+_supply_cache: dict[str, tuple[float, float]] = {}
 
 
 # DexScreener answers 403 to urllib's default agent, so the bot names itself.
@@ -74,7 +84,11 @@ def _as_float(value) -> float | None:
 def market_snapshot(mint: str = CYBER_SOL_MINT) -> dict | None:
     """{pool, sol_usd, price_usd, market_cap} for the deepest SOL-quoted pair,
     or the last good snapshot when the feed is unreadable, or None if we have
-    never read one. Cached for PUMPFUN_MARKET_TTL_SECONDS. Blocking."""
+    never read one. Cached for PUMPFUN_MARKET_TTL_SECONDS. Blocking.
+
+    `market_cap` is the feed's own figure and is only a fallback: it lags a
+    buy by that buy's own price impact. market_cap_after() is the number the
+    post prints."""
     global _market_cache, _market_fetched_at
 
     now = time.monotonic()
@@ -181,17 +195,22 @@ def parse_buy(tx: dict, pool: str, mint: str) -> dict | None:
 
     coin_delta = 0
     sol_delta = 0
+    coin_after = 0
+    sol_after = 0
     decimals = None
     for index in set(pre) | set(post):
         account = post.get(index) or pre[index]
         if account["owner"] != pool:
             continue
-        moved = post.get(index, {}).get("amount", 0) - pre.get(index, {}).get("amount", 0)
+        held = post.get(index, {}).get("amount", 0)
+        moved = held - pre.get(index, {}).get("amount", 0)
         if account["mint"] == mint:
             coin_delta += moved
+            coin_after += held
             decimals = account["decimals"]
         elif account["mint"] == WSOL_MINT:
             sol_delta += moved
+            sol_after += held
 
     # Coin out of the pool and SOL into it. A sell reverses both; a liquidity
     # deposit or withdrawal moves both the same way.
@@ -230,6 +249,10 @@ def parse_buy(tx: dict, pool: str, mint: str) -> dict | None:
         "token_amount": -coin_delta / 10 ** decimals,
         "token_decimals": decimals,
         "sol_amount": sol_delta / 10 ** SOL_DECIMALS,
+        # The pool as this trade left it, which is the price the coin is
+        # quoted at from here on. See market_cap_after().
+        "pool_coin": coin_after / 10 ** decimals,
+        "pool_sol": sol_after / 10 ** SOL_DECIMALS,
         # Nothing of this coin before the trade, and it did land with them.
         "new_holder": gained > 0 and held_before == 0,
         # Growth of an existing bag, in percent. None when there was nothing to
@@ -274,6 +297,54 @@ def collect_buys(pool: str, mint: str, after: tuple[int, int]) -> tuple[list[dic
                 buys.append(buy)
         scanned = cursor
     return buys, scanned
+
+
+def token_supply(mint: str = CYBER_SOL_MINT) -> float | None:
+    """The mint's supply, from the chain. Cached for PUMPFUN_SUPPLY_TTL_SECONDS
+    and the last good answer is kept through an RPC blip — a supply moves only
+    when somebody burns, so a stale one is off by a burn and a missing one
+    costs the post its market cap entirely. Blocking."""
+    cached = _supply_cache.get(mint)
+    now = time.monotonic()
+    if cached and now - cached[1] < PUMPFUN_SUPPLY_TTL_SECONDS:
+        return cached[0]
+
+    try:
+        value = (_rpc("getTokenSupply", [mint]) or {}).get("value") or {}
+        supply = int(value["amount"]) / 10 ** int(value.get("decimals") or 0)
+    except Exception as e:
+        logger.warning(f"pumpfun: supply of {mint} unreadable ({e}); keeping last answer")
+        return cached[0] if cached else None
+
+    if supply <= 0:
+        logger.warning(f"pumpfun: supply of {mint} read as {supply}; keeping last answer")
+        return cached[0] if cached else None
+
+    _supply_cache[mint] = (supply, now)
+    return supply
+
+
+def market_cap_after(buy: dict, sol_usd: float | None, supply: float | None) -> float | None:
+    """The coin's market cap at the price this buy left the pool at, or None
+    when any of the three numbers is missing.
+
+    The pump.fun page a post links to prices the coin off the pool's reserves —
+    spot, now — while DexScreener's `marketCap` is the last trade's *average
+    fill*, which for a buy always sits below the price that trade ended at.
+    Announcing a buy is precisely the moment the two disagree most: a 6.94 SOL
+    buy into an 88 SOL pool ended at $43.1k on the page while the feed still
+    said $39.9k, and the bigger the buy the wider that gap. Reading the
+    reserves the trade itself left behind costs no extra call — they are in the
+    balances the buy was parsed out of — and it makes each buy in a batch carry
+    its own cap instead of all of them sharing one cached figure.
+    """
+    coin = _as_float(buy.get("pool_coin"))
+    sol = _as_float(buy.get("pool_sol"))
+    usd = _as_float(sol_usd)
+    units = _as_float(supply)
+    if not coin or not sol or not usd or not units:
+        return None
+    return sol / coin * units * usd
 
 
 # --- post ---------------------------------------------------------------------
