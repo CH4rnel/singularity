@@ -72,7 +72,13 @@ def mint_and_distribute():
 
     logger.info(f"Distributing to {len(wallets)} wallets")
 
-    nonce = w3.eth.get_transaction_count(account.address, "pending")
+    # `latest`, deliberately not `pending`: this chain's node answers a pending
+    # count as `latest` plus the number of the account's transactions sitting in
+    # its pool, whatever nonces those carry. One transaction that can never
+    # execute therefore raises every later answer by one, and the account walks
+    # itself out of reach — on 2026-09-14 the gap reached 512 and this key
+    # stopped landing anything for forty minutes. Mirrors bot.chain.next_nonce.
+    nonce = w3.eth.get_transaction_count(account.address, "latest")
     success_count = 0
     failed_count = 0
     amount = 1 * 10**18
@@ -119,7 +125,11 @@ def mint_and_distribute():
         except Exception as e:
             failed_count += 1
             logger.error(f"Failed to mint to {address}: {e}")
-            nonce += 1
+            # A failed send did not consume a nonce, so carrying on from the next one
+            # opens a gap the chain can never close and every later signature lands
+            # further out of reach — that is how one failure became 512 on
+            # 2026-09-14. Ask the chain again instead of guessing.
+            nonce = w3.eth.get_transaction_count(account.address, "latest")
 
     logger.info(
         "Distribution complete: %d succeeded, %d failed",

@@ -48,6 +48,26 @@ ERC20_META_ABI = [
 # RPC chatter from "4 calls per swap" to ~zero once the active set is warm.
 _pair_token_cache: dict[str, tuple[str, str]] = {}
 _token_meta_cache: dict[str, tuple[str, int]] = {}
+def next_nonce(w3: Web3, address: str) -> int:
+    """The nonce to sign with — from `latest`, deliberately not `pending`.
+
+    This chain's node answers a pending count as `latest` plus the number of
+    the account's transactions sitting in its pool, *regardless of the nonces
+    those carry*. One transaction that can never execute therefore raises
+    every later answer by one, and each new signature lands further out of
+    reach: on 2026-09-14 the gap on the shared relayer key reached 512, every
+    mint and payout from it stopped landing for forty minutes, and a /claim
+    waiting 180s on a receipt that could never arrive froze the whole bot,
+    because the dispatcher is sequential.
+
+    `latest` can collide with a transaction broadcast a second earlier, which
+    the node rejects outright as `nonce too low`. That is the trade being
+    made on purpose: a rejection is one lost transaction and is recoverable,
+    a nonce gap is permanent and takes the account with it.
+    """
+    return w3.eth.get_transaction_count(Web3.to_checksum_address(address), "latest")
+
+
 def _get_pair_tokens(w3: Web3, pair_addr: str) -> tuple[str, str] | None:
     addr = Web3.to_checksum_address(pair_addr)
     cached = _pair_token_cache.get(addr)
