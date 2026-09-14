@@ -125,7 +125,11 @@ def mint_and_distribute():
         except Exception as e:
             failed_count += 1
             logger.error(f"Failed to mint to {address}: {e}")
-            nonce += 1
+            # A failed send did not consume a nonce, so carrying on from the next one
+            # opens a gap the chain can never close and every later signature lands
+            # further out of reach — that is how one failure became 512 on
+            # 2026-09-14. Ask the chain again instead of guessing.
+            nonce = w3.eth.get_transaction_count(account.address, "latest")
 
     logger.info(
         "Distribution complete: %d succeeded, %d failed",

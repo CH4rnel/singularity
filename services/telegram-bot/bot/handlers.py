@@ -990,7 +990,11 @@ async def reward_now_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 succeeded += 1
             except Exception as e:
                 logger.error(f"reward_now mint failed for {address}: {e}")
-                nonce += 1
+                # A failed send did not consume a nonce, so carrying on from the next one
+                # opens a gap the chain can never close and every later signature lands
+                # further out of reach — that is how one failure became 512 on
+                # 2026-09-14. Ask the chain again instead of guessing.
+                nonce = next_nonce(w3, acct.address)
                 failed += 1
     except Exception as e:
         logger.error(f"reward_now fatal: {e}")
@@ -1099,8 +1103,11 @@ def _claim_pending_rewards(user_id: int, address: str):
                 "claim_pending: mint failed user=%s chat=%s symbol=%s: %s",
                 user_id, chat_id, symbol, e,
             )
-            # Bump nonce defensively in case the tx was actually broadcast.
-            nonce += 1
+            # A failed send did not consume a nonce, so carrying on from the next one
+            # opens a gap the chain can never close and every later signature lands
+            # further out of reach — that is how one failure became 512 on
+            # 2026-09-14. Ask the chain again instead of guessing.
+            nonce = next_nonce(w3, acct.address)
 
     return claimed, failed, totals
 
