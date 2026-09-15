@@ -148,4 +148,11 @@ jobs:
               echo "preserved pre-repository docs template at $backup"
             fi
 
+            if ! git -C "$repo" diff --quiet || ! git -C "$repo" diff --cached --quiet; then
+              echo "production checkout has tracked changes; refusing to overwrite it" >&2
+              exit 1
+            fi
+            git -C "$repo" fetch --prune origin master
+            git -C "$repo" reset --hard origin/master
+
             bash /root/singularity/scripts/deploy-prod.sh
