@@ -294,12 +294,14 @@ class SlotsBankTests(SlotsCase):
 
 class SlotsCommandTests(SlotsCase):
     def command(self, args, user_id=1, dice=LEMONS, chat_type='supergroup',
-                send_dice=None, admin=False):
-        msg = SimpleNamespace(sender_chat=None, message_id=5, reply_text=AsyncMock())
+                send_dice=None, admin=False, sender_chat=None, effective_user=True,
+                administrators=None):
+        msg = SimpleNamespace(sender_chat=sender_chat, message_id=5, reply_text=AsyncMock())
         update = SimpleNamespace(
             effective_message=msg,
             effective_chat=SimpleNamespace(id=-100, type=chat_type),
-            effective_user=SimpleNamespace(id=user_id, is_bot=False, name=f'@u{user_id}'),
+            effective_user=(SimpleNamespace(id=user_id, is_bot=False, name=f'@u{user_id}')
+                            if effective_user else None),
         )
         rolled = SimpleNamespace(dice=SimpleNamespace(value=dice), message_id=6)
         bot = SimpleNamespace(
@@ -307,6 +309,7 @@ class SlotsCommandTests(SlotsCase):
             send_message=AsyncMock(),
             get_chat_member=AsyncMock(return_value=SimpleNamespace(
                 status='administrator' if admin else 'member')),
+            get_chat_administrators=AsyncMock(return_value=administrators or []),
         )
         context = SimpleNamespace(args=args, bot=bot, application=None)
         return msg, bot, update, context
@@ -323,6 +326,37 @@ class SlotsCommandTests(SlotsCase):
         self.assertEqual(bot.send_dice.await_args.kwargs['emoji'], '🎰')
         self.assertEqual(bot.send_dice.await_args.kwargs['reply_to_message_id'], 5)
         self.assertEqual(self.balance(1), (1000 - 10 + 130) * stakes.UNIT)
+
+    def test_owner_can_pull_anonymously_when_they_are_the_only_anonymous_admin(self):
+        owner = SimpleNamespace(id=1, is_bot=False, name='owner')
+        creator = SimpleNamespace(status='creator', is_anonymous=True, user=owner)
+        msg, bot = self.run_slots(
+            ['10'], dice=BARS, sender_chat=SimpleNamespace(id=-100),
+            effective_user=False, administrators=[creator],
+        )
+        self.assertEqual(bot.send_dice.await_count, 1)
+        self.assertEqual(self.balance(1), (1000 - 10 + 130) * stakes.UNIT)
+
+    def test_ordinary_members_keep_playing_from_their_own_accounts(self):
+        msg, bot = self.run_slots(['10'], user_id=2, dice=BARS)
+        self.assertEqual(bot.send_dice.await_count, 1)
+        self.assertEqual(self.balance(2), (1000 - 10 + 130) * stakes.UNIT)
+
+    def test_anonymous_admin_or_linked_channel_cannot_spend_the_owners_balance(self):
+        owner = SimpleNamespace(id=1, is_bot=False, name='owner')
+        creator = SimpleNamespace(status='creator', is_anonymous=True, user=owner)
+        admin = SimpleNamespace(status='administrator', is_anonymous=True,
+                                user=SimpleNamespace(id=2, is_bot=False, name='admin'))
+        for sender, administrators in (
+            (SimpleNamespace(id=-100), [creator, admin]),
+            (SimpleNamespace(id=-200), [creator]),
+        ):
+            msg, bot = self.run_slots(
+                ['10'], sender_chat=sender, effective_user=False, administrators=administrators,
+            )
+            self.assertEqual(bot.send_dice.await_count, 0)
+            self.assertIn('только его владелец', msg.reply_text.await_args.args[0])
+        self.assertEqual(self.balance(1), 1000 * stakes.UNIT)
 
     def test_no_argument_shows_the_machine_and_stakes_nothing(self):
         msg, bot = self.run_slots([])

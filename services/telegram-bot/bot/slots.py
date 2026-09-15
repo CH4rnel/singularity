@@ -352,12 +352,42 @@ async def _announce(bot, chat_id, spin, reply_to, delay=REVEAL):
 
 
 # --- handlers -------------------------------------------------------------------
+async def _anonymous_owner(update, context):
+    """Return the owner behind an anonymous message from this chat, if knowable.
+
+    Telegram deliberately omits the sender's user ID from an anonymous admin
+    message.  It is therefore safe to attribute it to the owner only when the
+    owner is the *only* anonymous administrator.  A linked channel, or a chat
+    with another anonymous admin, is indistinguishable from the owner and must
+    not be allowed to spend the owner's accrued balance.
+    """
+    chat, msg = update.effective_chat, update.effective_message
+    sender = getattr(msg, "sender_chat", None)
+    if not chat or not sender or getattr(sender, "id", None) != chat.id:
+        return None
+    try:
+        administrators = await context.bot.get_chat_administrators(chat.id)
+    except TelegramError:
+        return None
+    anonymous = [member for member in administrators if getattr(member, "is_anonymous", False)]
+    owners = [member for member in anonymous if getattr(member, "status", None) == "creator"]
+    return owners[0].user if len(anonymous) == len(owners) == 1 else None
+
+
 async def slots_command(update, context):
     chat, user, msg = update.effective_chat, update.effective_user, update.effective_message
     if not chat or chat.type not in ("group", "supergroup"):
         await msg.reply_text("Автомат стоит в чате: /slots 10 — он играет на токен этого чата.")
         return
-    if not user or user.is_bot or msg.sender_chat:
+    if msg.sender_chat:
+        user = await _anonymous_owner(update, context)
+        if user is None:
+            await msg.reply_text(
+                "Обычные участники играют от своих аккаунтов как обычно. Анонимно от имени чата "
+                "может играть только его владелец, когда он единственный анонимный администратор."
+            )
+            return
+    if not user or user.is_bot:
         await msg.reply_text("Для игры отправьте команду от своего аккаунта, а не от имени канала.")
         return
     if not context.args:
