@@ -138,6 +138,7 @@ jobs:
             repo=/root/singularity
             docs_template_rel=services/blockscout/docker-compose/proxy/docs.conf.template
             docs_template="$repo/$docs_template_rel"
+            before=$(git -C "$repo" rev-parse HEAD)
 
             # The docs virtual host existed on production before it became a
             # tracked repository file. Preserve that one-time local copy so
@@ -154,5 +155,23 @@ jobs:
             fi
             git -C "$repo" fetch --prune origin master
             git -C "$repo" reset --hard origin/master
+
+            if ! git -C "$repo" diff --quiet "$before" HEAD -- .github/workflows/ci.yml services/telegram-bot scripts/python/telegram_airdrop_bot.py; then
+              bot_pid=$(pgrep -o -f '[t]elegram_airdrop_bot\.py' || true)
+              if [ -z "$bot_pid" ]; then
+                echo "Telegram bot process was not found; refusing to start an unverified second copy" >&2
+                exit 1
+              fi
+              bot_cwd=$(readlink -f "/proc/$bot_pid/cwd")
+              bot_python=$(readlink -f "/proc/$bot_pid/exe")
+              test -x "$bot_python"
+              test -f "$bot_cwd/telegram_airdrop_bot.py"
+              "$bot_python" -c 'import telegram, sqlalchemy'
+              kill -TERM "$bot_pid"
+              for _ in $(seq 1 20); do kill -0 "$bot_pid" 2>/dev/null || break; sleep 1; done
+              ! kill -0 "$bot_pid" 2>/dev/null
+              tmux new-session -d -s "telegram-bot-$(date -u +%Y%m%dT%H%M%SZ)" \
+                "cd '$bot_cwd' && exec '$bot_python' telegram_airdrop_bot.py"
+            fi
 
             bash /root/singularity/scripts/deploy-prod.sh
