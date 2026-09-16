@@ -4,6 +4,49 @@
 <meta charset="utf-8" />
 <title>Cyberia — The liquidity home of Ritual DEX</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#0b0f10" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Cyberia" />
+<script>
+/*
+ * An app icon opens the wallet, and the landing page is not the wallet.
+ *
+ * The manifest asks for `/wallet`, but a `start_url` is read at install time:
+ * every copy installed before it said so still launches here, an iOS icon
+ * never re-reads a manifest at all, and this page is a static file outside the
+ * Inertia app, so nothing else on it would notice. It forwards the launch
+ * itself.
+ *
+ * A launch is the only thing forwarded, and two guards say what a launch is.
+ * A same-origin referrer means somebody inside the app followed a link out to
+ * the site — the wallet's own Settings has exactly that link — and sending
+ * them back would make the site unreachable from the app. The session flag
+ * means it has already happened once in this window, so a person who came
+ * back here on purpose stays here.
+ */
+(function () {
+  try {
+    var standalone =
+      (window.matchMedia &&
+        window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true;
+
+    if (
+      !standalone ||
+      document.referrer ||
+      sessionStorage.getItem('cyberia.pwa.launched')
+    ) {
+      return;
+    }
+
+    sessionStorage.setItem('cyberia.pwa.launched', '1');
+    location.replace('/wallet');
+  } catch (e) {
+    // A window that refuses storage or media queries still gets the landing.
+  }
+})();
+</script>
 <meta name="description" content="Bridge, trade and earn where about 90% of Ritual liquidity is concentrated: Cyberia. Robinhood Chain is natively supported." />
 <link rel="canonical" href="https://cyberia.church/" />
 <meta property="og:title" content="Cyberia — The liquidity home of Ritual DEX" />
