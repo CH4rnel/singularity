@@ -464,6 +464,38 @@ html:has(.cw-frame) {
 }
 
 /*
+ * "Never scrolls as a document" was a description of this layout and not a rule
+ * anything enforced, and an installed app is where the difference showed: the
+ * whole window — background, frame and tab bar together — dragged by a strip of
+ * about thirty pixels and sprang back.
+ *
+ * Two causes, and the first is arithmetic. The site pads `body` by the bottom
+ * safe-area inset so an ordinary page keeps clear of the home indicator; the
+ * frame is exactly one viewport tall and already carries that inset itself, so
+ * underneath it the same padding is a second copy with nowhere to go — the
+ * document comes out `100dvh` plus the inset, which is exactly the strip that
+ * scrolls. In a browser tab the inset is 0 and none of this was visible, which
+ * is why it arrived with the app.
+ *
+ * The second is the gesture. A standalone app still rubber-bands and Chrome
+ * still offers pull-to-refresh on a document with nothing to scroll, so both
+ * are turned off here — on the viewport, and deliberately not on the panes
+ * inside it, which have real scrolling to do.
+ *
+ * `clip` and not `hidden`, for the reason `.cw-shell` gives below: `hidden`
+ * leaves a scroll container behind, and a container that scrolls is one focused
+ * input away from pushing the frame off the top of a window that has no
+ * scrollbar and no gesture to drag it back.
+ */
+html:has(.cw-frame),
+body:has(.cw-frame) {
+    padding-bottom: 0;
+    overflow: hidden;
+    overflow: clip;
+    overscroll-behavior: none;
+}
+
+/*
  * Everything above the shell is chrome and keeps its height; only the shell
  * absorbs what is left. Without this the masthead and an error note shrink
  * first, because `flex: 0 1 auto` lets them.
