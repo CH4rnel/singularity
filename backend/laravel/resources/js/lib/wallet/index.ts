@@ -201,6 +201,7 @@ export type { WalletKeySource } from '@/lib/wallet/keys';
 export {
     EVM_CONTRACT_SEND_GAS_CAP,
     HOME_CHAIN,
+    shippedChainByEvmId,
     shippedChains,
     setShippedWalletChains,
     WALLET_FAMILY_GROUPS,

@@ -47,7 +47,7 @@ import { getSelectedEvmProvider } from '@/lib/evmProvider';
 import type { LiquidityChainConfig } from '@/lib/liquidityChains';
 import { logoForToken } from '@/lib/tokenLogos';
 import { track } from '@/lib/track';
-import { walletChains } from '@/lib/wallet';
+import { shippedChainByEvmId } from '@/lib/wallet';
 
 /**
  * Adding to and taking out of the concentrated-liquidity pools.
@@ -142,7 +142,7 @@ const price = (value: number): string => {
 };
 
 const walletAnalyticsChain = (): string | undefined =>
-    walletChains().find((chain) => chain.chainId === props.chain.chainId)?.id;
+    shippedChainByEvmId(props.chain.chainId)?.id;
 
 const ensureActiveNetwork = async (): Promise<BrowserProvider> => {
     const eth = getSelectedEvmProvider();

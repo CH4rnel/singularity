@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
 import { analytics } from '@/lib/analytics';
-import { createMnemonic, isValidMnemonic, walletChains } from '@/lib/wallet';
+import { createMnemonic, isValidMnemonic, shippedChains } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -404,7 +404,7 @@ onBeforeUnmount(() => {
                 "
             >
                 <span
-                    v-for="chain in walletChains()"
+                    v-for="chain in shippedChains()"
                     :key="chain.id"
                     class="cw-label"
                     style="color: var(--cw-faint)"
@@ -907,7 +907,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="cw-stack" style="gap: 10px">
                 <div
-                    v-for="chain in walletChains()"
+                    v-for="chain in shippedChains()"
                     :key="chain.id"
                     class="cw-row"
                 >

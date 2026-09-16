@@ -1348,6 +1348,19 @@ export const HOME_CHAIN: WalletChainId = 'cyberia';
 export const shippedChains = (): readonly WalletChain[] => SHIPPED_CHAINS;
 
 /**
+ * The wallet's own network for an EVM chain id, switched on or not.
+ *
+ * A switch decides what a portfolio reads on every refresh; it does not decide
+ * what a network is *called*. The site's DEX pages ask this to label an
+ * analytics event and to address a price index, and they are not the wallet —
+ * asking through `walletChains()` made both answers depend on a list the
+ * visitor keeps for their own reasons, so a chart went missing on a chain
+ * somebody had simply never switched on.
+ */
+export const shippedChainByEvmId = (chainId: number): WalletChain | null =>
+    SHIPPED_CHAINS.find((chain) => chain.chainId === chainId) ?? null;
+
+/**
  * Networks the user added themselves, layered over the shipped registry.
  *
  * Module state rather than a ref, mirroring how the vault holds the decrypted
