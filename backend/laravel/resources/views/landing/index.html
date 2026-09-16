@@ -3,10 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <title>Cyberia — The liquidity home of Ritual DEX</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<!--
+ On iOS the page you are looking at when you press "Add to Home Screen" is the
+ page the icon launches, manifest or not — and it is also the document iOS sizes
+ the app's window from, once, at install. This page is where most people are
+ when they do it, so it carries the app's own window settings or the wallet
+ inherits a window laid out for a web page: the web view stops short of the
+ screen and leaves a band along the bottom that nothing inside the page can
+ paint over, because the page does not reach it.
+-->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="theme-color" content="#0b0f10" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Cyberia" />
 <script>
 /*
