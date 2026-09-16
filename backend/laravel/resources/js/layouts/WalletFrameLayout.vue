@@ -44,8 +44,47 @@ import { isNativeShell } from '@/lib/native';
 
 const { scheme } = useWalletTheme();
 
-const APP_VIEWPORT =
-    'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+/**
+ * The window as it was before this file touched anything, kept for the readout
+ * in Settings. iOS lays a standalone window out once, and if the number changes
+ * after we edit the viewport meta then the edit is what shrank it.
+ */
+const bootWindowHeight = typeof window === 'undefined' ? 0 : window.innerHeight;
+
+/**
+ * The zoom clamps, added to whatever the document already asked for.
+ *
+ * It used to be a whole viewport string written here, which meant every launch
+ * had its viewport *replaced* a moment after it was read — and on iOS a
+ * standalone window is laid out from that meta, once. Rewriting it wholesale is
+ * the kind of thing that re-runs the layout with a different answer, so now
+ * nothing is restated: the document's own `width`, `initial-scale` and, above
+ * all, `viewport-fit=cover` stay exactly as they were written, and only what is
+ * missing is appended.
+ */
+const lockedViewport = (current: string): string => {
+    const parts = current
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+
+    const declares = (name: string): boolean =>
+        parts.some((part) => part.split('=')[0].trim() === name);
+
+    if (!declares('viewport-fit')) {
+        parts.push('viewport-fit=cover');
+    }
+
+    if (!declares('maximum-scale')) {
+        parts.push('maximum-scale=1');
+    }
+
+    if (!declares('user-scalable')) {
+        parts.push('user-scalable=no');
+    }
+
+    return parts.join(', ');
+};
 
 /**
  * Is this window an application rather than a tab?
@@ -163,10 +202,16 @@ onMounted(() => {
     }
 
     siteViewport = meta.content;
-    meta.content = APP_VIEWPORT;
+    document.documentElement.dataset.bootHeight = String(bootWindowHeight);
     document.documentElement.dataset.appWindow = 'true';
     readWindowInsets();
     window.addEventListener('resize', readWindowInsets);
+
+    const locked = lockedViewport(siteViewport);
+
+    if (locked !== siteViewport) {
+        meta.content = locked;
+    }
 });
 
 watch(scheme, () => paintWindowChrome());
@@ -191,6 +236,7 @@ onBeforeUnmount(() => {
     window.removeEventListener('resize', readWindowInsets);
     delete document.documentElement.dataset.appWindow;
     delete document.documentElement.dataset.windowInsets;
+    delete document.documentElement.dataset.bootHeight;
 });
 </script>
 
