@@ -148,6 +148,7 @@ const readFrameProbe = (): void => {
     frameProbe.value = [
         `win ${px(window.innerWidth)}×${px(window.innerHeight)} vv ${px(window.visualViewport?.height)} scr ${px(window.screen.height)}`,
         `safe ${safe}`,
+        `insets=${document.documentElement.dataset.windowInsets ?? '—'}`,
         `app=${document.documentElement.dataset.appWindow ?? '0'} sa=${
             (window.navigator as { standalone?: boolean }).standalone === true
                 ? 1

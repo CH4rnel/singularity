@@ -548,6 +548,18 @@ html[data-app-window]:has(.cw-frame) {
     html[data-app-window] .cw-shell {
         border: 0;
         border-radius: 0;
+    }
+
+    /*
+     * And the insets themselves, only where the window has not already had them
+     * taken out of it — `data-window-insets`, decided by measuring the window
+     * against the screen in `WalletFrameLayout`. An iPhone home-screen app is
+     * handed a window that stops under the status bar and still reports the
+     * full insets, so padding by them there is the same space counted twice:
+     * dead ground over the account chips and a strip under the tab bar that
+     * pushes the navigation up off the bottom of the screen.
+     */
+    html[data-app-window][data-window-insets='page'] .cw-shell {
         padding-top: env(safe-area-inset-top);
     }
 
@@ -560,11 +572,13 @@ html[data-app-window]:has(.cw-frame) {
      * ends underneath it. Inside the pane the same space is scrollable, the
      * ground runs on without an edge, and the button can be reached.
      */
-    html[data-app-window] .cw-shell:not(:has(.cw-tabs)) .cw-body {
+    html[data-app-window][data-window-insets='page']
+        .cw-shell:not(:has(.cw-tabs))
+        .cw-body {
         padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
     }
 
-    html[data-app-window] .cw-tabs {
+    html[data-app-window][data-window-insets='page'] .cw-tabs {
         height: calc(66px + env(safe-area-inset-bottom));
         padding-bottom: env(safe-area-inset-bottom);
     }

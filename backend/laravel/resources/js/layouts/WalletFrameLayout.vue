@@ -71,6 +71,32 @@ const isAppWindow = (): boolean => {
     );
 };
 
+/**
+ * Who has already paid for the system's bands — the window, or the page?
+ *
+ * An app window is supposed to be the whole screen, and then `env(safe-area-*)`
+ * is the page's share of it: the strip under the status bar, the strip over the
+ * home indicator. That is what the frame pads for.
+ *
+ * An iPhone home-screen app does not work that way. iOS hands the web view a
+ * window that is *already* inset — 848 of an 896pt screen, the missing 48 being
+ * the status bar — and goes on reporting the insets anyway. Padding by them
+ * there counts the same space twice: 48pt of dead ground above the account
+ * chips, and 34 under the tab bar, which is the strip that reads as a band
+ * pushing the navigation up off the bottom of the screen.
+ *
+ * So the question is asked of the window rather than assumed: a window shorter
+ * than the screen has had its insets taken out of it already, and the page adds
+ * nothing. It is re-asked on resize, because a rotation changes both numbers.
+ */
+const readWindowInsets = (): void => {
+    const screenHeight = window.screen?.height ?? 0;
+    const covered =
+        screenHeight === 0 || window.innerHeight >= screenHeight - 1;
+
+    document.documentElement.dataset.windowInsets = covered ? 'page' : 'system';
+};
+
 const metaTag = (name: string): HTMLMetaElement | null =>
     document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
 
@@ -139,6 +165,8 @@ onMounted(() => {
     siteViewport = meta.content;
     meta.content = APP_VIEWPORT;
     document.documentElement.dataset.appWindow = 'true';
+    readWindowInsets();
+    window.addEventListener('resize', readWindowInsets);
 });
 
 watch(scheme, () => paintWindowChrome());
@@ -160,7 +188,9 @@ onBeforeUnmount(() => {
 
     siteViewport = null;
     siteThemeColour = null;
+    window.removeEventListener('resize', readWindowInsets);
     delete document.documentElement.dataset.appWindow;
+    delete document.documentElement.dataset.windowInsets;
 });
 </script>
 
