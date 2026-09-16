@@ -254,6 +254,10 @@ export const walletMessages: Messages = {
             'No prices could be read just now. Balances are live; their value is not.',
         networks: 'Networks',
         derivedCount: '{count} derived',
+        navMore: 'More',
+        // Said under the balance instead of a bordered box with a heading, a
+        // paragraph and a button that repeats Receive.
+        emptyShort: 'Nothing here yet — top up an address',
         emptyTitle: 'No balances yet',
         emptyBody:
             'This vault is new. Receive assets to one of your addresses to get started.',
@@ -327,8 +331,10 @@ export const walletMessages: Messages = {
         networksHome: 'Home chain',
         networksChainId: 'chain {id}',
         networksIndexed: 'balances · tokens · history',
-        networksNoIndex: 'balances only · no keyless index here',
-        networksNoExplorer: 'balances only · no public explorer',
+        // A row's exception, in as few words as a row can carry: why there
+        // is no index is answered on that network's own screen.
+        networksNoIndex: 'balances only',
+        networksNoExplorer: 'no explorer',
         networksSwitchOn: 'Switch on',
         networksSwitchOff: 'On',
         networksEmpty: 'Nothing in the catalogue matches “{query}”.',
@@ -1841,6 +1847,8 @@ export const walletMessages: Messages = {
             'Цены сейчас прочитать не удалось. Остатки настоящие, их стоимость — нет.',
         networks: 'Сети',
         derivedCount: 'выведено: {count}',
+        navMore: 'Ещё',
+        emptyShort: 'Пока пусто — пополните адрес',
         emptyTitle: 'Балансов пока нет',
         emptyBody:
             'Хранилище новое. Пополните любой из своих адресов, чтобы начать.',
@@ -1913,8 +1921,8 @@ export const walletMessages: Messages = {
         networksHome: 'Домашняя сеть',
         networksChainId: 'chain {id}',
         networksIndexed: 'балансы · токены · история',
-        networksNoIndex: 'только балансы · индекса без ключа здесь нет',
-        networksNoExplorer: 'только балансы · нет публичного обозревателя',
+        networksNoIndex: 'только балансы',
+        networksNoExplorer: 'нет обозревателя',
         networksSwitchOn: 'Включить',
         networksSwitchOff: 'Вкл.',
         networksEmpty: 'В каталоге ничего не найдено по запросу «{query}».',
@@ -3358,6 +3366,8 @@ export const walletMessages: Messages = {
         priceOffline: '现在读不到价格。余额是实时的，它们的价值不是。',
         networks: '网络',
         derivedCount: '已派生 {count} 个',
+        navMore: '更多',
+        emptyShort: '还没有资产 — 先给地址充值',
         emptyTitle: '还没有余额',
         emptyBody: '这是一个新的保险库。往你的任一地址收一笔资产就可以开始了。',
         showAddress: '显示地址',
@@ -3427,8 +3437,8 @@ export const walletMessages: Messages = {
         networksHome: '主链',
         networksChainId: 'chain {id}',
         networksIndexed: '余额 · 代币 · 历史',
-        networksNoIndex: '仅余额 · 此处没有免密钥索引',
-        networksNoExplorer: '仅余额 · 没有公开浏览器',
+        networksNoIndex: '仅余额',
+        networksNoExplorer: '没有浏览器',
         networksSwitchOn: '开启',
         networksSwitchOff: '已开',
         networksEmpty: '目录中没有与“{query}”匹配的网络。',

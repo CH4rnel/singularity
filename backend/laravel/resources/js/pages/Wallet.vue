@@ -5,11 +5,9 @@ import {
     Bot,
     ExternalLink,
     Images,
-    Landmark,
     Lock,
     MessageCircle,
     Newspaper,
-    Rocket,
     WalletCards,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
@@ -35,6 +33,7 @@ import WalletLain from '@/components/wallet/WalletLain.vue';
 import WalletLaunchpad from '@/components/wallet/WalletLaunchpad.vue';
 import WalletLocked from '@/components/wallet/WalletLocked.vue';
 import WalletMarkets from '@/components/wallet/WalletMarkets.vue';
+import WalletMore from '@/components/wallet/WalletMore.vue';
 import WalletNetworkDetail from '@/components/wallet/WalletNetworkDetail.vue';
 import WalletNetworks from '@/components/wallet/WalletNetworks.vue';
 import WalletNft from '@/components/wallet/WalletNft.vue';
@@ -169,6 +168,7 @@ type Section =
     | 'networks'
     | 'security'
     | 'preferences'
+    | 'more'
     | 'feed'
     | 'profile'
     | 'launchpad'
@@ -294,6 +294,7 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
             { id: 'earn', label: () => t('earnTitle') },
             { id: 'daily', label: () => t('dailyTitle') },
             { id: 'browse', label: () => t('browseTitle') },
+            { id: 'gas', label: () => t('gasStation') },
             { id: 'security', label: () => t('navSecurity') },
             { id: 'preferences', label: () => t('navPreferences') },
         ],
@@ -341,9 +342,7 @@ const TABS: { id: Section; label: () => string; icon: Component }[] = [
     { id: 'portfolio', label: () => t('tabWallet'), icon: WalletCards },
     { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
     { id: 'feed', label: () => t('feed'), icon: Newspaper },
-    { id: 'launchpad', label: () => t('tabLaunch'), icon: Rocket },
     { id: 'nft', label: () => t('nftTitle'), icon: Images },
-    { id: 'dao', label: () => t('dao'), icon: Landmark },
     { id: 'lain', label: () => t('navLain'), icon: Bot },
 ];
 
@@ -362,6 +361,7 @@ const TAB_OF: Record<Section, Section> = {
     networks: 'portfolio',
     security: 'portfolio',
     preferences: 'portfolio',
+    more: 'portfolio',
     gas: 'portfolio',
     proxy: 'portfolio',
     earn: 'portfolio',
@@ -372,8 +372,8 @@ const TAB_OF: Record<Section, Section> = {
     browse: 'browse',
     feed: 'feed',
     profile: 'feed',
-    launchpad: 'launchpad',
-    dao: 'dao',
+    launchpad: 'portfolio',
+    dao: 'portfolio',
     lain: 'lain',
     nft: 'nft',
     nftMint: 'nft',
@@ -471,14 +471,20 @@ const PARENTS: Partial<Record<Section, Section>> = {
     chart: 'markets',
     networks: 'portfolio',
     importAccount: 'accounts',
-    gas: 'portfolio',
     proxy: 'security',
-    preferences: 'portfolio',
     earn: 'portfolio',
     stocks: 'portfolio',
     bridge: 'portfolio',
-    crosschain: 'portfolio',
-    daily: 'portfolio',
+    more: 'portfolio',
+    // Reached from "Ещё" and nowhere else on a phone, so back goes there
+    // rather than skipping the screen the person was actually on.
+    gas: 'more',
+    preferences: 'more',
+    analytics: 'more',
+    crosschain: 'more',
+    browse: 'more',
+    daily: 'more',
+    accounts: 'more',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -1551,12 +1557,25 @@ watch(
                             {{ t('tgCustody') }}
                         </p>
 
+                        <!--
+                            And the part that is only true while the phrase
+                            exists nowhere else: Telegram empties this storage
+                            without asking. It stops once the phrase is written
+                            down, which is exactly when it stops being true.
+                        -->
+                        <p
+                            v-if="telegram && !wallet.backedUp.value"
+                            class="cw-note cw-note-warn"
+                            style="margin-bottom: 16px"
+                        >
+                            {{ t('tgStorageWarning') }}
+                        </p>
+
                         <WalletPortfolio
                             :wallet="wallet"
                             :prices="prices"
                             :token-prices="tokenPrices"
                             :online="online"
-                            :telegram="telegram"
                             @open="openChain"
                             @send="openSend()"
                             @swap="openSwap()"
@@ -1564,17 +1583,14 @@ watch(
                             @add-network="openSection('networks')"
                             @tokens="openSection('tokens')"
                             @markets="openSection('markets')"
-                            @daily="openSection('daily')"
-                            @analytics="openSection('analytics')"
-                            @accounts="openSection('accounts')"
-                            @security="openSection('security')"
-                            @gas="openSection('gas')"
-                            @crosschain="openSection('crosschain')"
-                            @earn="openSection('earn')"
                             @stocks="openSection('stocks')"
                             @bridge="openSection('bridge')"
-                            @browse="openSection('browse')"
-                            @preferences="openSection('preferences')"
+                            @earn="openSection('earn')"
+                            @launchpad="openSection('launchpad')"
+                            @dao="openSection('dao')"
+                            @more="openSection('more')"
+                            @accounts="openSection('accounts')"
+                            @security="openSection('security')"
                         />
                     </template>
 
@@ -1615,6 +1631,25 @@ watch(
                       exchange's book where a book exists, and this chain's own
                       pools where it does not.
                     -->
+                    <!--
+                      The rest of the wallet, one level below the portfolio's
+                      eight names. It is a list and not a screen full of tiles,
+                      because a destination needs a name and nothing else.
+                    -->
+                    <WalletMore
+                        v-else-if="section === 'more'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
+                        @daily="openSection('daily')"
+                        @analytics="openSection('analytics')"
+                        @crosschain="openSection('crosschain')"
+                        @browse="openSection('browse')"
+                        @gas="openSection('gas')"
+                        @security="openSection('security')"
+                        @accounts="openSection('accounts')"
+                        @preferences="openSection('preferences')"
+                    />
+
                     <WalletMarkets
                         v-else-if="section === 'markets'"
                         :wallet="wallet"

@@ -98,10 +98,6 @@ const accountLabel = computed(() =>
         : t('accountPrimaryName'),
 );
 
-const accountKind = computed(() =>
-    activeRecord.value ? accountKindLabel(activeRecord.value, t) : '',
-);
-
 const accountRows = computed(() =>
     props.wallet.accountRecords.value.map((record) => ({
         record,
@@ -210,9 +206,15 @@ const use = async (id: string): Promise<void> => {
                         "
                     />
                 </span>
+                <!--
+                  The name, and not what kind of account it is. "ИЗ ВАШЕЙ
+                  ФРАЗЫ" sat under it on every screen of the wallet, saying the
+                  same thing about the same account forever — and the one place
+                  the kind decides anything is the list below, where several
+                  accounts are being told apart, which is where it still is.
+                -->
                 <span style="min-width: 0">
                     <span class="cw-chip-name">{{ accountLabel }}</span>
-                    <span class="cw-chip-sub">{{ accountKind }}</span>
                 </span>
                 <span class="cw-chip-chev">{{
                     open === 'account' ? '▴' : '▾'

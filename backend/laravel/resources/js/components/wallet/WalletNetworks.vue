@@ -53,13 +53,17 @@ const emit = defineEmits<{
 const { t } = useLocale(walletMessages);
 
 const query = ref('');
-type Filter = 'all' | 'on' | 'indexed';
+/*
+ * Two, and the third one went. "With a token index" is a question about how a
+ * network is read rather than about which network somebody is looking for, and
+ * what the list is actually opened for is answered by the search field.
+ */
+type Filter = 'all' | 'on';
 const filter = ref<Filter>('all');
 
 const FILTERS: { id: Filter; label: () => string }[] = [
     { id: 'all', label: () => t('networksFilterAll') },
     { id: 'on', label: () => t('networksFilterOn') },
-    { id: 'indexed', label: () => t('networksFilterIndexed') },
 ];
 
 const enabled = computed(() => props.wallet.enabledNetworks.value);
@@ -128,10 +132,6 @@ const rows = computed(() => {
             return false;
         }
 
-        if (filter.value === 'indexed' && !row.indexed) {
-            return false;
-        }
-
         return (
             term === '' ||
             row.label.toLowerCase().includes(term) ||
@@ -160,10 +160,17 @@ const toggle = (row: Row): void => {
     }
 };
 
-/** What a row promises, in one line, and never more than is true. */
-const capabilityOf = (row: Row): string =>
+/**
+ * What a row cannot do — and nothing at all when it can do everything.
+ *
+ * Every row used to carry its capabilities: "балансы · токены · история" under
+ * a hundred and twenty-eight networks, which is the normal case printed a
+ * hundred and twenty-eight times. A line is worth its row only where it is the
+ * exception, so what is left is the two ways a network is *less* than the rest.
+ */
+const limitOf = (row: Row): string | null =>
     row.indexed
-        ? t('networksIndexed')
+        ? null
         : row.explorer
           ? t('networksNoIndex')
           : t('networksNoExplorer');
@@ -175,29 +182,26 @@ const capabilityOf = (row: Row): string =>
             ← {{ t('navPortfolio') }}
         </button>
 
-        <h2 class="cw-title" style="margin: 22px 0 8px">
-            {{ t('networksTitle') }}
-        </h2>
-        <p class="cw-prose">{{ t('networksBody') }}</p>
-
-        <div class="cw-card" style="margin-top: 18px; padding: 14px 16px">
-            <div class="cw-label">{{ t('networksOnLabel') }}</div>
-            <div class="cw-total" style="margin-top: 8px; font-size: 26px">
-                {{ t('networksOnCount', { on: onCount, total: all.length }) }}
-            </div>
-            <p
-                class="cw-prose"
-                style="margin-top: 10px; font-size: 11px; line-height: 1.6"
-            >
-                {{ t('networksCost') }}
-            </p>
+        <!--
+          The title, and the one number this screen is about. What stood
+          between them was a paragraph explaining that the seed derives every
+          network and that a switch only decides whether a balance is read,
+          then a card repeating the count under a heading of its own and a
+          second paragraph about what being switched on costs — three
+          explanations of a switch, above the switches.
+        -->
+        <div class="cw-row" style="margin-top: 22px">
+            <h2 class="cw-title">{{ t('networksTitle') }}</h2>
+            <span class="cw-label" style="color: var(--cw-faint)">{{
+                t('networksOnCount', { on: onCount, total: all.length })
+            }}</span>
         </div>
 
         <input
             v-model="query"
             type="search"
             class="cw-input"
-            style="margin-top: 18px"
+            style="margin-top: 16px"
             :placeholder="t('networksSearch')"
             :aria-label="t('networksSearch')"
         />
@@ -265,14 +269,21 @@ const capabilityOf = (row: Row): string =>
                                 font: 400 10px/1.4 var(--cw-mono);
                                 color: var(--cw-dim);
                             "
-                            >{{ row.symbol
-                            }}<template v-if="row.chainId !== null">
-                                ·
-                                {{
-                                    t('networksChainId', { id: row.chainId })
-                                }}</template
-                            >
-                            · {{ capabilityOf(row) }}</span
+                            ><!--
+                              What identifies the network, and then what it
+                              cannot do. The ticker used to lead this line and
+                              was the least useful thing on it: forty rows here
+                              read "ETH", while the chain id is the one value
+                              that is different for every row and is what
+                              somebody checks before switching one on. A chain
+                              with no id of that kind keeps its ticker.
+                            -->{{
+                                row.chainId !== null
+                                    ? t('networksChainId', { id: row.chainId })
+                                    : row.symbol
+                            }}<template v-if="limitOf(row)">
+                                · {{ limitOf(row) }}</template
+                            ></span
                         >
                     </button>
 
@@ -285,24 +296,16 @@ const capabilityOf = (row: Row): string =>
                     <button
                         v-else
                         type="button"
-                        class="cw-ghost"
+                        class="cw-switch"
+                        :class="{ 'cw-switch-on': row.on }"
                         :aria-pressed="row.on"
-                        :style="
-                            row.on
-                                ? {
-                                      borderColor: 'var(--cw-accent)',
-                                      color: 'var(--cw-accent)',
-                                  }
-                                : undefined
-                        "
-                        @click="toggle(row)"
-                    >
-                        {{
+                        :aria-label="`${row.label} · ${
                             row.on
                                 ? t('networksSwitchOff')
                                 : t('networksSwitchOn')
-                        }}
-                    </button>
+                        }`"
+                        @click="toggle(row)"
+                    ></button>
                 </div>
             </div>
         </div>
