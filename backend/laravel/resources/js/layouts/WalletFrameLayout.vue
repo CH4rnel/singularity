@@ -89,15 +89,16 @@ let siteThemeColour: string | null = null;
  * has to actually be the colour the wallet is painted in, rather than a dark
  * site background hidden under a frame that covers it.
  *
- * `color-scheme` is sent with them, because a browser decides several things it
- * draws itself — scrollbars, form controls, the tint it picks when it has to
- * guess — from what the page says it is, and the wallet's scheme is not the
- * site's `dark` class.
+ * `color-scheme` is deliberately *not* sent with them, though it was for one
+ * release. The wallet already declares it on `.cw`, where it does the job it is
+ * for — the scrollbars and the native controls the wallet does not draw. Saying
+ * it again on the root says it to the system as well, and the system answered by
+ * painting the bottom band in contrast: a white strip under a dark wallet and a
+ * black one under a light wallet, which turned one band into two.
  *
- * All three are read off the frame's own `--cw-app` and its live scheme rather
- * than written down again here: the palette lives in one file, and a second
- * copy of a hex value is a copy that goes stale the first time somebody adjusts
- * the ground.
+ * Both values are read off the frame's own `--cw-app` rather than written down
+ * again here: the palette lives in one file, and a second copy of a hex value is
+ * a copy that goes stale the first time somebody adjusts the ground.
  */
 const paintWindowChrome = (): void => {
     const frame = document.querySelector('.cw-frame');
@@ -123,7 +124,6 @@ const paintWindowChrome = (): void => {
     }
 
     document.documentElement.style.backgroundColor = ground;
-    document.documentElement.style.colorScheme = scheme.value;
     document.body.style.backgroundColor = ground;
 };
 
@@ -156,7 +156,6 @@ onBeforeUnmount(() => {
     }
 
     document.documentElement.style.removeProperty('background-color');
-    document.documentElement.style.removeProperty('color-scheme');
     document.body.style.removeProperty('background-color');
 
     siteViewport = null;
