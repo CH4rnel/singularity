@@ -512,6 +512,56 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 /*
+ * In an app window on a phone the wallet reaches the edges of the screen.
+ *
+ * The frame was drawn as a card on a desk — a margin around the shell, a
+ * border, a rounded corner, and the safe-area insets held as padding on the
+ * page so the site's own pages keep clear of the home indicator. On the site
+ * that is right, and there is a site around it to justify the desk. In an
+ * installed app there is nothing else on the screen, so the same construction
+ * reads as a fault: the navigation floats a finger's width above the bottom
+ * edge with a strip of ground under it, and another strip above the account
+ * chips, both painted by the page beneath rather than by the wallet — black on
+ * a light wallet, which is what gave it away.
+ *
+ * So the insets move inside. The shell takes the whole window and pads itself
+ * by the top inset, which puts its own ground (and grid) under the status bar;
+ * the tab bar grows by the bottom inset and keeps its 66px of buttons above the
+ * gesture handle, so the bar's own panel is what sits behind it. A screen with
+ * no tab bar — onboarding, the lock — pads the shell instead, or the last line
+ * of a form would end under the handle.
+ *
+ * Phone widths only. The desktop app is an app window too, and there the margin
+ * is a window's inner margin rather than dead space; its insets are zero
+ * anyway.
+ */
+@media (max-width: 1023px) {
+    html[data-app-window] .cw-window {
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+
+    html[data-app-window] .cw-frame {
+        padding: 0;
+    }
+
+    html[data-app-window] .cw-shell {
+        border: 0;
+        border-radius: 0;
+        padding-top: env(safe-area-inset-top);
+    }
+
+    html[data-app-window] .cw-shell:not(:has(.cw-tabs)) {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    html[data-app-window] .cw-tabs {
+        height: calc(66px + env(safe-area-inset-bottom));
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+/*
  * Everything above the shell is chrome and keeps its height; only the shell
  * absorbs what is left. Without this the masthead and an error note shrink
  * first, because `flex: 0 1 auto` lets them.

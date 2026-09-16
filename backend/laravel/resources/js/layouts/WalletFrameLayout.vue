@@ -38,8 +38,11 @@
  * not a bug fix. The site's own meta is restored on the way out, so the rest of
  * Cyberia is untouched by this.
  */
-import { onBeforeUnmount, onMounted } from 'vue';
+import { onBeforeUnmount, onMounted, watch } from 'vue';
+import { useWalletTheme } from '@/composables/useWalletTheme';
 import { isNativeShell } from '@/lib/native';
+
+const { scheme } = useWalletTheme();
 
 const APP_VIEWPORT =
     'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
@@ -68,13 +71,48 @@ const isAppWindow = (): boolean => {
     );
 };
 
-const viewportMeta = (): HTMLMetaElement | null =>
-    document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+const metaTag = (name: string): HTMLMetaElement | null =>
+    document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
 
 let siteViewport: string | null = null;
+let siteThemeColour: string | null = null;
+
+/**
+ * The system paints a band of its own — the status bar, the address bar, the
+ * area behind the gesture handle — and it paints them the colour this meta
+ * names. The site's is a near-black that was true of everything until the
+ * wallet could be light, and then a light wallet sat between two black bars
+ * that looked like a rendering fault rather than a frame.
+ *
+ * The colour is read off the frame's own `--cw-app` rather than written down
+ * again here: the palette is in one file and a second copy of a hex value is a
+ * copy that goes stale the first time somebody adjusts the ground.
+ */
+const paintWindowChrome = (): void => {
+    const meta = metaTag('theme-color');
+    const frame = document.querySelector('.cw-frame');
+
+    if (!meta || !frame) {
+        return;
+    }
+
+    const ground = getComputedStyle(frame).getPropertyValue('--cw-app').trim();
+
+    if (!ground) {
+        return;
+    }
+
+    if (siteThemeColour === null) {
+        siteThemeColour = meta.content;
+    }
+
+    meta.content = ground;
+};
 
 onMounted(() => {
-    const meta = viewportMeta();
+    paintWindowChrome();
+
+    const meta = metaTag('viewport');
 
     if (!meta || !isAppWindow()) {
         return;
@@ -85,21 +123,29 @@ onMounted(() => {
     document.documentElement.dataset.appWindow = 'true';
 });
 
-onBeforeUnmount(() => {
-    const meta = viewportMeta();
+watch(scheme, () => paintWindowChrome());
 
-    if (meta && siteViewport !== null) {
-        meta.content = siteViewport;
+onBeforeUnmount(() => {
+    const viewport = metaTag('viewport');
+    const themeColour = metaTag('theme-color');
+
+    if (viewport && siteViewport !== null) {
+        viewport.content = siteViewport;
+    }
+
+    if (themeColour && siteThemeColour !== null) {
+        themeColour.content = siteThemeColour;
     }
 
     siteViewport = null;
+    siteThemeColour = null;
     delete document.documentElement.dataset.appWindow;
 });
 </script>
 
 <template>
     <div
-        class="flex h-dvh flex-col bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground"
+        class="cw-window flex h-dvh flex-col bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-foreground"
     >
         <main class="flex min-h-0 flex-1 flex-col">
             <slot />
