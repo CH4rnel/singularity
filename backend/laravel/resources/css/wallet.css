@@ -496,6 +496,22 @@ body:has(.cw-frame) {
 }
 
 /*
+ * The zoom half of the same rule, and the half that does not depend on a meta
+ * tag being read. A browser offers pinch-zoom only while the root's
+ * `touch-action` still allows it, so naming the two pans takes the gesture away
+ * — double-tap-to-zoom with it — and leaves every pane inside scrolling exactly
+ * as before, since panning is all they ever asked for.
+ *
+ * `WalletFrameLayout` sets `data-app-window` and it is deliberately not every
+ * container: in a browser tab the wallet stays zoomable. Magnification is how
+ * some people read an 11px label, and an app that cannot be zoomed is only
+ * acceptable where the window is the application itself.
+ */
+html[data-app-window]:has(.cw-frame) {
+    touch-action: pan-x pan-y;
+}
+
+/*
  * Everything above the shell is chrome and keeps its height; only the shell
  * absorbs what is left. Without this the masthead and an error note shrink
  * first, because `flex: 0 1 auto` lets them.
