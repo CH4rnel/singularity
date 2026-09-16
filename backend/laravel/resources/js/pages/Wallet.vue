@@ -68,6 +68,7 @@ import {
     telegramHaptic,
 } from '@/lib/telegram';
 import {
+    createMnemonic,
     formatUnits,
     unreadChatCount,
     walletChain,
@@ -205,9 +206,30 @@ const payoutSaved = ref(false);
  */
 const restoring = ref(false);
 
-const stage = computed<'onboarding' | 'locked' | 'app'>(() => {
-    if (restoring.value || !wallet.exists.value) {
-        return 'onboarding';
+/**
+ * There is no welcome screen. A device with no vault gets one made for it.
+ *
+ * The screen that used to stand here asked a newcomer to choose between two
+ * words before anything existed — and the honest answer to "create or import"
+ * is that almost everybody arriving has nothing to import. Every step after it
+ * (the risk notice, the held reveal, the backup check, the password) was a form
+ * standing between a person and an address that takes one millisecond to
+ * derive, so `starting` is a frame long: the phrase is generated here, the
+ * vault is written open, and the portfolio is what a first launch shows.
+ *
+ * Nothing about custody changed. The phrase is still made on the device and
+ * never sent anywhere, it is still the only way back, and the two facts that
+ * were previously enforced by a ritual — nobody has written it down, nothing
+ * locks it — are stated on the portfolio itself, where they stay until they
+ * stop being true. `import` remains for the phrase somebody already has.
+ */
+const stage = computed<'import' | 'starting' | 'locked' | 'app'>(() => {
+    if (restoring.value) {
+        return 'import';
+    }
+
+    if (!wallet.exists.value) {
+        return 'starting';
     }
 
     return wallet.unlocked.value ? 'app' : 'locked';
@@ -1014,7 +1036,7 @@ const networkAdded = (added: WalletChainId): void => {
 const adopt = async (
     phrase: string,
     password: string | null,
-    origin: 'created' | 'imported' = 'created',
+    origin: 'created' | 'imported' | 'auto' = 'created',
     backedUp = true,
 ): Promise<void> => {
     error.value = null;
@@ -1026,10 +1048,15 @@ const adopt = async (
 
         /*
          * The onboarding milestone, recorded at the only point where it is
-         * unambiguously true: the vault is sealed and open. Both branches end
+         * unambiguously true: the vault is written and open. Every branch ends
          * here — a phrase this device generated and one the user typed in are
          * the same thing by now — so the branch travels with the event rather
          * than being guessed from it later.
+         *
+         * `auto` is a third branch and not a kind of `created`: a wallet that
+         * made itself on first open is not somebody deciding to make one, and
+         * counting the two together would report a funnel where every visitor
+         * converts.
          *
          * Neither the phrase, the password nor anything derived from them is
          * involved; there is no field in the taxonomy that could hold one.
@@ -1045,6 +1072,23 @@ const adopt = async (
         error.value =
             failure instanceof Error ? failure.message : String(failure);
     }
+};
+
+/**
+ * First launch: the wallet makes itself.
+ *
+ * Open, with no password — a prompt at this point is asked of somebody who has
+ * not seen the wallet yet, and Security can add one later without touching a
+ * single account — and `backedUp: false`, because it is true: nobody has seen
+ * these twelve words. That is the whole reason the portfolio carries the two
+ * safety lines; they are what the skipped ritual turned into.
+ */
+const startFresh = async (): Promise<void> => {
+    if (wallet.exists.value || restoring.value) {
+        return;
+    }
+
+    await adopt(createMnemonic(12), null, 'auto', false);
 };
 
 const useForPayouts = async (address: string): Promise<void> => {
@@ -1064,6 +1108,7 @@ const trackConnection = (): void => {
 };
 
 onMounted(() => {
+    void startFresh();
     takeSwapRequest();
     applySwapRequest();
     trackConnection();
@@ -1416,14 +1461,26 @@ watch(
                 <div class="cw-body">
                     <div v-if="stage !== 'app'" class="cw-column">
                         <WalletOnboarding
-                            v-if="stage === 'onboarding'"
+                            v-if="stage === 'import'"
                             :busy="wallet.busy.value"
-                            :start="restoring ? 'import' : 'welcome'"
-                            :cancellable="restoring"
-                            :telegram="telegram"
                             @adopt="adopt"
                             @cancel="restoring = false"
                         />
+                        <!--
+                          A frame, normally: the phrase is generated and the
+                          vault written before the first balance is asked for.
+                          It says what is happening anyway, because the one
+                          case where it stays on screen is the one where
+                          something went wrong, and a blank column would be the
+                          worst way to say so. The error itself prints above.
+                        -->
+                        <p
+                            v-else-if="stage === 'starting'"
+                            class="cw-prose"
+                            style="margin-top: 28px"
+                        >
+                            {{ t('preparingWallet') }}
+                        </p>
                         <WalletLocked
                             v-else
                             :wallet="wallet"
@@ -1499,6 +1556,7 @@ watch(
                             :prices="prices"
                             :token-prices="tokenPrices"
                             :online="online"
+                            :telegram="telegram"
                             @open="openChain"
                             @send="openSend()"
                             @swap="openSwap()"

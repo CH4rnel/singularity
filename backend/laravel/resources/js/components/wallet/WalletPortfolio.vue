@@ -32,13 +32,24 @@ import { walletMessages } from '@/lib/walletMessages';
  * about the balance and "—" is a claim about the connection.
  */
 
-const props = defineProps<{
-    wallet: MultiWallet;
-    prices: Record<string, number | null>;
-    /** Chain id → (lowercased contract → USD price). */
-    tokenPrices: Record<string, Record<string, number>>;
-    online: boolean;
-}>();
+const props = withDefaults(
+    defineProps<{
+        wallet: MultiWallet;
+        prices: Record<string, number | null>;
+        /** Chain id → (lowercased contract → USD price). */
+        tokenPrices: Record<string, Record<string, number>>;
+        online: boolean;
+        /**
+         * Inside Telegram's frame, where the storage this vault sits in is
+         * Telegram's own and Telegram empties it without asking. That used to
+         * be said on the first onboarding screen; a first launch has no screen
+         * any more, so it is said here — beside "the phrase has never been
+         * written down", which is the fact that makes it survivable.
+         */
+        telegram?: boolean;
+    }>(),
+    { telegram: false },
+);
 
 const emit = defineEmits<{
     open: [chain: WalletChainId];
@@ -249,6 +260,10 @@ const safety = computed(() => {
 
     if (props.wallet.protection.value === 'none') {
         lines.push(t('safetyPassword'));
+    }
+
+    if (props.telegram && !props.wallet.backedUp.value) {
+        lines.push(t('tgStorageWarning'));
     }
 
     return lines;

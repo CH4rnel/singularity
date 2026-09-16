@@ -241,11 +241,13 @@ onBeforeUnmount(() => {
         </div>
 
         <!--
-          The two things somebody can decline at setup, said here for as long
-          as they are still declined. Neither is an error and neither blocks
+          The two things a first launch does not ask for, said here for as long
+          as they are still missing. Neither is an error and neither blocks
           anything — they are the two facts that decide whether this wallet can
           be got back, and a wallet that stayed quiet about them would be
-          keeping a secret from its owner about their own money.
+          keeping a secret from its owner about their own money. Since the
+          setup ritual is gone, this screen is where both are put right, and
+          the portfolio carries the same two lines with a door to it.
         -->
         <p
             v-if="!wallet.backedUp.value"

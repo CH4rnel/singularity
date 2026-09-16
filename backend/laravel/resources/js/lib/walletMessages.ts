@@ -188,6 +188,8 @@ export const walletMessages: Messages = {
          * behind a tile among eleven others — which is where a thing goes when
          * nobody is meant to find it.
          */
+        // Shown while the first launch writes a vault nobody asked for.
+        preparingWallet: 'Setting up your wallet…',
         safetyTitle: 'This wallet can still be lost',
         safetyBackup: 'The phrase has never been written down.',
         safetyPassword: 'There is no password on this device.',
@@ -1778,6 +1780,7 @@ export const walletMessages: Messages = {
         addingPassword: 'Шифруем…',
         words12: '12 слов',
         words24: '24 слова',
+        preparingWallet: 'Готовим кошелёк…',
         safetyTitle: 'Этот кошелёк ещё можно потерять',
         safetyBackup: 'Фраза ни разу не была записана.',
         safetyPassword: 'На этом устройстве нет пароля.',
@@ -3297,6 +3300,7 @@ export const walletMessages: Messages = {
         addingPassword: '正在加密…',
         words12: '12 个词',
         words24: '24 个词',
+        preparingWallet: '正在准备钱包…',
         safetyTitle: '这个钱包仍然可能丢失',
         safetyBackup: '助记词从未被抄写过。',
         safetyPassword: '这台设备上没有密码。',
