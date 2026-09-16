@@ -109,7 +109,60 @@ const unsubscribe = subscribeWalletPreferences((next) => {
     preferences.value = next;
 });
 
+/**
+ * TEMPORARY — a readout of how this window is actually laid out.
+ *
+ * The frame's bottom edge is wrong on one person's iPhone and right on every
+ * emulator here, and no Safari on this side of the cable can be attached to a
+ * home-screen app. So the app states its own numbers and a screenshot carries
+ * them back. Delete this block, `frameProbe` and the panel below it as soon as
+ * that is answered.
+ */
+const frameProbe = ref<string[]>([]);
+
+const readFrameProbe = (): void => {
+    const px = (value: number | undefined): string =>
+        value === undefined ? '—' : String(Math.round(value));
+
+    const probe = document.createElement('div');
+    probe.style.cssText =
+        'position:fixed;top:0;left:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);visibility:hidden;pointer-events:none';
+    document.body.append(probe);
+    const insets = getComputedStyle(probe);
+    const safe = `${insets.paddingTop} / ${insets.paddingBottom}`;
+    probe.remove();
+
+    const rect = (selector: string): string => {
+        const element = document.querySelector(selector);
+
+        if (!element) {
+            return 'нет';
+        }
+
+        const box = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+
+        return `${px(box.top)}–${px(box.bottom)} pad ${style.paddingTop}/${style.paddingBottom}`;
+    };
+
+    frameProbe.value = [
+        `win ${px(window.innerWidth)}×${px(window.innerHeight)} vv ${px(window.visualViewport?.height)} scr ${px(window.screen.height)}`,
+        `safe ${safe}`,
+        `app=${document.documentElement.dataset.appWindow ?? '0'} sa=${
+            (window.navigator as { standalone?: boolean }).standalone === true
+                ? 1
+                : 0
+        } dm=${window.matchMedia('(display-mode: standalone)').matches ? 1 : 0}`,
+        `frame ${rect('.cw-frame')}`,
+        `shell ${rect('.cw-shell')}`,
+        `tabs ${rect('.cw-tabs')}`,
+        `html ${getComputedStyle(document.documentElement).backgroundColor}`,
+        `body ${getComputedStyle(document.body).backgroundColor}`,
+    ];
+};
+
 onMounted(async () => {
+    readFrameProbe();
     startup.value = await refreshNativeStartup();
 });
 
@@ -330,5 +383,29 @@ onBeforeUnmount(unsubscribe);
             <ExternalLink :size="15" aria-hidden="true" />
             {{ t('openSite') }}
         </a>
+
+        <!-- TEMPORARY: see `readFrameProbe`. Remove with it. -->
+        <div
+            style="
+                margin-top: 20px;
+                padding: 10px 12px;
+                border: 1px dashed var(--cw-border);
+                font: 400 11px/1.6 var(--cw-mono);
+                color: var(--cw-faint);
+            "
+        >
+            <div style="margin-bottom: 4px; color: var(--cw-dim)">
+                РАМКА ОКНА · ВРЕМЕННО
+            </div>
+            <div v-for="line in frameProbe" :key="line">{{ line }}</div>
+            <button
+                type="button"
+                class="cw-ghost"
+                style="margin-top: 6px"
+                @click="readFrameProbe()"
+            >
+                обновить
+            </button>
+        </div>
     </div>
 </template>
