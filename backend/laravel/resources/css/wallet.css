@@ -548,18 +548,16 @@ html[data-app-window]:has(.cw-frame) {
     html[data-app-window] .cw-shell {
         border: 0;
         border-radius: 0;
-    }
-
-    /*
-     * And the insets themselves, only where the window has not already had them
-     * taken out of it — `data-window-insets`, decided by measuring the window
-     * against the screen in `WalletFrameLayout`. An iPhone home-screen app is
-     * handed a window that stops under the status bar and still reports the
-     * full insets, so padding by them there is the same space counted twice:
-     * dead ground over the account chips and a strip under the tab bar that
-     * pushes the navigation up off the bottom of the screen.
-     */
-    html[data-app-window][data-window-insets='page'] .cw-shell {
+        /*
+         * The top inset is always the page's, and needs no test. Where the
+         * window really does start under the status bar — an iPhone
+         * home-screen app, an Android window drawing edge to edge — this is
+         * what keeps the account and the network out from under the clock; and
+         * a browser that reserves the bar outside the window reports the inset
+         * as 0, so the same rule adds nothing there. It was removed once, on
+         * arithmetic rather than on looking, and the clock landed on top of the
+         * account chip.
+         */
         padding-top: env(safe-area-inset-top);
     }
 
@@ -578,6 +576,16 @@ html[data-app-window]:has(.cw-frame) {
         padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
     }
 
+    /*
+     * The foot is the half that has to be asked, because it is the half the
+     * system lies about. An iPhone home-screen app reports a 34pt bottom inset
+     * while handing the web view a window that already ends above the home
+     * indicator: 848 of an 896pt screen, the missing 48 taken off the bottom.
+     * Padding by it there is a strip of dead panel holding the navigation up
+     * off the edge of the screen, which is exactly what it looked like.
+     * `data-window-insets` is `page` only for a window that covers the screen —
+     * where the inset is real and the tab bar must clear the handle itself.
+     */
     html[data-app-window][data-window-insets='page'] .cw-tabs {
         height: calc(66px + env(safe-area-inset-bottom));
         padding-bottom: env(safe-area-inset-bottom);
