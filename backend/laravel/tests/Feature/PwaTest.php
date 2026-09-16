@@ -40,8 +40,13 @@ it('publishes a valid installable web app manifest', function () {
             'start_url' => '/wallet',
             'scope' => '/',
             'display' => 'standalone',
-            'background_color' => '#0b0f10',
-            'theme_color' => '#0b0f10',
+            // The wallet's own ground, not the site's. An installed app opens
+            // on `/wallet` and the system paints its splash — and the band it
+            // keeps for the navigation — from these two, at install time and
+            // never from the live page, so a near-black belonging to the site
+            // is a seam under the one screen the app actually launches on.
+            'background_color' => '#07080a',
+            'theme_color' => '#07080a',
         ])
         ->and($manifest['icons'])->toHaveCount(3)
         ->and($manifest['icons'][0])->toMatchArray([
