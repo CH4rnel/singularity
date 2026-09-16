@@ -78,21 +78,31 @@ let siteViewport: string | null = null;
 let siteThemeColour: string | null = null;
 
 /**
- * The system paints a band of its own — the status bar, the address bar, the
- * area behind the gesture handle — and it paints them the colour this meta
- * names. The site's is a near-black that was true of everything until the
- * wallet could be light, and then a light wallet sat between two black bars
- * that looked like a rendering fault rather than a frame.
+ * The bands the system paints around an app window, and they do not all come
+ * from the same place.
  *
- * The colour is read off the frame's own `--cw-app` rather than written down
- * again here: the palette is in one file and a second copy of a hex value is a
- * copy that goes stale the first time somebody adjusts the ground.
+ * `theme-color` is the one that is documented and the one everybody reaches for
+ * first: it colours the status bar at the top and the address bar in a tab, and
+ * it is what took the black strip off the top of the installed app. The *bottom*
+ * band — the area Android keeps for the gesture handle or the three buttons —
+ * ignores it. That one is tinted from the page's own ground, so the document
+ * has to actually be the colour the wallet is painted in, rather than a dark
+ * site background hidden under a frame that covers it.
+ *
+ * `color-scheme` is sent with them, because a browser decides several things it
+ * draws itself — scrollbars, form controls, the tint it picks when it has to
+ * guess — from what the page says it is, and the wallet's scheme is not the
+ * site's `dark` class.
+ *
+ * All three are read off the frame's own `--cw-app` and its live scheme rather
+ * than written down again here: the palette lives in one file, and a second
+ * copy of a hex value is a copy that goes stale the first time somebody adjusts
+ * the ground.
  */
 const paintWindowChrome = (): void => {
-    const meta = metaTag('theme-color');
     const frame = document.querySelector('.cw-frame');
 
-    if (!meta || !frame) {
+    if (!frame) {
         return;
     }
 
@@ -102,11 +112,19 @@ const paintWindowChrome = (): void => {
         return;
     }
 
-    if (siteThemeColour === null) {
-        siteThemeColour = meta.content;
+    const meta = metaTag('theme-color');
+
+    if (meta) {
+        if (siteThemeColour === null) {
+            siteThemeColour = meta.content;
+        }
+
+        meta.content = ground;
     }
 
-    meta.content = ground;
+    document.documentElement.style.backgroundColor = ground;
+    document.documentElement.style.colorScheme = scheme.value;
+    document.body.style.backgroundColor = ground;
 };
 
 onMounted(() => {
@@ -136,6 +154,10 @@ onBeforeUnmount(() => {
     if (themeColour && siteThemeColour !== null) {
         themeColour.content = siteThemeColour;
     }
+
+    document.documentElement.style.removeProperty('background-color');
+    document.documentElement.style.removeProperty('color-scheme');
+    document.body.style.removeProperty('background-color');
 
     siteViewport = null;
     siteThemeColour = null;
