@@ -1,4 +1,4 @@
-import { evmChain } from '@/lib/wallet/chains';
+import { HOME_CHAIN, evmChain, shippedChains } from '@/lib/wallet/chains';
 import type {
     WalletChain,
     WalletChainId,
@@ -1233,12 +1233,14 @@ export const catalogueNetwork = (id: WalletChainId): CatalogueNetwork | null =>
 /**
  * What this device has decided about each network, and only that.
  *
- * Deviations rather than a list of what is on, because every network now has a
- * default and the two kinds of default are the only thing separating a shipped
- * network from a catalogue one: some arrive on, most arrive off, and a stored
- * list of "what is on" would have quietly frozen that distinction into the
- * saved state. A network absent from this map is at its default, which is also
- * what makes a shipped list that grows later reach existing wallets.
+ * Deviations from the default rather than a list of what is on — and since the
+ * default is now off for every network but the home chain, the only deviation
+ * worth writing down is a `true`. The shape stays a map of booleans because an
+ * older rule shipped some networks on and wrote a `false` for one switched off:
+ * that entry still says off, which is what its absence would say too, so a
+ * record written under either rule reads the same way here. A network absent
+ * from this map is at its default, which is also what lets the shipped list
+ * grow later without touching a wallet that already exists.
  */
 export type NetworkChoices = Record<string, boolean>;
 
@@ -1299,6 +1301,27 @@ export const writeNetworkChoices = (choices: NetworkChoices): void => {
     if (typeof window !== 'undefined') {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(choices));
     }
+};
+
+/**
+ * The networks a device with these choices has on.
+ *
+ * One rule for both lists, because there is one default and it is off: a
+ * network the wallet ships an adapter for starts exactly where one of the
+ * hundred and twenty starts, since the only thing being on decides is whether
+ * a balance is read for it on every refresh.
+ *
+ * The home chain is added whatever the record says. It is the chain this wallet
+ * is for, it has no switch on the networks screen, and a wallet showing no
+ * Cyberia card is not a state worth being able to reach by mistake.
+ */
+export const networksOn = (choices: NetworkChoices): WalletChainId[] => {
+    const on = [
+        ...shippedChains().map((chain) => chain.id),
+        ...NETWORK_CATALOGUE.map((network) => network.id),
+    ].filter((id) => choices[id] === true);
+
+    return [...new Set([HOME_CHAIN, ...on])];
 };
 
 /**

@@ -7,11 +7,13 @@ import {
     catalogueWalletChain,
     catalogueWalletChains,
     deriveAccounts,
+    networksOn,
     readNetworkChoices,
     searchCatalogue,
     seedFromMnemonic,
     seedSource,
     setCatalogueWalletChains,
+    setShippedWalletChains,
     walletChains,
     writeNetworkChoices,
 } from '@/lib/wallet';
@@ -32,6 +34,14 @@ import { shippedChains } from '@/lib/wallet/chains';
 
 const PHRASE =
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+
+/*
+ * The registry opens on Cyberia alone, because being on is a choice and a bare
+ * process has made none. These tests compare the catalogue against the networks
+ * the wallet ships adapters for, so they switch that whole set on first — what
+ * is pinned below is the adapters, never anybody's settings.
+ */
+setShippedWalletChains(shippedChains());
 
 test('the catalogue is a hundred networks and more', () => {
     assert.ok(
@@ -236,9 +246,10 @@ test('only the choices that differ from the default are stored', () => {
     };
 
     try {
-        // Deviations, in both directions: one network switched on that arrives
-        // off, one switched off that arrives on. A stored list of "what is on"
-        // could not have said the second thing.
+        // Deviations from the default, which is off everywhere but the home
+        // chain — so a switched-on network is what gets written down. A `false`
+        // is what the older rule left behind for a shipped network switched
+        // off, and it survives a read because it still says off.
         writeNetworkChoices({ 'arbitrum-one': true, bnb: false });
         assert.deepEqual(readNetworkChoices(), {
             'arbitrum-one': true,
@@ -261,6 +272,28 @@ test('only the choices that differ from the default are stored', () => {
     } finally {
         delete globalThis.window;
     }
+});
+
+test('a wallet that has chosen nothing is one network', () => {
+    // The whole point of the switches: a wallet opens reading one balance, on
+    // the chain it is for, and every other network is something its owner asked
+    // for. Eight was the shipped default once, and seven of those were read on
+    // every refresh for somebody who had never named one of them.
+    assert.deepEqual(networksOn({}), ['cyberia']);
+
+    // A record left by the older rule — shipped networks arrived on, and only
+    // one switched off was written down — reads as off now, which is what the
+    // absence of an entry says too.
+    assert.deepEqual(networksOn({ bnb: false }), ['cyberia']);
+
+    // And the home chain is never absent, whatever the record says about it.
+    assert.deepEqual(networksOn({ cyberia: false }), ['cyberia']);
+
+    assert.deepEqual(networksOn({ solana: true, 'arbitrum-one': true }), [
+        'cyberia',
+        'solana',
+        'arbitrum-one',
+    ]);
 });
 
 test('switching a network on adds an account and never touches the others', () => {

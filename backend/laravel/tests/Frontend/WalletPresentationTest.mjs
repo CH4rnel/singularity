@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { walletChain } from '@/lib/wallet';
+import {
+    setShippedWalletChains,
+    shippedChains,
+    walletChain,
+} from '@/lib/wallet';
 import {
     formatUsd,
     formatUsdPrice,
@@ -16,6 +20,14 @@ import { qrMatrix, qrSvgPath } from '@/lib/wallet/qr';
  * QR slip is a payment to nobody, so both are pinned to known values rather
  * than eyeballed in the browser.
  */
+
+/*
+ * The registry opens on Cyberia alone: every other network is a switch a device
+ * has to flip, and a bare process has flipped nothing. These tests are about
+ * the adapters themselves and not about what anybody switched on, so they
+ * register the whole shipped set first.
+ */
+setShippedWalletChains(shippedChains());
 
 const CYBERIA_ADDRESS = '0x9c4A7fD2E51b0aB83c6De19F4a7B2c85D0e3F714';
 

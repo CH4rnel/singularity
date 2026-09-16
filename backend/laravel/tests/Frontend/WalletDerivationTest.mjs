@@ -6,6 +6,7 @@ import { Mnemonic, getBytes, keccak256 } from 'ethers';
 import { moneroAddressKind, moneroStandardAddress } from '@/lib/monero';
 import {
     shippedChains,
+    setShippedWalletChains,
     createMnemonic,
     deriveAccounts,
     deriveAddress,
@@ -26,6 +27,14 @@ import { deriveEd25519Key, masterNode } from '@/lib/wallet/slip10';
  * Each chain is therefore pinned to a published vector or to an independent
  * implementation, not to whatever this code happens to produce today.
  */
+
+/*
+ * The registry opens on Cyberia alone: every other network is a switch a device
+ * has to flip, and a bare process has flipped nothing. These tests are about
+ * the adapters themselves and not about what anybody switched on, so they
+ * register the whole shipped set first.
+ */
+setShippedWalletChains(shippedChains());
 
 // The BIP-39 test phrase every wallet ships in its own test suite.
 const PHRASE =

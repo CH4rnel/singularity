@@ -250,6 +250,7 @@ export {
     catalogueNetwork,
     catalogueWalletChain,
     catalogueWalletChains,
+    networksOn,
     readNetworkChoices,
     searchCatalogue,
     writeNetworkChoices,

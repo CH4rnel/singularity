@@ -312,7 +312,7 @@ export const walletMessages: Messages = {
         networksTileHint: '120 shipped · plus your own',
         networksTitle: 'Networks',
         networksBody:
-            'Your seed already holds an account on every EVM network here — the same key and the same address. A switch decides only whether the portfolio draws that network and reads its balance. Some arrive on and most arrive off; that is a starting position, not a ranking.',
+            'Your seed already holds an account on every EVM network here — the same key and the same address. A switch decides only whether the portfolio draws that network and reads its balance. Cyberia is on; everything else you switch on yourself, because a network that is on is read on every refresh.',
         networksOnLabel: 'Switched on',
         networksOnCount: '{on} of {total}',
         networksCost:
@@ -1897,7 +1897,7 @@ export const walletMessages: Messages = {
         networksTileHint: '120 готовых · плюс свои',
         networksTitle: 'Сети',
         networksBody:
-            'Ваша сид-фраза уже держит счёт в каждой из этих EVM-сетей — тот же ключ и тот же адрес. Переключатель меняет только одно: рисует ли портфель эту сеть и читает ли её баланс. Часть включена изначально, большинство выключено — это начальное положение переключателя, а не ранг.',
+            'Ваша сид-фраза уже держит счёт в каждой из этих EVM-сетей — тот же ключ и тот же адрес. Переключатель меняет только одно: рисует ли портфель эту сеть и читает ли её баланс. Включена Сайберия, остальные вы включаете сами: включённая сеть читается при каждом обновлении.',
         networksOnLabel: 'Включено',
         networksOnCount: '{on} из {total}',
         networksCost:
@@ -3410,7 +3410,7 @@ export const walletMessages: Messages = {
         networksTileHint: '内置 120 条 · 外加自定义',
         networksTitle: '网络',
         networksBody:
-            '您的助记词已经在这里的每一条 EVM 网络上持有账户——同一把密钥、同一个地址。开关只决定钱包是否显示该网络并读取余额。少数默认开启、多数默认关闭，这是开关的初始位置，不是高低之分。',
+            '您的助记词已经在这里的每一条 EVM 网络上持有账户——同一把密钥、同一个地址。开关只决定钱包是否显示该网络并读取余额。默认只开启 Cyberia，其余由您自行开启——每开启一条，每次刷新都要多读一次余额。',
         networksOnLabel: '已开启',
         networksOnCount: '{total} 条中的 {on} 条',
         networksCost:

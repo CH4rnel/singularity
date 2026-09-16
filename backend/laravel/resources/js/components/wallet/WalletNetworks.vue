@@ -16,17 +16,17 @@ import { walletMessages } from '@/lib/walletMessages';
  * The network list: everything this wallet knows how to reach, and which of it
  * is on.
  *
- * One list, because there is one kind of network. The screen used to open with
- * eight cards marked "always on" and then a hundred and twenty rows with
- * switches underneath, which drew a hierarchy that does not exist: a network we
- * happened to ship switched on is made by the same factory, read through the
- * same adapters and signed with the same key as one somebody switches on today.
- * What ships on is a default about how many balances a refresh should read —
- * 120 cards reading 120 balances is not a portfolio, it is a load test — and a
- * default belongs in the switch's starting position, not in a separate tier.
+ * One list, because there is one kind of network, and one default: off. The
+ * screen used to open with eight cards marked "always on" and then a hundred
+ * and twenty rows with switches underneath, which drew a hierarchy that does
+ * not exist — a network we happened to ship an adapter for is made by the same
+ * factory, read through the same adapters and signed with the same key as one
+ * somebody switches on today. So the tier went first and then the head start
+ * did: being on costs a balance read on every refresh, and the wallet is not
+ * the one who should decide that seven chains are worth it.
  *
  * Cyberia is the exception and the only one: it is the chain this wallet is
- * for, so it sits first and has no switch.
+ * for, so it sits first, is on from the first second and has no switch.
  *
  * The seed derives an account on every one of these already — that is what
  * BIP-44 coin type 60 means — so nothing here creates or destroys an account.
@@ -83,7 +83,7 @@ type Row = {
  *
  * Cyberia first because it is the exception; everything after it alphabetical,
  * which is the one order that is visibly not a ranking. Registry order would
- * have put the shipped eight on top again by accident.
+ * have put the seven the wallet ships adapters for on top again by accident.
  */
 const all = computed<Row[]>(() => {
     const on = enabled.value;
