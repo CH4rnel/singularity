@@ -128,12 +128,20 @@ const isAppWindow = (): boolean => {
  * than the screen has had its insets taken out of it already, and the page adds
  * nothing. It is re-asked on resize, because a rotation changes both numbers.
  */
-const readWindowInsets = (): void => {
+const windowCoversScreen = (): boolean => {
     const screenHeight = window.screen?.height ?? 0;
-    const covered =
-        screenHeight === 0 || window.innerHeight >= screenHeight - 1;
 
-    document.documentElement.dataset.windowInsets = covered ? 'page' : 'system';
+    return (
+        screenHeight === 0 ||
+        document.documentElement.clientHeight >= screenHeight - 1
+    );
+};
+
+const readWindowInsets = (): void => {
+    document.documentElement.dataset.windowInsets = windowCoversScreen()
+        ? 'page'
+        : 'system';
+    paintWindowChrome();
 };
 
 const metaTag = (name: string): HTMLMetaElement | null =>
@@ -188,8 +196,20 @@ const paintWindowChrome = (): void => {
         meta.content = ground;
     }
 
-    document.documentElement.style.backgroundColor = ground;
-    document.body.style.backgroundColor = ground;
+    /*
+     * The canvas — what shows beyond the viewport — is the one thing a page can
+     * put in a strip it cannot otherwise reach. Where the viewport stops short
+     * of the window that strip sits directly under the tab bar, so it is
+     * painted the bar's own panel rather than the ground: the alternative is a
+     * band of a second colour under the navigation, which is what it looked
+     * like. Where the window is covered there is no strip, and the ground is
+     * what belongs there.
+     */
+    const panel = getComputedStyle(frame).getPropertyValue('--cw-panel').trim();
+    const canvas = windowCoversScreen() || panel === '' ? ground : panel;
+
+    document.documentElement.style.backgroundColor = canvas;
+    document.body.style.backgroundColor = canvas;
 };
 
 onMounted(() => {

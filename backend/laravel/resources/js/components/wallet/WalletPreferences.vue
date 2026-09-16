@@ -147,6 +147,16 @@ const readFrameProbe = (): void => {
 
     frameProbe.value = [
         `win ${px(window.innerWidth)}×${px(window.innerHeight)} vv ${px(window.visualViewport?.height)} scr ${px(window.screen.height)}`,
+        `client ${px(document.documentElement.clientHeight)} vh ${(() => {
+            const unit = document.createElement('div');
+            unit.style.cssText =
+                'position:fixed;top:0;left:0;width:1px;height:100vh;visibility:hidden;pointer-events:none';
+            document.body.append(unit);
+            const height = unit.getBoundingClientRect().height;
+            unit.remove();
+
+            return px(height);
+        })()}`,
         `safe ${safe}`,
         `insets=${document.documentElement.dataset.windowInsets ?? '—'} boot ${
             document.documentElement.dataset.bootHeight ?? '—'

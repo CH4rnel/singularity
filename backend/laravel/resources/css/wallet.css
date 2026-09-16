@@ -539,6 +539,15 @@ html[data-app-window]:has(.cw-frame) {
     html[data-app-window] .cw-window {
         padding-top: 0;
         padding-bottom: 0;
+        /*
+         * `dvh` is the unit for a browser tab, where the viewport really does
+         * change height as the address bar comes and goes. An app window has no
+         * such chrome — and on an iPhone home-screen app `dvh` resolves to a
+         * viewport that stops 48pt short of the window, which is the strip that
+         * turned up under the tab bar painted in the page's own ground. `vh` is
+         * the whole window, which is what the frame of an application is.
+         */
+        height: 100vh;
     }
 
     html[data-app-window] .cw-frame {
