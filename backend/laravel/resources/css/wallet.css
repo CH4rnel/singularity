@@ -551,8 +551,17 @@ html[data-app-window]:has(.cw-frame) {
         padding-top: env(safe-area-inset-top);
     }
 
-    html[data-app-window] .cw-shell:not(:has(.cw-tabs)) {
-        padding-bottom: env(safe-area-inset-bottom);
+    /*
+     * A screen with no tab bar — onboarding, the lock — puts the same inset in
+     * the scrolling pane rather than in the shell around it. Padding the shell
+     * looked like the tidier answer and was the wrong one twice over: it draws
+     * a strip of ground under a hard edge, which is a *band* and reads as one,
+     * and it takes the room out of the pane, so the last control on a long step
+     * ends underneath it. Inside the pane the same space is scrollable, the
+     * ground runs on without an edge, and the button can be reached.
+     */
+    html[data-app-window] .cw-shell:not(:has(.cw-tabs)) .cw-body {
+        padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
     }
 
     html[data-app-window] .cw-tabs {
