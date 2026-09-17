@@ -36,6 +36,40 @@ export const SWIPE_MAX_MS = 700;
 /** The strip along each edge the operating system's own gestures own. */
 export const SWIPE_EDGE_PX = 24;
 
+/** How far a finger travels before the gesture has to declare an axis. */
+export const SWIPE_AXIS_PX = 10;
+
+/** How far the screen itself may be dragged, however far the finger goes. */
+export const SWIPE_MAX_DRAG_PX = 96;
+
+/**
+ * How much of the finger's travel the screen takes.
+ *
+ * Less than all of it on purpose. The screen underneath is not being carried
+ * across — the next one is not rendered yet — so a screen that tracked the
+ * finger exactly would promise a page turn that cannot be delivered. At just
+ * over half, the movement reads as "this gesture is doing something" while the
+ * screen stays obviously where it is.
+ */
+export const SWIPE_FOLLOW = 0.55;
+
+/** And at an end, where there is nothing to go to. */
+export const SWIPE_RESIST = 0.22;
+
+/**
+ * Where the screen sits for a finger this far across.
+ *
+ * Damped both ways and capped: at an end the resistance is the answer to
+ * "is there anything over there" — the screen gives a little and stops, which
+ * is how every list on a phone says no.
+ */
+export const swipeDrag = (dx: number, can: boolean): number => {
+    const pulled = dx * (can ? SWIPE_FOLLOW : SWIPE_RESIST);
+    const limit = can ? SWIPE_MAX_DRAG_PX : SWIPE_MAX_DRAG_PX / 2;
+
+    return Math.max(-limit, Math.min(limit, pulled));
+};
+
 export type SwipePoint = { x: number; y: number; at: number };
 
 /**

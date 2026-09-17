@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     SWIPE_EDGE_PX,
+    SWIPE_MAX_DRAG_PX,
     SWIPE_MAX_MS,
     SWIPE_MIN_PX,
+    swipeDrag,
     swipeIntent,
 } from '@/lib/wallet/swipe';
 
@@ -50,4 +52,22 @@ test('the edges belong to the operating system', () => {
     assert.equal(drag(SWIPE_EDGE_PX - 1, 200), null);
     assert.equal(drag(WIDTH - SWIPE_EDGE_PX + 1, 200), null);
     assert.equal(drag(SWIPE_EDGE_PX + 1, 200), 'back');
+});
+
+test('the screen follows the finger, part of the way and no further', () => {
+    // Part of the way: the next screen is not rendered yet, so tracking the
+    // finger exactly would promise a page turn this cannot deliver.
+    assert.ok(swipeDrag(100, true) > 0);
+    assert.ok(swipeDrag(100, true) < 100);
+
+    // However far the finger goes, the screen stops.
+    assert.equal(swipeDrag(4000, true), SWIPE_MAX_DRAG_PX);
+    assert.equal(swipeDrag(-4000, true), -SWIPE_MAX_DRAG_PX);
+});
+
+test('an end gives a little and refuses', () => {
+    // Nowhere to go that way: the same finger moves the screen far less, and
+    // it stops sooner — which is how every list on a phone says no.
+    assert.ok(swipeDrag(100, false) < swipeDrag(100, true));
+    assert.equal(swipeDrag(4000, false), SWIPE_MAX_DRAG_PX / 2);
 });

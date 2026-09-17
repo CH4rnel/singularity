@@ -941,8 +941,101 @@ if (telegram) {
  * The desktop is excluded outright. It has a rail, its pointer is a mouse, and
  * a mouse dragging across a page is somebody selecting text.
  */
-const swipeTo = (intent: SwipeIntent): void => {
+/**
+ * Where the screen is being held while a finger is on it.
+ *
+ * The transform is applied only while something is happening — during the drag
+ * and for the fifth of a second it takes to settle — and removed afterwards,
+ * because a permanent transform on the scrolling pane makes it a containing
+ * block for anything inside it that is ever positioned against the window.
+ */
+const dragX = ref(0);
+const dragLive = ref(false);
+const dragSettling = ref(false);
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** The one case where the screen must not move: somebody asked it not to. */
+const stillness =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const SETTLE_MS = 220;
+
+const holdAt = (px: number, live: boolean): void => {
+    if (stillness) {
+        return;
+    }
+
+    dragX.value = px;
+    dragLive.value = live;
+
+    if (settleTimer !== null) {
+        clearTimeout(settleTimer);
+        settleTimer = null;
+    }
+
+    if (!live) {
+        dragSettling.value = true;
+        settleTimer = setTimeout(() => {
+            dragSettling.value = false;
+            settleTimer = null;
+        }, SETTLE_MS + 40);
+    }
+};
+
+/**
+ * The new screen, arriving from the side the finger came from.
+ *
+ * Both screens are never on the page at once — mounting a second tab to slide
+ * it across would load a second tab's worth of chain reads to animate 200ms —
+ * so the direction is carried by where the arriving screen starts from. It is
+ * placed there without a transition and comes home with one.
+ */
+const slideIn = (from: number): void => {
+    if (stillness) {
+        return;
+    }
+
+    holdAt(from, true);
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => holdAt(0, false));
+    });
+};
+
+const bodyStyle = computed(() =>
+    dragLive.value || dragSettling.value
+        ? {
+              transform: `translate3d(${dragX.value}px, 0, 0)`,
+              transition: dragLive.value
+                  ? 'none'
+                  : `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.7, 0.3, 1)`,
+          }
+        : undefined,
+);
+
+/** Whether a swipe that way has anywhere to go, which the edge resists on. */
+const canSwipe = (intent: SwipeIntent): boolean => {
     if (desktop.value || stage.value !== 'app') {
+        return false;
+    }
+
+    if (intent === 'back' && goBack.value !== null) {
+        return true;
+    }
+
+    if (overlay.value !== null) {
+        return false;
+    }
+
+    const at = TABS.findIndex((entry) => entry.id === activeTab.value);
+
+    return at >= 0 && TABS[at + (intent === 'back' ? -1 : 1)] !== undefined;
+};
+
+const swipeTo = (intent: SwipeIntent): void => {
+    if (!canSwipe(intent)) {
+        holdAt(0, false);
+
         return;
     }
 
@@ -950,28 +1043,21 @@ const swipeTo = (intent: SwipeIntent): void => {
 
     if (intent === 'back' && back !== null) {
         back();
+        slideIn(-56);
 
-        return;
-    }
-
-    if (overlay.value !== null) {
         return;
     }
 
     const at = TABS.findIndex((entry) => entry.id === activeTab.value);
-
-    if (at < 0) {
-        return;
-    }
-
     const next = TABS[at + (intent === 'back' ? -1 : 1)];
 
     if (next) {
         openSection(next.id);
+        slideIn(intent === 'back' ? -56 : 56);
     }
 };
 
-const swipe = useSwipeNav(swipeTo);
+const swipe = useSwipeNav({ can: canSwipe, act: swipeTo, drag: holdAt });
 
 const refreshPrices = async (): Promise<void> => {
     try {
@@ -1381,6 +1467,7 @@ watch(
             :class="{ 'cw-shell-native': native }"
             @pointerdown="wallet.touch()"
             @touchstart="swipe.onTouchStart"
+            @touchmove="swipe.onTouchMove"
             @touchend="swipe.onTouchEnd"
             @touchcancel="swipe.onTouchCancel"
             @keydown="wallet.touch()"
@@ -1580,7 +1667,12 @@ watch(
                     @refresh="load()"
                 />
 
-                <div class="cw-body">
+                <!--
+                  The pane a swipe moves. It holds one screen at a time, so the
+                  gesture drags this and the arriving screen comes in from the
+                  side the finger came from.
+                -->
+                <div class="cw-body" :style="bodyStyle">
                     <div v-if="stage !== 'app'" class="cw-column">
                         <WalletOnboarding
                             v-if="stage === 'import'"
