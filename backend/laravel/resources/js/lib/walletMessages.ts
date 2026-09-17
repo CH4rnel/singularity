@@ -558,8 +558,7 @@ export const walletMessages: Messages = {
         gasDripCovers: 'One drip pays for about {count}',
         gasNoSignature:
             'Asking costs no signature. A drip can only ever arrive at the address named in the request, so proving you hold its key would cost you a tap and cost a script nothing.',
-        gasCyberiaOnly:
-            'Cyberia only, permanently. Sponsoring a fee on BNB or Base would mean buying ETH for strangers.',
+        gasCyberiaOnly: 'Cyberia only, permanently.',
         tileGasHint: 'Sponsored fees',
         tileBridgeHint: 'Another chain',
         tileEarnHint: 'Pools · APR',
@@ -2143,8 +2142,7 @@ export const walletMessages: Messages = {
         gasDripCovers: 'Одной выдачи хватит примерно на {count}',
         gasNoSignature:
             'Запрос не требует подписи. Газ может прийти только на тот адрес, который назван в запросе, — так что доказательство владения ключом стоило бы вам одного нажатия, а скрипту не стоило бы ничего.',
-        gasCyberiaOnly:
-            'Только Cyberia и навсегда. Спонсировать комиссию в BNB или Base значило бы покупать ETH для незнакомых людей.',
+        gasCyberiaOnly: 'Только Cyberia и навсегда.',
         tileGasHint: 'Комиссии за счёт станции',
         tileBridgeHint: 'В другую сеть',
         tileEarnHint: 'Пулы · APR',
@@ -3667,8 +3665,7 @@ export const walletMessages: Messages = {
         gasDripCovers: '一次发放大约够 {count} 笔',
         gasNoSignature:
             '申请不需要签名。发放只会到达请求里写明的那个地址，所以证明你握有它的私钥，对你是一次点击，对脚本则毫无成本。',
-        gasCyberiaOnly:
-            '只限 Cyberia，且永远如此。替 BNB 或 Base 上的手续费买单，等于替陌生人买 ETH。',
+        gasCyberiaOnly: '仅限 Cyberia，永远如此。',
         tileGasHint: '手续费由加油站代付',
         tileBridgeHint: '去另一条链',
         tileEarnHint: '池子 · APR',

@@ -63,20 +63,6 @@ const setAnalytics = (on: boolean): void => {
     analyticsOn.value = analytics.enabled();
 };
 
-/** The networks that ship with the wallet, named so "verified" means something. */
-/**
- * The networks read through an endpoint this project checked, named as that
- * rather than as a tier. It is the same list the row's "verified" tag is about,
- * and the only thing it separates from the rows below is who vetted the host —
- * not which chains count.
- */
-const vetted = computed(() =>
-    props.wallet.chains.value
-        .filter((chain) => !chain.custom)
-        .map((chain) => chain.label)
-        .join(' · '),
-);
-
 /**
  * Where each account's key comes from, one row per network.
  *
@@ -513,7 +499,6 @@ onBeforeUnmount(() => {
                     "
                 />
             </label>
-
         </div>
 
         <div class="cw-label" style="margin: 26px 0 6px">
@@ -555,147 +540,85 @@ onBeforeUnmount(() => {
         </div>
 
         <!--
-          Networks. The split that matters is who vouched for the endpoint, so
-          that is the split the section draws: everything shipped with the
-          wallet on one row, everything typed in here on its own removable one.
+          Networks, and only the half that is a security question: who vouched
+          for the endpoint a balance is read through. A wallet with nothing but
+          the endpoints this project checked has nothing to answer here — the
+          row said "Cyberia · ПРОВЕРЕНО" and the one under it offered to add a
+          network, which is what the networks screen is for — so the section
+          appears when there is an unvetted endpoint to name, and otherwise the
+          screen is shorter by a block.
         -->
-        <div class="cw-label" style="margin: 26px 0 10px">
-            {{ t('networksSection') }}
-        </div>
-
-        <div class="cw-card" style="padding: 0">
-            <div
-                class="cw-row"
-                style="padding: 16px; border-bottom: 1px solid var(--cw-line)"
-            >
-                <div style="flex: 1">
-                    <div
-                        style="
-                            font: 400 14px/1.3 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                    >
-                        {{ t('vettedEndpoints') }}
-                    </div>
-                    <div
-                        style="
-                            margin-top: 3px;
-                            font: 400 11px/1.4 var(--cw-mono);
-                            color: var(--cw-dim);
-                        "
-                    >
-                        {{ vetted }}
-                    </div>
-                </div>
-                <span
-                    class="cw-label"
-                    style="flex: none; color: var(--cw-faint)"
-                    >{{ t('verified') }}</span
-                >
+        <template v-if="wallet.customNetworks.value.length > 0">
+            <div class="cw-label" style="margin: 26px 0 10px">
+                {{ t('networksSection') }}
             </div>
 
-            <div
-                v-for="network in wallet.customNetworks.value"
-                :key="network.id"
-                class="cw-row"
-                style="padding: 16px; border-bottom: 1px solid var(--cw-line)"
-            >
-                <NetworkMark :chain="network.id" dot :size="9" />
-                <div style="flex: 1">
-                    <div
-                        style="
-                            font: 400 14px/1.3 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                    >
-                        {{ network.name }}
-                    </div>
-                    <div
-                        style="
-                            margin-top: 3px;
-                            font: 400 11px/1.4 var(--cw-mono);
-                            color: var(--cw-dim);
-                            word-break: break-all;
-                        "
-                    >
-                        {{
-                            network.kind === 'evm'
-                                ? `chain ${network.chainId}`
-                                : `coin ${network.coinType} · ${network.addressType}`
-                        }}
-                        · {{ t('addedByYou').toLowerCase() }}
-                    </div>
-                </div>
-                <button
-                    type="button"
-                    class="cw-back"
-                    style="flex: none; color: var(--cw-bad-soft)"
-                    @click="wallet.removeNetwork(network.id)"
-                >
-                    {{ t('removeNetwork') }}
-                </button>
-            </div>
-
-            <p
-                v-if="wallet.customNetworks.value.length > 0"
-                class="cw-prose"
-                style="
-                    margin: 0;
-                    padding: 12px 16px;
-                    border-bottom: 1px solid var(--cw-line);
-                    font-size: 11px;
-                "
-            >
-                {{ t('removeNetworkHint') }}
-            </p>
-
-            <button
-                type="button"
-                class="cw-row"
-                style="
-                    width: 100%;
-                    padding: 16px;
-                    border: 0;
-                    background: none;
-                    cursor: pointer;
-                    text-align: left;
-                "
-                @click="emit('addNetwork')"
-            >
-                <span style="flex: 1">
-                    <span
-                        style="
-                            display: block;
-                            font: 400 14px/1.3 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                        >{{ t('addNetworkRow') }}</span
-                    >
-                    <span
-                        style="
-                            display: block;
-                            margin-top: 3px;
-                            font: 400 11px/1.4 var(--cw-mono);
-                            color: var(--cw-dim);
-                        "
-                        >{{ t('addNetworkRowHint') }}</span
-                    >
-                </span>
-                <span
+            <div class="cw-card" style="padding: 0">
+                <div
+                    v-for="network in wallet.customNetworks.value"
+                    :key="network.id"
+                    class="cw-row"
                     style="
-                        font: 400 12px/1 var(--cw-mono);
-                        color: var(--cw-dim);
+                        padding: 16px;
+                        border-bottom: 1px solid var(--cw-line);
                     "
-                    >→</span
                 >
-            </button>
+                    <NetworkMark :chain="network.id" dot :size="9" />
+                    <div style="flex: 1">
+                        <div
+                            style="
+                                font: 400 14px/1.3 var(--cw-sans);
+                                color: var(--cw-text);
+                            "
+                        >
+                            {{ network.name }}
+                        </div>
+                        <div
+                            style="
+                                margin-top: 3px;
+                                font: 400 11px/1.4 var(--cw-mono);
+                                color: var(--cw-dim);
+                                word-break: break-all;
+                            "
+                        >
+                            {{
+                                network.kind === 'evm'
+                                    ? `chain ${network.chainId}`
+                                    : `coin ${network.coinType} · ${network.addressType}`
+                            }}
+                            · {{ t('addedByYou').toLowerCase() }}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        class="cw-back"
+                        style="flex: none; color: var(--cw-bad-soft)"
+                        @click="wallet.removeNetwork(network.id)"
+                    >
+                        {{ t('removeNetwork') }}
+                    </button>
+                </div>
 
-            <!--
-              The endpoints above are half the story: which hosts answer for
-              this wallet. The other half is what carries the question to them,
-              and it belongs next to them rather than in a settings page of its
-              own.
-            -->
+                <p
+                    v-if="wallet.customNetworks.value.length > 0"
+                    class="cw-prose"
+                    style="
+                        margin: 0;
+                        padding: 12px 16px;
+                        border-bottom: 1px solid var(--cw-line);
+                        font-size: 11px;
+                    "
+                >
+                    {{ t('removeNetworkHint') }}
+                </p>
+            </div>
+        </template>
+
+        <!--
+          Who carries a request is a security question whatever the endpoints
+          are, so this row does not sit inside the block about unvetted ones.
+        -->
+        <div class="cw-card" style="margin-top: 12px; padding: 0">
             <button
                 type="button"
                 class="cw-row"
@@ -703,7 +626,6 @@ onBeforeUnmount(() => {
                     width: 100%;
                     padding: 16px;
                     border: 0;
-                    border-top: 1px solid var(--cw-line);
                     background: none;
                     cursor: pointer;
                     text-align: left;
