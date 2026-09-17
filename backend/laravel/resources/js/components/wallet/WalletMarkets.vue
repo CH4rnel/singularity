@@ -108,10 +108,12 @@ const charted = (market: Market): boolean => market.source !== 'none';
             </button>
         </div>
 
-        <h2 class="cw-title">{{ t('markets') }}</h2>
-        <p class="cw-label" style="margin: 8px 0 14px">
-            {{ t('marketsCount', { count: String(rows.length) }) }}
-        </p>
+        <div class="cw-row" style="margin-bottom: 14px">
+            <h2 class="cw-title">{{ t('markets') }}</h2>
+            <span class="cw-label" style="color: var(--cw-faint)">{{
+                t('marketsCount', { count: String(rows.length) })
+            }}</span>
+        </div>
 
         <input
             v-model="query"

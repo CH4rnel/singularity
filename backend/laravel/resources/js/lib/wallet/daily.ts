@@ -13,6 +13,16 @@
  * what a person is told they have earned.
  */
 
+import { sessionCall, signInWithWallet } from '@/lib/wallet/session';
+
+/*
+ * Signing in lives in `session.ts` now: the feed needs the same session for the
+ * same reason this board does, and a helper two screens share does not belong
+ * to one of them. Re-exported so the screens that already ask the board for it
+ * are not made to know where it moved.
+ */
+export { signInWithWallet };
+
 /** One quest, as the board sends it. */
 export type DailyQuest = {
     key: string;
@@ -84,50 +94,8 @@ export type DailyBoard = {
 
 /* ------------------------------------------------------------ transport -- */
 
-const csrfToken = (): string => {
-    if (typeof document === 'undefined') {
-        return '';
-    }
-
-    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
-
-    return match ? decodeURIComponent(match[1]) : '';
-};
-
-const call = async <T>(url: string, init: RequestInit = {}): Promise<T> => {
-    const method = (init.method ?? 'GET').toUpperCase();
-
-    const response = await fetch(url, {
-        credentials: 'same-origin',
-        ...init,
-        method,
-        headers: {
-            Accept: 'application/json',
-            ...(method === 'GET'
-                ? {}
-                : {
-                      'Content-Type': 'application/json',
-                      'X-XSRF-TOKEN': csrfToken(),
-                  }),
-            ...(init.headers as Record<string, string> | undefined),
-        },
-    });
-
-    const data = (await response.json().catch(() => ({}))) as {
-        message?: string;
-    } & Record<string, unknown>;
-
-    if (!response.ok) {
-        const failure = new Error(
-            data.message ?? 'The daily board is unreachable right now.',
-        ) as Error & { status: number };
-        failure.status = response.status;
-
-        throw failure;
-    }
-
-    return data as T;
-};
+const call = <T>(url: string, init: RequestInit = {}): Promise<T> =>
+    sessionCall<T>(url, init, 'The daily board is unreachable right now.');
 
 export const loadDailyBoard = async (): Promise<DailyBoard> => {
     const board = await call<DailyBoard>('/api/wallet/daily');
@@ -177,64 +145,6 @@ export const dailyBoardCached = async (
         return board;
     } catch {
         return null;
-    }
-};
-
-/**
- * Sign in to this site with the wallet's own key.
- *
- * Three calls that already existed for the site's "connect a wallet" button —
- * a nonce, a signature over it, and the token that becomes a session. The
- * wallet performs them itself instead of sending the user to a login page,
- * because the key that would be asked for there is the key it is holding.
- *
- * This is the one moment the wallet tells the server whose it is, so nothing
- * calls it on its own: it happens on a press, under a sentence that says what
- * it does. The message signed is the *login* challenge and no other — a
- * signature is a bearer proof, and minting one under a different wording that
- * a login endpoint would also accept is how a proof for one thing becomes a
- * proof for another.
- */
-export const signInWithWallet = async (
-    address: string,
-    sign: (message: string) => Promise<string>,
-): Promise<void> => {
-    const { nonce } = await call<{ nonce: string }>('/api/wallet/nonce', {
-        method: 'POST',
-        body: JSON.stringify({ wallet_address: address }),
-    });
-
-    const signature = await sign(
-        `Sign this message to authenticate with your wallet. Nonce: ${nonce}`,
-    );
-
-    const { token } = await call<{ token: string }>('/api/wallet/verify', {
-        method: 'POST',
-        body: JSON.stringify({ wallet_address: address, signature }),
-    });
-
-    /*
-     * The token becomes a cookie session. `redirect: 'manual'` because this
-     * endpoint answers with a redirect to wherever the user came from, and
-     * following it would download a whole page nobody is going to look at —
-     * the cookie is already set by the time the redirect is written.
-     */
-    const response = await fetch('/login/web3', {
-        method: 'POST',
-        credentials: 'same-origin',
-        redirect: 'manual',
-        headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            'X-XSRF-TOKEN': csrfToken(),
-        },
-        body: JSON.stringify({ token }),
-    });
-
-    // An opaque redirect is the success case here; only a real error status is
-    // a failure, and `type === 'opaqueredirect'` reports `ok: false`.
-    if (!response.ok && response.type !== 'opaqueredirect') {
-        throw new Error('Signing in with this wallet failed.');
     }
 };
 

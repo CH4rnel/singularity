@@ -64,7 +64,17 @@ import { walletMessages } from '@/lib/walletMessages';
  * is talking to whom and when. Content is sealed; metadata is not.
  */
 
-const props = defineProps<{ wallet: MultiWallet }>();
+const props = defineProps<{
+    wallet: MultiWallet;
+    /**
+     * Somebody to open a thread with on arrival — an address handed over by
+     * another screen, the feed so far. It goes through the same lookup a typed
+     * address does, because an address that has never published a messaging key
+     * cannot be written to at all and saying so is the whole point of that
+     * lookup.
+     */
+    openWith?: string | null;
+}>();
 
 /**
  * `unread` is a nudge, not a number: the count lives in the cache both sides
@@ -72,7 +82,11 @@ const props = defineProps<{ wallet: MultiWallet }>();
  * whenever mail arrives or a thread is read, since those are the only two
  * things that move the badge.
  */
-const emit = defineEmits<{ unread: [] }>();
+const emit = defineEmits<{
+    unread: [];
+    /** The handed-over address has been dealt with, one way or the other. */
+    opened: [];
+}>();
 
 const { t, tag } = useLocale(walletMessages);
 
@@ -680,6 +694,49 @@ watch(
         // Cached envelopes are ciphertext; the wallet is unlocked, so they can
         // be read back now without another round trip to the relay.
         void decrypt();
+    },
+    { immediate: true },
+);
+
+/**
+ * An address handed over by another screen.
+ *
+ * It goes through the same path a typed one does — a key lookup first, then
+ * the thread — so "this person has never opened chat" is reported the same way
+ * whether the address was typed or tapped. Watched rather than read once,
+ * because the chat may already be mounted when the request arrives.
+ */
+watch(
+    () => props.openWith,
+    async (wanted) => {
+        if (!wanted) {
+            return;
+        }
+
+        const address = wanted.toLowerCase();
+
+        emit('opened');
+        view.value = 'list';
+        lookupError.value = null;
+        lookingUp.value = true;
+
+        try {
+            const record = await keyFor(address);
+
+            if (!record) {
+                lookupAddress.value = address;
+                lookupError.value = t('chatNoKey');
+
+                return;
+            }
+
+            openThread(address);
+        } catch (failure) {
+            lookupError.value =
+                failure instanceof Error ? failure.message : String(failure);
+        } finally {
+            lookingUp.value = false;
+        }
     },
     { immediate: true },
 );

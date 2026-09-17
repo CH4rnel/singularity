@@ -1,15 +1,18 @@
 /**
- * What the wallet reads about the rest of Cyberia.
+ * What the wallet reads about the rest of Cyberia, and the one thing it writes.
  *
- * These are the only requests in the wallet that go to Laravel for something
- * other than a price. They carry no identity — the wallet has no session and no
- * account — so every one of them is a public read, and everything they return
- * is something the site already shows on a public page.
+ * The reads carry no identity — they are public, and everything they return is
+ * something the site already shows on a public page. Nothing here ever sends an
+ * address the user did not ask about: the profile lookup is keyed by the
+ * address being looked at, and it is the only read that mentions one at all.
  *
- * Nothing here ever sends an address the user did not ask about: the profile
- * lookup is keyed by the address the user is looking at, and it is the only
- * call that mentions one at all.
+ * `publishPost` is the exception and needs a session, because a post needs an
+ * author. The wallet gets one by signing the site's login challenge
+ * (`lib/wallet/session.ts`); until it has, the composer offers that press and
+ * nothing else.
  */
+
+import { sessionCall } from '@/lib/wallet/session';
 
 export type FeedPerson = {
     name: string;
@@ -91,6 +94,22 @@ export const fetchFeed = async (
     tab: 'all' | 'posts' | 'dao' = 'all',
 ): Promise<FeedItem[]> =>
     (await read<{ items: FeedItem[] }>(`/api/wallet/feed?tab=${tab}`)).items;
+
+/**
+ * Write a post, as whoever this browser is signed in as.
+ *
+ * Answers with the row the feed draws, so the screen can put it on top of the
+ * list it already has instead of re-reading a list it just changed. A refusal
+ * arrives in the server's own words — "too fast", "not signed in" — because
+ * those are the two a person can act on.
+ */
+export const publishPost = async (body: string): Promise<FeedItem> =>
+    (
+        await sessionCall<{ post: FeedItem }>('/api/wallet/feed', {
+            method: 'POST',
+            body: JSON.stringify({ body }),
+        })
+    ).post;
 
 export const fetchDao = (): Promise<{
     daos: DaoSummary[];

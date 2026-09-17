@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StorePostRequest;
 use App\Models\Post;
 use App\Services\GamificationService;
+use App\Services\Social\PostAnnouncer;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,14 +22,25 @@ class PostController extends Controller
         ]);
     }
 
-    public function store(StorePostRequest $request, GamificationService $gamification): RedirectResponse
-    {
+    public function store(
+        StorePostRequest $request,
+        GamificationService $gamification,
+        PostAnnouncer $announcer,
+    ): RedirectResponse {
         $post = $request->user()->posts()->create($request->validated());
 
         // The wall paid nothing until now, which made it the one place on this
         // site where taking part was worth less than opening a page. Keyed by
         // the post so editing or reloading cannot pay twice.
         $gamification->recordAction($request->user(), 'post', (string) $post->getKey());
+
+        /*
+         * And everybody who allowed notifications hears about it — written
+         * here or written in the wallet, it is the same feed and the same
+         * audience. After the response, because this host has no queue worker
+         * and the person who wrote the post should not wait on the fan-out.
+         */
+        dispatch(fn () => $announcer->announce($post))->afterResponse();
 
         return back()->with('status', 'post-created');
     }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
 import {
     Bot,
@@ -456,6 +456,22 @@ const openSection = (next: Section): void => {
 /** Whose profile the profile screen is about — null means this wallet's own. */
 const profileAddress = ref<string | null>(null);
 
+/**
+ * Somebody the wallet is about to write to, handed to the chat on arrival.
+ *
+ * The feed prints an address on every post, and that address is the only thing
+ * the encrypted chat needs — so "write to this person" is one tap rather than
+ * copying twelve characters into a lookup field. Cleared once the chat has
+ * taken it, because it is a request and not a state: coming back to the chat
+ * later should open on whatever thread was last read.
+ */
+const chatPeer = ref<string | null>(null);
+
+const openChatWith = (address: string): void => {
+    chatPeer.value = address;
+    openSection('chat');
+};
+
 const openProfile = (address: string | null): void => {
     profileAddress.value = address;
     openSection('profile');
@@ -621,6 +637,38 @@ const openSwapContract = (
 const requestedSwap = ref<{ contract: string; chain: WalletChainId } | null>(
     null,
 );
+
+/**
+ * A link that names a screen: `/wallet?section=feed`.
+ *
+ * What a push notification lands on. Tapping "new post" has to arrive at the
+ * feed rather than at the portfolio with the feed one tap away — a
+ * notification that does not open what it is about is a notification people
+ * stop tapping.
+ *
+ * Only a destination of the tab bar is honoured — an address that can name any
+ * screen is an address that can be sent to somebody to open their wallet on a
+ * composer, and a name that is not a tab is simply ignored. The parameter stays
+ * in the address: this is a link to a place, and reopening it should land in
+ * the same place. `?swap=` deletes itself for the opposite reason — it opens a
+ * form over somebody's money, which must not come back on a refresh.
+ */
+const takeSectionRequest = (): void => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const url = new URL(window.location.href);
+    const wanted = url.searchParams.get('section');
+
+    if (wanted === null) {
+        return;
+    }
+
+    if (TABS.some((entry) => entry.id === wanted)) {
+        openSection(wanted as Section);
+    }
+};
 
 const takeSwapRequest = (): void => {
     if (typeof window === 'undefined') {
@@ -1115,6 +1163,7 @@ const trackConnection = (): void => {
 
 onMounted(() => {
     void startFresh();
+    takeSectionRequest();
     takeSwapRequest();
     applySwapRequest();
     trackConnection();
@@ -1597,7 +1646,9 @@ watch(
                     <WalletChat
                         v-else-if="section === 'chat'"
                         :wallet="wallet"
+                        :open-with="chatPeer"
                         @unread="refreshUnread"
+                        @opened="chatPeer = null"
                     />
 
                     <WalletAccounts
@@ -1812,7 +1863,11 @@ watch(
 
                     <WalletFeed
                         v-else-if="section === 'feed'"
+                        :wallet="wallet"
+                        :authenticated="authenticated"
                         @profile="openProfile"
+                        @message="openChatWith"
+                        @signed-in="router.reload({ only: ['auth'] })"
                     />
 
                     <WalletProfile

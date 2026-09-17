@@ -523,7 +523,7 @@ export const walletMessages: Messages = {
 
         gasStation: 'Gas station',
         gasStationBody:
-            'A fee can only be paid in the coin the network runs on, so an address holding tokens and no CYBER cannot move them. On Cyberia the station hands such an address enough CYBER to pay for itself — you then sign your own transaction, unchanged.',
+            'An address holding tokens and no CYBER cannot move them. The station hands it enough CYBER to pay its own fee — you then sign your own transaction, unchanged.',
         gasTank: 'Tank',
         gasStateLive: 'Serving',
         gasStatePaused: 'Stopped',
@@ -666,8 +666,10 @@ export const walletMessages: Messages = {
         // The Wired: what is on this chain, and how a page gets to talk to a
         // wallet. Not an embedded browser, and the screen says why.
         browseTitle: 'The Wired',
+        // A directory, and the one thing about it that is not obvious from
+        // looking at it: why these are links and not an embedded browser.
         browseBody:
-            'What runs on this chain, and where it is reached. This is a directory, not a browser: a page in a tab cannot hand another site a wallet, and a frame that could reach this vault could read the keys in it. What mediates between a page and a key is the extension, per site, with you in front of every signature.',
+            'A directory, not a browser: a frame that could reach this vault could read the keys in it. What mediates between a page and a key is the extension, per site, with you in front of every signature.',
         browseBridgeLabel: 'Pages here can talk to',
         browseModeExtension: 'A wallet is offered',
         browseModeExtensionBody:
@@ -829,7 +831,7 @@ export const walletMessages: Messages = {
         crossTileHint: 'Other chains · via a router',
         crossTitle: 'Cross-chain swap',
         crossBody:
-            'Cyberia has liquidity on Cyberia. Trading Base ETH for Solana SOL means somebody holding both sides, so this screen asks a router that does: you sign one deposit on the network you are spending from, and the router delivers on the other side. Cyberia never holds the money in between.',
+            'You sign one deposit on the network you are spending from, and a router that holds both sides delivers on the other. Cyberia never holds the money in between, and there is no cancel once the deposit is signed.',
         crossLoading: 'Asking the router what it can reach…',
         crossOff: 'Cross-chain swaps are switched off on this host.',
         crossUnavailable: 'The routing service could not be reached.',
@@ -1215,6 +1217,18 @@ export const walletMessages: Messages = {
         feedSomeone: 'Someone',
         feedLoading: 'Loading the feed…',
         feedEmpty: 'The feed is quiet.',
+        // Writing, which this screen could not do until the wallet was allowed
+        // to be an author.
+        feedComposePlaceholder: 'Say something to Cyberia',
+        feedPost: 'Post',
+        feedPosting: 'Posting…',
+        feedComposeReach: 'Notifies everyone',
+        feedSignInBody:
+            'Posting needs an author. Sign the site’s login message with this wallet — the key never leaves this device.',
+        feedSignIn: 'Sign in with this wallet',
+        feedSigningIn: 'Signing…',
+        feedWatchOnly: 'This account is watch-only, so it cannot sign or post.',
+        feedMessage: 'Message',
         feedUnreadable: 'Could not reach Cyberia for the feed.',
         feedOpen: 'Open',
         feedOpenSite: 'On the site',
@@ -2092,7 +2106,7 @@ export const walletMessages: Messages = {
 
         gasStation: 'Газовая станция',
         gasStationBody:
-            'Комиссию можно заплатить только той монетой, на которой работает сеть, — поэтому адрес с токенами и без CYBER не может сдвинуть эти токены. В Cyberia на это есть ответ: станция выдаёт такому адресу CYBER на его собственную комиссию, а вы подписываете свою транзакцию без изменений.',
+            'Адрес с токенами и без CYBER не может их сдвинуть. Станция выдаёт ему CYBER на его же комиссию — а вы подписываете свою транзакцию без изменений.',
         gasTank: 'Бак',
         gasStateLive: 'Работает',
         gasStatePaused: 'Остановлена',
@@ -2233,7 +2247,7 @@ export const walletMessages: Messages = {
         // разговаривает с кошельком.
         browseTitle: 'Провода',
         browseBody:
-            'Что работает в этой цепочке и где это открыть. Это каталог, а не браузер: страница во вкладке не может выдать другому сайту кошелёк, а фрейм, который дотянулся бы до этого хранилища, прочитал бы и ключи в нём. Посредник между страницей и ключом — расширение: по одному сайту за раз и с вами перед каждой подписью.',
+            'Это каталог, а не браузер: фрейм, который дотянулся бы до этого хранилища, прочитал бы и ключи в нём. Посредник между страницей и ключом — расширение: по одному сайту за раз и с вами перед каждой подписью.',
         browseBridgeLabel: 'Страницам здесь доступен',
         browseModeExtension: 'Кошелёк предложен',
         browseModeExtensionBody:
@@ -2388,7 +2402,7 @@ export const walletMessages: Messages = {
         crossTileHint: 'Другие сети · через маршрутизатор',
         crossTitle: 'Кроссчейн-своп',
         crossBody:
-            'Ликвидность Cyberia — на Cyberia. Обменять ETH в Base на SOL в Solana может только тот, у кого есть обе стороны, поэтому этот экран спрашивает маршрутизатор, у которого они есть: вы подписываете один депозит в сети, из которой тратите, а он выдаёт на другой стороне. Cyberia в промежутке деньги не держит.',
+            'Вы подписываете один депозит в сети, из которой тратите, а маршрутизатор с обеими сторонами выдаёт на другой. Cyberia в промежутке деньги не держит, и отменить подписанный депозит нельзя.',
         crossLoading: 'Спрашиваем маршрутизатор, куда он ходит…',
         crossOff: 'Кроссчейн-свопы на этом хосте выключены.',
         crossUnavailable: 'Маршрутизатор недоступен.',
@@ -2758,6 +2772,17 @@ export const walletMessages: Messages = {
         feedSomeone: 'Кто-то',
         feedLoading: 'Загружаю ленту…',
         feedEmpty: 'В ленте тихо.',
+        feedComposePlaceholder: 'Сказать Сайберии',
+        feedPost: 'Отправить',
+        feedPosting: 'Отправляем…',
+        feedComposeReach: 'Уведомит всех',
+        feedSignInBody:
+            'У поста должен быть автор. Подпишите этим кошельком обычное сообщение входа — ключ не покидает устройство.',
+        feedSignIn: 'Войти этим кошельком',
+        feedSigningIn: 'Подписываем…',
+        feedWatchOnly:
+            'Этот счёт только для наблюдения: он не может подписывать и писать.',
+        feedMessage: 'Написать',
         feedUnreadable: 'Не удалось получить ленту из Cyberia.',
         feedOpen: 'Открыть',
         feedOpenSite: 'На сайте',
@@ -3603,7 +3628,7 @@ export const walletMessages: Messages = {
 
         gasStation: '加油站',
         gasStationBody:
-            '手续费只能用这条链自己的币来付，所以一个只有代币、没有 CYBER 的地址动不了这些代币。在 Cyberia 上，加油站会给这样的地址一笔 CYBER 用来付它自己的手续费 — 然后你照原样签自己的交易。',
+            '只有代币、没有 CYBER 的地址动不了这些代币。加油站会给它一笔 CYBER 用来付自己的手续费 — 然后你照原样签自己的交易。',
         gasTank: '油箱',
         gasStateLive: '供应中',
         gasStatePaused: '已停止',
@@ -3737,7 +3762,7 @@ export const walletMessages: Messages = {
         // 线路：这条链上有什么，以及一个页面怎么跟钱包说话。
         browseTitle: '线路',
         browseBody:
-            '这条链上跑着什么，在哪里打开。这是一份目录，不是浏览器：标签页里的页面没法把钱包交给另一个站点，而一个能碰到这个保险库的框架，也就能读到里面的密钥。在页面和密钥之间做中间人的是扩展 — 按站点授权，每一次签名前都有你在。',
+            '这是一份目录，不是浏览器：一个能碰到这个保险库的框架，也就能读到里面的密钥。在页面和密钥之间做中间人的是扩展 — 按站点授权，每一次签名前都有你在。',
         browseBridgeLabel: '这里的页面能连到',
         browseModeExtension: '有钱包可用',
         browseModeExtensionBody:
@@ -3884,7 +3909,7 @@ export const walletMessages: Messages = {
         crossTileHint: '其他链 · 经由路由方',
         crossTitle: '跨链兑换',
         crossBody:
-            'Cyberia 的流动性在 Cyberia 上。用 Base 的 ETH 换 Solana 的 SOL，需要有人同时持有两端，所以本页向具备这一条件的路由方询价：您在支出所在的网络上签署一笔存入，路由方在另一端交付。中间过程 Cyberia 不持有任何资金。',
+            '您在支出所在的网络上签署一笔存入，同时持有两端的路由方在另一端交付。中间过程 Cyberia 不持有任何资金，存入一经签署便无法取消。',
         crossLoading: '正在询问路由方可达的网络…',
         crossOff: '本主机已关闭跨链兑换。',
         crossUnavailable: '无法连接路由服务。',
@@ -4234,6 +4259,16 @@ export const walletMessages: Messages = {
         feedSomeone: '某人',
         feedLoading: '正在加载动态…',
         feedEmpty: '动态很安静。',
+        feedComposePlaceholder: '对 Cyberia 说点什么',
+        feedPost: '发布',
+        feedPosting: '发布中…',
+        feedComposeReach: '会通知所有人',
+        feedSignInBody:
+            '发帖需要作者。用这个钱包签署站点的登录消息——密钥不会离开本设备。',
+        feedSignIn: '用这个钱包登录',
+        feedSigningIn: '签名中…',
+        feedWatchOnly: '这是只读账户，无法签名或发帖。',
+        feedMessage: '私信',
         feedUnreadable: '连不上 Cyberia，拿不到动态。',
         feedOpen: '打开',
         feedOpenSite: '在网站上',
