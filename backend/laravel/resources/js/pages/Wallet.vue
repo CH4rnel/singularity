@@ -302,8 +302,8 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
     {
         heading: () => t('railSections'),
         items: [
-            { id: 'chat', label: () => t('chatTitle') },
             { id: 'feed', label: () => t('feed') },
+            { id: 'chat', label: () => t('chatTitle') },
             { id: 'launchpad', label: () => t('launchpad') },
             { id: 'nft', label: () => t('nftTitle') },
             { id: 'tracker', label: () => t('trackerTitle') },
@@ -340,8 +340,8 @@ const SECTIONS: RailEntry[] = RAIL.flatMap((group) => group.items);
  */
 const TABS: { id: Section; label: () => string; icon: Component }[] = [
     { id: 'portfolio', label: () => t('tabWallet'), icon: WalletCards },
-    { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
     { id: 'feed', label: () => t('feed'), icon: Newspaper },
+    { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
     { id: 'nft', label: () => t('nftTitle'), icon: Images },
     { id: 'lain', label: () => t('navLain'), icon: Bot },
 ];
