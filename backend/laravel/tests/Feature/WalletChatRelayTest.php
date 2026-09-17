@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use App\Models\WalletChatKey;
 use App\Models\WalletChatMessage;
 use Elliptic\EC;
@@ -408,4 +409,38 @@ it('prunes envelopes past the retention window', function () {
     // The directory is not touched: a key is public and is what makes an
     // address reachable at all.
     expect(WalletChatKey::count())->toBe(2);
+});
+
+it('lists the site’s people to write to, and says who can be written to', function () {
+    $reachable = User::factory()->create([
+        'name' => 'netrunner',
+        'wallet_address' => '0x'.str_repeat('a', 40),
+    ]);
+    $silent = User::factory()->create([
+        'name' => 'lurker',
+        'wallet_address' => '0x'.str_repeat('b', 40),
+    ]);
+    User::factory()->create(['name' => 'no wallet', 'wallet_address' => null]);
+
+    WalletChatKey::query()->create([
+        'address' => strtolower($reachable->wallet_address),
+        'public_key' => '0x'.str_repeat('c', 66),
+        'issued_at' => now()->toIso8601String(),
+        'signature' => '0x'.str_repeat('d', 130),
+    ]);
+
+    $people = $this->getJson('/api/wallet/chat/people')->assertOk()->json('people');
+
+    // An account with no wallet cannot be written to at all, so it is not a
+    // row; one that has never opened chat is, with the reason it cannot be.
+    expect(collect($people)->pluck('name')->all())
+        ->toBe(['netrunner', 'lurker'])
+        ->and($people[0]['hasKey'])->toBeTrue()
+        ->and($people[1]['hasKey'])->toBeFalse()
+        ->and($people[0]['address'])->toBe(strtolower($reachable->wallet_address));
+
+    expect($this->getJson('/api/wallet/chat/people?q=lurk')->json('people'))
+        ->toHaveCount(1);
+
+    expect($silent->name)->toBe('lurker');
 });

@@ -379,6 +379,9 @@ Route::prefix('api/wallet/chat')->name('wallet.chat.')->group(function () {
         ->middleware('throttle:20,1')->name('keys.publish');
     Route::get('keys/{address}', [WalletChatController::class, 'key'])
         ->middleware('throttle:120,1')->name('keys.show');
+    // Who there is to write to: the site's own people, already public.
+    Route::get('people', [WalletChatController::class, 'people'])
+        ->middleware('throttle:60,1')->name('people');
     Route::get('messages', [WalletChatController::class, 'messages'])
         ->middleware('throttle:120,1')->name('messages');
     Route::post('messages', [WalletChatController::class, 'send'])

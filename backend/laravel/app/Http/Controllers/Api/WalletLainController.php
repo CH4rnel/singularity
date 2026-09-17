@@ -15,14 +15,21 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * The $LAIN holders' room inside the unified wallet.
+ * Lain's room inside the unified wallet.
+ *
+ * It was the *holders'* room: an address had to hold 10% of the live $LAIN
+ * supply to say anything at all, which meant the room existed for about two
+ * people and the rest of the wallet carried a door nobody could open. Anyone
+ * may write to her now. What the holding still decides is what she is — the
+ * share is read every turn and travels into `replyForHolder`, and the smarter
+ * Lain behind that share is the thing being built next.
  *
  * The wallet has no account behind it: the seed is generated in the browser and
- * the server never learns whose it is. So the gate cannot ask "who is signed
- * in" — it asks the wallet to sign a one-shot challenge with its Cyberia key,
- * recovers the address from that signature, and reads the address's share of
- * the live $LAIN supply from the chain. Holding the required share (10% by
- * default) is the entire membership test.
+ * the server never learns whose it is. So this still asks the wallet to sign a
+ * one-shot challenge with its Cyberia key and recovers the address from that
+ * signature — not as a membership test any more, but because a room where the
+ * turns belong to *somebody* is the difference between a conversation and an
+ * open pipe into a paid model.
  *
  * The challenge text is deliberately unlike the login one: a signature produced
  * here can never be replayed against /api/wallet/verify to take over an account.
@@ -95,32 +102,19 @@ class WalletLainController extends Controller
             ], 401);
         }
 
-        try {
-            $status = $this->holders->status($address);
-        } catch (Throwable $e) {
-            Log::warning('Wallet LAIN holder check failed', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'message' => 'Could not read the LAIN balance on Cyberia. Try again shortly.',
-                'gate' => ['state' => 'error'] + $this->gateBase(),
-            ], 503);
-        }
-
-        if (! $status['qualifies']) {
-            $request->session()->forget(self::SESSION_KEY);
-
-            return response()->json([
-                'message' => 'This wallet holds less than the required share of the LAIN supply.',
-                'gate' => $this->gate($status),
-            ], 403);
-        }
-
         $request->session()->put(self::SESSION_KEY, [
             'address' => $address,
             'proved_at' => now()->timestamp,
         ]);
 
-        return response()->json(['gate' => $this->gate($status)]);
+        /*
+         * The share is read for what it says about this address, never for
+         * whether it may speak — and an unreadable chain therefore closes
+         * nothing. It used to answer 503 here, which meant an RPC having a bad
+         * minute locked people out of a conversation that does not depend on
+         * it.
+         */
+        return response()->json(['gate' => $this->gate($this->share($address))]);
     }
 
     /** One turn. The browser sends the conversation it is holding. */
@@ -151,27 +145,10 @@ class WalletLainController extends Controller
         }
 
         // A proof from half an hour ago says nothing about the balance now, so
-        // the share is re-read every turn (cached 30s upstream): selling out
-        // closes the room mid-conversation, which is what the gate promises.
-        try {
-            $status = $this->holders->status($address);
-        } catch (Throwable $e) {
-            Log::warning('Wallet LAIN holder check failed', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'message' => 'Could not read the LAIN balance on Cyberia. Try again shortly.',
-                'gate' => ['state' => 'error'] + $this->gateBase(),
-            ], 503);
-        }
-
-        if (! $status['qualifies']) {
-            $request->session()->forget(self::SESSION_KEY);
-
-            return response()->json([
-                'message' => 'This wallet no longer holds the required share of the LAIN supply.',
-                'gate' => $this->gate($status),
-            ], 403);
-        }
+        // the share is re-read every turn (cached 30s upstream). It decides
+        // what Lain is to this address and not whether it may write to her, so
+        // selling out changes the room rather than closing it.
+        $status = $this->share($address);
 
         try {
             $reply = $this->lain->replyForHolder(
@@ -222,6 +199,33 @@ class WalletLainController extends Controller
             ],
             array_slice($history, -self::CONTEXT_MESSAGES),
         ));
+    }
+
+    /**
+     * This address's share of the supply, and zero when the chain will not say.
+     *
+     * Nothing is refused on this number any more, so an RPC that times out has
+     * to degrade the room rather than close it: the caller gets a Lain who does
+     * not know what they hold, which is exactly what this server knows.
+     *
+     * @return array{wallet: string, balance: string, total_supply: string, minimum_balance: string, share_bps: int, qualifies: bool}
+     */
+    private function share(string $address): array
+    {
+        try {
+            return $this->holders->status($address);
+        } catch (Throwable $e) {
+            Log::warning('Wallet LAIN holder check failed', ['error' => $e->getMessage()]);
+
+            return [
+                'wallet' => $address,
+                'balance' => '0',
+                'total_supply' => '0',
+                'minimum_balance' => '0',
+                'share_bps' => 0,
+                'qualifies' => false,
+            ];
+        }
     }
 
     /** The address this session proved, while the proof is still fresh. */

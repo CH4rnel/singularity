@@ -302,6 +302,7 @@ export {
     chatKeyVerifiedAt,
     clearChat,
     fetchChatEnvelopes,
+    fetchChatPeople,
     forgetWalletChats,
     lookupChatKey,
     markChatKeyVerified,
@@ -315,7 +316,7 @@ export {
     storeChatRows,
     unreadChatCount,
 } from '@/lib/wallet/chat';
-export type { ChatRow } from '@/lib/wallet/chat';
+export type { ChatPerson, ChatRow } from '@/lib/wallet/chat';
 export {
     APPROVE_GAS,
     SWAP_GAS_CAP,

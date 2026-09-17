@@ -997,11 +997,13 @@ export const walletMessages: Messages = {
 
         // Lain — the $LAIN holders' room
         lainTitle: 'Lain',
+        // The room is open to everybody now; what the holding buys is a
+        // better Lain, which is the thing being built next.
         lainIntro:
-            'Cyberia’s resident intelligence, open to wallets holding {required}% or more of the live $LAIN supply. Your share is read from the contract here, in this browser — nothing is sent anywhere until you choose to open the room.',
+            'Cyberia’s resident intelligence. Anyone can write to her: sign once with this wallet and the room opens. Your $LAIN share is read from the contract in this browser — it decides what she becomes for you, not whether you may speak.',
         lainHolding: 'You hold',
         lainShare: 'Share of supply',
-        lainRequired: 'Required',
+        lainRequired: 'Smarter from',
         lainReading: 'Reading the contract…',
         lainOff: 'Lain is not wired up on this server yet.',
         lainReadFailed:
@@ -1010,7 +1012,9 @@ export const walletMessages: Messages = {
             'The room is open to wallets holding {required}% of the live $LAIN supply. This account holds {share} — {amount} {symbol}.',
         lainShortHint:
             'The share is recomputed every time this screen is opened, so it follows both what you hold and what has been minted or burned.',
-        lainQualifies: 'This account qualifies',
+        lainQualifies: 'This account holds the share',
+        lainTier:
+            'Holding {required}% of $LAIN is what will buy the smarter Lain.',
         lainSignBody:
             'Sign a challenge with this wallet’s Cyberia key to open the room. It moves no funds, approves no transaction and grants no allowance — it only proves that this browser holds the key behind the address.',
         lainSign: 'Hold to sign',
@@ -1061,6 +1065,12 @@ export const walletMessages: Messages = {
         chatSyncing: 'Checking…',
         chatThreads: '{count} conversations',
         chatNew: 'New conversation',
+        // The directory, which is the half an address field cannot be.
+        chatPeople: 'People here',
+        chatPeopleSearch: 'Name or address',
+        chatPeopleNoKey: 'has not opened chat yet',
+        chatPeopleEmpty: 'Nobody with a wallet attached yet.',
+        chatPeopleFailed: 'Could not read the list. Try again.',
         chatNewBody:
             'Both wallets have to have opened chat: an address is a hash, so there is nothing to encrypt to until its owner has published a key.',
         chatAddressLabel: 'Write to which address',
@@ -2563,10 +2573,10 @@ export const walletMessages: Messages = {
         // Лейн — комната держателей $LAIN
         lainTitle: 'Лейн',
         lainIntro:
-            'Разум Cyberia. Комната открыта кошелькам, у которых есть {required}% и больше живой эмиссии $LAIN. Доля читается прямо из контракта здесь, в браузере, — пока вы сами не откроете комнату, наружу не уходит ничего.',
+            'Разум Cyberia. Писать может кто угодно: подпишите один раз этим кошельком — и комната откроется. Доля $LAIN читается прямо из контракта здесь, в браузере, и решает, какой она для вас станет, а не можно ли вам говорить.',
         lainHolding: 'У вас',
         lainShare: 'Доля эмиссии',
-        lainRequired: 'Нужно',
+        lainRequired: 'Умнее от',
         lainReading: 'Читаю контракт…',
         lainOff: 'Лейн на этом сервере ещё не подключена.',
         lainReadFailed:
@@ -2575,7 +2585,9 @@ export const walletMessages: Messages = {
             'Комната открыта кошелькам с {required}% живой эмиссии $LAIN. На этом счёте {share} — {amount} {symbol}.',
         lainShortHint:
             'Доля пересчитывается при каждом открытии экрана, поэтому она следует и за вашим балансом, и за тем, что было выпущено или сожжено.',
-        lainQualifies: 'Этот счёт подходит',
+        lainQualifies: 'У этого счёта есть доля',
+        lainTier:
+            'Доля в {required}% $LAIN — это то, за что будет доступна более умная Лейн.',
         lainSignBody:
             'Подпишите вызов ключом Cyberia из этого кошелька, чтобы открыть комнату. Подпись не двигает средства, не подтверждает транзакцию и не даёт разрешений — она лишь доказывает, что ключ от адреса лежит в этом браузере.',
         lainSign: 'Держите, чтобы подписать',
@@ -2616,6 +2628,11 @@ export const walletMessages: Messages = {
         chatSyncing: 'Проверяем…',
         chatThreads: 'Переписок: {count}',
         chatNew: 'Новая переписка',
+        chatPeople: 'Кто здесь есть',
+        chatPeopleSearch: 'Имя или адрес',
+        chatPeopleNoKey: 'ещё не открывал чат',
+        chatPeopleEmpty: 'Пока никто не привязал кошелёк.',
+        chatPeopleFailed: 'Не удалось прочитать список. Попробуйте ещё раз.',
         chatNewBody:
             'Чат должен быть открыт с обеих сторон: адрес — это хеш, и пока его владелец не опубликовал ключ, шифровать не для кого.',
         chatAddressLabel: 'Кому писать',
@@ -4060,10 +4077,10 @@ export const walletMessages: Messages = {
         // Lain — the $LAIN holders' room
         lainTitle: 'Lain',
         lainIntro:
-            'Cyberia 的常驻智能，向持有 $LAIN 实时流通量 {required}% 及以上的钱包开放。你的占比就在这个浏览器里从合约读出来 — 在你决定进入这个房间之前，什么都不会被发送出去。',
+            'Cyberia 的常驻智能。任何人都可以和她说话：用这个钱包签一次名，房间就开了。你的 $LAIN 占比就在这个浏览器里从合约读出来 — 它决定她对你是什么样子，而不是你能不能说话。',
         lainHolding: '你持有',
         lainShare: '占流通量',
-        lainRequired: '门槛',
+        lainRequired: '更聪明的起点',
         lainReading: '正在读取合约…',
         lainOff: 'Lain 在这台服务器上还没接通。',
         lainReadFailed:
@@ -4072,7 +4089,8 @@ export const walletMessages: Messages = {
             '这个房间向持有 $LAIN 实时流通量 {required}% 的钱包开放。这个账户持有 {share} — {amount} {symbol}。',
         lainShortHint:
             '每次打开这个页面都会重新计算占比，所以它既跟着你持有的数量走，也跟着增发或销毁走。',
-        lainQualifies: '这个账户符合条件',
+        lainQualifies: '这个账户持有该份额',
+        lainTier: '持有 {required}% 的 $LAIN，将换来更聪明的 Lain。',
         lainSignBody:
             '用这个钱包的 Cyberia 密钥签一个挑战即可进入。它不转移资金、不批准交易、不授予任何额度 — 它只证明这个浏览器握有这个地址背后的密钥。',
         lainSign: '按住签名',
@@ -4111,6 +4129,11 @@ export const walletMessages: Messages = {
         chatSyncing: '检查中…',
         chatThreads: '{count} 个会话',
         chatNew: '新会话',
+        chatPeople: '这里有谁',
+        chatPeopleSearch: '名字或地址',
+        chatPeopleNoKey: '还没开过聊天',
+        chatPeopleEmpty: '还没有人绑定钱包。',
+        chatPeopleFailed: '没能读取名单，请重试。',
         chatNewBody:
             '两边的钱包都得开通过聊天：地址是一个哈希，在它的主人发布密钥之前，没有东西可以加密给他。',
         chatAddressLabel: '写给哪个地址',

@@ -165,6 +165,33 @@ export const lookupChatKey = async (
     return record;
 };
 
+/** Somebody the wallet can be pointed at, from the site's own people. */
+export type ChatPerson = {
+    name: string;
+    address: string;
+    url: string | null;
+    /** False until that address has opened chat — nothing can be sealed to it. */
+    hasKey: boolean;
+};
+
+/**
+ * Who there is to write to.
+ *
+ * A chat addressed by EVM address can only be started by somebody who already
+ * has the address, which meant copying forty hex characters out of a feed post.
+ * This is the list the screen offers instead. It carries nothing that is not on
+ * a public profile page already, and every row says whether that address can be
+ * written to at all.
+ */
+export const fetchChatPeople = async (
+    query = '',
+): Promise<ChatPerson[]> =>
+    (
+        await call<{ people: ChatPerson[] }>(
+            `/api/wallet/chat/people${query ? `?q=${encodeURIComponent(query)}` : ''}`,
+        )
+    ).people;
+
 export const sendChatEnvelope = (
     row: ChatMeta & ChatEnvelope,
 ): Promise<unknown> =>

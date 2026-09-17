@@ -130,17 +130,20 @@ it('opens the room for a wallet holding its share of the supply', function () {
         ->assertJsonPath('text', 'present.');
 });
 
-it('turns away a wallet holding less than the required share', function () {
+it('lets in a wallet holding less than the tier, and says what it holds', function () {
     roomRpc(ROOM_ONE_PERCENT);
     [$key, $address] = roomWallet();
 
+    // The share is reported and the room opens anyway: it decides what Lain
+    // becomes for this address, not whether it may write to her.
     roomEnter($key, $address)
-        ->assertForbidden()
+        ->assertOk()
         ->assertJsonPath('gate.qualifies', false)
         ->assertJsonPath('gate.shareBps', 100);
 
     $this->postJson('/api/wallet/lain/chat', ['text' => 'let me in'])
-        ->assertForbidden();
+        ->assertOk()
+        ->assertJsonPath('gate.qualifies', false);
 });
 
 it('refuses a signature that was not made by the address it claims', function () {
@@ -183,25 +186,41 @@ it('refuses to answer a wallet that never signed', function () {
     Http::assertNotSent(fn (Request $request) => $request->url() === ROOM_OPENROUTER_URL);
 });
 
-it('closes the room again when the balance falls below the threshold', function () {
+it('follows the balance down without shutting the door', function () {
     roomRpc(ROOM_TEN_PERCENT);
     [$key, $address] = roomWallet();
 
-    roomEnter($key, $address)->assertOk();
+    roomEnter($key, $address)->assertOk()->assertJsonPath('gate.qualifies', true);
 
     // The holder status is cached for half a minute; drop it so the next turn
     // asks the chain rather than the answer it got when the room opened.
     Cache::flush();
     roomRpc(ROOM_ONE_PERCENT);
 
+    // Selling changes what she is, and the conversation continues.
     $this->postJson('/api/wallet/lain/chat', ['text' => 'still here?'])
-        ->assertForbidden()
-        ->assertJsonPath('gate.qualifies', false);
+        ->assertOk()
+        ->assertJsonPath('gate.qualifies', false)
+        ->assertJsonPath('gate.shareBps', 100);
+});
 
-    // And the proof is gone with it: the room stays shut until it is re-earned.
-    $this->postJson('/api/wallet/lain/chat', ['text' => 'hello?'])
-        ->assertForbidden()
-        ->assertJsonPath('gate.state', 'unproven');
+it('keeps talking when the chain cannot be read at all', function () {
+    Http::fake([
+        'rpc.cyberia.church/*' => Http::response([], 503),
+        ROOM_OPENROUTER_URL => Http::response([
+            'choices' => [['message' => ['content' => 'present.']]],
+        ]),
+    ]);
+
+    [$key, $address] = roomWallet();
+
+    // Nothing is refused on the share any more, so an RPC having a bad minute
+    // degrades what Lain knows rather than locking somebody out of her.
+    roomEnter($key, $address)->assertOk()->assertJsonPath('gate.shareBps', 0);
+
+    $this->postJson('/api/wallet/lain/chat', ['text' => 'hello'])
+        ->assertOk()
+        ->assertJsonPath('text', 'present.');
 });
 
 it('replays the browser transcript as context and keeps none of it', function () {

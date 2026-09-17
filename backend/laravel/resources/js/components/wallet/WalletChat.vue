@@ -25,6 +25,7 @@ import {
     chatMessageId,
     clearChat,
     fetchChatEnvelopes,
+    fetchChatPeople,
     lookupChatKey,
     markChatKeyVerified,
     markChatRead,
@@ -36,8 +37,14 @@ import {
     sendChatEnvelope,
     storeChatRows,
 } from '@/lib/wallet';
-import type { ChatKeyRecord, ChatMeta, ChatRow } from '@/lib/wallet';
+import type {
+    ChatKeyRecord,
+    ChatMeta,
+    ChatPerson,
+    ChatRow,
+} from '@/lib/wallet';
 import { growComposer } from '@/lib/wallet/composer';
+import { shortAddress } from '@/lib/wallet/format';
 import {
     announceWalletEvent,
     playWalletSound,
@@ -122,6 +129,48 @@ const view = ref<'list' | 'thread' | 'new' | 'verify'>('list');
 const peer = ref<string | null>(null);
 const draft = ref('');
 const lookupAddress = ref('');
+
+/**
+ * Who there is to write to.
+ *
+ * The screen used to be an address field and nothing else, which meant a
+ * conversation could only be started by somebody who had already copied forty
+ * hex characters out of a feed post. The list is the site's own people —
+ * accounts with a wallet attached, whose name and address are on a public
+ * profile already — and every row says whether that address has opened chat,
+ * because an address with no published key cannot be written to at all and
+ * that is worth saying before the composer rather than inside it.
+ */
+const people = ref<ChatPerson[]>([]);
+const peopleLoading = ref(false);
+const peopleFailed = ref(false);
+const peopleQuery = ref('');
+
+const loadPeople = async (): Promise<void> => {
+    peopleLoading.value = true;
+    peopleFailed.value = false;
+
+    try {
+        people.value = await fetchChatPeople(peopleQuery.value.trim());
+    } catch {
+        peopleFailed.value = true;
+        people.value = [];
+    } finally {
+        peopleLoading.value = false;
+    }
+};
+
+/** Whoever this wallet is, it is not somebody to write to from here. */
+const others = computed(() =>
+    people.value.filter(
+        (person) => person.address.toLowerCase() !== address.value,
+    ),
+);
+
+const writeTo = async (person: ChatPerson): Promise<void> => {
+    lookupAddress.value = person.address;
+    await startThread();
+};
 const lookupError = ref<string | null>(null);
 const lookingUp = ref(false);
 const transcript = ref<HTMLElement | null>(null);
@@ -911,7 +960,10 @@ onBeforeUnmount(stopPolling);
                 type="button"
                 class="cw-dashed"
                 style="margin-bottom: 14px"
-                @click="view = 'new'"
+                @click="
+                    view = 'new';
+                    loadPeople();
+                "
             >
                 <Plus :size="13" aria-hidden="true" />
                 {{ t('chatNew') }}
@@ -1008,9 +1060,6 @@ onBeforeUnmount(stopPolling);
             <p v-if="lookupError" class="cw-note cw-note-warn">
                 <span>{{ lookupError }}</span>
             </p>
-            <p class="cw-prose" style="max-width: 62ch">
-                {{ t('chatNewBody') }}
-            </p>
             <div style="display: flex; gap: 8px">
                 <button
                     type="button"
@@ -1028,6 +1077,87 @@ onBeforeUnmount(stopPolling);
                     {{ t('cancel') }}
                 </button>
             </div>
+
+            <!--
+              And who there is to write to, which is the half this screen was
+              missing: an address field alone can only be used by somebody who
+              already has the address. A row that has never opened chat is
+              still listed and says so — that is the answer to why it cannot be
+              written to, and it is better given here than inside a composer.
+            -->
+            <div class="cw-row" style="margin-top: 14px">
+                <span class="cw-label">{{ t('chatPeople') }}</span>
+                <button
+                    type="button"
+                    class="cw-back"
+                    :disabled="peopleLoading"
+                    @click="loadPeople()"
+                >
+                    {{ peopleLoading ? t('chatLookingUp') : t('refresh') }}
+                </button>
+            </div>
+
+            <input
+                v-model="peopleQuery"
+                class="cw-input"
+                type="search"
+                spellcheck="false"
+                :placeholder="t('chatPeopleSearch')"
+                :aria-label="t('chatPeopleSearch')"
+                @keydown.enter.prevent="loadPeople()"
+            />
+
+            <p
+                v-if="peopleFailed"
+                class="cw-label"
+                style="color: var(--cw-faint)"
+            >
+                {{ t('chatPeopleFailed') }}
+            </p>
+            <p
+                v-else-if="!peopleLoading && others.length === 0"
+                class="cw-label"
+                style="color: var(--cw-faint)"
+            >
+                {{ t('chatPeopleEmpty') }}
+            </p>
+
+            <div class="cw-stack" style="gap: 0">
+                <button
+                    v-for="person in others"
+                    :key="person.address"
+                    type="button"
+                    class="cw-line-row"
+                    :disabled="lookingUp"
+                    @click="writeTo(person)"
+                >
+                    <span style="flex: 1; min-width: 0">
+                        <span
+                            style="
+                                display: block;
+                                font: 500 14px/1.2 var(--cw-sans);
+                            "
+                            >{{ person.name }}</span
+                        >
+                        <span
+                            style="
+                                display: block;
+                                margin-top: 3px;
+                                font: 400 11px/1.4 var(--cw-mono);
+                                color: var(--cw-dim);
+                            "
+                            >{{ shortAddress(person.address)
+                            }}<template v-if="!person.hasKey">
+                                · {{ t('chatPeopleNoKey') }}</template
+                            ></span
+                        >
+                    </span>
+                </button>
+            </div>
+
+            <p class="cw-prose" style="max-width: 62ch">
+                {{ t('chatNewBody') }}
+            </p>
         </div>
 
         <!--
