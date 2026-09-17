@@ -56,6 +56,7 @@ import WalletTracker from '@/components/wallet/WalletTracker.vue';
 import WalletTrackerPublish from '@/components/wallet/WalletTrackerPublish.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
+import { useSwipeNav } from '@/composables/useSwipeNav';
 import { useWalletAuth } from '@/composables/useWalletAuth';
 import { useWalletTheme } from '@/composables/useWalletTheme';
 import { analytics } from '@/lib/analytics';
@@ -79,6 +80,7 @@ import type { QuestDestination } from '@/lib/wallet/daily';
 import type { Market } from '@/lib/wallet/markets';
 import { announceWalletEvent } from '@/lib/wallet/notifications';
 import type { PlayerTrack } from '@/lib/wallet/player';
+import type { SwipeIntent } from '@/lib/wallet/swipe';
 import { canStream, torrentBridge } from '@/lib/wallet/torrent';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -842,15 +844,20 @@ const sendChainToken = (
  *
  * This section has to sit *below* the navigation it reads. Its watches are
  * `immediate`, so they run while `setup` is still executing: reading
- * `telegramBack` there evaluates `PARENTS` and the openers, and a `const`
+ * `goBack` there evaluates `PARENTS` and the openers, and a `const`
  * declared further down the file is not yet initialised. Higher up, the whole
  * page threw `ReferenceError` before its first paint and the Mini App opened
  * on a black screen — and only inside Telegram, since nothing else runs this.
  */
 const telegram = nativeShell() === 'telegram';
 
-/** Where "back" goes, or null on a screen that is already the top of the app. */
-const telegramBack = computed<(() => void) | null>(() => {
+/**
+ * Where "back" goes, or null on a screen that is already the top of the app.
+ *
+ * Two things read it, because they are the same movement said two ways:
+ * Telegram's own back arrow, and a swipe from left to right.
+ */
+const goBack = computed<(() => void) | null>(() => {
     if (overlay.value !== null) {
         return () => {
             overlay.value = null;
@@ -907,7 +914,7 @@ if (telegram) {
     );
 
     watch(
-        telegramBack,
+        goBack,
         (handler) => {
             releaseBack();
             releaseBack = setBackButton(handler);
@@ -920,6 +927,51 @@ if (telegram) {
         releaseBack();
     });
 }
+
+/**
+ * A swipe across the screen, which on a phone is what "back" and "next" are.
+ *
+ * Two rules and no more. Going *back* means whatever the back arrow at the top
+ * of this screen means — an overlay closes, a screen opened from another one
+ * returns to it — so the two can never disagree about where back is. On a
+ * screen that has no back, the gesture moves between the tabs, in the order
+ * they are drawn, and stops at both ends rather than wrapping: a bar you can
+ * see is a map, and a map that loops teleports you.
+ *
+ * The desktop is excluded outright. It has a rail, its pointer is a mouse, and
+ * a mouse dragging across a page is somebody selecting text.
+ */
+const swipeTo = (intent: SwipeIntent): void => {
+    if (desktop.value || stage.value !== 'app') {
+        return;
+    }
+
+    const back = goBack.value;
+
+    if (intent === 'back' && back !== null) {
+        back();
+
+        return;
+    }
+
+    if (overlay.value !== null) {
+        return;
+    }
+
+    const at = TABS.findIndex((entry) => entry.id === activeTab.value);
+
+    if (at < 0) {
+        return;
+    }
+
+    const next = TABS[at + (intent === 'back' ? -1 : 1)];
+
+    if (next) {
+        openSection(next.id);
+    }
+};
+
+const swipe = useSwipeNav(swipeTo);
 
 const refreshPrices = async (): Promise<void> => {
     try {
@@ -1328,6 +1380,9 @@ watch(
             class="cw-shell"
             :class="{ 'cw-shell-native': native }"
             @pointerdown="wallet.touch()"
+            @touchstart="swipe.onTouchStart"
+            @touchend="swipe.onTouchEnd"
+            @touchcancel="swipe.onTouchCancel"
             @keydown="wallet.touch()"
         >
             <!-- Desktop rail -->
