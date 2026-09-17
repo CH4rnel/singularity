@@ -183,9 +183,7 @@ export type ChatPerson = {
  * a public profile page already, and every row says whether that address can be
  * written to at all.
  */
-export const fetchChatPeople = async (
-    query = '',
-): Promise<ChatPerson[]> =>
+export const fetchChatPeople = async (query = ''): Promise<ChatPerson[]> =>
     (
         await call<{ people: ChatPerson[] }>(
             `/api/wallet/chat/people${query ? `?q=${encodeURIComponent(query)}` : ''}`,
@@ -224,6 +222,25 @@ type Pinned = {
     verifiedAt?: string;
 };
 
+/**
+ * A message written to somebody who has not opened chat yet.
+ *
+ * There is nothing to encrypt to until an address publishes a messaging key,
+ * so this is what "write to anyone" is made of: the wallet takes the message,
+ * keeps it, and sends it the moment that key appears. It is held **sealed to
+ * the sender's own key** rather than as text — a locked wallet holding readable
+ * mail is exactly what the ciphertext-on-device rule exists to prevent, and an
+ * unsent message is still mail.
+ */
+export type PendingMessage = {
+    id: string;
+    /** Lowercased recipient. */
+    to: string;
+    sentAt: string;
+    /** Sealed to the sender's own messaging key; opened again to be sent. */
+    envelope: ChatEnvelope;
+};
+
 type OwnerState = {
     /** Peer address → the key first seen for it. */
     peers: Record<string, Pinned>;
@@ -231,6 +248,8 @@ type OwnerState = {
     cursor: number;
     /** Peer address → the highest `seq` this device has shown the user. */
     read: Record<string, number>;
+    /** Written, not yet sendable: the recipient has published no key. */
+    pending?: PendingMessage[];
 };
 
 type ChatStore = Record<string, OwnerState>;
@@ -240,7 +259,17 @@ const emptyOwner = (): OwnerState => ({
     rows: [],
     cursor: 0,
     read: {},
+    pending: [],
 });
+
+/**
+ * How many unsent messages one account keeps.
+ *
+ * A bound rather than a policy: these are held until a recipient opens chat,
+ * which may be never, and a queue that grows without one is a way to fill
+ * somebody's storage with their own patience.
+ */
+const MAX_PENDING = 50;
 
 const readStore = (): ChatStore => {
     if (typeof window === 'undefined') {
@@ -444,6 +473,44 @@ export const markChatRead = (
 };
 
 /** Forget one account's messages, leaving every other account's alone. */
+/**
+ * Everything written to somebody who could not yet be written to.
+ *
+ * Kept per account and in the order it was written, because that is the order
+ * it will be sent in and the order the thread shows it.
+ */
+export const readChatPending = (owner: string): PendingMessage[] =>
+    readChatState(owner).pending ?? [];
+
+/** Take a message the recipient has no key for, and keep it. */
+export const queueChatMessage = (
+    owner: string,
+    message: PendingMessage,
+): PendingMessage[] => {
+    const state = readChatState(owner);
+    const pending = [
+        ...(state.pending ?? []).filter((entry) => entry.id !== message.id),
+        message,
+    ].slice(-MAX_PENDING);
+
+    writeOwner(owner, { ...state, pending });
+
+    return pending;
+};
+
+/** Sent at last, or given up on: either way it stops being pending. */
+export const dropChatPending = (
+    owner: string,
+    id: string,
+): PendingMessage[] => {
+    const state = readChatState(owner);
+    const pending = (state.pending ?? []).filter((entry) => entry.id !== id);
+
+    writeOwner(owner, { ...state, pending });
+
+    return pending;
+};
+
 export const clearChat = (owner: string): void => {
     if (typeof window === 'undefined') {
         return;

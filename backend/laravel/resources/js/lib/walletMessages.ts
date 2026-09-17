@@ -1066,6 +1066,11 @@ export const walletMessages: Messages = {
         chatThreads: '{count} conversations',
         chatNew: 'New conversation',
         // The directory, which is the half an address field cannot be.
+        // Writing to somebody who has not opened chat yet: kept, not refused.
+        chatWaitingCount: '{count} waiting to be sent',
+        chatWaiting: 'waiting',
+        chatWaitingNote:
+            'This address has not opened chat yet, so nothing can be encrypted to it. What you write is kept on this device and sent by itself the moment they do.',
         chatPeople: 'People here',
         chatPeopleSearch: 'Name or address',
         chatPeopleNoKey: 'has not opened chat yet',
@@ -2628,6 +2633,10 @@ export const walletMessages: Messages = {
         chatSyncing: 'Проверяем…',
         chatThreads: 'Переписок: {count}',
         chatNew: 'Новая переписка',
+        chatWaitingCount: 'ждёт отправки: {count}',
+        chatWaiting: 'ждёт',
+        chatWaitingNote:
+            'Этот адрес ещё не открывал чат, поэтому зашифровать ему нечем. Написанное остаётся на этом устройстве и уйдёт само, как только он его откроет.',
         chatPeople: 'Кто здесь есть',
         chatPeopleSearch: 'Имя или адрес',
         chatPeopleNoKey: 'ещё не открывал чат',
@@ -4129,6 +4138,10 @@ export const walletMessages: Messages = {
         chatSyncing: '检查中…',
         chatThreads: '{count} 个会话',
         chatNew: '新会话',
+        chatWaitingCount: '{count} 条等待发送',
+        chatWaiting: '等待中',
+        chatWaitingNote:
+            '这个地址还没开过聊天，所以没有可加密的对象。你写的内容留在这台设备上，等对方开了聊天就会自动发出。',
         chatPeople: '这里有谁',
         chatPeopleSearch: '名字或地址',
         chatPeopleNoKey: '还没开过聊天',

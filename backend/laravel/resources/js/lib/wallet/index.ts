@@ -301,6 +301,7 @@ export type {
 export {
     chatKeyVerifiedAt,
     clearChat,
+    dropChatPending,
     fetchChatEnvelopes,
     fetchChatPeople,
     forgetWalletChats,
@@ -310,13 +311,19 @@ export {
     pinChatKey,
     proveChatAddress,
     publishChatKey,
+    queueChatMessage,
+    readChatPending,
     readChatState,
     requestChatNonce,
     sendChatEnvelope,
     storeChatRows,
     unreadChatCount,
 } from '@/lib/wallet/chat';
-export type { ChatPerson, ChatRow } from '@/lib/wallet/chat';
+export type {
+    ChatPerson,
+    ChatRow,
+    PendingMessage,
+} from '@/lib/wallet/chat';
 export {
     APPROVE_GAS,
     SWAP_GAS_CAP,
