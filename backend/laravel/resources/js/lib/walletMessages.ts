@@ -96,8 +96,12 @@ export const walletMessages: Messages = {
         preferencesBody:
             'How the wallet looks and reads, what this device says out loud, and whether the desktop app stays within reach after login. All of it is kept on this device.',
         preferencesNotifications: 'System notifications',
+        // Now one switch for both halves, so the hint says the half people
+        // cannot see: this is what reaches the device with the app closed.
         preferencesNotificationsHint:
-            'Incoming transfers, messages and completed operations',
+            'Transfers, messages and new posts — including while the wallet is closed',
+        preferencesNotificationsUnavailable:
+            'This device cannot be subscribed right now — reopen the wallet and try again',
         preferencesNotificationsDenied:
             'Blocked by the operating system or browser — allow Cyberia in its notification settings',
         preferencesNotificationsUnsupported:
@@ -1229,10 +1233,6 @@ export const walletMessages: Messages = {
         feedSigningIn: 'Signing…',
         feedWatchOnly: 'This account is watch-only, so it cannot sign or post.',
         feedMessage: 'Message',
-        // Offered on the feed, because that is where somebody has a reason to
-        // say yes; the switch itself stays in Security.
-        feedNotifyOffer: 'Tell me when somebody posts',
-        feedNotifyAction: 'Allow',
         feedUnreadable: 'Could not reach Cyberia for the feed.',
         feedOpen: 'Open',
         feedOpenSite: 'On the site',
@@ -1727,7 +1727,9 @@ export const walletMessages: Messages = {
             'Как кошелёк выглядит и на каком языке говорит, о чём сообщать на этом устройстве и должно ли настольное приложение оставаться доступным после входа в ОС. Всё это хранится на устройстве.',
         preferencesNotifications: 'Системные уведомления',
         preferencesNotificationsHint:
-            'Входящие переводы, сообщения и завершённые операции',
+            'Переводы, сообщения и новые посты — в том числе когда кошелёк закрыт',
+        preferencesNotificationsUnavailable:
+            'Это устройство сейчас не подписать — откройте кошелёк заново и попробуйте ещё раз',
         preferencesNotificationsDenied:
             'Заблокированы системой или браузером — разрешите уведомления для Cyberia в их настройках',
         preferencesNotificationsUnsupported:
@@ -2787,8 +2789,6 @@ export const walletMessages: Messages = {
         feedWatchOnly:
             'Этот счёт только для наблюдения: он не может подписывать и писать.',
         feedMessage: 'Написать',
-        feedNotifyOffer: 'Сообщать о новых постах',
-        feedNotifyAction: 'Разрешить',
         feedUnreadable: 'Не удалось получить ленту из Cyberia.',
         feedOpen: 'Открыть',
         feedOpenSite: 'На сайте',
@@ -3267,7 +3267,9 @@ export const walletMessages: Messages = {
         preferencesBody:
             '钱包的外观与语言、这台设备要提醒什么，以及桌面版是否在登录系统后保持可用。这些都只保存在本机。',
         preferencesNotifications: '系统通知',
-        preferencesNotificationsHint: '收款、消息和已完成的操作',
+        preferencesNotificationsHint: '收款、消息和新帖子 — 包括钱包关闭时',
+        preferencesNotificationsUnavailable:
+            '现在无法订阅这台设备 — 请重新打开钱包再试一次',
         preferencesNotificationsDenied:
             '已被系统或浏览器阻止 — 请在通知设置中允许 Cyberia',
         preferencesNotificationsUnsupported: '这个运行环境不支持系统通知',
@@ -4275,8 +4277,6 @@ export const walletMessages: Messages = {
         feedSigningIn: '签名中…',
         feedWatchOnly: '这是只读账户，无法签名或发帖。',
         feedMessage: '私信',
-        feedNotifyOffer: '有人发帖时通知我',
-        feedNotifyAction: '允许',
         feedUnreadable: '连不上 Cyberia，拿不到动态。',
         feedOpen: '打开',
         feedOpenSite: '在网站上',

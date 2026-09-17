@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
 import { Bell, ExternalLink, Power, Volume2 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { LOCALE_LABELS, useLocale } from '@/composables/useLocale';
@@ -19,6 +20,8 @@ import {
     subscribeWalletPreferences,
     walletNotificationPermission,
 } from '@/lib/wallet/notifications';
+import { disablePush, enablePush, pushState } from '@/lib/wallet/push';
+import type { PushState } from '@/lib/wallet/push';
 import { walletMessages } from '@/lib/walletMessages';
 
 defineEmits<{ back: [] }>();
@@ -45,27 +48,82 @@ const startupError = ref(false);
 const desktop = nativeShell() === 'desktop';
 const tray = hasNativeTray();
 
+/**
+ * One switch, and it covers both halves of being notified.
+ *
+ * There were two, in two screens, called the same word: this one, which let the
+ * wallet raise a notice while it was open, and a second in Security that
+ * subscribed the device for web push — the only one that can say anything while
+ * the app is closed. Somebody who turned on "Уведомления" here got the
+ * permission and no subscription, so the feed's announcement reached them
+ * never. They are one decision and are now one control: on means both, off
+ * means both, and the state that is drawn is the subscription's, because it is
+ * the one that can fail on its own.
+ */
+const push = ref<PushState>('unsupported');
+const pushBusy = ref(false);
+
+const vapidKey = computed(
+    () => (usePage().props.vapidPublicKey as string | undefined) ?? null,
+);
+
+const notificationsOn = computed(
+    () => preferences.value.notifications || push.value === 'on',
+);
+
+const notificationsBlocked = computed(
+    () =>
+        pushBusy.value ||
+        permission.value === 'unsupported' ||
+        permission.value === 'denied' ||
+        push.value === 'denied' ||
+        push.value === 'unsupported',
+);
+
 const notificationsHint = computed(() => {
-    if (permission.value === 'unsupported') {
+    if (permission.value === 'unsupported' || push.value === 'unsupported') {
         return t('preferencesNotificationsUnsupported');
     }
 
-    if (permission.value === 'denied') {
+    if (permission.value === 'denied' || push.value === 'denied') {
         return t('preferencesNotificationsDenied');
+    }
+
+    // The subscription is what a closed app is reached through, and it can be
+    // missing while the permission is granted — a rotated key, a cleared site,
+    // a browser that dropped it. Said rather than drawn as "on".
+    if (push.value === 'unavailable') {
+        return t('preferencesNotificationsUnavailable');
     }
 
     return t('preferencesNotificationsHint');
 });
 
 const toggleNotifications = async (enabled: boolean): Promise<void> => {
-    if (enabled) {
-        await enableWalletNotifications();
-    } else {
-        saveWalletPreferences({ notifications: false });
+    if (pushBusy.value) {
+        return;
     }
 
-    permission.value = walletNotificationPermission();
-    preferences.value = readWalletPreferences();
+    pushBusy.value = true;
+
+    try {
+        if (enabled) {
+            await enableWalletNotifications();
+
+            if (vapidKey.value !== null) {
+                push.value = await enablePush(vapidKey.value, locale.value);
+            }
+        } else {
+            saveWalletPreferences({ notifications: false });
+            push.value = await disablePush();
+        }
+    } catch {
+        push.value = await pushState(vapidKey.value);
+    } finally {
+        pushBusy.value = false;
+        permission.value = walletNotificationPermission();
+        preferences.value = readWalletPreferences();
+    }
 };
 
 const toggleSounds = (enabled: boolean): void => {
@@ -177,6 +235,7 @@ const readFrameProbe = (): void => {
 
 onMounted(async () => {
     readFrameProbe();
+    push.value = await pushState(vapidKey.value);
     startup.value = await refreshNativeStartup();
 });
 
@@ -273,10 +332,8 @@ onBeforeUnmount(unsubscribe);
                 </span>
                 <input
                     type="checkbox"
-                    :checked="preferences.notifications"
-                    :disabled="
-                        permission === 'unsupported' || permission === 'denied'
-                    "
+                    :checked="notificationsOn"
+                    :disabled="notificationsBlocked"
                     style="
                         width: 20px;
                         height: 20px;

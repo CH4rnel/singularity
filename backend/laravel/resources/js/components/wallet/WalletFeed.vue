@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { usePage } from '@inertiajs/vue3';
-import { Bell, MessageSquare } from 'lucide-vue-next';
+import { MessageSquare } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { growComposer } from '@/lib/wallet/composer';
 import { relativeTime, shortAddress } from '@/lib/wallet/format';
-import { enablePush, pushState } from '@/lib/wallet/push';
-import type { PushState } from '@/lib/wallet/push';
 import { signInWithWallet } from '@/lib/wallet/session';
 import { fetchFeed, publishPost } from '@/lib/wallet/social';
 import type { FeedItem } from '@/lib/wallet/social';
@@ -171,48 +168,8 @@ const publish = async (): Promise<void> => {
     }
 };
 
-/**
- * Being told when somebody writes — offered here, once, and nowhere else.
- *
- * The subscription itself lives in Security, which is where it belongs and
- * where nobody goes: the feature that tells everyone about a new post reached
- * two devices on the day it shipped, because asking for a browser permission
- * has to happen somewhere a person has a reason to say yes. This is that
- * place, it is one row, and it disappears the moment it is answered — allowed,
- * refused by the browser, or unsupported. It never asks on load: a page that
- * throws a permission prompt at somebody who just arrived is the reason
- * browsers started burying the prompt.
- */
-const push = ref<PushState>('unsupported');
-const pushBusy = ref(false);
-
-const vapidKey = computed(
-    () => (usePage().props.vapidPublicKey as string | undefined) ?? null,
-);
-
-const offerPush = computed(() => push.value === 'off');
-
-const allowPush = async (): Promise<void> => {
-    if (pushBusy.value || vapidKey.value === null) {
-        return;
-    }
-
-    pushBusy.value = true;
-
-    try {
-        push.value = await enablePush(vapidKey.value, locale.value);
-    } catch {
-        push.value = await pushState(vapidKey.value);
-    } finally {
-        pushBusy.value = false;
-    }
-};
-
 watch(tab, load);
-onMounted(async () => {
-    await load();
-    push.value = await pushState(vapidKey.value);
-});
+onMounted(load);
 </script>
 
 <template>
@@ -277,21 +234,6 @@ onMounted(async () => {
                 <span>{{ problem }}</span>
             </p>
         </div>
-
-        <button
-            v-if="offerPush"
-            type="button"
-            class="cw-line-row"
-            style="margin-top: 14px; border-bottom: none"
-            :disabled="pushBusy"
-            @click="allowPush"
-        >
-            <Bell :size="18" :stroke-width="1.5" aria-hidden="true" />
-            <span style="flex: 1">{{ t('feedNotifyOffer') }}</span>
-            <span class="cw-label" style="color: var(--cw-accent)">{{
-                t('feedNotifyAction')
-            }}</span>
-        </button>
 
         <div class="cw-seg" style="margin-top: 18px">
             <button
