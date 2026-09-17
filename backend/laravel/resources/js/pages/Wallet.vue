@@ -1098,7 +1098,19 @@ const adopt = async (
     try {
         await wallet.adopt(phrase, password, backedUp);
         restoring.value = false;
-        section.value = 'portfolio';
+
+        /*
+         * Somebody who just adopted a phrase is looking at the screen that did
+         * it, so the portfolio is where they go next — but the wallet that
+         * makes itself on first open adopts one too, and it does it while a
+         * link is being followed. `/wallet?section=feed` opened the feed and
+         * was then dragged back to the portfolio by a vault nobody asked for,
+         * which is every push notification landing on the wrong screen for
+         * anyone whose first visit it is.
+         */
+        if (origin !== 'auto') {
+            section.value = 'portfolio';
+        }
 
         /*
          * The onboarding milestone, recorded at the only point where it is

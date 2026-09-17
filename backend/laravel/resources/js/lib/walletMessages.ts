@@ -1229,6 +1229,10 @@ export const walletMessages: Messages = {
         feedSigningIn: 'Signing…',
         feedWatchOnly: 'This account is watch-only, so it cannot sign or post.',
         feedMessage: 'Message',
+        // Offered on the feed, because that is where somebody has a reason to
+        // say yes; the switch itself stays in Security.
+        feedNotifyOffer: 'Tell me when somebody posts',
+        feedNotifyAction: 'Allow',
         feedUnreadable: 'Could not reach Cyberia for the feed.',
         feedOpen: 'Open',
         feedOpenSite: 'On the site',
@@ -2783,6 +2787,8 @@ export const walletMessages: Messages = {
         feedWatchOnly:
             'Этот счёт только для наблюдения: он не может подписывать и писать.',
         feedMessage: 'Написать',
+        feedNotifyOffer: 'Сообщать о новых постах',
+        feedNotifyAction: 'Разрешить',
         feedUnreadable: 'Не удалось получить ленту из Cyberia.',
         feedOpen: 'Открыть',
         feedOpenSite: 'На сайте',
@@ -4269,6 +4275,8 @@ export const walletMessages: Messages = {
         feedSigningIn: '签名中…',
         feedWatchOnly: '这是只读账户，无法签名或发帖。',
         feedMessage: '私信',
+        feedNotifyOffer: '有人发帖时通知我',
+        feedNotifyAction: '允许',
         feedUnreadable: '连不上 Cyberia，拿不到动态。',
         feedOpen: '打开',
         feedOpenSite: '在网站上',
