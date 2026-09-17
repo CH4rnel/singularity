@@ -69,6 +69,35 @@ it('prices a token as the share times the issuer’s multiplier', function () {
     expect($quote['halted'])->toBeFalse();
 });
 
+it('reads a zero out of hours as nothing rather than as a price', function () {
+    Http::fake([
+        '*/rhj/assets' => Http::response(['assets' => []]),
+        '*/rhj/prices' => Http::response(['quotes' => [
+            [
+                'tokenSymbol' => 'NVDA',
+                'bid' => '200',
+                'ask' => '202',
+                // What the feed answers while the market is shut. It is not a
+                // price any share traded at, and printed as one it put
+                // "День 0,00 $ – 0,00 $" under every row on the screen.
+                'dailyHigh' => '0',
+                'dailyLow' => '0',
+                'dailyTradingVolume' => '0',
+                'isTradingHalt' => false,
+            ],
+        ]]),
+    ]);
+
+    $quote = app(RobinhoodStockService::class)->quotes()['NVDA'];
+
+    expect($quote['high'])->toBeNull()
+        ->and($quote['low'])->toBeNull()
+        ->and($quote['volume'])->toBeNull()
+        // The quote itself is untouched: the book is open even when the day's
+        // range is not yet a range.
+        ->and($quote['share'])->toBe(201.0);
+});
+
 it('drops a symbol this build does not list', function () {
     Http::fake([
         '*/rhj/assets' => Http::response(['assets' => []]),

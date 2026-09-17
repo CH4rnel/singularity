@@ -71,9 +71,38 @@ const open = computed(() =>
     options.value.filter((option) => option.block === 'ok'),
 );
 
-const closed = computed(() =>
-    options.value.filter((option) => option.block !== 'ok'),
-);
+/**
+ * The corridors that exist but cannot be started here, gathered by the reason.
+ *
+ * Every one of them stays listed — a corridor that quietly disappears is a
+ * corridor somebody goes looking for on the site — but the *reason* was printed
+ * under each row, which meant "Coming soon" nine times and one of two sentences
+ * five more, thirty lines to say three things. The reason is a heading now and
+ * the corridors are the list under it.
+ */
+const closed = computed(() => {
+    const groups = new Map<string, { reason: string; routes: string[] }>();
+
+    for (const option of options.value) {
+        if (option.block === 'ok') {
+            continue;
+        }
+
+        const reason =
+            option.block === 'closed' && option.unavailableReason
+                ? option.unavailableReason
+                : t(
+                      `bridgeBlock${option.block.charAt(0).toUpperCase()}${option.block.slice(1)}`,
+                  );
+
+        const group = groups.get(reason) ?? { reason, routes: [] };
+
+        group.routes.push(`${option.sourceLabel} → ${option.destinationLabel}`);
+        groups.set(reason, group);
+    }
+
+    return [...groups.values()];
+});
 
 const direction = ref<string | null>(null);
 const symbol = ref<string | null>(null);
@@ -862,41 +891,30 @@ const sign = async (): Promise<void> => {
             </div>
             <div class="cw-card" style="padding: 0">
                 <div
-                    v-for="entry in closed"
-                    :key="entry.direction"
-                    class="cw-row"
+                    v-for="group in closed"
+                    :key="group.reason"
                     style="
                         padding: 12px 16px;
                         border-bottom: 1px solid var(--cw-line);
                     "
                 >
-                    <span style="flex: 1">
-                        <span
-                            style="
-                                display: block;
-                                font: 400 12px/1.3 var(--cw-sans);
-                                color: var(--cw-muted);
-                            "
-                            >{{ entry.sourceLabel }} →
-                            {{ entry.destinationLabel }}</span
-                        >
-                        <span
-                            style="
-                                display: block;
-                                margin-top: 3px;
-                                font: 400 10px/1.4 var(--cw-mono);
-                                color: var(--cw-faint);
-                            "
-                            >{{
-                                entry.block === 'closed' &&
-                                entry.unavailableReason
-                                    ? entry.unavailableReason
-                                    : t(
-                                          `bridgeBlock${entry.block.charAt(0).toUpperCase()}${entry.block.slice(1)}`,
-                                      )
-                            }}</span
-                        >
-                    </span>
+                    <span
+                        style="
+                            display: block;
+                            font: 400 11px/1.4 var(--cw-mono);
+                            color: var(--cw-faint);
+                        "
+                        >{{ group.reason }}</span
+                    >
+                    <span
+                        style="
+                            display: block;
+                            margin-top: 5px;
+                            font: 400 12px/1.5 var(--cw-sans);
+                            color: var(--cw-muted);
+                        "
+                        >{{ group.routes.join(' · ') }}</span
+                    >
                 </div>
             </div>
             <p class="cw-prose" style="margin-top: 12px">
