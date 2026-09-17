@@ -130,16 +130,16 @@ const payoutOffered = computed(
                 :label="t('qrLabel', { chain: account.label })"
             />
         </div>
-        <div
-            class="cw-label"
-            style="margin-top: 12px; text-align: center; color: var(--cw-faint)"
-        >
-            {{ t('qrCaption', { chain: account.label }) }}
-        </div>
-
+        <!--
+          One label under the code, and it names the *network* — which is the
+          one thing on this screen that loses money when it is wrong. It used to
+          be two: "Адрес Cyberia" under the QR and "Адрес" again over the string
+          directly below it, which says the same word twice and the useful half
+          only once.
+        -->
         <div class="cw-card" style="margin-top: 20px">
             <div class="cw-label" style="margin-bottom: 8px">
-                {{ t('addressLabel') }}
+                {{ t('qrCaption', { chain: account.label }) }}
             </div>
             <!--
               In fours, like a card number. This is the screen where somebody

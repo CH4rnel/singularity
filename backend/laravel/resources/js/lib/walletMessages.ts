@@ -765,7 +765,7 @@ export const walletMessages: Messages = {
         copiedClears: 'Copied · clears in 30s',
         expandAddress: 'Show the full address',
         qrLabel: '{chain} address as a QR code',
-        qrCaption: '{chain} address · QR',
+        qrCaption: '{chain} address',
         warnEvm:
             'The same address is yours on every EVM network. Send only {chain} assets here (chain {chainId}) — anything sent on another EVM network is not lost, it is simply on that network, and you have to switch to it to see or spend it.',
         warnSolana:
@@ -2342,7 +2342,7 @@ export const walletMessages: Messages = {
         copiedClears: 'Скопировано · очистится через 30 с',
         expandAddress: 'Показать адрес целиком',
         qrLabel: 'Адрес {chain} в виде QR-кода',
-        qrCaption: 'Адрес {chain} · QR',
+        qrCaption: 'Адрес {chain}',
         warnEvm:
             'Этот адрес — ваш во всех EVM-сетях. Отправляйте сюда только активы {chain} (сеть {chainId}). Присланное в другой EVM-сети не пропадёт: оно просто в той сети, и чтобы его увидеть и потратить, нужно на неё переключиться.',
         warnSolana:
@@ -3852,7 +3852,7 @@ export const walletMessages: Messages = {
         copiedClears: '已复制 · 30 秒后清空',
         expandAddress: '显示完整地址',
         qrLabel: '{chain} 地址的二维码',
-        qrCaption: '{chain} 地址 · 二维码',
+        qrCaption: '{chain} 地址',
         warnEvm:
             '在每一个 EVM 网络上，这都是你的同一个地址。只往这里发 {chain} 的资产（链 {chainId}）— 从别的 EVM 网络发过来的东西不会丢，它只是在那个网络上，你得切换过去才能看到和花掉它。',
         warnSolana: '仅限 Solana 网络。从其他链发到这里的资产无法找回。',

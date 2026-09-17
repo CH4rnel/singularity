@@ -150,9 +150,6 @@ watch(() => props.chain, load);
         </div>
 
         <div class="cw-card" style="padding: 18px">
-            <div class="cw-label" style="margin-bottom: 10px">
-                {{ t('balance') }}
-            </div>
             <div style="display: flex; align-items: baseline; gap: 8px">
                 <span
                     style="

@@ -385,10 +385,6 @@ const cooldownHours = computed(() => {
                 >{{ levelTag }}</span
             >
         </div>
-        <div class="cw-label" style="color: var(--cw-dim)">
-            {{ t('dailyEyebrow') }}
-        </div>
-
         <p v-if="failure" class="cw-note cw-note-bad" style="margin-top: 16px">
             <span>{{ failure }}</span>
             <button type="button" class="cw-back" @click="read()">
