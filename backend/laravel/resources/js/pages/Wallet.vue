@@ -18,6 +18,7 @@ import WalletAddNetwork from '@/components/wallet/WalletAddNetwork.vue';
 import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
 import WalletBridge from '@/components/wallet/WalletBridge.vue';
 import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
+import WalletBuy from '@/components/wallet/WalletBuy.vue';
 import WalletChart from '@/components/wallet/WalletChart.vue';
 import WalletChat from '@/components/wallet/WalletChat.vue';
 import WalletContextBar from '@/components/wallet/WalletContextBar.vue';
@@ -188,6 +189,7 @@ type Section =
     | 'earn'
     | 'stocks'
     | 'bridge'
+    | 'buy'
     | 'crosschain'
     | 'daily'
     | 'browse';
@@ -291,6 +293,7 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
             { id: 'accounts', label: () => t('accounts') },
             // Three things done *with* a balance rather than three ways of
             // reading one, which is why they sit apart from the screens above.
+            { id: 'buy', label: () => t('tileBuy') },
             { id: 'bridge', label: () => t('bridgeTitle') },
             { id: 'crosschain', label: () => t('crossTile') },
             { id: 'earn', label: () => t('earnTitle') },
@@ -369,6 +372,7 @@ const TAB_OF: Record<Section, Section> = {
     earn: 'portfolio',
     stocks: 'portfolio',
     bridge: 'portfolio',
+    buy: 'portfolio',
     crosschain: 'portfolio',
     daily: 'portfolio',
     browse: 'browse',
@@ -493,6 +497,7 @@ const PARENTS: Partial<Record<Section, Section>> = {
     earn: 'portfolio',
     stocks: 'portfolio',
     bridge: 'portfolio',
+    buy: 'portfolio',
     more: 'portfolio',
     // Reached from "Ещё" and nowhere else on a phone, so back goes there
     // rather than skipping the screen the person was actually on.
@@ -667,7 +672,18 @@ const takeSectionRequest = (): void => {
         return;
     }
 
-    if (TABS.some((entry) => entry.id === wanted)) {
+    /*
+     * A tab, or any screen the rail names. It used to be the five tabs only,
+     * which was enough while the only link into the wallet was a push
+     * notification pointing at the feed — and then the on-ramp started sending
+     * people back from a provider's checkout to `?section=buy&ref=…` and they
+     * landed on the portfolio with no sign of the purchase they had just made.
+     * A link that names a screen opens that screen.
+     */
+    if (
+        TABS.some((entry) => entry.id === wanted) ||
+        SECTIONS.some((entry) => entry.id === wanted)
+    ) {
         openSection(wanted as Section);
     }
 };
@@ -1795,7 +1811,7 @@ watch(
                             @bridge="openSection('bridge')"
                             @earn="openSection('earn')"
                             @launchpad="openSection('launchpad')"
-                            @dao="openSection('dao')"
+                            @buy="openSection('buy')"
                             @more="openSection('more')"
                             @accounts="openSection('accounts')"
                             @security="openSection('security')"
@@ -1945,6 +1961,19 @@ watch(
                         :config="props.bridge"
                         :prices="prices"
                         @back="openSection('portfolio')"
+                    />
+
+                    <!--
+                      Where the first coins come from, for somebody holding a
+                      card and nothing else. A provider sells them and settles
+                      to this wallet's own address; nothing here touches a card
+                      or holds the money, and the screen says both.
+                    -->
+                    <WalletBuy
+                        v-else-if="section === 'buy'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
+                        @crosschain="openSection('crosschain')"
                     />
 
                     <!--

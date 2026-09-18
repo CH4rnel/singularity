@@ -279,6 +279,58 @@ export const walletMessages: Messages = {
 
         // Proxy & routing. Keys stay on the device; requests do not, and this
         // is the inventory of where they go.
+        // Buying with a card. The provider is the seller; we are not, and
+        // the screen says so before anybody leaves for their page.
+        buyTitle: 'Buy crypto',
+        buyBody:
+            'A payment provider sells it, takes the card and does its own identity check. Cyberia holds no card details, no money and no custody — the coins are delivered to an address this wallet derived.',
+        buyOff: 'Buying is switched off in this build.',
+        buyOrder: 'Your purchase',
+        buyStatus_pending: 'Waiting for payment',
+        buyStatus_paid: 'Paid',
+        buyStatus_delivering: 'Sending',
+        buyStatus_delivered: 'Delivered',
+        buyStatus_failed: 'Failed',
+        buyStatus_expired: 'Expired',
+        buyDelivered: 'It has arrived at your address.',
+        buyMoveOn: 'Move it to Cyberia',
+        buyMir: 'МИР card',
+        buyMirExternal:
+            'Someone else’s service, on their terms and with their custody. Opened in a new tab.',
+        buyMirOpen: 'Open',
+        buySpend: 'You pay',
+        buyCurrency: 'Currency',
+        buyGet: 'You get',
+        buyNotCyberia:
+            'No provider settles on Cyberia, so a purchase lands on the network above — at your own address — and moving it to Cyberia is a second step this wallet performs.',
+        buyNetworkOff:
+            '{chain} is switched off here, so there is no address to deliver to and nothing would be drawn when it arrives.',
+        buyNetworkOn: 'Switch the network on',
+        buyTo: 'To',
+        buyMethod_card: 'Card',
+        buyMethod_bank: 'Transfer',
+        buyMethod_apple_pay: 'Apple Pay',
+        buyMethod_google_pay: 'Google Pay',
+        buyOffers: 'Who sells it',
+        buyAmountBad: 'Enter an amount — up to two decimal places.',
+        buyQuoting: 'Asking every provider…',
+        buyFee: 'Fee',
+        buyNoTracking: 'this one does not report back',
+        buyWith: 'Buy with {provider}',
+        buyOpening: 'Opening…',
+        buyHandoff:
+            'The card is entered on the provider’s own page, never here. If a purchase fails or needs a refund, it is theirs to answer for.',
+        buyReason_provider_off: 'Switched off here.',
+        buyReason_unconfigured: 'Not connected yet.',
+        buyReason_country_restricted: 'It does not serve your country.',
+        buyReason_fiat_unsupported: 'It does not take this currency.',
+        buyReason_method_unsupported: 'It does not take this payment method.',
+        buyReason_provider_unreachable: 'It did not answer.',
+        buyReason_no_quote: 'It has no price for this purchase.',
+        buyReason_mir_unserved:
+            'МИР runs on rails that end at the borders of the countries wired into them, and every licensed provider here refuses that network. There is no route we can honestly offer.',
+        tileBuy: 'Buy',
+        tileBuyHint: 'With a bank card, through a provider',
         proxyTitle: 'Proxy & routing',
         proxyBody:
             'Your keys never leave this device. Your requests do — reading a balance tells whoever answers that this address is being watched from this connection. Here is what carries them.',
@@ -1899,6 +1951,58 @@ export const walletMessages: Messages = {
         proxySettings: 'Настройки прокси',
 
         // Прокси и маршрутизация: ключи остаются на устройстве, запросы — нет.
+        // Покупка картой. Продаёт провайдер, а не мы, и это сказано до того,
+        // как человек уходит на его страницу.
+        buyTitle: 'Купить криптовалюту',
+        buyBody:
+            'Продаёт платёжный провайдер: он принимает карту и сам проверяет личность. Cyberia не видит данных карты, не держит деньги и ничего не хранит за вас — монеты приходят на адрес, который создал этот кошелёк.',
+        buyOff: 'Покупка в этой сборке выключена.',
+        buyOrder: 'Ваша покупка',
+        buyStatus_pending: 'Ждём оплату',
+        buyStatus_paid: 'Оплачено',
+        buyStatus_delivering: 'Отправляем',
+        buyStatus_delivered: 'Доставлено',
+        buyStatus_failed: 'Не прошло',
+        buyStatus_expired: 'Истекло',
+        buyDelivered: 'Пришло на ваш адрес.',
+        buyMoveOn: 'Перевести в Cyberia',
+        buyMir: 'Карта МИР',
+        buyMirExternal:
+            'Чужой сервис: его условия и его хранение средств. Откроется в новой вкладке.',
+        buyMirOpen: 'Открыть',
+        buySpend: 'Вы платите',
+        buyCurrency: 'Валюта',
+        buyGet: 'Вы получаете',
+        buyNotCyberia:
+            'Ни один провайдер не выдаёт монеты в Cyberia, поэтому покупка приходит в сеть выше — на ваш собственный адрес, — а перевод в Cyberia это второй шаг, который делает сам кошелёк.',
+        buyNetworkOff:
+            'Сеть {chain} здесь выключена: адреса для доставки нет, и пришедшее не будет показано.',
+        buyNetworkOn: 'Включить сеть',
+        buyTo: 'На адрес',
+        buyMethod_card: 'Карта',
+        buyMethod_bank: 'Перевод',
+        buyMethod_apple_pay: 'Apple Pay',
+        buyMethod_google_pay: 'Google Pay',
+        buyOffers: 'Кто продаёт',
+        buyAmountBad: 'Введите сумму — не больше двух знаков после запятой.',
+        buyQuoting: 'Спрашиваем цену у всех…',
+        buyFee: 'Комиссия',
+        buyNoTracking: 'этот не сообщает о результате',
+        buyWith: 'Купить через {provider}',
+        buyOpening: 'Открываем…',
+        buyHandoff:
+            'Карта вводится на странице провайдера, не здесь. Если покупка не прошла или нужен возврат, отвечает за это он.',
+        buyReason_provider_off: 'Здесь выключен.',
+        buyReason_unconfigured: 'Ещё не подключён.',
+        buyReason_country_restricted: 'Не работает с вашей страной.',
+        buyReason_fiat_unsupported: 'Не принимает эту валюту.',
+        buyReason_method_unsupported: 'Не принимает этот способ оплаты.',
+        buyReason_provider_unreachable: 'Не ответил.',
+        buyReason_no_quote: 'Нет цены для такой покупки.',
+        buyReason_mir_unserved:
+            'МИР работает только там, куда дотянулись его собственные рельсы, и ни один лицензированный провайдер эту сеть не принимает. Честного маршрута, который мы могли бы предложить, нет.',
+        tileBuy: 'Купить',
+        tileBuyHint: 'Банковской картой, через провайдера',
         proxyTitle: 'Прокси и маршруты',
         proxyBody:
             'Ключи никогда не покидают это устройство. Запросы покидают — и чтение баланса сообщает тому, кто отвечает, что за этим адресом следят с этого соединения. Вот кто их несёт.',
@@ -3439,6 +3543,57 @@ export const walletMessages: Messages = {
         proxySettings: '代理设置',
 
         // 代理与线路：密钥留在设备上，请求不会。
+        // 用银行卡购买。卖方是服务商，不是我们；在离开本页之前就说清楚。
+        buyTitle: '购买加密货币',
+        buyBody:
+            '由支付服务商出售：他们收取银行卡并自行完成身份核验。Cyberia 不接触卡片信息、不保管资金、也不代为托管——币会直接发送到本钱包生成的地址。',
+        buyOff: '此版本未开启购买功能。',
+        buyOrder: '你的订单',
+        buyStatus_pending: '等待付款',
+        buyStatus_paid: '已付款',
+        buyStatus_delivering: '发送中',
+        buyStatus_delivered: '已到账',
+        buyStatus_failed: '未成功',
+        buyStatus_expired: '已过期',
+        buyDelivered: '已到达你的地址。',
+        buyMoveOn: '转入 Cyberia',
+        buyMir: 'МИР 卡',
+        buyMirExternal:
+            '这是别人的服务：他们的条款、他们的托管。将在新标签页打开。',
+        buyMirOpen: '打开',
+        buySpend: '你支付',
+        buyCurrency: '货币',
+        buyGet: '你获得',
+        buyNotCyberia:
+            '没有服务商直接结算到 Cyberia，所以购买会到达上面那条网络——同样是你自己的地址——转入 Cyberia 是本钱包完成的第二步。',
+        buyNetworkOff:
+            '{chain} 在这里未开启：没有可用于接收的地址，到账后也不会显示。',
+        buyNetworkOn: '开启该网络',
+        buyTo: '发送至',
+        buyMethod_card: '银行卡',
+        buyMethod_bank: '转账',
+        buyMethod_apple_pay: 'Apple Pay',
+        buyMethod_google_pay: 'Google Pay',
+        buyOffers: '谁在出售',
+        buyAmountBad: '请输入金额，最多两位小数。',
+        buyQuoting: '正在向各服务商询价…',
+        buyFee: '手续费',
+        buyNoTracking: '此服务商不会回报结果',
+        buyWith: '通过 {provider} 购买',
+        buyOpening: '正在打开…',
+        buyHandoff:
+            '银行卡信息在服务商自己的页面输入，不在这里。购买失败或需要退款时，由他们负责。',
+        buyReason_provider_off: '此处已关闭。',
+        buyReason_unconfigured: '尚未接入。',
+        buyReason_country_restricted: '不服务你所在的国家或地区。',
+        buyReason_fiat_unsupported: '不接受该货币。',
+        buyReason_method_unsupported: '不接受该支付方式。',
+        buyReason_provider_unreachable: '没有响应。',
+        buyReason_no_quote: '对这笔购买没有报价。',
+        buyReason_mir_unserved:
+            'МИР 只在其自有清算网络覆盖的范围内可用，而这里所有持牌服务商都拒绝该网络。我们没有可以诚实提供的通道。',
+        tileBuy: '购买',
+        tileBuyHint: '用银行卡，经由服务商',
         proxyTitle: '代理与线路',
         proxyBody:
             '你的密钥从不离开这台设备，请求会。读一次余额，就等于告诉应答的那一方：有人正从这条线上盯着这个地址。下面是这些请求由谁承载。',

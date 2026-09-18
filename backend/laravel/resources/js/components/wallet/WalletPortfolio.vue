@@ -2,7 +2,7 @@
 import {
     CandlestickChart,
     Coins,
-    Landmark,
+    CreditCard,
     LineChart,
     MoreHorizontal,
     Percent,
@@ -49,13 +49,13 @@ const emit = defineEmits<{
     swap: [];
     crosschain: [];
     addNetwork: [];
+    buy: [];
     tokens: [];
     markets: [];
     stocks: [];
     bridge: [];
     earn: [];
     launchpad: [];
-    dao: [];
     /** Everything that is not one of the eight, one level down. */
     more: [];
     accounts: [];
@@ -628,6 +628,14 @@ const recent = computed(() =>
           door to the rest, which are one level down rather than gone.
         -->
         <div class="cw-quick">
+            <!--
+              First, because it is the only one of these that answers "I have
+              no coins at all" — every other tile assumes a balance exists.
+            -->
+            <button type="button" class="cw-quick-item" @click="emit('buy')">
+                <CreditCard :size="21" :stroke-width="1.5" aria-hidden="true" />
+                <span>{{ t('tileBuy') }}</span>
+            </button>
             <button type="button" class="cw-quick-item" @click="emit('tokens')">
                 <Coins :size="21" :stroke-width="1.5" aria-hidden="true" />
                 <span>{{ t('tokens') }}</span>
@@ -663,10 +671,6 @@ const recent = computed(() =>
             >
                 <Rocket :size="21" :stroke-width="1.5" aria-hidden="true" />
                 <span>{{ t('tabLaunch') }}</span>
-            </button>
-            <button type="button" class="cw-quick-item" @click="emit('dao')">
-                <Landmark :size="21" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('dao') }}</span>
             </button>
             <button type="button" class="cw-quick-item" @click="emit('more')">
                 <MoreHorizontal
