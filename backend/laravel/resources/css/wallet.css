@@ -14,38 +14,45 @@
  */
 
 .cw {
-    --cw-canvas: #050607;
-    --cw-app: #07080a;
-    --cw-surface: #0a0c0f;
-    --cw-raised: #0e1216;
-    --cw-hairline: #16191d;
-    --cw-line: #14181c;
-    --cw-border: #2a3038;
-    --cw-border-soft: #23282e;
-    --cw-border-hover: #46505a;
+    --cw-canvas: #05070a;
+    --cw-app: #0a0d11;
+    --cw-surface: #0f1318;
+    --cw-raised: #161c22;
+    --cw-hairline: #262c33;
+    --cw-line: #242a31;
+    --cw-border: #3f4954;
+    --cw-border-soft: #333b44;
+    --cw-border-hover: #6a7785;
     /*
      * Four levels of quiet ink, and the line between them is not taste: the
      * top three are *text*, while `fainter` is the one that is not and is
      * therefore never allowed to be text — it draws disabled controls and
-     * rules, which is what it measured 1.92:1 as.
+     * rules.
      *
-     * The three were picked at WCAG's 4.5:1 and have been raised to **6.2:1 or
-     * better against every ground this theme paints** (surface, app, panel,
-     * well), because 4.5:1 is a floor for *normal-size* text and almost
-     * nothing wearing these is normal size. A label here is 11px uppercase
-     * mono at 0.16em tracking — the caps kill the word-shape, the tracking
-     * pulls the letters apart, and at the old ratios the result was legible
-     * only if you leaned in, which is exactly what it was reported as. The
-     * separation between the three is now a few points of lightness, and the
-     * hierarchy is carried by size and weight, which is where it belongs.
+     * The three were picked at WCAG's 4.5:1, raised once to 6.2:1 because
+     * almost nothing wearing them is normal-size text — a label here is 11px
+     * uppercase mono at 0.16em tracking, where the caps kill the word-shape
+     * and the tracking pulls the letters apart — and raised again, to **8.5:1
+     * or better against every ground this theme paints**, for the condition no
+     * contrast ratio describes: a phone held outdoors. A screen in daylight is
+     * a mirror with a picture behind it, and the reflected light lands on the
+     * dark end of the ramp, where this theme keeps everything. What survives
+     * 6.7:1 at a desk is gone in the sun, which is exactly how it was
+     * reported. The separation between the three is a few points of lightness
+     * and the hierarchy is carried by size and weight, which is where it
+     * belongs.
+     *
+     * The same daylight is why the grounds below climb in wider steps and why
+     * a hairline is no longer one point off its card: structure drawn at
+     * 1.1:1 is structure only a dim room can see.
      */
-    --cw-fainter: #626a72;
-    --cw-faint: #8f98a2;
-    --cw-dim: #949da7;
-    --cw-muted: #9aa3ad;
-    --cw-body: #d6dde4;
-    --cw-text: #e8edf2;
-    --cw-bright: #f2f6fa;
+    --cw-fainter: #7b848d;
+    --cw-faint: #b4bdc7;
+    --cw-dim: #b9c2cc;
+    --cw-muted: #bec7d1;
+    --cw-body: #e4eaf0;
+    --cw-text: #f0f4f8;
+    --cw-bright: #fbfdff;
 
     --cw-accent: #2fe9e0;
     --cw-accent-hover: #5cf2eb;
@@ -97,17 +104,17 @@
      * theme is a palette swap, and a colour spelled out at its use site is a
      * colour the light theme cannot reach.
      */
-    --cw-panel: #08090b;
-    --cw-sunken: #0c0e11;
-    --cw-elevated: #101418;
-    --cw-well: #12161a;
-    --cw-input-bg: #080a0c;
-    --cw-line-strong: #1b2126;
+    --cw-panel: #0c1014;
+    --cw-sunken: #12161b;
+    --cw-elevated: #181d23;
+    --cw-well: #1a2027;
+    --cw-input-bg: #0b0f13;
+    --cw-line-strong: #2e353d;
     --cw-pending-soft: #d9c08a;
 
     /* The atmosphere: grid, raster and the travelling scan line. */
-    --cw-grid: rgba(255, 255, 255, 0.018);
-    --cw-raster-ink: rgba(255, 255, 255, 0.05);
+    --cw-grid: rgba(255, 255, 255, 0.028);
+    --cw-raster-ink: rgba(255, 255, 255, 0.062);
     --cw-scan-ink: rgba(47, 233, 224, 0.035);
     /*
      * The accent as a ground rather than as ink: for the one panel per screen
@@ -158,30 +165,42 @@
  * structure survives inversion. What does not survive is a literal, which is
  * why every colour above is a token and this block is the whole theme.
  *
- * It is a swap and never a filter. A cyan that glows on #050607 is invisible on
+ * It is a swap and never a filter. A cyan that glows on #05070a is invisible on
  * paper, so the accent, the network hues and every state colour are re-picked
  * for a light ground rather than dimmed — the amber warning in particular, at
- * #e8b44a, reads as decoration on white and as a warning at #8f6407.
+ * #e8b44a, reads as decoration on white and as a warning at #9e5309.
+ *
+ * A *tint* is re-picked twice over. On black a wash carries a panel on its own;
+ * on white the same wash is the one place beige can still get in, and the
+ * warning panel is the largest block on the portfolio — so here the wash is
+ * nearly nothing and the border does the work instead.
+ *
+ * The ground is **neutral and slightly cool**, not warm. It was warm first —
+ * a paper-white ladder around #e9e8e2 — and warm was the wrong call twice
+ * over: it reads as beige rather than as white, and it fights every colour
+ * this wallet actually spends, all of which sit in the cool half of the wheel
+ * (one teal accent, violet for Solana, blue for Base). The inks were already
+ * neutral, so the grounds now match them.
  *
  * `color-scheme` moves with the tokens: it is what repaints the scrollbars and
  * the native controls the wallet does not draw itself.
  */
 .cw[data-cw-theme='light'] {
-    --cw-canvas: #e9e8e2;
-    --cw-app: #fbfaf7;
+    --cw-canvas: #dee3e9;
+    --cw-app: #f7f9fc;
     --cw-surface: #ffffff;
     --cw-raised: #e7f5f3;
-    --cw-hairline: #e1e0d9;
-    --cw-line: #e4e3dd;
-    --cw-border: #c2c1b7;
-    --cw-border-soft: #cfcec5;
-    --cw-border-hover: #93928a;
+    --cw-hairline: #dbe1e8;
+    --cw-line: #e0e6ec;
+    --cw-border: #b3bcc6;
+    --cw-border-soft: #c6ced8;
+    --cw-border-hover: #808a96;
     /* Same rule as the dark theme's: raised from 4.5:1 to 6.7:1 and up, for
        text that is mostly 11px uppercase mono. See the note there. */
     --cw-fainter: #868d95;
-    --cw-faint: #4f565d;
-    --cw-dim: #4a5158;
-    --cw-muted: #444b52;
+    --cw-faint: #464d54;
+    --cw-dim: #414850;
+    --cw-muted: #3c434a;
     --cw-body: #2c3238;
     --cw-text: #14181d;
     --cw-bright: #05070a;
@@ -226,35 +245,35 @@
     --cw-net-cat-7: #3a48a8;
     --cw-net-cat-8: #3f7191;
 
-    --cw-ok: #12925f;
-    --cw-pending: #8f6407;
-    --cw-bad: #ce2331;
+    --cw-ok: #0e7249;
+    --cw-pending: #9e5309;
+    --cw-bad: #c51f2d;
     --cw-bad-soft: #a61a26;
 
-    --cw-panel: #f3f2ed;
-    --cw-sunken: #f6f5f1;
-    --cw-elevated: #efeee9;
-    --cw-well: #ecebe5;
+    --cw-panel: #eef1f6;
+    --cw-sunken: #f2f5f9;
+    --cw-elevated: #e8edf3;
+    --cw-well: #e4eaf1;
     --cw-input-bg: #ffffff;
-    --cw-line-strong: #dbdad2;
-    --cw-pending-soft: #836728;
+    --cw-line-strong: #d4dae2;
+    --cw-pending-soft: #8a5a1e;
 
     --cw-grid: rgba(0, 0, 0, 0.036);
     --cw-raster-ink: rgba(0, 0, 0, 0.1);
     --cw-scan-ink: rgba(11, 122, 116, 0.06);
     --cw-accent-tint: rgba(11, 122, 116, 0.08);
 
-    --cw-bad-line: rgba(206, 35, 49, 0.3);
-    --cw-bad-line-strong: rgba(206, 35, 49, 0.45);
-    --cw-bad-tint: rgba(206, 35, 49, 0.102);
-    --cw-bad-tint-strong: rgba(206, 35, 49, 0.17);
-    --cw-pending-line: rgba(143, 100, 7, 0.28);
-    --cw-pending-line-strong: rgba(143, 100, 7, 0.4);
-    --cw-pending-tint: rgba(143, 100, 7, 0.085);
+    --cw-bad-line: rgba(197, 31, 45, 0.34);
+    --cw-bad-line-strong: rgba(197, 31, 45, 0.5);
+    --cw-bad-tint: rgba(197, 31, 45, 0.07);
+    --cw-bad-tint-strong: rgba(197, 31, 45, 0.12);
+    --cw-pending-line: rgba(158, 83, 9, 0.42);
+    --cw-pending-line-strong: rgba(158, 83, 9, 0.6);
+    --cw-pending-tint: rgba(158, 83, 9, 0.045);
     --cw-meta-line: rgba(90, 70, 214, 0.3);
 
-    --cw-veil: rgba(40, 42, 38, 0.72);
-    --cw-veil-strong: rgba(40, 42, 38, 0.82);
+    --cw-veil: rgba(18, 22, 28, 0.72);
+    --cw-veil-strong: rgba(18, 22, 28, 0.82);
 
     color-scheme: light;
 }
