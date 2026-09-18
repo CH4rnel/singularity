@@ -4,6 +4,7 @@ use App\Exceptions\AiApiException;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetTeamUrlDefaults;
+use App\Http\Middleware\ThrottlePerRoute;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -23,6 +24,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
+
+        /*
+         * Every `throttle:N,1` in this application counts into a bucket of its
+         * own. Laravel's key is the caller and not the route, which made the
+         * strictest limit anybody touched the limit for everything they did —
+         * see App\Http\Middleware\ThrottlePerRoute.
+         */
+        $middleware->alias(['throttle' => ThrottlePerRoute::class]);
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
