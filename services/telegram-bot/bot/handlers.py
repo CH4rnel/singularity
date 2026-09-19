@@ -31,6 +31,7 @@ from bot.utils import (
     _format_window, _format_token_amount,
 )
 from bot.announcers import _build_digest_text, _cyber_price_line, _SQLITE_TS
+from bot.chain import next_nonce
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help - show available commands",
         "/wallet - show your linked wallet and explorer link",
         "/rps <stake> - play rock-paper-scissors with this chat’s accrued tokens",
+        "/slots <stake> - pull the chat’s 🎰 slot machine with accrued tokens",
         "/balance - show TG, all chat tokens, and pending rewards",
         "/token - show this chat's reward token (group only)",
         "/unset_wallet - unlink your wallet (pending rewards are kept)",
@@ -185,6 +187,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/unset_wallet - unlink your wallet (pending rewards are kept)\n"
         "/wallet - show your linked wallet and explorer link\n"
         "/rps <stake> - play rock-paper-scissors with this chat’s accrued tokens\n"
+        "/slots <stake> - pull the chat’s 🎰 slot machine with accrued tokens\n"
+        "/slots_bank [amount] - show the machine’s till (admins top it up)\n"
         "/balance - show TG, all chat tokens, and pending rewards\n"
         "/token - show this chat's reward token (group only)\n"
         "/cancel - cancel an interactive prompt\n"
@@ -538,7 +542,7 @@ async def _process_create_token(
             abi=FACTORY_ABI,
         )
 
-        nonce = w3.eth.get_transaction_count(acct.address, "pending")
+        nonce = next_nonce(w3, acct.address)
         try:
             estimated = factory.functions.createToken(
                 name, symbol, acct.address
@@ -794,7 +798,7 @@ def _mint_chat_reward(token_address: str, recipient: str, amount: int) -> str:
         abi=CHAT_TOKEN_MINT_ABI,
     )
     to = Web3.to_checksum_address(recipient)
-    nonce = w3.eth.get_transaction_count(acct.address, "pending")
+    nonce = next_nonce(w3, acct.address)
     mint_fn = contract.functions.mint(to, amount)
     try:
         estimated_gas = mint_fn.estimate_gas({"from": acct.address})
@@ -976,7 +980,7 @@ async def reward_now_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             address=Web3.to_checksum_address(token_address), abi=token_abi
         )
         amount = int(reward_amount)
-        nonce = w3.eth.get_transaction_count(acct.address, "pending")
+        nonce = next_nonce(w3, acct.address)
 
         succeeded = 0
         failed = 0
@@ -1000,7 +1004,11 @@ async def reward_now_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 succeeded += 1
             except Exception as e:
                 logger.error(f"reward_now mint failed for {address}: {e}")
-                nonce += 1
+                # A failed send did not consume a nonce, so carrying on from the next one
+                # opens a gap the chain can never close and every later signature lands
+                # further out of reach — that is how one failure became 512 on
+                # 2026-09-14. Ask the chain again instead of guessing.
+                nonce = next_nonce(w3, acct.address)
                 failed += 1
     except Exception as e:
         logger.error(f"reward_now fatal: {e}")
@@ -1055,7 +1063,7 @@ def _claim_pending_rewards(user_id: int, address: str):
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
     acct = w3.eth.account.from_key(DEPLOYER_PK)
     to = Web3.to_checksum_address(address)
-    nonce = w3.eth.get_transaction_count(acct.address, "pending")
+    nonce = next_nonce(w3, acct.address)
 
     claimed = 0
     failed = 0
@@ -1079,6 +1087,9 @@ def _claim_pending_rewards(user_id: int, address: str):
             })
             signed = acct.sign_transaction(tx)
             tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+            # Up to three minutes per row, which is why every caller of this
+            # function hands it to a thread: the dispatcher is sequential, so
+            # waiting here on the event loop stops the bot answering anybody.
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
             nonce += 1
             if receipt.status != 1:
@@ -1106,8 +1117,11 @@ def _claim_pending_rewards(user_id: int, address: str):
                 "claim_pending: mint failed user=%s chat=%s symbol=%s: %s",
                 user_id, chat_id, symbol, e,
             )
-            # Bump nonce defensively in case the tx was actually broadcast.
-            nonce += 1
+            # A failed send did not consume a nonce, so carrying on from the next one
+            # opens a gap the chain can never close and every later signature lands
+            # further out of reach — that is how one failure became 512 on
+            # 2026-09-14. Ask the chain again instead of guessing.
+            nonce = next_nonce(w3, acct.address)
 
     return claimed, failed, totals
 
@@ -1169,7 +1183,7 @@ async def _process_set_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"Claiming pending rewards from {pending_count} chat(s)..."
     )
     try:
-        claimed, failed, totals = _claim_pending_rewards(user_id, address)
+        claimed, failed, totals = await asyncio.to_thread(_claim_pending_rewards, user_id, address)
     except Exception as e:
         logger.error(f"set_wallet claim failed: {e}")
         await status_msg.edit_text(
@@ -1445,7 +1459,7 @@ async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     try:
-        claimed, failed, totals = _claim_pending_rewards(user.id, address)
+        claimed, failed, totals = await asyncio.to_thread(_claim_pending_rewards, user.id, address)
     except Exception as e:
         logger.error("claim_command: failed user=%s: %s", user.id, e)
         await context.bot.send_message(

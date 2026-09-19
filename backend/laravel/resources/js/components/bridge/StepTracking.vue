@@ -29,6 +29,13 @@ const emit = defineEmits<{
 }>();
 
 const status = ref<string>('pending');
+// Everything below is seeded from the props and then kept up to date from the
+// poll, because the props are what this browser knew when the transfer
+// started — and a page reloaded twenty minutes into a Monero deposit knows
+// none of it.
+const sourceTxHash = ref<string>(props.sourceTxHash);
+const depositAddress = ref<string | null>(null);
+const recipientAddress = ref<string>(props.destinationAddress);
 const destinationTxHash = ref<string | null>(null);
 const errorMessage = ref<string | null>(null);
 const convertRequested = ref(false);
@@ -39,11 +46,11 @@ const explorerUrl = (chain: string, txHash: string): string =>
     explorerTxUrl(chain, txHash);
 
 const sourceExplorer = computed(() =>
-    explorerUrl(bridgeRoute(props.direction).source, props.sourceTxHash),
+    explorerUrl(bridgeRoute(props.direction).source, sourceTxHash.value),
 );
 
 const sourceExplorerFallbacks = computed(() =>
-    explorerTxFallbackUrls(bridgeRoute(props.direction).source, props.sourceTxHash),
+    explorerTxFallbackUrls(bridgeRoute(props.direction).source, sourceTxHash.value),
 );
 
 const destExplorer = computed(() => {
@@ -94,6 +101,17 @@ const poll = async () => {
         const data = await res.json();
 
         status.value = data.status;
+
+        if (data.source_tx_hash) {
+            sourceTxHash.value = data.source_tx_hash;
+        }
+
+        depositAddress.value = data.deposit_address ?? null;
+
+        if (data.recipient_address) {
+            recipientAddress.value = data.recipient_address;
+        }
+
         destinationTxHash.value = data.destination_tx_hash;
         errorMessage.value = data.error_message;
         convertRequested.value = Boolean(data.convert_to_native);
@@ -130,7 +148,11 @@ onBeforeUnmount(() => {
 
 const steps = computed(() => [
     {
-        label: 'Source transaction confirmed',
+        // A corridor with no source hash has no source *transaction* the user
+        // can be shown, so it is not called one.
+        label: sourceTxHash.value
+            ? 'Source transaction confirmed'
+            : 'Deposit confirmed',
         state: 'done',
     },
     {
@@ -254,7 +276,7 @@ const steps = computed(() => [
         </p>
 
         <div class="flex flex-col gap-2 text-xs">
-            <div class="flex items-center gap-2">
+            <div v-if="sourceTxHash" class="flex items-center gap-2">
                 <span class="text-[#706f6c] dark:text-[#A1A09A]"
                     >Source tx:</span
                 >
@@ -278,6 +300,19 @@ const steps = computed(() => [
                     fallback
                     <ExternalLink class="h-3 w-3" />
                 </a>
+            </div>
+            <div
+                v-else-if="depositAddress"
+                class="flex flex-wrap items-center gap-x-2 gap-y-1"
+            >
+                <span class="text-[#706f6c] dark:text-[#A1A09A]"
+                    >Deposit address:</span
+                >
+                <AddressDisplay :address="depositAddress" size="sm" />
+                <span class="w-full text-[#706f6c] dark:text-[#A1A09A]">
+                    This transfer is identified by the address it landed on, so
+                    there is no transaction hash to look up.
+                </span>
             </div>
             <div v-if="destExplorer" class="flex items-center gap-2">
                 <span class="text-[#706f6c] dark:text-[#A1A09A]">
@@ -304,9 +339,9 @@ const steps = computed(() => [
                     <ExternalLink class="h-3 w-3" />
                 </a>
             </div>
-            <div class="flex items-center gap-2">
+            <div v-if="recipientAddress" class="flex items-center gap-2">
                 <span class="text-[#706f6c] dark:text-[#A1A09A]">Sent to:</span>
-                <AddressDisplay :address="destinationAddress" size="sm" />
+                <AddressDisplay :address="recipientAddress" size="sm" />
             </div>
         </div>
 

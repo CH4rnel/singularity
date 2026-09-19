@@ -799,6 +799,11 @@ async def _announce_pumpfun_tick(bot) -> None:
         logger.warning("pumpfun_announcer: no pool to watch")
         return
 
+    # Both halves of the market cap the posts will print: the price comes from
+    # each buy's own pool reserves, the supply from the chain (cached for an
+    # hour). Unreadable, and the posts fall back to the feed's figure.
+    supply = await asyncio.to_thread(pumpfun.token_supply, CYBER_SOL_MINT)
+
     cursor = _get_block_cursor("last_announced_pumpfun_cursor")
     if cursor is None:
         slot, index = await asyncio.to_thread(pumpfun.head_cursor, pool)
@@ -846,10 +851,17 @@ async def _announce_pumpfun_tick(bot) -> None:
             )
             continue
 
+        # The cap as this buy left the pool, so the post agrees with the chart
+        # it links to; the feed's own figure is a trade behind and only stands
+        # in when the reserves or the supply could not be read.
+        cap = pumpfun.market_cap_after(buy, market["sol_usd"], supply)
+        if cap is None:
+            cap = market.get("market_cap")
+
         try:
             await bot.send_message(
                 chat_id=PUMPFUN_ANNOUNCE_CHAT,
-                text=pumpfun.format_buy(buy, usd, market.get("market_cap")),
+                text=pumpfun.format_buy(buy, usd, cap),
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
 import { Bell, ExternalLink, Power, Volume2 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { LOCALE_LABELS, useLocale } from '@/composables/useLocale';
@@ -19,6 +20,8 @@ import {
     subscribeWalletPreferences,
     walletNotificationPermission,
 } from '@/lib/wallet/notifications';
+import { disablePush, enablePush, pushState } from '@/lib/wallet/push';
+import type { PushState } from '@/lib/wallet/push';
 import { walletMessages } from '@/lib/walletMessages';
 
 defineEmits<{ back: [] }>();
@@ -45,27 +48,82 @@ const startupError = ref(false);
 const desktop = nativeShell() === 'desktop';
 const tray = hasNativeTray();
 
+/**
+ * One switch, and it covers both halves of being notified.
+ *
+ * There were two, in two screens, called the same word: this one, which let the
+ * wallet raise a notice while it was open, and a second in Security that
+ * subscribed the device for web push — the only one that can say anything while
+ * the app is closed. Somebody who turned on "Уведомления" here got the
+ * permission and no subscription, so the feed's announcement reached them
+ * never. They are one decision and are now one control: on means both, off
+ * means both, and the state that is drawn is the subscription's, because it is
+ * the one that can fail on its own.
+ */
+const push = ref<PushState>('unsupported');
+const pushBusy = ref(false);
+
+const vapidKey = computed(
+    () => (usePage().props.vapidPublicKey as string | undefined) ?? null,
+);
+
+const notificationsOn = computed(
+    () => preferences.value.notifications || push.value === 'on',
+);
+
+const notificationsBlocked = computed(
+    () =>
+        pushBusy.value ||
+        permission.value === 'unsupported' ||
+        permission.value === 'denied' ||
+        push.value === 'denied' ||
+        push.value === 'unsupported',
+);
+
 const notificationsHint = computed(() => {
-    if (permission.value === 'unsupported') {
+    if (permission.value === 'unsupported' || push.value === 'unsupported') {
         return t('preferencesNotificationsUnsupported');
     }
 
-    if (permission.value === 'denied') {
+    if (permission.value === 'denied' || push.value === 'denied') {
         return t('preferencesNotificationsDenied');
+    }
+
+    // The subscription is what a closed app is reached through, and it can be
+    // missing while the permission is granted — a rotated key, a cleared site,
+    // a browser that dropped it. Said rather than drawn as "on".
+    if (push.value === 'unavailable') {
+        return t('preferencesNotificationsUnavailable');
     }
 
     return t('preferencesNotificationsHint');
 });
 
 const toggleNotifications = async (enabled: boolean): Promise<void> => {
-    if (enabled) {
-        await enableWalletNotifications();
-    } else {
-        saveWalletPreferences({ notifications: false });
+    if (pushBusy.value) {
+        return;
     }
 
-    permission.value = walletNotificationPermission();
-    preferences.value = readWalletPreferences();
+    pushBusy.value = true;
+
+    try {
+        if (enabled) {
+            await enableWalletNotifications();
+
+            if (vapidKey.value !== null) {
+                push.value = await enablePush(vapidKey.value, locale.value);
+            }
+        } else {
+            saveWalletPreferences({ notifications: false });
+            push.value = await disablePush();
+        }
+    } catch {
+        push.value = await pushState(vapidKey.value);
+    } finally {
+        pushBusy.value = false;
+        permission.value = walletNotificationPermission();
+        preferences.value = readWalletPreferences();
+    }
 };
 
 const toggleSounds = (enabled: boolean): void => {
@@ -109,7 +167,75 @@ const unsubscribe = subscribeWalletPreferences((next) => {
     preferences.value = next;
 });
 
+/**
+ * TEMPORARY — a readout of how this window is actually laid out.
+ *
+ * The frame's bottom edge is wrong on one person's iPhone and right on every
+ * emulator here, and no Safari on this side of the cable can be attached to a
+ * home-screen app. So the app states its own numbers and a screenshot carries
+ * them back. Delete this block, `frameProbe` and the panel below it as soon as
+ * that is answered.
+ */
+const frameProbe = ref<string[]>([]);
+
+const readFrameProbe = (): void => {
+    const px = (value: number | undefined): string =>
+        value === undefined ? '—' : String(Math.round(value));
+
+    const probe = document.createElement('div');
+    probe.style.cssText =
+        'position:fixed;top:0;left:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);visibility:hidden;pointer-events:none';
+    document.body.append(probe);
+    const insets = getComputedStyle(probe);
+    const safe = `${insets.paddingTop} / ${insets.paddingBottom}`;
+    probe.remove();
+
+    const rect = (selector: string): string => {
+        const element = document.querySelector(selector);
+
+        if (!element) {
+            return 'нет';
+        }
+
+        const box = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+
+        return `${px(box.top)}–${px(box.bottom)} pad ${style.paddingTop}/${style.paddingBottom}`;
+    };
+
+    frameProbe.value = [
+        `win ${px(window.innerWidth)}×${px(window.innerHeight)} vv ${px(window.visualViewport?.height)} scr ${px(window.screen.height)}`,
+        `client ${px(document.documentElement.clientHeight)} vh ${(() => {
+            const unit = document.createElement('div');
+            unit.style.cssText =
+                'position:fixed;top:0;left:0;width:1px;height:100vh;visibility:hidden;pointer-events:none';
+            document.body.append(unit);
+            const height = unit.getBoundingClientRect().height;
+            unit.remove();
+
+            return px(height);
+        })()}`,
+        `safe ${safe}`,
+        `insets=${document.documentElement.dataset.windowInsets ?? '—'} boot ${
+            document.documentElement.dataset.bootHeight ?? '—'
+        }`,
+        `vp ${document.querySelector<HTMLMetaElement>('meta[name=viewport]')?.content ?? '—'}`,
+        `app=${document.documentElement.dataset.appWindow ?? '0'} sa=${
+            (window.navigator as { standalone?: boolean }).standalone === true
+                ? 1
+                : 0
+        } dm=${window.matchMedia('(display-mode: standalone)').matches ? 1 : 0}`,
+        `frame ${rect('.cw-frame')}`,
+        `shell ${rect('.cw-shell')}`,
+        `tabs ${rect('.cw-tabs')}`,
+        `html ${getComputedStyle(document.documentElement).backgroundColor}`,
+        `body ${getComputedStyle(document.body).backgroundColor}`,
+    ];
+};
+
 onMounted(async () => {
+    readFrameProbe();
+    push.value = await pushState(vapidKey.value);
     startup.value = await refreshNativeStartup();
 });
 
@@ -206,10 +332,8 @@ onBeforeUnmount(unsubscribe);
                 </span>
                 <input
                     type="checkbox"
-                    :checked="preferences.notifications"
-                    :disabled="
-                        permission === 'unsupported' || permission === 'denied'
-                    "
+                    :checked="notificationsOn"
+                    :disabled="notificationsBlocked"
                     style="
                         width: 20px;
                         height: 20px;
@@ -330,5 +454,29 @@ onBeforeUnmount(unsubscribe);
             <ExternalLink :size="15" aria-hidden="true" />
             {{ t('openSite') }}
         </a>
+
+        <!-- TEMPORARY: see `readFrameProbe`. Remove with it. -->
+        <div
+            style="
+                margin-top: 20px;
+                padding: 10px 12px;
+                border: 1px dashed var(--cw-border);
+                font: 400 11px/1.6 var(--cw-mono);
+                color: var(--cw-faint);
+            "
+        >
+            <div style="margin-bottom: 4px; color: var(--cw-dim)">
+                РАМКА ОКНА · ВРЕМЕННО
+            </div>
+            <div v-for="line in frameProbe" :key="line">{{ line }}</div>
+            <button
+                type="button"
+                class="cw-ghost"
+                style="margin-top: 6px"
+                @click="readFrameProbe()"
+            >
+                обновить
+            </button>
+        </div>
     </div>
 </template>

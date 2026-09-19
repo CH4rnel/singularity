@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { setShippedWalletChains, shippedChains } from '@/lib/wallet';
 import {
     coinMarkets,
     exchangeChartLocale,
@@ -20,6 +21,13 @@ import {
  * that everything else falls through to the chain's own pools or to a stated
  * "nobody prices this".
  */
+
+/*
+ * The coin list is drawn from the networks that are on, and a bare process has
+ * none but Cyberia — being on is a choice a device makes. What these tests are
+ * about is which chart a market gets, so they switch the shipped set on first.
+ */
+setShippedWalletChains(shippedChains());
 
 test('a coin is charted from an exchange only where one was verified', () => {
     assert.equal(exchangeSymbol('bitcoin'), 'BINANCE:BTCUSDT');

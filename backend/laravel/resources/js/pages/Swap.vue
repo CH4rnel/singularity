@@ -77,7 +77,7 @@ import type {
 } from '@/lib/marketCandles';
 import { logoForToken } from '@/lib/tokenLogos';
 import { track } from '@/lib/track';
-import { walletChains } from '@/lib/wallet/chains';
+import { shippedChainByEvmId } from '@/lib/wallet/chains';
 import type { WalletChainId } from '@/lib/wallet/chains';
 import type { DexPair } from '@/lib/wallet/dexscreener';
 import {
@@ -1626,9 +1626,7 @@ const onAmountEdited = (side: 'in' | 'out'): void => {
  * `X-Frame-Options: SAMEORIGIN`.
  */
 const activeWalletChain = computed<WalletChainId | null>(
-    () =>
-        walletChains().find((chain) => chain.chainId === activeChainId.value)
-            ?.id ?? null,
+    () => shippedChainByEvmId(activeChainId.value)?.id ?? null,
 );
 
 /**

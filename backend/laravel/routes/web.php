@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\Api\WalletChatController;
 use App\Http\Controllers\Api\WalletDailyController;
 use App\Http\Controllers\Api\WalletLainController;
+use App\Http\Controllers\Api\WalletPostController;
 use App\Http\Controllers\Api\WalletSocialController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\AppLinksController;
@@ -388,6 +389,9 @@ Route::prefix('api/wallet/chat')->name('wallet.chat.')->group(function () {
         ->middleware('throttle:20,1')->name('keys.publish');
     Route::get('keys/{address}', [WalletChatController::class, 'key'])
         ->middleware('throttle:120,1')->name('keys.show');
+    // Who there is to write to: the site's own people, already public.
+    Route::get('people', [WalletChatController::class, 'people'])
+        ->middleware('throttle:60,1')->name('people');
     Route::get('messages', [WalletChatController::class, 'messages'])
         ->middleware('throttle:120,1')->name('messages');
     Route::post('messages', [WalletChatController::class, 'send'])
@@ -397,10 +401,12 @@ Route::prefix('api/wallet/chat')->name('wallet.chat.')->group(function () {
 /**
  * What the wallet reads about the rest of Cyberia (WalletSocialController).
  *
- * Read-only and public, like the wallet itself. The wallet has no session, so
- * there is nobody here to post, comment or vote as; these answer with the same
- * fields the public feed, DAO and profile pages already render, and the wallet
- * links out to those pages for anything that needs an account.
+ * Public and cached: these answer with the same fields the public feed, DAO and
+ * profile pages already render, to anybody, with no session involved.
+ *
+ * Writing is a different matter and lives behind the session — `api/wallet/feed`
+ * in the auth group below, and `WalletPostController` for why a wallet can have
+ * one at all.
  */
 Route::prefix('api/wallet')->name('wallet.social.')->group(function () {
     Route::get('feed', [WalletSocialController::class, 'feed'])
@@ -429,6 +435,17 @@ Route::middleware(['auth'])->group(function () {
         Route::post('claims', [SolanaStakingController::class, 'claim'])
             ->middleware('throttle:6,1')->name('claims.store');
     });
+
+    /*
+     * Posting into the feed from the wallet.
+     *
+     * A web route rather than an `/api` one for the same reason the daily
+     * board is: this is a wallet surface whose subject is an account, and an
+     * account is a session. The wallet gets one by signing the site's login
+     * challenge, which is the one thing it can prove.
+     */
+    Route::post('api/wallet/feed', [WalletPostController::class, 'store'])
+        ->middleware('throttle:10,1')->name('wallet.social.post');
 
     // Own profile: account info + bridge deposit addresses for every chain.
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');

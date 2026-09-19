@@ -2,23 +2,23 @@
 
 All escrow transitions are durable SQLite transactions. Telegram messages are
 views only: a failed edit or repeated callback can never settle a stake twice.
+The money itself lives in `bot.stakes`, shared with the other chat-token game.
 """
 import asyncio
 import logging
 import re
 import time
-from contextlib import contextmanager
 
 from sqlalchemy import text
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TelegramError
 
 from bot.db import engine
+from bot.stakes import UNIT, amount, chat_token, credit, parse_stake, seen, transaction  # noqa: F401
 
 logger = logging.getLogger(__name__)
 MOVES = {"r": "🪨 Камень", "s": "✂️ Ножницы", "p": "📄 Бумага"}
 TTL = 600
-UNIT = 10**18  # TelegramChatToken uses ERC20's fixed 18 decimals.
 
 
 def ensure_schema():
@@ -36,47 +36,6 @@ def ensure_schema():
             )
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS rps_expiry ON rps_games(status, expires_at)"))
-
-
-@contextmanager
-def transaction():
-    with engine.connect() as conn:
-        conn.exec_driver_sql("BEGIN IMMEDIATE")
-        try:
-            yield conn
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
-
-
-def amount(raw):
-    whole, fraction = divmod(int(raw), UNIT)
-    return str(whole) + ("." + str(fraction).zfill(18).rstrip("0") if fraction else "")
-
-
-def parse_stake(value):
-    if not re.fullmatch(r"[0-9]{1,60}(?:[.,][0-9]{1,18})?", value):
-        raise ValueError("Ставка — положительное число, не более 18 знаков после запятой.")
-    whole, _, fraction = value.replace(",", ".").partition(".")
-    raw = int(whole) * UNIT + int(fraction.ljust(18, "0"))
-    if not 0 < raw <= (2**256 - 1) // 2:
-        raise ValueError("Ставка слишком большая или равна нулю.")
-    return raw
-
-
-def credit(conn, chat, user, delta):
-    args = {"c": chat, "u": user}
-    row = conn.execute(text("SELECT amount FROM pending_rewards WHERE chat_id=:c AND user_id=:u"), args).first()
-    balance = int(row[0]) if row else 0
-    if balance + delta < 0:
-        raise ValueError(f"Недостаточно токенов на внутреннем балансе: {amount(balance)}. "
-                         "Проверьте /balance; новые награды начисляются за участие в чате.")
-    conn.execute(text("""
-        INSERT INTO pending_rewards(chat_id,user_id,amount,updated_at)
-        VALUES(:c,:u,:a,datetime('now'))
-        ON CONFLICT(chat_id,user_id) DO UPDATE SET amount=excluded.amount,updated_at=excluded.updated_at
-    """), {**args, "a": str(balance + delta)})
 
 
 def refund(conn, game, status):
@@ -98,17 +57,14 @@ def create(chat, user, stake, now=None, display_name=None):
     with transaction() as conn:
         # Expire only in the background/callback path so its message updates
         # cannot be lost when another command creates a game.
-        token = conn.execute(text("SELECT symbol FROM chat_tokens WHERE chat_id=:c AND token_address IS NOT NULL"), {"c": chat}).first()
-        if not token:
-            raise ValueError("У этого чата ещё нет токена. Администратор может создать его: /create_token.")
+        symbol = chat_token(conn, chat)
         if conn.execute(text("SELECT 1 FROM rps_games WHERE chat_id=:c AND status='open' AND (creator=:u OR opponent=:u)"), {"c": chat, "u": user}).first():
             raise ValueError("Сначала завершите текущую игру или отмените свой вызов кнопкой под ним.")
         credit(conn, chat, user, -stake)
-        conn.execute(text("""INSERT INTO chat_members(chat_id,user_id) VALUES(:c,:u)
-            ON CONFLICT(chat_id,user_id) DO UPDATE SET last_seen=datetime('now')"""), {"c": chat, "u": user})
+        seen(conn, chat, user)
         return conn.execute(text("""INSERT INTO rps_games(chat_id,creator,creator_name,stake,symbol,expires_at)
             VALUES(:c,:u,:name,:a,:s,:e) RETURNING id"""),
-            {"c": chat, "u": user, "name": display_name, "a": str(stake), "s": token[0], "e": now + TTL}).scalar_one()
+            {"c": chat, "u": user, "name": display_name, "a": str(stake), "s": symbol, "e": now + TTL}).scalar_one()
 
 
 def play(game_id, chat, user, move, now=None, display_name=None):
@@ -138,8 +94,7 @@ def play(game_id, chat, user, move, now=None, display_name=None):
             if conn.execute(text("SELECT 1 FROM rps_games WHERE chat_id=:c AND status='open' AND (creator=:u OR opponent=:u)"), {"c": chat, "u": user}).first():
                 raise ValueError("Сначала завершите свою текущую игру.")
             credit(conn, chat, user, -int(game["stake"]))
-            conn.execute(text("""INSERT INTO chat_members(chat_id,user_id) VALUES(:c,:u)
-                ON CONFLICT(chat_id,user_id) DO UPDATE SET last_seen=datetime('now')"""), {"c": chat, "u": user})
+            seen(conn, chat, user)
             game["opponent"] = user
             conn.execute(text("UPDATE rps_games SET opponent=:u,opponent_name=:name WHERE id=:id"), {"u": user, "name": display_name, "id": game_id})
             field = "opponent_move"

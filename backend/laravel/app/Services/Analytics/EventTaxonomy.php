@@ -374,7 +374,10 @@ class EventTaxonomy
         'watchable' => 'flag',
         'sponsored' => 'flag',
         'verified' => 'flag',
-        'origin' => 'enum:created,imported',
+        // `auto` is the vault a first launch writes for somebody who has not
+        // asked for anything yet; it is deliberately not a kind of `created`,
+        // or the funnel would report every visitor as converting.
+        'origin' => 'enum:created,imported,auto',
         'grounds' => 'enum:tokens,nft,account,open',
         'pid' => 'count',
         'pool_kind' => 'enum:pair,solo',

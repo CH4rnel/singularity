@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { usePage } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
@@ -9,8 +8,6 @@ import {
     useSecureClipboard,
 } from '@/composables/useSecureClipboard';
 import { analytics } from '@/lib/analytics';
-import { disablePush, enablePush, pushState } from '@/lib/wallet/push';
-import type { PushState } from '@/lib/wallet/push';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -32,63 +29,8 @@ const emit = defineEmits<{
     proxy: [];
 }>();
 
-const { t, locale } = useLocale(walletMessages);
+const { t } = useLocale(walletMessages);
 const clipboard = useSecureClipboard();
-
-/**
- * Notifications, offered here because this is the only screen most people
- * running this wallet will ever see.
- *
- * The site has a bell in its header; this app does not render that header, and
- * neither does the PWA, the native shells or the Telegram mini app — so until
- * this row existed, somebody who installed the wallet had no button anywhere
- * to allow notifications at all.
- *
- * Four states rather than a checkbox, because three of them are refusals the
- * person can act on and one is a refusal they cannot: a browser that blocked
- * the permission has to be changed in the browser, and a switch that silently
- * does nothing is worse than a sentence saying so.
- */
-const vapidKey = computed(
-    () => (usePage().props.vapidPublicKey as string | undefined) ?? null,
-);
-const push = ref<PushState>('unsupported');
-const pushBusy = ref(false);
-
-onMounted(async () => {
-    push.value = await pushState(vapidKey.value);
-});
-
-const setPush = async (on: boolean): Promise<void> => {
-    if (pushBusy.value || vapidKey.value === null) {
-        return;
-    }
-
-    pushBusy.value = true;
-
-    try {
-        push.value = on
-            ? await enablePush(vapidKey.value, locale.value)
-            : await disablePush();
-    } catch {
-        push.value = await pushState(vapidKey.value);
-    } finally {
-        pushBusy.value = false;
-    }
-};
-
-const pushHint = computed(() => {
-    switch (push.value) {
-        case 'denied':
-            return t('notificationsDenied');
-        case 'unsupported':
-            return t('notificationsUnsupported');
-        case 'unavailable':
-            return t('notificationsUnavailable');
-        default:
-            return t('notificationsHint');
-    }
-});
 
 const password = ref('');
 const phrase = ref<string | null>(null);
@@ -120,20 +62,6 @@ const setAnalytics = (on: boolean): void => {
     analytics.setEnabled(on);
     analyticsOn.value = analytics.enabled();
 };
-
-/** The networks that ship with the wallet, named so "verified" means something. */
-/**
- * The networks read through an endpoint this project checked, named as that
- * rather than as a tier. It is the same list the row's "verified" tag is about,
- * and the only thing it separates from the rows below is who vetted the host —
- * not which chains count.
- */
-const vetted = computed(() =>
-    props.wallet.chains.value
-        .filter((chain) => !chain.custom)
-        .map((chain) => chain.label)
-        .join(' · '),
-);
 
 /**
  * Where each account's key comes from, one row per network.
@@ -241,11 +169,13 @@ onBeforeUnmount(() => {
         </div>
 
         <!--
-          The two things somebody can decline at setup, said here for as long
-          as they are still declined. Neither is an error and neither blocks
+          The two things a first launch does not ask for, said here for as long
+          as they are still missing. Neither is an error and neither blocks
           anything — they are the two facts that decide whether this wallet can
           be got back, and a wallet that stayed quiet about them would be
-          keeping a secret from its owner about their own money.
+          keeping a secret from its owner about their own money. Since the
+          setup ritual is gone, this screen is where both are put right, and
+          the portfolio carries the same two lines with a door to it.
         -->
         <p
             v-if="!wallet.backedUp.value"
@@ -569,55 +499,6 @@ onBeforeUnmount(() => {
                     "
                 />
             </label>
-
-            <label
-                style="
-                    display: flex;
-                    align-items: flex-start;
-                    justify-content: space-between;
-                    gap: 16px;
-                    cursor: pointer;
-                "
-            >
-                <span>
-                    <span
-                        style="
-                            display: block;
-                            font: 400 14px/1.3 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                        >{{ t('notificationsRow') }}</span
-                    >
-                    <span
-                        style="
-                            display: block;
-                            margin-top: 3px;
-                            font: 400 11px/1.4 var(--cw-mono);
-                            color: var(--cw-dim);
-                        "
-                        >{{ pushHint }}</span
-                    >
-                </span>
-                <input
-                    :checked="push === 'on'"
-                    :disabled="
-                        pushBusy ||
-                        push === 'denied' ||
-                        push === 'unsupported' ||
-                        push === 'unavailable'
-                    "
-                    type="checkbox"
-                    style="
-                        width: 20px;
-                        height: 20px;
-                        flex: none;
-                        accent-color: var(--cw-accent);
-                    "
-                    @change="
-                        setPush(($event.target as HTMLInputElement).checked)
-                    "
-                />
-            </label>
         </div>
 
         <div class="cw-label" style="margin: 26px 0 6px">
@@ -659,147 +540,85 @@ onBeforeUnmount(() => {
         </div>
 
         <!--
-          Networks. The split that matters is who vouched for the endpoint, so
-          that is the split the section draws: everything shipped with the
-          wallet on one row, everything typed in here on its own removable one.
+          Networks, and only the half that is a security question: who vouched
+          for the endpoint a balance is read through. A wallet with nothing but
+          the endpoints this project checked has nothing to answer here — the
+          row said "Cyberia · ПРОВЕРЕНО" and the one under it offered to add a
+          network, which is what the networks screen is for — so the section
+          appears when there is an unvetted endpoint to name, and otherwise the
+          screen is shorter by a block.
         -->
-        <div class="cw-label" style="margin: 26px 0 10px">
-            {{ t('networksSection') }}
-        </div>
-
-        <div class="cw-card" style="padding: 0">
-            <div
-                class="cw-row"
-                style="padding: 16px; border-bottom: 1px solid var(--cw-line)"
-            >
-                <div style="flex: 1">
-                    <div
-                        style="
-                            font: 400 14px/1.3 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                    >
-                        {{ t('vettedEndpoints') }}
-                    </div>
-                    <div
-                        style="
-                            margin-top: 3px;
-                            font: 400 11px/1.4 var(--cw-mono);
-                            color: var(--cw-dim);
-                        "
-                    >
-                        {{ vetted }}
-                    </div>
-                </div>
-                <span
-                    class="cw-label"
-                    style="flex: none; color: var(--cw-faint)"
-                    >{{ t('verified') }}</span
-                >
+        <template v-if="wallet.customNetworks.value.length > 0">
+            <div class="cw-label" style="margin: 26px 0 10px">
+                {{ t('networksSection') }}
             </div>
 
-            <div
-                v-for="network in wallet.customNetworks.value"
-                :key="network.id"
-                class="cw-row"
-                style="padding: 16px; border-bottom: 1px solid var(--cw-line)"
-            >
-                <NetworkMark :chain="network.id" dot :size="9" />
-                <div style="flex: 1">
-                    <div
-                        style="
-                            font: 400 14px/1.3 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                    >
-                        {{ network.name }}
-                    </div>
-                    <div
-                        style="
-                            margin-top: 3px;
-                            font: 400 11px/1.4 var(--cw-mono);
-                            color: var(--cw-dim);
-                            word-break: break-all;
-                        "
-                    >
-                        {{
-                            network.kind === 'evm'
-                                ? `chain ${network.chainId}`
-                                : `coin ${network.coinType} · ${network.addressType}`
-                        }}
-                        · {{ t('addedByYou').toLowerCase() }}
-                    </div>
-                </div>
-                <button
-                    type="button"
-                    class="cw-back"
-                    style="flex: none; color: var(--cw-bad-soft)"
-                    @click="wallet.removeNetwork(network.id)"
-                >
-                    {{ t('removeNetwork') }}
-                </button>
-            </div>
-
-            <p
-                v-if="wallet.customNetworks.value.length > 0"
-                class="cw-prose"
-                style="
-                    margin: 0;
-                    padding: 12px 16px;
-                    border-bottom: 1px solid var(--cw-line);
-                    font-size: 11px;
-                "
-            >
-                {{ t('removeNetworkHint') }}
-            </p>
-
-            <button
-                type="button"
-                class="cw-row"
-                style="
-                    width: 100%;
-                    padding: 16px;
-                    border: 0;
-                    background: none;
-                    cursor: pointer;
-                    text-align: left;
-                "
-                @click="emit('addNetwork')"
-            >
-                <span style="flex: 1">
-                    <span
-                        style="
-                            display: block;
-                            font: 400 14px/1.3 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                        >{{ t('addNetworkRow') }}</span
-                    >
-                    <span
-                        style="
-                            display: block;
-                            margin-top: 3px;
-                            font: 400 11px/1.4 var(--cw-mono);
-                            color: var(--cw-dim);
-                        "
-                        >{{ t('addNetworkRowHint') }}</span
-                    >
-                </span>
-                <span
+            <div class="cw-card" style="padding: 0">
+                <div
+                    v-for="network in wallet.customNetworks.value"
+                    :key="network.id"
+                    class="cw-row"
                     style="
-                        font: 400 12px/1 var(--cw-mono);
-                        color: var(--cw-dim);
+                        padding: 16px;
+                        border-bottom: 1px solid var(--cw-line);
                     "
-                    >→</span
                 >
-            </button>
+                    <NetworkMark :chain="network.id" dot :size="9" />
+                    <div style="flex: 1">
+                        <div
+                            style="
+                                font: 400 14px/1.3 var(--cw-sans);
+                                color: var(--cw-text);
+                            "
+                        >
+                            {{ network.name }}
+                        </div>
+                        <div
+                            style="
+                                margin-top: 3px;
+                                font: 400 11px/1.4 var(--cw-mono);
+                                color: var(--cw-dim);
+                                word-break: break-all;
+                            "
+                        >
+                            {{
+                                network.kind === 'evm'
+                                    ? `chain ${network.chainId}`
+                                    : `coin ${network.coinType} · ${network.addressType}`
+                            }}
+                            · {{ t('addedByYou').toLowerCase() }}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        class="cw-back"
+                        style="flex: none; color: var(--cw-bad-soft)"
+                        @click="wallet.removeNetwork(network.id)"
+                    >
+                        {{ t('removeNetwork') }}
+                    </button>
+                </div>
 
-            <!--
-              The endpoints above are half the story: which hosts answer for
-              this wallet. The other half is what carries the question to them,
-              and it belongs next to them rather than in a settings page of its
-              own.
-            -->
+                <p
+                    v-if="wallet.customNetworks.value.length > 0"
+                    class="cw-prose"
+                    style="
+                        margin: 0;
+                        padding: 12px 16px;
+                        border-bottom: 1px solid var(--cw-line);
+                        font-size: 11px;
+                    "
+                >
+                    {{ t('removeNetworkHint') }}
+                </p>
+            </div>
+        </template>
+
+        <!--
+          Who carries a request is a security question whatever the endpoints
+          are, so this row does not sit inside the block about unvetted ones.
+        -->
+        <div class="cw-card" style="margin-top: 12px; padding: 0">
             <button
                 type="button"
                 class="cw-row"
@@ -807,7 +626,6 @@ onBeforeUnmount(() => {
                     width: 100%;
                     padding: 16px;
                     border: 0;
-                    border-top: 1px solid var(--cw-line);
                     background: none;
                     cursor: pointer;
                     text-align: left;

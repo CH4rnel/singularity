@@ -24,20 +24,31 @@ import {
     chatKeyStatement,
     chatMessageId,
     clearChat,
+    dropChatPending,
     fetchChatEnvelopes,
+    fetchChatPeople,
     lookupChatKey,
     markChatKeyVerified,
     markChatRead,
     pinChatKey,
     proveChatAddress,
     publishChatKey,
+    queueChatMessage,
+    readChatPending,
     readChatState,
     requestChatNonce,
     sendChatEnvelope,
     storeChatRows,
 } from '@/lib/wallet';
-import type { ChatKeyRecord, ChatMeta, ChatRow } from '@/lib/wallet';
+import type {
+    ChatKeyRecord,
+    ChatMeta,
+    ChatPerson,
+    ChatRow,
+    PendingMessage,
+} from '@/lib/wallet';
 import { growComposer } from '@/lib/wallet/composer';
+import { shortAddress } from '@/lib/wallet/format';
 import {
     announceWalletEvent,
     playWalletSound,
@@ -64,7 +75,17 @@ import { walletMessages } from '@/lib/walletMessages';
  * is talking to whom and when. Content is sealed; metadata is not.
  */
 
-const props = defineProps<{ wallet: MultiWallet }>();
+const props = defineProps<{
+    wallet: MultiWallet;
+    /**
+     * Somebody to open a thread with on arrival — an address handed over by
+     * another screen, the feed so far. It goes through the same lookup a typed
+     * address does, because an address that has never published a messaging key
+     * cannot be written to at all and saying so is the whole point of that
+     * lookup.
+     */
+    openWith?: string | null;
+}>();
 
 /**
  * `unread` is a nudge, not a number: the count lives in the cache both sides
@@ -72,7 +93,11 @@ const props = defineProps<{ wallet: MultiWallet }>();
  * whenever mail arrives or a thread is read, since those are the only two
  * things that move the badge.
  */
-const emit = defineEmits<{ unread: [] }>();
+const emit = defineEmits<{
+    unread: [];
+    /** The handed-over address has been dealt with, one way or the other. */
+    opened: [];
+}>();
 
 const { t, tag } = useLocale(walletMessages);
 
@@ -108,6 +133,48 @@ const view = ref<'list' | 'thread' | 'new' | 'verify'>('list');
 const peer = ref<string | null>(null);
 const draft = ref('');
 const lookupAddress = ref('');
+
+/**
+ * Who there is to write to.
+ *
+ * The screen used to be an address field and nothing else, which meant a
+ * conversation could only be started by somebody who had already copied forty
+ * hex characters out of a feed post. The list is the site's own people —
+ * accounts with a wallet attached, whose name and address are on a public
+ * profile already — and every row says whether that address has opened chat,
+ * because an address with no published key cannot be written to at all and
+ * that is worth saying before the composer rather than inside it.
+ */
+const people = ref<ChatPerson[]>([]);
+const peopleLoading = ref(false);
+const peopleFailed = ref(false);
+const peopleQuery = ref('');
+
+const loadPeople = async (): Promise<void> => {
+    peopleLoading.value = true;
+    peopleFailed.value = false;
+
+    try {
+        people.value = await fetchChatPeople(peopleQuery.value.trim());
+    } catch {
+        peopleFailed.value = true;
+        people.value = [];
+    } finally {
+        peopleLoading.value = false;
+    }
+};
+
+/** Whoever this wallet is, it is not somebody to write to from here. */
+const others = computed(() =>
+    people.value.filter(
+        (person) => person.address.toLowerCase() !== address.value,
+    ),
+);
+
+const writeTo = async (person: ChatPerson): Promise<void> => {
+    lookupAddress.value = person.address;
+    await startThread();
+};
 const lookupError = ref<string | null>(null);
 const lookingUp = ref(false);
 const transcript = ref<HTMLElement | null>(null);
@@ -256,11 +323,25 @@ const messages = computed(() =>
  */
 const readMarks = ref<Record<string, number>>({});
 
-/** One row per correspondent, newest first, with what is unread on it. */
+/**
+ * One row per correspondent, newest first, with what is unread on it.
+ *
+ * A conversation with nothing delivered in it is still a conversation: a
+ * message written to somebody who has not opened chat yet lives in the queue,
+ * and if the list only knew about delivered mail, leaving that thread would be
+ * the last anybody saw of it. Those rows come first — they are the ones with
+ * something still to happen — and carry no `seq`, because nothing in them has
+ * been through the relay.
+ */
 const threads = computed(() => {
     const byPeer = new Map<
         string,
-        { peer: string; last: Decrypted; unread: number }
+        {
+            peer: string;
+            last: Decrypted | null;
+            unread: number;
+            waiting: number;
+        }
     >();
 
     for (const entry of messages.value) {
@@ -270,10 +351,32 @@ const threads = computed(() => {
             (existing?.unread ?? 0) +
             (!entry.mine && entry.row.seq > seen ? 1 : 0);
 
-        byPeer.set(entry.peer, { peer: entry.peer, last: entry, unread });
+        byPeer.set(entry.peer, {
+            peer: entry.peer,
+            last: entry,
+            unread,
+            waiting: existing?.waiting ?? 0,
+        });
     }
 
-    return [...byPeer.values()].sort((a, b) => b.last.row.seq - a.last.row.seq);
+    for (const entry of pending.value) {
+        const existing = byPeer.get(entry.to);
+
+        byPeer.set(entry.to, {
+            peer: entry.to,
+            last: existing?.last ?? null,
+            unread: existing?.unread ?? 0,
+            waiting: (existing?.waiting ?? 0) + 1,
+        });
+    }
+
+    return [...byPeer.values()].sort((a, b) => {
+        if (a.waiting > 0 !== b.waiting > 0) {
+            return a.waiting > 0 ? -1 : 1;
+        }
+
+        return (b.last?.row.seq ?? 0) - (a.last?.row.seq ?? 0);
+    });
 });
 
 const thread = computed(() =>
@@ -288,9 +391,85 @@ const peerFingerprint = computed(() => {
     return record ? chatFingerprint(record.publicKey) : '';
 });
 
+/* -------------------------------------------------------------- pending --- */
+
+/**
+ * Messages written to addresses that cannot yet receive them.
+ *
+ * Held here rather than refused, because "this address has not opened chat" is
+ * something the *recipient* has not done and the sender can do nothing about —
+ * a composer that turns that into an error makes the person copy their own
+ * sentence somewhere else and come back later, which is the job this is for.
+ */
+const pending = ref<PendingMessage[]>([]);
+
+const pendingFor = computed(() =>
+    peer.value === null
+        ? []
+        : pending.value.filter((entry) => entry.to === peer.value),
+);
+
+const readPending = (): void => {
+    pending.value = identity.value
+        ? readChatPending(identity.value.address)
+        : [];
+};
+
 const peerSuspect = computed(
     () => peer.value !== null && suspectPeers.value.includes(peer.value),
 );
+
+/** This correspondent has published no key yet, so their mail is waiting. */
+const peerKeyMissing = computed(
+    () => peer.value !== null && !peerKeys.value[peer.value],
+);
+
+/**
+ * A held message, read back for the screen.
+ *
+ * Opened on demand rather than kept in the open: the queue holds ciphertext,
+ * and the only place its text belongs is the thread it is drawn in. A message
+ * that cannot be opened is shown as such and never as an empty bubble.
+ */
+const pendingTexts = ref<Record<string, string>>({});
+
+const pendingText = (entry: PendingMessage): string =>
+    pendingTexts.value[entry.id] ?? '…';
+
+const openPending = async (): Promise<void> => {
+    const me = identity.value;
+
+    if (!me) {
+        return;
+    }
+
+    for (const entry of pending.value) {
+        if (pendingTexts.value[entry.id] !== undefined) {
+            continue;
+        }
+
+        let text: string;
+
+        try {
+            text = await props.wallet.chatOpen(
+                me.publicKey,
+                {
+                    id: entry.id,
+                    from: me.address,
+                    to: entry.to,
+                    sentAt: entry.sentAt,
+                },
+                entry.envelope,
+            );
+        } catch {
+            text = t('chatUnreadable');
+        }
+
+        pendingTexts.value = { ...pendingTexts.value, [entry.id]: text };
+    }
+};
+
+watch(pending, () => void openPending(), { deep: true });
 
 const short = (value: string): string =>
     `${value.slice(0, 8)}…${value.slice(-6)}`;
@@ -425,6 +604,109 @@ const sync = async (): Promise<void> => {
     }
 };
 
+/* -------------------------------------------------------------- pending --- */
+
+/** Keep a message nobody can be sent yet, and show it in the thread. */
+const queue = async (to: string, text: string): Promise<void> => {
+    const me = identity.value;
+
+    if (!me) {
+        return;
+    }
+
+    const meta: ChatMeta = {
+        id: chatMessageId(),
+        from: me.address,
+        to,
+        sentAt: new Date().toISOString(),
+    };
+
+    // Sealed to this wallet's own messaging key: the device keeps ciphertext
+    // for mail it has sent and received, and mail it has not sent yet is mail.
+    const envelope = await props.wallet.chatSeal(me.publicKey, meta, text);
+
+    pending.value = queueChatMessage(me.address, {
+        id: meta.id,
+        to,
+        sentAt: meta.sentAt,
+        envelope,
+    });
+
+    draft.value = '';
+    await nextTick(() => growComposer(composer.value));
+    await scrollDown();
+};
+
+/**
+ * Try every held message again.
+ *
+ * Runs on the same beat as the mailbox poll and whenever a thread opens, so a
+ * recipient who published a key five minutes ago gets the message without
+ * anybody having to notice. A failure is left queued: the alternative is
+ * dropping somebody's sentence because a relay had a bad second.
+ */
+const flushPending = async (): Promise<void> => {
+    const me = identity.value;
+
+    if (!me || pending.value.length === 0 || flushing) {
+        return;
+    }
+
+    flushing = true;
+
+    try {
+        for (const entry of [...pending.value]) {
+            const record = await keyFor(entry.to);
+
+            if (!record) {
+                continue;
+            }
+
+            const meta: ChatMeta = {
+                id: entry.id,
+                from: me.address,
+                to: entry.to,
+                sentAt: entry.sentAt,
+            };
+
+            let text: string;
+
+            try {
+                text = await props.wallet.chatOpen(
+                    me.publicKey,
+                    meta,
+                    entry.envelope,
+                );
+            } catch {
+                // Sealed under a key this account no longer has — it was
+                // written by a different account on this device. Keeping it
+                // would be keeping something nobody can ever read.
+                pending.value = dropChatPending(me.address, entry.id);
+
+                continue;
+            }
+
+            const envelope = await props.wallet.chatSeal(
+                record.publicKey,
+                meta,
+                text,
+            );
+            const stored = await sendChatEnvelope({ ...meta, ...envelope });
+            const row = (stored as { message: ChatRow }).message;
+
+            rows.value = storeChatRows(me.address, [row]).rows;
+            pending.value = dropChatPending(me.address, entry.id);
+            await decrypt();
+        }
+    } catch {
+        // Left queued on purpose; the next beat tries again.
+    } finally {
+        flushing = false;
+    }
+};
+
+let flushing = false;
+
 /* ----------------------------------------------------------------- send --- */
 
 const send = async (): Promise<void> => {
@@ -443,7 +725,16 @@ const send = async (): Promise<void> => {
         const record = await keyFor(to);
 
         if (!record) {
-            throw new Error(t('chatNoKey'));
+            /*
+             * Nothing to encrypt to yet, which is a fact about the recipient
+             * and not a reason to lose what somebody wrote. The message is
+             * kept — sealed to this wallet's own key, so an unsent message is
+             * no more readable on this device than a sent one — and goes out
+             * by itself the moment that address opens chat.
+             */
+            await queue(to, text);
+
+            return;
         }
 
         const meta: ChatMeta = {
@@ -519,15 +810,17 @@ const openThread = (who: string): void => {
     readVerifications();
 
     void keyFor(who);
+    void flushPending();
     void scrollDown();
 };
 
 /**
  * Start a conversation with an address.
  *
- * The lookup happens before anything is typed, because an address that has
- * never opened chat cannot be written to at all — there is no key to encrypt
- * to, and offering a composer that could only fail would be a lie.
+ * The key is looked up, but not as a gate: an address that has never opened
+ * chat can be written to anyway, and what is written waits for it. The lookup
+ * is what lets the thread say so above the composer instead of the composer
+ * failing after somebody has typed.
  */
 const startThread = async (): Promise<void> => {
     const wanted = lookupAddress.value.trim().toLowerCase();
@@ -543,13 +836,8 @@ const startThread = async (): Promise<void> => {
     lookingUp.value = true;
 
     try {
-        const record = await keyFor(wanted);
-
-        if (!record) {
-            lookupError.value = t('chatNoKey');
-
-            return;
-        }
+        // Looked up so the thread knows what to say; a miss opens it anyway.
+        await keyFor(wanted);
 
         lookupAddress.value = '';
         openThread(wanted);
@@ -640,6 +928,7 @@ const forget = (): void => {
 
     clearChat(address.value);
     rows.value = [];
+    pending.value = [];
     opened.value = {};
     view.value = 'list';
     peer.value = null;
@@ -649,7 +938,12 @@ const forget = (): void => {
 
 const startPolling = (): void => {
     if (timer === null) {
-        timer = setInterval(() => void sync(), POLL_MS);
+        timer = setInterval(() => {
+            void sync();
+            // The same beat carries the other direction: a recipient who has
+            // published a key since the message was written gets it now.
+            void flushPending();
+        }, POLL_MS);
     }
 };
 
@@ -671,6 +965,7 @@ watch(
         suspectPeers.value = [];
         view.value = 'list';
         peer.value = null;
+        readPending();
 
         const state = self ? readChatState(self) : null;
         rows.value = state?.rows ?? [];
@@ -680,6 +975,43 @@ watch(
         // Cached envelopes are ciphertext; the wallet is unlocked, so they can
         // be read back now without another round trip to the relay.
         void decrypt();
+    },
+    { immediate: true },
+);
+
+/**
+ * An address handed over by another screen.
+ *
+ * It goes through the same path a typed one does — a key lookup first, then
+ * the thread — so "this person has never opened chat" is reported the same way
+ * whether the address was typed or tapped. Watched rather than read once,
+ * because the chat may already be mounted when the request arrives.
+ */
+watch(
+    () => props.openWith,
+    async (wanted) => {
+        if (!wanted) {
+            return;
+        }
+
+        const address = wanted.toLowerCase();
+
+        emit('opened');
+        view.value = 'list';
+        lookupError.value = null;
+        lookingUp.value = true;
+
+        try {
+            // Same as a typed address: the key is looked up for what the
+            // thread will say, never for whether it may open.
+            await keyFor(address);
+            openThread(address);
+        } catch (failure) {
+            lookupError.value =
+                failure instanceof Error ? failure.message : String(failure);
+        } finally {
+            lookingUp.value = false;
+        }
     },
     { immediate: true },
 );
@@ -854,7 +1186,10 @@ onBeforeUnmount(stopPolling);
                 type="button"
                 class="cw-dashed"
                 style="margin-bottom: 14px"
-                @click="view = 'new'"
+                @click="
+                    view = 'new';
+                    loadPeople();
+                "
             >
                 <Plus :size="13" aria-hidden="true" />
                 {{ t('chatNew') }}
@@ -899,7 +1234,11 @@ onBeforeUnmount(stopPolling);
                                 ? undefined
                                 : { marginLeft: 'auto' }
                         "
-                        >{{ when(entry.last.row.sentAt) }}</span
+                        >{{
+                            entry.last
+                                ? when(entry.last.row.sentAt)
+                                : t('chatWaiting')
+                        }}</span
                     >
                 </div>
                 <div
@@ -911,7 +1250,10 @@ onBeforeUnmount(stopPolling);
                         white-space: nowrap;
                     "
                 >
-                    <template v-if="entry.last.text === null">{{
+                    <template v-if="!entry.last">{{
+                        t('chatWaitingCount', { count: entry.waiting })
+                    }}</template>
+                    <template v-else-if="entry.last.text === null">{{
                         t('chatUnreadable')
                     }}</template>
                     <template v-else
@@ -951,9 +1293,6 @@ onBeforeUnmount(stopPolling);
             <p v-if="lookupError" class="cw-note cw-note-warn">
                 <span>{{ lookupError }}</span>
             </p>
-            <p class="cw-prose" style="max-width: 62ch">
-                {{ t('chatNewBody') }}
-            </p>
             <div style="display: flex; gap: 8px">
                 <button
                     type="button"
@@ -971,6 +1310,87 @@ onBeforeUnmount(stopPolling);
                     {{ t('cancel') }}
                 </button>
             </div>
+
+            <!--
+              And who there is to write to, which is the half this screen was
+              missing: an address field alone can only be used by somebody who
+              already has the address. A row that has never opened chat is
+              still listed and says so — that is the answer to why it cannot be
+              written to, and it is better given here than inside a composer.
+            -->
+            <div class="cw-row" style="margin-top: 14px">
+                <span class="cw-label">{{ t('chatPeople') }}</span>
+                <button
+                    type="button"
+                    class="cw-back"
+                    :disabled="peopleLoading"
+                    @click="loadPeople()"
+                >
+                    {{ peopleLoading ? t('chatLookingUp') : t('refresh') }}
+                </button>
+            </div>
+
+            <input
+                v-model="peopleQuery"
+                class="cw-input"
+                type="search"
+                spellcheck="false"
+                :placeholder="t('chatPeopleSearch')"
+                :aria-label="t('chatPeopleSearch')"
+                @keydown.enter.prevent="loadPeople()"
+            />
+
+            <p
+                v-if="peopleFailed"
+                class="cw-label"
+                style="color: var(--cw-faint)"
+            >
+                {{ t('chatPeopleFailed') }}
+            </p>
+            <p
+                v-else-if="!peopleLoading && others.length === 0"
+                class="cw-label"
+                style="color: var(--cw-faint)"
+            >
+                {{ t('chatPeopleEmpty') }}
+            </p>
+
+            <div class="cw-stack" style="gap: 0">
+                <button
+                    v-for="person in others"
+                    :key="person.address"
+                    type="button"
+                    class="cw-line-row"
+                    :disabled="lookingUp"
+                    @click="writeTo(person)"
+                >
+                    <span style="flex: 1; min-width: 0">
+                        <span
+                            style="
+                                display: block;
+                                font: 500 14px/1.2 var(--cw-sans);
+                            "
+                            >{{ person.name }}</span
+                        >
+                        <span
+                            style="
+                                display: block;
+                                margin-top: 3px;
+                                font: 400 11px/1.4 var(--cw-mono);
+                                color: var(--cw-dim);
+                            "
+                            >{{ shortAddress(person.address)
+                            }}<template v-if="!person.hasKey">
+                                · {{ t('chatPeopleNoKey') }}</template
+                            ></span
+                        >
+                    </span>
+                </button>
+            </div>
+
+            <p class="cw-prose" style="max-width: 62ch">
+                {{ t('chatNewBody') }}
+            </p>
         </div>
 
         <!--
@@ -1108,8 +1528,24 @@ onBeforeUnmount(stopPolling);
                 <span>{{ t('chatKeyChanged') }}</span>
             </p>
 
+            <!--
+              Written to somebody who cannot receive it yet. Said above the
+              transcript rather than as an error after the fact: it is a state
+              of the correspondent, and it ends by itself.
+            -->
+            <p
+                v-if="peerKeyMissing"
+                class="cw-note"
+                style="margin-bottom: 12px"
+            >
+                <span>{{ t('chatWaitingNote') }}</span>
+            </p>
+
             <div ref="transcript" class="cw-chat-log">
-                <p v-if="thread.length === 0" class="cw-prose">
+                <p
+                    v-if="thread.length === 0 && pendingFor.length === 0"
+                    class="cw-prose"
+                >
                     {{ t('chatThreadEmpty') }}
                 </p>
 
@@ -1137,6 +1573,23 @@ onBeforeUnmount(stopPolling);
                                 : entry.text
                         }}
                     </div>
+                </div>
+
+                <!--
+                  Held, not lost. It is drawn in the thread where it was
+                  written, marked as waiting, and it becomes an ordinary
+                  message the moment it can be sent.
+                -->
+                <div
+                    v-for="entry in pendingFor"
+                    :key="entry.id"
+                    class="cw-turn cw-turn-you"
+                    style="opacity: 0.72"
+                >
+                    <div class="cw-label" style="margin-bottom: 5px">
+                        {{ t('chatYou') }} · {{ t('chatWaiting') }}
+                    </div>
+                    <div class="cw-turn-text">{{ pendingText(entry) }}</div>
                 </div>
             </div>
 

@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { HDNodeWallet, Mnemonic, SigningKey, getBytes } from 'ethers';
-import { deriveAccounts, walletChain } from '@/lib/wallet';
+import {
+    deriveAccounts,
+    setShippedWalletChains,
+    shippedChains,
+    walletChain,
+} from '@/lib/wallet';
 import { decodeBase58Check, encodeBase58Check } from '@/lib/wallet/base58check';
 import { decodeSegwitAddress, encodeSegwitAddress } from '@/lib/wallet/bech32';
 import {
@@ -29,6 +34,14 @@ import {
  * so a refactor that changes an address or a signature fails here rather than
  * on-chain, where a Bitcoin transfer cannot be recalled.
  */
+
+/*
+ * The registry opens on Cyberia alone: every other network is a switch a device
+ * has to flip, and a bare process has flipped nothing. These tests are about
+ * the adapters themselves and not about what anybody switched on, so they
+ * register the whole shipped set first.
+ */
+setShippedWalletChains(shippedChains());
 
 /** The BIP-39 test phrase every wallet ships in its own suite. */
 const PHRASE =

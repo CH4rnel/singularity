@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
 import {
     Bot,
     ExternalLink,
     Images,
-    Landmark,
     Lock,
     MessageCircle,
     Newspaper,
-    Rocket,
     WalletCards,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
@@ -21,6 +19,7 @@ import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
 import WalletArena from '@/components/wallet/WalletArena.vue';
 import WalletBridge from '@/components/wallet/WalletBridge.vue';
 import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
+import WalletBuy from '@/components/wallet/WalletBuy.vue';
 import WalletChart from '@/components/wallet/WalletChart.vue';
 import WalletChat from '@/components/wallet/WalletChat.vue';
 import WalletContextBar from '@/components/wallet/WalletContextBar.vue';
@@ -36,6 +35,7 @@ import WalletLain from '@/components/wallet/WalletLain.vue';
 import WalletLaunchpad from '@/components/wallet/WalletLaunchpad.vue';
 import WalletLocked from '@/components/wallet/WalletLocked.vue';
 import WalletMarkets from '@/components/wallet/WalletMarkets.vue';
+import WalletMore from '@/components/wallet/WalletMore.vue';
 import WalletNetworkDetail from '@/components/wallet/WalletNetworkDetail.vue';
 import WalletNetworks from '@/components/wallet/WalletNetworks.vue';
 import WalletNft from '@/components/wallet/WalletNft.vue';
@@ -58,6 +58,7 @@ import WalletTracker from '@/components/wallet/WalletTracker.vue';
 import WalletTrackerPublish from '@/components/wallet/WalletTrackerPublish.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
+import { useSwipeNav } from '@/composables/useSwipeNav';
 import { useWalletAuth } from '@/composables/useWalletAuth';
 import { useWalletTheme } from '@/composables/useWalletTheme';
 import { analytics } from '@/lib/analytics';
@@ -70,6 +71,7 @@ import {
     telegramHaptic,
 } from '@/lib/telegram';
 import {
+    createMnemonic,
     formatUnits,
     unreadChatCount,
     walletChain,
@@ -81,6 +83,7 @@ import type { QuestDestination } from '@/lib/wallet/daily';
 import type { Market } from '@/lib/wallet/markets';
 import { announceWalletEvent } from '@/lib/wallet/notifications';
 import type { PlayerTrack } from '@/lib/wallet/player';
+import type { SwipeIntent } from '@/lib/wallet/swipe';
 import { canStream, torrentBridge } from '@/lib/wallet/torrent';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -177,6 +180,7 @@ type Section =
     | 'networks'
     | 'security'
     | 'preferences'
+    | 'more'
     | 'feed'
     | 'profile'
     | 'launchpad'
@@ -194,6 +198,7 @@ type Section =
     | 'earn'
     | 'stocks'
     | 'bridge'
+    | 'buy'
     | 'crosschain'
     | 'arena'
     | 'daily'
@@ -220,9 +225,30 @@ const payoutSaved = ref(false);
  */
 const restoring = ref(false);
 
-const stage = computed<'onboarding' | 'locked' | 'app'>(() => {
-    if (restoring.value || !wallet.exists.value) {
-        return 'onboarding';
+/**
+ * There is no welcome screen. A device with no vault gets one made for it.
+ *
+ * The screen that used to stand here asked a newcomer to choose between two
+ * words before anything existed — and the honest answer to "create or import"
+ * is that almost everybody arriving has nothing to import. Every step after it
+ * (the risk notice, the held reveal, the backup check, the password) was a form
+ * standing between a person and an address that takes one millisecond to
+ * derive, so `starting` is a frame long: the phrase is generated here, the
+ * vault is written open, and the portfolio is what a first launch shows.
+ *
+ * Nothing about custody changed. The phrase is still made on the device and
+ * never sent anywhere, it is still the only way back, and the two facts that
+ * were previously enforced by a ritual — nobody has written it down, nothing
+ * locks it — are stated on the portfolio itself, where they stay until they
+ * stop being true. `import` remains for the phrase somebody already has.
+ */
+const stage = computed<'import' | 'starting' | 'locked' | 'app'>(() => {
+    if (restoring.value) {
+        return 'import';
+    }
+
+    if (!wallet.exists.value) {
+        return 'starting';
     }
 
     return wallet.unlocked.value ? 'app' : 'locked';
@@ -282,12 +308,14 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
             { id: 'accounts', label: () => t('accounts') },
             // Three things done *with* a balance rather than three ways of
             // reading one, which is why they sit apart from the screens above.
+            { id: 'buy', label: () => t('tileBuy') },
             { id: 'bridge', label: () => t('bridgeTitle') },
             { id: 'crosschain', label: () => t('crossTile') },
             { id: 'earn', label: () => t('earnTitle') },
             { id: 'arena', label: () => arenaT('nav') },
             { id: 'daily', label: () => t('dailyTitle') },
             { id: 'browse', label: () => t('browseTitle') },
+            { id: 'gas', label: () => t('gasStation') },
             { id: 'security', label: () => t('navSecurity') },
             { id: 'preferences', label: () => t('navPreferences') },
         ],
@@ -295,8 +323,8 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
     {
         heading: () => t('railSections'),
         items: [
-            { id: 'chat', label: () => t('chatTitle') },
             { id: 'feed', label: () => t('feed') },
+            { id: 'chat', label: () => t('chatTitle') },
             { id: 'launchpad', label: () => t('launchpad') },
             { id: 'nft', label: () => t('nftTitle') },
             { id: 'tracker', label: () => t('trackerTitle') },
@@ -333,11 +361,9 @@ const SECTIONS: RailEntry[] = RAIL.flatMap((group) => group.items);
  */
 const TABS: { id: Section; label: () => string; icon: Component }[] = [
     { id: 'portfolio', label: () => t('tabWallet'), icon: WalletCards },
-    { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
     { id: 'feed', label: () => t('feed'), icon: Newspaper },
-    { id: 'launchpad', label: () => t('tabLaunch'), icon: Rocket },
+    { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
     { id: 'nft', label: () => t('nftTitle'), icon: Images },
-    { id: 'dao', label: () => t('dao'), icon: Landmark },
     { id: 'lain', label: () => t('navLain'), icon: Bot },
 ];
 
@@ -356,19 +382,21 @@ const TAB_OF: Record<Section, Section> = {
     networks: 'portfolio',
     security: 'portfolio',
     preferences: 'portfolio',
+    more: 'portfolio',
     gas: 'portfolio',
     proxy: 'portfolio',
     earn: 'portfolio',
     stocks: 'portfolio',
     bridge: 'portfolio',
+    buy: 'portfolio',
     crosschain: 'portfolio',
     arena: 'portfolio',
     daily: 'portfolio',
     browse: 'browse',
     feed: 'feed',
     profile: 'feed',
-    launchpad: 'launchpad',
-    dao: 'dao',
+    launchpad: 'portfolio',
+    dao: 'portfolio',
     lain: 'lain',
     nft: 'nft',
     nftMint: 'nft',
@@ -451,6 +479,22 @@ const openSection = (next: Section): void => {
 /** Whose profile the profile screen is about — null means this wallet's own. */
 const profileAddress = ref<string | null>(null);
 
+/**
+ * Somebody the wallet is about to write to, handed to the chat on arrival.
+ *
+ * The feed prints an address on every post, and that address is the only thing
+ * the encrypted chat needs — so "write to this person" is one tap rather than
+ * copying twelve characters into a lookup field. Cleared once the chat has
+ * taken it, because it is a request and not a state: coming back to the chat
+ * later should open on whatever thread was last read.
+ */
+const chatPeer = ref<string | null>(null);
+
+const openChatWith = (address: string): void => {
+    chatPeer.value = address;
+    openSection('chat');
+};
+
 const openProfile = (address: string | null): void => {
     profileAddress.value = address;
     openSection('profile');
@@ -466,14 +510,21 @@ const PARENTS: Partial<Record<Section, Section>> = {
     chart: 'markets',
     networks: 'portfolio',
     importAccount: 'accounts',
-    gas: 'portfolio',
     proxy: 'security',
-    preferences: 'portfolio',
     earn: 'portfolio',
     stocks: 'portfolio',
     bridge: 'portfolio',
-    crosschain: 'portfolio',
-    daily: 'portfolio',
+    buy: 'portfolio',
+    more: 'portfolio',
+    // Reached from "Ещё" and nowhere else on a phone, so back goes there
+    // rather than skipping the screen the person was actually on.
+    gas: 'more',
+    preferences: 'more',
+    analytics: 'more',
+    crosschain: 'more',
+    browse: 'more',
+    daily: 'more',
+    accounts: 'more',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -610,6 +661,49 @@ const openSwapContract = (
 const requestedSwap = ref<{ contract: string; chain: WalletChainId } | null>(
     null,
 );
+
+/**
+ * A link that names a screen: `/wallet?section=feed`.
+ *
+ * What a push notification lands on. Tapping "new post" has to arrive at the
+ * feed rather than at the portfolio with the feed one tap away — a
+ * notification that does not open what it is about is a notification people
+ * stop tapping.
+ *
+ * Only a destination of the tab bar is honoured — an address that can name any
+ * screen is an address that can be sent to somebody to open their wallet on a
+ * composer, and a name that is not a tab is simply ignored. The parameter stays
+ * in the address: this is a link to a place, and reopening it should land in
+ * the same place. `?swap=` deletes itself for the opposite reason — it opens a
+ * form over somebody's money, which must not come back on a refresh.
+ */
+const takeSectionRequest = (): void => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const url = new URL(window.location.href);
+    const wanted = url.searchParams.get('section');
+
+    if (wanted === null) {
+        return;
+    }
+
+    /*
+     * A tab, or any screen the rail names. It used to be the five tabs only,
+     * which was enough while the only link into the wallet was a push
+     * notification pointing at the feed — and then the on-ramp started sending
+     * people back from a provider's checkout to `?section=buy&ref=…` and they
+     * landed on the portfolio with no sign of the purchase they had just made.
+     * A link that names a screen opens that screen.
+     */
+    if (
+        TABS.some((entry) => entry.id === wanted) ||
+        SECTIONS.some((entry) => entry.id === wanted)
+    ) {
+        openSection(wanted as Section);
+    }
+};
 
 const takeSwapRequest = (): void => {
     if (typeof window === 'undefined') {
@@ -783,15 +877,20 @@ const sendChainToken = (
  *
  * This section has to sit *below* the navigation it reads. Its watches are
  * `immediate`, so they run while `setup` is still executing: reading
- * `telegramBack` there evaluates `PARENTS` and the openers, and a `const`
+ * `goBack` there evaluates `PARENTS` and the openers, and a `const`
  * declared further down the file is not yet initialised. Higher up, the whole
  * page threw `ReferenceError` before its first paint and the Mini App opened
  * on a black screen — and only inside Telegram, since nothing else runs this.
  */
 const telegram = nativeShell() === 'telegram';
 
-/** Where "back" goes, or null on a screen that is already the top of the app. */
-const telegramBack = computed<(() => void) | null>(() => {
+/**
+ * Where "back" goes, or null on a screen that is already the top of the app.
+ *
+ * Two things read it, because they are the same movement said two ways:
+ * Telegram's own back arrow, and a swipe from left to right.
+ */
+const goBack = computed<(() => void) | null>(() => {
     if (overlay.value !== null) {
         return () => {
             overlay.value = null;
@@ -848,7 +947,7 @@ if (telegram) {
     );
 
     watch(
-        telegramBack,
+        goBack,
         (handler) => {
             releaseBack();
             releaseBack = setBackButton(handler);
@@ -861,6 +960,137 @@ if (telegram) {
         releaseBack();
     });
 }
+
+/**
+ * A swipe across the screen, which on a phone is what "back" and "next" are.
+ *
+ * Two rules and no more. Going *back* means whatever the back arrow at the top
+ * of this screen means — an overlay closes, a screen opened from another one
+ * returns to it — so the two can never disagree about where back is. On a
+ * screen that has no back, the gesture moves between the tabs, in the order
+ * they are drawn, and stops at both ends rather than wrapping: a bar you can
+ * see is a map, and a map that loops teleports you.
+ *
+ * The desktop is excluded outright. It has a rail, its pointer is a mouse, and
+ * a mouse dragging across a page is somebody selecting text.
+ */
+/**
+ * Where the screen is being held while a finger is on it.
+ *
+ * The transform is applied only while something is happening — during the drag
+ * and for the fifth of a second it takes to settle — and removed afterwards,
+ * because a permanent transform on the scrolling pane makes it a containing
+ * block for anything inside it that is ever positioned against the window.
+ */
+const dragX = ref(0);
+const dragLive = ref(false);
+const dragSettling = ref(false);
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** The one case where the screen must not move: somebody asked it not to. */
+const stillness =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const SETTLE_MS = 220;
+
+const holdAt = (px: number, live: boolean): void => {
+    if (stillness) {
+        return;
+    }
+
+    dragX.value = px;
+    dragLive.value = live;
+
+    if (settleTimer !== null) {
+        clearTimeout(settleTimer);
+        settleTimer = null;
+    }
+
+    if (!live) {
+        dragSettling.value = true;
+        settleTimer = setTimeout(() => {
+            dragSettling.value = false;
+            settleTimer = null;
+        }, SETTLE_MS + 40);
+    }
+};
+
+/**
+ * The new screen, arriving from the side the finger came from.
+ *
+ * Both screens are never on the page at once — mounting a second tab to slide
+ * it across would load a second tab's worth of chain reads to animate 200ms —
+ * so the direction is carried by where the arriving screen starts from. It is
+ * placed there without a transition and comes home with one.
+ */
+const slideIn = (from: number): void => {
+    if (stillness) {
+        return;
+    }
+
+    holdAt(from, true);
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => holdAt(0, false));
+    });
+};
+
+const bodyStyle = computed(() =>
+    dragLive.value || dragSettling.value
+        ? {
+              transform: `translate3d(${dragX.value}px, 0, 0)`,
+              transition: dragLive.value
+                  ? 'none'
+                  : `transform ${SETTLE_MS}ms cubic-bezier(0.2, 0.7, 0.3, 1)`,
+          }
+        : undefined,
+);
+
+/** Whether a swipe that way has anywhere to go, which the edge resists on. */
+const canSwipe = (intent: SwipeIntent): boolean => {
+    if (desktop.value || stage.value !== 'app') {
+        return false;
+    }
+
+    if (intent === 'back' && goBack.value !== null) {
+        return true;
+    }
+
+    if (overlay.value !== null) {
+        return false;
+    }
+
+    const at = TABS.findIndex((entry) => entry.id === activeTab.value);
+
+    return at >= 0 && TABS[at + (intent === 'back' ? -1 : 1)] !== undefined;
+};
+
+const swipeTo = (intent: SwipeIntent): void => {
+    if (!canSwipe(intent)) {
+        holdAt(0, false);
+
+        return;
+    }
+
+    const back = goBack.value;
+
+    if (intent === 'back' && back !== null) {
+        back();
+        slideIn(-56);
+
+        return;
+    }
+
+    const at = TABS.findIndex((entry) => entry.id === activeTab.value);
+    const next = TABS[at + (intent === 'back' ? -1 : 1)];
+
+    if (next) {
+        openSection(next.id);
+        slideIn(intent === 'back' ? -56 : 56);
+    }
+};
+
+const swipe = useSwipeNav({ can: canSwipe, act: swipeTo, drag: holdAt });
 
 const refreshPrices = async (): Promise<void> => {
     try {
@@ -1031,7 +1261,7 @@ const networkAdded = (added: WalletChainId): void => {
 const adopt = async (
     phrase: string,
     password: string | null,
-    origin: 'created' | 'imported' = 'created',
+    origin: 'created' | 'imported' | 'auto' = 'created',
     backedUp = true,
 ): Promise<void> => {
     error.value = null;
@@ -1039,14 +1269,31 @@ const adopt = async (
     try {
         await wallet.adopt(phrase, password, backedUp);
         restoring.value = false;
-        section.value = 'portfolio';
+
+        /*
+         * Somebody who just adopted a phrase is looking at the screen that did
+         * it, so the portfolio is where they go next — but the wallet that
+         * makes itself on first open adopts one too, and it does it while a
+         * link is being followed. `/wallet?section=feed` opened the feed and
+         * was then dragged back to the portfolio by a vault nobody asked for,
+         * which is every push notification landing on the wrong screen for
+         * anyone whose first visit it is.
+         */
+        if (origin !== 'auto') {
+            section.value = 'portfolio';
+        }
 
         /*
          * The onboarding milestone, recorded at the only point where it is
-         * unambiguously true: the vault is sealed and open. Both branches end
+         * unambiguously true: the vault is written and open. Every branch ends
          * here — a phrase this device generated and one the user typed in are
          * the same thing by now — so the branch travels with the event rather
          * than being guessed from it later.
+         *
+         * `auto` is a third branch and not a kind of `created`: a wallet that
+         * made itself on first open is not somebody deciding to make one, and
+         * counting the two together would report a funnel where every visitor
+         * converts.
          *
          * Neither the phrase, the password nor anything derived from them is
          * involved; there is no field in the taxonomy that could hold one.
@@ -1062,6 +1309,23 @@ const adopt = async (
         error.value =
             failure instanceof Error ? failure.message : String(failure);
     }
+};
+
+/**
+ * First launch: the wallet makes itself.
+ *
+ * Open, with no password — a prompt at this point is asked of somebody who has
+ * not seen the wallet yet, and Security can add one later without touching a
+ * single account — and `backedUp: false`, because it is true: nobody has seen
+ * these twelve words. That is the whole reason the portfolio carries the two
+ * safety lines; they are what the skipped ritual turned into.
+ */
+const startFresh = async (): Promise<void> => {
+    if (wallet.exists.value || restoring.value) {
+        return;
+    }
+
+    await adopt(createMnemonic(12), null, 'auto', false);
 };
 
 const useForPayouts = async (address: string): Promise<void> => {
@@ -1081,6 +1345,8 @@ const trackConnection = (): void => {
 };
 
 onMounted(() => {
+    void startFresh();
+    takeSectionRequest();
     takeSwapRequest();
     applySwapRequest();
     trackConnection();
@@ -1233,6 +1499,10 @@ watch(
             class="cw-shell"
             :class="{ 'cw-shell-native': native }"
             @pointerdown="wallet.touch()"
+            @touchstart="swipe.onTouchStart"
+            @touchmove="swipe.onTouchMove"
+            @touchend="swipe.onTouchEnd"
+            @touchcancel="swipe.onTouchCancel"
             @keydown="wallet.touch()"
         >
             <!-- Desktop rail -->
@@ -1430,17 +1700,34 @@ watch(
                     @refresh="load()"
                 />
 
-                <div class="cw-body">
+                <!--
+                  The pane a swipe moves. It holds one screen at a time, so the
+                  gesture drags this and the arriving screen comes in from the
+                  side the finger came from.
+                -->
+                <div class="cw-body" :style="bodyStyle">
                     <div v-if="stage !== 'app'" class="cw-column">
                         <WalletOnboarding
-                            v-if="stage === 'onboarding'"
+                            v-if="stage === 'import'"
                             :busy="wallet.busy.value"
-                            :start="restoring ? 'import' : 'welcome'"
-                            :cancellable="restoring"
-                            :telegram="telegram"
                             @adopt="adopt"
                             @cancel="restoring = false"
                         />
+                        <!--
+                          A frame, normally: the phrase is generated and the
+                          vault written before the first balance is asked for.
+                          It says what is happening anyway, because the one
+                          case where it stays on screen is the one where
+                          something went wrong, and a blank column would be the
+                          worst way to say so. The error itself prints above.
+                        -->
+                        <p
+                            v-else-if="stage === 'starting'"
+                            class="cw-prose"
+                            style="margin-top: 28px"
+                        >
+                            {{ t('preparingWallet') }}
+                        </p>
                         <WalletLocked
                             v-else
                             :wallet="wallet"
@@ -1511,6 +1798,20 @@ watch(
                             {{ t('tgCustody') }}
                         </p>
 
+                        <!--
+                            And the part that is only true while the phrase
+                            exists nowhere else: Telegram empties this storage
+                            without asking. It stops once the phrase is written
+                            down, which is exactly when it stops being true.
+                        -->
+                        <p
+                            v-if="telegram && !wallet.backedUp.value"
+                            class="cw-note cw-note-warn"
+                            style="margin-bottom: 16px"
+                        >
+                            {{ t('tgStorageWarning') }}
+                        </p>
+
                         <WalletPortfolio
                             :wallet="wallet"
                             :prices="prices"
@@ -1523,25 +1824,26 @@ watch(
                             @add-network="openSection('networks')"
                             @tokens="openSection('tokens')"
                             @markets="openSection('markets')"
-                            @daily="openSection('daily')"
-                            @analytics="openSection('analytics')"
-                            @accounts="openSection('accounts')"
-                            @security="openSection('security')"
-                            @gas="openSection('gas')"
-                            @crosschain="openSection('crosschain')"
-                            @earn="openSection('earn')"
                             @stocks="openSection('stocks')"
                             @bridge="openSection('bridge')"
                             @arena="openSection('arena')"
                             @browse="openSection('browse')"
                             @preferences="openSection('preferences')"
+                            @earn="openSection('earn')"
+                            @launchpad="openSection('launchpad')"
+                            @buy="openSection('buy')"
+                            @more="openSection('more')"
+                            @accounts="openSection('accounts')"
+                            @security="openSection('security')"
                         />
                     </template>
 
                     <WalletChat
                         v-else-if="section === 'chat'"
                         :wallet="wallet"
+                        :open-with="chatPeer"
                         @unread="refreshUnread"
+                        @opened="chatPeer = null"
                     />
 
                     <WalletArena
@@ -1582,6 +1884,25 @@ watch(
                       exchange's book where a book exists, and this chain's own
                       pools where it does not.
                     -->
+                    <!--
+                      The rest of the wallet, one level below the portfolio's
+                      eight names. It is a list and not a screen full of tiles,
+                      because a destination needs a name and nothing else.
+                    -->
+                    <WalletMore
+                        v-else-if="section === 'more'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
+                        @daily="openSection('daily')"
+                        @analytics="openSection('analytics')"
+                        @crosschain="openSection('crosschain')"
+                        @browse="openSection('browse')"
+                        @gas="openSection('gas')"
+                        @security="openSection('security')"
+                        @accounts="openSection('accounts')"
+                        @preferences="openSection('preferences')"
+                    />
+
                     <WalletMarkets
                         v-else-if="section === 'markets'"
                         :wallet="wallet"
@@ -1670,6 +1991,19 @@ watch(
                     />
 
                     <!--
+                      Where the first coins come from, for somebody holding a
+                      card and nothing else. A provider sells them and settles
+                      to this wallet's own address; nothing here touches a card
+                      or holds the money, and the screen says both.
+                    -->
+                    <WalletBuy
+                        v-else-if="section === 'buy'"
+                        :wallet="wallet"
+                        @back="openSection('portfolio')"
+                        @crosschain="openSection('crosschain')"
+                    />
+
+                    <!--
                       The other kind of swap: one this chain has no liquidity
                       for, routed by somebody who does, for a fee that is in
                       the quote before anything is signed.
@@ -1744,7 +2078,11 @@ watch(
 
                     <WalletFeed
                         v-else-if="section === 'feed'"
+                        :wallet="wallet"
+                        :authenticated="authenticated"
                         @profile="openProfile"
+                        @message="openChatWith"
+                        @signed-in="router.reload({ only: ['auth'] })"
                     />
 
                     <WalletProfile

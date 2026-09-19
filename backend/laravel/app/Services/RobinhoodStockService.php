@@ -258,8 +258,17 @@ class RobinhoodStockService
         return rtrim((string) config('robinhood.api', ''), '/').'/'.$path;
     }
 
+    /**
+     * A figure from the issuer, or null — and a zero is a null.
+     *
+     * Outside market hours the feed answers the day's high and low with `0`,
+     * which is not a price any share traded at: it is the feed saying it has
+     * nothing for today. Passed through as a number it printed "День 0,00 $ –
+     * 0,00 $" under all fifty-three rows, which is the same lie as drawing an
+     * unreadable balance as zero, fifty-three times over.
+     */
     private function number(mixed $value): ?float
     {
-        return is_numeric($value) ? (float) $value : null;
+        return is_numeric($value) && (float) $value > 0 ? (float) $value : null;
     }
 }

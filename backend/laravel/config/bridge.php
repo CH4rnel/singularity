@@ -79,7 +79,7 @@ return [
     'inventory' => [
         'measured_chain_types' => array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) env('BRIDGE_INVENTORY_MEASURED_TYPES', 'evm,solana,ton,monero')),
+            explode(',', (string) env('BRIDGE_INVENTORY_MEASURED_TYPES', 'evm,solana,ton,monero,bitcoin,litecoin')),
         ))),
 
         // How long a pre-signature reservation holds capacity. Long enough for
@@ -139,6 +139,24 @@ return [
         // monero-wallet-rpc builds, signs and relays inside the one `transfer`
         // call, and a wallet with many outputs takes its time about it.
         'monero_timeout_seconds' => (int) env('BRIDGE_RELAY_MONERO_TIMEOUT', 240),
+
+        // The Bitcoin/Litecoin relay: several reads of a public index that
+        // rate-limits, then a broadcast whose lost answer is reconciled by
+        // polling for the txid it already signed.
+        'utxo_timeout_seconds' => (int) env('BRIDGE_RELAY_UTXO_TIMEOUT', 300),
+
+        /*
+         * How long a credited request may sit in `pending` before
+         * `bridge:sweep-deposits` relays it itself. This is the gap between
+         * taking somebody's coins and starting their payout: normally it is
+         * milliseconds, because the same call does both, but a failure in
+         * between used to leave the request there forever — nothing else looks
+         * at `pending`. Longer than the slowest payout so a relay still in
+         * flight is never duplicated (it could not be paid twice anyway —
+         * `hasPayout()` sees to that — but a second read of the destination
+         * chain for nothing is still worth avoiding).
+         */
+        'resume_after_minutes' => (int) env('BRIDGE_RELAY_RESUME_AFTER_MINUTES', 10),
         // One request can run a payout AND a burn, so the job must outlive
         // two of the slowest scripts back to back.
         'job_timeout_seconds' => (int) env('BRIDGE_RELAY_JOB_TIMEOUT', 660),
@@ -314,13 +332,47 @@ return [
             'wallet' => 'manual',
             'enabled' => filter_var(env('BRIDGE_CHAIN_BTC_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
             'explorer_tx' => 'https://mempool.space/tx/{hash}',
+            // The central wallet: where change from a payout lands and where
+            // an operator tops the corridor up. Its spending key is below, and
+            // this must be that key's **P2PKH** address (`1…`) — the relay
+            // spends a pool of P2PKH addresses and refuses change it could not
+            // spend again, which is the failure a bech32 address here would be.
             'deposit_address' => env('BRIDGE_BTC_DEPOSIT_ADDRESS'),
-            // Master seed for per-user profile deposit addresses (CEX-style).
-            // Each user gets a P2PKH address derived at index = user id; the
-            // WIF spending key is re-derivable for sweeping. Only the seed is
-            // secret. Generate: php -r 'echo bin2hex(random_bytes(32));'
+            // Master seed for deposit addresses — per-user profile ones
+            // (namespace 'btc-user', index = user id) and the bridge's
+            // per-request ones (namespace 'btc-deposit', index = request id).
+            // Each is a P2PKH address whose WIF is re-derivable, so only the
+            // seed is secret. Generate: php -r 'echo bin2hex(random_bytes(32));'
             'hd_seed' => env('BRIDGE_BTC_HD_SEED'),
             'minimum_confirmations' => (int) env('BRIDGE_BTC_MIN_CONFIRMATIONS', 3),
+
+            // Esplora: the keyless index behind mempool.space. This is what
+            // makes Bitcoin the opposite of the Monero corridor — deposits are
+            // watched by asking a public index, and a key is needed only for
+            // the half that signs. Unset means both routes disappear rather
+            // than accepting deposits nobody here would see.
+            'esplora_url' => env('BRIDGE_BTC_ESPLORA_URL', 'https://mempool.space/api'),
+            'esplora_timeout' => (int) env('BRIDGE_BTC_ESPLORA_TIMEOUT', 15),
+            // Spending key for `deposit_address`, WIF. Without it the corridor
+            // can take deposits and cannot pay anything out.
+            'relayer_wif' => env('BRIDGE_BTC_RELAYER_WIF'),
+            // Flat BTC retained from each evm_to_btc payout: the recipient
+            // gets the net figure exactly and this is what pays the miner.
+            'payout_fee' => env('BRIDGE_BTC_PAYOUT_FEE', '0.00005'),
+            // Held back from advertised capacity for the same reason — a pool
+            // that exactly covers a payout cannot also pay for its own
+            // transaction.
+            'fee_reserve' => env('BRIDGE_BTC_FEE_RESERVE', '0.0002'),
+            // Confirmation target the relay asks the index to price, and the
+            // ceiling it refuses to exceed (satoshis per vbyte). A fee spike
+            // becomes a refusal a person can see, never a payout that quietly
+            // costs more than it delivers.
+            'fee_target_blocks' => (int) env('BRIDGE_BTC_FEE_TARGET_BLOCKS', 6),
+            'max_fee_rate' => (int) env('BRIDGE_BTC_MAX_FEE_RATE', 200),
+            // How long an unused deposit address is watched. Three
+            // confirmations is roughly half an hour, and somebody paying from
+            // an exchange withdrawal queue may take longer than that to send.
+            'deposit_ttl_minutes' => (int) env('BRIDGE_BTC_DEPOSIT_TTL_MINUTES', 1440),
         ],
         'litecoin' => [
             'key' => 'litecoin',
@@ -331,9 +383,24 @@ return [
             'enabled' => filter_var(env('BRIDGE_CHAIN_LTC_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
             'explorer_tx' => 'https://litecoinspace.org/tx/{hash}',
             'deposit_address' => env('BRIDGE_LTC_DEPOSIT_ADDRESS'),
-            // Per-user profile deposit addresses — see the bitcoin entry.
+            // Deposit addresses, both kinds — see the bitcoin entry.
             'hd_seed' => env('BRIDGE_LTC_HD_SEED'),
+            // Six blocks is fifteen minutes here rather than an hour: Litecoin
+            // aims at a block every 2.5 minutes.
             'minimum_confirmations' => (int) env('BRIDGE_LTC_MIN_CONFIRMATIONS', 6),
+
+            // The same Esplora API, served by litecoinspace.org. Everything
+            // under here means exactly what it means for Bitcoin above; only
+            // the numbers differ, because a Litecoin fee is a hundredth of a
+            // Bitcoin one and its blocks are four times as frequent.
+            'esplora_url' => env('BRIDGE_LTC_ESPLORA_URL', 'https://litecoinspace.org/api'),
+            'esplora_timeout' => (int) env('BRIDGE_LTC_ESPLORA_TIMEOUT', 15),
+            'relayer_wif' => env('BRIDGE_LTC_RELAYER_WIF'),
+            'payout_fee' => env('BRIDGE_LTC_PAYOUT_FEE', '0.0001'),
+            'fee_reserve' => env('BRIDGE_LTC_FEE_RESERVE', '0.001'),
+            'fee_target_blocks' => (int) env('BRIDGE_LTC_FEE_TARGET_BLOCKS', 6),
+            'max_fee_rate' => (int) env('BRIDGE_LTC_MAX_FEE_RATE', 200),
+            'deposit_ttl_minutes' => (int) env('BRIDGE_LTC_DEPOSIT_TTL_MINUTES', 1440),
         ],
         'monero' => [
             'key' => 'monero',
@@ -503,7 +570,10 @@ return [
             'direction' => 'btc_to_evm',
             'source_chain' => 'bitcoin',
             'destination_chain' => 'cyberia',
-            'auto_process' => false,
+            // Automatic now that this server can both see a deposit (Esplora)
+            // and sign a payout (crypto/utxo). It was manual for as long as
+            // neither was true.
+            'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_BTC_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
             'coming_soon' => filter_var(env('BRIDGE_ROUTE_BTC_TO_EVM_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
@@ -511,7 +581,7 @@ return [
             'direction' => 'evm_to_btc',
             'source_chain' => 'cyberia',
             'destination_chain' => 'bitcoin',
-            'auto_process' => false,
+            'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BTC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
             'coming_soon' => filter_var(env('BRIDGE_ROUTE_EVM_TO_BTC_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
@@ -519,7 +589,7 @@ return [
             'direction' => 'ltc_to_evm',
             'source_chain' => 'litecoin',
             'destination_chain' => 'cyberia',
-            'auto_process' => false,
+            'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_LTC_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
             'coming_soon' => filter_var(env('BRIDGE_ROUTE_LTC_TO_EVM_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],
@@ -527,7 +597,7 @@ return [
             'direction' => 'evm_to_ltc',
             'source_chain' => 'cyberia',
             'destination_chain' => 'litecoin',
-            'auto_process' => false,
+            'auto_process' => true,
             'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_LTC_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
             'coming_soon' => filter_var(env('BRIDGE_ROUTE_EVM_TO_LTC_COMING_SOON', true), FILTER_VALIDATE_BOOLEAN),
         ],

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Actions\Wallet\RecoverEvmAddress;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Models\WalletChatKey;
 use App\Models\WalletChatMessage;
 use Carbon\CarbonImmutable;
@@ -52,6 +53,12 @@ class WalletChatController extends Controller
 
     /** Session key holding the address that proved itself, and when. */
     private const SESSION_KEY = 'wallet_chat_address';
+
+    /** People in one answer of the directory. */
+    private const PEOPLE_LIMIT = 60;
+
+    /** Long enough to absorb a screen opening, short enough to feel current. */
+    private const PEOPLE_TTL_SECONDS = 60;
 
     public function __construct(private RecoverEvmAddress $recover) {}
 
@@ -200,6 +207,90 @@ class WalletChatController extends Controller
         }
 
         return response()->json($this->keyPayload($record));
+    }
+
+    /**
+     * Who there is to write to.
+     *
+     * A chat addressed by EVM address is a chat you can only start if you
+     * already know the address, which in practice meant copying forty hex
+     * characters out of a feed post — the screen had a text field and no answer
+     * to "who is here". This is that answer, and it is deliberately the *site's
+     * people*: accounts that have attached a wallet, whose name and address are
+     * already on a public profile page. Nothing new is disclosed; what is new
+     * is that it can be read as a list.
+     *
+     * A row says whether that address has ever published a messaging key,
+     * because without one nothing can be encrypted to it. Saying so here is
+     * what lets the screen show somebody and explain why they cannot be written
+     * to yet, rather than offering a composer that could only fail.
+     *
+     * Public and cached like the rest of the directory: the key records are
+     * already served one by one, and a session would buy nothing.
+     */
+    public function people(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'q' => ['sometimes', 'nullable', 'string', 'max:64'],
+        ]);
+
+        $query = trim((string) ($data['q'] ?? ''));
+        $cacheKey = 'wallet.chat.people.'.md5(Str::lower($query));
+
+        return response()->json(Cache::remember(
+            $cacheKey,
+            self::PEOPLE_TTL_SECONDS,
+            fn (): array => ['people' => $this->peopleFor($query)],
+        ));
+    }
+
+    /**
+     * @return list<array{name: string, address: string, url: string|null, hasKey: bool}>
+     */
+    private function peopleFor(string $query): array
+    {
+        $users = User::query()
+            ->whereNull('merged_into_id')
+            ->whereNotNull('wallet_address')
+            ->when($query !== '', function ($builder) use ($query): void {
+                $like = '%'.Str::lower($query).'%';
+
+                $builder->where(function ($inner) use ($like): void {
+                    $inner->whereRaw('lower(name) like ?', [$like])
+                        ->orWhereRaw('lower(onchain_nickname) like ?', [$like])
+                        ->orWhereRaw('lower(wallet_address) like ?', [$like]);
+                });
+            })
+            ->orderByDesc('id')
+            ->limit(self::PEOPLE_LIMIT)
+            ->get(['id', 'name', 'onchain_nickname', 'avatar_path', 'wallet_address']);
+
+        $addresses = $users
+            ->map(fn (User $user): string => Str::lower((string) $user->wallet_address))
+            ->all();
+
+        $withKeys = WalletChatKey::query()
+            ->whereIn('address', $addresses)
+            ->pluck('address')
+            ->all();
+
+        return $users
+            ->map(fn (User $user): array => [
+                'name' => $user->name,
+                'address' => Str::lower((string) $user->wallet_address),
+                'url' => $user->profile_url,
+                'hasKey' => in_array(
+                    Str::lower((string) $user->wallet_address),
+                    $withKeys,
+                    true,
+                ),
+            ])
+            // Somebody who can be written to right now comes first; the rest
+            // are still listed, because "they have not opened chat" is the
+            // answer to why they are not.
+            ->sortByDesc('hasKey')
+            ->values()
+            ->all();
     }
 
     /* ----------------------------------------------------------- messages --- */

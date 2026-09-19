@@ -18,6 +18,8 @@ from web3 import Web3
 
 from telegram import Update
 from telegram.ext import ContextTypes
+
+from bot.chain import next_nonce
 from telegram.error import TelegramError
 
 from bot.config import (
@@ -116,7 +118,7 @@ def _build_post_metadata(chat, message, image_uri: str | None, text_body: str) -
 def _send_tx(w3, acct, fn, fallback_gas: int) -> str:
     """Build/sign/send `fn` from `acct`, wait for the receipt, return tx hash.
     Raises on revert. Uses a fresh pending nonce so sequential calls don't clash."""
-    nonce = w3.eth.get_transaction_count(acct.address, "pending")
+    nonce = next_nonce(w3, acct.address)
     try:
         estimated = fn.estimate_gas({"from": acct.address})
     except Exception as est_err:

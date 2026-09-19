@@ -86,23 +86,19 @@ const qualifies = computed(
         shareBps.value >= props.config.minimumShareBps,
 );
 
-const stage = computed<
-    'off' | 'reading' | 'error' | 'short' | 'locked' | 'open'
->(() => {
+/**
+ * Three states, where there used to be six.
+ *
+ * The room was gated on holding 10% of the supply, so a balance that was still
+ * being read, one that could not be read at all, and one that was simply small
+ * were each a screen of their own explaining why nothing could be said here.
+ * Anybody may write now, so none of them stops anything: what somebody holds
+ * is drawn on the card above and decides what Lain will become for them, not
+ * whether the composer opens.
+ */
+const stage = computed<'off' | 'locked' | 'open'>(() => {
     if (!props.config.enabled || !props.config.tokenAddress) {
         return 'off';
-    }
-
-    if (readError.value) {
-        return 'error';
-    }
-
-    if (holding.value === null) {
-        return 'reading';
-    }
-
-    if (!qualifies.value) {
-        return 'short';
     }
 
     return proven.value ? 'open' : 'locked';
@@ -376,6 +372,10 @@ onMounted(() => {
                         {{ sharePercent }}
                     </div>
                 </div>
+                <!--
+                  What the threshold buys, rather than what it forbids: it is
+                  not a door any more, it is the next version of her.
+                -->
                 <div>
                     <div class="cw-label">{{ t('lainRequired') }}</div>
                     <div class="cw-num" style="margin-top: 4px">
@@ -395,6 +395,14 @@ onMounted(() => {
             </div>
         </div>
 
+        <p
+            v-if="readError"
+            class="cw-label"
+            style="margin-bottom: 14px; color: var(--cw-faint)"
+        >
+            {{ t('lainReadFailed') }}
+        </p>
+
         <p v-if="error" class="cw-note cw-note-bad" style="margin-bottom: 14px">
             <span>{{ error }}</span>
         </p>
@@ -404,43 +412,7 @@ onMounted(() => {
             <span>{{ t('lainOff') }}</span>
         </p>
 
-        <!-- The contract could not be read; this is not "you hold nothing". -->
-        <div v-else-if="stage === 'error'" class="cw-stack">
-            <p class="cw-note cw-note-warn">
-                <span>{{ t('lainReadFailed') }}</span>
-            </p>
-            <button
-                type="button"
-                class="cw-btn cw-btn-secondary"
-                style="align-self: flex-start"
-                @click="readHolding()"
-            >
-                {{ t('retry') }}
-            </button>
-        </div>
-
-        <p v-else-if="stage === 'reading'" class="cw-prose">
-            {{ t('lainReading') }}
-        </p>
-
-        <!-- Below the threshold. Say by how much, not just "no". -->
-        <div v-else-if="stage === 'short'" class="cw-stack">
-            <p class="cw-note cw-note-warn">
-                <span>{{
-                    t('lainShort', {
-                        required: requiredPercent,
-                        share: sharePercent,
-                        amount,
-                        symbol,
-                    })
-                }}</span>
-            </p>
-            <p class="cw-prose" style="max-width: 62ch">
-                {{ t('lainShortHint') }}
-            </p>
-        </div>
-
-        <!-- Qualifies, but the server has not been shown a signature yet. -->
+        <!-- Anybody may write; the server has not been shown a signature yet. -->
         <div v-else-if="stage === 'locked'" class="cw-stack" style="gap: 14px">
             <div class="cw-card" style="padding: 18px">
                 <div
@@ -452,7 +424,11 @@ onMounted(() => {
                     "
                 >
                     <ShieldCheck :size="15" aria-hidden="true" />
-                    <span class="cw-data">{{ t('lainQualifies') }}</span>
+                    <span class="cw-data">{{
+                        qualifies
+                            ? t('lainQualifies')
+                            : t('lainTier', { required: requiredPercent })
+                    }}</span>
                 </div>
                 <p class="cw-prose" style="max-width: 62ch">
                     {{ t('lainSignBody') }}

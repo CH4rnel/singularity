@@ -487,17 +487,16 @@ const tiers = computed(() =>
                             }}</span
                         >
                     </span>
+                    <!--
+                      The coin, and not the dollar. A transfer here costs
+                      0.000222 CYBER, which is $0.0000000087 — a figure with
+                      eight leading zeros printed three times, saying "free" in
+                      the least readable way available. What one drip covers is
+                      the number that answers the question, and it is on the
+                      other side of the row.
+                    -->
                     <span class="cw-kv-val">
                         {{ tier.cost }} {{ chain.symbol }}
-                        <span
-                            v-if="tier.usd !== null"
-                            style="
-                                display: block;
-                                margin-top: 4px;
-                                color: var(--cw-faint);
-                            "
-                            >{{ formatUsd(tier.usd, locale) }}</span
-                        >
                     </span>
                 </div>
             </div>
@@ -515,10 +514,13 @@ const tiers = computed(() =>
             />
         </div>
 
+        <!--
+          Why asking costs no signature is an argument about this design, and
+          it is written where design arguments go — `GasSponsorService` and the
+          architecture notes. What is left here is the one line that changes
+          what somebody does: this station serves one chain.
+        -->
         <p class="cw-prose" style="margin-top: 22px">
-            {{ t('gasNoSignature') }}
-        </p>
-        <p class="cw-prose" style="margin-top: 10px">
             {{ t('gasCyberiaOnly') }}
         </p>
     </div>

@@ -202,7 +202,7 @@ export type AnalyticsProperties = {
     watchable?: boolean;
     sponsored?: boolean;
     verified?: boolean;
-    origin?: 'created' | 'imported';
+    origin?: 'created' | 'imported' | 'auto';
     grounds?: 'tokens' | 'nft' | 'account' | 'open';
     pid?: number;
     pool_kind?: 'pair' | 'solo';

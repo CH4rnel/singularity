@@ -38,10 +38,26 @@ return [
             'database' => env('DB_DATABASE', database_path('database.sqlite')),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
-            'busy_timeout' => env('DB_BUSY_TIMEOUT', 5000),
+            /*
+             * SQLite has exactly one writer at a time, and this app writes
+             * from several processes at once: the web server, the queue
+             * worker, the scheduler every minute, and whatever an operator is
+             * running by hand. The three settings below are what keeps that
+             * from surfacing as "database is locked" in somebody's face while
+             * they are bridging.
+             *
+             * `transaction_mode` is the one that is not a preference.
+             * DEFERRED starts a transaction as a reader and asks for the write
+             * lock at its first write — and if another connection committed in
+             * between, SQLite answers BUSY *immediately*, without consulting
+             * busy_timeout at all. No amount of waiting configured anywhere
+             * helps, because nothing waits. IMMEDIATE takes the write lock at
+             * BEGIN, so a contending transaction queues instead of failing.
+             */
+            'busy_timeout' => env('DB_BUSY_TIMEOUT', 15000),
             'journal_mode' => env('DB_JOURNAL_MODE', 'wal'),
             'synchronous' => env('DB_SYNCHRONOUS', 'normal'),
-            'transaction_mode' => 'DEFERRED',
+            'transaction_mode' => env('DB_TRANSACTION_MODE', 'IMMEDIATE'),
         ],
 
         'mysql' => [

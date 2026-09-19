@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\WalletCrosschainController;
 use App\Http\Controllers\Api\WalletGasController;
 use App\Http\Controllers\Api\WalletIpfsController;
 use App\Http\Controllers\Api\WalletMoneroSwapController;
+use App\Http\Controllers\Api\WalletOnrampController;
 use App\Http\Controllers\Api\WalletPushController;
 use App\Http\Controllers\Api\WalletStocksController;
 use App\Http\Middleware\AuthenticateAiApiKey;
@@ -77,7 +78,32 @@ Route::prefix('wallet')->group(function () {
     // reaches it: two routes, ours and a partner's, compared on the screen.
     Route::get('monero/swap', [WalletMoneroSwapController::class, 'index'])->middleware('throttle:60,1');
     Route::get('monero/swap/quote', [WalletMoneroSwapController::class, 'quote'])->middleware('throttle:30,1');
+
+    /*
+     * Buying with a card. The provider is the merchant of record — it takes
+     * the card, does the KYC and settles to the address the browser derived —
+     * and this host composes the handoff, signs it where the provider demands
+     * a signature, and remembers that it happened.
+     *
+     * The checkout is throttled hardest of the three: each call mints a
+     * reference and writes a row, so it is the only one of them that costs
+     * this host anything to be hammered.
+     */
+    Route::get('onramp', [WalletOnrampController::class, 'index'])->middleware('throttle:60,1');
+    Route::post('onramp/quote', [WalletOnrampController::class, 'quote'])->middleware('throttle:30,1');
+    Route::post('onramp/checkout', [WalletOnrampController::class, 'checkout'])->middleware('throttle:12,1');
+    Route::get('onramp/order/{reference}', [WalletOnrampController::class, 'order'])->middleware('throttle:60,1');
 });
+
+/*
+ * On-ramp webhooks, outside the wallet group because they are not the wallet
+ * talking: a provider posts here minutes or hours after somebody left this
+ * site, carrying its own signature. Every payload is verified against the
+ * provider's secret before a row moves, and an unverifiable one is answered
+ * with the same 202 as a good one — see WalletOnrampController::webhook().
+ */
+Route::post('wallet/onramp/webhook/{name}', [WalletOnrampController::class, 'webhook'])
+    ->middleware('throttle:120,1');
 
 /*
  * Product analytics for the wallet: acquisition, onboarding, funding,

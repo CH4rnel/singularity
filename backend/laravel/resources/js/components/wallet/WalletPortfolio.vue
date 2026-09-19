@@ -1,22 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import {
+    CandlestickChart,
+    Coins,
+    CreditCard,
+    LineChart,
+    MoreHorizontal,
+    Percent,
+    Rocket,
+    Route,
+} from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
-import StatusPill from '@/components/wallet/StatusPill.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { arenaMessages } from '@/lib/arenaMessages';
 import { canOpenProxySettings, openProxySettings } from '@/lib/native';
-import { WALLET_FAMILY_GROUPS, formatUnits, walletChain } from '@/lib/wallet';
+import { WALLET_FAMILY_GROUPS, formatUnits } from '@/lib/wallet';
 import type { WalletChainId, WalletTxStatus } from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
-import {
-    SPONSORED_CHAIN,
-    dripsLeft,
-    gasSponsorStatus,
-    stationState,
-} from '@/lib/wallet/gas';
-import type { SponsorStatus } from '@/lib/wallet/gas';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -48,19 +50,21 @@ const emit = defineEmits<{
     swap: [];
     crosschain: [];
     addNetwork: [];
+    buy: [];
     tokens: [];
     markets: [];
-    analytics: [];
-    accounts: [];
-    security: [];
-    gas: [];
+    stocks: [];
     bridge: [];
     earn: [];
-    stocks: [];
     browse: [];
     arena: [];
     daily: [];
     preferences: [];
+    launchpad: [];
+    /** Everything that is not one of the eight, one level down. */
+    more: [];
+    accounts: [];
+    security: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
@@ -133,25 +137,21 @@ const cards = computed(() =>
     }),
 );
 
-const GROUP_LABELS: Record<string, string> = {
-    evm: 'groupEvm',
-    other: 'groupOther',
-    utxo: 'groupUtxo',
-};
-
 /**
- * Cards in family order, each carrying the heading its group opens with. A
- * heading is on the first card of a group rather than in a wrapper element so
- * the whole list stays one flat, evenly spaced column.
+ * Cards in family order: the EVM chains that share one address, then the ones
+ * with a key of their own.
+ *
+ * The order is the grouping now. Each group used to open with its name —
+ * "EVM-СЕТИ", "СЕМЕЙСТВО BITCOIN" — which answered "why do these two show the
+ * same string" on every visit, forever, and above a single card answered
+ * nothing at all. Where that question is actually asked, on the receive screen
+ * and on a network's own, it is still answered.
  */
 const groupedCards = computed(() =>
     WALLET_FAMILY_GROUPS.flatMap((group) =>
-        cards.value
-            .filter((card) => group.families.includes(card.account.family))
-            .map((card, index) => ({
-                ...card,
-                heading: index === 0 ? t(GROUP_LABELS[group.id]) : null,
-            })),
+        cards.value.filter((card) =>
+            group.families.includes(card.account.family),
+        ),
     ),
 );
 
@@ -197,64 +197,26 @@ const proxyOffer = computed(
 );
 
 /**
- * The gas station, as a state rather than as an offer.
+ * The thing about this wallet that cannot be undone by anybody, including us —
+ * one of them, and never a list.
  *
- * Asked without an address on purpose. Eligibility costs the server an
- * eth_call and an index lookup for whichever address is named, and this card
- * is not about one address — it says whether the station is serving at all,
- * which is the same answer for every reader and is cached as such. Whether
- * *this* account may be sponsored is asked on the station's own screen, and at
- * the moment of a transaction, which are the two places it is the question.
- */
-const station = ref<SponsorStatus | null>(null);
-
-onMounted(async () => {
-    station.value = await gasSponsorStatus();
-});
-
-const stationTone = {
-    live: 'confirmed',
-    paused: 'pending',
-    empty: 'failed',
-    off: 'failed',
-    unreadable: 'pending',
-} as const;
-
-const stationStatus = computed(() => stationState(station.value));
-
-const stationDrips = computed(() => dripsLeft(station.value));
-
-/** How much coin the station is still holding, in CYBER. */
-const stationTank = computed(() => {
-    const tank = station.value?.tank;
-
-    return tank
-        ? formatUnits(BigInt(tank), walletChain(SPONSORED_CHAIN).decimals, 2)
-        : null;
-});
-
-/**
- * The two states this wallet cannot come back from, on the screen everybody
- * actually opens.
- *
- * Both used to live only inside Security — two taps away, behind one tile
- * among eleven — which is where a thing goes when nobody is meant to find it.
- * They are worth more of the first screen than anything else on it: every
- * other failure here is a bad minute on an RPC, and these two are the whole
- * wallet. The wording stays in Security; what is here is the fact and the door.
+ * Both facts used to be printed together under a heading: a title, a
+ * two-sentence paragraph and a button, five lines above the balance saying
+ * that a phrase was never written down *and* that there is no password. Two
+ * problems stated at once is a paragraph to read; one problem with one action
+ * is something to do. The phrase comes first because it is the one that loses
+ * the money rather than merely exposing it, and the password's turn comes when
+ * the phrase is safe. The full wording stays in Security, which this row is a
+ * door to.
  */
 const safety = computed(() => {
-    const lines: string[] = [];
-
     if (!props.wallet.backedUp.value) {
-        lines.push(t('safetyBackup'));
+        return t('safetyBackup');
     }
 
-    if (props.wallet.protection.value === 'none') {
-        lines.push(t('safetyPassword'));
-    }
-
-    return lines;
+    return props.wallet.protection.value === 'none'
+        ? t('safetyPassword')
+        : null;
 });
 
 /**
@@ -332,42 +294,28 @@ const recent = computed(() =>
         </p>
 
         <!--
-          The only two things on this screen that cannot be undone by anybody,
-          including us. They sit above the balance because the balance is what
-          they are about.
+          The one thing on this screen that cannot be undone by anybody,
+          including us. It sits above the balance because the balance is what
+          it is about, and the whole row is the way to fix it: a sentence with
+          a separate link under it is two things to read where there is one
+          thing to do.
         -->
-        <div
-            v-if="safety.length > 0"
+        <button
+            v-if="safety"
+            type="button"
             class="cw-note cw-note-warn"
-            style="margin-bottom: 18px"
+            style="
+                width: 100%;
+                margin-bottom: 18px;
+                align-items: center;
+                cursor: pointer;
+                text-align: left;
+            "
+            @click="emit('security')"
         >
-            <span style="flex: 1; min-width: 0">
-                <strong style="display: block">{{ t('safetyTitle') }}</strong>
-                <span
-                    style="
-                        display: block;
-                        margin-top: 2px;
-                        font: 400 12px/1.5 var(--cw-sans);
-                        color: var(--cw-body);
-                    "
-                    >{{ safety.join(' ') }}</span
-                >
-                <!--
-                  Under the sentence rather than beside it: as a flex sibling
-                  the button refused to shrink and squeezed the warning into a
-                  ninety-pixel column six lines tall, which is the shape of a
-                  notice nobody finishes reading.
-                -->
-                <button
-                    type="button"
-                    class="cw-back"
-                    style="min-height: 36px; margin-top: 4px"
-                    @click="emit('security')"
-                >
-                    {{ t('safetyAction') }} →
-                </button>
-            </span>
-        </div>
+            <span style="flex: 1; min-width: 0">{{ safety }}</span>
+            <span style="flex: none">→</span>
+        </button>
 
         <p v-if="!online" class="cw-note" style="margin-bottom: 18px">
             <span>
@@ -427,15 +375,14 @@ const recent = computed(() =>
             </button>
         </p>
 
-        <div class="cw-label">{{ t('totalPortfolio') }}</div>
-        <div
-            style="
-                display: flex;
-                align-items: baseline;
-                gap: 10px;
-                margin-top: 10px;
-            "
-        >
+        <!--
+          The number, with nothing over it. "ПОРТФЕЛЬ ЦЕЛИКОМ" named what the
+          biggest figure on the wallet's first screen obviously is, and the
+          line under it printed where prices come from — on every visit, to
+          everyone, whether or not anything was wrong. What is left below is
+          only the exception: a total that is missing a price it needed.
+        -->
+        <div style="display: flex; align-items: baseline; gap: 10px">
             <span
                 class="cw-total"
                 :style="
@@ -461,17 +408,33 @@ const recent = computed(() =>
                 "
                 >{{ t('pricePartial') }}</span
             >
-            <span class="cw-label" style="color: var(--cw-faint)">{{
-                pricesOffline
-                    ? t('priceOffline')
-                    : unaccounted > 0
-                      ? t('priceMissing', {
-                            count: unaccounted,
-                            total: cards.length,
-                        })
-                      : t('priceSource')
-            }}</span>
+            <span
+                v-if="pricesOffline || unaccounted > 0"
+                class="cw-label"
+                style="color: var(--cw-faint)"
+                >{{
+                    pricesOffline
+                        ? t('priceOffline')
+                        : t('priceMissing', {
+                              count: unaccounted,
+                              total: cards.length,
+                          })
+                }}</span
+            >
         </div>
+
+        <!--
+          A new wallet has nothing in it, said next to the zero it explains
+          rather than in a bordered box of its own with a heading, two
+          sentences and a button repeating Получить from the row below.
+        -->
+        <p
+            v-if="isEmpty && !orphaned"
+            class="cw-prose"
+            style="margin: 12px 0 0"
+        >
+            {{ t('emptyShort') }}
+        </p>
 
         <!--
           Three things you do with a balance rather than three ways of reading
@@ -526,10 +489,10 @@ const recent = computed(() =>
         </div>
 
         <!--
-          What a new wallet is actually supposed to do next, above the eight
-          zeros rather than below them. It used to be the last block on a
-          1720px screen — two screens of scrolling past every empty network to
-          reach the one sentence that says how to stop them being empty.
+          The holdings, with no heading over them: a list of networks carrying
+          amounts, directly under a total, is not something a label called
+          "СЕТИ" makes clearer, and "ВЫВЕДЕНО: 1" counted a thing nobody asked
+          about.
         -->
         <div
             v-else-if="isEmpty"
@@ -569,14 +532,8 @@ const recent = computed(() =>
                 t('derivedCount', { count: cards.length })
             }}</span>
         </div>
-
         <div class="cw-stack" style="gap: 8px">
             <template v-for="card in groupedCards" :key="card.account.chain">
-                <div v-if="card.heading" class="cw-group">
-                    <span class="cw-label" style="color: var(--cw-faint)">{{
-                        card.heading
-                    }}</span>
-                </div>
                 <button
                     type="button"
                     class="cw-card cw-card-button"
@@ -673,37 +630,14 @@ const recent = computed(() =>
             >
                 <span
                     style="
-                        display: flex;
-                        width: 32px;
-                        height: 32px;
-                        flex: none;
-                        align-items: center;
-                        justify-content: center;
-                        border: 1px dashed var(--cw-border);
                         font: 400 15px/1 var(--cw-mono);
                         color: var(--cw-muted);
                     "
                     >+</span
                 >
-                <span style="flex: 1">
-                    <span
-                        style="
-                            display: block;
-                            font: 500 13px/1.2 var(--cw-sans);
-                        "
-                        >{{ t('networksTile') }}</span
-                    >
-                    <span class="cw-hint" style="margin-top: 3px">{{
-                        t('networksTileHint')
-                    }}</span>
-                </span>
-                <span
-                    style="
-                        font: 400 12px/1 var(--cw-mono);
-                        color: var(--cw-dim);
-                    "
-                    >→</span
-                >
+                <span style="flex: 1; font: 400 13px/1.2 var(--cw-sans)">{{
+                    t('addNetwork')
+                }}</span>
             </button>
         </div>
 
@@ -725,239 +659,71 @@ const recent = computed(() =>
 
         <!--
           Everything here is a way *out* of the portfolio, and none of it is a
-          holding — so it goes under the holdings. Ordered the other way round
-          this screen opened with fourteen buttons and eleven tiles, and the
-          first balance began at y=730 on a 703px phone: a wallet whose first
-          screen contained no money.
-        -->
-        <div class="cw-label" style="margin: 30px 0 12px">
-            {{ t('moreTitle') }}
-        </div>
+          holding — so it goes under the holdings. Eight names in a grid, and
+          nothing else: what stood here was eleven destinations, every one of
+          them a card or a tile with a caption explaining what it was for
+          ("Графики · биржевые стаканы и наши пулы", "Серия · задания · чем
+          оплачивается день", "0.98 CYBER · хватит примерно на 98 адресов"),
+          which is four hundred pixels of prose on the screen somebody opens to
+          look at their money. A destination needs a name; what it is for is
+          answered by opening it.
 
-        <!--
-          Prices over time, which this screen otherwise never shows: every
-          number above is a reading taken now. A full row and not a fourth tile
-          because it is the only place in the wallet that answers "what has this
-          been doing", and because the two kinds of chart behind it — an
-          exchange's book, and this chain's own pools — are worth naming.
+          Seven of these are the ones people actually go to; the eighth is the
+          door to the rest, which are one level down rather than gone.
         -->
-        <button
-            type="button"
-            class="cw-card cw-card-button"
-            style="margin-bottom: 10px; padding: 14px 16px"
-            @click="emit('markets')"
-        >
-            <div class="cw-row">
-                <span
-                    style="
-                        font: 500 12px/1 var(--cw-sans);
-                        color: var(--cw-text);
-                    "
-                    >{{ t('markets') }}</span
-                >
-                <span class="cw-label" style="color: var(--cw-faint)">→</span>
-            </div>
-            <div class="cw-hint" style="margin-top: 8px">
-                {{ t('tileMarketsHint') }}
-            </div>
-        </button>
-
-        <!--
-          Shares, which are not a coin and are not pretending to be one. A full
-          row rather than a fourth tile for the same reason Markets is one: the
-          three tiles below are ways of reading what you already hold, and this
-          is a catalogue of something you do not.
-        -->
-        <button
-            type="button"
-            class="cw-card cw-card-button"
-            style="margin-bottom: 10px; padding: 14px 16px"
-            @click="emit('stocks')"
-        >
-            <div class="cw-row">
-                <span
-                    style="
-                        font: 500 12px/1 var(--cw-sans);
-                        color: var(--cw-text);
-                    "
-                    >{{ t('stocks') }}</span
-                >
-                <span class="cw-label" style="color: var(--cw-faint)">→</span>
-            </div>
-            <div class="cw-hint" style="margin-top: 8px">
-                {{ t('tileStocksHint') }}
-            </div>
-        </button>
-
-        <!--
-          The station, when there is one to speak of. It sits above the
-          shortcuts because it is not a way of reading holdings: it is the
-          answer to the one state in which holdings cannot be moved at all.
-        -->
-        <button
-            v-if="station?.enabled"
-            type="button"
-            class="cw-card cw-card-button"
-            style="margin-bottom: 10px; padding: 14px 16px"
-            @click="emit('gas')"
-        >
-            <div class="cw-row">
-                <span style="display: flex; align-items: center; gap: 10px">
-                    <span
-                        style="
-                            font: 500 12px/1 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                        >{{ t('gasStation') }}</span
-                    >
-                    <StatusPill
-                        :status="stationTone[stationStatus]"
-                        :label="
-                            t(
-                                `gasState${stationStatus.charAt(0).toUpperCase()}${stationStatus.slice(1)}`,
-                            )
-                        "
-                        bare
-                    />
-                </span>
-                <span class="cw-label" style="color: var(--cw-faint)">→</span>
-            </div>
-            <div class="cw-hint" style="margin-top: 8px">
-                <template v-if="stationTank !== null"
-                    >{{ stationTank }} CYBER<template
-                        v-if="stationDrips !== null"
-                    >
-                        ·
-                        {{
-                            t('gasDripsLeft', { count: stationDrips })
-                        }}</template
-                    ></template
-                >
-                <template v-else>{{ t('tileGasHint') }}</template>
-            </div>
-        </button>
-
-        <!--
-          Shortcuts, not a menu: the same holdings read as tokens, the same
-          holdings read as shares, and the keys underneath both.
-        -->
-        <div class="cw-tiles">
-            <button type="button" class="cw-tile" @click="emit('tokens')">
-                <span style="font: 500 12px/1 var(--cw-sans)">{{
-                    t('tokens')
-                }}</span>
-                <span class="cw-hint">{{ t('tileTokensHint') }}</span>
+        <div class="cw-quick">
+            <!--
+              First, because it is the only one of these that answers "I have
+              no coins at all" — every other tile assumes a balance exists.
+            -->
+            <button type="button" class="cw-quick-item" @click="emit('buy')">
+                <CreditCard :size="21" :stroke-width="1.5" aria-hidden="true" />
+                <span>{{ t('tileBuy') }}</span>
             </button>
-            <button type="button" class="cw-tile" @click="emit('analytics')">
-                <span style="font: 500 12px/1 var(--cw-sans)">{{
-                    t('navAnalytics')
-                }}</span>
-                <span class="cw-hint">{{ t('tileAnalyticsHint') }}</span>
+            <button type="button" class="cw-quick-item" @click="emit('tokens')">
+                <Coins :size="21" :stroke-width="1.5" aria-hidden="true" />
+                <span>{{ t('tokens') }}</span>
             </button>
-            <button type="button" class="cw-tile" @click="emit('security')">
-                <span style="font: 500 12px/1 var(--cw-sans)">{{
-                    t('navSecurity')
-                }}</span>
-                <span class="cw-hint">{{ t('tileSecurityHint') }}</span>
+            <button
+                type="button"
+                class="cw-quick-item"
+                @click="emit('markets')"
+            >
+                <LineChart :size="21" :stroke-width="1.5" aria-hidden="true" />
+                <span>{{ t('markets') }}</span>
+            </button>
+            <button type="button" class="cw-quick-item" @click="emit('stocks')">
+                <CandlestickChart
+                    :size="21"
+                    :stroke-width="1.5"
+                    aria-hidden="true"
+                />
+                <span>{{ t('stocks') }}</span>
+            </button>
+            <button type="button" class="cw-quick-item" @click="emit('bridge')">
+                <Route :size="21" :stroke-width="1.5" aria-hidden="true" />
+                <span>{{ t('bridgeTitle') }}</span>
+            </button>
+            <button type="button" class="cw-quick-item" @click="emit('earn')">
+                <Percent :size="21" :stroke-width="1.5" aria-hidden="true" />
+                <span>{{ t('earnTitle') }}</span>
+            </button>
+            <button
+                type="button"
+                class="cw-quick-item"
+                @click="emit('launchpad')"
+            >
+                <Rocket :size="21" :stroke-width="1.5" aria-hidden="true" />
+                <span>{{ t('tabLaunch') }}</span>
+            </button>
+            <button type="button" class="cw-quick-item" @click="emit('more')">
+                <MoreHorizontal
+                    :size="21"
+                    :stroke-width="1.5"
+                    aria-hidden="true"
+                />
+                <span>{{ t('navMore') }}</span>
             </button>
         </div>
-
-        <!--
-          A second row, and the difference from the first is what they are
-          about: those three are ways of reading what you hold, these three are
-          things done with it — moved to another chain, put to work, or spent
-          on something running here.
-        -->
-        <div class="cw-tiles">
-            <button type="button" class="cw-tile" @click="emit('bridge')">
-                <span style="font: 500 12px/1 var(--cw-sans)">{{
-                    t('bridgeTitle')
-                }}</span>
-                <span class="cw-hint">{{ t('tileBridgeHint') }}</span>
-            </button>
-            <button type="button" class="cw-tile" @click="emit('earn')">
-                <span style="font: 500 12px/1 var(--cw-sans)">{{
-                    t('earnTitle')
-                }}</span>
-                <span class="cw-hint">{{ t('tileEarnHint') }}</span>
-            </button>
-            <button type="button" class="cw-tile" @click="emit('browse')">
-                <span style="font: 500 12px/1 var(--cw-sans)">{{
-                    t('browseTitle')
-                }}</span>
-                <span class="cw-hint">{{ t('tileBrowseHint') }}</span>
-            </button>
-        </div>
-
-        <!--
-          What this project pays for using it. A row of its own because it is
-          the only entry here that is not about a balance at all: it is about
-          the person, and it says so on the screen it opens.
-        -->
-        <button
-            type="button"
-            class="cw-card cw-card-button"
-            style="margin-bottom: 10px; padding: 14px 16px"
-            @click="emit('daily')"
-        >
-            <span class="cw-row">
-                <span style="text-align: left">
-                    <span
-                        style="display: block; font: 500 12px/1 var(--cw-sans)"
-                        >{{ t('dailyTitle') }}</span
-                    >
-                    <span class="cw-hint" style="margin-top: 5px">{{
-                        t('tileDailyHint')
-                    }}</span>
-                </span>
-                <span class="cw-label" style="color: var(--cw-faint)">→</span>
-            </span>
-        </button>
-
-        <!--
-          The other kind of swap, and a full row rather than a fourth tile in
-          a row of three: it is the only thing on this screen that hands money
-          to somebody who is not Cyberia, and the sentence saying so does not
-          fit in a tile.
-        -->
-        <button
-            type="button"
-            class="cw-card cw-card-button"
-            style="margin-bottom: 10px; padding: 14px 16px"
-            @click="emit('crosschain')"
-        >
-            <span class="cw-row">
-                <span style="text-align: left">
-                    <span
-                        style="display: block; font: 500 12px/1 var(--cw-sans)"
-                        >{{ t('crossTile') }}</span
-                    >
-                    <span class="cw-hint" style="margin-top: 5px">{{
-                        t('crossTileHint')
-                    }}</span>
-                </span>
-                <span class="cw-label" style="color: var(--cw-faint)">→</span>
-            </span>
-        </button>
-
-        <button
-            type="button"
-            class="cw-card cw-card-button"
-            style="margin-bottom: 24px; padding: 14px 16px"
-            @click="emit('preferences')"
-        >
-            <span class="cw-row">
-                <span style="text-align: left">
-                    <span
-                        style="display: block; font: 500 12px/1 var(--cw-sans)"
-                        >{{ t('navPreferences') }}</span
-                    >
-                    <span class="cw-hint" style="margin-top: 5px">{{
-                        t('tilePreferencesHint')
-                    }}</span>
-                </span>
-                <span class="cw-label" style="color: var(--cw-faint)">→</span>
-            </span>
-        </button>
     </div>
 </template>

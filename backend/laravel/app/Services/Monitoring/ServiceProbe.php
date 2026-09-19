@@ -4,6 +4,7 @@ namespace App\Services\Monitoring;
 
 use App\Services\BridgeRelayerService;
 use App\Services\GasSponsorService;
+use App\Services\Monero\MoneroWalletRpc;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
@@ -37,6 +38,7 @@ class ServiceProbe
     public function __construct(
         private BridgeRelayerService $relayer,
         private GasSponsorService $sponsor,
+        private MoneroWalletRpc $monero,
     ) {}
 
     /**
@@ -220,6 +222,7 @@ class ServiceProbe
                 'scheduled-command' => $this->evaluateScheduledCommand($definition),
                 'table-freshness' => $this->evaluateTableFreshness($definition),
                 'gas-station' => $this->evaluateGasStation(),
+                'monero-wallet' => $this->evaluateMoneroWallet($definition, $previous),
                 'heartbeat' => $this->evaluateHeartbeatBacked($definition, $this->snapshotFor($definition, $fleet), $previous),
                 'heartbeat-self' => $this->evaluateHeartbeatSelf($fleet),
                 'host' => $this->evaluateHost($definition, $this->snapshotFor($definition, $fleet)),
@@ -667,6 +670,70 @@ class ServiceProbe
         return $age > (int) $definition->checkOption('stale_seconds', 7200)
             ? ProbeResult::down('table-stale', $detail)
             : ProbeResult::up($detail);
+    }
+
+    /**
+     * The bridge's Monero wallet, which is a different question from "is the
+     * container running".
+     *
+     * This host runs it as a thin client: the keys are here, the chain is on
+     * a node somebody else operates. When that node goes away the wallet keeps
+     * answering — opening a wallet and reporting its version are local acts —
+     * and simply stops learning about new blocks. So a reply proves nothing on
+     * its own and the *height moving between sweeps* is the check, in the same
+     * spirit as the chain's head age and a container's restart delta.
+     *
+     * A stalled wallet is `degraded` rather than `down` on purpose. Deposits
+     * already seen stay credited, payouts already made stay made, and the
+     * corridor recovers by itself the moment blocks arrive again; what it
+     * cannot do meanwhile is notice anything new, which is worth a person
+     * looking and not worth calling an outage.
+     *
+     * @param  array<string, mixed>  $previous
+     */
+    private function evaluateMoneroWallet(ServiceDefinition $definition, array $previous = []): ProbeResult
+    {
+        if (! $this->monero->configured()) {
+            // Not a failure. With no wallet attached both XMR routes vanish
+            // from the bridge — a corridor that does not exist, rather than
+            // one that is broken.
+            return ProbeResult::off('no-wallet');
+        }
+
+        $height = $this->monero->height();
+
+        if ($height === null) {
+            // Unreachable covers the whole span from "the container is gone"
+            // to "Laravel and the wallet are on different docker networks",
+            // which is what actually happened on 2026-09-13 and went unseen
+            // for ten hours because nothing here was watching it.
+            return ProbeResult::down('unreachable');
+        }
+
+        $before = isset($previous['height']) ? (int) $previous['height'] : null;
+        $detail = ['height' => $height];
+
+        if ($before === null || $height !== $before) {
+            return ProbeResult::up($detail);
+        }
+
+        // Stalled since the first sweep that saw this height, not since this
+        // one: a wallet that stopped an hour ago should say an hour.
+        $since = isset($previous['stalled_since'])
+            ? CarbonImmutable::parse((string) $previous['stalled_since'])
+            : CarbonImmutable::now();
+
+        $detail['stalled_since'] = $since->toIso8601String();
+
+        // Monero aims at a block every two minutes, so twenty without one is
+        // not a quiet stretch of chain — it is nobody serving us blocks.
+        $threshold = max(60, (int) $definition->checkOption('stale_seconds', 1200));
+
+        if ($since->addSeconds($threshold)->isPast()) {
+            return ProbeResult::degraded('daemon-stalled', $detail);
+        }
+
+        return ProbeResult::up($detail);
     }
 
     private function evaluateGasStation(): ProbeResult

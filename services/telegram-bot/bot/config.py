@@ -303,8 +303,13 @@ PUMPFUN_RPC_TIMEOUT = float(os.environ.get("PUMPFUN_RPC_TIMEOUT", "20"))
 # cursor is hours behind, and the catch-up scan would otherwise announce
 # yesterday's trades one after another as if they had just happened.
 PUMPFUN_MAX_AGE_SECONDS = float(os.environ.get("PUMPFUN_MAX_AGE_SECONDS", "1800"))
-# How long one market quote (SOL/USD + market cap) is reused across ticks.
+# How long one market quote (SOL/USD + the feed's fallback market cap) is
+# reused across ticks.
 PUMPFUN_MARKET_TTL_SECONDS = float(os.environ.get("PUMPFUN_MARKET_TTL_SECONDS", "60"))
+# The coin's supply, the other half of the market cap the post prints. It moves
+# only when somebody burns, so it is read off the chain an order of magnitude
+# less often than the price.
+PUMPFUN_SUPPLY_TTL_SECONDS = float(os.environ.get("PUMPFUN_SUPPLY_TTL_SECONDS", "3600"))
 DEXSCREENER_API_URL = os.environ.get(
     "DEXSCREENER_API_URL", "https://api.dexscreener.com"
 ).rstrip("/")

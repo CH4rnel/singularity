@@ -180,6 +180,20 @@ services:
       - "9001:9001"
     env_file:
       - /root/singularity/backend/laravel/.env
+    # Two networks, and the second one exists for a single link. The bridge's
+    # Monero wallet (services/monero) is a HOT wallet: whoever reaches its RPC
+    # and holds its login can spend it. Putting it on the network above would
+    # hand that reach to the explorer front end, IPFS, the proxy and every
+    # other container here, so it gets a network with exactly two members
+    # instead — this app and that wallet.
+    #
+    # Declared here rather than in services/monero, and not `external`, so the
+    # site still starts on a host that has never run the monero stack. The
+    # dependency only points one way: the wallet joins this network, the site
+    # never waits for it.
+    networks:
+      - default
+      - bridge_monero
 
   polygon-edge:
     logging: *logging-node
@@ -238,3 +252,9 @@ services:
 
 volumes:
   ipfs-data:
+
+networks:
+  # Named explicitly because another compose project joins it by name; see
+  # cyberia_church above for why it exists at all.
+  bridge_monero:
+    name: cyberia-bridge-monero

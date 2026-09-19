@@ -38,7 +38,7 @@ import type { LiquidityChainConfig } from '@/lib/liquidityChains';
 import { scanLiquidityBalances } from '@/lib/liquidityPositions';
 import { logoForToken } from '@/lib/tokenLogos';
 import { track } from '@/lib/track';
-import { walletChains } from '@/lib/wallet';
+import { shippedChainByEvmId } from '@/lib/wallet';
 
 // Router/factory/wrapped-native/pools are per-chain (LIQUIDITY_CHAINS); the
 // page reads and trades entirely within the wallet's chain, so Robinhood
@@ -134,8 +134,7 @@ const activeChain = computed<LiquidityChainConfig>(() =>
  * wallet and liquidity added here group under the same name.
  */
 const walletAnalyticsChain = (): string | undefined =>
-    walletChains().find((chain) => chain.chainId === activeChain.value.chainId)
-        ?.id;
+    shippedChainByEvmId(activeChain.value.chainId)?.id;
 
 const makeReadProvider = (cfg: LiquidityChainConfig): JsonRpcProvider =>
     new JsonRpcProvider(cfg.readRpcUrl, {

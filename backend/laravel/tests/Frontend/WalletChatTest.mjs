@@ -10,10 +10,13 @@ import {
     chatPrivateKey,
     chatPublicKey,
     conversationId,
+    dropChatPending,
     conversationKey,
     markChatKeyVerified,
     openMessage,
     pinChatKey,
+    queueChatMessage,
+    readChatPending,
     sealMessage,
     verifyChatKey,
 } from '@/lib/wallet';
@@ -310,6 +313,58 @@ test('one account’s verifications say nothing about another’s', () => {
     // The second account has its own mailbox, its own pins and its own checks.
     assert.equal(chatKeyVerifiedAt(other, them), null);
     assert.equal(markChatKeyVerified(other, them), false);
+
+    delete globalThis.window;
+});
+
+test('a message to somebody with no key is kept, not lost', async () => {
+    globalThis.window = { localStorage: chatStorage() };
+
+    const me = ALICE.address.toLowerCase();
+    const them = BOB.address.toLowerCase();
+    const mine = chatPrivateKey(ALICE.privateKey);
+
+    // Held sealed to the sender's own key: an unsent message is still mail,
+    // and mail on this device is ciphertext.
+    const meta = {
+        id: chatMessageId(),
+        from: me,
+        to: them,
+        sentAt: '2026-09-18T00:00:00.000Z',
+    };
+    const toSelf = await conversationKey(mine, chatPublicKey(mine), me, me);
+    const envelope = await sealMessage(toSelf, meta, 'are you there');
+
+    const queued = queueChatMessage(me, {
+        id: meta.id,
+        to: them,
+        sentAt: meta.sentAt,
+        envelope,
+    });
+
+    assert.equal(queued.length, 1);
+    assert.equal(readChatPending(me).length, 1);
+    assert.notEqual(JSON.stringify(readChatPending(me)), undefined);
+    // Nothing readable was written down.
+    assert.ok(!JSON.stringify(readChatPending(me)).includes('are you there'));
+
+    // And it opens again for the thread that draws it.
+    assert.equal(
+        await openMessage(toSelf, meta, readChatPending(me)[0].envelope),
+        'are you there',
+    );
+
+    // Sent at last: it stops being pending, and only that one does.
+    queueChatMessage(me, {
+        id: chatMessageId(),
+        to: them,
+        sentAt: meta.sentAt,
+        envelope,
+    });
+    assert.equal(dropChatPending(me, meta.id).length, 1);
+
+    // Another account's queue is its own.
+    assert.deepEqual(readChatPending(BOB.address.toLowerCase()), []);
 
     delete globalThis.window;
 });

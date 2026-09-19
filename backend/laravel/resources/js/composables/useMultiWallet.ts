@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue';
 import { nftChain } from '@/lib/nftChains';
 import {
-    NETWORK_CATALOGUE,
     PRIMARY_ACCOUNT_ID,
     arenaCommitment,
     commitArenaMove,
@@ -23,6 +22,7 @@ import {
     importedAccountId,
     isValidMnemonic,
     keySource,
+    networksOn,
     nextSeedIndex,
     normalizeMnemonic,
     openVault,
@@ -368,24 +368,6 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         load();
     };
 
-    /**
-     * Every network currently on, from the defaults and what this device chose
-     * about them. Cyberia is added whatever the storage says: it is the chain
-     * the wallet is for, and a wallet with no Cyberia card is not a state worth
-     * being able to reach by mistake.
-     */
-    const networksFromChoices = (choices: NetworkChoices): WalletChainId[] => {
-        const on = shippedChains()
-            .map((chain) => chain.id)
-            .filter((id) => choices[id] !== false);
-
-        const fromCatalogue = NETWORK_CATALOGUE.map(
-            (network) => network.id,
-        ).filter((id) => choices[id] === true);
-
-        return [...new Set([HOME_CHAIN, ...on, ...fromCatalogue])];
-    };
-
     if (customNetworks.value.length === 0) {
         syncCustomNetworks(readCustomNetworks());
     }
@@ -396,7 +378,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     if (!enabledLoaded) {
         enabledLoaded = true;
         networkChoices.value = readNetworkChoices();
-        syncEnabledNetworks(networksFromChoices(networkChoices.value));
+        syncEnabledNetworks(networksOn(networkChoices.value));
     }
 
     if (manualTokens.value.length === 0) {
@@ -442,28 +424,30 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     /**
      * One switch for every network, shipped or catalogue alike.
      *
-     * Only the deviation from the default is written down — a shipped network
-     * switched back on stops being a stored choice — so a wallet that never
-     * touches this screen keeps whatever the build ships, and a later shipped
-     * network reaches it too. Cyberia has no switch and silently ignores one.
+     * Only the deviation from the default is written down, and the default is
+     * off everywhere but the home chain — so a network switched back off stops
+     * being a stored choice rather than becoming a stored "no". A record left
+     * by the older rule, where a shipped network arrived on and only an *off*
+     * was written down, still reads correctly: that `false` says off, which is
+     * now also what its absence would say. Cyberia has no switch and silently
+     * ignores one.
      */
     const setNetwork = (id: WalletChainId, on: boolean): void => {
         if (id === HOME_CHAIN) {
             return;
         }
 
-        const shipped = shippedChains().some((chain) => chain.id === id);
         const next = { ...networkChoices.value };
 
-        if (on === shipped) {
-            delete next[id];
+        if (on) {
+            next[id] = true;
         } else {
-            next[id] = on;
+            delete next[id];
         }
 
         networkChoices.value = next;
         writeNetworkChoices(next);
-        syncEnabledNetworks(networksFromChoices(next));
+        syncEnabledNetworks(networksOn(next));
     };
 
     /**

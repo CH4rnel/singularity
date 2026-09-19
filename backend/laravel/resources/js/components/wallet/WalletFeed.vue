@@ -1,30 +1,52 @@
 <script setup lang="ts">
-import { ExternalLink } from 'lucide-vue-next';
-import { onMounted, ref, watch } from 'vue';
+import { MessageSquare } from 'lucide-vue-next';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useLocale } from '@/composables/useLocale';
+import type { MultiWallet } from '@/composables/useMultiWallet';
+import { growComposer } from '@/lib/wallet/composer';
 import { relativeTime, shortAddress } from '@/lib/wallet/format';
-import { fetchFeed } from '@/lib/wallet/social';
+import { signInWithWallet } from '@/lib/wallet/session';
+import { fetchFeed, publishPost } from '@/lib/wallet/social';
 import type { FeedItem } from '@/lib/wallet/social';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
- * What is happening across Cyberia, as one column.
+ * What is happening across Cyberia, as one column you can write into.
  *
  * Two sources, because that is what exists: posts people wrote and activity the
- * DAO recorded. They are merged server-side into one stream so this screen does
- * not have to page two lists against each other.
+ * DAO recorded, merged server-side so this screen does not page two lists
+ * against each other.
  *
- * It is read-only, and that is the wallet being honest rather than unfinished:
- * there is no session here — the seed is in this browser and the server never
- * learns whose it is — so there is nobody to post or reply as. Anything that
- * needs an account opens on the site.
+ * It used to be read-only, with a note at the bottom explaining that a wallet
+ * has no account to post from. That was true of the plumbing and false about
+ * the wallet: it holds a key, and a key is exactly what an author is. So the
+ * composer signs the site's login challenge once — the same press the daily
+ * board already offers — and after that this is an ordinary post. Custody does
+ * not move; the seed stays in this browser and what the server gets is an
+ * address that proved it can sign.
+ *
+ * Replying is still elsewhere: a post opens on the site, and the person who
+ * wrote it can be written to *directly* — the wallet's own encrypted chat is
+ * addressed by exactly the address this feed already shows.
  */
+
+const props = defineProps<{
+    wallet: MultiWallet;
+    /** Whether this browser already carries a session. */
+    authenticated: boolean;
+}>();
 
 const emit = defineEmits<{
     profile: [address: string];
+    message: [address: string];
+    /** A session was just created, so the page can re-read who it is. */
+    signedIn: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
+
+/** The chain whose key signs the challenge: one address, every EVM network. */
+const SIGNING_CHAIN = 'cyberia';
 
 type Tab = 'all' | 'posts' | 'dao';
 
@@ -34,6 +56,33 @@ const tab = ref<Tab>('all');
 const items = ref<FeedItem[]>([]);
 const loading = ref(true);
 const failure = ref(false);
+
+const draft = ref('');
+const composer = ref<HTMLTextAreaElement | null>(null);
+const posting = ref(false);
+const signingIn = ref(false);
+const problem = ref<string | null>(null);
+
+watch(draft, () => void nextTick(() => growComposer(composer.value)));
+
+/**
+ * The address that would sign, and would be the author.
+ *
+ * A watch-only account cannot sign anything, so the composer says so rather
+ * than offering a press that can only fail.
+ */
+const signer = computed(
+    () =>
+        props.wallet.accounts.value.find(
+            (account) => account.chain === SIGNING_CHAIN,
+        )?.address ?? null,
+);
+
+const canSign = computed(
+    () =>
+        signer.value !== null &&
+        props.wallet.activeAccount.value?.kind !== 'watch',
+);
 
 /**
  * The activity keys the DAO records, said in the reader's language. An
@@ -64,33 +113,127 @@ const load = async (): Promise<void> => {
     }
 };
 
+const signIn = async (): Promise<void> => {
+    const address = signer.value;
+
+    if (address === null || signingIn.value) {
+        return;
+    }
+
+    signingIn.value = true;
+    problem.value = null;
+
+    try {
+        await signInWithWallet(address, (message) =>
+            props.wallet.signMessage(SIGNING_CHAIN, message),
+        );
+        emit('signedIn');
+    } catch (error) {
+        problem.value = error instanceof Error ? error.message : String(error);
+    } finally {
+        signingIn.value = false;
+    }
+};
+
+/**
+ * Post, and put the row on top rather than re-reading the list.
+ *
+ * The server answers with the row it wrote, in the shape this screen already
+ * draws — so what appears is what exists, not an optimistic copy that could
+ * differ from it.
+ */
+const publish = async (): Promise<void> => {
+    const body = draft.value.trim();
+
+    if (body === '' || posting.value) {
+        return;
+    }
+
+    posting.value = true;
+    problem.value = null;
+
+    try {
+        const post = await publishPost(body);
+
+        draft.value = '';
+        await nextTick(() => growComposer(composer.value));
+
+        if (tab.value !== 'dao') {
+            items.value = [post, ...items.value];
+        }
+    } catch (error) {
+        problem.value = error instanceof Error ? error.message : String(error);
+    } finally {
+        posting.value = false;
+    }
+};
+
 watch(tab, load);
 onMounted(load);
 </script>
 
 <template>
     <div class="cw-stack">
-        <div
-            style="
-                display: flex;
-                align-items: baseline;
-                justify-content: space-between;
-                gap: 12px;
-            "
-        >
-            <h2 class="cw-title" style="margin: 0">{{ t('feed') }}</h2>
-            <a
-                class="cw-back"
-                href="/feed"
-                target="_blank"
-                rel="noopener noreferrer"
-                style="text-decoration: none"
+        <h2 class="cw-title" style="margin: 0">{{ t('feed') }}</h2>
+
+        <!--
+          The composer, which is the whole difference between a feed and a
+          noticeboard. Signed in, it is a box and a button; not signed in, it is
+          the one press that makes an author out of a key, under the sentence
+          saying what that press does.
+        -->
+        <div class="cw-card" style="margin-top: 16px; padding: 14px">
+            <template v-if="authenticated">
+                <textarea
+                    ref="composer"
+                    v-model="draft"
+                    class="cw-textarea"
+                    rows="2"
+                    style="min-height: 64px"
+                    :maxlength="2000"
+                    :placeholder="t('feedComposePlaceholder')"
+                    :aria-label="t('feedComposePlaceholder')"
+                ></textarea>
+                <div class="cw-row" style="margin-top: 10px">
+                    <span class="cw-label" style="color: var(--cw-faint)">{{
+                        t('feedComposeReach')
+                    }}</span>
+                    <button
+                        type="button"
+                        class="cw-btn cw-btn-primary"
+                        style="width: auto; min-width: 120px; height: 40px"
+                        :disabled="draft.trim() === '' || posting"
+                        @click="publish"
+                    >
+                        {{ posting ? t('feedPosting') : t('feedPost') }}
+                    </button>
+                </div>
+            </template>
+
+            <template v-else>
+                <p class="cw-prose" style="margin: 0">
+                    {{ canSign ? t('feedSignInBody') : t('feedWatchOnly') }}
+                </p>
+                <button
+                    v-if="canSign"
+                    type="button"
+                    class="cw-btn cw-btn-secondary"
+                    style="margin-top: 12px; height: 44px"
+                    :disabled="signingIn"
+                    @click="signIn"
+                >
+                    {{ signingIn ? t('feedSigningIn') : t('feedSignIn') }}
+                </button>
+            </template>
+
+            <p
+                v-if="problem"
+                class="cw-note cw-note-bad"
+                style="margin-top: 12px"
             >
-                {{ t('feedOpenSite') }}
-                <ExternalLink :size="12" aria-hidden="true" />
-            </a>
+                <span>{{ problem }}</span>
+            </p>
         </div>
-        <p class="cw-prose" style="margin-top: 8px">{{ t('feedBody') }}</p>
 
         <div class="cw-seg" style="margin-top: 18px">
             <button
@@ -215,19 +358,23 @@ onMounted(load);
                             }}
                         </div>
                     </div>
-                    <span
-                        class="cw-label"
-                        style="
-                            border: 1px solid var(--cw-hairline);
-                            padding: 4px 6px;
-                            color: var(--cw-muted);
-                        "
-                        >{{
-                            item.kind === 'dao'
-                                ? t('feedTagDao')
-                                : t('feedTagPost')
-                        }}</span
+                    <!--
+                      Writing to the person rather than about them. The chat is
+                      end-to-end encrypted and addressed by exactly the address
+                      printed above, so this is one tap and no lookup — it is
+                      offered only for a post, since DAO activity is a record
+                      rather than somebody talking.
+                    -->
+                    <button
+                        v-if="item.kind === 'post' && item.who?.address"
+                        type="button"
+                        class="cw-icon-btn cw-icon-btn-bare"
+                        :title="t('feedMessage')"
+                        :aria-label="t('feedMessage')"
+                        @click="emit('message', item.who.address)"
                     >
+                        <MessageSquare :size="15" aria-hidden="true" />
+                    </button>
                 </div>
 
                 <p
@@ -256,6 +403,7 @@ onMounted(load);
                 </p>
 
                 <div
+                    v-if="item.meta"
                     style="
                         display: flex;
                         align-items: center;
@@ -265,26 +413,9 @@ onMounted(load);
                         border-top: 1px solid var(--cw-line);
                     "
                 >
-                    <span v-if="item.meta" class="cw-label">{{
-                        item.meta
-                    }}</span>
-                    <span class="cw-fill"></span>
-                    <a
-                        class="cw-back"
-                        :href="item.url"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style="text-decoration: none"
-                    >
-                        {{ t('feedOpen') }}
-                        <ExternalLink :size="12" aria-hidden="true" />
-                    </a>
+                    <span class="cw-label">{{ item.meta }}</span>
                 </div>
             </article>
         </div>
-
-        <p class="cw-note" style="margin-top: 20px">
-            <span>{{ t('feedReadOnly') }}</span>
-        </p>
     </div>
 </template>

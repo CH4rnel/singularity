@@ -58,14 +58,28 @@ final class BridgeDepositCredit
             config('bridge.tokens', [])[$request->token]['chains'][$request->source_chain]['decimals'] ?? 8
         );
 
-        $request->update([
-            'amount' => TokenAmount::fromRaw($balances['confirmed'], $decimals),
-            'status' => BridgeRequest::PENDING,
-        ]);
+        // Three writes, in this order, because the order is what makes a
+        // failure between them survivable. The amount is what the obligation
+        // is quoted from, so it goes first; the obligation is what the payout
+        // will be judged against, so it goes second; and the status flip goes
+        // last, because *that* is the write that takes this request out of the
+        // sweep's sight. Fail anywhere before it and the request is still
+        // awaiting_deposit with its coins on their own address, which the next
+        // sweep will read again — `commit()` is idempotent precisely so that
+        // second pass costs nothing.
+        //
+        // It used to write the amount and the status together and commit
+        // afterwards. On 2026-09-13 a locked database threw between them: the
+        // deposit was credited into a `pending` nobody sweeps, no obligation
+        // was written, and the transfer stopped dead with the coins already
+        // taken. That is the state this ordering makes unreachable.
+        $request->update(['amount' => TokenAmount::fromRaw($balances['confirmed'], $decimals)]);
 
         // The coins are on the request's own address: from here this is an
         // obligation, whatever the payout does next.
         $this->admission->commit($request, null);
+
+        $request->update(['status' => BridgeRequest::PENDING]);
 
         if (($chain['type'] ?? null) !== null && $this->autoProcesses($request->direction)) {
             ProcessBridgeRequest::dispatchSync($request->id, $sessionId);

@@ -385,10 +385,6 @@ const cooldownHours = computed(() => {
                 >{{ levelTag }}</span
             >
         </div>
-        <div class="cw-label" style="color: var(--cw-dim)">
-            {{ t('dailyEyebrow') }}
-        </div>
-
         <p v-if="failure" class="cw-note cw-note-bad" style="margin-top: 16px">
             <span>{{ failure }}</span>
             <button type="button" class="cw-back" @click="read()">
@@ -613,16 +609,43 @@ const cooldownHours = computed(() => {
                     {{ group.header }}
                 </div>
 
+                <!--
+                  A quest row is the way to go and do it: every unfinished one
+                  carried a button reading "ВПЕРЁД", so a board of ten quests
+                  printed the same word ten times under ten different
+                  instructions. The row says where it goes by being tappable
+                  where there is somewhere to go, and is a plain card where
+                  there is not.
+                -->
                 <div style="display: flex; flex-direction: column; gap: 7px">
-                    <div
+                    <component
+                        :is="
+                            !quest.completed && questDestination(quest.actions)
+                                ? 'button'
+                                : 'div'
+                        "
                         v-for="quest in group.rows"
                         :key="quest.key"
+                        :type="
+                            !quest.completed && questDestination(quest.actions)
+                                ? 'button'
+                                : undefined
+                        "
                         class="cw-card"
-                        style="padding: 13px 14px"
+                        style="
+                            padding: 13px 14px;
+                            width: 100%;
+                            text-align: left;
+                        "
                         :style="
                             quest.completed
                                 ? { borderColor: 'var(--cw-ok)' }
                                 : undefined
+                        "
+                        @click="
+                            !quest.completed &&
+                            questDestination(quest.actions) &&
+                            emit('go', questDestination(quest.actions))
                         "
                     >
                         <div class="cw-row" style="align-items: baseline">
@@ -689,22 +712,21 @@ const cooldownHours = computed(() => {
                                         : `${quest.progress} / ${quest.target}`
                                 }}</span
                             >
-                            <button
+                            <span
                                 v-if="
                                     !quest.completed &&
                                     questDestination(quest.actions)
                                 "
-                                type="button"
-                                class="cw-ghost"
-                                style="flex: none; min-height: 32px"
-                                @click="
-                                    emit('go', questDestination(quest.actions))
+                                style="
+                                    flex: none;
+                                    font: 400 12px/1 var(--cw-mono);
+                                    color: var(--cw-accent);
                                 "
+                                aria-hidden="true"
+                                >→</span
                             >
-                                {{ t('dailyGo') }}
-                            </button>
                         </div>
-                    </div>
+                    </component>
                 </div>
             </template>
 

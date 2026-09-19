@@ -96,8 +96,12 @@ export const walletMessages: Messages = {
         preferencesBody:
             'How the wallet looks and reads, what this device says out loud, and whether the desktop app stays within reach after login. All of it is kept on this device.',
         preferencesNotifications: 'System notifications',
+        // Now one switch for both halves, so the hint says the half people
+        // cannot see: this is what reaches the device with the app closed.
         preferencesNotificationsHint:
-            'Incoming transfers, messages and completed operations',
+            'Transfers, messages and new posts — including while the wallet is closed',
+        preferencesNotificationsUnavailable:
+            'This device cannot be subscribed right now — reopen the wallet and try again',
         preferencesNotificationsDenied:
             'Blocked by the operating system or browser — allow Cyberia in its notification settings',
         preferencesNotificationsUnsupported:
@@ -188,6 +192,8 @@ export const walletMessages: Messages = {
          * behind a tile among eleven others — which is where a thing goes when
          * nobody is meant to find it.
          */
+        // Shown while the first launch writes a vault nobody asked for.
+        preparingWallet: 'Setting up your wallet…',
         safetyTitle: 'This wallet can still be lost',
         safetyBackup: 'The phrase has never been written down.',
         safetyPassword: 'There is no password on this device.',
@@ -252,6 +258,10 @@ export const walletMessages: Messages = {
             'No prices could be read just now. Balances are live; their value is not.',
         networks: 'Networks',
         derivedCount: '{count} derived',
+        navMore: 'More',
+        // Said under the balance instead of a bordered box with a heading, a
+        // paragraph and a button that repeats Receive.
+        emptyShort: 'Nothing here yet — top up an address',
         emptyTitle: 'No balances yet',
         emptyBody:
             'This vault is new. Receive assets to one of your addresses to get started.',
@@ -269,6 +279,58 @@ export const walletMessages: Messages = {
 
         // Proxy & routing. Keys stay on the device; requests do not, and this
         // is the inventory of where they go.
+        // Buying with a card. The provider is the seller; we are not, and
+        // the screen says so before anybody leaves for their page.
+        buyTitle: 'Buy crypto',
+        buyBody:
+            'A payment provider sells it, takes the card and does its own identity check. Cyberia holds no card details, no money and no custody — the coins are delivered to an address this wallet derived.',
+        buyOff: 'Buying is switched off in this build.',
+        buyOrder: 'Your purchase',
+        buyStatus_pending: 'Waiting for payment',
+        buyStatus_paid: 'Paid',
+        buyStatus_delivering: 'Sending',
+        buyStatus_delivered: 'Delivered',
+        buyStatus_failed: 'Failed',
+        buyStatus_expired: 'Expired',
+        buyDelivered: 'It has arrived at your address.',
+        buyMoveOn: 'Move it to Cyberia',
+        buyMir: 'МИР card',
+        buyMirExternal:
+            'Someone else’s service, on their terms and with their custody. Opened in a new tab.',
+        buyMirOpen: 'Open',
+        buySpend: 'You pay',
+        buyCurrency: 'Currency',
+        buyGet: 'You get',
+        buyNotCyberia:
+            'No provider settles on Cyberia, so a purchase lands on the network above — at your own address — and moving it to Cyberia is a second step this wallet performs.',
+        buyNetworkOff:
+            '{chain} is switched off here, so there is no address to deliver to and nothing would be drawn when it arrives.',
+        buyNetworkOn: 'Switch the network on',
+        buyTo: 'To',
+        buyMethod_card: 'Card',
+        buyMethod_bank: 'Transfer',
+        buyMethod_apple_pay: 'Apple Pay',
+        buyMethod_google_pay: 'Google Pay',
+        buyOffers: 'Who sells it',
+        buyAmountBad: 'Enter an amount — up to two decimal places.',
+        buyQuoting: 'Asking every provider…',
+        buyFee: 'Fee',
+        buyNoTracking: 'this one does not report back',
+        buyWith: 'Buy with {provider}',
+        buyOpening: 'Opening…',
+        buyHandoff:
+            'The card is entered on the provider’s own page, never here. If a purchase fails or needs a refund, it is theirs to answer for.',
+        buyReason_provider_off: 'Switched off here.',
+        buyReason_unconfigured: 'Not connected yet.',
+        buyReason_country_restricted: 'It does not serve your country.',
+        buyReason_fiat_unsupported: 'It does not take this currency.',
+        buyReason_method_unsupported: 'It does not take this payment method.',
+        buyReason_provider_unreachable: 'It did not answer.',
+        buyReason_no_quote: 'It has no price for this purchase.',
+        buyReason_mir_unserved:
+            'МИР runs on rails that end at the borders of the countries wired into them, and every licensed provider here refuses that network. There is no route we can honestly offer.',
+        tileBuy: 'Buy',
+        tileBuyHint: 'With a bank card, through a provider',
         proxyTitle: 'Proxy & routing',
         proxyBody:
             'Your keys never leave this device. Your requests do — reading a balance tells whoever answers that this address is being watched from this connection. Here is what carries them.',
@@ -312,7 +374,7 @@ export const walletMessages: Messages = {
         networksTileHint: '120 shipped · plus your own',
         networksTitle: 'Networks',
         networksBody:
-            'Your seed already holds an account on every EVM network here — the same key and the same address. A switch decides only whether the portfolio draws that network and reads its balance. Some arrive on and most arrive off; that is a starting position, not a ranking.',
+            'Your seed already holds an account on every EVM network here — the same key and the same address. A switch decides only whether the portfolio draws that network and reads its balance. Cyberia is on; everything else you switch on yourself, because a network that is on is read on every refresh.',
         networksOnLabel: 'Switched on',
         networksOnCount: '{on} of {total}',
         networksCost:
@@ -325,8 +387,10 @@ export const walletMessages: Messages = {
         networksHome: 'Home chain',
         networksChainId: 'chain {id}',
         networksIndexed: 'balances · tokens · history',
-        networksNoIndex: 'balances only · no keyless index here',
-        networksNoExplorer: 'balances only · no public explorer',
+        // A row's exception, in as few words as a row can carry: why there
+        // is no index is answered on that network's own screen.
+        networksNoIndex: 'balances only',
+        networksNoExplorer: 'no explorer',
         networksSwitchOn: 'Switch on',
         networksSwitchOff: 'On',
         networksEmpty: 'Nothing in the catalogue matches “{query}”.',
@@ -515,7 +579,7 @@ export const walletMessages: Messages = {
 
         gasStation: 'Gas station',
         gasStationBody:
-            'A fee can only be paid in the coin the network runs on, so an address holding tokens and no CYBER cannot move them. On Cyberia the station hands such an address enough CYBER to pay for itself — you then sign your own transaction, unchanged.',
+            'An address holding tokens and no CYBER cannot move them. The station hands it enough CYBER to pay its own fee — you then sign your own transaction, unchanged.',
         gasTank: 'Tank',
         gasStateLive: 'Serving',
         gasStatePaused: 'Stopped',
@@ -546,8 +610,7 @@ export const walletMessages: Messages = {
         gasDripCovers: 'One drip pays for about {count}',
         gasNoSignature:
             'Asking costs no signature. A drip can only ever arrive at the address named in the request, so proving you hold its key would cost you a tap and cost a script nothing.',
-        gasCyberiaOnly:
-            'Cyberia only, permanently. Sponsoring a fee on BNB or Base would mean buying ETH for strangers.',
+        gasCyberiaOnly: 'Cyberia only, permanently.',
         tileGasHint: 'Sponsored fees',
         tileBridgeHint: 'Another chain',
         tileEarnHint: 'Pools · APR',
@@ -658,8 +721,10 @@ export const walletMessages: Messages = {
         // The Wired: what is on this chain, and how a page gets to talk to a
         // wallet. Not an embedded browser, and the screen says why.
         browseTitle: 'The Wired',
+        // A directory, and the one thing about it that is not obvious from
+        // looking at it: why these are links and not an embedded browser.
         browseBody:
-            'What runs on this chain, and where it is reached. This is a directory, not a browser: a page in a tab cannot hand another site a wallet, and a frame that could reach this vault could read the keys in it. What mediates between a page and a key is the extension, per site, with you in front of every signature.',
+            'A directory, not a browser: a frame that could reach this vault could read the keys in it. What mediates between a page and a key is the extension, per site, with you in front of every signature.',
         browseBridgeLabel: 'Pages here can talk to',
         browseModeExtension: 'A wallet is offered',
         browseModeExtensionBody:
@@ -755,7 +820,7 @@ export const walletMessages: Messages = {
         copiedClears: 'Copied · clears in 30s',
         expandAddress: 'Show the full address',
         qrLabel: '{chain} address as a QR code',
-        qrCaption: '{chain} address · QR',
+        qrCaption: '{chain} address',
         warnEvm:
             'The same address is yours on every EVM network. Send only {chain} assets here (chain {chainId}) — anything sent on another EVM network is not lost, it is simply on that network, and you have to switch to it to see or spend it.',
         warnSolana:
@@ -821,7 +886,7 @@ export const walletMessages: Messages = {
         crossTileHint: 'Other chains · via a router',
         crossTitle: 'Cross-chain swap',
         crossBody:
-            'Cyberia has liquidity on Cyberia. Trading Base ETH for Solana SOL means somebody holding both sides, so this screen asks a router that does: you sign one deposit on the network you are spending from, and the router delivers on the other side. Cyberia never holds the money in between.',
+            'You sign one deposit on the network you are spending from, and a router that holds both sides delivers on the other. Cyberia never holds the money in between, and there is no cancel once the deposit is signed.',
         crossLoading: 'Asking the router what it can reach…',
         crossOff: 'Cross-chain swaps are switched off on this host.',
         crossUnavailable: 'The routing service could not be reached.',
@@ -984,11 +1049,13 @@ export const walletMessages: Messages = {
 
         // Lain — the $LAIN holders' room
         lainTitle: 'Lain',
+        // The room is open to everybody now; what the holding buys is a
+        // better Lain, which is the thing being built next.
         lainIntro:
-            'Cyberia’s resident intelligence, open to wallets holding {required}% or more of the live $LAIN supply. Your share is read from the contract here, in this browser — nothing is sent anywhere until you choose to open the room.',
+            'Cyberia’s resident intelligence. Anyone can write to her: sign once with this wallet and the room opens. Your $LAIN share is read from the contract in this browser — it decides what she becomes for you, not whether you may speak.',
         lainHolding: 'You hold',
         lainShare: 'Share of supply',
-        lainRequired: 'Required',
+        lainRequired: 'Smarter from',
         lainReading: 'Reading the contract…',
         lainOff: 'Lain is not wired up on this server yet.',
         lainReadFailed:
@@ -997,7 +1064,9 @@ export const walletMessages: Messages = {
             'The room is open to wallets holding {required}% of the live $LAIN supply. This account holds {share} — {amount} {symbol}.',
         lainShortHint:
             'The share is recomputed every time this screen is opened, so it follows both what you hold and what has been minted or burned.',
-        lainQualifies: 'This account qualifies',
+        lainQualifies: 'This account holds the share',
+        lainTier:
+            'Holding {required}% of $LAIN is what will buy the smarter Lain.',
         lainSignBody:
             'Sign a challenge with this wallet’s Cyberia key to open the room. It moves no funds, approves no transaction and grants no allowance — it only proves that this browser holds the key behind the address.',
         lainSign: 'Hold to sign',
@@ -1048,6 +1117,17 @@ export const walletMessages: Messages = {
         chatSyncing: 'Checking…',
         chatThreads: '{count} conversations',
         chatNew: 'New conversation',
+        // The directory, which is the half an address field cannot be.
+        // Writing to somebody who has not opened chat yet: kept, not refused.
+        chatWaitingCount: '{count} waiting to be sent',
+        chatWaiting: 'waiting',
+        chatWaitingNote:
+            'This address has not opened chat yet, so nothing can be encrypted to it. What you write is kept on this device and sent by itself the moment they do.',
+        chatPeople: 'People here',
+        chatPeopleSearch: 'Name or address',
+        chatPeopleNoKey: 'has not opened chat yet',
+        chatPeopleEmpty: 'Nobody with a wallet attached yet.',
+        chatPeopleFailed: 'Could not read the list. Try again.',
         chatNewBody:
             'Both wallets have to have opened chat: an address is a hash, so there is nothing to encrypt to until its owner has published a key.',
         chatAddressLabel: 'Write to which address',
@@ -1207,6 +1287,18 @@ export const walletMessages: Messages = {
         feedSomeone: 'Someone',
         feedLoading: 'Loading the feed…',
         feedEmpty: 'The feed is quiet.',
+        // Writing, which this screen could not do until the wallet was allowed
+        // to be an author.
+        feedComposePlaceholder: 'Say something to Cyberia',
+        feedPost: 'Post',
+        feedPosting: 'Posting…',
+        feedComposeReach: 'Notifies everyone',
+        feedSignInBody:
+            'Posting needs an author. Sign the site’s login message with this wallet — the key never leaves this device.',
+        feedSignIn: 'Sign in with this wallet',
+        feedSigningIn: 'Signing…',
+        feedWatchOnly: 'This account is watch-only, so it cannot sign or post.',
+        feedMessage: 'Message',
         feedUnreadable: 'Could not reach Cyberia for the feed.',
         feedOpen: 'Open',
         feedOpenSite: 'On the site',
@@ -1701,7 +1793,9 @@ export const walletMessages: Messages = {
             'Как кошелёк выглядит и на каком языке говорит, о чём сообщать на этом устройстве и должно ли настольное приложение оставаться доступным после входа в ОС. Всё это хранится на устройстве.',
         preferencesNotifications: 'Системные уведомления',
         preferencesNotificationsHint:
-            'Входящие переводы, сообщения и завершённые операции',
+            'Переводы, сообщения и новые посты — в том числе когда кошелёк закрыт',
+        preferencesNotificationsUnavailable:
+            'Это устройство сейчас не подписать — откройте кошелёк заново и попробуйте ещё раз',
         preferencesNotificationsDenied:
             'Заблокированы системой или браузером — разрешите уведомления для Cyberia в их настройках',
         preferencesNotificationsUnsupported:
@@ -1778,6 +1872,7 @@ export const walletMessages: Messages = {
         addingPassword: 'Шифруем…',
         words12: '12 слов',
         words24: '24 слова',
+        preparingWallet: 'Готовим кошелёк…',
         safetyTitle: 'Этот кошелёк ещё можно потерять',
         safetyBackup: 'Фраза ни разу не была записана.',
         safetyPassword: 'На этом устройстве нет пароля.',
@@ -1838,6 +1933,8 @@ export const walletMessages: Messages = {
             'Цены сейчас прочитать не удалось. Остатки настоящие, их стоимость — нет.',
         networks: 'Сети',
         derivedCount: 'выведено: {count}',
+        navMore: 'Ещё',
+        emptyShort: 'Пока пусто — пополните адрес',
         emptyTitle: 'Балансов пока нет',
         emptyBody:
             'Хранилище новое. Пополните любой из своих адресов, чтобы начать.',
@@ -1854,6 +1951,58 @@ export const walletMessages: Messages = {
         proxySettings: 'Настройки прокси',
 
         // Прокси и маршрутизация: ключи остаются на устройстве, запросы — нет.
+        // Покупка картой. Продаёт провайдер, а не мы, и это сказано до того,
+        // как человек уходит на его страницу.
+        buyTitle: 'Купить криптовалюту',
+        buyBody:
+            'Продаёт платёжный провайдер: он принимает карту и сам проверяет личность. Cyberia не видит данных карты, не держит деньги и ничего не хранит за вас — монеты приходят на адрес, который создал этот кошелёк.',
+        buyOff: 'Покупка в этой сборке выключена.',
+        buyOrder: 'Ваша покупка',
+        buyStatus_pending: 'Ждём оплату',
+        buyStatus_paid: 'Оплачено',
+        buyStatus_delivering: 'Отправляем',
+        buyStatus_delivered: 'Доставлено',
+        buyStatus_failed: 'Не прошло',
+        buyStatus_expired: 'Истекло',
+        buyDelivered: 'Пришло на ваш адрес.',
+        buyMoveOn: 'Перевести в Cyberia',
+        buyMir: 'Карта МИР',
+        buyMirExternal:
+            'Чужой сервис: его условия и его хранение средств. Откроется в новой вкладке.',
+        buyMirOpen: 'Открыть',
+        buySpend: 'Вы платите',
+        buyCurrency: 'Валюта',
+        buyGet: 'Вы получаете',
+        buyNotCyberia:
+            'Ни один провайдер не выдаёт монеты в Cyberia, поэтому покупка приходит в сеть выше — на ваш собственный адрес, — а перевод в Cyberia это второй шаг, который делает сам кошелёк.',
+        buyNetworkOff:
+            'Сеть {chain} здесь выключена: адреса для доставки нет, и пришедшее не будет показано.',
+        buyNetworkOn: 'Включить сеть',
+        buyTo: 'На адрес',
+        buyMethod_card: 'Карта',
+        buyMethod_bank: 'Перевод',
+        buyMethod_apple_pay: 'Apple Pay',
+        buyMethod_google_pay: 'Google Pay',
+        buyOffers: 'Кто продаёт',
+        buyAmountBad: 'Введите сумму — не больше двух знаков после запятой.',
+        buyQuoting: 'Спрашиваем цену у всех…',
+        buyFee: 'Комиссия',
+        buyNoTracking: 'этот не сообщает о результате',
+        buyWith: 'Купить через {provider}',
+        buyOpening: 'Открываем…',
+        buyHandoff:
+            'Карта вводится на странице провайдера, не здесь. Если покупка не прошла или нужен возврат, отвечает за это он.',
+        buyReason_provider_off: 'Здесь выключен.',
+        buyReason_unconfigured: 'Ещё не подключён.',
+        buyReason_country_restricted: 'Не работает с вашей страной.',
+        buyReason_fiat_unsupported: 'Не принимает эту валюту.',
+        buyReason_method_unsupported: 'Не принимает этот способ оплаты.',
+        buyReason_provider_unreachable: 'Не ответил.',
+        buyReason_no_quote: 'Нет цены для такой покупки.',
+        buyReason_mir_unserved:
+            'МИР работает только там, куда дотянулись его собственные рельсы, и ни один лицензированный провайдер эту сеть не принимает. Честного маршрута, который мы могли бы предложить, нет.',
+        tileBuy: 'Купить',
+        tileBuyHint: 'Банковской картой, через провайдера',
         proxyTitle: 'Прокси и маршруты',
         proxyBody:
             'Ключи никогда не покидают это устройство. Запросы покидают — и чтение баланса сообщает тому, кто отвечает, что за этим адресом следят с этого соединения. Вот кто их несёт.',
@@ -1897,7 +2046,7 @@ export const walletMessages: Messages = {
         networksTileHint: '120 готовых · плюс свои',
         networksTitle: 'Сети',
         networksBody:
-            'Ваша сид-фраза уже держит счёт в каждой из этих EVM-сетей — тот же ключ и тот же адрес. Переключатель меняет только одно: рисует ли портфель эту сеть и читает ли её баланс. Часть включена изначально, большинство выключено — это начальное положение переключателя, а не ранг.',
+            'Ваша сид-фраза уже держит счёт в каждой из этих EVM-сетей — тот же ключ и тот же адрес. Переключатель меняет только одно: рисует ли портфель эту сеть и читает ли её баланс. Включена Сайберия, остальные вы включаете сами: включённая сеть читается при каждом обновлении.',
         networksOnLabel: 'Включено',
         networksOnCount: '{on} из {total}',
         networksCost:
@@ -1910,8 +2059,8 @@ export const walletMessages: Messages = {
         networksHome: 'Домашняя сеть',
         networksChainId: 'chain {id}',
         networksIndexed: 'балансы · токены · история',
-        networksNoIndex: 'только балансы · индекса без ключа здесь нет',
-        networksNoExplorer: 'только балансы · нет публичного обозревателя',
+        networksNoIndex: 'только балансы',
+        networksNoExplorer: 'нет обозревателя',
         networksSwitchOn: 'Включить',
         networksSwitchOff: 'Вкл.',
         networksEmpty: 'В каталоге ничего не найдено по запросу «{query}».',
@@ -2081,7 +2230,7 @@ export const walletMessages: Messages = {
 
         gasStation: 'Газовая станция',
         gasStationBody:
-            'Комиссию можно заплатить только той монетой, на которой работает сеть, — поэтому адрес с токенами и без CYBER не может сдвинуть эти токены. В Cyberia на это есть ответ: станция выдаёт такому адресу CYBER на его собственную комиссию, а вы подписываете свою транзакцию без изменений.',
+            'Адрес с токенами и без CYBER не может их сдвинуть. Станция выдаёт ему CYBER на его же комиссию — а вы подписываете свою транзакцию без изменений.',
         gasTank: 'Бак',
         gasStateLive: 'Работает',
         gasStatePaused: 'Остановлена',
@@ -2112,8 +2261,7 @@ export const walletMessages: Messages = {
         gasDripCovers: 'Одной выдачи хватит примерно на {count}',
         gasNoSignature:
             'Запрос не требует подписи. Газ может прийти только на тот адрес, который назван в запросе, — так что доказательство владения ключом стоило бы вам одного нажатия, а скрипту не стоило бы ничего.',
-        gasCyberiaOnly:
-            'Только Cyberia и навсегда. Спонсировать комиссию в BNB или Base значило бы покупать ETH для незнакомых людей.',
+        gasCyberiaOnly: 'Только Cyberia и навсегда.',
         tileGasHint: 'Комиссии за счёт станции',
         tileBridgeHint: 'В другую сеть',
         tileEarnHint: 'Пулы · APR',
@@ -2222,7 +2370,7 @@ export const walletMessages: Messages = {
         // разговаривает с кошельком.
         browseTitle: 'Провода',
         browseBody:
-            'Что работает в этой цепочке и где это открыть. Это каталог, а не браузер: страница во вкладке не может выдать другому сайту кошелёк, а фрейм, который дотянулся бы до этого хранилища, прочитал бы и ключи в нём. Посредник между страницей и ключом — расширение: по одному сайту за раз и с вами перед каждой подписью.',
+            'Это каталог, а не браузер: фрейм, который дотянулся бы до этого хранилища, прочитал бы и ключи в нём. Посредник между страницей и ключом — расширение: по одному сайту за раз и с вами перед каждой подписью.',
         browseBridgeLabel: 'Страницам здесь доступен',
         browseModeExtension: 'Кошелёк предложен',
         browseModeExtensionBody:
@@ -2317,7 +2465,7 @@ export const walletMessages: Messages = {
         copiedClears: 'Скопировано · очистится через 30 с',
         expandAddress: 'Показать адрес целиком',
         qrLabel: 'Адрес {chain} в виде QR-кода',
-        qrCaption: 'Адрес {chain} · QR',
+        qrCaption: 'Адрес {chain}',
         warnEvm:
             'Этот адрес — ваш во всех EVM-сетях. Отправляйте сюда только активы {chain} (сеть {chainId}). Присланное в другой EVM-сети не пропадёт: оно просто в той сети, и чтобы его увидеть и потратить, нужно на неё переключиться.',
         warnSolana:
@@ -2377,7 +2525,7 @@ export const walletMessages: Messages = {
         crossTileHint: 'Другие сети · через маршрутизатор',
         crossTitle: 'Кроссчейн-своп',
         crossBody:
-            'Ликвидность Cyberia — на Cyberia. Обменять ETH в Base на SOL в Solana может только тот, у кого есть обе стороны, поэтому этот экран спрашивает маршрутизатор, у которого они есть: вы подписываете один депозит в сети, из которой тратите, а он выдаёт на другой стороне. Cyberia в промежутке деньги не держит.',
+            'Вы подписываете один депозит в сети, из которой тратите, а маршрутизатор с обеими сторонами выдаёт на другой. Cyberia в промежутке деньги не держит, и отменить подписанный депозит нельзя.',
         crossLoading: 'Спрашиваем маршрутизатор, куда он ходит…',
         crossOff: 'Кроссчейн-свопы на этом хосте выключены.',
         crossUnavailable: 'Маршрутизатор недоступен.',
@@ -2534,10 +2682,10 @@ export const walletMessages: Messages = {
         // Лейн — комната держателей $LAIN
         lainTitle: 'Лейн',
         lainIntro:
-            'Разум Cyberia. Комната открыта кошелькам, у которых есть {required}% и больше живой эмиссии $LAIN. Доля читается прямо из контракта здесь, в браузере, — пока вы сами не откроете комнату, наружу не уходит ничего.',
+            'Разум Cyberia. Писать может кто угодно: подпишите один раз этим кошельком — и комната откроется. Доля $LAIN читается прямо из контракта здесь, в браузере, и решает, какой она для вас станет, а не можно ли вам говорить.',
         lainHolding: 'У вас',
         lainShare: 'Доля эмиссии',
-        lainRequired: 'Нужно',
+        lainRequired: 'Умнее от',
         lainReading: 'Читаю контракт…',
         lainOff: 'Лейн на этом сервере ещё не подключена.',
         lainReadFailed:
@@ -2546,7 +2694,9 @@ export const walletMessages: Messages = {
             'Комната открыта кошелькам с {required}% живой эмиссии $LAIN. На этом счёте {share} — {amount} {symbol}.',
         lainShortHint:
             'Доля пересчитывается при каждом открытии экрана, поэтому она следует и за вашим балансом, и за тем, что было выпущено или сожжено.',
-        lainQualifies: 'Этот счёт подходит',
+        lainQualifies: 'У этого счёта есть доля',
+        lainTier:
+            'Доля в {required}% $LAIN — это то, за что будет доступна более умная Лейн.',
         lainSignBody:
             'Подпишите вызов ключом Cyberia из этого кошелька, чтобы открыть комнату. Подпись не двигает средства, не подтверждает транзакцию и не даёт разрешений — она лишь доказывает, что ключ от адреса лежит в этом браузере.',
         lainSign: 'Держите, чтобы подписать',
@@ -2587,6 +2737,15 @@ export const walletMessages: Messages = {
         chatSyncing: 'Проверяем…',
         chatThreads: 'Переписок: {count}',
         chatNew: 'Новая переписка',
+        chatWaitingCount: 'ждёт отправки: {count}',
+        chatWaiting: 'ждёт',
+        chatWaitingNote:
+            'Этот адрес ещё не открывал чат, поэтому зашифровать ему нечем. Написанное остаётся на этом устройстве и уйдёт само, как только он его откроет.',
+        chatPeople: 'Кто здесь есть',
+        chatPeopleSearch: 'Имя или адрес',
+        chatPeopleNoKey: 'ещё не открывал чат',
+        chatPeopleEmpty: 'Пока никто не привязал кошелёк.',
+        chatPeopleFailed: 'Не удалось прочитать список. Попробуйте ещё раз.',
         chatNewBody:
             'Чат должен быть открыт с обеих сторон: адрес — это хеш, и пока его владелец не опубликовал ключ, шифровать не для кого.',
         chatAddressLabel: 'Кому писать',
@@ -2747,6 +2906,17 @@ export const walletMessages: Messages = {
         feedSomeone: 'Кто-то',
         feedLoading: 'Загружаю ленту…',
         feedEmpty: 'В ленте тихо.',
+        feedComposePlaceholder: 'Сказать Сайберии',
+        feedPost: 'Отправить',
+        feedPosting: 'Отправляем…',
+        feedComposeReach: 'Уведомит всех',
+        feedSignInBody:
+            'У поста должен быть автор. Подпишите этим кошельком обычное сообщение входа — ключ не покидает устройство.',
+        feedSignIn: 'Войти этим кошельком',
+        feedSigningIn: 'Подписываем…',
+        feedWatchOnly:
+            'Этот счёт только для наблюдения: он не может подписывать и писать.',
+        feedMessage: 'Написать',
         feedUnreadable: 'Не удалось получить ленту из Cyberia.',
         feedOpen: 'Открыть',
         feedOpenSite: 'На сайте',
@@ -3225,7 +3395,9 @@ export const walletMessages: Messages = {
         preferencesBody:
             '钱包的外观与语言、这台设备要提醒什么，以及桌面版是否在登录系统后保持可用。这些都只保存在本机。',
         preferencesNotifications: '系统通知',
-        preferencesNotificationsHint: '收款、消息和已完成的操作',
+        preferencesNotificationsHint: '收款、消息和新帖子 — 包括钱包关闭时',
+        preferencesNotificationsUnavailable:
+            '现在无法订阅这台设备 — 请重新打开钱包再试一次',
         preferencesNotificationsDenied:
             '已被系统或浏览器阻止 — 请在通知设置中允许 Cyberia',
         preferencesNotificationsUnsupported: '这个运行环境不支持系统通知',
@@ -3297,6 +3469,7 @@ export const walletMessages: Messages = {
         addingPassword: '正在加密…',
         words12: '12 个词',
         words24: '24 个词',
+        preparingWallet: '正在准备钱包…',
         safetyTitle: '这个钱包仍然可能丢失',
         safetyBackup: '助记词从未被抄写过。',
         safetyPassword: '这台设备上没有密码。',
@@ -3354,6 +3527,8 @@ export const walletMessages: Messages = {
         priceOffline: '现在读不到价格。余额是实时的，它们的价值不是。',
         networks: '网络',
         derivedCount: '已派生 {count} 个',
+        navMore: '更多',
+        emptyShort: '还没有资产 — 先给地址充值',
         emptyTitle: '还没有余额',
         emptyBody: '这是一个新的保险库。往你的任一地址收一笔资产就可以开始了。',
         showAddress: '显示地址',
@@ -3368,6 +3543,57 @@ export const walletMessages: Messages = {
         proxySettings: '代理设置',
 
         // 代理与线路：密钥留在设备上，请求不会。
+        // 用银行卡购买。卖方是服务商，不是我们；在离开本页之前就说清楚。
+        buyTitle: '购买加密货币',
+        buyBody:
+            '由支付服务商出售：他们收取银行卡并自行完成身份核验。Cyberia 不接触卡片信息、不保管资金、也不代为托管——币会直接发送到本钱包生成的地址。',
+        buyOff: '此版本未开启购买功能。',
+        buyOrder: '你的订单',
+        buyStatus_pending: '等待付款',
+        buyStatus_paid: '已付款',
+        buyStatus_delivering: '发送中',
+        buyStatus_delivered: '已到账',
+        buyStatus_failed: '未成功',
+        buyStatus_expired: '已过期',
+        buyDelivered: '已到达你的地址。',
+        buyMoveOn: '转入 Cyberia',
+        buyMir: 'МИР 卡',
+        buyMirExternal:
+            '这是别人的服务：他们的条款、他们的托管。将在新标签页打开。',
+        buyMirOpen: '打开',
+        buySpend: '你支付',
+        buyCurrency: '货币',
+        buyGet: '你获得',
+        buyNotCyberia:
+            '没有服务商直接结算到 Cyberia，所以购买会到达上面那条网络——同样是你自己的地址——转入 Cyberia 是本钱包完成的第二步。',
+        buyNetworkOff:
+            '{chain} 在这里未开启：没有可用于接收的地址，到账后也不会显示。',
+        buyNetworkOn: '开启该网络',
+        buyTo: '发送至',
+        buyMethod_card: '银行卡',
+        buyMethod_bank: '转账',
+        buyMethod_apple_pay: 'Apple Pay',
+        buyMethod_google_pay: 'Google Pay',
+        buyOffers: '谁在出售',
+        buyAmountBad: '请输入金额，最多两位小数。',
+        buyQuoting: '正在向各服务商询价…',
+        buyFee: '手续费',
+        buyNoTracking: '此服务商不会回报结果',
+        buyWith: '通过 {provider} 购买',
+        buyOpening: '正在打开…',
+        buyHandoff:
+            '银行卡信息在服务商自己的页面输入，不在这里。购买失败或需要退款时，由他们负责。',
+        buyReason_provider_off: '此处已关闭。',
+        buyReason_unconfigured: '尚未接入。',
+        buyReason_country_restricted: '不服务你所在的国家或地区。',
+        buyReason_fiat_unsupported: '不接受该货币。',
+        buyReason_method_unsupported: '不接受该支付方式。',
+        buyReason_provider_unreachable: '没有响应。',
+        buyReason_no_quote: '对这笔购买没有报价。',
+        buyReason_mir_unserved:
+            'МИР 只在其自有清算网络覆盖的范围内可用，而这里所有持牌服务商都拒绝该网络。我们没有可以诚实提供的通道。',
+        tileBuy: '购买',
+        tileBuyHint: '用银行卡，经由服务商',
         proxyTitle: '代理与线路',
         proxyBody:
             '你的密钥从不离开这台设备，请求会。读一次余额，就等于告诉应答的那一方：有人正从这条线上盯着这个地址。下面是这些请求由谁承载。',
@@ -3410,7 +3636,7 @@ export const walletMessages: Messages = {
         networksTileHint: '内置 120 条 · 外加自定义',
         networksTitle: '网络',
         networksBody:
-            '您的助记词已经在这里的每一条 EVM 网络上持有账户——同一把密钥、同一个地址。开关只决定钱包是否显示该网络并读取余额。少数默认开启、多数默认关闭，这是开关的初始位置，不是高低之分。',
+            '您的助记词已经在这里的每一条 EVM 网络上持有账户——同一把密钥、同一个地址。开关只决定钱包是否显示该网络并读取余额。默认只开启 Cyberia，其余由您自行开启——每开启一条，每次刷新都要多读一次余额。',
         networksOnLabel: '已开启',
         networksOnCount: '{total} 条中的 {on} 条',
         networksCost:
@@ -3423,8 +3649,8 @@ export const walletMessages: Messages = {
         networksHome: '主链',
         networksChainId: 'chain {id}',
         networksIndexed: '余额 · 代币 · 历史',
-        networksNoIndex: '仅余额 · 此处没有免密钥索引',
-        networksNoExplorer: '仅余额 · 没有公开浏览器',
+        networksNoIndex: '仅余额',
+        networksNoExplorer: '没有浏览器',
         networksSwitchOn: '开启',
         networksSwitchOff: '已开',
         networksEmpty: '目录中没有与“{query}”匹配的网络。',
@@ -3589,7 +3815,7 @@ export const walletMessages: Messages = {
 
         gasStation: '加油站',
         gasStationBody:
-            '手续费只能用这条链自己的币来付，所以一个只有代币、没有 CYBER 的地址动不了这些代币。在 Cyberia 上，加油站会给这样的地址一笔 CYBER 用来付它自己的手续费 — 然后你照原样签自己的交易。',
+            '只有代币、没有 CYBER 的地址动不了这些代币。加油站会给它一笔 CYBER 用来付自己的手续费 — 然后你照原样签自己的交易。',
         gasTank: '油箱',
         gasStateLive: '供应中',
         gasStatePaused: '已停止',
@@ -3620,8 +3846,7 @@ export const walletMessages: Messages = {
         gasDripCovers: '一次发放大约够 {count} 笔',
         gasNoSignature:
             '申请不需要签名。发放只会到达请求里写明的那个地址，所以证明你握有它的私钥，对你是一次点击，对脚本则毫无成本。',
-        gasCyberiaOnly:
-            '只限 Cyberia，且永远如此。替 BNB 或 Base 上的手续费买单，等于替陌生人买 ETH。',
+        gasCyberiaOnly: '仅限 Cyberia，永远如此。',
         tileGasHint: '手续费由加油站代付',
         tileBridgeHint: '去另一条链',
         tileEarnHint: '池子 · APR',
@@ -3723,7 +3948,7 @@ export const walletMessages: Messages = {
         // 线路：这条链上有什么，以及一个页面怎么跟钱包说话。
         browseTitle: '线路',
         browseBody:
-            '这条链上跑着什么，在哪里打开。这是一份目录，不是浏览器：标签页里的页面没法把钱包交给另一个站点，而一个能碰到这个保险库的框架，也就能读到里面的密钥。在页面和密钥之间做中间人的是扩展 — 按站点授权，每一次签名前都有你在。',
+            '这是一份目录，不是浏览器：一个能碰到这个保险库的框架，也就能读到里面的密钥。在页面和密钥之间做中间人的是扩展 — 按站点授权，每一次签名前都有你在。',
         browseBridgeLabel: '这里的页面能连到',
         browseModeExtension: '有钱包可用',
         browseModeExtensionBody:
@@ -3813,7 +4038,7 @@ export const walletMessages: Messages = {
         copiedClears: '已复制 · 30 秒后清空',
         expandAddress: '显示完整地址',
         qrLabel: '{chain} 地址的二维码',
-        qrCaption: '{chain} 地址 · 二维码',
+        qrCaption: '{chain} 地址',
         warnEvm:
             '在每一个 EVM 网络上，这都是你的同一个地址。只往这里发 {chain} 的资产（链 {chainId}）— 从别的 EVM 网络发过来的东西不会丢，它只是在那个网络上，你得切换过去才能看到和花掉它。',
         warnSolana: '仅限 Solana 网络。从其他链发到这里的资产无法找回。',
@@ -3870,7 +4095,7 @@ export const walletMessages: Messages = {
         crossTileHint: '其他链 · 经由路由方',
         crossTitle: '跨链兑换',
         crossBody:
-            'Cyberia 的流动性在 Cyberia 上。用 Base 的 ETH 换 Solana 的 SOL，需要有人同时持有两端，所以本页向具备这一条件的路由方询价：您在支出所在的网络上签署一笔存入，路由方在另一端交付。中间过程 Cyberia 不持有任何资金。',
+            '您在支出所在的网络上签署一笔存入，同时持有两端的路由方在另一端交付。中间过程 Cyberia 不持有任何资金，存入一经签署便无法取消。',
         crossLoading: '正在询问路由方可达的网络…',
         crossOff: '本主机已关闭跨链兑换。',
         crossUnavailable: '无法连接路由服务。',
@@ -4016,10 +4241,10 @@ export const walletMessages: Messages = {
         // Lain — the $LAIN holders' room
         lainTitle: 'Lain',
         lainIntro:
-            'Cyberia 的常驻智能，向持有 $LAIN 实时流通量 {required}% 及以上的钱包开放。你的占比就在这个浏览器里从合约读出来 — 在你决定进入这个房间之前，什么都不会被发送出去。',
+            'Cyberia 的常驻智能。任何人都可以和她说话：用这个钱包签一次名，房间就开了。你的 $LAIN 占比就在这个浏览器里从合约读出来 — 它决定她对你是什么样子，而不是你能不能说话。',
         lainHolding: '你持有',
         lainShare: '占流通量',
-        lainRequired: '门槛',
+        lainRequired: '更聪明的起点',
         lainReading: '正在读取合约…',
         lainOff: 'Lain 在这台服务器上还没接通。',
         lainReadFailed:
@@ -4028,7 +4253,8 @@ export const walletMessages: Messages = {
             '这个房间向持有 $LAIN 实时流通量 {required}% 的钱包开放。这个账户持有 {share} — {amount} {symbol}。',
         lainShortHint:
             '每次打开这个页面都会重新计算占比，所以它既跟着你持有的数量走，也跟着增发或销毁走。',
-        lainQualifies: '这个账户符合条件',
+        lainQualifies: '这个账户持有该份额',
+        lainTier: '持有 {required}% 的 $LAIN，将换来更聪明的 Lain。',
         lainSignBody:
             '用这个钱包的 Cyberia 密钥签一个挑战即可进入。它不转移资金、不批准交易、不授予任何额度 — 它只证明这个浏览器握有这个地址背后的密钥。',
         lainSign: '按住签名',
@@ -4067,6 +4293,15 @@ export const walletMessages: Messages = {
         chatSyncing: '检查中…',
         chatThreads: '{count} 个会话',
         chatNew: '新会话',
+        chatWaitingCount: '{count} 条等待发送',
+        chatWaiting: '等待中',
+        chatWaitingNote:
+            '这个地址还没开过聊天，所以没有可加密的对象。你写的内容留在这台设备上，等对方开了聊天就会自动发出。',
+        chatPeople: '这里有谁',
+        chatPeopleSearch: '名字或地址',
+        chatPeopleNoKey: '还没开过聊天',
+        chatPeopleEmpty: '还没有人绑定钱包。',
+        chatPeopleFailed: '没能读取名单，请重试。',
         chatNewBody:
             '两边的钱包都得开通过聊天：地址是一个哈希，在它的主人发布密钥之前，没有东西可以加密给他。',
         chatAddressLabel: '写给哪个地址',
@@ -4220,6 +4455,16 @@ export const walletMessages: Messages = {
         feedSomeone: '某人',
         feedLoading: '正在加载动态…',
         feedEmpty: '动态很安静。',
+        feedComposePlaceholder: '对 Cyberia 说点什么',
+        feedPost: '发布',
+        feedPosting: '发布中…',
+        feedComposeReach: '会通知所有人',
+        feedSignInBody:
+            '发帖需要作者。用这个钱包签署站点的登录消息——密钥不会离开本设备。',
+        feedSignIn: '用这个钱包登录',
+        feedSigningIn: '签名中…',
+        feedWatchOnly: '这是只读账户，无法签名或发帖。',
+        feedMessage: '私信',
         feedUnreadable: '连不上 Cyberia，拿不到动态。',
         feedOpen: '打开',
         feedOpenSite: '在网站上',

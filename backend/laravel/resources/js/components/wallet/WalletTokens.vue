@@ -87,7 +87,6 @@ onMounted(() => {
         </button>
 
         <h2 class="cw-title" style="margin: 22px 0 8px">{{ t('tokens') }}</h2>
-        <p class="cw-prose">{{ t('tokensScreenBody') }}</p>
 
         <div class="cw-card" style="margin-top: 18px; padding: 14px 16px">
             <div class="cw-label">{{ t('tokenValue') }}</div>

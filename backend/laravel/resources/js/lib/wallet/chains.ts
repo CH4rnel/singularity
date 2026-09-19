@@ -1029,18 +1029,18 @@ const BITCOIN_NETWORK: Omit<UtxoNetwork, 'coinType' | 'api' | 'explorer'> = {
     addressType: 'bech32',
 };
 
-/** The networks that ship with the wallet, in the order the portfolio lists them. */
 /**
- * The networks this wallet ships knowing about and switched on.
+ * The networks this wallet ships knowing about, in the order it lists them.
  *
- * "Shipped on" is a default and not a rank. Every network here is made by the
- * same factories, read through the same adapters and drawn by the same rules as
- * the hundred and twenty in the catalogue; the only thing this list decides is
- * which ones a wallet has on its first day, and that decision is about how many
- * balances a refresh should read, not about which chains matter.
+ * Shipped is *known*, not *on*. Every network here is made by the same
+ * factories, read through the same adapters and drawn by the same rules as the
+ * hundred and twenty in the catalogue, and it starts switched off for the same
+ * reason they do: a network that is on is a balance read on every refresh, and
+ * a wallet that opens by reading eight chains spends its first seconds on seven
+ * the person never asked for.
  *
  * Cyberia is the exception, and the only one: it is the chain this wallet is
- * for, so it has no switch.
+ * for, so it is on from the first second and has no switch.
  */
 const SHIPPED_CHAINS: readonly WalletChain[] = [
     evmChain({
@@ -1344,8 +1344,21 @@ const SHIPPED_CHAINS: readonly WalletChain[] = [
 /** The chain this wallet is for. Always on, and the one network with no switch. */
 export const HOME_CHAIN: WalletChainId = 'cyberia';
 
-/** Every network that ships switched on, whether or not it currently is. */
+/** Every network the wallet ships knowing, whether or not it is switched on. */
 export const shippedChains = (): readonly WalletChain[] => SHIPPED_CHAINS;
+
+/**
+ * The wallet's own network for an EVM chain id, switched on or not.
+ *
+ * A switch decides what a portfolio reads on every refresh; it does not decide
+ * what a network is *called*. The site's DEX pages ask this to label an
+ * analytics event and to address a price index, and they are not the wallet —
+ * asking through `walletChains()` made both answers depend on a list the
+ * visitor keeps for their own reasons, so a chart went missing on a chain
+ * somebody had simply never switched on.
+ */
+export const shippedChainByEvmId = (chainId: number): WalletChain | null =>
+    SHIPPED_CHAINS.find((chain) => chain.chainId === chainId) ?? null;
 
 /**
  * Networks the user added themselves, layered over the shipped registry.
@@ -1359,13 +1372,15 @@ let customChains: readonly WalletChain[] = [];
 /**
  * The shipped networks that are currently switched on.
  *
- * A slot rather than the constant itself, because these are switchable now:
- * whichever of them the user has left on is what the portfolio draws, and
+ * A slot rather than the constant itself, because these are switchable:
+ * whichever of them the user has switched on is what the portfolio draws, and
  * anything switched off has to leave nothing behind that could still answer a
- * balance read. Until the composable says otherwise every one of them is on,
- * which is the state a wallet opens in.
+ * balance read. Until the composable says otherwise the home chain is the whole
+ * of it, which is the state a wallet opens in.
  */
-let shippedOn: readonly WalletChain[] = SHIPPED_CHAINS;
+let shippedOn: readonly WalletChain[] = SHIPPED_CHAINS.filter(
+    (chain) => chain.id === HOME_CHAIN,
+);
 
 /**
  * Networks switched on from the shipped catalogue.

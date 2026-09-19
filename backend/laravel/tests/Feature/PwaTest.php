@@ -40,8 +40,13 @@ it('publishes a valid installable web app manifest', function () {
             'start_url' => '/wallet',
             'scope' => '/',
             'display' => 'standalone',
-            'background_color' => '#0b0f10',
-            'theme_color' => '#0b0f10',
+            // The wallet's own ground, not the site's. An installed app opens
+            // on `/wallet` and the system paints its splash — and the band it
+            // keeps for the navigation — from these two, at install time and
+            // never from the live page, so a near-black belonging to the site
+            // is a seam under the one screen the app actually launches on.
+            'background_color' => '#07080a',
+            'theme_color' => '#07080a',
         ])
         ->and($manifest['icons'])->toHaveCount(3)
         ->and($manifest['icons'][0])->toMatchArray([
@@ -56,6 +61,40 @@ it('publishes a valid installable web app manifest', function () {
     foreach ($manifest['icons'] as $icon) {
         expect(public_path(Str::after($icon['src'], '/')))->toBeFile();
     }
+});
+
+/**
+ * The landing page is a static file served outside the Inertia app, and it is
+ * where every copy installed before the manifest said `/wallet` still launches
+ * — an iOS icon reads `start_url` once, when it is created, and never again.
+ * So the page forwards the launch itself, and the two guards are the test: a
+ * same-origin referrer is somebody following the wallet's own link out to the
+ * site, and the session flag is that window having been forwarded already.
+ */
+it('opens the wallet when the landing page is the installed app launching', function () {
+    $landing = file_get_contents(resource_path('views/landing/index.html'));
+
+    expect($landing)
+        ->toContain('<link rel="manifest" href="/manifest.webmanifest" />')
+        ->toContain("window.matchMedia('(display-mode: standalone)').matches")
+        ->toContain('window.navigator.standalone === true')
+        ->toContain('document.referrer ||')
+        ->toContain("sessionStorage.getItem('cyberia.pwa.launched')")
+        ->toContain("sessionStorage.setItem('cyberia.pwa.launched', '1')")
+        ->toContain("location.replace('/wallet')");
+
+    $this->get('/')->assertOk();
+});
+
+/**
+ * That link is what the referrer guard above is protecting: the wallet has no
+ * site header in any container, so Settings is the one way back to the rest of
+ * Cyberia, and a landing page that bounced it would close the door.
+ */
+it('keeps the wallet link out of the app pointing at the landing page', function () {
+    expect(file_get_contents(
+        resource_path('js/components/wallet/WalletPreferences.vue'),
+    ))->toContain('href="/"');
 });
 
 it('keeps authenticated pages out of the service worker cache', function () {

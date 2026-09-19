@@ -103,23 +103,12 @@ const watching = computed(
           pages. Four answers, and two of them are "not from here".
         -->
         <div class="cw-card" style="margin-top: 20px; padding: 18px">
-            <div class="cw-row" style="margin-bottom: 10px">
-                <span class="cw-label">{{ t('browseBridgeLabel') }}</span>
-                <span
-                    class="cw-label"
-                    :style="{
-                        color:
-                            mode === 'extension'
-                                ? 'var(--cw-ok)'
-                                : 'var(--cw-muted)',
-                    }"
-                    >{{
-                        t(
-                            `browseMode${mode.charAt(0).toUpperCase()}${mode.slice(1)}`,
-                        )
-                    }}</span
-                >
-            </div>
+            <!--
+              The state as a sentence and not as a label with a value beside
+              it: "СТРАНИЦАМ ЗДЕСЬ ДОСТУПЕН — НИЧЕГО" said in eleven uppercase
+              characters what the line under it says in words, and the words
+              are the ones somebody can act on.
+            -->
             <p class="cw-prose" style="max-width: 62ch">
                 {{
                     t(
@@ -154,14 +143,39 @@ const watching = computed(
             {{ t('browseDirectory') }}
         </div>
 
+        <!--
+          A row is a link, so the directory stops repeating itself: every entry
+          used to carry "ОТКРЫТЬ СТРАНИЦУ" and most of them "ОТКРЫТЬ В
+          КОШЕЛЬКЕ" as well — eighteen buttons under nine names, all saying one
+          of two things. The row goes to the page; the one exception, where the
+          wallet does this itself and no page needs a key at all, stays as a
+          control of its own, because it is the safer of the two and has to be
+          visible as a choice.
+        -->
         <div class="cw-stack" style="gap: 8px">
             <div
                 v-for="row in rows"
                 :key="row.key"
                 class="cw-card"
-                style="padding: 14px 16px"
+                style="
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    padding: 14px 16px;
+                "
             >
-                <div style="display: flex; align-items: flex-start; gap: 12px">
+                <a
+                    :href="row.path"
+                    style="
+                        display: flex;
+                        flex: 1;
+                        min-width: 0;
+                        align-items: flex-start;
+                        gap: 12px;
+                        color: inherit;
+                        text-decoration: none;
+                    "
+                >
                     <span
                         style="
                             display: flex;
@@ -192,46 +206,28 @@ const watching = computed(
                                 font: 400 11px/1.5 var(--cw-sans);
                                 color: var(--cw-muted);
                             "
-                            >{{ row.note }}</span
+                            >{{ row.note
+                            }}<template v-if="!row.signs">
+                                · {{ t('browseReadOnly') }}</template
+                            ></span
                         >
                     </span>
-                </div>
+                </a>
 
                 <!--
                   The shortest way to use a dapp safely is not to need one:
-                  where the wallet already does this itself, that is the first
-                  control, and the page stays available beside it.
+                  where the wallet already does this itself, that is a control
+                  of its own, and the row behind it still goes to the page.
                 -->
-                <div
-                    style="
-                        display: flex;
-                        gap: 8px;
-                        margin-top: 12px;
-                        flex-wrap: wrap;
-                    "
+                <button
+                    v-if="row.internal"
+                    type="button"
+                    class="cw-ghost"
+                    style="flex: none"
+                    @click="openInternal(row.internal)"
                 >
-                    <button
-                        v-if="row.internal"
-                        type="button"
-                        class="cw-ghost"
-                        @click="openInternal(row.internal)"
-                    >
-                        {{ t('browseOpenHere') }}
-                    </button>
-                    <a class="cw-ghost" :href="row.path">{{
-                        t('browseOpenPage')
-                    }}</a>
-                    <span
-                        v-if="!row.signs"
-                        class="cw-label"
-                        style="
-                            display: flex;
-                            align-items: center;
-                            color: var(--cw-faint);
-                        "
-                        >{{ t('browseReadOnly') }}</span
-                    >
-                </div>
+                    {{ t('browseOpenHere') }}
+                </button>
             </div>
         </div>
 

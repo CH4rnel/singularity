@@ -201,6 +201,7 @@ export type { WalletKeySource } from '@/lib/wallet/keys';
 export {
     EVM_CONTRACT_SEND_GAS_CAP,
     HOME_CHAIN,
+    shippedChainByEvmId,
     shippedChains,
     setShippedWalletChains,
     WALLET_FAMILY_GROUPS,
@@ -250,6 +251,7 @@ export {
     catalogueNetwork,
     catalogueWalletChain,
     catalogueWalletChains,
+    networksOn,
     readNetworkChoices,
     searchCatalogue,
     writeNetworkChoices,
@@ -354,7 +356,9 @@ export type {
 export {
     chatKeyVerifiedAt,
     clearChat,
+    dropChatPending,
     fetchChatEnvelopes,
+    fetchChatPeople,
     forgetWalletChats,
     lookupChatKey,
     markChatKeyVerified,
@@ -362,13 +366,19 @@ export {
     pinChatKey,
     proveChatAddress,
     publishChatKey,
+    queueChatMessage,
+    readChatPending,
     readChatState,
     requestChatNonce,
     sendChatEnvelope,
     storeChatRows,
     unreadChatCount,
 } from '@/lib/wallet/chat';
-export type { ChatRow } from '@/lib/wallet/chat';
+export type {
+    ChatPerson,
+    ChatRow,
+    PendingMessage,
+} from '@/lib/wallet/chat';
 export {
     APPROVE_GAS,
     SWAP_GAS_CAP,

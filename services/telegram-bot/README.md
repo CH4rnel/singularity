@@ -23,6 +23,9 @@ bot/
   ai.py          Cyberia AI prompt, provider client, and message handlers
   ai_models.py   the free-model pool and the per-user /model picker
   cyberia_knowledge.md  operator-approved facts supplied to the model
+  stakes.py      chat-token escrow shared by the games (one place moves a balance)
+  rps.py         rock-paper-scissors duels on that escrow
+  slots.py       🎰 slot machine: Telegram's own dice, a per-chat bank
   pumpfun.py     pump.fun buy detection (Solana RPC + market feed) and the post
   announcers.py  background loops (bridge/swap/liquidity/lending/convert/
                  staking/pumpfun/digest/snapshot/whale) + run_snapshot_once
@@ -104,11 +107,23 @@ through an aggregator reads like a direct one, and a liquidity deposit (both
 sides moving in) is never mistaken for a buy. The buyer is whoever the coin
 landed with, which stays correct when someone else paid the fee.
 
-USD value, market cap and — unless `PUMPFUN_POOL_ADDRESS` pins one — the pool
-address come from the DexScreener pair feed. Without a readable SOL price the
-tick is deferred rather than posting a buy it cannot size, so nothing is lost.
-On a fresh install the cursor starts at the pool's current head: history is
-never replayed into the chat.
+USD value and — unless `PUMPFUN_POOL_ADDRESS` pins one — the pool address come
+from the DexScreener pair feed. Without a readable SOL price the tick is
+deferred rather than posting a buy it cannot size, so nothing is lost. On a
+fresh install the cursor starts at the pool's current head: history is never
+replayed into the chat.
+
+The market cap is **not** the feed's. DexScreener's `marketCap` prices the coin
+at the last trade's *average fill*, which for a buy always sits below the price
+that same trade ended at, while the pump.fun page the post links to prices it
+off the pool's reserves. Announcing a buy is exactly when the two disagree
+most: a 6.94 SOL buy into an 88 SOL pool read $43.1k on the page while the feed
+still said $39.9k, and the bigger the buy the wider the gap. So the cap is the
+pool's own reserves as the announced trade left them — already present in the
+balances the buy was parsed out of, so it costs no extra call and each buy in a
+batch carries its own figure — times the mint's supply, read from the chain
+every `PUMPFUN_SUPPLY_TTL_SECONDS` (default 3600, since a supply only moves on
+a burn). If either is unreadable the post falls back to the feed's figure.
 
 The loop polls Solana every `PUMPFUN_POLL_SECONDS` (default 30) and makes one
 `getTransaction` call per new pool transaction. The default public RPC is enough
@@ -259,3 +274,68 @@ were intentionally left in `scripts/python/` and are unaffected.
 Обработчики денежных операций синхронны внутри стандартного последовательного
 диспетчера бота: не включайте `concurrent_updates` и не переносите `/claim`
 в поток без отдельного протокола резервирования выплат.
+
+### 🎰 Слоты на токены чата
+
+`/slots 10` — автомат в чате, играющий на тот же внутренний баланс
+(`pending_rewards`), что и `/rps`. Без аргумента `/slots` показывает сам
+автомат: таблицу выплат, кассу, ваш баланс и максимальную ставку.
+
+**Барабаны — Telegram'а.** Бот отправляет нативный 🎰-дайс и записывает то, что
+вернул сервер: выбрать значение, подсмотреть заранее или переиграть он не может.
+В игре на деньги «поверьте в честность бота» — не ответ, а `random.randint` был
+бы именно им.
+
+**Ничего не эмитируется.** Проигранная ставка уходит в кассу чата, выигрыш
+приходит из неё, так что сумма всех `pending_rewards` плюс касса не меняется ни
+при каком раскладе барабанов. Касса и есть главная часть конструкции, и ведётся
+она как инвентарь моста: **ставка отклоняется до того, как крутятся барабаны,
+если касса не потянет джекпот** — и никогда после. Каждый спин держит свой
+худший случай (`ставка × 28`) до расчёта, поэтому два спина в одну секунду не
+могут быть обещаны одними и теми же деньгами, а максимальная ставка печатается
+на экране, а не выясняется проигрышем.
+
+Таблица выплат (множитель на всю ставку):
+
+| Комбинация | Выплата | Шанс |
+|---|---|---|
+| `7️⃣ 7️⃣ 7️⃣` | ×28 | 1/64 |
+| `BAR BAR BAR` | ×13 | 1/64 |
+| `🍋 🍋 🍋` | ×6 | 1/64 |
+| `🍇 🍇 🍇` | ×4 | 1/64 |
+| `7️⃣ 7️⃣ + любой` | ставка назад | 9/64 |
+
+Возврат — **93.75%**, и это число `rtp()` считает из самой таблицы, а не
+написано рядом с ней: первая редакция этих множителей читалась как 93.75%, а
+платила 112.5%, потому что «две семёрки» — девять исходов из 64, а не три
+(лишний барабан может стоять на любой из трёх позиций с любым из трёх других
+символов). Цифра, которую таблица может опровергнуть, рано или поздно её
+опровергнет.
+
+Касса пополняется вручную: `/slots_bank` показывает её, `/slots_bank 500`
+(только админы чата) переводит туда токены со своего накопленного баланса.
+Обратно касса не выводится — возврат потребовал бы долей вкладчиков, то есть
+пула ликвидности, а не автомата; вместо этого касса растёт на 6.25% оборота.
+Пустая касса — закрытый автомат, и он так и пишет.
+
+Ставка и резерв кассы берутся **до** отправки дайса, потому что после анимации
+честно отказать уже нельзя. Если дайс не вернулся (бот умер в этом односекундном
+окне), спин висит `spinning` и фоновая проверка возвращает ставку: значение
+осталось на стороне Telegram, и выплатить его — значит его выдумать. Результат
+публикуется отдельной фоновой задачей через ~2.4 с, ровно чтобы не выдать его до
+конца анимации; расчёт к этому моменту уже в базе, так что потеря задачи стоит
+сообщения, но не выплаты.
+
+Один спин на игрока за раз и не чаще раза в 5 секунд: автомат печатает два
+сообщения на дёрг, и неограниченный цикл — это флуд со ставкой.
+
+Все участники чата по-прежнему крутят `/slots` от своего аккаунта. Дополнительно
+создатель чата может крутить его анонимно от имени самого чата. Telegram не
+передаёт боту ID автора такого сообщения, поэтому это разрешено только когда
+создатель — **единственный** анонимный администратор: иначе анонимного
+администратора нельзя отличить от создателя, и команда не имеет права тратить
+баланс владельца. Команды от связанного канала также не допускаются.
+
+Состояние — `slots_bank` и `slots_spins`. Деньги обеих игр живут в одном модуле
+`bot/stakes.py`: два места, умеющих двигать баланс, — это два способа заплатить
+ставку дважды.

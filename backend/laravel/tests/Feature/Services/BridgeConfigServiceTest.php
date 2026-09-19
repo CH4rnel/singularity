@@ -84,6 +84,13 @@ test('hides Yenten routes until the relayer WIF is configured', function () {
 test('external BTC LTC XMR routes require a configured wallet before submit', function () {
     $service = app(BridgeConfigService::class);
 
+    // Tests load the real .env, where these seeds may well be set; the point
+    // here is what an unconfigured server does, so they are cleared by hand.
+    config()->set('bridge.chains.bitcoin.hd_seed', null);
+    config()->set('bridge.chains.litecoin.hd_seed', null);
+    config()->set('bridge.chains.bitcoin.relayer_wif', null);
+    config()->set('bridge.chains.litecoin.relayer_wif', null);
+
     expect($service->availableRoutes())->not->toHaveKeys([
         'btc_to_evm',
         'evm_to_btc',
@@ -99,10 +106,21 @@ test('external BTC LTC XMR routes require a configured wallet before submit', fu
     config()->set('bridge.routes.btc_to_evm.coming_soon', false);
     config()->set('bridge.routes.evm_to_btc.coming_soon', false);
 
+    // A payout address alone is not the setup. Since the corridor became
+    // automatic, taking a deposit needs a seed to derive a per-request
+    // address from, and sending one needs a key — see BridgeUtxoCorridorTest
+    // for the two halves in detail.
+    expect($service->availableRoutes())->not->toHaveKeys(['btc_to_evm', 'evm_to_btc']);
+
+    config()->set('bridge.chains.bitcoin.hd_seed', str_repeat('f1', 32));
+    config()->set('bridge.chains.bitcoin.relayer_wif', 'L1aW4aubDFB7yfras2S1mN3bqg9nwySY8nkoLmJebSLD5BWv3ENZ');
+
     $routes = $service->availableRoutes();
 
     expect($routes)->toHaveKeys(['btc_to_evm', 'evm_to_btc'])
-        ->and($routes['btc_to_evm']['auto_process'])->toBeFalse()
+        // Automatic now: this server can see a deposit through a keyless index
+        // and sign a payout through crypto/utxo.
+        ->and($routes['btc_to_evm']['auto_process'])->toBeTrue()
         ->and($service->tokensForRoute('btc_to_evm'))->toHaveKey('BTC')
         ->and($service->tokensForRoute('evm_to_btc'))->toHaveKey('BTC');
 });
