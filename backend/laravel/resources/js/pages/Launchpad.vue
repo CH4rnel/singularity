@@ -29,6 +29,7 @@ import {
 } from '@/lib/launchpadChains';
 import type { LaunchpadChain } from '@/lib/launchpadChains';
 import type { TokenCandle } from '@/lib/launchpadChart';
+import { sqrtPriceQuote } from '@/lib/wallet/launchpad';
 
 // LaunchpadNative — fair launches paid in the chain's native coin, burned into
 // permanently locked liquidity. A launch may target several chains at once;
@@ -68,6 +69,26 @@ const LAUNCHPAD_V3_ABI = [
     'function launch(string,string,uint256,uint24,uint16) payable returns (address,address,uint256)',
     'event TokenLaunched(address indexed token, address indexed creator, address pool, string name, string symbol, uint256 tokenSupply, uint256 cyberLiquidity)',
     'event LaunchTerms(address indexed token, uint256 positionId, uint24 poolFee, uint16 creatorBps, uint16 holdersBps, uint16 treasuryBps)',
+];
+
+/**
+ * The v3 launchpad's read side, for the "recently launched" listing.
+ *
+ * A chain with `launchpadV3` deployed is where every launch — the site's own
+ * form and the wallet alike — actually goes once it exists (`launchVenue()`
+ * in `lib/wallet/launchpad.ts` prefers it), so a listing that only enumerates
+ * the v2 registry silently drops every v3 launch from the page, forever.
+ */
+const LAUNCHPAD_V3_READ_ABI = [
+    'function allTokensLength() view returns (uint256)',
+    'function allTokens(uint256) view returns (address)',
+    'function poolOf(address) view returns (address)',
+];
+
+/** A v3 pool's own price and fee — no Sync event, so read live instead. */
+const POOL_V3_ABI = [
+    'function token0() view returns (address)',
+    'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16, uint16, uint16, uint8, bool)',
 ];
 
 const PAIR_ABI = [
@@ -880,6 +901,43 @@ const readPairPrice = async (
     }
 };
 
+/**
+ * A v3 launch's price and locked liquidity, read live off the pool.
+ *
+ * There is no `Sync` event to replay for a chart (concentrated liquidity
+ * moves on every swap, not on every reserve change), so this only answers
+ * "what does it cost right now" — the caller leaves `tokenIsToken0` at
+ * `null` for a v3 row, which is exactly the signal `loadPriceHistories`
+ * already treats as "no chart for this one" for a v2 pool it could not read.
+ */
+const readPoolV3Price = async (
+    poolAddr: string,
+    tokenAddr: string,
+): Promise<{ priceCyber: number; reserveCyber: bigint } | null> => {
+    try {
+        const pool = new Contract(poolAddr, POOL_V3_ABI, readProvider);
+        const wrapped = new Contract(
+            WCYBER_ADDRESS,
+            ['function balanceOf(address) view returns (uint256)'],
+            readProvider,
+        );
+        const [token0, slot0, reserveCyber] = await Promise.all([
+            pool.token0() as Promise<string>,
+            pool.slot0() as Promise<[bigint, bigint]>,
+            wrapped.balanceOf(poolAddr) as Promise<bigint>,
+        ]);
+        const priceCyber = sqrtPriceQuote(
+            String(token0),
+            tokenAddr,
+            slot0[0],
+        );
+
+        return priceCyber === null ? null : { priceCyber, reserveCyber };
+    } catch {
+        return null;
+    }
+};
+
 const swapBreakdown = (
     amount0In: bigint,
     amount1In: bigint,
@@ -1114,12 +1172,26 @@ const loadRecent = async (): Promise<void> => {
             FACTORY_ABI,
             readProvider,
         );
+        const v3Address = LISTING_CHAIN.launchpadV3 ?? null;
+        const v3 = v3Address
+            ? new Contract(v3Address, LAUNCHPAD_V3_READ_ABI, readProvider)
+            : null;
 
-        const lengthBn = (await launchpad.allTokensLength()) as bigint;
-        const length = Number(lengthBn);
-        totalLaunches.value = length;
+        // v3 first: once a chain has it, every launch — the site's own form
+        // and the wallet alike — goes there (`launchVenue()` in
+        // `lib/wallet/launchpad.ts` prefers it over v2), so it is the newer
+        // list and fills the page before v2's older one does.
+        const [v2LengthBn, v3LengthBn] = await Promise.all([
+            launchpad.allTokensLength() as Promise<bigint>,
+            v3
+                ? (v3.allTokensLength() as Promise<bigint>)
+                : Promise.resolve(0n),
+        ]);
+        const v2Length = Number(v2LengthBn);
+        const v3Length = Number(v3LengthBn);
+        totalLaunches.value = v2Length + v3Length;
 
-        if (length === 0) {
+        if (v2Length === 0 && v3Length === 0) {
             recent.value = [];
             priceHistories.value = {};
             historyLoaded.value = {};
@@ -1127,54 +1199,107 @@ const loadRecent = async (): Promise<void> => {
             return;
         }
 
-        // Newest first, cap at 25.
-        const start = Math.max(0, length - 25);
-        const indices: number[] = [];
+        const CAP = 25;
+        const v3Indices: number[] = [];
 
-        for (let i = length - 1; i >= start; i--) {
-            indices.push(i);
+        for (let i = v3Length - 1; i >= 0 && v3Indices.length < CAP; i--) {
+            v3Indices.push(i);
         }
 
-        const addresses = (await Promise.all(
-            indices.map((i) => launchpad.allTokens(i)),
-        )) as string[];
+        const v2Room = CAP - v3Indices.length;
+        const v2Indices: number[] = [];
 
+        for (let i = v2Length - 1; i >= 0 && v2Indices.length < v2Room; i--) {
+            v2Indices.push(i);
+        }
+
+        const [v3Addresses, v2Addresses] = await Promise.all([
+            v3
+                ? (Promise.all(
+                      v3Indices.map((i) => v3.allTokens(i)),
+                  ) as Promise<string[]>)
+                : Promise.resolve([] as string[]),
+            Promise.all(v2Indices.map((i) => launchpad.allTokens(i))) as Promise<
+                string[]
+            >,
+        ]);
+
+        const entries: { address: string; venue: 'v2' | 'v3' }[] = [
+            ...v3Addresses.map((address) => ({
+                address,
+                venue: 'v3' as const,
+            })),
+            ...v2Addresses.map((address) => ({
+                address,
+                venue: 'v2' as const,
+            })),
+        ];
+
+        // The event log this decodes is v2-only (a different signature backs
+        // v3's own `TokenLaunched`), so it simply has nothing for a v3
+        // address — those fall back to the off-chain creator below.
         const launchEvents = await fetchLaunchEvents();
 
         const perTokenData = await Promise.all(
-            addresses.map(async (tokenAddr) => {
+            entries.map(async ({ address: tokenAddr, venue }) => {
                 const erc20 = new Contract(
                     tokenAddr,
                     ERC20_READ_ABI,
                     readProvider,
                 );
-                const launchEvent = launchEvents.get(tokenAddr.toLowerCase());
-                const [name_, symbol_, totalSupply_, pairAddrFromFactory] =
-                    await Promise.all([
-                        erc20.name().catch(() => '') as Promise<string>,
-                        erc20.symbol().catch(() => '') as Promise<string>,
-                        erc20.totalSupply().catch(() => 0n) as Promise<bigint>,
-                        factory
-                            .getPair(tokenAddr, WCYBER_ADDRESS)
-                            .catch(() => ZeroAddress) as Promise<string>,
-                    ]);
-                const pairAddr =
-                    launchEvent?.pair && launchEvent.pair !== ZeroAddress
-                        ? launchEvent.pair
-                        : pairAddrFromFactory;
+                const launchEvent =
+                    venue === 'v2'
+                        ? launchEvents.get(tokenAddr.toLowerCase())
+                        : undefined;
+                const [name_, symbol_, totalSupply_] = await Promise.all([
+                    erc20.name().catch(() => '') as Promise<string>,
+                    erc20.symbol().catch(() => '') as Promise<string>,
+                    erc20.totalSupply().catch(() => 0n) as Promise<bigint>,
+                ]);
                 const quoteSymbol = 'CYBER';
+                let pairAddr = ZeroAddress;
                 let reserveCyber = 0n;
                 let priceCyber: number | null = null;
                 let tokenIsToken0: boolean | null = null;
 
-                if (pairAddr && pairAddr !== ZeroAddress) {
-                    const p = await readPairPrice(pairAddr, tokenAddr);
+                if (venue === 'v2') {
+                    const pairAddrFromFactory = (await factory
+                        .getPair(tokenAddr, WCYBER_ADDRESS)
+                        .catch(() => ZeroAddress)) as string;
+                    pairAddr =
+                        launchEvent?.pair && launchEvent.pair !== ZeroAddress
+                            ? launchEvent.pair
+                            : pairAddrFromFactory;
 
-                    if (p) {
-                        priceCyber = p.priceCyber;
-                        reserveCyber = p.reserveCyber;
-                        tokenIsToken0 = p.tokenIsToken0;
+                    if (pairAddr && pairAddr !== ZeroAddress) {
+                        const p = await readPairPrice(pairAddr, tokenAddr);
+
+                        if (p) {
+                            priceCyber = p.priceCyber;
+                            reserveCyber = p.reserveCyber;
+                            tokenIsToken0 = p.tokenIsToken0;
+                        }
                     }
+                } else if (v3) {
+                    const poolAddr = (await v3
+                        .poolOf(tokenAddr)
+                        .catch(() => ZeroAddress)) as string;
+
+                    if (poolAddr && poolAddr !== ZeroAddress) {
+                        pairAddr = poolAddr;
+                        const quote = await readPoolV3Price(
+                            poolAddr,
+                            tokenAddr,
+                        );
+
+                        if (quote) {
+                            priceCyber = quote.priceCyber;
+                            reserveCyber = quote.reserveCyber;
+                        }
+                    }
+                    // A v3 pool emits no `Sync` event to replay into a chart,
+                    // so `tokenIsToken0` stays null — the same signal a v2
+                    // pool that failed to read already falls back on.
                 }
 
                 return {
@@ -1194,7 +1319,7 @@ const loadRecent = async (): Promise<void> => {
 
         const metadata = await fetchMetadata();
 
-        recent.value = addresses.map((tokenAddr, i) => {
+        recent.value = entries.map(({ address: tokenAddr }, i) => {
             const d = perTokenData[i];
             const md = metadata.get(
                 metadataKey(LISTING_CHAIN.chain.chainId, tokenAddr),
