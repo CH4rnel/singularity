@@ -8,6 +8,10 @@ use App\Services\Social\PostAnnouncer;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
+/** A throwaway VAPID pair — WebPush is the only channel an installation has. */
+const FEED_VAPID_PUBLIC = 'BFyCqu6c1-7IfXmNbjkQX4wGEwLVxsoeQ5YZU7iz24zlEdpNsh5i2_Gzv8lzHjuA_CClN7_xRuJQM9LfvPoigJY';
+const FEED_VAPID_PRIVATE = '32q0BGHK6sEQfAIHRhSSFH7p7LyHQWggbt3kMtorb4s';
+
 /**
  * Writing into the feed from the wallet, and who hears about it.
  *
@@ -54,6 +58,12 @@ it('refuses an empty post and one longer than the feed accepts', function () {
 });
 
 it('announces a post to accounts and to wallet installations alike', function () {
+    // VAPID has to be configured for the WebPush channel to be selected at
+    // all, and it is the only channel an installation (no login, no bell) has.
+    config()->set('webpush.vapid.public_key', FEED_VAPID_PUBLIC);
+    config()->set('webpush.vapid.private_key', FEED_VAPID_PRIVATE);
+    config()->set('webpush.vapid.subject', 'https://cyberia.test');
+
     Notification::fake();
 
     $author = User::factory()->create();
