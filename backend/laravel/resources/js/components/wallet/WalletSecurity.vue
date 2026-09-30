@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
@@ -25,8 +25,7 @@ const props = defineProps<{ wallet: MultiWallet }>();
 const emit = defineEmits<{
     locked: [];
     forgotten: [];
-    addNetwork: [];
-    proxy: [];
+    back: [];
 }>();
 
 const { t } = useLocale(walletMessages);
@@ -87,15 +86,60 @@ const canDelete = computed(
 /** Whether this device's vault has a password on it at all. */
 const unprotected = computed(() => props.wallet.protection.value === 'none');
 
+const hasPhrase = computed(() => {
+    const record = props.wallet.accountRecords.value.find(
+        (entry) => entry.id === props.wallet.activeAccountId.value,
+    );
+
+    return record?.kind === 'seed' || record?.kind === 'phrase';
+});
+let holdTimer: ReturnType<typeof setTimeout> | null = null;
+let revealVersion = 0;
+const cancelHold = (): void => {
+    if (holdTimer !== null) {
+        clearTimeout(holdTimer);
+    }
+
+    holdTimer = null;
+};
+const startHold = (): void => {
+    if (holdTimer !== null || (!unprotected.value && !password.value)) {
+        return;
+    }
+
+    holdTimer = setTimeout(() => {
+        holdTimer = null;
+        void reveal();
+    }, 800);
+};
+watch(
+    () => props.wallet.activeAccountId.value,
+    () => {
+        revealVersion++;
+        cancelHold();
+        phrase.value = null;
+        password.value = '';
+        error.value = null;
+    },
+    { flush: 'sync' },
+);
+
 const reveal = async (): Promise<void> => {
     error.value = null;
+    const version = ++revealVersion;
 
     try {
-        phrase.value = await props.wallet.reveal(
+        const revealed = await props.wallet.reveal(
             unprotected.value ? null : password.value,
         );
+
+        if (version === revealVersion) {
+            phrase.value = revealed;
+        }
     } catch {
-        error.value = t('wrongPassword');
+        if (version === revealVersion) {
+            error.value = t('wrongPassword');
+        }
     } finally {
         password.value = '';
     }
@@ -111,7 +155,10 @@ const reveal = async (): Promise<void> => {
  */
 const hide = (): void => {
     phrase.value = null;
-    void props.wallet.markBackedUp();
+
+    if (props.wallet.activeAccount.value?.kind === 'seed') {
+        void props.wallet.markBackedUp();
+    }
 };
 
 /* ---------------------------------------------------- adding a password -- */
@@ -153,6 +200,8 @@ const forget = (): void => {
 };
 
 onBeforeUnmount(() => {
+    revealVersion++;
+    cancelHold();
     phrase.value = null;
     password.value = '';
 });
@@ -160,6 +209,9 @@ onBeforeUnmount(() => {
 
 <template>
     <div class="cw-stack">
+        <button type="button" class="cw-back" @click="emit('back')">
+            ← {{ t('navPreferences') }}
+        </button>
         <h2 class="cw-title" style="margin: 6px 0 22px; font-size: 22px">
             {{ t('security') }}
         </h2>
@@ -252,7 +304,10 @@ onBeforeUnmount(() => {
 
         <div class="cw-card" style="padding: 0">
             <!-- Seed backup, password-gated. -->
-            <div style="padding: 16px; border-bottom: 1px solid var(--cw-line)">
+            <div
+                v-if="hasPhrase"
+                style="padding: 16px; border-bottom: 1px solid var(--cw-line)"
+            >
                 <div
                     style="
                         font: 400 16px/1.3 var(--cw-sans);
@@ -280,10 +335,24 @@ onBeforeUnmount(() => {
                   nothing is a lock drawn on an open door, and typing into it
                   would teach the wrong thing about what protects this wallet.
                 -->
+                <div
+                    v-if="!phrase"
+                    aria-hidden="true"
+                    style="
+                        filter: blur(6px);
+                        user-select: none;
+                        pointer-events: none;
+                        margin-top: 12px;
+                        font: 500 15px/2 var(--cw-mono);
+                    "
+                >
+                    •••••• •••••• •••••• •••••• •••••• ••••••<br />
+                    •••••• •••••• •••••• •••••• •••••• ••••••
+                </div>
                 <form
                     v-if="!phrase"
                     style="display: flex; gap: 8px; margin-top: 12px"
-                    @submit.prevent="reveal"
+                    @submit.prevent
                 >
                     <input
                         v-if="!unprotected"
@@ -295,8 +364,18 @@ onBeforeUnmount(() => {
                         placeholder="••••••••••••"
                     />
                     <button
-                        type="submit"
+                        type="button"
                         class="cw-ghost"
+                        style="user-select: none; touch-action: none"
+                        @pointerdown.prevent="startHold"
+                        @pointerup="cancelHold"
+                        @pointerleave="cancelHold"
+                        @pointercancel="cancelHold"
+                        @contextmenu.prevent
+                        @keydown.space.prevent="!$event.repeat && startHold()"
+                        @keydown.enter.prevent="!$event.repeat && startHold()"
+                        @keyup="cancelHold"
+                        @blur="cancelHold"
                         :style="
                             unprotected
                                 ? { height: '48px', width: '100%' }
@@ -304,7 +383,7 @@ onBeforeUnmount(() => {
                         "
                         :disabled="!unprotected && password.length === 0"
                     >
-                        {{ t('showPhrase') }}
+                        {{ t('holdToShowPhrase') }}
                     </button>
                 </form>
 
@@ -613,53 +692,6 @@ onBeforeUnmount(() => {
                 </p>
             </div>
         </template>
-
-        <!--
-          Who carries a request is a security question whatever the endpoints
-          are, so this row does not sit inside the block about unvetted ones.
-        -->
-        <div class="cw-card" style="margin-top: 12px; padding: 0">
-            <button
-                type="button"
-                class="cw-row"
-                style="
-                    width: 100%;
-                    padding: 16px;
-                    border: 0;
-                    background: none;
-                    cursor: pointer;
-                    text-align: left;
-                "
-                @click="emit('proxy')"
-            >
-                <span style="flex: 1">
-                    <span
-                        style="
-                            display: block;
-                            font: 400 16px/1.3 var(--cw-sans);
-                            color: var(--cw-text);
-                        "
-                        >{{ t('proxyTitle') }}</span
-                    >
-                    <span
-                        style="
-                            display: block;
-                            margin-top: 3px;
-                            font: 500 13px/1.4 var(--cw-mono);
-                            color: var(--cw-dim);
-                        "
-                        >{{ t('proxyRowHint') }}</span
-                    >
-                </span>
-                <span
-                    style="
-                        font: 400 14px/1 var(--cw-mono);
-                        color: var(--cw-dim);
-                    "
-                    >→</span
-                >
-            </button>
-        </div>
 
         <button
             v-if="!unprotected"

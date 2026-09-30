@@ -94,7 +94,7 @@ export const walletMessages: Messages = {
         // Local app preferences
         preferencesTitle: 'Settings',
         preferencesBody:
-            'How the wallet looks and reads, what this device says out loud, and whether the desktop app stays within reach after login. All of it is kept on this device.',
+            'Accounts, security, networks and proxies, plus appearance and notifications — all wallet settings in one place.',
         preferencesNotifications: 'System notifications',
         // Now one switch for both halves, so the hint says the half people
         // cannot see: this is what reaches the device with the app closed.
@@ -1039,6 +1039,7 @@ export const walletMessages: Messages = {
         backupSeedHintOpen:
             'no password on this wallet · never shown on the portfolio',
         showPhrase: 'Show phrase',
+        holdToShowPhrase: 'Hold to show phrase',
         autoLockHint: 'locks after inactivity',
         clipboardRow: 'Clear clipboard after copy',
         clipboardHint: '30 seconds, while this tab keeps focus',
@@ -1442,6 +1443,14 @@ export const walletMessages: Messages = {
 
         // DAO
         dao: 'DAO',
+        daoCreate: 'Create DAO',
+        daoAccountChanged: 'The active account changed. Try again.',
+        daoName: 'Name',
+        daoTokenAddress: 'Voting token address',
+        daoCreateHint:
+            'Register a DAO for an existing token. Sign the login challenge to create it under your wallet account.',
+        daoSignAndCreate: 'Sign in and create',
+
         daoBody:
             'Every proposal and how the vote actually stands. The bar is voting power, not the number of voters.',
         daoProposals: 'Proposals',
@@ -1925,7 +1934,7 @@ export const walletMessages: Messages = {
         // Локальные настройки приложения
         preferencesTitle: 'Настройки',
         preferencesBody:
-            'Как кошелёк выглядит и на каком языке говорит, о чём сообщать на этом устройстве и должно ли настольное приложение оставаться доступным после входа в ОС. Всё это хранится на устройстве.',
+            'Счета, безопасность, сети и прокси, а также внешний вид и уведомления — все настройки кошелька в одном месте.',
         preferencesNotifications: 'Системные уведомления',
         preferencesNotificationsHint:
             'Переводы, сообщения и новые посты — в том числе когда кошелёк закрыт',
@@ -2811,6 +2820,7 @@ export const walletMessages: Messages = {
         backupSeedHintOpen:
             'пароля на кошельке нет · в портфеле фраза не показывается',
         showPhrase: 'Показать фразу',
+        holdToShowPhrase: 'Удерживайте, чтобы показать фразу',
         autoLockHint: 'блокируется после простоя',
         clipboardRow: 'Очищать буфер после копирования',
         clipboardHint: '30 секунд, пока вкладка остаётся активной',
@@ -3194,6 +3204,14 @@ export const walletMessages: Messages = {
 
         // DAO
         dao: 'DAO',
+        daoCreate: 'Создать DAO',
+        daoAccountChanged: 'Аккаунт изменился. Попробуйте снова.',
+        daoName: 'Название',
+        daoTokenAddress: 'Адрес токена для голосования',
+        daoCreateHint:
+            'Регистрация DAO для существующего токена. Подпишите запрос входа, чтобы создать DAO от своего аккаунта.',
+        daoSignAndCreate: 'Войти и создать',
+
         daoBody:
             'Все предложения и реальный расклад голосов. Полоса — это вес голосов, а не число проголосовавших.',
         daoProposals: 'Предложения',
@@ -3662,7 +3680,7 @@ export const walletMessages: Messages = {
         // 本地应用设置
         preferencesTitle: '设置',
         preferencesBody:
-            '钱包的外观与语言、这台设备要提醒什么，以及桌面版是否在登录系统后保持可用。这些都只保存在本机。',
+            '账户、安全、网络和代理，以及外观与通知 — 所有钱包设置集中在这里。',
         preferencesNotifications: '系统通知',
         preferencesNotificationsHint: '收款、消息和新帖子 — 包括钱包关闭时',
         preferencesNotificationsUnavailable:
@@ -4503,6 +4521,7 @@ export const walletMessages: Messages = {
         backupSeedHint: '需要你的密码 · 永远不会显示在资产页上',
         backupSeedHintOpen: '此钱包没有密码 · 永远不会显示在资产页上',
         showPhrase: '显示助记词',
+        holdToShowPhrase: '长按显示助记词',
         autoLockHint: '闲置一段时间后锁定',
         clipboardRow: '复制后清空剪贴板',
         clipboardHint: '30 秒，前提是这个标签页保持在前台',
@@ -4864,6 +4883,13 @@ export const walletMessages: Messages = {
 
         // DAO
         dao: 'DAO',
+        daoCreate: '创建 DAO',
+        daoAccountChanged: '当前账户已更改，请重试。',
+        daoName: '名称',
+        daoTokenAddress: '投票代币地址',
+        daoCreateHint: '为现有代币注册 DAO。签署登录请求以使用钱包账户创建。',
+        daoSignAndCreate: '登录并创建',
+
         daoBody:
             '每一个提案，以及投票真实的样子。进度条画的是投票权重，不是投票人数。',
         daoProposals: '提案',

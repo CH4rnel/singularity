@@ -199,3 +199,19 @@ export const accountKindLabel = (
             watch: 'accountKindWatch',
         }[record.kind],
     );
+
+/** The backup belongs to the active account, not to the vault container. */
+export const accountBackupPhrase = (
+    vaultPhrase: string,
+    record: WalletAccountRecord | null,
+): string => {
+    if (record?.kind === 'phrase') {
+        return record.phrase;
+    }
+
+    if (record?.kind === 'seed') {
+        return vaultPhrase;
+    }
+
+    throw new Error('This account has no seed phrase');
+};

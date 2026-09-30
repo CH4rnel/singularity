@@ -5,12 +5,9 @@ import {
     Droplets,
     Fuel,
     LayoutGrid,
-    Lock,
     PieChart,
     Settings,
-    Users,
 } from 'lucide-vue-next';
-import { computed } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { walletMessages } from '@/lib/walletMessages';
@@ -34,7 +31,7 @@ import { walletMessages } from '@/lib/walletMessages';
  * where a number came from.
  */
 
-const props = defineProps<{
+defineProps<{
     wallet: MultiWallet;
 }>();
 
@@ -46,19 +43,10 @@ const emit = defineEmits<{
     liquidity: [];
     browse: [];
     gas: [];
-    security: [];
-    accounts: [];
     preferences: [];
 }>();
 
 const { t } = useLocale(walletMessages);
-
-/** Whether Security still has something to fix, as a mark rather than a line. */
-const unsafe = computed(
-    () =>
-        !props.wallet.backedUp.value ||
-        props.wallet.protection.value === 'none',
-);
 </script>
 
 <template>
@@ -122,25 +110,6 @@ const unsafe = computed(
         </div>
 
         <div class="cw-stack" style="gap: 0; margin-top: 26px">
-            <button type="button" class="cw-line-row" @click="emit('security')">
-                <Lock :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span style="flex: 1">{{ t('navSecurity') }}</span>
-                <span
-                    v-if="unsafe"
-                    :title="t('safetyTitle')"
-                    :aria-label="t('safetyTitle')"
-                    style="
-                        width: 7px;
-                        height: 7px;
-                        flex: none;
-                        background: var(--cw-pending);
-                    "
-                ></span>
-            </button>
-            <button type="button" class="cw-line-row" @click="emit('accounts')">
-                <Users :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span style="flex: 1">{{ t('accounts') }}</span>
-            </button>
             <button
                 type="button"
                 class="cw-line-row"

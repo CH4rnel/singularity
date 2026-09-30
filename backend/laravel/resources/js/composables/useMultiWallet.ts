@@ -21,7 +21,6 @@ import {
     networksOn,
     nextSeedIndex,
     normalizeMnemonic,
-    openVault,
     parseUnits,
     mergeTokens,
     phraseAccountId,
@@ -71,6 +70,7 @@ import type {
     WalletTokenBalance,
     WalletTx,
 } from '@/lib/wallet';
+import { accountBackupPhrase } from '@/lib/wallet/accounts';
 import { lockOnEvm } from '@/lib/wallet/bridge';
 import type { BridgeLock } from '@/lib/wallet/bridge';
 import { executeCrossSwap } from '@/lib/wallet/crosschain';
@@ -628,15 +628,21 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
      * open. The screen that calls this says which of the two it is.
      */
     const reveal = async (password: string | null): Promise<string> => {
-        if (protection.value === 'none') {
-            if (!vault) {
-                throw new Error('The wallet is not open');
-            }
+        const accountId = activeAccountId.value;
 
-            return vault.phrase;
+        if (!vault) {
+            throw new Error('The wallet is not open');
         }
 
-        return openVault(password ?? '');
+        if (protection.value !== 'none') {
+            await unsealVault(password ?? '');
+        }
+
+        if (!vault || activeAccountId.value !== accountId) {
+            throw new Error('The active account changed');
+        }
+
+        return accountBackupPhrase(vault.phrase, activeRecord());
     };
 
     /**

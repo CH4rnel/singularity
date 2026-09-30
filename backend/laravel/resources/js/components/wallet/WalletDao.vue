@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import { useForm } from '@inertiajs/vue3';
 import { ExternalLink } from 'lucide-vue-next';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useLocale } from '@/composables/useLocale';
+import type { MultiWallet } from '@/composables/useMultiWallet';
 import { relativeTime } from '@/lib/wallet/format';
+import { signInWithWallet } from '@/lib/wallet/session';
 import { fetchDao, fetchProposal, tally } from '@/lib/wallet/social';
 import type { DaoSummary, ProposalSummary } from '@/lib/wallet/social';
 import { walletMessages } from '@/lib/walletMessages';
+import { store as daoStore } from '@/routes/dao';
 
 /**
  * Governance, as the wallet can see it.
@@ -19,6 +23,66 @@ import { walletMessages } from '@/lib/walletMessages';
  * one large one against is a proposal that is losing, and a bar built from
  * headcount would draw the opposite.
  */
+
+const props = defineProps<{ wallet: MultiWallet }>();
+const creating = ref(false);
+const signing = ref(false);
+const createError = ref<string | null>(null);
+const form = useForm({ name: '', address: '' });
+const signer = computed(() =>
+    props.wallet.accounts.value.find(
+        (account) =>
+            account.chain === 'cyberia' &&
+            props.wallet.activeAccount.value?.kind !== 'watch',
+    ),
+);
+const createDao = async (): Promise<void> => {
+    if (!signer.value || signing.value || form.processing) {
+        return;
+    }
+
+    signing.value = true;
+    createError.value = null;
+    const accountId = props.wallet.activeAccountId.value;
+
+    try {
+        await signInWithWallet(signer.value.address, (message) => {
+            if (accountId !== props.wallet.activeAccountId.value) {
+                throw new Error(t('daoAccountChanged'));
+            }
+
+            return props.wallet.signMessage('cyberia', message);
+        });
+
+        if (accountId !== props.wallet.activeAccountId.value) {
+            return;
+        }
+
+        form.post(daoStore.url(), {
+            preserveScroll: true,
+            onSuccess: () => {
+                creating.value = false;
+                form.reset();
+                void load();
+            },
+        });
+    } catch (error) {
+        createError.value =
+            error instanceof Error ? error.message : String(error);
+    } finally {
+        signing.value = false;
+    }
+};
+watch(
+    () => props.wallet.activeAccountId.value,
+    () => {
+        creating.value = false;
+        form.reset();
+        form.clearErrors();
+        createError.value = null;
+    },
+    { flush: 'sync' },
+);
 
 const { locale, t } = useLocale(walletMessages);
 
@@ -213,6 +277,50 @@ onMounted(load);
                 }}</span>
             </div>
             <p class="cw-prose" style="margin-top: 8px">{{ t('daoBody') }}</p>
+            <button
+                type="button"
+                class="cw-btn cw-btn-secondary"
+                style="margin-top: 16px"
+                @click="creating = !creating"
+            >
+                {{ t('daoCreate') }}
+            </button>
+            <form
+                v-if="creating"
+                class="cw-card cw-stack"
+                style="gap: 12px; margin-top: 12px"
+                @submit.prevent="createDao"
+            >
+                <label
+                    >{{ t('daoName')
+                    }}<input v-model="form.name" class="cw-input" required
+                /></label>
+                <p v-if="form.errors.name" class="cw-note cw-note-bad">
+                    {{ form.errors.name }}
+                </p>
+                <label
+                    >{{ t('daoTokenAddress')
+                    }}<input v-model="form.address" class="cw-input" required
+                /></label>
+                <p v-if="form.errors.address" class="cw-note cw-note-bad">
+                    {{ form.errors.address }}
+                </p>
+                <p class="cw-prose">{{ t('daoCreateHint') }}</p>
+                <p v-if="createError" class="cw-note cw-note-bad">
+                    {{ createError }}
+                </p>
+                <button
+                    type="submit"
+                    class="cw-btn cw-btn-primary"
+                    :disabled="!signer || signing || form.processing"
+                >
+                    {{
+                        signing || form.processing
+                            ? t('daoLoading')
+                            : t('daoSignAndCreate')
+                    }}
+                </button>
+            </form>
 
             <p
                 v-if="failure"

@@ -48,7 +48,6 @@ const emit = defineEmits<{
     receive: [];
     swap: [];
     crosschain: [];
-    addNetwork: [];
     buy: [];
     tokens: [];
     markets: [];
@@ -438,7 +437,7 @@ const recent = computed(() =>
         <div style="display: flex; gap: 8px; margin: 22px 0 24px">
             <button
                 type="button"
-                class="cw-btn cw-btn-primary"
+                class="cw-btn cw-btn-secondary"
                 style="height: 48px"
                 @click="emit('send')"
             >
@@ -446,7 +445,7 @@ const recent = computed(() =>
             </button>
             <button
                 type="button"
-                class="cw-btn cw-btn-secondary"
+                class="cw-btn cw-btn-primary"
                 style="height: 48px"
                 @click="emit('receive')"
             >
@@ -577,40 +576,6 @@ const recent = computed(() =>
                     </div>
                 </button>
             </template>
-
-            <button
-                type="button"
-                class="cw-dashed"
-                style="margin-top: 4px"
-                @click="emit('addNetwork')"
-            >
-                <span
-                    style="
-                        font: 400 16px/1 var(--cw-mono);
-                        color: var(--cw-muted);
-                    "
-                    >+</span
-                >
-                <span style="flex: 1; font: 400 15px/1.2 var(--cw-sans)">{{
-                    t('addNetwork')
-                }}</span>
-            </button>
-        </div>
-
-        <div
-            v-if="!orphaned && !isEmpty && recent.length > 0"
-            style="margin-top: 26px"
-        >
-            <div class="cw-label" style="margin-bottom: 10px">
-                {{ t('recent') }}
-            </div>
-            <TxList
-                :entries="recent"
-                :locale="locale"
-                :status-labels="statusLabels"
-                :sent-to="t('sentTo')"
-                :received-from="t('receivedFrom')"
-            />
         </div>
 
         <!--
@@ -680,6 +645,21 @@ const recent = computed(() =>
                 />
                 <span>{{ t('navMore') }}</span>
             </button>
+        </div>
+        <div
+            v-if="!orphaned && !isEmpty && recent.length > 0"
+            style="margin-top: 26px"
+        >
+            <div class="cw-label" style="margin-bottom: 10px">
+                {{ t('recent') }}
+            </div>
+            <TxList
+                :entries="recent"
+                :locale="locale"
+                :status-labels="statusLabels"
+                :sent-to="t('sentTo')"
+                :received-from="t('receivedFrom')"
+            />
         </div>
     </div>
 </template>

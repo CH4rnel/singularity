@@ -130,7 +130,7 @@ const rows = computed(() =>
 <template>
     <div class="cw-stack">
         <button type="button" class="cw-back" @click="emit('back')">
-            ← {{ t('navSecurity') }}
+            ← {{ t('navPreferences') }}
         </button>
 
         <h2 class="cw-title" style="margin: 22px 0 8px">

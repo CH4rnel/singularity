@@ -10,9 +10,36 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.13.0'),
+    'current_version' => env('APP_VERSION', 'v0.14.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.14.0',
+            'date' => '2026-09-30',
+            'title' => 'Wallet settings and safer phrase backup',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Register a DAO for an existing voting token directly from the wallet, signing the site login challenge with the selected account.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'Accounts, security, networks and proxy controls now share one Settings menu, reached from the gear or More.',
+                        'Receive is the primary portfolio action. Recent transactions appear below the section buttons, and adding networks lives in Settings.',
+                        'The backup phrase stays hidden until Show is held for 0.8 seconds. A protected vault still requires its password.',
+                    ],
+                ],
+                [
+                    'label' => 'Fixed',
+                    'items' => [
+                        'The backup screen shows the selected account phrase, including separately imported phrases, and clears it when accounts change. Imported keys and watched addresses no longer display an unrelated seed phrase.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.13.0',
             'date' => '2026-08-21',

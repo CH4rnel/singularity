@@ -24,7 +24,13 @@ import { disablePush, enablePush, pushState } from '@/lib/wallet/push';
 import type { PushState } from '@/lib/wallet/push';
 import { walletMessages } from '@/lib/walletMessages';
 
-defineEmits<{ back: [] }>();
+defineEmits<{
+    back: [];
+    security: [];
+    accounts: [];
+    networks: [];
+    proxy: [];
+}>();
 
 const { t, locale, available, setLocale } = useLocale(walletMessages);
 
@@ -255,6 +261,33 @@ onBeforeUnmount(unsubscribe);
             <p class="cw-prose" style="margin-top: 8px">
                 {{ t('preferencesBody') }}
             </p>
+        </div>
+
+        <div class="cw-stack" style="gap: 0; margin-bottom: 24px">
+            <button
+                type="button"
+                class="cw-line-row"
+                @click="$emit('accounts')"
+            >
+                {{ t('accounts') }} →
+            </button>
+            <button
+                type="button"
+                class="cw-line-row"
+                @click="$emit('security')"
+            >
+                {{ t('navSecurity') }} →
+            </button>
+            <button
+                type="button"
+                class="cw-line-row"
+                @click="$emit('networks')"
+            >
+                {{ t('networksSection') }} →
+            </button>
+            <button type="button" class="cw-line-row" @click="$emit('proxy')">
+                {{ t('proxyTitle') }} →
+            </button>
         </div>
 
         <div class="cw-label" style="margin-bottom: 9px">

@@ -179,7 +179,7 @@ const limitOf = (row: Row): string | null =>
 <template>
     <div class="cw-stack">
         <button type="button" class="cw-back" @click="emit('back')">
-            ← {{ t('navPortfolio') }}
+            ← {{ t('navPreferences') }}
         </button>
 
         <!--

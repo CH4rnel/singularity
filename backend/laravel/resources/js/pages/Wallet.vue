@@ -292,7 +292,6 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
             { id: 'stocks', label: () => t('stocks') },
             { id: 'analytics', label: () => t('navAnalytics') },
             { id: 'network', label: () => t('navActivity') },
-            { id: 'accounts', label: () => t('accounts') },
             // Three things done *with* a balance rather than three ways of
             // reading one, which is why they sit apart from the screens above.
             { id: 'buy', label: () => t('tileBuy') },
@@ -303,7 +302,6 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
             { id: 'daily', label: () => t('dailyTitle') },
             { id: 'browse', label: () => t('browseTitle') },
             { id: 'gas', label: () => t('gasStation') },
-            { id: 'security', label: () => t('navSecurity') },
             { id: 'preferences', label: () => t('navPreferences') },
         ],
     },
@@ -366,7 +364,7 @@ const TAB_OF: Record<Section, Section> = {
     accounts: 'portfolio',
     importAccount: 'portfolio',
     network: 'portfolio',
-    networks: 'portfolio',
+    networks: 'preferences',
     security: 'portfolio',
     preferences: 'portfolio',
     more: 'portfolio',
@@ -495,9 +493,10 @@ const openProfile = (address: string | null): void => {
 const PARENTS: Partial<Record<Section, Section>> = {
     token: 'tokens',
     chart: 'markets',
-    networks: 'portfolio',
+    networks: 'preferences',
     importAccount: 'accounts',
-    proxy: 'security',
+    security: 'preferences',
+    proxy: 'preferences',
     earn: 'portfolio',
     stocks: 'portfolio',
     bridge: 'portfolio',
@@ -506,12 +505,12 @@ const PARENTS: Partial<Record<Section, Section>> = {
     // Reached from "Ещё" and nowhere else on a phone, so back goes there
     // rather than skipping the screen the person was actually on.
     gas: 'more',
-    preferences: 'more',
+    preferences: 'portfolio',
     analytics: 'more',
     crosschain: 'more',
     browse: 'more',
     daily: 'more',
-    accounts: 'more',
+    accounts: 'preferences',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -1809,7 +1808,6 @@ watch(
                             @send="openSend()"
                             @swap="openSwap()"
                             @receive="overlay = 'receive'"
-                            @add-network="openSection('networks')"
                             @tokens="openSection('tokens')"
                             @markets="openSection('markets')"
                             @stocks="openSection('stocks')"
@@ -1834,7 +1832,7 @@ watch(
                     <WalletAccounts
                         v-else-if="section === 'accounts'"
                         :wallet="wallet"
-                        @back="openSection('portfolio')"
+                        @back="openSection('preferences')"
                         @import="openSection('importAccount')"
                     />
 
@@ -1877,8 +1875,6 @@ watch(
                         @liquidity="openSection('liquidity')"
                         @browse="openSection('browse')"
                         @gas="openSection('gas')"
-                        @security="openSection('security')"
-                        @accounts="openSection('accounts')"
                         @preferences="openSection('preferences')"
                     />
 
@@ -2054,7 +2050,7 @@ watch(
                     <WalletNetworks
                         v-else-if="section === 'networks'"
                         :wallet="wallet"
-                        @back="openSection('portfolio')"
+                        @back="openSection('preferences')"
                         @add-network="overlay = 'addNetwork'"
                         @open="openChain"
                     />
@@ -2095,7 +2091,7 @@ watch(
                         @swap="openSwapContract"
                     />
 
-                    <WalletDao v-else-if="section === 'dao'" />
+                    <WalletDao v-else-if="section === 'dao'" :wallet="wallet" />
 
                     <!--
                       One tab for the things that are not balances: what this
@@ -2181,11 +2177,15 @@ watch(
                     <WalletProxy
                         v-else-if="section === 'proxy'"
                         :wallet="wallet"
-                        @back="openSection('security')"
+                        @back="openSection('preferences')"
                     />
 
                     <WalletPreferences
                         v-else-if="section === 'preferences'"
+                        @security="openSection('security')"
+                        @accounts="openSection('accounts')"
+                        @networks="openSection('networks')"
+                        @proxy="openSection('proxy')"
                         @back="openSection('portfolio')"
                     />
 
@@ -2193,8 +2193,7 @@ watch(
                         v-else
                         :wallet="wallet"
                         @locked="section = 'portfolio'"
-                        @add-network="openSection('networks')"
-                        @proxy="openSection('proxy')"
+                        @back="openSection('preferences')"
                         @forgotten="
                             restoring = false;
                             section = 'portfolio';

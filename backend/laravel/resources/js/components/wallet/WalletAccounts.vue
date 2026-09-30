@@ -150,7 +150,7 @@ const commitRename = async (id: string): Promise<void> => {
 <template>
     <div class="cw-stack">
         <button type="button" class="cw-back" @click="emit('back')">
-            ← {{ t('navPortfolio') }}
+            ← {{ t('navPreferences') }}
         </button>
 
         <h2 class="cw-title" style="margin: 22px 0 8px">{{ t('accounts') }}</h2>
