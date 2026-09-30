@@ -135,6 +135,8 @@ const PAGE = 12;
 const providerFor = (target: LaunchpadChain): JsonRpcProvider =>
     new JsonRpcProvider(launchpadReadRpcUrl(target), target.chain.chainId, {
         staticNetwork: true,
+        // Cyberia's node refuses a JSON-RPC batch over 20 calls outright.
+        batchMaxCount: 20,
     });
 
 /**

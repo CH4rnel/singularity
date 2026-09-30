@@ -291,10 +291,20 @@ const readProviderFor = (target: LaunchpadChain): JsonRpcProvider => {
         return cached;
     }
 
-    const provider = new JsonRpcProvider(launchpadReadRpcUrl(target), {
-        chainId: target.chain.chainId,
-        name: target.chain.name.toLowerCase(),
-    });
+    const provider = new JsonRpcProvider(
+        launchpadReadRpcUrl(target),
+        {
+            chainId: target.chain.chainId,
+            name: target.chain.name.toLowerCase(),
+        },
+        {
+            // Cyberia's node refuses a JSON-RPC batch over 20 calls outright,
+            // and every launch listed costs several — past a handful of
+            // launches the whole batch came back as an error and every name,
+            // ticker and pair read fell through to its empty fallback.
+            batchMaxCount: 20,
+        },
+    );
     readProviders.set(target.chain.chainId, provider);
 
     return provider;
@@ -488,7 +498,11 @@ const refreshLaunchTerms = async (): Promise<void> => {
     }
 
     try {
-        const provider = new JsonRpcProvider(launchpadReadRpcUrl(registry));
+        const provider = new JsonRpcProvider(
+            launchpadReadRpcUrl(registry),
+            undefined,
+            { batchMaxCount: 20 },
+        );
         const pad = new Contract(
             registry.launchpadV3,
             LAUNCHPAD_V3_ABI,
@@ -926,11 +940,7 @@ const readPoolV3Price = async (
             pool.slot0() as Promise<[bigint, bigint]>,
             wrapped.balanceOf(poolAddr) as Promise<bigint>,
         ]);
-        const priceCyber = sqrtPriceQuote(
-            String(token0),
-            tokenAddr,
-            slot0[0],
-        );
+        const priceCyber = sqrtPriceQuote(String(token0), tokenAddr, slot0[0]);
 
         return priceCyber === null ? null : { priceCyber, reserveCyber };
     } catch {
@@ -1219,9 +1229,9 @@ const loadRecent = async (): Promise<void> => {
                       v3Indices.map((i) => v3.allTokens(i)),
                   ) as Promise<string[]>)
                 : Promise.resolve([] as string[]),
-            Promise.all(v2Indices.map((i) => launchpad.allTokens(i))) as Promise<
-                string[]
-            >,
+            Promise.all(
+                v2Indices.map((i) => launchpad.allTokens(i)),
+            ) as Promise<string[]>,
         ]);
 
         const entries: { address: string; venue: 'v2' | 'v3' }[] = [
