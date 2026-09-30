@@ -91,6 +91,29 @@ fi
 # too, so rebuild that cache as well or new routes 404.
 echo "==> config cache"
 in_container php artisan config:clear
+# Keep the env override aligned with the release shipped by this checkout.
+# Read only release metadata into output; the rest of .env stays private.
+in_container php -r '
+require "vendor/autoload.php";
+$app = require "bootstrap/app.php";
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$version = config("changelog.releases.0.version");
+if (! is_string($version) || ! preg_match("/^v[0-9]+\\.[0-9]+\\.[0-9]+$/", $version)) {
+    throw new RuntimeException("Invalid application release version");
+}
+$path = $app->environmentFilePath();
+$contents = file_get_contents($path);
+if ($contents === false) {
+    throw new RuntimeException("Could not read application environment");
+}
+$updated = preg_match("/^APP_VERSION=/m", $contents)
+    ? preg_replace("/^APP_VERSION=.*$/m", "APP_VERSION=".$version, $contents)
+    : rtrim($contents).PHP_EOL."APP_VERSION=".$version.PHP_EOL;
+if (file_put_contents($path, $updated, LOCK_EX) === false) {
+    throw new RuntimeException("Could not update application version");
+}
+echo "==> application version ".$version.PHP_EOL;
+'
 in_container php artisan config:cache
 in_container php artisan route:cache
 

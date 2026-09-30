@@ -28,6 +28,12 @@ it('renders the changelog page', function () {
             ->where('release.changelogUrl', route('changelog')));
 });
 
+it('keeps the example environment aligned with the current release', function () {
+    $contents = file_get_contents(base_path('.env.example'));
+
+    expect($contents)->toContain('APP_VERSION='.config('changelog.releases.0.version').PHP_EOL);
+});
+
 it('shares only the three latest releases for the header menu', function () {
     Config::set('changelog.current_version', 'v4');
     Config::set('changelog.releases', [
