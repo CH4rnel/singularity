@@ -1483,6 +1483,7 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 .cw-input {
+    min-width: 0;
     width: 100%;
     height: 48px;
     padding: 0 14px;
@@ -1589,6 +1590,8 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 .cw-note {
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: flex;
     gap: 11px;
     padding: 13px 14px;
@@ -1660,7 +1663,14 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-stack {
     display: flex;
+    min-width: 0;
     flex-direction: column;
+}
+
+/* Scroll the content rather than compressing its cards into each other. */
+.cw-stack > *,
+.cw-body > * {
+    flex-shrink: 0;
 }
 
 .cw-fill {
@@ -2445,13 +2455,126 @@ html[data-app-window]:has(.cw-frame) {
 
 /* The output is quoted rather than typed, so it wears the accent. */
 .cw-amount-out {
-    display: flex;
-    overflow: hidden;
-    align-items: center;
-    justify-content: flex-end;
+    display: block;
+    height: auto;
+    min-height: 44px;
+    overflow-wrap: anywhere;
     color: var(--cw-accent);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+}
+
+.cw-swap-asset-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 12px;
+}
+
+.cw-swap-balance-row {
+    flex-wrap: wrap;
+}
+
+.cw-swap-balance-row > :last-child {
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.cw-swap-summary {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 12px;
+}
+
+.cw-swap-summary > :last-child {
+    text-align: right;
+}
+
+.cw-swap-summary > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.cw-token-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+}
+
+.cw-token-row > *,
+.cw-token-balance {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.cw-token-add {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.cw-token-contract {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+}
+
+.cw-route-pay {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 6px;
+}
+
+.cw-route-search {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+}
+
+.cw-route-offers {
+    gap: 5px;
+    margin-top: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.cw-route-offers .cw-pick {
+    min-width: 0;
+    align-items: flex-start;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+    .cw-swap-asset-row,
+    .cw-token-add {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .cw-swap-asset-row .cw-chip {
+        justify-self: start;
+        max-width: 100%;
+    }
+
+    .cw-swap-asset-row .cw-amount {
+        width: 100%;
+    }
+
+    .cw-swap-summary > * {
+        width: 100%;
+    }
+
+    .cw-swap-summary > :last-child {
+        text-align: left;
+    }
+
+    .cw-route-pay {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 /* The primary action of a whole screen, one step taller than a button in a row. */

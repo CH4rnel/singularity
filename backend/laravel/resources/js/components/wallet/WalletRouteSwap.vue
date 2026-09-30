@@ -614,12 +614,8 @@ const canSign = computed(
         <div class="cw-label" style="margin: 18px 0 8px">
             {{ t('routePay') }}
         </div>
-        <div style="display: flex; gap: 6px">
-            <select
-                v-model="from"
-                class="cw-input"
-                style="flex: none; width: 40%"
-            >
+        <div class="cw-route-pay">
+            <select v-model="from" class="cw-input">
                 <option
                     v-for="token in payable"
                     :key="token.address"
@@ -633,7 +629,6 @@ const canSign = computed(
                 class="cw-input"
                 inputmode="decimal"
                 :placeholder="t('crossAmount')"
-                style="flex: 1"
             />
         </div>
         <p
@@ -660,12 +655,17 @@ const canSign = computed(
         <div class="cw-label" style="margin: 18px 0 8px">
             {{ t('routeReceive') }}
         </div>
-        <input
-            v-model="query"
-            class="cw-input"
-            type="search"
-            :placeholder="t('routeSearch', { chain: chain.label })"
-        />
+        <label class="cw-route-search">
+            <span class="cw-hint">{{
+                t('routeSearch', { chain: chain.label })
+            }}</span>
+            <input
+                v-model="query"
+                class="cw-input"
+                type="search"
+                :aria-label="t('routeSearch', { chain: chain.label })"
+            />
+        </label>
 
         <!--
           Where the list comes from and what decides its order. Without this
@@ -691,16 +691,7 @@ const canSign = computed(
             <span>{{ searchError }}</span>
         </p>
 
-        <div
-            v-else
-            class="cw-stack"
-            style="
-                gap: 5px;
-                margin-top: 8px;
-                max-height: 240px;
-                overflow-y: auto;
-            "
-        >
+        <div v-else class="cw-stack cw-route-offers">
             <button
                 v-for="offer in offers"
                 :key="offer.address"

@@ -156,8 +156,7 @@ const add = async (): Promise<void> => {
             >
                 <button
                     type="button"
-                    class="cw-open"
-                    style="display: flex; align-items: center; gap: 12px"
+                    class="cw-open cw-token-row"
                     @click="emit('open', row.token)"
                 >
                     <StockIcon
@@ -186,6 +185,7 @@ const add = async (): Promise<void> => {
                         <span
                             style="
                                 display: flex;
+                                flex-wrap: wrap;
                                 align-items: center;
                                 gap: 8px;
                                 font: 500 15px/1.2 var(--cw-sans);
@@ -204,17 +204,15 @@ const add = async (): Promise<void> => {
                         <span
                             style="
                                 display: block;
-                                overflow: hidden;
+                                overflow-wrap: anywhere;
                                 margin-top: 2px;
                                 font: 500 12px/1.4 var(--cw-mono);
                                 color: var(--cw-dim);
-                                text-overflow: ellipsis;
-                                white-space: nowrap;
                             "
                             >{{ row.token.name || row.token.address }}</span
                         >
                     </span>
-                    <span style="text-align: right">
+                    <span class="cw-token-balance" style="text-align: right">
                         <span class="cw-num" style="display: block">{{
                             row.amount
                         }}</span>
@@ -285,24 +283,23 @@ const add = async (): Promise<void> => {
             </p>
 
             <!-- Adding a token is reading a contract, not trusting a list. -->
-            <form
-                style="display: flex; gap: 8px; margin-top: 4px"
-                @submit.prevent="add"
-            >
-                <input
-                    v-model="contract"
-                    type="text"
-                    class="cw-input"
-                    autocomplete="off"
-                    spellcheck="false"
-                    :aria-label="t('addToken')"
-                    :aria-invalid="problem !== null"
-                    :placeholder="t('tokenContract')"
-                />
+            <form class="cw-token-add" @submit.prevent="add">
+                <label class="cw-token-contract">
+                    <span class="cw-label">{{ t('tokenContract') }}</span>
+                    <input
+                        v-model="contract"
+                        type="text"
+                        class="cw-input"
+                        autocomplete="off"
+                        spellcheck="false"
+                        :aria-label="t('tokenContract')"
+                        :aria-invalid="problem !== null"
+                    />
+                </label>
                 <button
                     type="submit"
                     class="cw-ghost"
-                    style="height: 48px; flex: none"
+                    style="min-height: 48px"
                     :disabled="adding || contract.trim().length === 0"
                 >
                     {{ adding ? t('loading') : t('addToken') }}

@@ -1853,7 +1853,10 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                             : undefined
                     "
                 >
-                    <div class="cw-row" style="margin-bottom: 10px">
+                    <div
+                        class="cw-row cw-swap-balance-row"
+                        style="margin-bottom: 10px"
+                    >
                         <span class="cw-label">{{ t('swapPay') }}</span>
                         <span
                             style="
@@ -1900,7 +1903,7 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                         </span>
                     </div>
 
-                    <div style="display: flex; align-items: center; gap: 12px">
+                    <div class="cw-swap-asset-row">
                         <button
                             type="button"
                             class="cw-chip cw-chip-tight"
@@ -1975,7 +1978,10 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
 
                 <!-- Receive -->
                 <div class="cw-card" style="padding: 14px 15px">
-                    <div class="cw-row" style="margin-bottom: 10px">
+                    <div
+                        class="cw-row cw-swap-balance-row"
+                        style="margin-bottom: 10px"
+                    >
                         <span class="cw-label">{{ t('swapReceive') }}</span>
                         <span
                             style="
@@ -1996,7 +2002,7 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                         >
                     </div>
 
-                    <div style="display: flex; align-items: center; gap: 12px">
+                    <div class="cw-swap-asset-row">
                         <button
                             type="button"
                             class="cw-chip cw-chip-tight"
@@ -2057,14 +2063,7 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                 </div>
 
                 <!-- The rate on the left, what it costs on the right. -->
-                <div
-                    class="cw-row"
-                    style="
-                        gap: 12px;
-                        padding: 12px 2px;
-                        align-items: flex-start;
-                    "
-                >
+                <div class="cw-row cw-swap-summary" style="padding: 12px 2px">
                     <span
                         style="
                             font: 500 13px/1.4 var(--cw-mono);
@@ -2076,7 +2075,6 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                         style="
                             font: 500 12px/1.4 var(--cw-mono);
                             color: var(--cw-faint);
-                            text-align: right;
                             flex: none;
                         "
                         >{{ summaryLine }}</span
