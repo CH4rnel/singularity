@@ -24,6 +24,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `services/blockscout/` | Docker Compose (official Blockscout images) | Cyberia explorer deployment config; no Elixir source vendored |
 | `services/cyberia-node/` | polygon-edge/IBFT PoA, Docker Compose | Cyberia L1 second node: non-validating full/RPC follower (chainID 49406); prepared, not deployed |
 | `services/ipfs/` | Docker Compose | IPFS service config |
+| `services/irc/` | Ergo IRC server, Docker Compose | Cyberia IRC: `irc.cyberia.church:6697`, TLS only (Let's Encrypt via the shared certbot, SIGHUP cron reloads it), `#cyberia`; oper hash only in the gitignored `.env` |
 | `services/monero/` | Docker Compose (monerod + monero-wallet-rpc) | The bridge's Monero wallet: the XMR corridor cannot be read by anyone who does not hold one |
 | `services/lisp/` | Common Lisp/SBCL | Daemon and HTTP services |
 | `services/telegram-bot/` | Python, python-telegram-bot, web3, SQLAlchemy | Cyberia Telegram bot: wallet rewards, chat tokens, on-chain announcers, pump.fun buy bot, whales gate, AI assistant with a per-user free-model picker (`/model`) |

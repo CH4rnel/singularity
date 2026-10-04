@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AnalyticsIngestController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
 use App\Http\Controllers\Api\CrmTaskIngestController;
+use App\Http\Controllers\Api\IrcLainController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\NFTController;
 use App\Http\Controllers\Api\OpsHeartbeatController;
@@ -253,3 +254,8 @@ Route::post('ops/heartbeat', OpsHeartbeatController::class)->middleware('throttl
 // one writes, so it accepts facts only: a title, a detail, whether it is
 // already finished, and an id the sender minted so a retry cannot double-file.
 Route::post('crm/tasks', CrmTaskIngestController::class)->middleware('throttle:120,1');
+
+// Lain on irc.cyberia.church. The bot in services/irc/lain-bot holds the IRC
+// connection; this answers it with the same tool-less persona as /lain and the
+// wallet. Shared token, none configured = 404, like the two routes above.
+Route::post('irc/lain', IrcLainController::class)->middleware('throttle:60,1');

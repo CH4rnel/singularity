@@ -53,6 +53,9 @@ return [
         // hold this share of the live $LAIN supply. 1000 bps = 10%.
         'token_address' => env('LAIN_TOKEN_ADDRESS', '0x05cd1afd5b2df3cca6ceab80cbc21168ec981e8b'),
         'minimum_share_bps' => (int) env('LAIN_MINIMUM_SHARE_BPS', 1000),
+        // The lain bot on irc.cyberia.church (services/irc/lain-bot) and this
+        // app share this token; unset = /api/irc/lain answers 404.
+        'irc_token' => env('IRC_LAIN_TOKEN'),
     ],
 
     // The LainOS daemon itself (services/lainos), which is a different

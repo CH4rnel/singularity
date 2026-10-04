@@ -39,6 +39,7 @@ singularity/
 ├── services/blockscout/  # Cyberia explorer: Blockscout docker-compose deploy config (official images)
 ├── services/cyberia-node/ # Cyberia L1 second node (polygon-edge follower/RPC); prepared, not deployed
 ├── services/ipfs/        # IPFS docker-compose config
+├── services/irc/         # Ergo IRC server (irc.cyberia.church:6697, TLS only)
 ├── services/monero/      # The bridge's Monero wallet (monerod + monero-wallet-rpc): the XMR corridor is unreadable without one
 ├── services/lisp/        # Common Lisp daemon/http services
 ├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, pump.fun buy bot, whales gate, wallet Mini App, AI assistant with a per-user free-model picker

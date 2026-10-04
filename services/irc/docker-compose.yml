@@ -1,0 +1,71 @@
+# Cyberia IRC: Ergo on irc.cyberia.church:6697, TLS only. See README.md.
+#
+# Ergo is the whole thing — server, NickServ, ChanServ, history — in one
+# binary with one embedded database, so this is one container and a volume.
+#
+#   config  ./ircd.yaml + ./cyberia.motd, read-only at /ircd-conf
+#   data    the irc_data volume at /ircd (accounts, channel registrations)
+#   tls     /root/certbot/conf read-only at /tls — the same Let's Encrypt
+#           store every other cyberia.church cert lives in
+#   secret  ./.env (gitignored): ERGO__OPERS__ADMIN__PASSWORD, and for the bot
+#           IRC_LAIN_PASSWORD + IRC_LAIN_TOKEN
+#
+# lain-bot is Lain on IRC: it forwards lines addressed to her to Laravel's
+# /api/irc/lain, which answers with the tool-less persona of /lain and the
+# wallet — never the LainOS daemon, which is the operator's personal agent.
+
+# Log rotation, as on every service on this host since a 48 GB container log
+# filled the disk on 2026-09-13.
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "20m"
+    max-file: "3"
+    compress: "true"
+
+services:
+  ergo:
+    image: ghcr.io/ergochat/ergo:v2.19.1
+    container_name: cyberia-irc
+    logging: *logging
+    restart: unless-stopped
+    # Ergo's own recommendation: reaps children of auth/ip-check scripts.
+    init: true
+    # Bypass the image's run.sh: it writes a default config into /ircd and
+    # generates self-signed certs there. The config here is the repo's, and
+    # the certs are real.
+    entrypoint: ["/ircd-bin/ergo", "run", "--conf", "/ircd-conf/ircd.yaml"]
+    env_file:
+      - path: .env
+        required: true
+    volumes:
+      - ./ircd.yaml:/ircd-conf/ircd.yaml:ro
+      - ./cyberia.motd:/ircd-conf/cyberia.motd:ro
+      - irc_data:/ircd
+      - ${IRC_TLS_DIR:-/root/certbot/conf}:/tls:ro
+    ports:
+      # TLS only. There is deliberately no 6667: plaintext would carry
+      # NickServ passwords across the internet.
+      - "6697:6697"
+
+  lain-bot:
+    image: python:3.12-alpine
+    container_name: cyberia-irc-lain
+    logging: *logging
+    restart: unless-stopped
+    depends_on: [ergo]
+    # Standard library only: nothing is installed, the script is mounted.
+    command: ["python", "-u", "/bot/bot.py"]
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      IRC_HOST: ergo
+      IRC_TLS_NAME: irc.cyberia.church
+      IRC_LAIN_CHANNELS: ${IRC_LAIN_CHANNELS:-#cyberia}
+      LAIN_API_URL: ${LAIN_API_URL:-https://cyberia.church/api/irc/lain}
+    volumes:
+      - ./lain-bot/bot.py:/bot/bot.py:ro
+
+volumes:
+  irc_data:
