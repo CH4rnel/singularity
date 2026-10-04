@@ -145,3 +145,67 @@ export const tally = (
         ? { for: 0, against: 0, cast: 0 }
         : { for: (100 * yes) / cast, against: (100 * no) / cast, cast };
 };
+
+export type MyVote = { support: boolean; power: string };
+
+/**
+ * This account's vote on a proposal, or null — and null too when the browser
+ * carries no session yet, because "not signed in" and "has not voted" draw the
+ * same two buttons.
+ */
+export const fetchMyVote = async (
+    id: number,
+): Promise<{ address: string | null; vote: MyVote | null }> => {
+    try {
+        return await sessionCall(`/api/wallet/dao/proposals/${id}/vote`);
+    } catch {
+        return { address: null, vote: null };
+    }
+};
+
+/**
+ * Cast (or change) a vote as the address this session signed in with.
+ *
+ * `address` is what the wallet believes it is voting as; the server compares it
+ * with the session and answers 409 when they differ, which is the caller's cue
+ * to sign in again with the right key rather than vote under another name.
+ */
+export const castVote = async (
+    id: number,
+    address: string,
+    support: boolean,
+): Promise<MyVote> =>
+    (
+        await sessionCall<{ vote: MyVote }>(
+            `/api/wallet/dao/proposals/${id}/vote`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ address, support }),
+            },
+        )
+    ).vote;
+
+/**
+ * Put a proposal up, authored by the address this session signed in with. The
+ * same 409 as a vote when the session belongs to another key. Answers with the
+ * new proposal's id, which the screen then opens.
+ */
+export const createProposal = async (proposal: {
+    address: string;
+    daoId: number;
+    title: string;
+    description: string;
+    endsAt: string;
+}): Promise<number> =>
+    (
+        await sessionCall<{ id: number }>('/api/wallet/dao/proposals', {
+            method: 'POST',
+            body: JSON.stringify({
+                address: proposal.address,
+                dao_id: proposal.daoId,
+                title: proposal.title,
+                description: proposal.description,
+                ends_at: proposal.endsAt,
+            }),
+        })
+    ).id;

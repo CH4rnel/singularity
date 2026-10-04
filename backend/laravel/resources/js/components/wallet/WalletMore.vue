@@ -4,6 +4,7 @@ import {
     CalendarCheck,
     Droplets,
     Fuel,
+    Landmark,
     LayoutGrid,
     PieChart,
     Settings,
@@ -42,6 +43,7 @@ const emit = defineEmits<{
     crosschain: [];
     liquidity: [];
     browse: [];
+    dao: [];
     gas: [];
     preferences: [];
 }>();
@@ -98,6 +100,10 @@ const { t } = useLocale(walletMessages);
             >
                 <Droplets :size="20" :stroke-width="1.5" aria-hidden="true" />
                 <span style="flex: 1">{{ t('poolTitle') }}</span>
+            </button>
+            <button type="button" class="cw-line-row" @click="emit('dao')">
+                <Landmark :size="20" :stroke-width="1.5" aria-hidden="true" />
+                <span style="flex: 1">{{ t('dao') }}</span>
             </button>
             <button type="button" class="cw-line-row" @click="emit('browse')">
                 <LayoutGrid :size="20" :stroke-width="1.5" aria-hidden="true" />

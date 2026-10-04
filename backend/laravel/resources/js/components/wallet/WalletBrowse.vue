@@ -7,6 +7,7 @@ import {
     CYBERIA_DAPPS,
     dappBridgeMode,
     hasInjectedProvider,
+    isTouchOnly,
 } from '@/lib/wallet/dapps';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -41,7 +42,7 @@ const emit = defineEmits<{
 const { t } = useLocale(walletMessages);
 
 const mode = computed(() =>
-    dappBridgeMode(nativeShell(), hasInjectedProvider()),
+    dappBridgeMode(nativeShell(), hasInjectedProvider(), isTouchOnly()),
 );
 
 /** Which in-wallet screen a row opens, when the wallet has one of its own. */
@@ -117,7 +118,7 @@ const watching = computed(
                 }}
             </p>
             <div
-                v-if="mode !== 'extension'"
+                v-if="mode === 'browser' || mode === 'desktop'"
                 style="
                     display: flex;
                     gap: 8px;
@@ -164,17 +165,26 @@ const watching = computed(
                     padding: 14px 16px;
                 "
             >
-                <a
-                    :href="row.path"
+                <component
+                    :is="row.internal ? 'button' : 'a'"
+                    :type="row.internal ? 'button' : undefined"
+                    :href="row.internal ? undefined : row.path"
                     style="
                         display: flex;
                         flex: 1;
                         min-width: 0;
                         align-items: flex-start;
                         gap: 12px;
+                        padding: 0;
+                        border: 0;
+                        background: none;
                         color: inherit;
+                        font: inherit;
+                        text-align: left;
                         text-decoration: none;
+                        cursor: pointer;
                     "
+                    @click="row.internal && openInternal(row.internal)"
                 >
                     <span
                         style="
@@ -207,27 +217,29 @@ const watching = computed(
                                 color: var(--cw-muted);
                             "
                             >{{ row.note
-                            }}<template v-if="!row.signs">
+                            }}<template v-if="row.internal">
+                                · {{ t('browseInWallet') }}</template
+                            ><template v-else-if="!row.signs">
                                 · {{ t('browseReadOnly') }}</template
                             ></span
                         >
                     </span>
-                </a>
+                </component>
 
                 <!--
                   The shortest way to use a dapp safely is not to need one:
-                  where the wallet already does this itself, that is a control
-                  of its own, and the row behind it still goes to the page.
+                  where the wallet already does this itself, the row opens it
+                  here — on a phone the page would only ask for a browser
+                  wallet it cannot have — and the page is the secondary link.
                 -->
-                <button
+                <a
                     v-if="row.internal"
-                    type="button"
                     class="cw-ghost"
                     style="flex: none"
-                    @click="openInternal(row.internal)"
+                    :href="row.path"
                 >
-                    {{ t('browseOpenHere') }}
-                </button>
+                    {{ t('browseOpenSite') }}
+                </a>
             </div>
         </div>
 

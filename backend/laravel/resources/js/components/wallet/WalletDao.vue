@@ -6,18 +6,27 @@ import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { relativeTime } from '@/lib/wallet/format';
 import { signInWithWallet } from '@/lib/wallet/session';
-import { fetchDao, fetchProposal, tally } from '@/lib/wallet/social';
-import type { DaoSummary, ProposalSummary } from '@/lib/wallet/social';
+import {
+    castVote,
+    createProposal,
+    fetchDao,
+    fetchMyVote,
+    fetchProposal,
+    tally,
+} from '@/lib/wallet/social';
+import type { DaoSummary, MyVote, ProposalSummary } from '@/lib/wallet/social';
 import { walletMessages } from '@/lib/walletMessages';
 import { store as daoStore } from '@/routes/dao';
 
 /**
- * Governance, as the wallet can see it.
+ * Governance, from the wallet: read a proposal and vote on it, here.
  *
- * Cyberia's DAO votes are weighted by a token snapshot and recorded against an
- * account on the site, so a wallet with no session cannot cast one. That is
- * stated once, plainly, and the screen does the part it genuinely can: show
- * every proposal, its real tally by voting power, and where to go to vote.
+ * This screen used to show the tally and then send people to the site to cast
+ * the vote — on a phone, a page that wants a browser wallet the phone does not
+ * have. A vote is recorded against an account, and the wallet becomes one the
+ * same way the feed composer does: the first press signs the site's login
+ * challenge with the active key, and the vote follows as that session. Nothing
+ * goes on chain and nothing costs gas; the weight is the address's snapshot.
  *
  * The bar is drawn from power, not from voter count. Two small votes for and
  * one large one against is a proposal that is losing, and a bar built from
@@ -92,6 +101,214 @@ const detail = ref<ProposalSummary | null>(null);
 const loading = ref(true);
 const failure = ref(false);
 
+const myVote = ref<MyVote | null>(null);
+const pending = ref<boolean | null>(null);
+const voteError = ref<string | null>(null);
+
+const canVote = computed(
+    () =>
+        signer.value !== undefined &&
+        props.wallet.activeAccount.value?.kind !== 'watch',
+);
+
+/** Voting power is a decimal(*,18); four places are plenty to read it by. */
+const powerLabel = (power: string): string => {
+    const value = Number(power);
+
+    return Number.isFinite(value)
+        ? value.toLocaleString(locale.value, { maximumFractionDigits: 4 })
+        : power;
+};
+
+const readMyVote = async (id: number): Promise<void> => {
+    const address = signer.value?.address ?? null;
+    const answer = await fetchMyVote(id);
+
+    // A session belonging to another key says nothing about this one.
+    myVote.value =
+        address !== null &&
+        answer.address !== null &&
+        answer.address.toLowerCase() === address.toLowerCase() &&
+        detail.value?.id === id
+            ? answer.vote
+            : null;
+};
+
+/**
+ * Run a write as the active key's session, signing in first when this browser
+ * has none for it. The first attempt goes straight to the write because most
+ * presses after the first already have a session; a refusal that means "not
+ * you" (401, an expired 419, or a session as somebody else, 409) signs the
+ * login challenge and tries exactly once more.
+ */
+const asSigner = async <T,>(
+    address: string,
+    accountId: string | null,
+    write: () => Promise<T>,
+): Promise<T> => {
+    try {
+        return await write();
+    } catch (error) {
+        const status = (error as { status?: number }).status;
+
+        if (status !== 401 && status !== 409 && status !== 419) {
+            throw error;
+        }
+
+        await signInWithWallet(address, (message) => {
+            if (accountId !== props.wallet.activeAccountId.value) {
+                throw new Error(t('daoAccountChanged'));
+            }
+
+            return props.wallet.signMessage('cyberia', message);
+        });
+
+        return write();
+    }
+};
+
+/**
+ * Writing a proposal, from the phone it will be voted on.
+ *
+ * The deadline is a choice of durations rather than a date picker: a vote
+ * needs an end (one without would be open forever), and "a week" is what
+ * somebody means far more often than a calendar day typed on a phone.
+ */
+const DURATIONS = [1, 3, 7, 14] as const;
+const proposing = ref(false);
+const publishing = ref(false);
+const proposeError = ref<string | null>(null);
+const draft = ref({
+    daoId: null as number | null,
+    title: '',
+    description: '',
+    days: 7 as (typeof DURATIONS)[number],
+});
+
+const startProposal = (): void => {
+    proposing.value = !proposing.value;
+    creating.value = false;
+    proposeError.value = null;
+
+    if (draft.value.daoId === null && daos.value.length > 0) {
+        draft.value.daoId = daos.value[0].id;
+    }
+};
+
+const publishProposal = async (): Promise<void> => {
+    const address = signer.value?.address;
+    const daoId = draft.value.daoId;
+    const title = draft.value.title.trim();
+
+    if (
+        !address ||
+        !canVote.value ||
+        daoId === null ||
+        title === '' ||
+        publishing.value
+    ) {
+        return;
+    }
+
+    publishing.value = true;
+    proposeError.value = null;
+    const accountId = props.wallet.activeAccountId.value;
+    const endsAt = new Date(
+        Date.now() + draft.value.days * 86_400_000,
+    ).toISOString();
+
+    try {
+        const id = await asSigner(address, accountId, () =>
+            createProposal({
+                address,
+                daoId,
+                title,
+                description: draft.value.description.trim(),
+                endsAt,
+            }),
+        );
+
+        if (accountId !== props.wallet.activeAccountId.value) {
+            return;
+        }
+
+        proposing.value = false;
+        draft.value = { ...draft.value, title: '', description: '' };
+        await load();
+        const created = proposals.value.find((entry) => entry.id === id);
+        await open(
+            created ?? ({ id, title, status: 'open' } as ProposalSummary),
+        );
+    } catch (error) {
+        proposeError.value =
+            error instanceof Error ? error.message : String(error);
+    } finally {
+        publishing.value = false;
+    }
+};
+
+/** Cast the vote (or change it) as the active key; see `asSigner`. */
+const vote = async (support: boolean): Promise<void> => {
+    const proposal = detail.value;
+    const address = signer.value?.address;
+
+    if (!proposal || !address || !canVote.value || pending.value !== null) {
+        return;
+    }
+
+    pending.value = support;
+    voteError.value = null;
+    const accountId = props.wallet.activeAccountId.value;
+
+    try {
+        const cast: MyVote = await asSigner(address, accountId, () =>
+            castVote(proposal.id, address, support),
+        );
+
+        if (
+            accountId !== props.wallet.activeAccountId.value ||
+            detail.value?.id !== proposal.id
+        ) {
+            return;
+        }
+
+        myVote.value = cast;
+
+        try {
+            const fresh = await fetchProposal(proposal.id);
+
+            if (detail.value?.id === fresh.id) {
+                detail.value = fresh;
+            }
+
+            proposals.value = proposals.value.map((entry) =>
+                entry.id === fresh.id ? { ...entry, ...fresh } : entry,
+            );
+        } catch {
+            // The vote is recorded; only the redrawn tally is missing, and
+            // the next visit reads it.
+        }
+    } catch (error) {
+        voteError.value =
+            error instanceof Error ? error.message : String(error);
+    } finally {
+        pending.value = null;
+    }
+};
+
+watch(
+    () => props.wallet.activeAccountId.value,
+    () => {
+        myVote.value = null;
+        voteError.value = null;
+        proposeError.value = null;
+
+        if (detail.value) {
+            void readMyVote(detail.value.id);
+        }
+    },
+);
+
 const openProposals = computed(
     () => proposals.value.filter((entry) => entry.status === 'open').length,
 );
@@ -117,6 +334,9 @@ const load = async (): Promise<void> => {
 /** The list already holds the summary; this fetches the body underneath it. */
 const open = async (proposal: ProposalSummary): Promise<void> => {
     detail.value = proposal;
+    myVote.value = null;
+    voteError.value = null;
+    void readMyVote(proposal.id);
 
     try {
         detail.value = await fetchProposal(proposal.id);
@@ -246,19 +466,102 @@ onMounted(load);
                 </div>
             </div>
 
-            <p class="cw-note" style="margin-top: 14px">
-                <span>{{ t('daoNoSession') }}</span>
+            <!--
+              The vote itself. Two buttons and the one already pressed is the
+              filled one, so changing your mind is the same gesture as voting.
+            -->
+            <template v-if="detail.status === 'open'">
+                <div class="cw-label" style="margin: 22px 0 10px">
+                    {{ t('daoYourVote') }}
+                </div>
+                <div style="display: flex; gap: 10px">
+                    <button
+                        type="button"
+                        class="cw-btn"
+                        :class="
+                            myVote?.support === true
+                                ? 'cw-btn-primary'
+                                : 'cw-btn-secondary'
+                        "
+                        style="flex: 1"
+                        :disabled="!canVote || pending !== null"
+                        :aria-pressed="myVote?.support === true"
+                        @click="vote(true)"
+                    >
+                        {{
+                            pending === true ? t('daoVoting') : t('daoVoteFor')
+                        }}
+                    </button>
+                    <button
+                        type="button"
+                        class="cw-btn"
+                        :class="
+                            myVote?.support === false
+                                ? 'cw-btn-primary'
+                                : 'cw-btn-secondary'
+                        "
+                        style="flex: 1"
+                        :disabled="!canVote || pending !== null"
+                        :aria-pressed="myVote?.support === false"
+                        @click="vote(false)"
+                    >
+                        {{
+                            pending === false
+                                ? t('daoVoting')
+                                : t('daoVoteAgainst')
+                        }}
+                    </button>
+                </div>
+
+                <p v-if="myVote" class="cw-note" style="margin-top: 12px">
+                    <span>{{
+                        t(myVote.support ? 'daoVotedFor' : 'daoVotedAgainst', {
+                            power: powerLabel(myVote.power),
+                        })
+                    }}</span>
+                </p>
+                <p
+                    v-else-if="!canVote"
+                    class="cw-note cw-note-warn"
+                    style="margin-top: 12px"
+                >
+                    <span>{{ t('daoVoteWatchOnly') }}</span>
+                </p>
+                <p v-else class="cw-prose" style="margin-top: 12px">
+                    {{ t('daoVoteHint') }}
+                </p>
+
+                <p
+                    v-if="voteError"
+                    class="cw-note cw-note-bad"
+                    style="margin-top: 12px"
+                >
+                    <span>{{ voteError }}</span>
+                </p>
+            </template>
+
+            <p v-else class="cw-note" style="margin-top: 14px">
+                <span>{{
+                    myVote
+                        ? t(
+                              myVote.support
+                                  ? 'daoClosedVotedFor'
+                                  : 'daoClosedVotedAgainst',
+                          )
+                        : t('daoVoteClosed')
+                }}</span>
             </p>
 
+            <!-- Comments still live on the site; voting no longer does. -->
             <a
-                class="cw-btn cw-btn-secondary"
-                style="margin-top: 18px; text-decoration: none"
+                class="cw-ghost"
+                style="margin-top: 18px; align-self: flex-start"
                 :href="detail.url"
                 target="_blank"
                 rel="noopener noreferrer"
             >
-                {{ t('daoOpenToVote') }}
-                <ExternalLink :size="14" aria-hidden="true" />
+                {{ t('daoDiscuss', { comments: detail.comments }) }}
+                <ExternalLink :size="13" aria-hidden="true" />
             </a>
         </template>
 
@@ -277,14 +580,119 @@ onMounted(load);
                 }}</span>
             </div>
             <p class="cw-prose" style="margin-top: 8px">{{ t('daoBody') }}</p>
-            <button
-                type="button"
-                class="cw-btn cw-btn-secondary"
-                style="margin-top: 16px"
-                @click="creating = !creating"
+            <div style="display: flex; gap: 10px; margin-top: 16px">
+                <button
+                    type="button"
+                    class="cw-btn cw-btn-primary"
+                    style="flex: 1"
+                    :aria-expanded="proposing"
+                    @click="startProposal"
+                >
+                    {{ t('daoPropose') }}
+                </button>
+                <button
+                    type="button"
+                    class="cw-btn cw-btn-secondary"
+                    style="flex: 1"
+                    :aria-expanded="creating"
+                    @click="
+                        creating = !creating;
+                        proposing = false;
+                    "
+                >
+                    {{ t('daoCreate') }}
+                </button>
+            </div>
+
+            <form
+                v-if="proposing"
+                class="cw-card cw-stack"
+                style="gap: 12px; margin-top: 12px"
+                @submit.prevent="publishProposal"
             >
-                {{ t('daoCreate') }}
-            </button>
+                <p v-if="daos.length === 0" class="cw-prose">
+                    {{ t('daoProposeNoDao') }}
+                </p>
+                <template v-else>
+                    <label
+                        >{{ t('daoProposeIn') }}
+                        <select v-model="draft.daoId" class="cw-input" required>
+                            <option
+                                v-for="entry in daos"
+                                :key="entry.id"
+                                :value="entry.id"
+                            >
+                                {{ entry.name }}
+                            </option>
+                        </select>
+                    </label>
+                    <label
+                        >{{ t('daoProposeTitle') }}
+                        <input
+                            v-model="draft.title"
+                            class="cw-input"
+                            maxlength="255"
+                            required
+                        />
+                    </label>
+                    <label
+                        >{{ t('daoProposeBody') }}
+                        <textarea
+                            v-model="draft.description"
+                            class="cw-input"
+                            rows="5"
+                            maxlength="10000"
+                            style="min-height: 120px; resize: vertical"
+                        ></textarea>
+                    </label>
+                    <div>
+                        <div class="cw-label" style="margin-bottom: 8px">
+                            {{ t('daoProposeEnds') }}
+                        </div>
+                        <div style="display: flex; gap: 8px">
+                            <button
+                                v-for="days in DURATIONS"
+                                :key="days"
+                                type="button"
+                                class="cw-btn"
+                                :class="
+                                    draft.days === days
+                                        ? 'cw-btn-primary'
+                                        : 'cw-btn-secondary'
+                                "
+                                style="flex: 1; padding-inline: 0"
+                                :aria-pressed="draft.days === days"
+                                @click="draft.days = days"
+                            >
+                                {{ t('daoProposeDays', { days }) }}
+                            </button>
+                        </div>
+                    </div>
+                    <p v-if="!canVote" class="cw-note cw-note-warn">
+                        <span>{{ t('daoVoteWatchOnly') }}</span>
+                    </p>
+                    <p v-else class="cw-prose">{{ t('daoProposeHint') }}</p>
+                    <p v-if="proposeError" class="cw-note cw-note-bad">
+                        <span>{{ proposeError }}</span>
+                    </p>
+                    <button
+                        type="submit"
+                        class="cw-btn cw-btn-primary"
+                        :disabled="
+                            !canVote ||
+                            publishing ||
+                            draft.title.trim() === '' ||
+                            draft.daoId === null
+                        "
+                    >
+                        {{
+                            publishing
+                                ? t('daoProposePublishing')
+                                : t('daoProposePublish')
+                        }}
+                    </button>
+                </template>
+            </form>
             <form
                 v-if="creating"
                 class="cw-card cw-stack"

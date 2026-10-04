@@ -353,6 +353,11 @@ test('a page is only told a wallet exists when something actually offers one', (
     // Inside Telegram and on the phone shell the pages open elsewhere.
     assert.equal(dappBridgeMode('mobile', false), 'mobile');
     assert.equal(dappBridgeMode('telegram', false), 'mobile');
+
+    // A phone browser cannot take an extension, so it is never told to get one.
+    assert.equal(dappBridgeMode(null, false, true), 'phone');
+    assert.equal(dappBridgeMode(null, true, true), 'extension');
+    assert.equal(dappBridgeMode('mobile', false, true), 'mobile');
 });
 
 test('every listed dapp is a path on this site, not an outside link', () => {

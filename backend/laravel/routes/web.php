@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\TgWhaleController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\Api\WalletChatController;
 use App\Http\Controllers\Api\WalletDailyController;
+use App\Http\Controllers\Api\WalletDaoVoteController;
 use App\Http\Controllers\Api\WalletLainController;
 use App\Http\Controllers\Api\WalletPostController;
 use App\Http\Controllers\Api\WalletSocialController;
@@ -436,6 +437,15 @@ Route::middleware(['auth'])->group(function () {
      */
     Route::post('api/wallet/feed', [WalletPostController::class, 'store'])
         ->middleware('throttle:10,1')->name('wallet.social.post');
+
+    // Voting on a DAO proposal from the wallet — same session, same rule as
+    // the site's vote panel (`ProposalVoter`), cast as the signed-in address.
+    Route::post('api/wallet/dao/proposals', [WalletDaoVoteController::class, 'propose'])
+        ->middleware('throttle:6,1')->name('wallet.social.propose');
+    Route::get('api/wallet/dao/proposals/{proposal}/vote', [WalletDaoVoteController::class, 'show'])
+        ->middleware('throttle:60,1')->name('wallet.social.vote.show');
+    Route::post('api/wallet/dao/proposals/{proposal}/vote', [WalletDaoVoteController::class, 'store'])
+        ->middleware('throttle:20,1')->name('wallet.social.vote');
 
     // Own profile: account info + bridge deposit addresses for every chain.
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');

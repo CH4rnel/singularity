@@ -106,11 +106,22 @@ export const CYBERIA_DAPPS: readonly Dapp[] = [
  * guessed from a user agent, because the honest answer is about what this
  * window can actually do.
  */
-export type DappBridgeMode = 'extension' | 'desktop' | 'browser' | 'mobile';
+export type DappBridgeMode =
+    | 'extension'
+    | 'desktop'
+    | 'browser'
+    | 'mobile'
+    | 'phone';
 
+/**
+ * `phone` is a browser tab on a touch-only device. It used to read as
+ * `browser`, which answered a phone with "install the extension" — advice no
+ * phone browser can take, given to somebody who only wanted to vote.
+ */
 export const dappBridgeMode = (
     shell: 'desktop' | 'mobile' | 'telegram' | null,
     hasInjectedProvider: boolean,
+    phone = false,
 ): DappBridgeMode => {
     if (hasInjectedProvider) {
         return 'extension';
@@ -120,8 +131,22 @@ export const dappBridgeMode = (
         return 'desktop';
     }
 
-    return shell === null ? 'browser' : 'mobile';
+    if (shell !== null) {
+        return 'mobile';
+    }
+
+    return phone ? 'phone' : 'browser';
 };
+
+/**
+ * Whether this window is a phone: a coarse pointer and no fine one anywhere.
+ * A touch laptop has a trackpad too and can still take an extension.
+ */
+export const isTouchOnly = (): boolean =>
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches &&
+    !window.matchMedia('(any-pointer: fine)').matches;
 
 /**
  * Whether something in this browser is already offering an EIP-1193 provider

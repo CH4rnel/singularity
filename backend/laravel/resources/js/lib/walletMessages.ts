@@ -795,10 +795,14 @@ export const walletMessages: Messages = {
         browseModeMobile: 'The system browser',
         browseModeMobileBody:
             'On a phone the pages below open in the system browser, which has its own wallet or none. This app is the wallet for what it does itself.',
+        browseModePhone: 'This wallet',
+        browseModePhoneBody:
+            'A phone browser takes no wallet extensions. What this wallet does itself — swap, farm, launchpad, DAO, bridge — opens right here with your key; the other pages need a wallet app of their own.',
         browseWatchOnly:
             'This account is watch-only. Pages can be opened and read, but nothing here can sign for them.',
         browseDirectory: 'On this chain',
-        browseOpenHere: 'Open in the wallet',
+        browseOpenSite: 'Site',
+        browseInWallet: 'works in this wallet',
         browseOpenPage: 'Open the page',
         browseReadOnly: 'No signature needed',
         browseLeavingNote:
@@ -1466,9 +1470,34 @@ export const walletMessages: Messages = {
         daoAgainst: '{percent}% against',
         daoCast: '{votes} votes · {comments} comments',
         daoCastShort: '{votes} votes',
-        daoNoSession:
-            'Voting is weighted by a token snapshot and recorded against an account, which this wallet does not have. Open the proposal on the site to cast a vote.',
-        daoOpenToVote: 'Open to vote',
+        daoPropose: 'New proposal',
+        daoProposeIn: 'DAO',
+        daoProposeTitle: 'Title',
+        daoProposeBody: 'What and why',
+        daoProposeEnds: 'Voting ends in',
+        daoProposeDays: '{days} d',
+        daoProposeHint:
+            'Published under this wallet’s address. The first press signs you in with it — nothing goes on chain and nothing costs gas.',
+        daoProposePublish: 'Publish',
+        daoProposePublishing: 'Publishing…',
+        daoProposeNoDao:
+            'There is no DAO to propose in yet — create one first.',
+        daoYourVote: 'Your vote',
+        daoVoteFor: 'Vote for',
+        daoVoteAgainst: 'Vote against',
+        daoVoting: 'Recording…',
+        daoVotedFor:
+            'You voted for, with {power} of voting power. You can change it until the vote closes.',
+        daoVotedAgainst:
+            'You voted against, with {power} of voting power. You can change it until the vote closes.',
+        daoVoteHint:
+            'A vote weighs this address’s balance of the DAO’s token, read at your first vote. The first press signs you in with this wallet — nothing goes on chain and nothing costs gas.',
+        daoVoteWatchOnly:
+            'This account is watch-only, so it cannot sign a vote. Switch to an account that holds its key.',
+        daoVoteClosed: 'Voting on this proposal has closed.',
+        daoClosedVotedFor: 'Voting has closed. You voted for.',
+        daoClosedVotedAgainst: 'Voting has closed. You voted against.',
+        daoDiscuss: 'Discussion on the site · {comments}',
 
         // Profile
         profileTitle: 'Profile',
@@ -2584,10 +2613,14 @@ export const walletMessages: Messages = {
         browseModeMobile: 'Системный браузер',
         browseModeMobileBody:
             'На телефоне страницы ниже открываются в системном браузере — со своим кошельком или без него. Для того, что делает само это приложение, кошелёк — оно.',
+        browseModePhone: 'Этот кошелёк',
+        browseModePhoneBody:
+            'Браузер телефона не ставит расширения-кошельки. То, что кошелёк умеет сам — обмен, фарм, лаунчпад, DAO, мост, — открывается прямо здесь, с вашим ключом; остальным страницам нужен свой кошелёк-приложение.',
         browseWatchOnly:
             'Это наблюдательный счёт. Страницы можно открыть и прочитать, но подписать за них отсюда нечем.',
         browseDirectory: 'В этой цепочке',
-        browseOpenHere: 'Открыть в кошельке',
+        browseOpenSite: 'Сайт',
+        browseInWallet: 'работает в этом кошельке',
         browseOpenPage: 'Открыть страницу',
         browseReadOnly: 'Подпись не нужна',
         browseLeavingNote:
@@ -3227,9 +3260,33 @@ export const walletMessages: Messages = {
         daoAgainst: '{percent}% против',
         daoCast: 'Голосов: {votes} · комментариев: {comments}',
         daoCastShort: 'Голосов: {votes}',
-        daoNoSession:
-            'Вес голоса считается по снимку баланса токена и записывается на аккаунт, которого у этого кошелька нет. Чтобы проголосовать, откройте предложение на сайте.',
-        daoOpenToVote: 'Открыть и проголосовать',
+        daoPropose: 'Новое предложение',
+        daoProposeIn: 'DAO',
+        daoProposeTitle: 'Заголовок',
+        daoProposeBody: 'Что и зачем',
+        daoProposeEnds: 'Голосование закончится через',
+        daoProposeDays: '{days} д',
+        daoProposeHint:
+            'Публикуется от адреса этого кошелька. Первое нажатие входит им на сайт: в сеть ничего не уходит, газ не нужен.',
+        daoProposePublish: 'Опубликовать',
+        daoProposePublishing: 'Публикуем…',
+        daoProposeNoDao: 'Пока нет ни одного DAO — сначала создайте его.',
+        daoYourVote: 'Ваш голос',
+        daoVoteFor: 'За',
+        daoVoteAgainst: 'Против',
+        daoVoting: 'Записываем…',
+        daoVotedFor:
+            'Вы проголосовали «за» с силой голоса {power}. Передумать можно до конца голосования.',
+        daoVotedAgainst:
+            'Вы проголосовали «против» с силой голоса {power}. Передумать можно до конца голосования.',
+        daoVoteHint:
+            'Вес голоса — баланс токена DAO на этом адресе в момент первого голоса. Первое нажатие входит на сайт этим кошельком: в сеть ничего не уходит, газ не нужен.',
+        daoVoteWatchOnly:
+            'Этот аккаунт только для просмотра и не может подписать голос. Переключитесь на аккаунт с ключом.',
+        daoVoteClosed: 'Голосование по этому предложению закончено.',
+        daoClosedVotedFor: 'Голосование закончено. Вы голосовали «за».',
+        daoClosedVotedAgainst: 'Голосование закончено. Вы голосовали «против».',
+        daoDiscuss: 'Обсуждение на сайте · {comments}',
 
         // Profile
         profileTitle: 'Профиль',
@@ -4302,10 +4359,14 @@ export const walletMessages: Messages = {
         browseModeMobile: '系统浏览器',
         browseModeMobileBody:
             '在手机上，下面的页面会在系统浏览器里打开，那里有它自己的钱包，或者根本没有。这个应用自己能做的事，钱包就是它。',
+        browseModePhone: '这个钱包',
+        browseModePhoneBody:
+            '手机浏览器装不了钱包扩展。钱包自己能做的 —— 兑换、农场、发射台、DAO、跨链桥 —— 就在这里用你的密钥打开；其他页面需要它们自己的钱包应用。',
         browseWatchOnly:
             '这是一个观察账户。页面可以打开、可以读，但这里没有东西能替它签名。',
         browseDirectory: '这条链上',
-        browseOpenHere: '在钱包里打开',
+        browseOpenSite: '网站',
+        browseInWallet: '在这个钱包里就能用',
         browseOpenPage: '打开页面',
         browseReadOnly: '不需要签名',
         browseLeavingNote:
@@ -4905,9 +4966,31 @@ export const walletMessages: Messages = {
         daoAgainst: '{percent}% 反对',
         daoCast: '{votes} 票 · {comments} 条评论',
         daoCastShort: '{votes} 票',
-        daoNoSession:
-            '投票按代币快照加权，并记在一个账号名下，而这个钱包没有账号。到网站上打开提案才能投票。',
-        daoOpenToVote: '打开去投票',
+        daoPropose: '新提案',
+        daoProposeIn: 'DAO',
+        daoProposeTitle: '标题',
+        daoProposeBody: '内容和理由',
+        daoProposeEnds: '投票结束于',
+        daoProposeDays: '{days} 天',
+        daoProposeHint:
+            '以这个钱包的地址发布。第一次点击会用它登录 —— 不上链，也不花 gas。',
+        daoProposePublish: '发布',
+        daoProposePublishing: '正在发布…',
+        daoProposeNoDao: '还没有 DAO —— 请先创建一个。',
+        daoYourVote: '你的投票',
+        daoVoteFor: '赞成',
+        daoVoteAgainst: '反对',
+        daoVoting: '正在记录…',
+        daoVotedFor: '你投了赞成票，投票权重 {power}。投票结束前可以更改。',
+        daoVotedAgainst: '你投了反对票，投票权重 {power}。投票结束前可以更改。',
+        daoVoteHint:
+            '投票权重是该地址在你首次投票时持有的 DAO 代币余额。第一次点击会用这个钱包登录 —— 不上链，也不花 gas。',
+        daoVoteWatchOnly:
+            '这是只读账户，无法签署投票。请切换到持有私钥的账户。',
+        daoVoteClosed: '这个提案的投票已结束。',
+        daoClosedVotedFor: '投票已结束。你投了赞成票。',
+        daoClosedVotedAgainst: '投票已结束。你投了反对票。',
+        daoDiscuss: '在网站上讨论 · {comments}',
 
         // Profile
         profileTitle: '个人资料',

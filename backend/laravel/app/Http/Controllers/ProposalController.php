@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreProposalRequest;
 use App\Http\Requests\UpdateProposalRequest;
-use App\Jobs\CreateProposalSnapshot;
 use App\Models\Proposal;
 use App\Services\Dao\ActivityRecorder;
 use App\Services\Dao\DaoNotifier;
+use App\Services\Dao\ProposalPublisher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -50,24 +50,9 @@ class ProposalController extends Controller
         ]);
     }
 
-    public function store(StoreProposalRequest $request): RedirectResponse
+    public function store(StoreProposalRequest $request, ProposalPublisher $publisher): RedirectResponse
     {
-        $proposal = Proposal::create([
-            ...$request->validated(),
-            'user_id' => $request->user()->id,
-        ]);
-
-        $this->activityRecorder->record(
-            'proposal.created',
-            $request->user(),
-            $proposal,
-            $proposal->dao,
-        );
-
-        // Heavy holder scan runs after the response; see the job docblock.
-        CreateProposalSnapshot::dispatchAfterResponse($proposal);
-
-        $this->notifier->proposalCreated($proposal);
+        $publisher->publish($request->user(), $request->validated());
 
         return back()->with('success', 'Proposal created');
     }

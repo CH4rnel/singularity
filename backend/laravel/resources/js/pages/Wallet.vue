@@ -5,6 +5,7 @@ import {
     Bot,
     ExternalLink,
     Images,
+    Landmark,
     Lock,
     MessageCircle,
     Newspaper,
@@ -348,6 +349,10 @@ const TABS: { id: Section; label: () => string; icon: Component }[] = [
     { id: 'portfolio', label: () => t('tabWallet'), icon: WalletCards },
     { id: 'feed', label: () => t('feed'), icon: Newspaper },
     { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
+    // A vote is a thing somebody comes to the app to do, so it is one tap
+    // away — not More → The Wired → a row → a page that asks for a browser
+    // extension on a phone, which is where it was.
+    { id: 'dao', label: () => t('dao'), icon: Landmark },
     { id: 'nft', label: () => t('nftTitle'), icon: Images },
     { id: 'lain', label: () => t('navLain'), icon: Bot },
 ];
@@ -381,7 +386,7 @@ const TAB_OF: Record<Section, Section> = {
     feed: 'feed',
     profile: 'feed',
     launchpad: 'portfolio',
-    dao: 'portfolio',
+    dao: 'dao',
     lain: 'lain',
     nft: 'nft',
     nftMint: 'nft',
@@ -1874,6 +1879,7 @@ watch(
                         @crosschain="openSection('crosschain')"
                         @liquidity="openSection('liquidity')"
                         @browse="openSection('browse')"
+                        @dao="openSection('dao')"
                         @gas="openSection('gas')"
                         @preferences="openSection('preferences')"
                     />
