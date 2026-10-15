@@ -7,12 +7,14 @@ first submitted as the one-button phrase generator (1.0.0, built from
 
 ## Package
 
-Upload **`Cyberia-extension.zip`** (the Chromium build, `dist/`) under
-*Package → Upload new package*. The version, 1.4.2, is higher than the item's 1.0.0,
-which is all the store requires. Build and check it with:
+Upload **`Cyberia-extension.zip` from the `app-v*` GitHub release** under
+*Package → Upload new package* — the same version the Firefox add-on and
+`/download` carry (the tag is the version; see the README). 1.4.2 is higher than
+the item's 1.0.0, which is all the store requires. To check the file, run at the
+tagged commit:
 
 ```bash
-npm ci && npm test && npm run zip   # writes Cyberia-extension.zip next to the Firefox one
+npm ci && npm test && npm run zip   # the same bytes as the release asset
 ```
 
 This version asks for permissions 1.0.0 did not (it had none), so Chrome will ask

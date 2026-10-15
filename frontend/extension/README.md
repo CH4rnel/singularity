@@ -191,8 +191,17 @@ AMO takes no new add-on without a data declaration, so `manifest.mjs` writes
 and `websiteActivity` — the address goes to RPC nodes, and a connected site's
 calls are forwarded to them; the reasoning is in `DATA_COLLECTION`), and Firefox
 shows it in its own install prompt from **140**, which is why that is the
-floor. Each AMO version must be higher than the last: the version comes from
-`package.json`, which CI sets from the `app-v*` tag.
+floor.
+
+**One version everywhere, and the tag is it.** `/download`, addons.mozilla.org
+and the Chrome Web Store carry the same build under the same number, and that
+number is the `app-v*` tag: CI writes it into `package.json` and from there into
+both manifests. Never bump `package.json` by hand for a store upload — that is
+how the three channels drifted to 1.4.0, 1.4.1 and a different extension
+altogether. To ship: cut a tag, then upload **the files from that GitHub
+release** (`Cyberia-extension-firefox.zip` + `Cyberia-extension-source.zip` to
+AMO, `Cyberia-extension.zip` to the Chrome Web Store). A local `npm run zip` at
+the tagged commit produces the same bytes, which is how to check them.
 
 Signing an *unlisted* build for side-loading still works with the same
 `gecko.id` if it is ever needed:

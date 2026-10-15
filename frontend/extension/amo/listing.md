@@ -92,6 +92,7 @@ Developer Hub → Cyberia Wallet → **Edit Product Page**:
    https://cyberia.church.
 6. **Android.** 1.4.1 is listed for Firefox for Android because its manifest
    carried `gecko_android`; signing cannot work there (no windows API for the
-   approval window). 1.4.2 drops the key — upload it through **Upload New
+   approval window). 1.4.2 drops the key — upload `Cyberia-extension-firefox.zip`
+   from the `app-v1.4.2` GitHub release through **Upload New
    Version** with the source zip and `amo/reviewer-notes.md`, and the Android
    listing goes away with it.
