@@ -65,6 +65,16 @@ class OpsHeartbeatController extends Controller
             'containers.*.state' => ['required', 'string', 'max:32'],
             'containers.*.status' => ['nullable', 'string', 'max:128'],
             'containers.*.restarts' => ['nullable', 'integer', 'min:0'],
+            'containers.*.exit_code' => ['nullable', 'integer', 'min:0'],
+            // The last line a dying container printed — sent only for one that
+            // is restarting or exited with an error, and cut at 200 there.
+            'containers.*.last_log' => ['nullable', 'string', 'max:300'],
+
+            // The busiest containers by CPU, so a load alert can name them.
+            'top' => ['nullable', 'array', 'max:10'],
+            'top.*.name' => ['required', 'string', 'max:128'],
+            'top.*.cpu' => ['nullable', 'numeric', 'min:0'],
+            'top.*.mem_mb' => ['nullable', 'numeric', 'min:0'],
 
             'tmux' => ['nullable', 'array', 'max:50'],
             'tmux.*' => ['string', 'max:64'],

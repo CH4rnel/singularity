@@ -1,5 +1,10 @@
 <?php
 
+use App\Models\CrmContact;
+use App\Models\CrmTask;
+use App\Models\ServiceCheck;
+use App\Models\ServiceHeartbeat;
+use App\Models\ServiceIncident;
 use App\Models\User;
 use App\Services\Analytics\ProductDigest;
 use App\Services\TelegramOpsNotifier;
@@ -11,11 +16,11 @@ use Illuminate\Support\Facades\Http;
  * The daily report and the channel that carries it.
  *
  * What is pinned here is what makes the report worth reading rather than what
- * makes it render: that it names the funnel's worst step, that a delta against
- * the previous window is attached to counts, that an empty population is a
- * missing section rather than a row of zeros, and — the reason this exists at
- * all — that a second operator who has not started the bot cannot silently
- * swallow the whole message.
+ * makes it render: that what is broken comes first and says why, that money
+ * and people are named rather than counted per event kind, that a total which
+ * did not move is not repeated, that an empty population is a missing section
+ * rather than a row of zeros — and that a second operator who has not started
+ * the bot cannot silently swallow the whole message.
  */
 beforeEach(function () {
     config()->set('services.telegram_ops.bot_token', 'test-token');
@@ -72,87 +77,175 @@ function analyticsUser(array $attributes = []): string
     return $id;
 }
 
-it('names the worst step of the funnel', function () {
+/** The bot's on-chain feed, created the way `bot/db.py` creates it. */
+function activityTable(): void
+{
+    DB::statement('CREATE TABLE IF NOT EXISTS activity_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, usd REAL,
+        sym_in TEXT, amt_in REAL, sym_out TEXT, amt_out REAL, user_addr TEXT,
+        tx_hash TEXT, block INTEGER, meta TEXT, created_at TEXT)');
+}
+
+function activity(string $kind, string $address, ?float $usd, array $extra = []): void
+{
+    DB::table('activity_events')->insert(array_merge([
+        'kind' => $kind,
+        'usd' => $usd,
+        'user_addr' => $address,
+        'tx_hash' => Str::random(40),
+        'created_at' => Carbon::now('UTC')->subHours(2)->toDateTimeString(),
+    ], $extra));
+}
+
+it('marks the weakest step of the funnel on its one line', function () {
     // Three installs, all of which made a wallet, none of which funded it.
     foreach (range(1, 3) as $i) {
         analyticsUser(['wallet_created_at' => Carbon::now('UTC')->subHour()]);
     }
 
-    $text = app(ProductDigest::class)->toText(days: 7);
-
-    expect($text)->toContain('Узкое место')
-        ->and($text)->toContain('Пополнен');
+    expect(app(ProductDigest::class)->toText(days: 7))
+        ->toContain('установки 3 → кошелёк 3 → ⚠️ пополнили 0');
 });
 
-it('reports an empty funnel as empty rather than inventing a bottleneck', function () {
+it('leaves the wallet out on a day nobody opened it', function () {
     $text = app(ProductDigest::class)->toText(days: 7);
 
-    expect($text)->toContain('никто не открыл кошелёк')
-        ->and($text)->not->toContain('Узкое место');
+    expect($text)->not->toContain('КОШЕЛЁК')
+        ->and($text)->not->toContain('⚠️ пополнили');
 });
 
-it('attaches a change against the previous window', function () {
-    $user = User::factory()->create();
+it('says a quiet day in one sentence instead of a page of zeros', function () {
+    $text = app(ProductDigest::class)->toText(days: 1);
 
-    // One XP award inside the window, none before it.
-    DB::table('xp_entries')->insert([
-        'user_id' => $user->id,
-        'source' => 'visit',
-        'reference' => 'day:'.Carbon::now('UTC')->toDateString(),
-        'amount' => 10,
-        'created_at' => Carbon::now('UTC')->subHours(2),
+    expect($text)->toContain('Ничего не сломалось')
+        ->and($text)->not->toContain(': 0');
+});
+
+it('puts a broken service first and says why it is broken', function () {
+    config()->set('monitoring.services.sig-provider', [
+        'group' => 'infra',
+        'label' => 'Blockscout sig-provider',
+        'check' => ['type' => 'heartbeat', 'container' => 'sig-provider'],
+        'usage' => null,
     ]);
 
-    expect(app(ProductDigest::class)->toText(days: 1))->toContain('(новое)');
+    ServiceIncident::create([
+        'service' => 'sig-provider',
+        'status' => 'down',
+        'reason' => 'crash-loop',
+        'detail' => [
+            'container' => 'sig-provider',
+            'status' => 'Restarting (127) 5 seconds ago',
+            'restarts' => 34005,
+            'exit_code' => 127,
+            'last_log' => 'error while loading shared libraries: libssl.so.3',
+        ],
+        'started_at' => now()->subDays(24),
+        'notified_at' => now()->subDays(24),
+    ]);
+
+    $text = app(ProductDigest::class)->toText(days: 1);
+
+    expect($text)->toContain('ТРЕБУЕТ ВНИМАНИЯ')
+        ->and($text)->toContain('Blockscout sig-provider лежит 24 дн.: контейнер падает')
+        ->and($text)->toContain('libssl.so.3')
+        ->and(strpos($text, 'ТРЕБУЕТ ВНИМАНИЯ'))->toBeLessThan(strpos($text, 'Blockscout'));
 });
 
-it('omits the telegram section when the bot has no members', function () {
-    expect(app(ProductDigest::class)->toText(days: 7))->not->toContain('ТЕЛЕГРАМ');
+it('counts the short failures nobody was paged about', function () {
+    foreach ([8, 12] as $minutes) {
+        ServiceIncident::create([
+            'service' => 'host',
+            'status' => 'degraded',
+            'reason' => 'host-pressure',
+            'started_at' => now()->subHours(3),
+            'resolved_at' => now()->subHours(3)->addMinutes($minutes),
+        ]);
+    }
+
+    expect(app(ProductDigest::class)->toText(days: 1))
+        ->toContain('2 коротких сбоя (в среднем 10 мин, хост перегружен), без уведомлений');
 });
 
-it('reports the telegram population and how little of it has a wallet', function () {
+it('reports a host that was heavy all day, and who was eating it', function () {
+    foreach (range(1, 6) as $i) {
+        ServiceCheck::create([
+            'service' => 'host',
+            'status' => 'up',
+            'detail' => ['cpus' => 4, 'load' => [11.5, 11.0, 10.9]],
+            'checked_at' => now()->subHours($i),
+        ]);
+    }
+
+    ServiceHeartbeat::query()->create([
+        'host' => 'cyber.main',
+        'payload' => ['host' => 'cyber.main', 'top' => [['name' => 'backend', 'cpu' => 171.1, 'mem_mb' => 246]]],
+        'reported_at' => now(),
+    ]);
+
+    $text = app(ProductDigest::class)->toText(days: 1);
+
+    expect($text)->toContain('Хост загружен весь день: нагрузка в среднем 11 на 4 ядра (2.8 на ядро')
+        ->and($text)->toContain('больше всего CPU: backend 171%');
+});
+
+it('says the money, the new holders and who they are', function () {
+    activityTable();
+
+    $whale = 'FjDZWDNZ'.str_repeat('a', 36);
+    CrmContact::query()->create(['name' => 'Kirill', 'solana_address' => $whale, 'type' => 'investor', 'status' => 'active']);
+
+    activity('pumpfun_buy', $whale, 425.05, ['meta' => 'new_holder']);
+    activity('pumpfun_buy', 'HFKto1R6'.str_repeat('b', 36), 157.76, ['meta' => 'new_holder']);
+    activity('pumpfun_buy', 'HFKto1R6'.str_repeat('b', 36), 46.60);
+    activity('swap', '0x'.str_repeat('c', 40), 12.5);
+
+    // Seen before the window: not a new address.
+    activity('swap', '0x'.str_repeat('c', 40), 3.0, ['created_at' => Carbon::now('UTC')->subDays(3)->toDateTimeString()]);
+
+    $text = app(ProductDigest::class)->toText(days: 1);
+
+    expect($text)->toContain('4 действия от 3 адресов (2 новых), $642 (новое)')
+        ->and($text)->toContain('pump.fun, покупки CYBER.sol: 3 на $629 от 2 адресов · 2 новых холдера · крупнейшая $425 — Kirill (FjDZWD…aaaa)')
+        ->and($text)->toContain('Обмены: 1 на $12.50 от 1 адреса');
+});
+
+it('omits the telegram line when nobody new came', function () {
+    botTables();
+
+    DB::table('chat_members')->insert([
+        'chat_id' => -100, 'user_id' => 1,
+        'first_seen' => Carbon::now('UTC')->subMonth()->toDateTimeString(),
+        'last_seen' => Carbon::now('UTC')->toDateTimeString(),
+    ]);
+
+    // 658 members yesterday and 658 today is not news.
+    expect(app(ProductDigest::class)->toText(days: 1))->not->toContain('Telegram');
+});
+
+it('reports who joined the chats and linked a wallet', function () {
     // These tables belong to the Python bot (services/telegram-bot/bot/db.py),
     // which owns the same SQLite file. There is no Laravel migration for them,
-    // so the test stands them up exactly as the bot does — the digest reads
-    // them through Schema::hasTable for the deploys where they are absent, and
-    // that branch is covered by the test above.
+    // so the test stands them up exactly as the bot does.
     botTables();
 
     foreach (range(1, 4) as $i) {
         DB::table('chat_members')->insert([
             'chat_id' => -100,
             'user_id' => $i,
-            'first_seen' => Carbon::now('UTC')->subDay(),
-            'last_seen' => Carbon::now('UTC'),
+            'first_seen' => Carbon::now('UTC')->subHours(3)->toDateTimeString(),
+            'last_seen' => Carbon::now('UTC')->toDateTimeString(),
         ]);
     }
 
     DB::table('tg_wallets')->insert([
         'user_id' => 1,
         'address' => '0x'.str_repeat('a', 40),
-        'created_at' => Carbon::now('UTC'),
+        'created_at' => Carbon::now('UTC')->subHour()->toDateTimeString(),
     ]);
 
-    $text = app(ProductDigest::class)->toText(days: 7);
-
-    expect($text)->toContain('Участников чатов: 4')
-        ->and($text)->toContain('привязали кошелёк: 1 (25%)');
-});
-
-it('counts the people owed chat rewards that have nowhere to be paid', function () {
-    botTables();
-
-    DB::table('chat_members')->insert([
-        'chat_id' => -100, 'user_id' => 7,
-        'first_seen' => Carbon::now('UTC')->subDay(), 'last_seen' => Carbon::now('UTC'),
-    ]);
-    DB::table('pending_rewards')->insert([
-        'chat_id' => -100, 'user_id' => 7,
-        'amount' => '1000000000000000000', 'updated_at' => Carbon::now('UTC'),
-    ]);
-
-    expect(app(ProductDigest::class)->toText(days: 7))
-        ->toContain('Ждут наград без кошелька: 1');
+    expect(app(ProductDigest::class)->toText(days: 1))
+        ->toContain('Telegram: +4 в чатах, +1 привязал кошелёк — с кошельком 1 из 4 (25%)');
 });
 
 it('escapes the report for telegram HTML', function () {
@@ -208,7 +301,7 @@ it('splits a report too long for one telegram message', function () {
 
 it('prints without sending unless asked', function () {
     $this->artisan('analytics:digest --days=7')
-        ->expectsOutputToContain('СЕВЕРНАЯ ЗВЕЗДА')
+        ->expectsOutputToContain('Cyberia · 7 дн.')
         ->assertSuccessful();
 
     expect(telegramRequests())->toBeEmpty();
@@ -231,4 +324,31 @@ it('says so when there is nobody to send to', function () {
         ->assertSuccessful();
 
     expect(telegramRequests())->toBeEmpty();
+});
+
+it('says a task once on the day it falls due and folds the old backlog into one line', function () {
+    $owner = User::factory()->create(['name' => 'netrunner']);
+
+    foreach (['Old one', 'Older one'] as $i => $title) {
+        CrmTask::query()->create([
+            'title' => $title,
+            'status' => 'open',
+            'priority' => 'normal',
+            'assigned_to_user_id' => $owner->id,
+            'due_at' => now()->subDays(30 + $i),
+        ]);
+    }
+
+    CrmTask::query()->create([
+        'title' => 'Due this morning',
+        'status' => 'open',
+        'priority' => 'normal',
+        'due_at' => now()->subHours(3),
+    ]);
+
+    $text = app(ProductDigest::class)->toText(days: 1);
+
+    expect($text)->toContain('Сегодня просрочена задача «Due this morning»')
+        ->and($text)->toContain('Давно просрочено задач: 2 (netrunner 2), самая старая — «Older one»')
+        ->and($text)->not->toContain('«Old one»');
 });

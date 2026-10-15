@@ -89,20 +89,55 @@ DISK_FREE_GB=$(df -P -BG "$DISK_PATH" | awk 'NR==2 {gsub("G","",$4); print $4+0}
 # State and restart count are read separately from the human status line,
 # because "Restarting (1) 17 seconds ago" is the only outward sign of a crash
 # loop and it does not appear in .State alone.
+#
+# A container that keeps dying also carries the last line it printed. "Restarting
+# (127)" says that something is wrong; "error while loading shared libraries:
+# libssl.so.3" says what, and it is the difference between an alert somebody
+# acts on and one they scroll past for three weeks. Only for containers that
+# are restarting or exited with an error, so a healthy host sends no logs.
 CONTAINERS="[]"
+TOP="[]"
 
 if command -v docker >/dev/null 2>&1; then
     CONTAINERS=$(docker ps -a --format '{{.Names}}\t{{.State}}\t{{.Status}}' 2>/dev/null | \
         while IFS=$'\t' read -r name state status; do
             [ -z "$name" ] && continue
-            restarts=$(docker inspect -f '{{.RestartCount}}' "$name" 2>/dev/null || echo 0)
-            printf '{"name":"%s","state":"%s","status":"%s","restarts":%s},' \
+            read -r restarts exit_code < <(docker inspect -f '{{.RestartCount}} {{.State.ExitCode}}' "$name" 2>/dev/null || echo "0 0")
+            restarts=$(printf '%s' "${restarts:-0}" | tr -cd '0-9')
+            exit_code=$(printf '%s' "${exit_code:-0}" | tr -cd '0-9')
+            last_log=""
+            # 130/143 are SIGINT/SIGTERM: somebody stopped it on purpose.
+            if [ "$state" = "restarting" ] || { [ "$state" = "exited" ] && [ "${exit_code:-0}" != "0" ] && [ "$exit_code" != "130" ] && [ "$exit_code" != "143" ]; }; then
+                last_log=$(docker logs --tail 1 "$name" 2>&1 | tail -n 1 | cut -c1-200)
+            fi
+            printf '{"name":"%s","state":"%s","status":"%s","restarts":%s,"exit_code":%s,"last_log":"%s"},' \
                 "$(json_escape "$name")" \
                 "$(json_escape "$state")" \
                 "$(json_escape "$status")" \
-                "${restarts:-0}"
+                "${restarts:-0}" \
+                "${exit_code:-0}" \
+                "$(json_escape "$last_log")"
         done)
     CONTAINERS="[${CONTAINERS%,}]"
+
+    # Who is eating the machine. A load alert that cannot name the process
+    # behind it sends somebody to ssh in and run `top` — or, more often, to
+    # ignore it. `--no-stream` samples for about two seconds.
+    TOP=$(docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' 2>/dev/null | \
+        awk -F'\t' '
+            function mb(v,  n, u) {
+                n = v + 0; u = v; gsub(/[0-9.]/, "", u)
+                if (u ~ /^GiB/) return n * 1024
+                if (u ~ /^MiB/) return n
+                if (u ~ /^KiB/) return n / 1024
+                return n / 1048576
+            }
+            $1 != "" { cpu = $2; gsub("%", "", cpu); split($3, mem, " / "); printf "%s\t%.1f\t%d\n", $1, cpu + 0, mb(mem[1]) }' | \
+        sort -t$'\t' -k2 -rn | head -n 5 | \
+        while IFS=$'\t' read -r name cpu mem; do
+            printf '{"name":"%s","cpu":%s,"mem_mb":%s},' "$(json_escape "$name")" "${cpu:-0}" "${mem:-0}"
+        done)
+    TOP="[${TOP%,}]"
 fi
 
 # --------------------------------------------------------------------- tmux --
@@ -175,6 +210,7 @@ PAYLOAD=$(cat <<JSON
   "swap": {"total_mb": ${SWAP_TOTAL:-0}, "used_mb": ${SWAP_USED:-0}},
   "disk": {"path": "$(json_escape "$DISK_PATH")", "used_percent": ${DISK_USED:-0}, "free_gb": ${DISK_FREE_GB:-0}},
   "containers": ${CONTAINERS},
+  "top": ${TOP},
   "tmux": ${TMUX_SESSIONS},
   "processes": ${PROCS},
   "units": ${UNITS_JSON},

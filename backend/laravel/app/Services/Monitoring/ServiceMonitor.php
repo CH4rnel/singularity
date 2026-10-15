@@ -17,10 +17,18 @@ use Carbon\CarbonImmutable;
  *
  * So an incident is a row, not a cache entry. It is opened once, after enough
  * consecutive failures that a single network hiccup on this host cannot open
- * it; announced once; reminded about at most once a day; and announced again
- * when it closes — after as many good checks as it took bad ones to open
- * it — because "it's back" is the half people are waiting for, and a false
- * "it's back" is the fastest way to teach them not to wait.
+ * it, and announced once — immediately when a critical service is down,
+ * otherwise only once it has outlasted `alerts.quiet_minutes`. That delay is
+ * what the channel was missing: in two weeks the host opened 81 incidents, 77
+ * of them shorter than half an hour, each one a "degraded" and a "recovered"
+ * nobody needed. A blip that ends inside the quiet period ends silently and is
+ * counted in the morning report instead. A recovery is announced only for an
+ * incident that was — "it's back" is the half people wait for, but only about
+ * something they were told had gone.
+ *
+ * Reminders are for critical services. A non-critical one that has been down
+ * for three weeks is a standing problem, not news; it is listed in the morning
+ * report every day rather than repeated here twice a day.
  *
  * `unknown` never opens an incident and never closes one. Going blind is not
  * the same as going down, and a monitor that shouts when it loses sight of
@@ -119,7 +127,10 @@ class ServiceMonitor
 
             $open->update(['resolved_at' => $now]);
 
-            return ['kind' => 'resolved', 'definition' => $definition, 'incident' => $open];
+            // A blip nobody was told about ends as quietly as it began.
+            return $open->notified_at === null
+                ? null
+                : ['kind' => 'resolved', 'definition' => $definition, 'incident' => $open];
         }
 
         if ($open !== null) {
@@ -135,7 +146,25 @@ class ServiceMonitor
                     'detail' => $result->detail,
                 ]);
 
-                return ['kind' => 'worsened', 'definition' => $definition, 'incident' => $open];
+                if ($open->notified_at !== null) {
+                    return ['kind' => 'worsened', 'definition' => $definition, 'incident' => $open];
+                }
+            }
+
+            if ($open->notified_at === null) {
+                // Not announced yet: still inside its quiet period, or the
+                // last attempt was refused. Either way the question is the
+                // same every sweep — is it time — and a refused send is
+                // retried by asking it again.
+                if (! $this->due($definition, $open, $now)) {
+                    return null;
+                }
+
+                // What it looks like now, not what it looked like when the
+                // row was opened half an hour ago.
+                $open->update(['detail' => $result->detail]);
+
+                return ['kind' => 'opened', 'definition' => $definition, 'incident' => $open];
             }
 
             return $this->maybeRemind($definition, $open, $now);
@@ -153,7 +182,29 @@ class ServiceMonitor
             'started_at' => $now,
         ]);
 
-        return ['kind' => 'opened', 'definition' => $definition, 'incident' => $incident];
+        return $this->due($definition, $incident, $now)
+            ? ['kind' => 'opened', 'definition' => $definition, 'incident' => $incident]
+            : null;
+    }
+
+    /**
+     * Whether an open incident has earned a message.
+     *
+     * A critical service that is down cannot wait: the site, the chain, the
+     * bridge. Everything else waits out the quiet period first, because most
+     * of what goes wrong on this host fixes itself within minutes, and a
+     * message about something that has already stopped being true by the
+     * time it is read trains the reader to stop reading.
+     */
+    private function due(ServiceDefinition $definition, ServiceIncident $incident, CarbonImmutable $now): bool
+    {
+        if ($definition->critical && $incident->status === ServiceStatus::Down->value) {
+            return true;
+        }
+
+        $quiet = max(0, (int) config('monitoring.alerts.quiet_minutes', 30));
+
+        return CarbonImmutable::parse($incident->started_at)->addMinutes($quiet)->lessThanOrEqualTo($now);
     }
 
     /**
@@ -215,6 +266,10 @@ class ServiceMonitor
         ServiceIncident $incident,
         CarbonImmutable $now,
     ): ?array {
+        if (! $definition->critical) {
+            return null;
+        }
+
         $hours = (int) config('monitoring.alerts.reminder_hours', 12);
         $since = $incident->reminded_at ?? $incident->notified_at ?? $incident->started_at;
 
@@ -243,30 +298,35 @@ class ServiceMonitor
             $definition = $transition['definition'];
             $incident = $transition['incident'];
             $status = ServiceStatus::from($incident->status);
+            $label = '<b>'.e($definition->label).'</b>';
+            $reason = IncidentText::reason($incident->reason);
+            $reason = $reason === '' ? '' : ': '.e($reason);
+            $for = IncidentText::duration($incident->durationSeconds());
+
+            if ($lines !== []) {
+                $lines[] = '';
+            }
 
             $lines[] = match ($transition['kind']) {
-                'resolved' => '🟢 <b>'.e($definition->label).'</b> recovered after '
-                    .$this->duration($incident->durationSeconds()),
-                'reminder' => $status->emoji().' <b>'.e($definition->label).'</b> still '
-                    .$status->value.' — '.$this->duration($incident->durationSeconds()),
-                'worsened' => $status->emoji().' <b>'.e($definition->label).'</b> got worse: '
-                    .e((string) $incident->reason),
-                default => $status->emoji().' <b>'.e($definition->label).'</b> is '
-                    .$status->value.' — '.e((string) $incident->reason),
+                'resolved' => '🟢 '.$label.' снова в норме — проблема длилась '.$for,
+                'reminder' => $status->emoji().' '.$label.' всё ещё '.IncidentText::status($status).' — уже '.$for.$reason,
+                'worsened' => $status->emoji().' '.$label.' стало хуже — '.IncidentText::status($status).$reason,
+                // Announced after the quiet period, so it says how long it has
+                // already been going on: that is half of how bad it is.
+                default => $status->emoji().' '.$label.' '.IncidentText::status($status)
+                    .($incident->durationSeconds() >= 600 ? ' уже '.$for : '').$reason,
             };
 
             // A recovery needs no more than its duration. Everything else is
-            // a request for somebody's attention, and a reason key alone told
+            // a request for somebody's attention, and a reason alone told
             // them only that something somewhere had a name: what was seen
             // and what to do about it is the part that makes it actionable.
             if ($transition['kind'] === 'resolved') {
                 continue;
             }
 
-            $facts = $this->facts(is_array($incident->detail) ? $incident->detail : []);
-
-            if ($facts !== '') {
-                $lines[] = '    '.$facts;
+            foreach (IncidentText::facts(is_array($incident->detail) ? $incident->detail : []) as $fact) {
+                $lines[] = '    '.e($fact);
             }
 
             if ($definition->runbook !== null) {
@@ -275,8 +335,8 @@ class ServiceMonitor
         }
 
         $sent = $this->telegram->send(
-            "🩺 <b>Cyberia services</b>\n\n".implode("\n", $lines)
-            ."\n\n<a href=\"".e(url('/crm/services')).'">Board</a>',
+            "🩺 <b>Cyberia · сервисы</b>\n\n".implode("\n", $lines)
+            ."\n\n<a href=\"".e(url('/crm/machines')).'">Пульт → Машины</a>',
         );
 
         if (! $sent) {
@@ -291,56 +351,5 @@ class ServiceMonitor
                 $transition['incident']->update(['notified_at' => CarbonImmutable::now()]);
             }
         }
-    }
-
-    /**
-     * The scalar half of a probe's detail, as one line.
-     *
-     * `detail` is free-form per probe, so this does not know what any key
-     * means — only that a timestamp reads better as how long ago it was.
-     *
-     * @param  array<string, mixed>  $detail
-     */
-    private function facts(array $detail): string
-    {
-        $parts = [];
-
-        foreach ($detail as $key => $value) {
-            if (! is_scalar($value) || $value === '' || count($parts) >= 4) {
-                continue;
-            }
-
-            $label = str_replace('_', ' ', (string) $key);
-
-            if (is_string($value) && str_ends_with((string) $key, '_since')) {
-                try {
-                    $at = CarbonImmutable::parse($value)->utc();
-                    $value = $at->format('d.m H:i').' UTC ('.$this->duration((int) $at->diffInSeconds(CarbonImmutable::now())).' ago)';
-                } catch (\Throwable) {
-                    // Not a date after all; print it as it came.
-                }
-            } elseif (is_bool($value)) {
-                $value = $value ? 'yes' : 'no';
-            }
-
-            $parts[] = e($label).' '.e((string) $value);
-        }
-
-        return implode(' · ', $parts);
-    }
-
-    private function duration(int $seconds): string
-    {
-        if ($seconds < 90) {
-            return $seconds.'s';
-        }
-
-        if ($seconds < 5400) {
-            return round($seconds / 60).'m';
-        }
-
-        return $seconds < 172800
-            ? round($seconds / 3600, 1).'h'
-            : round($seconds / 86400, 1).'d';
     }
 }

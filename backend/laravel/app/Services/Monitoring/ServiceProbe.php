@@ -830,6 +830,12 @@ class ServiceProbe
         $detail = ['container' => $name, 'status' => $container['status'], 'restarts' => $container['restarts']];
 
         if ($container['state'] !== 'running') {
+            // Why it died, in its own words, when the host could read them.
+            $detail += array_filter([
+                'exit_code' => $container['exit_code'],
+                'last_log' => $container['last_log'],
+            ], fn ($value) => $value !== null);
+
             return match ($container['state']) {
                 // Docker's own word for a container it cannot keep alive.
                 'restarting' => ProbeResult::down('crash-loop', $detail),
@@ -997,7 +1003,11 @@ class ServiceProbe
         $problems = [];
 
         $cpus = max(1, (int) ($metrics['cpus'] ?? 1));
-        $load = is_array($metrics['load'] ?? null) ? (float) ($metrics['load'][0] ?? 0) : null;
+        // The five-minute average, not the one-minute one. This host sits at
+        // a load of about 11 on 4 cores all day, so the one-minute figure
+        // crossed the line and fell back every few minutes — 81 incidents in
+        // two weeks, 77 of them shorter than half an hour, none of them news.
+        $load = is_array($metrics['load'] ?? null) ? (float) ($metrics['load'][1] ?? $metrics['load'][0] ?? 0) : null;
 
         if ($load !== null && $load / $cpus > (float) $definition->checkOption('max_load_per_cpu', 3.0)) {
             $problems[] = 'load';

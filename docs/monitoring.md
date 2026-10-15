@@ -23,6 +23,9 @@ the public internet and its own database, and it can see **none** of this:
 - the docker daemon and every other container on the host
 - the tmux sessions holding the Telegram bot and LainOS
 - load average, memory, swap, disk
+- the five busiest containers by CPU (`docker stats --no-stream`), and for a
+  container that is restarting or exited with an error, its exit code and the
+  last line it logged
 - host cron logs
 
 That is most of what this project actually runs. So the monitor has two halves.
@@ -169,20 +172,38 @@ flushed cache cannot turn one outage into a stream of identical messages.
 
 1. Opened only after `failures_before_alert` (default 2) consecutive failures.
    One failed probe is usually this host's own network.
-2. Announced once, as **one message per sweep** however many services changed —
-   five services going down together is almost always one cause.
-3. Reminded about at most once every `reminder_hours` (default 12).
-4. Announced again when it resolves — after `checks_before_resolve` (default 2)
-   consecutive healthy checks, with no `unknown` among them. "It's back" is the
-   half people wait for, and a false one is how they learn not to: something
-   that fails more often than it answers used to produce a down/recovered pair
-   every hour.
-5. Every alert but a recovery carries what the probe saw (the scalar half of
-   its `detail`, timestamps as "how long ago") and, when the registry entry
-   declares one, a `runbook` line saying what to do. A reason key alone is a
-   name, not information.
-6. `notified_at` is stamped **only when Telegram accepted the message**, so a
-   refused alert is retried instead of being silently counted as delivered.
+2. Announced **at once only when a critical service is down**. Everything else
+   — a non-critical service, or a critical one that is merely degraded — waits
+   out `quiet_minutes` (default 30) first. Most of what goes wrong on this host
+   fixes itself within minutes: in the two weeks before this rule the host
+   opened 81 incidents, 77 of them shorter than half an hour, and every one
+   was a "degraded" plus a "recovered" nobody acted on. A blip that ends inside
+   the quiet period ends **silently** — it stays on the record and on the
+   board, and the morning report (`analytics:digest`) counts it per service.
+3. One message per sweep however many services changed — five services going
+   down together is almost always one cause.
+4. Reminded every `reminder_hours` (default 12) — **critical services only**.
+   A non-critical one that stays broken is a standing problem, not news; it is
+   listed at the top of the morning report every day instead (sig-provider was
+   reminded about 48 times in its first 24 days down).
+5. Announced again when it resolves — after `checks_before_resolve` (default 2)
+   consecutive healthy checks, with no `unknown` among them — **if its opening
+   was announced**. "It's back" is the half people wait for, but only about
+   something they were told had gone.
+6. Every alert but a recovery says, in Russian, what the probe saw and what it
+   means (`IncidentText`): the host's five-minute load per core, free memory,
+   swap, disk and the containers eating the CPU; a container's status, exit
+   code (127 — a missing binary or library, 137 — killed, usually memory) and
+   the **last line it printed**; anything else as its scalar facts. Then, when
+   the registry entry declares one, a `runbook` line saying what to do.
+7. `notified_at` is stamped **only when Telegram accepted the message**, and an
+   un-announced incident asks "is it due?" again every sweep, so a refused
+   alert is retried within five minutes instead of being counted as delivered.
+
+The host is judged on its **five-minute** load average. This one sits at a load
+of about 11 on 4 cores all day, so the one-minute figure crossed the 3-per-core
+line and fell back every few minutes; the chronic part is reported once a day
+in the morning report, with the top consumers, instead.
 
 ---
 

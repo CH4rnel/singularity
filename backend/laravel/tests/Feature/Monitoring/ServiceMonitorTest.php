@@ -197,7 +197,7 @@ it('says what it saw and what to do about it', function () {
     $text = Http::recorded(fn ($request) => str_contains($request->url(), 'api.telegram.org'))
         ->first()[0]['text'];
 
-    expect($text)->toContain('bad-status')
+    expect($text)->toContain('отвечает ошибкой')
         ->and($text)->toContain('status 500')
         ->and($text)->toContain('→ Restart the demo.');
 });
@@ -701,9 +701,10 @@ it('keeps the stall clock through the sweeps the wallet does not answer', functi
 
     $incident = ServiceIncident::sole();
 
-    // Opened, worsened once to unreachable, and nothing after that.
+    // Opened as a stall, worsened to unreachable inside its quiet period, and
+    // announced once when that period ran out — then nothing after that.
     expect($incident->resolved_at)->toBeNull()
-        ->and(alertsSent())->toBe(2)
+        ->and(alertsSent())->toBe(1)
         ->and($incident->detail['height'])->toBe(3_777_376);
 });
 
@@ -723,4 +724,198 @@ it('clears a stall as soon as blocks arrive again', function () {
 
     expect($result->status)->toBe(ServiceStatus::Up)
         ->and($result->detail)->not->toHaveKey('stalled_since');
+});
+
+/* ------------------------------------------------- what reaches a phone -- */
+
+/** Every message the sweeps sent, in order. */
+function alertTexts(): array
+{
+    return Http::recorded(fn ($request) => str_contains($request->url(), 'api.telegram.org'))
+        ->map(fn (array $pair) => (string) $pair[0]['text'])
+        ->values()
+        ->all();
+}
+
+it('waits out the quiet period before announcing a service that is not critical', function () {
+    config()->set('monitoring.services.demo.critical', false);
+    config()->set('monitoring.alerts.quiet_minutes', 30);
+    demoStatus(500);
+    fakeNetwork();
+
+    sweep();
+    sweep();
+
+    // Confirmed and on the board, but nobody is woken for it yet.
+    expect(ServiceIncident::sole()->notified_at)->toBeNull()
+        ->and(alertsSent())->toBe(0);
+
+    $this->travel(31)->minutes();
+    sweep();
+
+    expect(ServiceIncident::sole()->notified_at)->not->toBeNull()
+        ->and(alertsSent())->toBe(1)
+        // Late, so it says how long it has already been going on.
+        ->and(alertTexts()[0])->toContain('уже 31 мин');
+});
+
+it('lets a blip that fixes itself end without a word', function () {
+    config()->set('monitoring.services.demo.critical', false);
+    demoStatus(500);
+    fakeNetwork();
+
+    sweep();
+    sweep();
+    $this->travel(10)->minutes();
+
+    demoStatus(200);
+    sweep();
+    sweep();
+
+    // Opened and closed on the record — the morning report counts it — and
+    // neither half of it reached anybody.
+    expect(ServiceIncident::sole()->resolved_at)->not->toBeNull()
+        ->and(alertsSent())->toBe(0);
+});
+
+it('holds back a critical service that is only degraded', function () {
+    config()->set('monitoring.services', [
+        'host' => [
+            'group' => 'infra',
+            'label' => 'Host',
+            'critical' => true,
+            'check' => ['type' => 'host', 'max_load_per_cpu' => 3.0],
+            'usage' => null,
+        ],
+    ]);
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    $heartbeat = fn () => ServiceHeartbeat::query()->updateOrCreate(['host' => 'test'], [
+        'payload' => [
+            'host' => 'test',
+            'cpus' => 4,
+            'load' => [15.0, 14.0, 11.0],
+            'memory' => ['total_mb' => 7940, 'available_mb' => 1600],
+            'swap' => ['total_mb' => 511, 'used_mb' => 511],
+            'disk' => ['path' => '/', 'used_percent' => 85, 'free_gb' => 18],
+            'top' => [
+                ['name' => 'backend', 'cpu' => 171.1, 'mem_mb' => 246],
+                ['name' => 'db', 'cpu' => 90.5, 'mem_mb' => 1965],
+                ['name' => 'stats-db', 'cpu' => 0.4, 'mem_mb' => 33],
+            ],
+        ],
+        'reported_at' => now(),
+    ]);
+
+    $heartbeat();
+    sweep();
+    sweep();
+
+    // Critical, but degraded is not down: the quiet period still applies.
+    expect(ServiceIncident::sole()->reason)->toBe('host-pressure')
+        ->and(alertsSent())->toBe(0);
+
+    $this->travel(35)->minutes();
+    $heartbeat();
+    sweep();
+
+    $text = alertTexts()[0];
+
+    // The facts that decide what to do, not "cpus 4 · uptime seconds".
+    expect($text)->toContain('хост перегружен')
+        ->and($text)->toContain('нагрузка 14 на 4 ядра (3.5 на ядро)')
+        ->and($text)->toContain('своп заполнен')
+        ->and($text)->toContain('больше всего CPU: backend 171%, db 91%')
+        ->and($text)->not->toContain('stats-db')
+        ->and($text)->not->toContain('uptime')
+        ->and($text)->toContain('/crm/machines');
+});
+
+it('judges the host on the five-minute load, not the one-minute spike', function () {
+    config()->set('monitoring.services', [
+        'host' => [
+            'group' => 'infra',
+            'label' => 'Host',
+            'check' => ['type' => 'host', 'max_load_per_cpu' => 3.0],
+            'usage' => null,
+        ],
+    ]);
+    Http::fake();
+
+    ServiceHeartbeat::query()->updateOrCreate(['host' => 'test'], [
+        'payload' => ['host' => 'test', 'cpus' => 4, 'load' => [13.0, 11.0, 11.0]],
+        'reported_at' => now(),
+    ]);
+
+    // 13 on 4 cores for a minute is this host on an ordinary afternoon.
+    expect(sweep(alert: false)['host']->status)->toBe(ServiceStatus::Up);
+});
+
+it('says why a container keeps dying', function () {
+    config()->set('monitoring.services', [
+        'sig' => [
+            'group' => 'infra',
+            'label' => 'Blockscout sig-provider',
+            'check' => ['type' => 'heartbeat', 'container' => 'sig-provider'],
+            'usage' => null,
+        ],
+    ]);
+    config()->set('monitoring.alerts.quiet_minutes', 0);
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    ServiceHeartbeat::query()->updateOrCreate(['host' => 'test'], [
+        'payload' => [
+            'host' => 'test',
+            'containers' => [[
+                'name' => 'sig-provider',
+                'state' => 'restarting',
+                'status' => 'Restarting (127) 21 seconds ago',
+                'restarts' => 34005,
+                'exit_code' => 127,
+                'last_log' => './sig-provider-server: error while loading shared libraries: libssl.so.3',
+            ]],
+        ],
+        'reported_at' => now(),
+    ]);
+
+    sweep();
+    sweep();
+
+    $text = alertTexts()[0];
+
+    expect($text)->toContain('контейнер падает и перезапускается по кругу')
+        ->and($text)->toContain('контейнер sig-provider: Restarting (127)')
+        ->and($text)->not->toContain('seconds ago')
+        ->and($text)->toContain('код 127')
+        ->and($text)->toContain('libssl.so.3');
+});
+
+it('reminds about a critical outage and leaves a minor one to the morning report', function () {
+    config()->set('monitoring.alerts.reminder_hours', 12);
+    demoStatus(500);
+    fakeNetwork();
+
+    sweep();
+    sweep();
+    $this->travel(13)->hours();
+    sweep();
+
+    // Critical: opened, then reminded once.
+    expect(alertsSent())->toBe(2)
+        ->and(alertTexts()[1])->toContain('всё ещё лежит');
+
+    ServiceIncident::query()->delete();
+    ServiceCheck::query()->delete();
+    config()->set('monitoring.services.demo.critical', false);
+    $before = alertsSent();
+
+    sweep();
+    sweep();
+    $this->travel(31)->minutes();
+    sweep();
+    $this->travel(13)->hours();
+    sweep();
+
+    // Not critical: announced once after its quiet period, never repeated.
+    expect(alertsSent() - $before)->toBe(1);
 });

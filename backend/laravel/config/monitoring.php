@@ -102,7 +102,17 @@ return [
         // "down / recovered" pair every hour, and neither one was news.
         'checks_before_resolve' => (int) env('MONITORING_CHECKS_BEFORE_RESOLVE', 2),
 
-        // Hours before an unresolved incident is repeated once.
+        // Minutes an incident must last before anyone is told — except a
+        // critical service that is down, which is told at once. Most of what
+        // goes wrong on this host fixes itself within minutes: the host alone
+        // opened 81 incidents in two weeks, 77 of them shorter than this. A
+        // blip that ends inside it ends silently and is counted in the
+        // morning report (analytics:digest) instead.
+        'quiet_minutes' => (int) env('MONITORING_QUIET_MINUTES', 30),
+
+        // Hours between reminders about an unresolved incident — critical
+        // services only. A non-critical one that stays broken is listed in
+        // the morning report every day instead of repeated here.
         'reminder_hours' => (int) env('MONITORING_REMINDER_HOURS', 12),
     ],
 
@@ -327,7 +337,7 @@ return [
             'group' => 'infra',
             'label' => 'Host',
             'critical' => true,
-            'note' => 'Load, memory, disk. 4 cores.',
+            'note' => 'Load (5-minute average), memory, disk. 4 cores.',
             'check' => [
                 'type' => 'host',
                 'max_load_per_cpu' => 3.0,

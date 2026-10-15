@@ -75,7 +75,7 @@ final class HeartbeatSnapshot
     /**
      * One container as the host saw it, or null when it was not mentioned.
      *
-     * @return array{name: string, state: string, status: string, restarts: int}|null
+     * @return array{name: string, state: string, status: string, restarts: int, exit_code: int|null, last_log: string|null}|null
      */
     public function container(string $name): ?array
     {
@@ -89,6 +89,8 @@ final class HeartbeatSnapshot
                 'state' => (string) ($container['state'] ?? 'unknown'),
                 'status' => (string) ($container['status'] ?? ''),
                 'restarts' => (int) ($container['restarts'] ?? 0),
+                'exit_code' => isset($container['exit_code']) ? (int) $container['exit_code'] : null,
+                'last_log' => trim((string) ($container['last_log'] ?? '')) ?: null,
             ];
         }
 
@@ -157,6 +159,9 @@ final class HeartbeatSnapshot
             'memory' => $this->payload['memory'] ?? null,
             'swap' => $this->payload['swap'] ?? null,
             'disk' => $this->payload['disk'] ?? null,
+            // The busiest containers, when the host sent them — what a load
+            // alert names instead of leaving somebody to go and run `top`.
+            'top' => is_array($this->payload['top'] ?? null) ? array_values($this->payload['top']) : null,
             'uptime_seconds' => isset($this->payload['uptime_seconds'])
                 ? (int) $this->payload['uptime_seconds']
                 : null,
