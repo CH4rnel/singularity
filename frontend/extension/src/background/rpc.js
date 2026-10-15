@@ -6,7 +6,7 @@
  * with it, and when the relay is down they fail instead of quietly finding
  * their own way out.
  */
-import { PRICES_URL, chainById } from '../shared/chains.js';
+import { PRICES_URL, chainById, flooredGasPrice, plainTransferGas } from '../shared/chains.js';
 
 let counter = 0;
 
@@ -66,23 +66,30 @@ export const sendRaw = (chainId, raw) => rpc(chainId, 'eth_sendRawTransaction', 
 /**
  * A gas limit for a transaction the user is about to sign.
  *
- * The Cyberia node answers `eth_estimateGas` for plain transfers and calls but
- * not for every contract deploy, so a failed estimate is not fatal: a plain
- * transfer falls back to the 21000 every EVM charges for one, and anything
- * with calldata is refused rather than signed for a number nobody checked.
+ * A coin transfer with no calldata is not estimated at all where the answer is
+ * known: 21000 to an address with no code, and `CONTRACT_SEND_GAS` (or more,
+ * if the node says more) to one with code — because the Cyberia node answers
+ * 21000 for both, and the second reverts. Anything with calldata is estimated,
+ * and refused rather than signed for a number nobody checked when the node
+ * will not answer.
  */
 export const gasFor = async (chainId, transaction) => {
-    try {
-        return await rpc(chainId, 'eth_estimateGas', [transaction]);
-    } catch (error) {
-        const plain = !transaction.data || transaction.data === '0x';
+    const plain = !transaction.data || transaction.data === '0x';
 
-        if (plain) {
-            return '0x5208';
+    if (plain && transaction.to) {
+        const code = await rpc(chainId, 'eth_getCode', [transaction.to, 'latest']);
+        let estimate = null;
+
+        try {
+            estimate = BigInt(await rpc(chainId, 'eth_estimateGas', [transaction]));
+        } catch {
+            // A plain transfer does not need the node's opinion to be priced.
         }
 
-        throw error;
+        return `0x${plainTransferGas(code, estimate).toString(16)}`;
     }
+
+    return rpc(chainId, 'eth_estimateGas', [transaction]);
 };
 
 /**
@@ -98,7 +105,10 @@ export const feesFor = async (chainId) => {
     const base = block?.baseFeePerGas ? BigInt(block.baseFeePerGas) : null;
 
     if (base === null) {
-        const gasPrice = BigInt(await rpc(chainId, 'eth_gasPrice'));
+        const gasPrice = flooredGasPrice(
+            BigInt(await rpc(chainId, 'eth_gasPrice')),
+            chainById(chainId)?.minGasPrice,
+        );
 
         return { type: 0, gasPrice: `0x${gasPrice.toString(16)}` };
     }

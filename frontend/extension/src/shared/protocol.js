@@ -94,6 +94,7 @@ export const POPUP = {
     addAccount: 'popup:add-account',
     selectChain: 'popup:select-chain',
     resolveRequest: 'popup:resolve-request',
+    connectOrigin: 'popup:connect-origin',
     revokeOrigin: 'popup:revoke-origin',
     setRelay: 'popup:set-relay',
     rotateCircuit: 'popup:rotate-circuit',

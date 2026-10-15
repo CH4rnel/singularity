@@ -10,6 +10,7 @@
  * Nothing here is sent anywhere. The phrase is generated in the service worker
  * on this machine, shown once, and sealed with the password on the last step.
  */
+import { renderInto } from '../shared/dom.js';
 import { POPUP } from '../shared/protocol.js';
 
 const app = document.getElementById('app');
@@ -239,7 +240,7 @@ const done = () => `
 
 const render = () => {
     const views = { welcome, risk, phrase: phraseView, confirm, import: importView, password, done };
-    app.innerHTML = `${progress()}${(views[step] ?? welcome)()}`;
+    renderInto(app, `${progress()}${(views[step] ?? welcome)()}`);
 };
 
 /* ------------------------------------------------------------ interaction --- */

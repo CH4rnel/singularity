@@ -16,7 +16,7 @@ import {
     routesThrough,
     walletEndpoints,
 } from '../src/background/relay.js';
-import { GECKO_ID, GECKO_MIN, TARGETS, manifestFor } from '../manifest.mjs';
+import { DATA_COLLECTION, GECKO_ID, GECKO_MIN, TARGETS, manifestFor } from '../manifest.mjs';
 import { addressFor, isValidPhrase, normalisePhrase, pathFor } from '../src/background/keyring.js';
 
 const manifest = JSON.parse(await readFile(new URL('../manifest.json', import.meta.url), 'utf8'));
@@ -163,6 +163,14 @@ test('the firefox manifest is the same wallet in gecko dialect', () => {
     assert.ok(!('minimum_chrome_version' in gecko));
     assert.equal(gecko.browser_specific_settings.gecko.id, GECKO_ID);
     assert.equal(gecko.browser_specific_settings.gecko.strict_min_version, GECKO_MIN);
+    // AMO refuses a new add-on without the declaration, and Firefox only
+    // shows it from 140 — an older floor would install without the prompt.
+    assert.deepEqual(gecko.browser_specific_settings.gecko.data_collection_permissions, DATA_COLLECTION);
+    assert.ok(Number.parseFloat(GECKO_MIN) >= 140);
+    assert.ok(!DATA_COLLECTION.required.includes('none'), 'the wallet does talk to nodes');
+    // Approvals open with windows.create and Android has no windows API; AMO
+    // lists an add-on for Android off this key.
+    assert.ok(!('gecko_android' in gecko.browser_specific_settings), 'not an Android add-on');
 
     // Everything that decides what the wallet may reach stays identical.
     assert.deepEqual(gecko.permissions, manifest.permissions);

@@ -14,6 +14,8 @@
  */
 import { POPUP } from '../shared/protocol.js';
 import { SITE_URL, chainById } from '../shared/chains.js';
+import { renderInto } from '../shared/dom.js';
+import { permissionPattern } from '../shared/origins.js';
 import { formatFiat, formatUnits, initials, parseUnits, shortAddress, toDecimal } from '../shared/format.js';
 import { RELAY_MODES } from '../background/relay.js';
 
@@ -31,6 +33,7 @@ const HOLD_MS = 900;
 let state = null;
 let money = null;
 let activeOrigin = null;
+let activeTabId = null;
 let view = 'home';
 let notice = '';
 let draft = { to: '', amount: '', password: '', host: '', port: '' };
@@ -246,7 +249,9 @@ const homeView = () => {
                 ${
                     connected
                         ? '<button class="cw-link" data-do="revoke-active">DISCONNECT</button>'
-                        : `<button class="cw-link is-quiet" data-go="sites">${esc(state.grants.length)} SITES</button>`
+                        : permissionPattern(activeOrigin ?? '')
+                          ? '<button class="cw-link" data-do="connect-active">CONNECT</button>'
+                          : `<button class="cw-link is-quiet" data-go="sites">${esc(state.grants.length)} SITES</button>`
                 }
             </div>
             ${noticeLine()}
@@ -645,7 +650,7 @@ const currentView = () => {
 
 const render = () => {
     if (!state) {
-        app.innerHTML = '<div class="cw-body cw-center"><div class="cw-sub">READING VAULT…</div></div>';
+        renderInto(app, '<div class="cw-body cw-center"><div class="cw-sub">READING VAULT…</div></div>');
         return;
     }
 
@@ -664,7 +669,7 @@ const render = () => {
     };
 
     const active = currentView();
-    app.innerHTML = `${head()}${(bodies[active] ?? homeView)()}${foot()}`;
+    renderInto(app, `${head()}${(bodies[active] ?? homeView)()}${foot()}`);
 
     const focus = app.querySelector('[autofocus]');
     focus?.focus();
@@ -981,6 +986,40 @@ app.addEventListener('click', async (event) => {
             setNotice('COPIED');
             break;
 
+        case 'connect-active': {
+            // The host permission first and in this click — Gecko refuses a
+            // `permissions.request` that comes after any other await. Without
+            // it the provider cannot be placed on the page at all.
+            let allowed = false;
+
+            try {
+                allowed = await chrome.permissions.request({ origins: [permissionPattern(activeOrigin)] });
+            } catch {
+                allowed = false;
+            }
+
+            if (!allowed) {
+                setNotice('Without access to this site the wallet cannot appear on it');
+                break;
+            }
+
+            const result = await ask(POPUP.connectOrigin, { origin: activeOrigin });
+
+            if (!result?.ok) {
+                setNotice(result?.error ?? 'The site could not be connected');
+                break;
+            }
+
+            // The provider is registered for the site's next load; reloading
+            // is what makes it appear in the page that is open now.
+            if (activeTabId !== null) {
+                await chrome.tabs.reload(activeTabId);
+            }
+
+            await refresh();
+            break;
+        }
+
         case 'revoke-active':
             await ask(POPUP.revokeOrigin, { origin: activeOrigin });
             await refresh();
@@ -1048,8 +1087,10 @@ const readActiveTab = async () => {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         activeOrigin = tab?.url ? new URL(tab.url).origin : null;
+        activeTabId = tab?.id ?? null;
     } catch {
         activeOrigin = null;
+        activeTabId = null;
     }
 };
 

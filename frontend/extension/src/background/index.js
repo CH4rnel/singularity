@@ -764,6 +764,36 @@ const popupHandlers = {
     [POPUP.resolveRequest]: ({ id, approved, accounts }) =>
         approveRequest(id, { approved, accounts }),
 
+    /**
+     * Connecting the site in the active tab, from the popup.
+     *
+     * The provider is injected only where a grant exists, and a grant used to
+     * come only from `eth_requestAccounts` — which a page can send only through
+     * the provider. On a fresh install nothing could therefore ever connect.
+     * This is the way in: the popup has already asked the browser for the
+     * site's host permission inside the user's click, and this grants the
+     * active account to that origin and registers the provider there.
+     */
+    [POPUP.connectOrigin]: async ({ origin }) => {
+        const open = await session();
+
+        if (!open) {
+            return { ok: false, error: 'The vault is locked' };
+        }
+
+        if (!normaliseOrigin(origin)) {
+            return { ok: false, error: 'Only a web page can be connected' };
+        }
+
+        const { grants } = await readLocal(['grants']);
+        const next = grantOrigin(grants, origin, [activeAddress(open.document)]);
+
+        await writeLocal({ grants: next });
+        await syncInjection(next);
+
+        return { ok: true };
+    },
+
     [POPUP.revokeOrigin]: async ({ origin }) => {
         const { grants } = await readLocal(['grants']);
         const next = revokeOrigin(grants, origin);

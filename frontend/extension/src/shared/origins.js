@@ -9,7 +9,7 @@
  * that decide what a page is allowed to see can be tested without a browser.
  */
 
-/** `https://swap.cyberia.church` for anything web, `null` for anything else. */
+/** `https://dapp.example` for anything web, `null` for anything else. */
 export const normaliseOrigin = (input) => {
     if (typeof input !== 'string' || input === '') {
         return null;
@@ -39,6 +39,33 @@ export const hostOf = (origin) => {
 };
 
 /** The match pattern that injects the provider into exactly this origin. */
+/**
+ * The host permission a site's grant needs, or null for a site that cannot be
+ * given one.
+ *
+ * Gecko refuses a port in a permission pattern and Chromium ignores one, so
+ * the pattern is scheme + host only; the *grant* stays per origin, port
+ * included, through `matchPattern`. Only what `optional_host_permissions`
+ * declares can be asked for — every https site, and plain http on localhost
+ * for a dapp under development — so a plain-http site gets no Connect button
+ * rather than a permission prompt that cannot exist.
+ */
+export const permissionPattern = (origin) => {
+    const normalised = normaliseOrigin(origin);
+
+    if (!normalised) {
+        return null;
+    }
+
+    const { protocol, hostname } = new URL(normalised);
+
+    if (protocol === 'http:' && hostname !== 'localhost') {
+        return null;
+    }
+
+    return `${protocol}//${hostname}/*`;
+};
+
 export const matchPattern = (origin) => {
     const normalised = normaliseOrigin(origin);
 

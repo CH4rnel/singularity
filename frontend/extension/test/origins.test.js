@@ -8,6 +8,7 @@ import {
     isConnected,
     matchPattern,
     normaliseOrigin,
+    permissionPattern,
     revokeOrigin,
 } from '../src/shared/origins.js';
 
@@ -15,18 +16,18 @@ const ADDRESS = '0x9c4A0Bd45178aE0d6C1b37F9042e5A8Db02F714a';
 
 test('an origin is scheme plus host, and nothing else', () => {
     assert.equal(
-        normaliseOrigin('https://swap.cyberia.church/pool/cyber-usdc?a=1'),
-        'https://swap.cyberia.church',
+        normaliseOrigin('https://dapp.example/pool/cyber-usdc?a=1'),
+        'https://dapp.example',
     );
     assert.equal(normaliseOrigin('http://localhost:5173/'), 'http://localhost:5173');
-    assert.equal(hostOf('https://swap.cyberia.church/anything'), 'swap.cyberia.church');
+    assert.equal(hostOf('https://dapp.example/anything'), 'dapp.example');
 });
 
 test('http and https of the same host are two different places', () => {
-    const grants = grantOrigin({}, 'https://swap.cyberia.church', [ADDRESS]);
+    const grants = grantOrigin({}, 'https://dapp.example', [ADDRESS]);
 
-    assert.equal(isConnected(grants, 'https://swap.cyberia.church', [ADDRESS]), true);
-    assert.equal(isConnected(grants, 'http://swap.cyberia.church', [ADDRESS]), false);
+    assert.equal(isConnected(grants, 'https://dapp.example', [ADDRESS]), true);
+    assert.equal(isConnected(grants, 'http://dapp.example', [ADDRESS]), false);
 });
 
 test('nothing without a web origin can be granted to', () => {
@@ -41,7 +42,7 @@ test('a grant names the accounts and only those', () => {
 
     assert.deepEqual(grantedOrigins(grants), ['https://cyberia.church']);
     assert.deepEqual(accountsFor(grants, 'https://cyberia.church', [ADDRESS]), [ADDRESS]);
-    assert.deepEqual(accountsFor(grants, 'https://swap.cyberia.church', [ADDRESS]), []);
+    assert.deepEqual(accountsFor(grants, 'https://dapp.example', [ADDRESS]), []);
 });
 
 test('an account the vault no longer holds is never reported to a page', () => {
@@ -61,5 +62,22 @@ test('a grant survives being re-granted, and dies when revoked', () => {
 });
 
 test('the match pattern injects into that origin and no other', () => {
-    assert.equal(matchPattern('https://swap.cyberia.church'), 'https://swap.cyberia.church/*');
+    assert.equal(matchPattern('https://dapp.example'), 'https://dapp.example/*');
+});
+
+test('a site can be connected only where the manifest lets the extension ask', async () => {
+    const manifest = JSON.parse(
+        await (await import('node:fs/promises')).readFile(new URL('../manifest.json', import.meta.url), 'utf8'),
+    );
+
+    assert.equal(permissionPattern('https://dapp.example/pool?a=1'), 'https://dapp.example/*');
+    // Gecko refuses a port in a permission pattern; the grant keeps it.
+    assert.equal(permissionPattern('http://localhost:5173/'), 'http://localhost/*');
+    // Nothing in optional_host_permissions covers plain http elsewhere.
+    assert.equal(permissionPattern('http://example.com/'), null);
+    assert.equal(permissionPattern('about:addons'), null);
+    assert.equal(permissionPattern('moz-extension://abc/popup.html'), null);
+
+    assert.ok(manifest.optional_host_permissions.includes('https://*/*'));
+    assert.ok(manifest.optional_host_permissions.includes('http://localhost/*'));
 });

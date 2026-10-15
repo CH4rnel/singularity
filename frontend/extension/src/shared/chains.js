@@ -29,6 +29,10 @@ export const CHAINS = [
         // balance, which is why nothing here hardcodes a token's decimals.
         tokens: 'https://explorer.cyberia.church/api',
         priceKey: 'cyberia',
+        // The node's pool rejects anything under 1.5 gwei outright, while its
+        // own `eth_gasPrice` answers ~1.3 — so its suggestion is a floor
+        // violation, and the floor wins.
+        minGasPrice: 1_500_000_000n,
         tag: 'CY',
         color: '#2FE9E0',
     },
@@ -89,6 +93,38 @@ export const parseChainId = (value) => {
 
     return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 };
+
+/** What a transfer of the coin costs when nothing but an address is paid. */
+export const TRANSFER_GAS = 21_000n;
+
+/**
+ * Gas for the coin sent to a *contract*, stated rather than estimated.
+ *
+ * Cyberia's node answers `eth_estimateGas` for a value transfer with empty
+ * calldata with 21000 whether or not the recipient has code: it prices the
+ * transfer without running the `receive()` the transfer will run. Signing that
+ * answer reverts out of gas and still charges the fee. The site's wallet pays
+ * a contract at this cap for the same reason (`EVM_CONTRACT_SEND_GAS_CAP`), and
+ * unused gas is refunded, so the cost of the headroom is nothing.
+ */
+export const CONTRACT_SEND_GAS = 120_000n;
+
+/**
+ * The gas limit for a coin transfer with no calldata, given what the recipient
+ * turned out to be and what the node estimated (null when it would not).
+ */
+export const plainTransferGas = (recipientCode, estimate) => {
+    const isContract = typeof recipientCode === 'string' && !/^0x0*$/i.test(recipientCode);
+
+    if (!isContract) {
+        return TRANSFER_GAS;
+    }
+
+    return estimate !== null && estimate > CONTRACT_SEND_GAS ? estimate : CONTRACT_SEND_GAS;
+};
+
+/** A node's gas price, raised to the chain's pool floor where it has one. */
+export const flooredGasPrice = (price, floor) => (floor && price < floor ? floor : price);
 
 /** Where the site's USD quotes come from. Its own project, not a vendor. */
 export const PRICES_URL = 'https://cyberia.church/api/wallet/prices';

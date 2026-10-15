@@ -1,6 +1,6 @@
 # Cyberia Wallet — browser extension
 
-A Manifest V3 wallet for Chrome, Brave, Edge and Firefox 128+. It holds its own
+A Manifest V3 wallet for Chrome, Brave, Edge and Firefox 140+. It holds its own
 encrypted vault, injects an EIP-1193 provider into the sites you grant it, and
 signs transactions and messages for them.
 
@@ -21,7 +21,7 @@ screens instead of a provider.
 npm install
 npm test             # the rules worth pinning: derivation, permissions, calldata, vault
 npm run build        # dist/ (Chromium) and dist-firefox/ (Gecko)
-npm run zip          # both zips, the files /download hands out
+npm run zip          # both zips (the files /download hands out) + the source zip AMO asks for
 ```
 
 ## Two builds, one source
@@ -43,13 +43,14 @@ capabilities, which is the relay below.
 
 ```text
 Chrome · Brave · Edge   chrome://extensions → Developer mode → Load unpacked → dist/
-Firefox 128+            about:debugging#/runtime/this-firefox → Load Temporary
+Firefox 140+            about:debugging#/runtime/this-firefox → Load Temporary
                         Add-on → dist-firefox/manifest.json
 ```
 
-Nothing is in a web store yet, so a release is a zip. On Chromium an unpacked
-extension stays installed; **Firefox drops an unsigned add-on when it closes**,
-which is a real limitation and not a bug — see _Signing for Firefox_ below.
+Firefox users install from addons.mozilla.org (see _Publishing on
+addons.mozilla.org_ below); for Chromium a release is still a zip, and an
+unpacked extension stays installed. A build loaded temporarily into Firefox
+goes away when it closes.
 During development point the browser at the unpacked directory: `npm run build`
 rewrites both and the extension reloads with one click.
 
@@ -60,8 +61,11 @@ rewrites both and the extension reloads with one click.
   A malicious page can ask — it cannot read.
 - **Permissions are per origin.** There is no `<all_urls>` content script.
   `src/background/injection.js` registers the provider at runtime for the origins
-  you granted and nowhere else, so a random tab cannot fingerprint you by asking
-  whether a wallet exists. Revoking an origin unregisters it on the next load and
+  you granted and nowhere else. A site is granted from the popup's **Connect**
+  row, which asks the browser for that one origin's host permission in the click
+  and reloads the tab — the only way in, since a page without the provider has
+  nothing to send `eth_requestAccounts` through. So a random tab cannot
+  fingerprint you by asking whether a wallet exists. Revoking an origin unregisters it on the next load and
   rejects anything it left waiting.
 - **Every signature stops at a human.** `PASSTHROUGH_METHODS` is the complete
   list of calls that reach the chain without asking you, and a test asserts no
@@ -151,40 +155,77 @@ means editing `manifest.mjs`, the workflow **and**
 The zip is written without timestamps, so two builds of the same source are the
 same bytes and the published checksum means something.
 
-## Signing for Firefox
+## Publishing on addons.mozilla.org
 
-Release Firefox installs an add-on permanently only if Mozilla signed it. That
-does **not** require a public listing: an *unlisted* submission to AMO returns a
-signed `.xpi` that installs from anywhere.
+The Firefox build is a **listed** add-on, live since 2026-10-13 (1.4.1) at
+https://addons.mozilla.org/firefox/addon/cyberia-wallet/ — it installs from AMO
+and updates itself. Desktop only: approvals open with `windows.create` and
+Firefox for Android has no windows API, so the manifest carries no
+`gecko_android` key, which is what AMO reads as Android support. Everything AMO
+asks for is in `amo/`:
+
+- `amo/listing.md` — name, summary, description (en, ru), categories, links;
+- `amo/privacy-policy.md` — the policy text for the listing;
+- `amo/reviewer-notes.md` — what to paste into *Notes to Reviewer*: how to
+  rebuild the package, what each permission is for, what data leaves;
+- `amo/screenshots/` — the listing's screenshots, 1280×800.
 
 ```bash
-npm run build
+npm ci && npm test && npm run zip
+npx web-ext lint --source-dir=dist-firefox      # the linter AMO runs
+```
+
+The linter must report 0 errors and exactly one warning,
+`KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION` — it is about Android, which
+this add-on does not claim (see the comment in `manifest.mjs`).
+
+A new version goes up from the add-on's page in the Developer Hub (*Upload New
+Version*; the first one went through https://addons.mozilla.org/developers/addon/submit/):
+upload `Cyberia-extension-firefox.zip`, answer **yes** to "does it use minified or
+bundled code", and upload `Cyberia-extension-source.zip` — AMO rejects a bundled
+add-on without its source, and the source zip is exactly the files `npm ci &&
+npm run build` needs to reproduce `dist-firefox/` byte for byte.
+
+AMO takes no new add-on without a data declaration, so `manifest.mjs` writes
+`data_collection_permissions` into the Gecko manifest (`financialAndPaymentInfo`
+and `websiteActivity` — the address goes to RPC nodes, and a connected site's
+calls are forwarded to them; the reasoning is in `DATA_COLLECTION`), and Firefox
+shows it in its own install prompt from **140**, which is why that is the
+floor. Each AMO version must be higher than the last: the version comes from
+`package.json`, which CI sets from the `app-v*` tag.
+
+Signing an *unlisted* build for side-loading still works with the same
+`gecko.id` if it is ever needed:
+
+```bash
 npx web-ext sign --source-dir=dist-firefox --channel=unlisted \
     --api-key="$AMO_JWT_ISSUER" --api-secret="$AMO_JWT_SECRET"
 ```
 
 The credentials come from https://addons.mozilla.org/developers/addon/api/key/
-and belong in the environment, never in this repository. The signed file keeps
-`wallet@cyberia.church` as its id, so a signed build updates an unsigned one that
-was loaded temporarily rather than appearing beside it.
+and belong in the environment, never in this repository.
 
-Until that runs, Firefox users load the add-on temporarily and it goes away with
-the browser — the vault survives, because it is keyed to that id and stays in the
-profile, but the add-on has to be loaded again.
+## Publishing on the Chrome Web Store
 
-`npx web-ext lint --source-dir=dist-firefox --self-hosted` runs the same
-addons-linter AMO does. It reports zero errors; the two `innerHTML` warnings are
-the popup's own escaped rendering (`esc()` on every interpolation), which an
-unlisted signature does not review.
+The Chromium build goes to the Chrome Web Store as an update of the item first
+submitted as the one-button phrase generator (1.0.0), so its id and users carry
+over. Upload `Cyberia-extension.zip`; every dashboard answer — description,
+single purpose, a justification per permission, the data disclosure, test
+instructions — is in `cws/listing.md`, with 1280×800 screenshots taken in
+Chromium in `cws/screenshots/` and the 440×280 tile in `cws/promo-440x280.png`.
+The privacy policy URL the item declares,
+https://cyberia.church/privacy/cyberia-wallet-extension.html, is
+`backend/laravel/public/privacy/cyberia-wallet-extension.html` and is deployed
+with the site.
 
 ## Known limits
 
-- **Firefox 128 or newer.** `world: "MAIN"` for a registered content script
-  landed there, and without it the provider cannot reach the page at all — so
-  `strict_min_version` refuses an older Firefox instead of installing a wallet
-  that silently never connects.
-- **An unsigned Firefox build is temporary** (above). Chromium keeps an unpacked
-  extension across restarts; Gecko does not.
+- **Firefox 140 or newer.** That is where Firefox shows the add-on's data
+  declaration in its install prompt (and `world: "MAIN"` for a registered
+  content script, without which the provider cannot reach a page, landed in
+  128) — so `strict_min_version` refuses an older Firefox.
+- **An unsigned Firefox build is temporary.** A build loaded from
+  `about:debugging` goes away when Firefox closes; the AMO install does not.
 - **No hardware wallets, no WalletConnect, no token approvals screen.** The
   extension signs what a dapp asks for; managing existing allowances is the
   site's job.

@@ -5,6 +5,7 @@ dist/
 dist-firefox/
 Cyberia-extension.zip
 Cyberia-extension-firefox.zip
+Cyberia-extension-source.zip
 
 # `web-ext sign` leaves the signed .xpi and its state here.
 web-ext-artifacts/

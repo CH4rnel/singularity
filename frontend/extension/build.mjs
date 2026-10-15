@@ -38,6 +38,31 @@ const STATIC = [
     ['icons', 'icons'],
 ];
 
+/**
+ * What a reviewer needs to rebuild the Firefox package byte for byte:
+ * addons.mozilla.org asks for the source of any bundled or minified add-on,
+ * and this is that source and nothing else — no node_modules (the lockfile
+ * pins them), no build output.
+ */
+const SOURCE = [
+    '.gitignore',
+    'README.md',
+    // The listing texts; the screenshots in amo/screenshots/ build nothing.
+    'amo/listing.md',
+    'amo/privacy-policy.md',
+    'amo/reviewer-notes.md',
+    'build.mjs',
+    'icons',
+    'manifest.json',
+    'manifest.mjs',
+    'package-lock.json',
+    'package.json',
+    'src',
+    'test',
+];
+
+const SOURCE_ZIP = 'Cyberia-extension-source.zip';
+
 const base = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
 
 for (const [target, { dir, zip, engine }] of Object.entries(TARGETS)) {
@@ -78,10 +103,25 @@ for (const [target, { dir, zip, engine }] of Object.entries(TARGETS)) {
     if (process.argv.includes('--zip')) {
         const archive = join(root, zip);
         await rm(archive, { force: true });
-        await writeFile(archive, await zipDirectory(out));
+        await writeFile(archive, await zipFiles(out, await walk(out)));
         const { size } = await stat(archive);
         console.log(`packed ${zip} · ${(size / 1024).toFixed(0)} KB`);
     }
+}
+
+if (process.argv.includes('--zip')) {
+    const files = [];
+
+    for (const path of SOURCE) {
+        const full = join(root, path);
+        files.push(...((await stat(full)).isDirectory() ? await walk(full) : [full]));
+    }
+
+    const archive = join(root, SOURCE_ZIP);
+    await rm(archive, { force: true });
+    await writeFile(archive, await zipFiles(root, files.sort()));
+    const { size } = await stat(archive);
+    console.log(`packed ${SOURCE_ZIP} · ${(size / 1024).toFixed(0)} KB`);
 }
 
 /* ------------------------------------------------------------------- zip --- */
@@ -101,9 +141,9 @@ async function walk(dir) {
 /**
  * A ZIP with no extra fields and no timestamps, so two builds of the same
  * source produce the same bytes and a published checksum means something.
+ * Entries are named relative to `dir`.
  */
-async function zipDirectory(dir) {
-    const files = await walk(dir);
+async function zipFiles(dir, files) {
     const chunks = [];
     const central = [];
     let offset = 0;
