@@ -180,10 +180,9 @@ class GamificationRemindCommand extends Command
     }
 
     /**
-     * The Telegram accounts that asked the bot for reminders and belong to this
-     * user: the one linked in settings, or any whose `/set_wallet` address is
-     * this user's wallet. Opting in happens in the bot, so nobody who never
-     * asked is written to there.
+     * The Telegram accounts that belong to this user — the one linked in
+     * settings, or any whose `/set_wallet` address is this user's wallet —
+     * minus those that switched reminders off in the bot (`/remind off`).
      *
      * @return list<int>
      */
@@ -211,12 +210,14 @@ class GamificationRemindCommand extends Command
             return [];
         }
 
-        return DB::table('tg_reminder_optins')
-            ->whereIn('tg_user_id', array_values(array_unique($candidates)))
-            ->where('enabled', true)
+        $switchedOff = DB::table('tg_reminder_optins')
+            ->whereIn('tg_user_id', $candidates)
+            ->where('enabled', false)
             ->pluck('tg_user_id')
             ->map(fn ($id) => (int) $id)
             ->all();
+
+        return array_values(array_diff(array_unique($candidates), $switchedOff));
     }
 
     /** The same nudge, left in the outbox the bot drains. */

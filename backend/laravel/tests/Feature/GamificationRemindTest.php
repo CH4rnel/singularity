@@ -197,11 +197,11 @@ it('stores the browser language when a subscription is registered', function () 
 });
 
 /**
- * A Telegram account that asked the bot for reminders, linked to this user's
+ * A Telegram account linked to this user's
  * wallet the way `/set_wallet` links it. `tg_wallets` belongs to the bot, so
  * the test creates it the way the bot does.
  */
-function telegramReachable(bool $optedIn = true, array $stats = []): User
+function telegramReachable(?bool $optedIn = null, array $stats = []): User
 {
     if (! Schema::hasTable('tg_wallets')) {
         Schema::create('tg_wallets', function (Blueprint $table) {
@@ -226,12 +226,14 @@ function telegramReachable(bool $optedIn = true, array $stats = []): User
     ], $stats));
 
     DB::table('tg_wallets')->insert(['user_id' => 777, 'address' => strtolower($user->wallet_address)]);
-    DB::table('tg_reminder_optins')->insert(['tg_user_id' => 777, 'enabled' => $optedIn]);
+    if ($optedIn !== null) {
+        DB::table('tg_reminder_optins')->insert(['tg_user_id' => 777, 'enabled' => $optedIn]);
+    }
 
     return $user;
 }
 
-it('leaves the nudge in the bot outbox for somebody who asked for Telegram reminders', function () {
+it('leaves the nudge in the bot outbox for a linked Telegram account that never touched the setting', function () {
     $user = telegramReachable();
 
     $this->artisan('gamification:remind')->assertSuccessful();
@@ -245,7 +247,7 @@ it('leaves the nudge in the bot outbox for somebody who asked for Telegram remin
     expect(DB::table('notifications')->where('notifiable_id', $user->id)->count())->toBe(1);
 });
 
-it('writes nothing to a Telegram account that never asked', function () {
+it('writes nothing to a Telegram account that switched reminders off', function () {
     telegramReachable(optedIn: false);
 
     $this->artisan('gamification:remind')->assertSuccessful();

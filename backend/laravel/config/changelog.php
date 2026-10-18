@@ -134,7 +134,7 @@ return [
                         'Wrapping, one for one, on the networks where a coin has to become a token before a pool will accept it. No route, no slippage and nothing to choose, because there is nothing to choose.',
                         'NFTs in the wallet: what each of your accounts owns, and minting your own. What a token points at can be a picture, a page or a single line of text, and nothing here assumes it is an image.',
                         'Publishing to IPFS from the wallet. Put up a file or a whole page and get a permanent address made out of the contents themselves — anyone who has that address can fetch it from any node that holds it. Up to 10 MB at a time.',
-                        'The wallet opens inside Telegram. @cyberia_bot has it behind the ☰ button and behind /open: the same wallet as the site, in the chat you were already in, and you can now create one there too. It carries the one warning that is only true inside Telegram — Telegram empties its own storage without asking, and your recovery phrase is what brings the wallet back.',
+                        'The wallet opens inside Telegram. @cyberia_network_bot has it behind the ☰ button and behind /open: the same wallet as the site, in the chat you were already in, and you can now create one there too. It carries the one warning that is only true inside Telegram — Telegram empties its own storage without asking, and your recovery phrase is what brings the wallet back.',
                         'The wallet, the download page and the leaderboard now read in Simplified Chinese as well as English and Russian — 简体中文, every screen, including every warning about what nobody can undo for you.',
                     ],
                 ],

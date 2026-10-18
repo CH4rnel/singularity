@@ -1,6 +1,6 @@
 """Daily reminders delivered from the outbox Laravel fills.
 
-Pinned: nobody who didn't opt in is written to, a reminder opens the wallet's
+Pinned: reminders are on until switched off, nobody who switched off is written to, a reminder opens the wallet's
 Daily screen inside Telegram, one that bounces is recorded and not retried, and
 the off switch works from the message itself.
 """
@@ -56,6 +56,16 @@ class ReminderTests(unittest.TestCase):
         self.assertEqual(button.web_app.url, f"{WALLET_MINI_APP_URL}?section=daily")
         self.assertEqual(kwargs["reply_markup"].inline_keyboard[1][0].callback_data, reminders.OFF_CALLBACK)
         self.assertIsNotNone(self._row()[0])
+
+    def test_reminders_are_on_for_someone_who_never_touched_the_setting(self):
+        self._queue(42)
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+
+        sent = asyncio.run(reminders.deliver_pending(bot))
+
+        self.assertEqual(sent, 1)
+        self.assertIsNone(self._row()[1])
 
     def test_nobody_who_switched_off_is_written_to(self):
         reminders.set_optin(42, False)

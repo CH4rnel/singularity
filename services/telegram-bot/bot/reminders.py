@@ -5,9 +5,9 @@ daily quest is one step short; it can't write to Telegram. It leaves each
 nudge in `tg_outbox`, and this module sends it with a button that opens the
 wallet's Daily screen inside Telegram.
 
-Nobody is written to who didn't ask. Opting in happens here — `/remind`, or
-the `remind` deep link the wallet's Daily screen points at — and every
-reminder carries a button to turn them off again.
+Reminders are on for every Telegram account linked to a wallet; nobody has
+to find a setting first. Switching them off happens here — `/remind off`, or
+the button under every reminder — and sticks until `/remind` turns them on.
 """
 import asyncio
 import logging
@@ -70,12 +70,13 @@ def set_optin(tg_user_id: int, enabled: bool) -> None:
 
 
 def is_opted_in(tg_user_id: int) -> bool:
+    """On unless this account switched reminders off."""
     with engine.connect() as conn:
         row = conn.execute(
             text("SELECT enabled FROM tg_reminder_optins WHERE tg_user_id = :u"),
             {"u": tg_user_id},
         ).fetchone()
-    return bool(row and row[0])
+    return row is None or bool(row[0])
 
 
 def wallet_url(path: str | None) -> str:
