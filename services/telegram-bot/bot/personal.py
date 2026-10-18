@@ -4,7 +4,8 @@ The announcers post what happens on Cyberia to the public chats; nobody there
 is told that it was their money. This module writes to the owner instead:
 
 - a bridge delivered — to the recipient, and to the sender if it's someone else;
-- coins or a priced token arrived on Cyberia.
+- coins or a priced token arrived on Cyberia;
+- a token they hold moved 10 % or more since the last time anyone was told.
 
 An owner is a Telegram account in `tg_wallets` — linked with `/set_wallet`, or
 in one tap from the wallet: it signs its address to Laravel, gets a one-time
@@ -18,6 +19,7 @@ mints, which is how the bot's own hourly rewards arrive.
 """
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy import text
@@ -31,7 +33,7 @@ from bot.chain import (
     _address_topic_hex, _decode_topic_address, _event_topic, _get_token_meta,
     _get_token_usd_price, _hex_no_prefix,
 )
-from bot.config import EVENT_WATCH_POLL_SECONDS, RPC_URL, WALLET_MINI_APP_URL
+from bot.config import EVENT_WATCH_POLL_SECONDS, RPC_URL, WALLET_MINI_APP_URL, WCYBER_ADDRESS
 from bot.db import _kv_get, _kv_set, engine
 from bot.reminders import OFF_CALLBACK, is_opted_in
 from bot.utils import _fmt_amount, _fmt_usd, _format_decimal_amount, _short_addr
@@ -45,6 +47,16 @@ MIN_NOTIFY_USD = 0.01
 # Native coin moves are found by reading whole blocks; the cap keeps one tick
 # cheap after a restart, and the cursor catches up over the next ones.
 MAX_BLOCKS_PER_TICK = 200
+
+# A price move worth a message, and how often one token may cause one.
+PRICE_MOVE = 0.10
+PRICE_QUIET_SECONDS = 3 * 3600
+MIN_HOLDING_USD = 1.0
+BALANCE_OF_ABI = [{
+    "name": "balanceOf", "type": "function", "stateMutability": "view",
+    "inputs": [{"name": "owner", "type": "address"}],
+    "outputs": [{"name": "", "type": "uint256"}],
+}]
 
 BRIDGE_CURSOR = "personal_bridge_id"
 BLOCK_CURSOR = "personal_block"
@@ -71,6 +83,15 @@ def ensure_personal_schema() -> None:
                 expires_at TEXT NOT NULL,
                 used_at    TEXT,
                 created_at TEXT
+            )
+        """))
+        # The price each token was last reported at (or first seen at): a move
+        # is measured from here, and the mark resets when one is reported.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS tg_price_marks (
+                address   TEXT PRIMARY KEY,
+                price_usd REAL NOT NULL,
+                marked_at REAL NOT NULL
             )
         """))
 
@@ -257,10 +278,100 @@ def transfer_tick(w3: Web3) -> list[tuple[int, str]]:
     return out
 
 
+# ------------------------------------------------------------------ prices --
+
+def price_moves(prices, marks, now: float) -> tuple[list[tuple[str, str, float, float]], dict]:
+    """Tokens that moved PRICE_MOVE or more from their mark, and the new marks.
+
+    `prices` is (address, symbol, price) from the market snapshot; `marks` is
+    address → (price, marked_at). A token seen for the first time is marked,
+    not reported; a token reported within PRICE_QUIET_SECONDS waits, so a
+    price bouncing around a threshold doesn't write every five minutes.
+    """
+    moved: list[tuple[str, str, float, float]] = []
+    updates: dict[str, tuple[float, float]] = {}
+    for address, symbol, price in prices:
+        if price is None or price <= 0:
+            continue
+        mark = marks.get(address)
+        if mark is None:
+            updates[address] = (price, now)
+            continue
+        before, marked_at = mark
+        if abs(price / before - 1) >= PRICE_MOVE and now - marked_at >= PRICE_QUIET_SECONDS:
+            moved.append((address, symbol, before, price))
+            updates[address] = (price, now)
+    return moved, updates
+
+
+def _move_text(symbol: str, before: float, after: float, amount: float) -> str:
+    change = (after / before - 1) * 100
+    verb = "вырос" if change > 0 else "упал"
+    return (
+        f"{symbol} {verb} на {abs(change):.0f}%: {_fmt_usd(before)} → {_fmt_usd(after)}.\n"
+        f"У вас {_fmt_amount(amount)} {symbol} ≈ {_fmt_usd(amount * after)}."
+    )
+
+
+def _held(w3: Web3, token: str, owner: str) -> int:
+    contract = w3.eth.contract(address=Web3.to_checksum_address(token), abi=BALANCE_OF_ABI)
+    held = contract.functions.balanceOf(Web3.to_checksum_address(owner)).call()
+    # CYBER is mostly held as the native coin; WCYBER's price is its price.
+    if WCYBER_ADDRESS and token.lower() == WCYBER_ADDRESS.lower():
+        held += w3.eth.get_balance(Web3.to_checksum_address(owner))
+    return held
+
+
+def price_tick(w3: Web3, now: float) -> list[tuple[int, str]]:
+    with engine.connect() as conn:
+        prices = conn.execute(text(
+            "SELECT address, symbol, price_usd FROM token_prices WHERE price_usd IS NOT NULL"
+        )).fetchall()
+        marks = {
+            row[0]: (row[1], row[2])
+            for row in conn.execute(text("SELECT address, price_usd, marked_at FROM tg_price_marks"))
+        }
+    moved, updates = price_moves(prices, marks, now)
+    if updates:
+        with engine.begin() as conn:
+            for address, (price, at) in updates.items():
+                conn.execute(
+                    text("""
+                        INSERT INTO tg_price_marks (address, price_usd, marked_at) VALUES (:a, :p, :t)
+                        ON CONFLICT(address) DO UPDATE SET price_usd = :p, marked_at = :t
+                    """),
+                    {"a": address, "p": price, "t": at},
+                )
+    if not moved:
+        return []
+
+    owners = linked_owners()
+    out: list[tuple[int, str]] = []
+    for address, symbol, before, after in moved:
+        _sym, decimals = _get_token_meta(w3, address)
+        name = "CYBER" if WCYBER_ADDRESS and address.lower() == WCYBER_ADDRESS.lower() else symbol
+        for owner, tgs in owners.items():
+            try:
+                amount = _held(w3, address, owner) / 10**decimals
+            except Exception as exc:
+                logger.debug(f"personal prices: balance {address} of {owner}: {exc}")
+                continue
+            if amount * after < MIN_HOLDING_USD:
+                continue
+            for tg in tgs:
+                out.append((tg, _move_text(name, before, after, amount)))
+    return out
+
+
 async def personal_loop(application: Application) -> None:
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
     while True:
-        for name, tick in (("bridge", bridge_tick), ("transfers", lambda: transfer_tick(w3))):
+        ticks = (
+            ("bridge", bridge_tick),
+            ("transfers", lambda: transfer_tick(w3)),
+            ("prices", lambda: price_tick(w3, time.time())),
+        )
+        for name, tick in ticks:
             try:
                 messages = await asyncio.to_thread(tick)
             except Exception as exc:  # pragma: no cover - keep the loop alive

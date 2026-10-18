@@ -102,6 +102,26 @@ class PersonalTests(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertIn("3 CYBER", messages[0][1])
 
+    def test_a_new_token_is_marked_not_reported(self):
+        moved, updates = personal.price_moves([(TOKEN, "ASH", 2.0)], {}, now=1000.0)
+        self.assertEqual(moved, [])
+        self.assertEqual(updates[TOKEN], (2.0, 1000.0))
+
+    def test_a_ten_percent_move_is_reported_and_resets_the_mark(self):
+        marks = {TOKEN: (2.0, 0.0)}
+        moved, updates = personal.price_moves([(TOKEN, "ASH", 2.25)], marks, now=personal.PRICE_QUIET_SECONDS)
+        self.assertEqual(moved, [(TOKEN, "ASH", 2.0, 2.25)])
+        self.assertEqual(updates[TOKEN][0], 2.25)
+
+    def test_small_moves_and_recent_reports_stay_quiet(self):
+        small, _ = personal.price_moves([(TOKEN, "ASH", 2.1)], {TOKEN: (2.0, 0.0)}, now=10**9)
+        recent, _ = personal.price_moves([(TOKEN, "ASH", 3.0)], {TOKEN: (2.0, 100.0)}, now=200.0)
+        self.assertEqual((small, recent), ([], []))
+
+    def test_a_move_says_which_way_and_what_it_means_for_you(self):
+        self.assertIn("упал на 20%", personal._move_text("CYBER", 0.05, 0.04, 1000))
+        self.assertIn("1,000 CYBER ≈ $40", personal._move_text("CYBER", 0.05, 0.04, 1000))
+
     def test_nothing_is_sent_to_someone_who_switched_off(self):
         reminders.set_optin(1, False)
         bot = MagicMock()
