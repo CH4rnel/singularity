@@ -12,17 +12,15 @@ it('renders the changelog page', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Changelog')
-            ->where('currentVersion', 'v0.15.0')
-            ->has('releases', 17)
-            ->where('releases.0.version', 'v0.15.0')
+            ->where('currentVersion', 'v0.16.0')
+            ->has('releases', 18)
+            ->where('releases.0.version', 'v0.16.0')
             ->where('releases.0.date', '2026-10-18')
-            ->where('releases.0.title', 'Agent Arena: a free-model paper season')
-            ->has('releases.0.sections', 2)
+            ->where('releases.0.title', 'Cyberia imageboard')
+            ->has('releases.0.sections', 1)
             ->where('releases.0.sections.0.label', 'Added')
             ->has('releases.0.sections.0.items', 2)
-            ->where('releases.0.sections.1.label', 'Changed')
-            ->has('releases.0.sections.1.items', 1)
-            ->where('release.current.version', 'v0.15.0')
+            ->where('release.current.version', 'v0.16.0')
             ->where('release.changelogUrl', route('changelog')));
 });
 
