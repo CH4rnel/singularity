@@ -467,6 +467,9 @@ export const walletMessages: Messages = {
         hideToken: 'Hide',
         kToken: 'Token',
         tokenByHand: 'Added by hand',
+        provBridged: 'Bridged via Cyberia',
+        provWrapped: 'Wrapped',
+        provUnverified: 'Unverified',
         tokensScreenBody:
             'Every token this vault holds, network by network. They share the address and the gas of the network they sit on — a token is not a chain of its own.',
         tokenValue: 'Token value',
@@ -1038,23 +1041,29 @@ export const walletMessages: Messages = {
         // A receipt with status 1 — settled, which "broadcast" under-claimed.
         txSettledLabel: 'Confirmed',
         txSettledTitle: 'Transfer confirmed',
-        txSettledBody: 'It’s in a block on {network}. Balances refresh on their own.',
+        txSettledBody:
+            'It’s in a block on {network}. Balances refresh on their own.',
         kDetails: 'Technical details',
         failReason_user_rejected: 'You cancelled it. Nothing was signed.',
-        failReason_insufficient_gas: 'Not enough of the network’s own coin to pay the fee.',
-        failReason_insufficient_funds: 'The balance doesn’t cover the amount and the fee.',
-        failReason_allowance: 'The token’s spending permission is too low for this.',
+        failReason_insufficient_gas:
+            'Not enough of the network’s own coin to pay the fee.',
+        failReason_insufficient_funds:
+            'The balance doesn’t cover the amount and the fee.',
+        failReason_allowance:
+            'The token’s spending permission is too low for this.',
         failReason_slippage: 'The price moved past your limit.',
         failReason_no_route: 'No pool can make this trade right now.',
         failReason_quote_expired: 'The quote expired before it was signed.',
-        failReason_nonce: 'Another transaction from this account got there first.',
+        failReason_nonce:
+            'Another transaction from this account got there first.',
         failReason_watch_only: 'This account can’t sign.',
         failReason_unsupported: 'This network can’t do that from here.',
         failReason_timeout: 'The network didn’t answer in time.',
         failReason_rpc_unreachable: 'The network’s node couldn’t be reached.',
         failReason_reverted: 'The contract refused the transaction.',
         failReason_server_refused: 'The server refused the request.',
-        failReason_unknown: 'The network returned an error this wallet doesn’t recognise.',
+        failReason_unknown:
+            'The network returned an error this wallet doesn’t recognise.',
         kVault: 'Vault',
         vaultUnlockedLocal: 'unlocked · local',
         kTxHash: 'Transaction',
@@ -2507,6 +2516,9 @@ export const walletMessages: Messages = {
         hideToken: 'Скрыть',
         kToken: 'Токен',
         tokenByHand: 'Добавлен вручную',
+        provBridged: 'Через мост Cyberia',
+        provWrapped: 'Обёрнутый',
+        provUnverified: 'Не проверен',
         tokensScreenBody:
             'Все токены этого хранилища, по сетям. Они живут на адресе своей сети и оплачиваются её газом — токен не отдельная сеть.',
         tokenValue: 'Стоимость токенов',
@@ -3053,8 +3065,10 @@ export const walletMessages: Messages = {
         txSettledBody: 'Он в блоке сети {network}. Балансы обновятся сами.',
         kDetails: 'Технические подробности',
         failReason_user_rejected: 'Вы отменили. Ничего не подписано.',
-        failReason_insufficient_gas: 'Не хватает собственной монеты сети на комиссию.',
-        failReason_insufficient_funds: 'Баланса не хватает на сумму и комиссию.',
+        failReason_insufficient_gas:
+            'Не хватает собственной монеты сети на комиссию.',
+        failReason_insufficient_funds:
+            'Баланса не хватает на сумму и комиссию.',
         failReason_allowance: 'Разрешение на трату токена меньше, чем нужно.',
         failReason_slippage: 'Цена ушла дальше вашего предела.',
         failReason_no_route: 'Сейчас ни один пул не может провести этот обмен.',
@@ -3066,7 +3080,8 @@ export const walletMessages: Messages = {
         failReason_rpc_unreachable: 'Не удалось связаться с узлом сети.',
         failReason_reverted: 'Контракт отклонил транзакцию.',
         failReason_server_refused: 'Сервер отклонил запрос.',
-        failReason_unknown: 'Сеть вернула ошибку, которую кошелёк не распознал.',
+        failReason_unknown:
+            'Сеть вернула ошибку, которую кошелёк не распознал.',
         kVault: 'Хранилище',
         vaultUnlockedLocal: 'открыто · локально',
         kTxHash: 'Транзакция',
@@ -4469,6 +4484,9 @@ export const walletMessages: Messages = {
         hideToken: '隐藏',
         kToken: '代币',
         tokenByHand: '手动添加',
+        provBridged: '经 Cyberia 跨链桥',
+        provWrapped: '封装',
+        provUnverified: '未验证',
         tokensScreenBody:
             '这个保险库持有的所有代币，按网络分开。它们和所在网络共用同一个地址、同一份 gas — 代币不是一条自己的链。',
         tokenValue: '代币价值',
@@ -4977,7 +4995,8 @@ export const walletMessages: Messages = {
         txFailedBody: '什么都没有转出。',
         txRevertedLabel: '链上失败',
         txRevertedTitle: '网络拒绝了这笔交易',
-        txRevertedBody: '你的 {amount} {symbol} 没有转出。这次尝试的网络手续费已经扣除。',
+        txRevertedBody:
+            '你的 {amount} {symbol} 没有转出。这次尝试的网络手续费已经扣除。',
         txSettledLabel: '已确认',
         txSettledTitle: '转账已确认',
         txSettledBody: '已写入 {network} 的区块。余额会自动刷新。',
@@ -5587,8 +5606,10 @@ export const walletMessages: Messages = {
         swapOutcomeBody_confirmed: '你的 {from} 现在是 {to} 了。',
         swapOutcomeBody_failed: '账户里什么都没有出去。',
         swapOutcome_reverted: '链上失败',
-        swapOutcomeBody_reverted: '兑换在区块里被拒绝。你的 {from} 没有转出；这次尝试的网络手续费已经扣除。',
-        swapOutcomeBody_failedAfterApproval: '兑换没有发生。你先签署的代币授权已经上链，它的手续费已经扣除。',
+        swapOutcomeBody_reverted:
+            '兑换在区块里被拒绝。你的 {from} 没有转出；这次尝试的网络手续费已经扣除。',
+        swapOutcomeBody_failedAfterApproval:
+            '兑换没有发生。你先签署的代币授权已经上链，它的手续费已经扣除。',
 
         // NFT, IPFS, torrents
         tabNft: 'NFT',

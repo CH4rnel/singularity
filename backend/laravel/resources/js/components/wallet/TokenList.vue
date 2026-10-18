@@ -6,7 +6,8 @@ import type { MultiWallet } from '@/composables/useMultiWallet';
 import { logoForToken } from '@/lib/tokenLogos';
 import { describeReadError, formatUnits, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
-import { formatUsd, usdValue } from '@/lib/wallet/format';
+import { formatUsd, shortAddress, usdValue } from '@/lib/wallet/format';
+import { provenanceOf } from '@/lib/wallet/provenance';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -90,6 +91,41 @@ const tag = (symbol: string): string =>
  */
 const markFor = (token: WalletTokenBalance): string | undefined =>
     logoForToken(chain.value.chainId, token.address, token.symbol);
+
+/**
+ * The tag beside a ticker: what this contract is, said by its address.
+ * Canonical and chain-issued tokens need none; a bridged or wrapped one says
+ * so, and a contract the registry doesn't know is unverified — shown with its
+ * own address, which is the one thing about it that can't be borrowed.
+ */
+const provenanceTag = (
+    token: WalletTokenBalance,
+): { label: string; address?: string } | null => {
+    // Solana and the Bitcoin family have no contract registry here: no claim
+    // either way rather than calling every SPL token unverified.
+    if (chain.value.chainId === undefined) {
+        return null;
+    }
+
+    const known = provenanceOf(chain.value.chainId, token.address);
+
+    if (known?.kind === 'bridged') {
+        return { label: t('provBridged') };
+    }
+
+    if (known?.kind === 'wrapped') {
+        return { label: t('provWrapped') };
+    }
+
+    if (known) {
+        return null;
+    }
+
+    return {
+        label: t('provUnverified'),
+        address: shortAddress(token.address, 6, 4),
+    };
+};
 
 const add = async (): Promise<void> => {
     adding.value = true;
@@ -197,9 +233,27 @@ const add = async (): Promise<void> => {
                               that arrived by hand rather than through the
                               chain's index says so wherever it appears.
                             -->
-                            <span v-if="row.token.manual" class="cw-badge">{{
+                            <span v-if="row.token.manual" class="cw-prov">{{
                                 t('tokenByHand')
-                            }}</span></span
+                            }}</span>
+                            <span
+                                v-if="provenanceTag(row.token)"
+                                class="cw-prov"
+                                :data-kind="
+                                    provenanceTag(row.token)!.address
+                                        ? 'unverified'
+                                        : 'known'
+                                "
+                                >{{ provenanceTag(row.token)!.label
+                                }}<template
+                                    v-if="provenanceTag(row.token)!.address"
+                                >
+                                    ·
+                                    {{
+                                        provenanceTag(row.token)!.address
+                                    }}</template
+                                ></span
+                            ></span
                         >
                         <span
                             style="

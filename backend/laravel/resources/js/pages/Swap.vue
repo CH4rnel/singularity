@@ -887,7 +887,7 @@ const symbolOf = (addr: string): string => {
 const logoOf = (addr: string | null): string | undefined =>
     addr === null || addr === NATIVE
         ? undefined
-        : logoForToken(activeChainId.value, addr, symbolOf(addr));
+        : (logoForToken(activeChainId.value, addr, symbolOf(addr)) ?? '');
 
 // --- token metadata cache -----------------------------------------------
 const metaCache = new Map<string, { symbol: string; decimals: number }>();

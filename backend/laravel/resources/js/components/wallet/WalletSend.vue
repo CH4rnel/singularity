@@ -291,9 +291,17 @@ const OUTCOMES: Record<
 const outcomeCopy = computed(() => {
     switch (outcome.value) {
         case 'signing':
-            return { label: t('txSigningLabel'), title: t('txSigningTitle'), body: t('txSigningBody') };
+            return {
+                label: t('txSigningLabel'),
+                title: t('txSigningTitle'),
+                body: t('txSigningBody'),
+            };
         case 'pending':
-            return { label: t('txPendingLabel'), title: t('txPendingTitle'), body: t('txPendingBody') };
+            return {
+                label: t('txPendingLabel'),
+                title: t('txPendingTitle'),
+                body: t('txPendingBody'),
+            };
         case 'confirmed':
             return {
                 label: t('txSettledLabel'),
@@ -304,10 +312,17 @@ const outcomeCopy = computed(() => {
             return {
                 label: t('txRevertedLabel'),
                 title: t('txRevertedTitle'),
-                body: t('txRevertedBody', { amount: amount.value, symbol: symbol.value }),
+                body: t('txRevertedBody', {
+                    amount: amount.value,
+                    symbol: symbol.value,
+                }),
             };
         default:
-            return { label: t('txFailedLabel'), title: t('txFailedTitle'), body: t('txFailedBody') };
+            return {
+                label: t('txFailedLabel'),
+                title: t('txFailedTitle'),
+                body: t('txFailedBody'),
+            };
     }
 });
 
@@ -1081,8 +1096,7 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                         color:
                             outcome === 'confirmed'
                                 ? 'var(--cw-ok)'
-                                : outcome === 'failed' ||
-                                    outcome === 'reverted'
+                                : outcome === 'failed' || outcome === 'reverted'
                                   ? 'var(--cw-bad)'
                                   : outcome === 'pending'
                                     ? 'var(--cw-pending)'

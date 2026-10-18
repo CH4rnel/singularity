@@ -16,8 +16,11 @@ const props = withDefaults(
     { size: 40, ring: false, logo: null },
 );
 
-const src = computed<string | undefined>(
-    () => props.logo ?? logoFor(props.symbol),
+// `null` (the default) means "no opinion": look the symbol up. An empty string
+// means the caller knows the contract and knows it has no logo — a stranger's
+// "USDC" must get the lettered avatar, not Circle's mark.
+const src = computed<string | undefined>(() =>
+    props.logo === null ? logoFor(props.symbol) : props.logo || undefined,
 );
 const useImage = computed(() => !!src.value && !logoFailed(src.value));
 

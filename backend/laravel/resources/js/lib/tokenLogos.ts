@@ -3,6 +3,7 @@ import {
     ROBINHOOD_STOCK_CHAIN_ID,
     stockByAddress,
 } from '@/lib/robinhoodStocks';
+import { provenanceOf } from '@/lib/wallet/provenance';
 
 // Token logos served from public/token-icons/ (copied from the Ritual DEX), keyed by
 // on-chain symbol. Used by both the Lending and Farm pages via <TokenIcon>.
@@ -60,15 +61,21 @@ export const logoFor = (symbol: string): string | undefined =>
  * handful of assets this project deployed. The tokenised stocks broke that
  * quietly: `F` is Ford on Robinhood Chain and could be anything on Cyberia
  * tomorrow, and drawing Ford's mark on somebody else's token is worse than
- * drawing no mark at all. So an address, where there is one, is asked first —
- * and only a contract the stock registry actually lists gets a company's logo.
+ * drawing no mark at all. So an address, where there is one, decides: a
+ * contract the stock registry lists gets its company's logo, one the
+ * provenance registry lists gets its asset's logo, and anything else gets none.
  */
 export const logoForToken = (
     chainId: number | undefined,
     address: string | null | undefined,
     symbol: string,
 ): string | undefined => {
-    if (chainId === ROBINHOOD_STOCK_CHAIN_ID && address) {
+    if (!address) {
+        // A chain's own coin has no contract; its symbol is the only key.
+        return TOKEN_LOGOS[symbol];
+    }
+
+    if (chainId === ROBINHOOD_STOCK_CHAIN_ID) {
         const stock = stockByAddress(address);
 
         if (stock) {
@@ -76,7 +83,12 @@ export const logoForToken = (
         }
     }
 
-    return TOKEN_LOGOS[symbol];
+    // A contract gets a logo only when the registry says which asset it is.
+    // Falling back to the ticker drew Circle's mark on any token that called
+    // itself USDC, on any chain.
+    const known = provenanceOf(chainId, address);
+
+    return known ? TOKEN_LOGOS[known.symbol] : undefined;
 };
 
 export const showLogo = (symbol: string): boolean =>

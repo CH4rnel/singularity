@@ -200,7 +200,7 @@ const symbolOf = (addr: string): string =>
 const logoOf = (addr: string | null | undefined): string | undefined =>
     !addr || isNative(addr)
         ? undefined
-        : logoForToken(props.chain.chainId, addr, symbolOf(addr));
+        : (logoForToken(props.chain.chainId, addr, symbolOf(addr)) ?? '');
 
 const loadBalance = async (token: string): Promise<bigint> => {
     const me = wallet.address.value;

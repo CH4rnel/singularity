@@ -2540,8 +2540,7 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                         color:
                             outcome === 'confirmed'
                                 ? 'var(--cw-ok)'
-                                : outcome === 'failed' ||
-                                    outcome === 'reverted'
+                                : outcome === 'failed' || outcome === 'reverted'
                                   ? 'var(--cw-bad)'
                                   : 'var(--cw-accent)',
                     }"

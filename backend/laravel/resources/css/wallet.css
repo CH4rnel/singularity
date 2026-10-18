@@ -2156,6 +2156,27 @@ html[data-app-window]:has(.cw-frame) {
     white-space: nowrap;
 }
 
+/*
+ * What a token is, beside its ticker. `.cw-badge` above is redefined further
+ * down as the unread-count pill, so provenance has a class of its own. Amber
+ * for a claim nobody vetted; quiet ink for a fact (bridged, wrapped).
+ */
+.cw-prov {
+    display: inline-block;
+    max-width: 100%;
+    padding: 3px 5px;
+    border: 1px solid var(--cw-border-soft);
+    font: 500 12px/1.3 var(--cw-mono);
+    letter-spacing: 0.04em;
+    color: var(--cw-muted);
+    overflow-wrap: anywhere;
+}
+
+.cw-prov[data-kind='unverified'] {
+    border-color: var(--cw-pending-line-strong);
+    color: var(--cw-pending);
+}
+
 /* --------------------------------------------------------------- lain --- */
 
 /*
