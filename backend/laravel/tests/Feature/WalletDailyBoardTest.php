@@ -111,13 +111,3 @@ it('names the next thing experience buys, and never one already bought', functio
         ->and($unlock['state'])->not->toBe('owned')
         ->and($unlock['cost'])->toBe((int) config('gamification.unlocks.0.cost'));
 });
-
-it('points at the bot that turns daily reminders on, and at nothing when there is no bot', function () {
-    config()->set('services.telegram_bot.username', '@cyberia_network_bot');
-    $this->getJson('/api/wallet/daily')
-        ->assertOk()
-        ->assertJsonPath('remindersUrl', 'https://t.me/cyberia_network_bot?start=remind');
-
-    config()->set('services.telegram_bot.username', '');
-    $this->getJson('/api/wallet/daily')->assertOk()->assertJsonPath('remindersUrl', null);
-});

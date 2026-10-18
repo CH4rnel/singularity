@@ -99,7 +99,6 @@ class WalletDailyController extends Controller
              * strip on the screen has to be able to say what day 7 pays before
              * anybody has reached day 7.
              */
-            'remindersUrl' => $this->remindersUrl(),
             'streakBonuses' => array_map(
                 'intval',
                 (array) config('gamification.streak_bonuses', []),
@@ -241,13 +240,5 @@ class WalletDailyController extends Controller
             'level' => (int) $next['level'],
             'state' => $next['state'] ?? 'xp',
         ];
-    }
-
-    /** The bot's `start=remind` deep link, or null when no bot is configured. */
-    private function remindersUrl(): ?string
-    {
-        $bot = trim((string) config('services.telegram_bot.username', ''), "@ \t\n");
-
-        return $bot === '' ? null : "https://t.me/{$bot}?start=remind";
     }
 }

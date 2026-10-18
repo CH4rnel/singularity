@@ -28,7 +28,7 @@ from bot.config import (
 from bot.db import engine
 from bot.utils import (
     is_valid_eth_address, parse_interval, format_interval, slugify_symbol,
-    _format_window, _format_token_amount,
+    _format_window, _format_token_amount, _short_addr,
 )
 from bot.announcers import _build_digest_text, _cyber_price_line, _SQLITE_TS
 from bot.chain import next_nonce
@@ -111,6 +111,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Контракт: {match[1]}",
                 reply_markup=swap_markup(True, [("токен", match[1])]),
             )
+        return
+
+    # The wallet's "Notifications in Telegram": a one-time link that names the
+    # address the wallet signed for. Opening it here proves the Telegram side.
+    if context.args and context.args[0].startswith("link_") and _is_private(update) and update.effective_user:
+        from bot.personal import LINK_EXPIRED_TEXT, LINKED_TEXT, consume_link, wallet_markup
+
+        address = consume_link(context.args[0][len("link_"):], update.effective_user.id)
+        if address is None:
+            await update.message.reply_text(LINK_EXPIRED_TEXT)
+            return
+        await _process_set_wallet(update, context, Web3.to_checksum_address(address))
+        await update.message.reply_text(
+            LINKED_TEXT.format(addr=_short_addr(address)), reply_markup=wallet_markup()
+        )
         return
 
     # The wallet's Daily screen links here to switch reminders on.

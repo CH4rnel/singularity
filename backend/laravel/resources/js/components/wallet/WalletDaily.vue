@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import WalletTelegramLink from '@/components/wallet/WalletTelegramLink.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { formatUnits, walletChain } from '@/lib/wallet/chains';
@@ -558,22 +559,10 @@ const cooldownHours = computed(() => {
                 </p>
                 <!--
                   A streak only lasts if something reminds you it exists. The
-                  bot writes once on a day the streak would otherwise end, and
-                  only to somebody who switched it on there.
+                  bot writes once on a day the streak would otherwise end, to
+                  the Telegram account linked to this wallet.
                 -->
-                <a
-                    v-if="board?.remindersUrl"
-                    :href="board.remindersUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="cw-ghost"
-                    style="
-                        display: inline-block;
-                        margin-top: 10px;
-                        text-decoration: none;
-                    "
-                    >{{ t('dailyRemindTelegram') }} ↗</a
-                >
+                <WalletTelegramLink :wallet="wallet" style="margin-top: 10px" />
             </div>
 
             <!-- ------------------------------------------------ faucet --- -->

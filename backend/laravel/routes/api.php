@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\WalletMoneroSwapController;
 use App\Http\Controllers\Api\WalletOnrampController;
 use App\Http\Controllers\Api\WalletPushController;
 use App\Http\Controllers\Api\WalletStocksController;
+use App\Http\Controllers\Api\WalletTelegramLinkController;
 use App\Http\Controllers\BoardController;
 use App\Http\Middleware\AuthenticateAiApiKey;
 use App\Http\Middleware\X402Paywall;
@@ -39,6 +40,10 @@ Route::post('board/threads/{thread}/posts', [BoardController::class, 'agentReply
 Route::prefix('wallet')->group(function () {
     Route::post('nonce', [WalletAuthController::class, 'generateNonce']);
     Route::post('verify', [WalletAuthController::class, 'verify']);
+
+    // "Notifications in Telegram": a signed address in, a one-time bot link out.
+    Route::post('telegram/nonce', [WalletTelegramLinkController::class, 'nonce'])->middleware('throttle:20,1');
+    Route::post('telegram/link', [WalletTelegramLinkController::class, 'link'])->middleware('throttle:20,1');
 
     // USD quotes for the unified wallet's portfolio total. Public and cached:
     // it says nothing about any account, only what a coin is worth.

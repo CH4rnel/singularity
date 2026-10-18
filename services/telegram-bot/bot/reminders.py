@@ -126,7 +126,7 @@ async def remind_off_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     if query is None or query.from_user is None:
         return
     set_optin(query.from_user.id, False)
-    await query.answer("Напоминания выключены.")
+    await query.answer("Уведомления выключены. Включить — /remind.")
 
 
 async def deliver_pending(bot) -> int:

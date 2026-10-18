@@ -5,6 +5,7 @@ import StockIcon from '@/components/wallet/StockIcon.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import WalletPlaces from '@/components/wallet/WalletPlaces.vue';
 import type { WalletPlace } from '@/components/wallet/WalletPlaces.vue';
+import WalletTelegramLink from '@/components/wallet/WalletTelegramLink.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useWalletMode } from '@/composables/useWalletMode';
@@ -567,6 +568,8 @@ const recent = computed(() =>
                 {{ t('swapTitle') }}
             </button>
         </div>
+
+        <WalletTelegramLink v-if="!orphaned" :wallet="wallet" variant="card" />
 
         <div
             v-if="orphaned"

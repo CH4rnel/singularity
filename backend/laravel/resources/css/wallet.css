@@ -2878,7 +2878,6 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 .cw-addr,
-.cw-data,
 .cw-token-contract {
     font-family: var(--cw-code);
 }
@@ -3089,6 +3088,13 @@ html[data-app-window]:has(.cw-frame) {
 .cw-badge,
 .cw-prov {
     border-radius: 999px;
+}
+
+/* The offer to link Telegram, between the actions and the holdings. */
+.cw-telegram-card {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 18px;
 }
 
 /* One asset a row on the simple home: logo, name and amount, value. */

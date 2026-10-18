@@ -2,7 +2,9 @@
 import { usePage } from '@inertiajs/vue3';
 import { Bell, ExternalLink, Power, Volume2 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import WalletTelegramLink from '@/components/wallet/WalletTelegramLink.vue';
 import { LOCALE_LABELS, useLocale } from '@/composables/useLocale';
+import type { MultiWallet } from '@/composables/useMultiWallet';
 import { WALLET_MODES, useWalletMode } from '@/composables/useWalletMode';
 import { WALLET_THEMES, useWalletTheme } from '@/composables/useWalletTheme';
 import {
@@ -24,6 +26,11 @@ import {
 import { disablePush, enablePush, pushState } from '@/lib/wallet/push';
 import type { PushState } from '@/lib/wallet/push';
 import { walletMessages } from '@/lib/walletMessages';
+
+defineProps<{
+    /** For the Telegram link; Preferences reads nothing else from it. */
+    wallet?: MultiWallet;
+}>();
 
 defineEmits<{
     back: [];
@@ -382,6 +389,12 @@ onBeforeUnmount(unsubscribe);
         <div class="cw-label" style="margin-bottom: 9px">
             {{ t('preferencesAlerts') }}
         </div>
+
+        <WalletTelegramLink
+            v-if="wallet"
+            :wallet="wallet"
+            style="margin-bottom: 12px"
+        />
 
         <div class="cw-card" style="padding: 0">
             <label class="cw-row" style="padding: 16px; cursor: pointer">

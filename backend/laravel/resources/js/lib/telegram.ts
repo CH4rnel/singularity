@@ -59,6 +59,7 @@ export interface TelegramWebApp {
     expand(): void;
     close(): void;
     openLink(url: string, options?: { try_instant_view?: boolean }): void;
+    openTelegramLink?(url: string): void;
     setHeaderColor(color: string): void;
     setBackgroundColor(color: string): void;
     disableVerticalSwipes?(): void;
@@ -154,7 +155,9 @@ export function telegramStartParam(): string | null {
         window.Telegram?.WebApp?.initDataUnsafe?.start_param ??
         null;
 
-    return typeof value === 'string' && value !== '' ? value.slice(0, 100) : null;
+    return typeof value === 'string' && value !== ''
+        ? value.slice(0, 100)
+        : null;
 }
 
 /** Which Telegram client, for the few places it changes what is possible. */
@@ -313,5 +316,19 @@ export function telegramOpenLink(url: string): void {
         app.openLink(url);
     } else {
         window.open(url, '_blank', 'noopener');
+    }
+}
+
+/**
+ * Open a t.me link — a chat with the bot — the way Telegram means it to be:
+ * inside Telegram from the Mini App, in a new tab anywhere else.
+ */
+export function telegramOpenChat(url: string): void {
+    const app = telegramWebApp();
+
+    if (app?.openTelegramLink) {
+        app.openTelegramLink(url);
+    } else {
+        telegramOpenLink(url);
     }
 }

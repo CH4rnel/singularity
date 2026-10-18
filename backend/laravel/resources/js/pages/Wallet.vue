@@ -2331,6 +2331,7 @@ watch(
 
                     <WalletPreferences
                         v-else-if="section === 'preferences'"
+                        :wallet="wallet"
                         @security="openSection('security')"
                         @accounts="openSection('accounts')"
                         @networks="openSection('networks')"

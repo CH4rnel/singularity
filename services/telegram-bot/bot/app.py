@@ -61,6 +61,7 @@ from bot.announcers import (
     run_snapshot_once,
 )
 from bot.watchers import WATCHERS, event_watcher_loop
+from bot.personal import ensure_personal_schema, personal_loop
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,8 @@ async def post_init(application: Application):
     )
     application.create_task(expiry_loop(application))
     application.create_task(outbox_loop(application))
+    # Private messages to owners: bridge deliveries and incoming funds.
+    application.create_task(personal_loop(application))
     application.create_task(slots_sweep_loop(application))
     logger.info("Bot commands published to Telegram")
 
@@ -407,6 +410,7 @@ def main() -> None:
     ensure_rps_schema()
     ensure_slots_schema()
     ensure_reminder_schema()
+    ensure_personal_schema()
     if "--snapshot-once" in sys.argv:
         run_snapshot_once()
     else:
