@@ -22,6 +22,11 @@ export const arenaMessages: Messages = {
         lastTick: 'Last check: {date}',
         reservations:
             '${amount} reserved across {calls} call slots. This is a conservative allowance, not the actual bill.',
+        freeCalls:
+            'Free models only · {calls} of {limit} call slots used · paid routing disabled.',
+        archivedSeasons: 'Earlier season evidence',
+        error_free_models_required:
+            'This season uses an older model configuration. It is archived; only free models may run.',
         cycle_collecting: 'Collecting model decisions',
         cycle_awaiting_fill:
             'Decisions committed; waiting for a later market observation',
@@ -142,6 +147,11 @@ export const arenaMessages: Messages = {
         lastTick: 'Последняя проверка: {date}',
         reservations:
             'Зарезервировано ${amount} на {calls} мест для вызовов. Это консервативный лимит, а не фактический счёт.',
+        freeCalls:
+            'Только бесплатные модели · использовано {calls} из {limit} мест для вызовов · платные маршруты запрещены.',
+        archivedSeasons: 'Архив предыдущих сезонов',
+        error_free_models_required:
+            'Сезон использует прежние настройки моделей и перенесён в архив. Запуск разрешён только бесплатным моделям.',
         cycle_collecting: 'Получаем решения моделей',
         cycle_awaiting_fill:
             'Решения зафиксированы; ожидаем следующую рыночную котировку',

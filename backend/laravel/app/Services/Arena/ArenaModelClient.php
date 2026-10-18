@@ -9,7 +9,7 @@ use Illuminate\Validation\Rule;
 
 class ArenaModelClient
 {
-    public const PROMPT = 'You are a bounded paper-trading contestant. You have no tools, wallet, web access or private memory. Use only the supplied observation and your own portfolio. Prices are USDC micro-units per WETH; cash has 6 decimals and WETH has 18. Do not invent news, indicators or history. Compare costs and uncertainty. Output only JSON with exactly action (hold/buy/sell), bps (0 for hold; 2500/5000/10000 otherwise), and reason (at most 600 characters). No markdown. Buying spends that fraction of cash including modeled costs; selling uses that fraction of WETH. Never buy with no cash or sell with no WETH. The future fill price is unknown. Your public reason must explain the decision briefly; it is not a private chain of thought.';
+    public const PROMPT = 'You are a bounded paper-trading contestant. You have no tools, wallet, web access or private memory. Use only the supplied observation and your own portfolio. Prices are USDC micro-units per WETH; cash has 6 decimals and WETH has 18. Do not invent news, indicators or history. Compare costs and uncertainty. Output only JSON with exactly action (hold/buy/sell), bps (0 for hold; 2500/5000/10000 otherwise), and reason (at most 600 characters). No markdown. Buying spends that fraction of cash including modeled costs; selling uses that fraction of WETH. Never buy with no cash or sell with no WETH. The future fill price is unknown. Your public reason must explain the decision briefly; it is not a private chain of thought. Return exactly one JSON object, never an array. Example: {"action":"hold","bps":0,"reason":"Insufficient evidence to change the position."}';
 
     /** @param array<string, mixed> $rules
      * @param  array<string, mixed>  $context
@@ -18,6 +18,7 @@ class ArenaModelClient
     public function decide(string $actor, array $rules, array $context): array
     {
         $settings = $rules['automation'];
+        self::assertFreeOnly($settings);
         $model = $settings['models'][$actor];
         $system = $settings['prompt']."\nMethod: ".$rules['agents'][$actor]['method'];
         $user = json_encode($context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
@@ -28,8 +29,9 @@ class ArenaModelClient
             ->connectTimeout(3)->timeout($settings['timeout_seconds'])->withOptions(['allow_redirects' => false])
             ->post('https://openrouter.ai/api/v1/chat/completions', [
                 'model' => $model, 'stream' => false, 'max_tokens' => $settings['max_output_tokens'], 'temperature' => 0.2,
+                'reasoning' => ['enabled' => false],
                 'provider' => ['allow_fallbacks' => false, 'require_parameters' => true,
-                    'max_price' => ['prompt' => $settings['max_price_per_million'], 'completion' => $settings['max_price_per_million'], 'request' => 0]],
+                    'max_price' => ['prompt' => 0, 'completion' => 0, 'request' => 0]],
                 'response_format' => ['type' => 'json_object'],
                 'messages' => [['role' => 'system', 'content' => $system], ['role' => 'user', 'content' => $user]],
             ]);
@@ -55,5 +57,21 @@ class ArenaModelClient
         }
 
         return ['decision' => [...$decision, 'model' => $model], 'served_model' => $response->json('model')];
+    }
+
+    /** @param array<string, mixed> $settings */
+    public static function assertFreeOnly(array $settings): void
+    {
+        if (($settings['pricing_policy'] ?? null) !== 'free-only'
+            || ($settings['max_price_per_million'] ?? null) !== 0
+            || ($settings['budget_cents'] ?? null) !== 0 || ($settings['reservation_cents_per_call'] ?? null) !== 0) {
+            throw new DomainException('free_models_required');
+        }
+        foreach (['lain', 'challenger'] as $actor) {
+            $model = $settings['models'][$actor] ?? null;
+            if (! is_string($model) || ! preg_match('/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]{1,80}:free$/D', $model)) {
+                throw new DomainException('free_models_required');
+            }
+        }
     }
 }

@@ -5,6 +5,7 @@ use App\Models\ArenaRound;
 use App\Models\ArenaSeason;
 use App\Services\Arena\ArenaAutomation;
 use App\Services\Arena\ArenaMarketFeed;
+use App\Services\Arena\ArenaModelClient;
 use App\Services\Arena\ArenaSeasonManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
@@ -19,7 +20,7 @@ beforeEach(function () {
     config()->set('arena.slug', 'season-zero');
     config()->set('arena.automation.enabled', true);
     config()->set('arena.automation.api_key', 'test-only-not-a-real-key');
-    config()->set('arena.automation.models', ['lain' => 'fixture/lain', 'challenger' => 'fixture/challenger']);
+    config()->set('arena.automation.models', ['lain' => 'fixture/lain:free', 'challenger' => 'fixture/challenger:free']);
     Http::preventStrayRequests();
 });
 
@@ -32,8 +33,8 @@ function fakeArenaMarket(?Closure $change = null, ?Closure $modelResponse = null
     Http::fake(function (Request $request) use ($change, $modelResponse) {
         if ($request->url() === 'https://openrouter.ai/api/v1/chat/completions') {
             $model = $request['model'];
-            $decision = ['action' => $model === 'fixture/lain' ? 'buy' : 'hold',
-                'bps' => $model === 'fixture/lain' ? 5000 : 0, 'reason' => 'Public fixture rationale'];
+            $decision = ['action' => $model === 'fixture/lain:free' ? 'buy' : 'hold',
+                'bps' => $model === 'fixture/lain:free' ? 5000 : 0, 'reason' => 'Public fixture rationale'];
             $result = ['model' => $model, 'choices' => [['finish_reason' => 'stop', 'message' => ['content' => json_encode($decision)]]]];
 
             return $modelResponse ? $modelResponse($result, $request) : Http::response($result);
@@ -111,7 +112,7 @@ it('commits both model decisions before a later fill and keeps evidence hashes r
     expect($runner->tick())->toBe('awaiting_fill')->and(ArenaRound::query()->count())->toBe(0);
     $cycle = $season->cycles()->sole();
     expect($cycle->record['attempts']['lain']['status'])->toBe('ok')->and($cycle->reserved_calls)->toBe(2)
-        ->and($cycle->reserved_cents)->toBe(20)->and($cycle->commit_hash)->toBe(app(ArenaSeasonManager::class)->digest($cycle->record));
+        ->and($cycle->reserved_cents)->toBe(0)->and($cycle->commit_hash)->toBe(app(ArenaSeasonManager::class)->digest($cycle->record));
     $calls = count(Http::recorded());
     expect($runner->tick())->toBe('awaiting_fill');
     expect(count(Http::recorded()))->toBe($calls);
@@ -128,6 +129,7 @@ it('commits both model decisions before a later fill and keeps evidence hashes r
     expect($runner->tick())->toBe('slot_already_recorded')->and(count(Http::recorded()))->toBe($calls);
     Http::assertSent(fn (Request $request) => $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
         && $request['max_tokens'] === 400 && $request['provider']['allow_fallbacks'] === false
+        && $request['provider']['max_price'] === ['prompt' => 0, 'completion' => 0, 'request' => 0]
         && ! isset($request['tools']) && ! isset($request['models']));
 });
 
@@ -146,11 +148,11 @@ it('does not run when disabled, before the start, or without an explicit key', f
 
 it('does not repeat model requests after a crash or after their deadline', function () {
     $season = automaticArena();
-    $cycle = ArenaCycle::factory()->create(['arena_season_id' => $season->id, 'reserved_cents' => 20, 'reserved_calls' => 2]);
+    $cycle = ArenaCycle::factory()->create(['arena_season_id' => $season->id, 'reserved_cents' => 0, 'reserved_calls' => 2]);
     expect(app(ArenaAutomation::class)->tick())->toBe('collecting');
     CarbonImmutable::setTestNow(CarbonImmutable::now()->addMinutes(3));
     expect(app(ArenaAutomation::class)->tick())->toBe('decision_incomplete')
-        ->and($cycle->fresh()->status)->toBe('skipped')->and($cycle->fresh()->reserved_cents)->toBe(20);
+        ->and($cycle->fresh()->status)->toBe('skipped')->and($cycle->fresh()->reserved_cents)->toBe(0);
     Http::assertNothingSent();
 });
 
@@ -162,18 +164,18 @@ it('records missed slots without inventing historical decisions', function () {
     Http::assertNothingSent();
 });
 
-it('reserves a bounded budget before inference and never refunds failed requests', function () {
+it('counts failed free requests against the bounded call allowance', function () {
     fakeArenaMarket(null, fn () => Http::response(['error' => 'fixture'], 429));
     $season = automaticArena();
-    expect(app(ArenaAutomation::class)->tick())->toBe('both_models_failed')->and($season->cycles()->sum('reserved_cents'))->toBe(20);
-    config()->set('arena.automation.budget_cents', 39);
+    expect(app(ArenaAutomation::class)->tick())->toBe('both_models_failed')->and($season->cycles()->sum('reserved_cents'))->toBe(0);
+    config()->set('arena.automation.max_calls', 3);
     CarbonImmutable::setTestNow($season->starts_at->addHours(6));
     expect(app(ArenaAutomation::class)->tick())->toBe('budget_exhausted')->and($season->cycles()->sum('reserved_calls'))->toBe(2);
     expect(Http::recorded(fn (Request $request) => str_contains($request->url(), 'openrouter.ai')))->toHaveCount(2);
 });
 
 it('makes a single model failure explicit while retaining the other decision', function () {
-    fakeArenaMarket(null, fn ($result, Request $request) => $request['model'] === 'fixture/lain'
+    fakeArenaMarket(null, fn ($result, Request $request) => $request['model'] === 'fixture/lain:free'
         ? Http::response(['error' => 'fixture'], 500) : Http::response($result));
     $season = automaticArena();
     expect(app(ArenaAutomation::class)->tick())->toBe('awaiting_fill');
@@ -217,7 +219,7 @@ it('reads a reproducible integer reference price even when JSON object keys are 
 
 it('never resurrects a collecting cycle that another process has skipped', function () {
     fakeArenaMarket(null, function ($result, Request $request) {
-        if ($request['model'] === 'fixture/challenger') {
+        if ($request['model'] === 'fixture/challenger:free') {
             ArenaCycle::query()->update(['status' => 'skipped', 'error_code' => 'decision_incomplete']);
         }
 
@@ -242,7 +244,7 @@ it('rejects late commitments even when their content hash has been recomputed', 
 
 it('rejects an unfunded model order without rewriting its committed decision or blocking the round', function () {
     fakeArenaMarket(null, function ($result, Request $request) {
-        if ($request['model'] === 'fixture/challenger') {
+        if ($request['model'] === 'fixture/challenger:free') {
             $result['choices'][0]['message']['content'] = json_encode(['action' => 'sell', 'bps' => 10000, 'reason' => 'An unfunded fixture order']);
         }
 
@@ -263,7 +265,7 @@ it('publishes pending commitments and failure state without exposing credentials
     automaticArena();
     app(ArenaAutomation::class)->tick();
     $response = $this->get('/arena')->assertSuccessful()->assertInertia(fn (AssertableInertia $page) => $page
-        ->where('automation.enabled', true)->where('automation.reservedCents', 20)->where('automation.cycles.0.status', 'awaiting_fill')
+        ->where('automation.enabled', true)->where('automation.reservedCents', 0)->where('automation.cycles.0.status', 'awaiting_fill')
         ->where('automation.cycles.0.attempts.lain', 'ok')->has('automation.cycles.0.commitHash'));
     expect($response->getContent())->not->toContain('test-only-not-a-real-key');
     $export = $this->get('/arena/evidence')->assertSuccessful()->assertJsonPath('format', 'cyberia-arena-automatic-paper-v2');
@@ -286,3 +288,43 @@ it('does not retry truncated, wrong-model or tool-bearing responses', function (
     expect(app(ArenaAutomation::class)->tick())->toBe('both_models_failed')
         ->and(Http::recorded(fn (Request $request) => str_contains($request->url(), 'openrouter.ai')))->toHaveCount(2);
 })->with(['truncated', 'model', 'tools']);
+
+it('rejects paid or routed model IDs before any inference request', function (string $model) {
+    $rules = automaticArena()->rules;
+    $rules['automation']['models']['lain'] = $model;
+    expect(fn () => app(ArenaModelClient::class)->decide('lain', $rules, []))->toThrow(DomainException::class);
+    config()->set('arena.automation.models.lain', $model);
+    expect(fn () => app(ArenaSeasonManager::class)->rules(true))->toThrow(DomainException::class);
+    Http::assertNothingSent();
+})->with(['fixture/paid', 'openrouter/free', 'openrouter/auto', 'fixture/model:free:online']);
+
+it('refuses nonzero provider prices even for a free model ID', function () {
+    $rules = automaticArena()->rules;
+    $rules['automation']['max_price_per_million'] = 1;
+    expect(fn () => app(ArenaModelClient::class)->decide('lain', $rules, []))->toThrow(DomainException::class);
+    Http::assertNothingSent();
+});
+
+it('blocks an intact older paid season without rewriting its rules or making calls', function () {
+    $season = automaticArena();
+    $rules = $season->rules;
+    unset($rules['automation']['pricing_policy']);
+    $rules['automation']['models']['lain'] = 'fixture/paid';
+    $hash = app(ArenaSeasonManager::class)->digest($rules);
+    $season->update(['rules' => $rules, 'rules_hash' => $hash]);
+    expect(app(ArenaAutomation::class)->tick())->toBe('free_models_required')
+        ->and($season->fresh()->rules_hash)->toBe($hash)->and($season->cycles()->count())->toBe(0);
+    Http::assertNothingSent();
+});
+
+it('accepts a canonical served identity while keeping the requested free variant in the record', function () {
+    fakeArenaMarket(null, function ($result) {
+        $result['model'] = substr($result['model'], 0, -5);
+
+        return Http::response($result);
+    });
+    $season = automaticArena();
+    expect(app(ArenaAutomation::class)->tick())->toBe('awaiting_fill');
+    $attempt = $season->cycles()->sole()->record['attempts']['lain'];
+    expect($attempt['served_model'])->toBe('fixture/lain')->and($attempt['decision']['model'])->toBe('fixture/lain:free');
+});

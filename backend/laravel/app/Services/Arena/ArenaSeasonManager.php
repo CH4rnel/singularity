@@ -32,23 +32,17 @@ class ArenaSeasonManager
         ];
         if ($automatic) {
             $settings = config('arena.automation');
-            foreach (['lain', 'challenger'] as $actor) {
-                $model = $settings['models'][$actor] ?? '';
-                if (! is_string($model) || ! preg_match('/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.:-]{1,80}$/D', $model)
-                    || str_starts_with($model, 'openrouter/')) {
-                    throw new DomainException('Configure two explicit model IDs before freezing an automatic season.');
-                }
-            }
-            $limits = ['budget_cents' => 1500, 'reservation_cents_per_call' => 10, 'max_calls' => 112,
-                'max_prompt_bytes' => 12000, 'max_output_tokens' => 400, 'max_price_per_million' => 1,
+            ArenaModelClient::assertFreeOnly($settings);
+            $limits = ['budget_cents' => 0, 'reservation_cents_per_call' => 0, 'max_calls' => 112,
+                'max_prompt_bytes' => 12000, 'max_output_tokens' => 400, 'max_price_per_million' => 0,
                 'timeout_seconds' => 20, 'opening_window_seconds' => 90, 'decision_window_seconds' => 180,
                 'fill_delay_seconds' => 60, 'fill_window_seconds' => 180, 'max_block_age_seconds' => 90];
             foreach ($limits as $key => $maximum) {
-                if (! is_int($settings[$key]) || $settings[$key] < 1 || $settings[$key] > $maximum) {
+                if (! is_int($settings[$key]) || $settings[$key] < ($maximum === 0 ? 0 : 1) || $settings[$key] > $maximum) {
                     throw new DomainException('Automatic season limits exceed the pilot allowance.');
                 }
             }
-            if ($settings['reservation_cents_per_call'] !== 10 || $settings['fill_delay_seconds'] !== 60
+            if ($settings['fill_delay_seconds'] !== 60
                 || $settings['decision_window_seconds'] !== 180 || $settings['opening_window_seconds'] > 90
                 || $rules['rounds_per_day'] !== 4 || $rules['days'] < 1 || $rules['days'] > 14) {
                 throw new DomainException('Automatic seasons require the bounded pilot schedule and reservations.');
@@ -56,6 +50,7 @@ class ArenaSeasonManager
             $rules['version'] = 2;
             $rules['mode'] = 'automatic-paper';
             $rules['automation'] = [...array_intersect_key($settings, $limits),
+                'pricing_policy' => 'free-only',
                 'models' => $settings['models'], 'prompt' => ArenaModelClient::PROMPT,
                 'market_source' => app(ArenaMarketFeed::class)->specification(),
                 'runtime' => 'Isolated, tool-free paper personas; not the privileged LainOS daemon'];

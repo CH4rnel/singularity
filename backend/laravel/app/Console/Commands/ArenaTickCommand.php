@@ -16,7 +16,7 @@ class ArenaTickCommand extends Command
         $state = $automation->tick();
         $this->line($state);
 
-        return in_array($state, ['automation_failed', 'market_unavailable', 'fill_unavailable', 'both_models_failed', 'missing_model_key', 'budget_exhausted'], true)
+        return in_array($state, ['automation_failed', 'market_unavailable', 'fill_unavailable', 'both_models_failed', 'missing_model_key', 'budget_exhausted', 'free_models_required'], true)
             ? self::FAILURE : self::SUCCESS;
     }
 }

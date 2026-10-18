@@ -246,6 +246,7 @@ Route::get('feed', [PostController::class, 'index'])->name('feed');
 Route::prefix('arena')->name('arena.')->group(function () {
     Route::get('/', [ArenaController::class, 'index'])->middleware('throttle:60,1')->name('index');
     Route::get('evidence', [ArenaController::class, 'evidence'])->middleware('throttle:20,1')->name('evidence');
+    Route::get('seasons/{season:slug}/evidence', [ArenaController::class, 'archive'])->middleware('throttle:20,1')->name('archive');
     Route::middleware('auth')->group(function () {
         Route::post('comments', [ArenaController::class, 'comment'])->middleware('throttle:5,1')->name('comments.store');
         Route::delete('comments/{comment}', [ArenaController::class, 'remove'])->middleware('throttle:10,1')->name('comments.destroy');

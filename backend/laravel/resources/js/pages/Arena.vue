@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useLocale } from '@/composables/useLocale';
 import { arenaMessages } from '@/lib/arenaMessages';
 import { login } from '@/routes';
-import { evidence, follow, unfollow } from '@/routes/arena';
+import { archive, evidence, follow, unfollow } from '@/routes/arena';
 import { store, destroy, report } from '@/routes/arena/comments';
 
 type Actor = 'lain' | 'challenger';
@@ -54,7 +54,11 @@ const props = defineProps<{
     } | null;
     rules: {
         mode: string;
-        automation?: { models: Record<Actor, string> };
+        automation?: {
+            models: Record<Actor, string>;
+            pricing_policy?: string;
+            max_calls: number;
+        };
         fee_bps: number;
         slippage_bps: number;
         gas_micros: string;
@@ -77,6 +81,7 @@ const props = defineProps<{
         }[];
     } | null;
     rounds: Round[];
+    archivedSeasons: { slug: string; title: string }[];
     comments: {
         data: Comment[];
         prev_page_url: string | null;
@@ -291,10 +296,16 @@ async function invite(): Promise<void> {
             </p>
             <p class="text-xs text-muted-foreground">
                 {{
-                    t('reservations', {
-                        amount: money(String(automation.reservedCents), 2),
-                        calls: automation.reservedCalls,
-                    })
+                    t(
+                        rules.automation?.pricing_policy === 'free-only'
+                            ? 'freeCalls'
+                            : 'reservations',
+                        {
+                            amount: money(String(automation.reservedCents), 2),
+                            calls: automation.reservedCalls,
+                            limit: rules.automation?.max_calls ?? 112,
+                        },
+                    )
                 }}
             </p>
             <div
@@ -544,6 +555,19 @@ async function invite(): Promise<void> {
                 class="inline-block text-sm text-primary underline underline-offset-4"
                 >{{ t('evidence') }}</a
             >
+            <div
+                v-if="archivedSeasons.length"
+                class="space-y-2 text-xs text-muted-foreground"
+            >
+                <p>{{ t('archivedSeasons') }}</p>
+                <a
+                    v-for="archived in archivedSeasons"
+                    :key="archived.slug"
+                    :href="archive(archived.slug).url"
+                    class="block underline underline-offset-4"
+                    >{{ archived.title }} · {{ archived.slug }}</a
+                >
+            </div>
         </section>
 
         <section class="space-y-5" aria-labelledby="arena-discussion">

@@ -285,3 +285,15 @@ it('accepts a local evidence file through the console without duplicating its ro
         unlink($file);
     }
 });
+
+it('preserves earlier season evidence when the active season changes', function () {
+    $old = runningArena();
+    $round = app(ArenaSeasonManager::class)->import($old, arenaPayload(), CarbonImmutable::parse('2026-10-02'));
+    app(ArenaSeasonManager::class)->create('season-zero-free', null, true);
+    config()->set('arena.slug', 'season-zero-free');
+    $this->get('/arena')->assertInertia(fn (Assert $page) => $page->where('archivedSeasons.0.slug', 'season-zero')->has('rounds', 0));
+    $this->get('/arena/seasons/season-zero/evidence')->assertSuccessful()->assertJsonPath('rounds.0.record_hash', $round->record_hash);
+    $this->get('/arena/seasons/not-a-season/evidence')->assertNotFound();
+    config()->set('arena.enabled', false);
+    $this->get('/arena/seasons/season-zero/evidence')->assertNotFound();
+});

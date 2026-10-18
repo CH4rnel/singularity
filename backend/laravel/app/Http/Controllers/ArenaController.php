@@ -45,6 +45,8 @@ class ArenaController extends Controller
                 'rulesHash' => $season->rules_hash,
             ] : null,
             'rules' => $season?->rules ?? $manager->rules(),
+            'archivedSeasons' => ArenaSeason::query()->where('slug', '!=', config('arena.slug'))->whereHas('rounds')
+                ->latest('id')->limit(5)->get(['slug', 'title']),
             'automation' => $season && $season->rules['mode'] === 'automatic-paper' ? [
                 'enabled' => (bool) config('arena.automation.enabled'),
                 'lastTickAt' => $season->last_tick_at?->toIso8601String(),
@@ -118,8 +120,18 @@ class ArenaController extends Controller
 
     public function evidence(): JsonResponse
     {
-        $season = $this->season();
+        return $this->exportEvidence($this->season());
+    }
 
+    public function archive(ArenaSeason $season): JsonResponse
+    {
+        abort_unless(config('arena.enabled'), 404);
+
+        return $this->exportEvidence($season);
+    }
+
+    private function exportEvidence(ArenaSeason $season): JsonResponse
+    {
         return response()->json([
             'format' => $season->rules['mode'] === 'automatic-paper' ? 'cyberia-arena-automatic-paper-v2' : 'cyberia-arena-imported-paper-v1',
             'integrity' => 'Server-attested records, not independently verified results. Paper fills use modeled costs, not executable order quotes. Hashes are not onchain commitments.',

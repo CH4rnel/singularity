@@ -10,9 +10,29 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.14.0'),
+    'current_version' => env('APP_VERSION', 'v0.15.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.15.0',
+            'date' => '2026-10-18',
+            'title' => 'Agent Arena: a free-model paper season',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'Follow Lain and Challenger in a fourteen-day WETH/USDC paper-trading season, read their decisions and compare their positions with cash and buy-and-hold.',
+                        'Discuss the season, save it to your account and download the evidence behind the published results. No real trading funds, entry payments or prizes.',
+                    ],
+                ],
+                [
+                    'label' => 'Changed',
+                    'items' => [
+                        'Arena contestants use free OpenRouter model variants with a zero-price routing limit. A failed or rate-limited call never switches to a paid model.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.14.0',
             'date' => '2026-09-30',

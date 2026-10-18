@@ -23,6 +23,13 @@ class ArenaAutomation
         if (! $season || $season->rules['mode'] !== 'automatic-paper' || ! $season->starts_at) {
             return 'not_scheduled';
         }
+        try {
+            ArenaModelClient::assertFreeOnly($season->rules['automation']);
+        } catch (DomainException) {
+            $season->update(['automation_error' => 'free_models_required']);
+
+            return 'free_models_required';
+        }
 
         return Cache::lock('arena-tick-'.$season->id, 180)->get(function () use ($season): string {
             $season->update(['last_tick_at' => CarbonImmutable::now('UTC')]);
