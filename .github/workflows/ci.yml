@@ -165,7 +165,10 @@ jobs:
                 exit 1
               fi
               bot_cwd=$(readlink -f "/proc/$bot_pid/cwd")
-              bot_python=$(readlink -f "/proc/$bot_pid/exe")
+              # The interpreter as it was invoked, not /proc/<pid>/exe: that
+              # resolves the venv's symlink to the system python, which has
+              # none of the bot's packages.
+              bot_python=$(tr '\0' '\n' < "/proc/$bot_pid/cmdline" | head -n 1)
               test -x "$bot_python"
               if [ -f "$bot_cwd/bot/__main__.py" ]; then
                 bot_start="-m bot"
