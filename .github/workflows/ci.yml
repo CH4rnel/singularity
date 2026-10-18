@@ -156,7 +156,7 @@ jobs:
             git -C "$repo" fetch --prune origin master
             git -C "$repo" reset --hard origin/master
 
-            if ! git -C "$repo" diff --quiet "$before" HEAD -- .github/workflows/ci.yml services/telegram-bot scripts/python/telegram_airdrop_bot.py; then
+            if ! git -C "$repo" diff --quiet "$before" HEAD -- services/telegram-bot scripts/python/telegram_airdrop_bot.py; then
               bot_pid=$(pgrep -o -f '[t]elegram_airdrop_bot\.py' || true)
               if [ -z "$bot_pid" ]; then
                 echo "Telegram bot process was not found; refusing to start an unverified second copy" >&2
