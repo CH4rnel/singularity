@@ -195,3 +195,46 @@ export const quotes = async () => {
 
     return response.json();
 };
+
+/** An ABI-encoded `string` return value, or null when it isn't one. */
+const decodeString = (result) => {
+    const body = typeof result === 'string' ? result.slice(2) : '';
+
+    if (body.length < 128) {
+        return null;
+    }
+
+    const length = Number.parseInt(body.slice(64, 128), 16);
+    const bytes = body.slice(128, 128 + length * 2).match(/.{2}/g) ?? [];
+
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(bytes, (pair) => Number.parseInt(pair, 16)));
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * The symbol and decimals of an ERC-20, for the screen that asks about it —
+ * two read-only calls to the chain's own RPC, which every request already
+ * talks to. Best-effort: a contract that answers neither, or answers slowly,
+ * leaves the screen in base units rather than holding the request up.
+ */
+export const tokenMeta = async (chainId, address, timeoutMs = 2500) => {
+    const call = (data) => rpc(chainId, 'eth_call', [{ to: address, data }, 'latest']);
+    const read = Promise.all([call('0x95d89b41'), call('0x313ce567')]).then(([symbol, decimals]) => {
+        const places = Number.parseInt(String(decimals).slice(2) || 'x', 16);
+
+        return {
+            symbol: (decodeString(symbol) ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, 12) || null,
+            decimals: Number.isInteger(places) && places <= 36 ? places : null,
+        };
+    });
+    const timeout = new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs));
+
+    try {
+        return await Promise.race([read, timeout]);
+    } catch {
+        return null;
+    }
+};

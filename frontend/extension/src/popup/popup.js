@@ -17,6 +17,7 @@ import { SITE_URL, chainById } from '../shared/chains.js';
 import { renderInto } from '../shared/dom.js';
 import { permissionPattern } from '../shared/origins.js';
 import { formatFiat, formatUnits, initials, parseUnits, shortAddress, toDecimal } from '../shared/format.js';
+import { describeSignature, describeTypedData } from '../shared/tx.js';
 import { RELAY_MODES } from '../background/relay.js';
 
 const app = document.getElementById('app');
@@ -95,10 +96,22 @@ const factRow = (key, value) =>
 const noticeLine = () => (notice ? `<div class="cw-error">${esc(notice)}</div>` : '');
 
 const holdButton = (action, label, disabled = false) => `
-    <button class="cw-hold" data-hold="${action}" ${disabled ? 'disabled' : ''}>
+    <button class="cw-hold" data-hold="${action}" ${disabled ? 'disabled' : ''}
+        aria-label="${esc(label)} — press and hold, or hold Space" aria-describedby="cw-hold-status">
         <span class="cw-hold-fill"></span>
         <span class="cw-hold-label">${esc(label)}</span>
-    </button>`;
+    </button>
+    <span id="cw-hold-status" class="cw-sr" aria-live="polite"></span>`;
+
+/** "Request 2 of 3" — the queue is visible, so nothing is signed out of order unseen. */
+const queueLine = () =>
+    state.requests.length > 1
+        ? `<div class="cw-label" style="margin-bottom:8px">REQUEST 1 OF ${state.requests.length}</div>`
+        : '';
+
+/** Reject is focused when a request opens, and Esc means it too. Enter never signs. */
+const rejectButton = (style = 'margin-top:8px') =>
+    `<button class="cw-btn" style="${style}" data-resolve="reject" data-autofocus-reject>REJECT</button>`;
 
 /* ------------------------------------------------------------------ views --- */
 
@@ -557,7 +570,7 @@ const connectRequest = (request) => {
             </div>
 
             <div class="cw-pair">
-                <button class="cw-btn" data-resolve="reject">REJECT</button>
+                <button class="cw-btn" data-resolve="reject" data-autofocus-reject>REJECT</button>
                 <button class="cw-btn is-primary" data-resolve="approve" ${chosenAccounts.size === 0 ? 'disabled' : ''}>CONNECT</button>
             </div>
             ${noticeLine()}
@@ -566,10 +579,13 @@ const connectRequest = (request) => {
 
 const signRequest = (request) => {
     const preview = request.payload.preview;
+    const host = hostOf(request.origin);
 
     return `
         <div class="cw-body">
-            <div class="cw-label is-warn">SIGNATURE REQUEST · ${esc(hostOf(request.origin))}</div>
+            ${queueLine()}
+            <div class="cw-label is-warn">${esc(preview.title ?? 'SIGNATURE REQUEST')} · ${esc(host)}</div>
+            ${preview.consequence ? `<div class="cw-consequence">${esc(preview.consequence)}</div>` : ''}
             <div class="cw-panel">
                 <div class="cw-field-label">${esc(preview.subject)}</div>
                 <div class="cw-headline">${esc(preview.headline)}</div>
@@ -585,37 +601,39 @@ const signRequest = (request) => {
                 factRow('NETWORK', `${preview.chainName} · ${preview.chainId}`),
                 factRow('FROM', shortAddress(preview.from, 8, 6)),
                 factRow('NONCE', String(preview.nonce)),
+                // Said every time, because silence would read as "checked".
+                factRow('SIMULATION', 'Not available in this wallet'),
             ])}
 
             ${preview.warning ? `<div class="cw-note is-warn">${esc(preview.warning)}</div>` : ''}
             ${holdButton('approve', 'HOLD TO SIGN')}
-            <button class="cw-btn" style="margin-top:8px" data-resolve="reject">REJECT</button>
+            ${rejectButton()}
             ${noticeLine()}
         </div>`;
 };
 
 const messageRequest = (request) => {
     const typed = request.type === 'signTypedData';
-    const body = typed
-        ? JSON.stringify(request.payload.typed?.message ?? {}, null, 2)
-        : request.payload.text;
+    const host = hostOf(request.origin);
+    const described = typed
+        ? describeTypedData(request.payload.typed, state.chainId)
+        : describeSignature(request.payload.text, request.origin);
+    const body = typed ? JSON.stringify(request.payload.typed?.message ?? {}, null, 2) : described.body;
 
     return `
         <div class="cw-body">
-            <div class="cw-label is-warn">${typed ? 'TYPED DATA' : 'MESSAGE'} · ${esc(hostOf(request.origin))}</div>
+            ${queueLine()}
+            <div class="cw-label is-warn">${esc(described.title)} · ${esc(host)}</div>
+            <div class="cw-consequence">${esc(described.consequence)}</div>
+            ${typed ? rows(described.rows.map((row) => factRow(row.key, row.value))) : ''}
+            ${described.warning ? `<div class="cw-note is-warn">${esc(described.warning)}</div>` : ''}
             <div class="cw-panel">
+                <div class="cw-field-label">${typed ? 'FULL MESSAGE' : 'TEXT'}</div>
                 <div class="cw-message">${esc(body)}</div>
             </div>
-            ${rows([
-                factRow('SIGNING AS', shortAddress(request.payload.address, 8, 6)),
-                ...(typed ? [factRow('PRIMARY TYPE', request.payload.primaryType || '—')] : []),
-            ])}
-            <div class="cw-note">
-                A signature is not a transaction, but it can authorise one elsewhere. Read what
-                it says before you hold.
-            </div>
+            ${rows([factRow('SIGNING AS', shortAddress(request.payload.address, 8, 6))])}
             ${holdButton('approve', 'HOLD TO SIGN')}
-            <button class="cw-btn" style="margin-top:8px" data-resolve="reject">REJECT</button>
+            ${rejectButton()}
             ${noticeLine()}
         </div>`;
 };
@@ -671,7 +689,7 @@ const render = () => {
     const active = currentView();
     renderInto(app, `${head()}${(bodies[active] ?? homeView)()}${foot()}`);
 
-    const focus = app.querySelector('[autofocus]');
+    const focus = app.querySelector('[autofocus]') ?? (active === 'request' ? app.querySelector('[data-autofocus-reject]') : null);
     focus?.focus();
     wireHold();
 };
@@ -797,21 +815,53 @@ const wireHold = () => {
         frame = requestAnimationFrame(tick);
     };
 
-    button.addEventListener('pointerdown', () => {
+    const status = app.querySelector('#cw-hold-status');
+    const start = () => {
         // Checked here rather than at wiring time: the form repaints this
         // button as it is typed into, and a listener attached once must still
         // respect a button that is disabled right now.
-        if (button.disabled) {
+        if (button.disabled || started !== 0) {
             return;
         }
 
         started = Date.now();
         frame = requestAnimationFrame(tick);
-    });
+
+        if (status) {
+            status.textContent = 'Holding — release to cancel';
+        }
+    };
+    const release = () => {
+        stop();
+
+        if (status) {
+            status.textContent = '';
+        }
+    };
+
+    button.addEventListener('pointerdown', start);
 
     for (const event of ['pointerup', 'pointerleave', 'pointercancel']) {
-        button.addEventListener(event, stop);
+        button.addEventListener(event, release);
     }
+
+    // The same hold by keyboard: Space or Enter held down, key repeat ignored,
+    // released early = nothing signed. A tap of Enter therefore never signs.
+    button.addEventListener('keydown', (event) => {
+        if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+            event.preventDefault();
+            start();
+        } else if (event.key === ' ' || event.key === 'Enter') {
+            event.preventDefault();
+        }
+    });
+    button.addEventListener('keyup', (event) => {
+        if (event.key === ' ' || event.key === 'Enter') {
+            event.preventDefault();
+            release();
+        }
+    });
+    button.addEventListener('blur', release);
 };
 
 /**
@@ -852,6 +902,14 @@ app.addEventListener('input', (event) => {
 
     if (field === 'to' || field === 'amount') {
         paintSend();
+    }
+});
+
+// Esc on a request rejects it, wherever focus is.
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state && currentView() === 'request') {
+        event.preventDefault();
+        resolveRequest(false);
     }
 });
 

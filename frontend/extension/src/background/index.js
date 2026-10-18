@@ -46,7 +46,7 @@ import {
     signTransaction,
     signTypedData,
 } from './keyring.js';
-import { balanceOf, feesFor, gasFor, nonceOf, quotes, rpc, sendRaw, tokensOf } from './rpc.js';
+import { balanceOf, feesFor, gasFor, nonceOf, quotes, rpc, sendRaw, tokenMeta, tokensOf } from './rpc.js';
 import { applyRelay, permissionsFor, relayScope } from './relay.js';
 import { syncInjection } from './injection.js';
 import * as requests from './requests.js';
@@ -286,22 +286,27 @@ const feeCeiling = (transaction) =>
     transaction.gasLimit * (transaction.type === 2 ? transaction.maxFeePerGas : transaction.gasPrice);
 
 /** The transaction, described for the screen that asks about it. */
-const previewOf = (transaction, chain) => ({
-    ...describeTransaction(
-        {
-            to: transaction.to,
-            data: transaction.data,
-            value: `0x${transaction.value.toString(16)}`,
-        },
-        chain,
-    ),
-    chainId: chain.id,
-    chainName: chain.name,
-    symbol: chain.symbol,
-    from: transaction.from,
-    fee: `0x${feeCeiling(transaction).toString(16)}`,
-    nonce: transaction.nonce,
-});
+const previewOf = async (transaction, chain) => {
+    const call = {
+        to: transaction.to,
+        data: transaction.data,
+        value: `0x${transaction.value.toString(16)}`,
+    };
+    // A first pass finds out whether a token contract is involved; only then
+    // is it asked for its symbol and decimals.
+    const first = describeTransaction(call, chain);
+    const token = first.tokenContract ? await tokenMeta(chain.id, first.tokenContract) : null;
+
+    return {
+        ...(token ? describeTransaction(call, chain, token) : first),
+        chainId: chain.id,
+        chainName: chain.name,
+        symbol: chain.symbol,
+        from: transaction.from,
+        fee: `0x${feeCeiling(transaction).toString(16)}`,
+        nonce: transaction.nonce,
+    };
+};
 
 const signAndSend = async (chainId, index, transaction) => {
     const open = await session();
@@ -455,7 +460,7 @@ const handleProviderRequest = async (origin, { method, params = [] }) => {
                 origin,
                 payload: {
                     address: account,
-                    preview: previewOf(transaction, chain),
+                    preview: await previewOf(transaction, chain),
                     transaction: serialiseTransaction(transaction),
                 },
             });

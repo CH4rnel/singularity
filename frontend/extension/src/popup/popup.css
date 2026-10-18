@@ -946,3 +946,21 @@ button.cw-row:hover {
 .cw-bar.is-strong {
     background: var(--cw-ok);
 }
+
+/* The one sentence a request is about, under its title and above the numbers. */
+.cw-consequence {
+    margin: 4px 0 12px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--cw-text);
+}
+
+/* Read by screen readers, never drawn. */
+.cw-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}

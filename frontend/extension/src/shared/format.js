@@ -15,6 +15,19 @@ export const shortAddress = (address, lead = 6, tail = 4) => {
     return `${address.slice(0, lead)}…${address.slice(-tail)}`;
 };
 
+/**
+ * The whole address in groups of four: `0x9c4A 81d2 … F714`, every character
+ * there. On a review screen a truncated address is exactly what an
+ * address-poisoning attack is built to pass — the look-alike shares both ends.
+ */
+export const addressGroups = (address) => {
+    if (typeof address !== 'string' || !/^0x[0-9a-fA-F]+$/.test(address)) {
+        return address ?? '';
+    }
+
+    return `0x${address.slice(2).match(/.{1,4}/g).join(' ')}`;
+};
+
 /** A quantity from the chain — hex, decimal string, number or bigint. */
 export const toBigInt = (value) => {
     if (typeof value === 'bigint') {
