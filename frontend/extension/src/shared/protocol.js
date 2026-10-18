@@ -81,6 +81,17 @@ export const APPROVAL_METHODS = new Set([
     'eth_signTypedData_v4',
 ]);
 
+/**
+ * Whether a page's request is somebody using the wallet.
+ *
+ * Only a call that stops at a person — a connection or a signature — counts.
+ * A dapp that polls the chain is not anybody at the keyboard, and letting each
+ * poll re-arm the auto-lock kept the vault open for as long as any connected
+ * tab stayed open.
+ */
+export const keepsWalletAwake = (method) =>
+    APPROVAL_METHODS.has(method) || method === 'eth_requestAccounts' || method === 'wallet_requestPermissions';
+
 /** What the popup asks the service worker for. One name per intent. */
 export const POPUP = {
     state: 'popup:state',

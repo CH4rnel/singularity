@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { CHAINS, DEFAULT_CHAIN_ID, chainById, chainIdHex, parseChainId } from '../src/shared/chains.js';
-import { APPROVAL_METHODS, PASSTHROUGH_METHODS, rpcError } from '../src/shared/protocol.js';
+import { APPROVAL_METHODS, PASSTHROUGH_METHODS, keepsWalletAwake, rpcError } from '../src/shared/protocol.js';
 import {
     endpointFor,
     permissionsFor,
@@ -68,6 +68,19 @@ test('no method both bypasses the human and reaches the signer', () => {
     assert.ok(!PASSTHROUGH_METHODS.has('eth_requestAccounts'));
     assert.equal(rpcError('userRejected').code, 4001);
     assert.equal(rpcError('unauthorized').code, 4100);
+});
+
+test('a page polling the chain does not keep the vault open', () => {
+    for (const method of PASSTHROUGH_METHODS) {
+        assert.ok(!keepsWalletAwake(method), `${method} must not re-arm the auto-lock`);
+    }
+
+    for (const method of [...APPROVAL_METHODS, 'eth_requestAccounts', 'wallet_requestPermissions']) {
+        assert.ok(keepsWalletAwake(method), `${method} is somebody using the wallet`);
+    }
+
+    assert.ok(!keepsWalletAwake('eth_accounts'));
+    assert.ok(!keepsWalletAwake(undefined));
 });
 
 test('no screen is re-rendered from a keystroke', async () => {

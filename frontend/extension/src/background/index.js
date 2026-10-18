@@ -24,7 +24,7 @@ import {
     chainIdHex,
     parseChainId,
 } from '../shared/chains.js';
-import { PASSTHROUGH_METHODS, POPUP, PROVIDER_PORT, rpcError } from '../shared/protocol.js';
+import { PASSTHROUGH_METHODS, POPUP, PROVIDER_PORT, keepsWalletAwake, rpcError } from '../shared/protocol.js';
 import {
     accountsFor,
     grantOrigin,
@@ -512,7 +512,9 @@ chrome.runtime.onConnect.addListener((port) => {
             return;
         }
 
-        await armAutoLock();
+        if (keepsWalletAwake(message.payload?.method)) {
+            await armAutoLock();
+        }
 
         try {
             const result = await handleProviderRequest(origin, message.payload ?? {});
