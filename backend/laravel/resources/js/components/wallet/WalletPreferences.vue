@@ -3,6 +3,7 @@ import { usePage } from '@inertiajs/vue3';
 import { Bell, ExternalLink, Power, Volume2 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { LOCALE_LABELS, useLocale } from '@/composables/useLocale';
+import { WALLET_MODES, useWalletMode } from '@/composables/useWalletMode';
 import { WALLET_THEMES, useWalletTheme } from '@/composables/useWalletTheme';
 import {
     hasNativeTray,
@@ -43,6 +44,10 @@ const { t, locale, available, setLocale } = useLocale(walletMessages);
  * press it twice to find out what the third one was.
  */
 const { theme } = useWalletTheme();
+const { mode } = useWalletMode();
+
+const modeLabel = (option: (typeof WALLET_MODES)[number]): string =>
+    t(option === 'simple' ? 'modeSimpleShort' : 'modeFullShort');
 
 const themeLabel = (option: (typeof WALLET_THEMES)[number]): string =>
     t(`theme${option.charAt(0).toUpperCase()}${option.slice(1)}Short`);
@@ -296,6 +301,34 @@ onBeforeUnmount(unsubscribe);
 
         <div class="cw-card" style="padding: 16px; margin-bottom: 18px">
             <div class="cw-label" style="margin-bottom: 9px">
+                {{ t('preferencesMode') }}
+            </div>
+            <div class="cw-seg">
+                <button
+                    v-for="option in WALLET_MODES"
+                    :key="option"
+                    type="button"
+                    class="cw-seg-item"
+                    :aria-pressed="mode === option"
+                    @click="mode = option"
+                >
+                    {{ modeLabel(option) }}
+                    <span
+                        class="cw-seg-bar"
+                        :style="{
+                            background:
+                                mode === option
+                                    ? 'var(--cw-accent)'
+                                    : 'transparent',
+                        }"
+                    />
+                </button>
+            </div>
+            <span class="cw-hint" style="margin-top: 8px">{{
+                t('modeHint')
+            }}</span>
+
+            <div class="cw-label" style="margin: 18px 0 9px">
                 {{ t('preferencesTheme') }}
             </div>
             <div class="cw-seg">

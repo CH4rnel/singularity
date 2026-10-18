@@ -3,11 +3,13 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
 import {
     Bot,
+    CalendarCheck,
     ExternalLink,
     Images,
     Landmark,
     Lock,
     MessageCircle,
+    MoreHorizontal,
     Newspaper,
     WalletCards,
 } from 'lucide-vue-next';
@@ -43,6 +45,7 @@ import WalletNetworks from '@/components/wallet/WalletNetworks.vue';
 import WalletNft from '@/components/wallet/WalletNft.vue';
 import WalletNftMint from '@/components/wallet/WalletNftMint.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
+import type { WalletPlace } from '@/components/wallet/WalletPlaces.vue';
 import WalletPlayer from '@/components/wallet/WalletPlayer.vue';
 import WalletPortfolio from '@/components/wallet/WalletPortfolio.vue';
 import WalletPreferences from '@/components/wallet/WalletPreferences.vue';
@@ -62,6 +65,7 @@ import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useSwipeNav } from '@/composables/useSwipeNav';
 import { useWalletAuth } from '@/composables/useWalletAuth';
+import { useWalletMode } from '@/composables/useWalletMode';
 import { useWalletTheme } from '@/composables/useWalletTheme';
 import { analytics } from '@/lib/analytics';
 import { isNativeShell, nativeShell } from '@/lib/native';
@@ -403,7 +407,54 @@ const TAB_OF: Record<Section, Section> = {
     player: 'nft',
 };
 
-const activeTab = computed(() => TAB_OF[section.value]);
+const { simple } = useWalletMode();
+
+/**
+ * Simple mode's rail and tab bar: the balance (recent movement is on it), the
+ * daily loop and the community, with every other place behind More (`WalletMore` carries the
+ * grid). Full mode is `RAIL` and `TABS` as they were.
+ */
+const SIMPLE_RAIL: { heading: () => string; items: RailEntry[] }[] = [
+    {
+        heading: () => t('railInWallet'),
+        items: [
+            { id: 'portfolio', label: () => t('navPortfolio') },
+            { id: 'daily', label: () => t('dailyTitle') },
+            { id: 'feed', label: () => t('feed') },
+            { id: 'chat', label: () => t('chatTitle') },
+            { id: 'more', label: () => t('navMore') },
+            { id: 'preferences', label: () => t('navPreferences') },
+        ],
+    },
+];
+
+const SIMPLE_TABS: { id: Section; label: () => string; icon: Component }[] = [
+    { id: 'portfolio', label: () => t('tabWallet'), icon: WalletCards },
+    { id: 'daily', label: () => t('tileDaily'), icon: CalendarCheck },
+    { id: 'feed', label: () => t('feed'), icon: Newspaper },
+    { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
+    { id: 'more', label: () => t('navMore'), icon: MoreHorizontal },
+];
+
+const rail = computed(() => (simple.value ? SIMPLE_RAIL : RAIL));
+const tabs = computed(() => (simple.value ? SIMPLE_TABS : TABS));
+
+const inSimpleTabs = (id: Section): boolean =>
+    SIMPLE_TABS.some((entry) => entry.id === id);
+
+const activeTab = computed<Section>(() => {
+    if (!simple.value) {
+        return TAB_OF[section.value];
+    }
+
+    if (inSimpleTabs(section.value)) {
+        return section.value;
+    }
+
+    const parent = PARENTS[section.value] ?? TAB_OF[section.value];
+
+    return inSimpleTabs(parent) && parent !== 'portfolio' ? parent : 'more';
+});
 
 /**
  * What this screen is called — for the browser tab, the history entry, the
@@ -536,11 +587,27 @@ const PARENTS: Partial<Record<Section, Section>> = {
  * highlight that names the wrong screen is worse than no highlight, because it
  * is the control people use to find out where they are.
  */
-const current = computed<Section | null>(() =>
-    bodyOverlay.value !== null
-        ? null
-        : (PARENTS[section.value] ?? section.value),
-);
+const current = computed<Section | null>(() => {
+    if (bodyOverlay.value !== null) {
+        return null;
+    }
+
+    const page = PARENTS[section.value] ?? section.value;
+
+    if (!simple.value) {
+        return page;
+    }
+
+    const listed = (id: Section): boolean =>
+        SIMPLE_RAIL[0].items.some((entry) => entry.id === id);
+
+    // A place opened from More keeps More lit: the simple rail doesn't list it.
+    if (listed(section.value)) {
+        return section.value;
+    }
+
+    return listed(page) ? page : 'more';
+});
 
 /** The asset the send screen opens on: a token row, or the network's coin. */
 const sendToken = ref<WalletTokenBalance | null>(null);
@@ -791,6 +858,19 @@ const openNftPlace = (
     openSection(next);
 };
 
+/** A tile in the places grid — under the balance, or on More. */
+const openPlace = (place: WalletPlace, from: Section): void => {
+    if (place === 'browse') {
+        openBrowse(null);
+    } else if (place === 'domains') {
+        openDomains(null);
+    } else if (place === 'tracker' || place === 'ipfs') {
+        openNftPlace(place, from);
+    } else {
+        openSection(place);
+    }
+};
+
 /**
  * What the player is playing, and where it came from.
  *
@@ -878,7 +958,10 @@ watch(section, (next) => {
  * screen that opens next is already pointed at the right account.
  */
 const openToken = (next: WalletChainId, token: WalletTokenBalance): void => {
-    tokenOrigin.value = section.value === 'network' ? 'network' : 'tokens';
+    tokenOrigin.value =
+        section.value === 'network' || section.value === 'portfolio'
+            ? section.value
+            : 'tokens';
     chain.value = next;
     tokenContract.value = token.address;
     section.value = 'token';
@@ -1085,9 +1168,11 @@ const canSwipe = (intent: SwipeIntent): boolean => {
         return false;
     }
 
-    const at = TABS.findIndex((entry) => entry.id === activeTab.value);
+    const at = tabs.value.findIndex((entry) => entry.id === activeTab.value);
 
-    return at >= 0 && TABS[at + (intent === 'back' ? -1 : 1)] !== undefined;
+    return (
+        at >= 0 && tabs.value[at + (intent === 'back' ? -1 : 1)] !== undefined
+    );
 };
 
 const swipeTo = (intent: SwipeIntent): void => {
@@ -1106,8 +1191,8 @@ const swipeTo = (intent: SwipeIntent): void => {
         return;
     }
 
-    const at = TABS.findIndex((entry) => entry.id === activeTab.value);
-    const next = TABS[at + (intent === 'back' ? -1 : 1)];
+    const at = tabs.value.findIndex((entry) => entry.id === activeTab.value);
+    const next = tabs.value[at + (intent === 'back' ? -1 : 1)];
 
     if (next) {
         openSection(next.id);
@@ -1567,7 +1652,7 @@ watch(
                 </div>
 
                 <div style="display: flex; flex-direction: column">
-                    <template v-for="group in RAIL" :key="group.heading()">
+                    <template v-for="group in rail" :key="group.heading()">
                         <div class="cw-rail-group">
                             <span class="cw-label">{{ group.heading() }}</span>
                         </div>
@@ -1599,7 +1684,7 @@ watch(
                     </template>
                 </div>
 
-                <div style="margin-top: 28px; padding: 0 20px">
+                <div v-if="!simple" style="margin-top: 28px; padding: 0 20px">
                     <div class="cw-label" style="margin-bottom: 14px">
                         {{ t('networks') }}
                     </div>
@@ -1635,11 +1720,20 @@ watch(
 
                 <div class="cw-fill"></div>
 
-                <div style="padding: 0 20px">
+                <!--
+                  Simple mode doesn't open on what isn't set up yet: the home
+                  asks for the backup once there is money to protect, and the
+                  rail shows the vault once there is a lock to press.
+                -->
+                <div
+                    v-if="!simple || !unprotectedVault"
+                    style="padding: 0 20px"
+                >
                     <div
                         style="
                             padding: 13px 14px;
-                            border: 1px solid var(--cw-hairline);
+                            border-radius: 16px;
+                            background: var(--cw-surface);
                         "
                     >
                         <div
@@ -1844,24 +1938,11 @@ watch(
                             :token-prices="tokenPrices"
                             :online="online"
                             @open="openChain"
+                            @token="openToken"
                             @send="openSend()"
                             @swap="openSwap()"
                             @receive="overlay = 'receive'"
-                            @tokens="openSection('tokens')"
-                            @markets="openSection('markets')"
-                            @stocks="openSection('stocks')"
-                            @bridge="openSection('bridge')"
-                            @earn="openSection('earn')"
-                            @launchpad="openSection('launchpad')"
-                            @crosschain="openSection('crosschain')"
-                            @liquidity="openSection('liquidity')"
-                            @browse="openBrowse(null)"
-                            @domains="openDomains(null)"
-                            @daily="openSection('daily')"
-                            @analytics="openSection('analytics')"
-                            @tracker="openNftPlace('tracker', 'portfolio')"
-                            @ipfs="openNftPlace('ipfs', 'portfolio')"
-                            @more="openSection('more')"
+                            @place="openPlace($event, 'portfolio')"
                             @accounts="openSection('accounts')"
                             @security="openSection('security')"
                         />
@@ -1920,6 +2001,7 @@ watch(
                         @torrent="openNftPlace('torrent', 'more')"
                         @dao="openSection('dao')"
                         @preferences="openSection('preferences')"
+                        @place="openPlace($event, 'more')"
                     />
 
                     <WalletMarkets
@@ -2271,7 +2353,7 @@ watch(
                 <!-- Mobile tab bar -->
                 <nav v-if="stage === 'app'" class="cw-tabs">
                     <button
-                        v-for="entry in TABS"
+                        v-for="entry in tabs"
                         :key="entry.id"
                         type="button"
                         class="cw-tab"

@@ -1,6 +1,13 @@
 /*
  * The Cyberia Wallet surface.
  *
+ * 2026-10: the look moved from a neon console (hairlines on near-black, cyan,
+ * mono capitals, a scan line) to a calm one — graphite grounds, rounded
+ * filled surfaces, one soft aqua accent, a single sans face. The tokens below
+ * carry most of it; the "Soft look" block at the end of the file reshapes the
+ * components. Older notes in this file describe the console where they say
+ * "hairline" or "mono"; the reasoning about contrast and state colour stands.
+ *
  * The wallet is its own product inside the site: a dark, high-contrast console
  * that stays dark in either site theme, because the whole visual language —
  * hairlines on near-black, one cyan accent, a scan line — only reads that way.
@@ -14,15 +21,15 @@
  */
 
 .cw {
-    --cw-canvas: #05070a;
-    --cw-app: #0a0d11;
-    --cw-surface: #0f1318;
-    --cw-raised: #161c22;
-    --cw-hairline: #262c33;
-    --cw-line: #242a31;
-    --cw-border: #3f4954;
-    --cw-border-soft: #333b44;
-    --cw-border-hover: #6a7785;
+    --cw-canvas: #0b0c10;
+    --cw-app: #111318;
+    --cw-surface: #191b22;
+    --cw-raised: #22252e;
+    --cw-hairline: #2c303a;
+    --cw-line: #22252d;
+    --cw-border: #444a57;
+    --cw-border-soft: #2e323c;
+    --cw-border-hover: #59606e;
     /*
      * Four levels of quiet ink, and the line between them is not taste: the
      * top three are *text*, while `fainter` is the one that is not and is
@@ -48,23 +55,23 @@
      * 1.1:1 is structure only a dim room can see.
      */
     --cw-fainter: #7b848d;
-    --cw-faint: #b4bdc7;
-    --cw-dim: #b9c2cc;
-    --cw-muted: #bec7d1;
+    --cw-faint: #bac2cc;
+    --cw-dim: #bdc5cf;
+    --cw-muted: #c2cad4;
     --cw-body: #e4eaf0;
     --cw-text: #f0f4f8;
     --cw-bright: #fbfdff;
 
-    --cw-accent: #2fe9e0;
-    --cw-accent-hover: #5cf2eb;
-    --cw-accent-ink: #04191a;
+    --cw-accent: #72dccf;
+    --cw-accent-hover: #8fe5da;
+    --cw-accent-ink: #062420;
     --cw-meta: #8b7bf7;
 
     /*
      * Network hues. All of them stay clear of the amber/green/red family that
      * transaction status owns, so a glance never reads a chain as a state.
      */
-    --cw-net-cyberia: #2fe9e0;
+    --cw-net-cyberia: #72dccf;
     --cw-net-robinhood: #ff2bd6;
     --cw-net-bnb: #f2c230;
     --cw-net-base: #4c8dff;
@@ -105,16 +112,16 @@
      * theme is a palette swap, and a colour spelled out at its use site is a
      * colour the light theme cannot reach.
      */
-    --cw-panel: #0c1014;
-    --cw-sunken: #12161b;
-    --cw-elevated: #181d23;
-    --cw-well: #1a2027;
-    --cw-input-bg: #0b0f13;
-    --cw-line-strong: #2e353d;
+    --cw-panel: #111318;
+    --cw-sunken: #1d2028;
+    --cw-elevated: #23262f;
+    --cw-well: #1f222a;
+    --cw-input-bg: #15171d;
+    --cw-line-strong: #30343e;
     --cw-pending-soft: #d9c08a;
 
     /* The atmosphere: grid, raster and the travelling scan line. */
-    --cw-grid: rgba(255, 255, 255, 0.028);
+    --cw-grid: transparent;
     --cw-raster-ink: rgba(255, 255, 255, 0.062);
     --cw-scan-ink: rgba(47, 233, 224, 0.035);
     /*
@@ -122,7 +129,7 @@
      * that is an *offer* — take this, start here — which a plain card cannot
      * say and a warning colour would say wrongly.
      */
-    --cw-accent-tint: rgba(47, 233, 224, 0.05);
+    --cw-accent-tint: rgba(114, 220, 207, 0.08);
 
     /* State edges and washes, kept apart from the flat state colours above. */
     --cw-bad-line: rgba(255, 92, 104, 0.3);
@@ -138,9 +145,16 @@
     --cw-veil: rgba(4, 5, 6, 0.72);
     --cw-veil-strong: rgba(4, 5, 6, 0.82);
 
-    /* Space Grotesk has no Cyrillic; Manrope catches Russian copy. */
-    --cw-sans: 'Space Grotesk', Manrope, ui-sans-serif, system-ui, sans-serif;
-    --cw-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+    /*
+     * One friendly face for everything a person reads, numbers included.
+     * `--cw-mono` keeps its name because 160-odd call sites use it for
+     * amounts and labels — it now means "the data face" and is the same
+     * Manrope with tabular figures. Only what really is code — addresses,
+     * hashes — is set in `--cw-code`.
+     */
+    --cw-sans: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --cw-mono: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --cw-code: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
     color: var(--cw-text);
     font-family: var(--cw-sans);
@@ -2834,4 +2848,304 @@ html[data-app-window]:has(.cw-frame) {
     font: 600 12px/1 var(--cw-mono);
     letter-spacing: 0.07em;
     color: var(--cw-bad);
+}
+
+/* ------------------------------------------------------------ Soft look -- */
+
+/*
+ * Shapes for the calm look. Surfaces are filled rather than outlined, corners
+ * are round, labels are sentences rather than tracked capitals, and nothing
+ * moves in the background. Kept as one block so the whole look reads in one
+ * place; the rules above it still own layout.
+ */
+.cw {
+    font-feature-settings: 'tnum' 1;
+}
+
+.cw-shell {
+    border-color: transparent;
+    border-radius: 20px;
+    background-image: none;
+}
+
+.cw-shell-native {
+    border-radius: 0;
+}
+
+.cw-raster,
+.cw-scan {
+    display: none;
+}
+
+.cw-addr,
+.cw-data,
+.cw-token-contract {
+    font-family: var(--cw-code);
+}
+
+.cw-label {
+    font: 600 13px/1.3 var(--cw-sans);
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.cw-num {
+    font-weight: 600;
+}
+
+.cw-total {
+    font: 700 46px/1 var(--cw-sans);
+    letter-spacing: -0.03em;
+}
+
+.cw-title {
+    font-weight: 700;
+}
+
+.cw-btn {
+    border-radius: 16px;
+    font-weight: 700;
+}
+
+.cw-btn-secondary {
+    border-color: transparent;
+    background: var(--cw-raised);
+    font-weight: 600;
+}
+
+.cw-btn-secondary:hover:not(:disabled) {
+    border-color: transparent;
+    background: var(--cw-border-soft);
+}
+
+.cw-btn:disabled {
+    border-color: transparent;
+}
+
+.cw-ghost,
+.cw-ghost-dashed {
+    border-color: transparent;
+    border-radius: 999px;
+    background: var(--cw-raised);
+    font: 600 14px/1 var(--cw-sans);
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.cw-back {
+    font: 600 15px/1 var(--cw-sans);
+    letter-spacing: 0;
+}
+
+.cw-icon-btn {
+    border-color: transparent;
+    border-radius: 999px;
+    background: var(--cw-raised);
+}
+
+.cw-icon-btn-bare {
+    background: transparent;
+}
+
+.cw-input,
+.cw-textarea {
+    border-color: transparent;
+    border-radius: 14px;
+    background: var(--cw-raised);
+}
+
+.cw-input:focus,
+.cw-textarea:focus {
+    border-color: var(--cw-accent);
+}
+
+.cw-card {
+    border-color: transparent;
+    border-radius: 18px;
+}
+
+.cw-card-button:hover {
+    border-color: transparent;
+    background: var(--cw-raised);
+}
+
+.cw-card-custom {
+    border-color: var(--cw-meta-line);
+}
+
+.cw-note {
+    border-color: transparent;
+    border-radius: 16px;
+}
+
+.cw-note::before {
+    border-radius: 50%;
+}
+
+.cw-context {
+    border-bottom-color: transparent;
+}
+
+.cw-chip {
+    border-color: transparent;
+    border-radius: 999px;
+    background: var(--cw-raised);
+}
+
+.cw-chip-on {
+    border-color: var(--cw-accent);
+}
+
+.cw-chip-mark {
+    border-radius: 50%;
+}
+
+.cw-chip-sub {
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.cw-pick {
+    border-radius: 14px;
+}
+
+.cw-seg {
+    gap: 4px;
+    padding: 4px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--cw-sunken);
+}
+
+.cw-seg-item {
+    border-radius: 10px;
+    background: transparent;
+    font: 600 14px/1 var(--cw-sans);
+    letter-spacing: 0;
+}
+
+.cw-seg-item[aria-pressed='true'] {
+    background: var(--cw-border-soft);
+}
+
+.cw-seg-bar {
+    display: none;
+}
+
+.cw-rail {
+    border-right-color: transparent;
+}
+
+.cw-rail-item {
+    border-left: 0;
+    border-radius: 12px;
+}
+
+.cw-rail-item[aria-current='page'] {
+    background: var(--cw-raised);
+    color: var(--cw-bright);
+    font-weight: 600;
+}
+
+.cw-tabs {
+    border-top-color: var(--cw-line);
+    background: var(--cw-app);
+}
+
+.cw-tab {
+    border-top: 0;
+    font: 600 11px/1 var(--cw-sans);
+    letter-spacing: 0;
+}
+
+.cw-tab[aria-current='page'] {
+    color: var(--cw-bright);
+}
+
+.cw-tab[aria-current='page'] .cw-tab-icon {
+    color: var(--cw-accent);
+}
+
+.cw-quick {
+    gap: 8px;
+}
+
+.cw-quick-item {
+    border-radius: 16px;
+    background: var(--cw-surface);
+    font-weight: 600;
+}
+
+.cw-quick-item:hover {
+    background: var(--cw-raised);
+    color: var(--cw-text);
+}
+
+.cw-sheet-panel {
+    border-top: 0;
+    border-radius: 24px 24px 0 0;
+}
+
+.cw-badge,
+.cw-prov {
+    border-radius: 999px;
+}
+
+/* One asset a row on the simple home: logo, name and amount, value. */
+.cw-asset {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 0;
+    border-radius: 18px;
+    background: transparent;
+    color: var(--cw-text);
+    cursor: pointer;
+}
+
+.cw-asset:hover {
+    background: var(--cw-surface);
+}
+
+.cw-asset .cw-stock-icon {
+    border-radius: 50%;
+}
+
+.cw-asset-name {
+    display: block;
+    overflow: hidden;
+    font: 700 16px/1.25 var(--cw-sans);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cw-asset-sub {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin-top: 3px;
+    font: 500 14px/1.3 var(--cw-sans);
+    color: var(--cw-dim);
+}
+
+.cw-asset-usd {
+    flex: none;
+    font: 700 16px/1.25 var(--cw-sans);
+}
+
+/*
+ * On a phone the wallet is the screen, not a card on a page: no margin round
+ * the shell and no corners — the room goes to the content.
+ */
+@media (max-width: 640px) {
+    .cw.cw-frame {
+        padding: 0;
+    }
+
+    .cw-shell {
+        border-radius: 0;
+    }
 }

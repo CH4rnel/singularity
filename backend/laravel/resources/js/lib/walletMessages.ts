@@ -197,6 +197,15 @@ export const walletMessages: Messages = {
         safetyTitle: 'This wallet can still be lost',
         safetyBackup: 'The phrase has never been written down.',
         safetyPassword: 'There is no password on this device.',
+        safetyBackupSoft:
+            'Save your recovery phrase so this wallet is never lost',
+        safetyPasswordSoft: 'Add a password to lock the wallet on this device',
+        assetsHidden: '{count} more tokens without a price',
+        preferencesMode: 'Interface',
+        modeSimpleShort: 'Simple',
+        modeFullShort: 'Full',
+        modeHint:
+            'Simple keeps the essentials on screen; everything else is under More.',
         safetyAction: 'Open Security',
 
         // Backup confirmation
@@ -2271,6 +2280,15 @@ export const walletMessages: Messages = {
         safetyTitle: 'Этот кошелёк ещё можно потерять',
         safetyBackup: 'Фраза ни разу не была записана.',
         safetyPassword: 'На этом устройстве нет пароля.',
+        safetyBackupSoft:
+            'Сохраните фразу восстановления, чтобы кошелёк никогда не потерялся',
+        safetyPasswordSoft:
+            'Поставьте пароль, чтобы кошелёк запирался на этом устройстве',
+        assetsHidden: 'Ещё токенов без цены: {count}',
+        preferencesMode: 'Интерфейс',
+        modeSimpleShort: 'Простой',
+        modeFullShort: 'Полный',
+        modeHint: 'В простом — только главное, остальное в «Ещё».',
         safetyAction: 'Открыть «Безопасность»',
 
         // Backup confirmation
@@ -4254,6 +4272,13 @@ export const walletMessages: Messages = {
         safetyTitle: '这个钱包仍然可能丢失',
         safetyBackup: '助记词从未被抄写过。',
         safetyPassword: '这台设备上没有密码。',
+        safetyBackupSoft: '保存恢复短语，钱包就永远不会丢失',
+        safetyPasswordSoft: '设置密码，在这台设备上锁定钱包',
+        assetsHidden: '另有 {count} 个无价格代币',
+        preferencesMode: '界面',
+        modeSimpleShort: '简洁',
+        modeFullShort: '完整',
+        modeHint: '简洁模式只显示常用功能，其余在“更多”里。',
         safetyAction: '打开「安全」',
 
         // Backup confirmation

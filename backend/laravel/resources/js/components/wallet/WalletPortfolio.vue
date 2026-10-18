@@ -1,30 +1,23 @@
 <script setup lang="ts">
-import {
-    ArrowLeftRight,
-    CalendarCheck,
-    CandlestickChart,
-    Coins,
-    Compass,
-    Droplets,
-    Globe,
-    HardDrive,
-    LineChart,
-    Magnet,
-    MoreHorizontal,
-    Percent,
-    PieChart,
-    Rocket,
-    Route,
-} from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
+import StockIcon from '@/components/wallet/StockIcon.vue';
 import TxList from '@/components/wallet/TxList.vue';
+import WalletPlaces from '@/components/wallet/WalletPlaces.vue';
+import type { WalletPlace } from '@/components/wallet/WalletPlaces.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useWalletMode } from '@/composables/useWalletMode';
 import { canOpenProxySettings, openProxySettings } from '@/lib/native';
-import { WALLET_FAMILY_GROUPS, formatUnits } from '@/lib/wallet';
-import type { WalletChainId, WalletTxStatus } from '@/lib/wallet';
+import { logoForToken } from '@/lib/tokenLogos';
+import { WALLET_FAMILY_GROUPS, formatUnits, walletChain } from '@/lib/wallet';
+import type {
+    WalletChainId,
+    WalletTokenBalance,
+    WalletTxStatus,
+} from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
+import { provenanceOf } from '@/lib/wallet/provenance';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -51,30 +44,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     open: [chain: WalletChainId];
+    /** A token row on the simple home. */
+    token: [chain: WalletChainId, token: WalletTokenBalance];
     send: [];
     receive: [];
     swap: [];
-    crosschain: [];
-    tokens: [];
-    markets: [];
-    stocks: [];
-    bridge: [];
-    earn: [];
-    liquidity: [];
-    launchpad: [];
-    browse: [];
-    domains: [];
-    daily: [];
-    analytics: [];
-    tracker: [];
-    ipfs: [];
-    /** Everything that is not one of the fourteen, one level down. */
-    more: [];
+    /** A place from the grid under the balance (full mode only). */
+    place: [place: WalletPlace];
     accounts: [];
     security: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
+
+const { simple } = useWalletMode();
 
 const activeRecord = computed(() => props.wallet.activeAccount.value);
 
@@ -222,13 +205,21 @@ const proxyOffer = computed(
  * door to.
  */
 const safety = computed(() => {
-    if (!props.wallet.backedUp.value) {
-        return t('safetyBackup');
+    // Simple mode asks once there is something to lose, and asks kindly: a
+    // newcomer first gets a wallet that works, then the reason to keep it safe.
+    if (simple.value && isEmpty.value) {
+        return null;
     }
 
-    return props.wallet.protection.value === 'none'
-        ? t('safetyPassword')
-        : null;
+    if (!props.wallet.backedUp.value) {
+        return t(simple.value ? 'safetyBackupSoft' : 'safetyBackup');
+    }
+
+    if (props.wallet.protection.value !== 'none') {
+        return null;
+    }
+
+    return t(simple.value ? 'safetyPasswordSoft' : 'safetyPassword');
 });
 
 /**
@@ -305,6 +296,110 @@ const caveat = computed(() => {
         : null;
 });
 
+/**
+ * Simple mode doesn't flag a total for tokens nobody prices — those are almost
+ * always airdropped dust. A network that couldn't be read or priced is still
+ * said, because then the number really is missing something.
+ */
+const partial = computed(() =>
+    simple.value
+        ? unread.value + unpricedNetworks.value > 0 || pricesOffline.value
+        : unaccounted.value > 0,
+);
+
+const shownCaveat = computed(() => (partial.value ? caveat.value : null));
+
+type AssetRow = {
+    key: string;
+    chain: WalletChainId;
+    token: WalletTokenBalance | null;
+    name: string;
+    symbol: string;
+    amount: string;
+    usd: number | null;
+    logo?: string;
+    /** Bridged, wrapped or unverified — what this contract is, by address. */
+    tag?: string;
+};
+
+/**
+ * The simple home lists what you hold, one asset a row — every network's own
+ * coin that has a balance, then every token that is priced or that the
+ * registry knows. Unpriced strangers (airdropped dust, almost always) stay on
+ * the Tokens screen, counted in a link below the list.
+ */
+const assets = computed<AssetRow[]>(() => {
+    const rows: AssetRow[] = [];
+
+    for (const card of cards.value) {
+        const { account } = card;
+
+        const chainId = walletChain(account.chain).chainId;
+
+        if (card.raw !== null && card.raw > 0n) {
+            rows.push({
+                key: account.chain,
+                chain: account.chain,
+                token: null,
+                name: account.label,
+                symbol: account.symbol,
+                amount: card.amount ?? '—',
+                usd: card.usd,
+                logo: logoForToken(chainId, null, account.symbol),
+            });
+        }
+
+        const quotes = props.tokenPrices[account.chain] ?? {};
+
+        for (const token of props.wallet.tokens.value[account.chain]?.items ??
+            []) {
+            const price = quotes[token.address.toLowerCase()];
+            const known = provenanceOf(chainId, token.address);
+
+            if (token.balance <= 0n || (price === undefined && !known)) {
+                continue;
+            }
+
+            const shown = formatUnits(token.balance, token.decimals, 4);
+
+            rows.push({
+                key: `${account.chain}:${token.address}`,
+                chain: account.chain,
+                token,
+                name: token.name || token.symbol,
+                symbol: token.symbol,
+                amount: shown === '0' ? '<0.0001' : shown,
+                usd: usdValue(token.balance, token.decimals, price ?? null),
+                logo: logoForToken(chainId, token.address, token.symbol),
+                tag:
+                    known?.kind === 'bridged'
+                        ? t('provBridged')
+                        : known?.kind === 'wrapped'
+                          ? t('provWrapped')
+                          : known || chainId === undefined
+                            ? undefined
+                            : t('provUnverified'),
+            });
+        }
+    }
+
+    return rows.sort((a, b) => (b.usd ?? -1) - (a.usd ?? -1));
+});
+
+const hiddenTokens = computed(
+    () =>
+        cards.value.reduce((sum, card) => sum + card.tokenCount, 0) -
+        assets.value.filter((row) => row.token !== null).length,
+);
+
+const openAsset = (row: AssetRow): void => {
+    if (row.token) {
+        emit('token', row.chain, row.token);
+    } else {
+        emit('open', row.chain);
+    }
+};
+
 const total = computed(() =>
     cards.value.reduce((sum, card) => sum + (card.usd ?? 0) + card.tokenUsd, 0),
 );
@@ -370,7 +465,8 @@ const recent = computed(() =>
         <button
             v-if="safety"
             type="button"
-            class="cw-note cw-note-warn"
+            class="cw-note"
+            :class="{ 'cw-note-warn': !simple }"
             style="
                 width: 100%;
                 margin-bottom: 18px;
@@ -452,9 +548,7 @@ const recent = computed(() =>
         <div style="display: flex; align-items: baseline; gap: 10px">
             <span
                 class="cw-total"
-                :style="
-                    unaccounted > 0 ? { color: 'var(--cw-muted)' } : undefined
-                "
+                :style="partial ? { color: 'var(--cw-muted)' } : undefined"
                 >{{ totalUnknown ? '—' : formatUsd(total, locale) }}</span
             >
         </div>
@@ -468,19 +562,14 @@ const recent = computed(() =>
             "
         >
             <span
-                v-if="unaccounted > 0"
+                v-if="partial && !simple"
                 style="
                     font: 500 13px/1 var(--cw-mono);
                     color: var(--cw-pending);
                 "
                 >{{ t('pricePartial') }}</span
             >
-            <span
-                v-if="caveat"
-                class="cw-label"
-                style="color: var(--cw-faint)"
-                >{{ caveat }}</span
-            >
+            <span v-if="shownCaveat" class="cw-hint">{{ shownCaveat }}</span>
         </div>
 
         <!--
@@ -554,7 +643,50 @@ const recent = computed(() =>
           "СЕТИ" makes clearer, and "ВЫВЕДЕНО: 1" counted a thing nobody asked
           about.
         -->
-        <div class="cw-stack" style="gap: 8px">
+        <div
+            v-if="simple && assets.length > 0"
+            class="cw-stack"
+            style="gap: 4px"
+        >
+            <button
+                v-for="row in assets"
+                :key="row.key"
+                type="button"
+                class="cw-asset"
+                @click="openAsset(row)"
+            >
+                <StockIcon
+                    v-if="row.logo"
+                    :symbol="row.symbol"
+                    :src="row.logo"
+                    :size="40"
+                />
+                <NetworkMark v-else :chain="row.chain" />
+                <span style="flex: 1; min-width: 0; text-align: left">
+                    <span class="cw-asset-name">{{ row.name }}</span>
+                    <span class="cw-asset-sub"
+                        >{{ row.amount }} {{ row.symbol }}
+                        <span v-if="row.tag" class="cw-prov">{{
+                            row.tag
+                        }}</span></span
+                    >
+                </span>
+                <span class="cw-asset-usd">{{
+                    row.usd === null ? '—' : formatUsd(row.usd, locale)
+                }}</span>
+            </button>
+            <button
+                v-if="hiddenTokens > 0"
+                type="button"
+                class="cw-back"
+                style="align-self: flex-start; margin-top: 4px"
+                @click="emit('place', 'tokens')"
+            >
+                {{ t('assetsHidden', { count: hiddenTokens }) }} →
+            </button>
+        </div>
+
+        <div v-else class="cw-stack" style="gap: 8px">
             <template v-for="card in groupedCards" :key="card.account.chain">
                 <button
                     type="button"
@@ -656,112 +788,27 @@ const recent = computed(() =>
           less often (buying with a card, the gas station, torrents), one level
           down rather than gone.
         -->
-        <div class="cw-quick">
-            <button type="button" class="cw-quick-item" @click="emit('tokens')">
-                <Coins :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('tokens') }}</span>
-            </button>
-            <button
-                type="button"
-                class="cw-quick-item"
-                @click="emit('markets')"
-            >
-                <LineChart :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('markets') }}</span>
-            </button>
-            <button type="button" class="cw-quick-item" @click="emit('stocks')">
-                <CandlestickChart
-                    :size="20"
-                    :stroke-width="1.5"
-                    aria-hidden="true"
-                />
-                <span>{{ t('stocks') }}</span>
-            </button>
-            <button type="button" class="cw-quick-item" @click="emit('bridge')">
-                <Route :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('bridgeTitle') }}</span>
-            </button>
-            <button
-                type="button"
-                class="cw-quick-item"
-                @click="emit('crosschain')"
-            >
-                <ArrowLeftRight
-                    :size="20"
-                    :stroke-width="1.5"
-                    aria-hidden="true"
-                />
-                <span>{{ t('tileCross') }}</span>
-            </button>
-            <button type="button" class="cw-quick-item" @click="emit('earn')">
-                <Percent :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('earnTitle') }}</span>
-            </button>
-            <button
-                type="button"
-                class="cw-quick-item"
-                @click="emit('liquidity')"
-            >
-                <Droplets :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('tilePools') }}</span>
-            </button>
-            <button
-                type="button"
-                class="cw-quick-item"
-                @click="emit('launchpad')"
-            >
-                <Rocket :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('tabLaunch') }}</span>
-            </button>
-            <button type="button" class="cw-quick-item" @click="emit('browse')">
-                <Compass :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('browseTitle') }}</span>
-            </button>
-            <button
-                type="button"
-                class="cw-quick-item"
-                @click="emit('domains')"
-            >
-                <Globe :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('domainsTitle') }}</span>
-            </button>
-            <button type="button" class="cw-quick-item" @click="emit('daily')">
-                <CalendarCheck
-                    :size="20"
-                    :stroke-width="1.5"
-                    aria-hidden="true"
-                />
-                <span>{{ t('tileDaily') }}</span>
-            </button>
-            <button
-                type="button"
-                class="cw-quick-item"
-                @click="emit('analytics')"
-            >
-                <PieChart :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('navAnalytics') }}</span>
-            </button>
-            <button
-                type="button"
-                class="cw-quick-item"
-                @click="emit('tracker')"
-            >
-                <Magnet :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('trackerTitle') }}</span>
-            </button>
-            <button type="button" class="cw-quick-item" @click="emit('ipfs')">
-                <HardDrive :size="20" :stroke-width="1.5" aria-hidden="true" />
-                <span>{{ t('ipfsTitle') }}</span>
-            </button>
-            <button type="button" class="cw-quick-item" @click="emit('more')">
-                <MoreHorizontal
-                    :size="20"
-                    :stroke-width="1.5"
-                    aria-hidden="true"
-                />
-                <span>{{ t('navMore') }}</span>
-            </button>
-        </div>
+        <WalletPlaces
+            v-if="!simple"
+            :places="[
+                'tokens',
+                'markets',
+                'stocks',
+                'bridge',
+                'crosschain',
+                'earn',
+                'liquidity',
+                'launchpad',
+                'browse',
+                'domains',
+                'daily',
+                'analytics',
+                'tracker',
+                'ipfs',
+                'more',
+            ]"
+            @place="emit('place', $event)"
+        />
         <div
             v-if="!orphaned && !isEmpty && recent.length > 0"
             style="margin-top: 26px"

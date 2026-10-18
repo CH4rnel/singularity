@@ -6,8 +6,11 @@ import {
     Landmark,
     Settings,
 } from 'lucide-vue-next';
+import WalletPlaces from '@/components/wallet/WalletPlaces.vue';
+import type { WalletPlace } from '@/components/wallet/WalletPlaces.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useWalletMode } from '@/composables/useWalletMode';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -19,6 +22,9 @@ import { walletMessages } from '@/lib/walletMessages';
  * WIP until a provider is configured), what has no fuel (the gas station),
  * what only works in one build (torrents need the desktop shell), and what has
  * a tab of its own already (the DAO).
+ *
+ * In simple mode this is also where the places grid lives, so every screen
+ * the simple wallet does not list is one tap from the tab bar.
  *
  * The fine print at the bottom is where the price sources went. They were
  * printed under the total on every visit, to everyone, saying nothing about
@@ -37,9 +43,12 @@ const emit = defineEmits<{
     torrent: [];
     dao: [];
     preferences: [];
+    place: [place: WalletPlace];
 }>();
 
 const { t } = useLocale(walletMessages);
+
+const { simple } = useWalletMode();
 </script>
 
 <template>
@@ -49,6 +58,30 @@ const { t } = useLocale(walletMessages);
         </button>
 
         <h2 class="cw-title" style="margin: 22px 0 18px">{{ t('navMore') }}</h2>
+
+        <WalletPlaces
+            v-if="simple"
+            :places="[
+                'tokens',
+                'bridge',
+                'earn',
+                'markets',
+                'stocks',
+                'crosschain',
+                'liquidity',
+                'launchpad',
+                'dao',
+                'nft',
+                'lain',
+                'browse',
+                'domains',
+                'analytics',
+                'tracker',
+                'ipfs',
+            ]"
+            style="margin-top: 0"
+            @place="emit('place', $event)"
+        />
 
         <div class="cw-stack" style="gap: 0">
             <button type="button" class="cw-line-row" @click="emit('buy')">
