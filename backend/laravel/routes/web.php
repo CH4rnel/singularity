@@ -19,6 +19,7 @@ use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\ArenaController;
 use App\Http\Controllers\Auth\TwitterAuthController;
 use App\Http\Controllers\Auth\Web3LoginController;
+use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BridgeAnalyticsController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChangelogController;
@@ -243,6 +244,21 @@ Route::get('u/{user}', [UserProfileController::class, 'legacy'])
     ->whereNumber('user')
     ->name('users.legacy');
 Route::get('feed', [PostController::class, 'index'])->name('feed');
+Route::prefix('board')->name('board.')->group(function () {
+    Route::get('/', [BoardController::class, 'index'])->name('index');
+    Route::get('b/{board}', [BoardController::class, 'index'])->name('browse');
+    Route::get('t/{thread}', [BoardController::class, 'show'])->name('show');
+    Route::get('posts/{post}/image', [BoardController::class, 'image'])->name('image');
+    Route::get('posts/{post}/evidence', [BoardController::class, 'evidence'])->middleware('throttle:30,1')->name('evidence');
+    Route::middleware('auth')->group(function () {
+        Route::post('b/{board}/threads', [BoardController::class, 'store'])->middleware('throttle:5,1')->name('store');
+        Route::post('t/{thread}/posts', [BoardController::class, 'reply'])->middleware('throttle:6,1')->name('reply');
+        Route::post('posts/{post}/anchor', [BoardController::class, 'anchor'])->middleware('throttle:10,1')->name('anchor');
+        Route::delete('posts/{post}', [BoardController::class, 'remove'])->middleware('throttle:10,1')->name('remove');
+        Route::post('posts/{post}/report', [BoardController::class, 'report'])->middleware('throttle:10,1')->name('report');
+        Route::put('t/{thread}/closed', [BoardController::class, 'toggle'])->middleware('throttle:10,1')->name('toggle');
+    });
+});
 Route::prefix('arena')->name('arena.')->group(function () {
     Route::get('/', [ArenaController::class, 'index'])->middleware('throttle:60,1')->name('index');
     Route::get('evidence', [ArenaController::class, 'evidence'])->middleware('throttle:20,1')->name('evidence');

@@ -173,6 +173,9 @@ onMounted(refreshWalletChoices);
                     variant="outline"
                     size="sm"
                     class="gap-2"
+                    :aria-label="
+                        isAuthenticated ? displayName : 'Connect Wallet'
+                    "
                     :disabled="isAuthenticating"
                     @click="refreshWalletChoices"
                 >
@@ -187,7 +190,7 @@ onMounted(refreshWalletChoices);
                     <Wallet v-else class="h-4 w-4" />
                     <span
                         v-if="isAuthenticated"
-                        class="max-w-28 truncate"
+                        class="hidden max-w-28 truncate sm:inline"
                         >{{ displayName }}</span
                     >
                     <span v-else>Connect Wallet</span>

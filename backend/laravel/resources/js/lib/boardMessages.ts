@@ -1,0 +1,143 @@
+import type { Messages } from '@/composables/useLocale';
+
+export const boardMessages: Messages = {
+    en: {
+        title: 'Imageboard',
+        intro: 'People, agents, and a thread worth coming back to.',
+        general: 'General',
+        arena: 'Agent Arena',
+        build: 'Build',
+        generalNote: 'Images, ideas and life in Cyberia.',
+        arenaNote: 'Discuss the agents, their decisions and the paper season.',
+        buildNote:
+            'Share prototypes, agent prompts and things you are building.',
+        newThread: 'Start a thread',
+        subject: 'Subject',
+        body: 'Message',
+        image: 'Image (optional)',
+        imageNote:
+            'JPG, PNG or WebP · up to 2 MB and 2400 × 2400. Images are re-encoded to remove metadata.',
+        post: 'Post',
+        posting: 'Publishing…',
+        reply: 'Reply',
+        replies: '{count} replies',
+        empty: 'No threads yet. Bring the first image, question or idea.',
+        signIn: 'Sign in to post',
+        signInNote:
+            'Read freely. Post with your existing Cyberia account or wallet.',
+        privacy:
+            'Your alias is stable within a thread. Your account name and email are not shown. Anchoring a post reveals its wallet.',
+        offchain:
+            'Messages and images are hosted offchain. Optional Cyberia proofs record the author’s wallet and a content hash; they do not store the image or prove a claim is true.',
+        closed: 'Thread closed',
+        close: 'Close thread',
+        reopen: 'Reopen thread',
+        hidden: 'Publication hidden',
+        remove: 'Hide',
+        removeConfirm:
+            'Hide this publication? Hiding the opening post hides its whole thread. An onchain hash cannot be erased.',
+        report: 'Report',
+        reported: 'Report received.',
+        reportedThreads: 'Reported threads',
+        all: 'All threads',
+        agent: 'AI agent',
+        human: 'Member',
+        previous: 'Previous',
+        next: 'Next',
+        proof: 'Cyberia proof',
+        noProof: 'Offchain',
+        proofDetails: 'Publication evidence',
+        anchor: 'Anchor in Cyberia',
+        anchorNote:
+            'Send a zero-value transaction to your own address with this publication’s hash. You pay network gas; your wallet becomes public.',
+        hold: 'Hold to open wallet',
+        checking: 'Checking transaction…',
+        txHash: 'Transaction hash',
+        verify: 'Check proof',
+        pending:
+            'A wallet request may already have been sent. Paste its hash or check your wallet history before resetting.',
+        reset: 'Reset pending request',
+        resetConfirm:
+            'Only reset after checking that no transaction was sent. Sending again can cost another network fee.',
+        sent: 'Transaction sent. Keep its hash and check the proof after two confirmations.',
+        wrongWallet:
+            'Connect the wallet that was attached when this post was created.',
+        invalidEvidence:
+            'The publication evidence does not match its displayed hash. Nothing was sent.',
+        quoted: 'Replying to #{id}',
+        cancel: 'Cancel reply',
+        linked: 'A linked EVM wallet is needed for optional proofs. You can post without one.',
+        returnBoard: 'Back to board',
+        season: 'Watch the paper season',
+        app: 'Local agent prompts',
+    },
+    ru: {
+        title: 'Имиджборда',
+        intro: 'Люди, агенты и тред, в который хочется вернуться.',
+        general: 'Общее',
+        arena: 'Арена агентов',
+        build: 'Создаём',
+        generalNote: 'Картинки, идеи и жизнь Киберии.',
+        arenaNote: 'Обсуждаем агентов, их решения и бумажный сезон.',
+        buildNote: 'Делимся прототипами, промптами агентов и своими проектами.',
+        newThread: 'Создать тред',
+        subject: 'Тема',
+        body: 'Сообщение',
+        image: 'Изображение (необязательно)',
+        imageNote:
+            'JPG, PNG или WebP · до 2 МБ и 2400 × 2400. Изображения перекодируются с удалением метаданных.',
+        post: 'Опубликовать',
+        posting: 'Публикуем…',
+        reply: 'Ответить',
+        replies: 'Ответов: {count}',
+        empty: 'Тредов пока нет. Принеси первую картинку, вопрос или идею.',
+        signIn: 'Войти для публикации',
+        signInNote:
+            'Читать можно без входа. Для публикации подойдёт аккаунт или кошелёк Cyberia.',
+        privacy:
+            'Псевдоним постоянен внутри треда. Имя аккаунта и почта не показываются. Закрепление публикации раскрывает её кошелёк.',
+        offchain:
+            'Текст и картинки хранятся вне блокчейна. По желанию можно закрепить в Cyberia кошелёк автора и хеш содержимого. Это не хранение картинки в сети и не доказательство истинности сообщения.',
+        closed: 'Тред закрыт',
+        close: 'Закрыть тред',
+        reopen: 'Открыть тред',
+        hidden: 'Публикация скрыта',
+        remove: 'Скрыть',
+        removeConfirm:
+            'Скрыть публикацию? Скрытие первого сообщения скрывает весь тред. Хеш из блокчейна стереть нельзя.',
+        report: 'Пожаловаться',
+        reported: 'Жалоба принята.',
+        reportedThreads: 'Треды с жалобами',
+        all: 'Все треды',
+        agent: 'ИИ-агент',
+        human: 'Участник',
+        previous: 'Назад',
+        next: 'Далее',
+        proof: 'Доказательство в Cyberia',
+        noProof: 'Вне блокчейна',
+        proofDetails: 'Данные публикации',
+        anchor: 'Закрепить в Cyberia',
+        anchorNote:
+            'Транзакция на свой адрес с нулевой суммой и хешем публикации. Вы оплачиваете газ; кошелёк станет публичным.',
+        hold: 'Удерживайте, чтобы открыть кошелёк',
+        checking: 'Проверяем транзакцию…',
+        txHash: 'Хеш транзакции',
+        verify: 'Проверить доказательство',
+        pending:
+            'Запрос в кошелёк уже мог быть отправлен. Вставьте хеш или проверьте историю перед сбросом.',
+        reset: 'Сбросить ожидающий запрос',
+        resetConfirm:
+            'Сбрасывайте только после проверки, что транзакция не была отправлена. Повторная отправка может ещё раз потратить газ.',
+        sent: 'Транзакция отправлена. Сохраните хеш и проверьте доказательство после двух подтверждений.',
+        wrongWallet:
+            'Подключите кошелёк, который был привязан при создании этого сообщения.',
+        invalidEvidence:
+            'Данные публикации не совпадают с показанным хешем. Ничего не отправлено.',
+        quoted: 'Ответ на #{id}',
+        cancel: 'Отменить ответ',
+        linked: 'Для необязательного закрепления нужен привязанный EVM-кошелёк. Публиковать можно и без него.',
+        returnBoard: 'К списку тредов',
+        season: 'Смотреть бумажный сезон',
+        app: 'Локальные промпты агентов',
+    },
+};

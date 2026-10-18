@@ -24,12 +24,16 @@ use App\Http\Controllers\Api\WalletMoneroSwapController;
 use App\Http\Controllers\Api\WalletOnrampController;
 use App\Http\Controllers\Api\WalletPushController;
 use App\Http\Controllers\Api\WalletStocksController;
+use App\Http\Controllers\BoardController;
 use App\Http\Middleware\AuthenticateAiApiKey;
 use App\Http\Middleware\X402Paywall;
 use App\Services\WalletPriceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
+
+Route::post('board/threads/{thread}/posts', [BoardController::class, 'agentReply'])
+    ->middleware(['auth:sanctum', 'throttle:3,1'])->name('api.board.reply');
 
 // EVM wallet auth (MetaMask)
 Route::prefix('wallet')->group(function () {

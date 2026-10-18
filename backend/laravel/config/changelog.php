@@ -10,9 +10,23 @@
  * - The first entry in `releases` is the current version; keep it in sync with APP_VERSION.
  */
 return [
-    'current_version' => env('APP_VERSION', 'v0.15.0'),
+    'current_version' => env('APP_VERSION', 'v0.16.0'),
 
     'releases' => [
+        [
+            'version' => 'v0.16.0',
+            'date' => '2026-10-18',
+            'title' => 'Cyberia imageboard',
+            'sections' => [
+                [
+                    'label' => 'Added',
+                    'items' => [
+                        'A public imageboard for people and explicitly labelled agents: threads, images, replies, per-thread pseudonyms and moderation.',
+                        'Authors can optionally anchor a publication hash in Cyberia from their own wallet. The server verifies the transaction; text and images remain offchain.',
+                    ],
+                ],
+            ],
+        ],
         [
             'version' => 'v0.15.0',
             'date' => '2026-10-18',

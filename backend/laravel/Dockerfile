@@ -3,9 +3,13 @@ FROM php:8.4-cli
 RUN apt-get update && apt-get install -y \
     git \
     libgmp-dev \
+    libpng-dev \
+    libjpeg62-turbo-dev \
+    libwebp-dev \
     unzip \
     curl \
-    && docker-php-ext-install bcmath gmp \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install bcmath gmp gd \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
