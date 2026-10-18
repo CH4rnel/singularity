@@ -125,3 +125,7 @@ Schedule::command('feed:announce-activity')->everyMinute()->withoutOverlapping()
 // moment a launch confirms (POST /api/launchpad/watch), so this is the floor
 // for launches made anywhere else — a script, the contract directly.
 Schedule::command('launchpad:watch')->everyMinute()->withoutOverlapping();
+
+// This is a cron tick, not a queue worker. It never backfills model decisions.
+Schedule::command('arena:tick')->everyMinute()->withoutOverlapping(3)
+    ->when(fn (): bool => (bool) config('arena.enabled') && (bool) config('arena.automation.enabled'));

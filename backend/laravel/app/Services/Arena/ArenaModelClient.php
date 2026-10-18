@@ -1,0 +1,59 @@
+<?php
+
+namespace App\Services\Arena;
+
+use DomainException;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
+
+class ArenaModelClient
+{
+    public const PROMPT = 'You are a bounded paper-trading contestant. You have no tools, wallet, web access or private memory. Use only the supplied observation and your own portfolio. Prices are USDC micro-units per WETH; cash has 6 decimals and WETH has 18. Do not invent news, indicators or history. Compare costs and uncertainty. Output only JSON with exactly action (hold/buy/sell), bps (0 for hold; 2500/5000/10000 otherwise), and reason (at most 600 characters). No markdown. Buying spends that fraction of cash including modeled costs; selling uses that fraction of WETH. Never buy with no cash or sell with no WETH. The future fill price is unknown. Your public reason must explain the decision briefly; it is not a private chain of thought.';
+
+    /** @param array<string, mixed> $rules
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    public function decide(string $actor, array $rules, array $context): array
+    {
+        $settings = $rules['automation'];
+        $model = $settings['models'][$actor];
+        $system = $settings['prompt']."\nMethod: ".$rules['agents'][$actor]['method'];
+        $user = json_encode($context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        if (strlen($system) + strlen($user) > $settings['max_prompt_bytes']) {
+            throw new DomainException('model_context_too_large');
+        }
+        $response = Http::withToken((string) config('arena.automation.api_key'))->acceptJson()
+            ->connectTimeout(3)->timeout($settings['timeout_seconds'])->withOptions(['allow_redirects' => false])
+            ->post('https://openrouter.ai/api/v1/chat/completions', [
+                'model' => $model, 'stream' => false, 'max_tokens' => $settings['max_output_tokens'], 'temperature' => 0.2,
+                'provider' => ['allow_fallbacks' => false, 'require_parameters' => true,
+                    'max_price' => ['prompt' => $settings['max_price_per_million'], 'completion' => $settings['max_price_per_million'], 'request' => 0]],
+                'response_format' => ['type' => 'json_object'],
+                'messages' => [['role' => 'system', 'content' => $system], ['role' => 'user', 'content' => $user]],
+            ]);
+        $served = $response->json('model');
+        $expected = preg_replace('/:free$/D', '', $model);
+        if (! $response->successful() || strlen($response->body()) > 32768 || ! in_array($served, [$model, $expected], true)
+            || $response->json('choices.0.finish_reason') !== 'stop' || $response->json('choices.0.message.tool_calls')) {
+            throw new DomainException('model_response_rejected');
+        }
+        $content = $response->json('choices.0.message.content');
+        if (! is_string($content) || strlen($content) > 4096) {
+            throw new DomainException('model_response_rejected');
+        }
+        $data = json_decode($content, true, 8, JSON_THROW_ON_ERROR);
+        $decision = Validator::make(['decision' => $data], [
+            'decision' => ['required', 'array:action,bps,reason'],
+            'decision.action' => ['required', Rule::in(['hold', 'buy', 'sell'])],
+            'decision.bps' => ['required', 'integer', Rule::in([0, 2500, 5000, 10000])],
+            'decision.reason' => ['required', 'string', 'max:600'],
+        ])->validated()['decision'];
+        if (! is_int($data['bps']) || ($decision['action'] === 'hold') !== ($decision['bps'] === 0)) {
+            throw new DomainException('invalid_model_action');
+        }
+
+        return ['decision' => [...$decision, 'model' => $model], 'served_model' => $response->json('model')];
+    }
+}

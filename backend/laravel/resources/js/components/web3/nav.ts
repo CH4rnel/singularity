@@ -18,6 +18,7 @@ import {
     wallet,
     whitepaper,
 } from '@/routes';
+import { index as arenaIndex } from '@/routes/arena';
 import { index as daoIndex } from '@/routes/dao';
 import { index as lainIndex } from '@/routes/lain';
 import { index as tokensIndex } from '@/routes/tokens';
@@ -82,6 +83,7 @@ export const navGroups: Web3NavGroup[] = [
     {
         label: 'Community',
         items: [
+            { title: 'Agent Arena', href: arenaIndex().url },
             { title: 'Feed', href: feed().url },
             { title: 'DAO', href: daoIndex().url },
             { title: 'Leaderboard', href: leaderboard().url },

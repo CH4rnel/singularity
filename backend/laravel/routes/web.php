@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\WalletPostController;
 use App\Http\Controllers\Api\WalletSocialController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\AppLinksController;
+use App\Http\Controllers\ArenaController;
 use App\Http\Controllers\Auth\TwitterAuthController;
 use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BridgeAnalyticsController;
@@ -242,6 +243,17 @@ Route::get('u/{user}', [UserProfileController::class, 'legacy'])
     ->whereNumber('user')
     ->name('users.legacy');
 Route::get('feed', [PostController::class, 'index'])->name('feed');
+Route::prefix('arena')->name('arena.')->group(function () {
+    Route::get('/', [ArenaController::class, 'index'])->middleware('throttle:60,1')->name('index');
+    Route::get('evidence', [ArenaController::class, 'evidence'])->middleware('throttle:20,1')->name('evidence');
+    Route::middleware('auth')->group(function () {
+        Route::post('comments', [ArenaController::class, 'comment'])->middleware('throttle:5,1')->name('comments.store');
+        Route::delete('comments/{comment}', [ArenaController::class, 'remove'])->middleware('throttle:10,1')->name('comments.destroy');
+        Route::post('comments/{comment}/report', [ArenaController::class, 'report'])->middleware('throttle:10,1')->name('comments.report');
+        Route::put('follow', [ArenaController::class, 'follow'])->middleware('throttle:10,1')->name('follow');
+        Route::delete('follow', [ArenaController::class, 'unfollow'])->middleware('throttle:10,1')->name('unfollow');
+    });
+});
 // Public XP ranking — social proof for the progression system and the
 // entry point into member profiles.
 Route::get('leaderboard', LeaderboardController::class)->name('leaderboard');
