@@ -14,6 +14,8 @@ import type {
     WalletFeeTier,
     WalletTokenBalance,
 } from '@/lib/wallet';
+import { failureReason } from '@/lib/wallet/failure';
+import type { FailureReason } from '@/lib/wallet/failure';
 import { formatUsd, shortAddress, usdValue } from '@/lib/wallet/format';
 import {
     announceWalletEvent,
@@ -54,7 +56,13 @@ const emit = defineEmits<{
 const { locale, t } = useLocale(walletMessages);
 
 type Phase = 'compose' | 'review' | 'status';
-type Outcome = 'signing' | 'pending' | 'confirmed' | 'failed';
+/**
+ * `failed` is "never reached the network" — nothing moved and nothing was
+ * paid. `reverted` reached a block and was refused there: the coins stayed,
+ * the fee for the attempt did not. They were one state once, and the screen
+ * told people whose fee had been spent that nothing had happened.
+ */
+type Outcome = 'signing' | 'pending' | 'confirmed' | 'failed' | 'reverted';
 
 const phase = ref<Phase>('compose');
 const outcome = ref<Outcome>('signing');
@@ -64,7 +72,7 @@ const to = ref('');
 const amount = ref('');
 const tier = ref<WalletFeeTier>('normal');
 const txHash = ref<string | null>(null);
-const failure = ref<string | null>(null);
+const failure = ref<FailureReason | null>(null);
 
 const chain = computed(() => walletChain(props.chain));
 
@@ -276,7 +284,32 @@ const OUTCOMES: Record<
     pending: { icon: Loader, status: 'pending' },
     confirmed: { icon: CircleCheck, status: 'confirmed' },
     failed: { icon: CircleX, status: 'failed' },
+    reverted: { icon: CircleX, status: 'failed' },
 };
+
+/** Pill, title and body per outcome — one table rather than three ternaries. */
+const outcomeCopy = computed(() => {
+    switch (outcome.value) {
+        case 'signing':
+            return { label: t('txSigningLabel'), title: t('txSigningTitle'), body: t('txSigningBody') };
+        case 'pending':
+            return { label: t('txPendingLabel'), title: t('txPendingTitle'), body: t('txPendingBody') };
+        case 'confirmed':
+            return {
+                label: t('txSettledLabel'),
+                title: t('txSettledTitle'),
+                body: t('txSettledBody', { network: chain.value.label }),
+            };
+        case 'reverted':
+            return {
+                label: t('txRevertedLabel'),
+                title: t('txRevertedTitle'),
+                body: t('txRevertedBody', { amount: amount.value, symbol: symbol.value }),
+            };
+        default:
+            return { label: t('txFailedLabel'), title: t('txFailedTitle'), body: t('txFailedBody') };
+    }
+});
 
 /**
  * What a transfer looks like to analytics: which network, which kind of asset,
@@ -346,7 +379,7 @@ const sign = async (): Promise<void> => {
         outcome.value = 'pending';
     } catch (error) {
         outcome.value = 'failed';
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = failureReason(error);
         announceWalletEvent({
             title: t('txFailedTitle'),
             body: `${chain.value.label} · ${t('txFailedBody')}`,
@@ -396,7 +429,10 @@ const sign = async (): Promise<void> => {
     }
 
     try {
-        outcome.value = await chain.value.awaitOutcome(txHash.value);
+        outcome.value =
+            (await chain.value.awaitOutcome(txHash.value)) === 'confirmed'
+                ? 'confirmed'
+                : 'reverted';
 
         analytics.track(
             outcome.value === 'confirmed'
@@ -414,18 +450,21 @@ const sign = async (): Promise<void> => {
         announceWalletEvent({
             title:
                 outcome.value === 'confirmed'
-                    ? t('txConfirmedTitle')
-                    : t('txFailedTitle'),
+                    ? t('txSettledTitle')
+                    : t('txRevertedTitle'),
             body: `${chain.value.label} · ${
                 outcome.value === 'confirmed'
-                    ? t('txConfirmedBody')
-                    : t('txFailedBody')
+                    ? t('txSettledBody', { network: chain.value.label })
+                    : t('txRevertedBody', {
+                          amount: amount.value,
+                          symbol: symbol.value,
+                      })
             }`,
             sound: outcome.value === 'confirmed' ? 'success' : 'error',
             tag: txHash.value ? `transaction:${txHash.value}` : undefined,
         });
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = failureReason(error);
 
         // A watch that timed out is not a transfer that failed, and the row
         // stays pending on screen — so nothing is recorded as either.
@@ -1042,7 +1081,8 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                         color:
                             outcome === 'confirmed'
                                 ? 'var(--cw-ok)'
-                                : outcome === 'failed'
+                                : outcome === 'failed' ||
+                                    outcome === 'reverted'
                                   ? 'var(--cw-bad)'
                                   : outcome === 'pending'
                                     ? 'var(--cw-pending)'
@@ -1056,40 +1096,16 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                 />
                 <StatusPill
                     :status="OUTCOMES[outcome].status"
-                    :label="
-                        outcome === 'signing'
-                            ? t('txSigningLabel')
-                            : outcome === 'pending'
-                              ? t('txPendingLabel')
-                              : outcome === 'confirmed'
-                                ? t('txConfirmedLabel')
-                                : t('txFailedLabel')
-                    "
+                    :label="outcomeCopy.label"
                 />
                 <h3
                     class="cw-title"
                     style="margin: 12px 0 10px; font-size: 22px"
                 >
-                    {{
-                        outcome === 'signing'
-                            ? t('txSigningTitle')
-                            : outcome === 'pending'
-                              ? t('txPendingTitle')
-                              : outcome === 'confirmed'
-                                ? t('txConfirmedTitle')
-                                : t('txFailedTitle')
-                    }}
+                    {{ outcomeCopy.title }}
                 </h3>
                 <p class="cw-prose" style="max-width: 34ch">
-                    {{
-                        outcome === 'signing'
-                            ? t('txSigningBody')
-                            : outcome === 'pending'
-                              ? t('txPendingBody')
-                              : outcome === 'confirmed'
-                                ? t('txConfirmedBody')
-                                : t('txFailedBody')
-                    }}
+                    {{ outcomeCopy.body }}
                 </p>
 
                 <div
@@ -1123,10 +1139,37 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                         <span
                             class="cw-kv-val"
                             style="color: var(--cw-bad-soft)"
-                            >{{ failure }}</span
+                            >{{ t(failure.key) }}</span
                         >
                     </div>
                 </div>
+                <!--
+                  The node's own words, for whoever helps with this later. Kept
+                  out of sight: it is English, it can be hundreds of characters
+                  of hex, and it once held the whole signed transaction.
+                -->
+                <details
+                    v-if="failure && failure.detail"
+                    class="cw-details"
+                    style="width: 100%; margin-top: 12px; text-align: left"
+                >
+                    <summary class="cw-ghost" style="cursor: pointer">
+                        {{ t('kDetails') }}
+                    </summary>
+                    <pre
+                        class="cw-mono"
+                        style="
+                            white-space: pre-wrap;
+                            word-break: break-all;
+                            max-height: 160px;
+                            overflow: auto;
+                            font-size: 12px;
+                            color: var(--cw-faint);
+                            margin: 8px 0 0;
+                        "
+                        >{{ failure.detail }}</pre
+                    >
+                </details>
             </div>
 
             <div class="cw-stack" style="gap: 8px">
@@ -1155,6 +1198,16 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                 >
                     {{ t('viewInExplorer') }} ↗
                 </a>
+                <!-- After a refusal on chain, retrying pays another fee: offered, not urged. -->
+                <button
+                    v-if="outcome === 'reverted'"
+                    type="button"
+                    class="cw-ghost"
+                    style="width: 100%"
+                    @click="reset"
+                >
+                    {{ t('adjustRetry') }}
+                </button>
             </div>
         </template>
 

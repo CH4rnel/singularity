@@ -53,6 +53,8 @@ import {
 } from '@/lib/wallet/crosschain';
 import { dailyBoardCached } from '@/lib/wallet/daily';
 import type { DailyBoard } from '@/lib/wallet/daily';
+import { failureReason } from '@/lib/wallet/failure';
+import type { FailureReason } from '@/lib/wallet/failure';
 import { formatUsd, shortAddress, usdValue } from '@/lib/wallet/format';
 import {
     loadRouteHistory,
@@ -124,7 +126,14 @@ const { locale, t } = useLocale(walletMessages);
 
 type Mode = 'swap' | 'wrap';
 type Phase = 'compose' | 'review' | 'status';
-type Outcome = 'signing' | 'approving' | 'pending' | 'confirmed' | 'failed';
+/** `failed` never reached a block; `reverted` was refused in one and its fee was spent. */
+type Outcome =
+    | 'signing'
+    | 'approving'
+    | 'pending'
+    | 'confirmed'
+    | 'failed'
+    | 'reverted';
 
 const mode = ref<Mode>('swap');
 const phase = ref<Phase>('compose');
@@ -136,7 +145,7 @@ const slippageBps = ref(50);
 const quote = ref<SwapQuote | null>(null);
 const wrapQuote = ref<WrapQuote | null>(null);
 const quoting = ref(false);
-const failure = ref<string | null>(null);
+const failure = ref<FailureReason | null>(null);
 const hash = ref<string | null>(null);
 const approvalHash = ref<string | null>(null);
 const gasPrice = ref<bigint | null>(null);
@@ -563,7 +572,7 @@ const chooseToken = async (
             setAsset(side, asAsset(read));
         }
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = failureReason(error);
     } finally {
         loadingAsset.value = false;
     }
@@ -757,8 +766,7 @@ const refreshQuote = async (): Promise<void> => {
         }
     } catch (error) {
         if (mine === sequence) {
-            failure.value =
-                error instanceof Error ? error.message : String(error);
+            failure.value = failureReason(error);
 
             analytics.track('swap_quote_failed', {
                 ...traits(),
@@ -846,6 +854,7 @@ const OUTCOMES: Record<Outcome, { icon: typeof Loader }> = {
     pending: { icon: Loader },
     confirmed: { icon: CircleCheck },
     failed: { icon: CircleX },
+    reverted: { icon: CircleX },
 };
 
 /** The quote was accepted and the review screen opened. */
@@ -910,7 +919,7 @@ const sign = async (): Promise<void> => {
         outcome.value = 'pending';
     } catch (error) {
         outcome.value = 'failed';
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = failureReason(error);
         announceWalletEvent({
             title: `${t('swapTitle')} · ${t('swapOutcome_failed')}`,
             body: t('swapOutcomeBody_failed'),
@@ -943,7 +952,10 @@ const sign = async (): Promise<void> => {
     }
 
     try {
-        outcome.value = await chain.value.awaitOutcome(hash.value);
+        outcome.value =
+            (await chain.value.awaitOutcome(hash.value)) === 'confirmed'
+                ? 'confirmed'
+                : 'reverted';
 
         analytics.track(
             outcome.value === 'confirmed' ? 'swap_completed' : 'swap_failed',
@@ -965,12 +977,14 @@ const sign = async (): Promise<void> => {
                           from: payAsset.value?.symbol ?? '—',
                           to: receiveAsset.value?.symbol ?? '—',
                       })
-                    : t('swapOutcomeBody_failed'),
+                    : t('swapOutcomeBody_reverted', {
+                          from: payAsset.value?.symbol ?? '—',
+                      }),
             sound: outcome.value === 'confirmed' ? 'success' : 'error',
             tag: `swap:${hash.value}`,
         });
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = failureReason(error);
 
         // A watch that timed out has not failed the trade, and the screen says
         // so — nothing is recorded either way.
@@ -2169,7 +2183,7 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                     class="cw-note cw-note-bad"
                     style="margin-top: 12px"
                 >
-                    <span>{{ failure }}</span>
+                    <span>{{ t(failure.key) }}</span>
                     <button
                         type="button"
                         class="cw-back"
@@ -2526,7 +2540,8 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                         color:
                             outcome === 'confirmed'
                                 ? 'var(--cw-ok)'
-                                : outcome === 'failed'
+                                : outcome === 'failed' ||
+                                    outcome === 'reverted'
                                   ? 'var(--cw-bad)'
                                   : 'var(--cw-accent)',
                     }"
@@ -2536,13 +2551,42 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                 </h2>
                 <p class="cw-prose" style="max-width: 42ch">
                     {{
-                        failure ??
-                        t(`swapOutcomeBody_${outcome}`, {
-                            from: payAsset.symbol,
-                            to: receiveAsset?.symbol ?? '—',
-                        })
+                        outcome === 'failed' && approvalHash
+                            ? t('swapOutcomeBody_failedAfterApproval')
+                            : t(`swapOutcomeBody_${outcome}`, {
+                                  from: payAsset.symbol,
+                                  to: receiveAsset?.symbol ?? '—',
+                              })
                     }}
                 </p>
+                <p
+                    v-if="failure"
+                    class="cw-prose"
+                    style="max-width: 42ch; color: var(--cw-bad-soft)"
+                >
+                    {{ t(failure.key) }}
+                </p>
+                <details
+                    v-if="failure && failure.detail"
+                    style="width: 100%; margin-top: 12px; text-align: left"
+                >
+                    <summary class="cw-ghost" style="cursor: pointer">
+                        {{ t('kDetails') }}
+                    </summary>
+                    <pre
+                        class="cw-mono"
+                        style="
+                            white-space: pre-wrap;
+                            word-break: break-all;
+                            max-height: 160px;
+                            overflow: auto;
+                            font-size: 12px;
+                            color: var(--cw-faint);
+                            margin: 8px 0 0;
+                        "
+                        >{{ failure.detail }}</pre
+                    >
+                </details>
             </div>
 
             <div class="cw-stack" style="gap: 8px">
