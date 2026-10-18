@@ -9,6 +9,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * The only notification that brings anybody back.
@@ -45,14 +46,14 @@ class GamificationRemindCommand extends Command
         $candidates = User::query()
             ->join('user_stats', 'user_stats.user_id', '=', 'users.id')
             ->whereNull('users.merged_into_id')
-            // Only people this can actually reach. Writing to a bell that
-            // nobody will open is the failure this command exists to end.
-            ->whereExists(fn ($query) => $query->select(DB::raw(1))
-                ->from('push_subscriptions')
-                ->whereColumn('push_subscriptions.subscribable_id', 'users.id')
-                ->where('push_subscriptions.subscribable_type', User::class))
             ->select('users.*', 'user_stats.current_streak', 'user_stats.last_active_on')
-            ->get();
+            ->get()
+            // Only people this can actually reach: a push subscription, or a
+            // Telegram account that asked the bot for reminders. Writing to a
+            // bell that nobody will open is the failure this command exists to end.
+            ->filter(fn (User $user) => $user->pushSubscriptions()->exists()
+                || $this->telegramIds($user) !== [])
+            ->values();
 
         $sent = 0;
 
@@ -74,6 +75,7 @@ class GamificationRemindCommand extends Command
             }
 
             $user->notify($reason['notification']);
+            $this->queueTelegram($user, $reason['notification']);
             $sent++;
         }
 
@@ -120,7 +122,7 @@ class GamificationRemindCommand extends Command
                         'ru' => 'Загляните в Cyberia до полуночи UTC, чтобы сохранить её.',
                         'zh' => '在 UTC 午夜前打开 Cyberia 即可保住它。',
                     ],
-                    url: '/profile',
+                    url: '/wallet?section=daily',
                     replace: ['days' => $streak],
                 ),
             ];
@@ -143,7 +145,7 @@ class GamificationRemindCommand extends Command
                         'ru' => 'Сделано {done} из {target}. Закончите до полуночи UTC.',
                         'zh' => '已完成 {done}/{target}。请在 UTC 午夜前完成。',
                     ],
-                    url: '/profile',
+                    url: '/wallet?section=daily',
                     replace: ['done' => (int) $quest->progress, 'target' => (int) $quest->target],
                 ),
             ];
@@ -175,6 +177,60 @@ class GamificationRemindCommand extends Command
             ->whereColumn('progress', '<', 'target')
             ->orderByDesc('progress')
             ->first();
+    }
+
+    /**
+     * The Telegram accounts that asked the bot for reminders and belong to this
+     * user: the one linked in settings, or any whose `/set_wallet` address is
+     * this user's wallet. Opting in happens in the bot, so nobody who never
+     * asked is written to there.
+     *
+     * @return list<int>
+     */
+    private function telegramIds(User $user): array
+    {
+        if (! Schema::hasTable('tg_reminder_optins')) {
+            return [];
+        }
+
+        $candidates = [];
+
+        if ($user->telegram_id) {
+            $candidates[] = (int) $user->telegram_id;
+        }
+
+        if ($user->wallet_address && Schema::hasTable('tg_wallets')) {
+            $candidates = [...$candidates, ...DB::table('tg_wallets')
+                ->whereRaw('lower(address) = ?', [strtolower($user->wallet_address)])
+                ->pluck('user_id')
+                ->map(fn ($id) => (int) $id)
+                ->all()];
+        }
+
+        if ($candidates === []) {
+            return [];
+        }
+
+        return DB::table('tg_reminder_optins')
+            ->whereIn('tg_user_id', array_values(array_unique($candidates)))
+            ->where('enabled', true)
+            ->pluck('tg_user_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /** The same nudge, left in the outbox the bot drains. */
+    private function queueTelegram(User $user, ProgressNotification $notification): void
+    {
+        foreach ($this->telegramIds($user) as $telegramId) {
+            DB::table('tg_outbox')->insert([
+                'tg_user_id' => $telegramId,
+                'kind' => $notification->type,
+                'text' => $notification->titleFor($user)."\n".$notification->bodyFor($user),
+                'url' => $notification->url,
+                'created_at' => Carbon::now('UTC')->toDateTimeString(),
+            ]);
+        }
     }
 
     /** At most one nudge a day, whichever of the two reasons it was. */

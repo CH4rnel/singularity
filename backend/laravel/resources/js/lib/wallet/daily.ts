@@ -88,6 +88,8 @@ export type DailyBoard = {
     xpPerAction: Record<string, number>;
     board: DailyBoardRow[];
     resetsAt: string;
+    /** The bot's deep link that switches daily reminders on, when configured. */
+    remindersUrl?: string | null;
     /** Only on a check-in: the XP that press actually granted. */
     granted?: number;
 };

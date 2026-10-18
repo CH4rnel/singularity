@@ -4,10 +4,12 @@ use App\Models\User;
 use App\Models\UserStat;
 use App\Notifications\ProgressNotification;
 use App\Support\Localised;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * A real uncompressed P-256 point. The webpush library encrypts the payload
@@ -192,4 +194,70 @@ it('stores the browser language when a subscription is registered', function () 
     ])->assertOk();
 
     expect($user->fresh()->notification_locale)->toBe('zh');
+});
+
+/**
+ * A Telegram account that asked the bot for reminders, linked to this user's
+ * wallet the way `/set_wallet` links it. `tg_wallets` belongs to the bot, so
+ * the test creates it the way the bot does.
+ */
+function telegramReachable(bool $optedIn = true, array $stats = []): User
+{
+    if (! Schema::hasTable('tg_wallets')) {
+        Schema::create('tg_wallets', function (Blueprint $table) {
+            $table->unsignedBigInteger('user_id')->primary();
+            $table->string('address');
+            $table->string('created_at')->nullable();
+        });
+    }
+
+    $user = User::factory()->create([
+        'notification_locale' => 'ru',
+        'wallet_address' => '0xAbC0000000000000000000000000000000000001',
+    ]);
+
+    UserStat::query()->create(array_merge([
+        'user_id' => $user->id,
+        'xp' => 100,
+        'level' => 2,
+        'current_streak' => 4,
+        'longest_streak' => 4,
+        'last_active_on' => Carbon::now('UTC')->subDay()->toDateString(),
+    ], $stats));
+
+    DB::table('tg_wallets')->insert(['user_id' => 777, 'address' => strtolower($user->wallet_address)]);
+    DB::table('tg_reminder_optins')->insert(['tg_user_id' => 777, 'enabled' => $optedIn]);
+
+    return $user;
+}
+
+it('leaves the nudge in the bot outbox for somebody who asked for Telegram reminders', function () {
+    $user = telegramReachable();
+
+    $this->artisan('gamification:remind')->assertSuccessful();
+
+    $row = DB::table('tg_outbox')->where('tg_user_id', 777)->first();
+
+    expect($row)->not->toBeNull()
+        ->and($row->kind)->toBe('progress.streak_at_risk')
+        ->and($row->url)->toBe('/wallet?section=daily')
+        ->and($row->text)->toContain('4');
+    expect(DB::table('notifications')->where('notifiable_id', $user->id)->count())->toBe(1);
+});
+
+it('writes nothing to a Telegram account that never asked', function () {
+    telegramReachable(optedIn: false);
+
+    $this->artisan('gamification:remind')->assertSuccessful();
+
+    expect(DB::table('tg_outbox')->count())->toBe(0);
+});
+
+it('writes to Telegram at most once a day', function () {
+    telegramReachable();
+
+    $this->artisan('gamification:remind')->assertSuccessful();
+    $this->artisan('gamification:remind')->assertSuccessful();
+
+    expect(DB::table('tg_outbox')->count())->toBe(1);
 });

@@ -113,6 +113,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
+    # The wallet's Daily screen links here to switch reminders on.
+    if context.args and context.args[0] == "remind" and _is_private(update) and update.effective_user:
+        from bot.reminders import OPTED_IN_TEXT, set_optin
+
+        set_optin(update.effective_user.id, True)
+        await update.message.reply_text(OPTED_IN_TEXT)
+        return
+
     user = update.effective_user
 
     has_wallet = False

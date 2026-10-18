@@ -556,6 +556,24 @@ const cooldownHours = computed(() => {
                 >
                     {{ streakNote }}
                 </p>
+                <!--
+                  A streak only lasts if something reminds you it exists. The
+                  bot writes once on a day the streak would otherwise end, and
+                  only to somebody who switched it on there.
+                -->
+                <a
+                    v-if="board?.remindersUrl"
+                    :href="board.remindersUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="cw-ghost"
+                    style="
+                        display: inline-block;
+                        margin-top: 10px;
+                        text-decoration: none;
+                    "
+                    >{{ t('dailyRemindTelegram') }} ↗</a
+                >
             </div>
 
             <!-- ------------------------------------------------ faucet --- -->

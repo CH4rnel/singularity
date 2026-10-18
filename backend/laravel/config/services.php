@@ -121,6 +121,11 @@ return [
     // flow above and to the Python bot: nothing here receives updates, it only
     // lets a scheduled command reach a human. Unset means alerts are silently
     // skipped, which is a supported deploy, not a broken one.
+    // The community bot (`services/telegram-bot`), for links into it.
+    'telegram_bot' => [
+        'username' => env('TELEGRAM_BOT_USERNAME', 'cyberia_network_bot'),
+    ],
+
     'telegram_ops' => [
         'bot_token' => env('TELEGRAM_OPS_BOT_TOKEN'),
         // A list, because there is more than one operator. Commas, spaces or

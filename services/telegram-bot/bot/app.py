@@ -37,6 +37,7 @@ from bot.slots import (
     sweep_loop as slots_sweep_loop, ensure_schema as ensure_slots_schema,
 )
 from bot.db import ensure_schema
+from bot.reminders import OFF_CALLBACK as REMIND_OFF, ensure_reminder_schema, outbox_loop, remind_command, remind_off_callback
 from bot.nft import (
     channel_post_handler, set_channel_wallet_command, channel_wallet_command,
 )
@@ -100,6 +101,7 @@ async def post_init(application: Application):
         ]
     )
     application.create_task(expiry_loop(application))
+    application.create_task(outbox_loop(application))
     application.create_task(slots_sweep_loop(application))
     logger.info("Bot commands published to Telegram")
 
@@ -263,6 +265,8 @@ def run_dispatcher():
     application = builder.build()
 
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("remind", remind_command))
+    application.add_handler(CallbackQueryHandler(remind_off_callback, pattern=rf"^{REMIND_OFF}$"))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("set_wallet", set_wallet_command))
     application.add_handler(CommandHandler("unset_wallet", unset_wallet_command))
@@ -402,6 +406,7 @@ def main() -> None:
     ensure_schema()
     ensure_rps_schema()
     ensure_slots_schema()
+    ensure_reminder_schema()
     if "--snapshot-once" in sys.argv:
         run_snapshot_once()
     else:

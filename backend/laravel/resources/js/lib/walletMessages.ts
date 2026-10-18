@@ -558,6 +558,7 @@ export const walletMessages: Messages = {
         dailyPerkAnon:
             '{title} costs {cost} XP once there is an account to carry it.',
         dailyStreakLabel: 'Check-in streak',
+        dailyRemindTelegram: 'Remind me in Telegram before a streak ends',
         dailyStreakDays: '{days} days',
         dailyStreakNone: 'Not started',
         dailyStreakNext: 'Day {day} pays {xp} XP on top of the visit.',
@@ -2604,6 +2605,7 @@ export const walletMessages: Messages = {
         dailyPerkAnon:
             '«{title}» стоит {cost} XP, когда опыту есть куда копиться.',
         dailyStreakLabel: 'Серия заходов',
+        dailyRemindTelegram: 'Напоминать в Telegram, когда серия под угрозой',
         dailyStreakDays: '{days} дн.',
         dailyStreakNone: 'Не начата',
         dailyStreakNext: 'День {day} даёт {xp} XP сверх обычного захода.',
@@ -4575,6 +4577,7 @@ export const walletMessages: Messages = {
         dailyPerkLevel: '{title} 在 {level} 级开放。',
         dailyPerkAnon: '有账户来累积经验之后，{title} 需要 {cost} XP。',
         dailyStreakLabel: '连续签到',
+        dailyRemindTelegram: '连续记录快中断时在 Telegram 提醒我',
         dailyStreakDays: '{days} 天',
         dailyStreakNone: '尚未开始',
         dailyStreakNext: '第 {day} 天在当日经验之外再给 {xp} XP。',
