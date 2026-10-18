@@ -5,9 +5,12 @@ import GasSponsor from '@/components/wallet/GasSponsor.vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import StatusPill from '@/components/wallet/StatusPill.vue';
+import StockIcon from '@/components/wallet/StockIcon.vue';
+import WalletAssetPicker from '@/components/wallet/WalletAssetPicker.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { analytics, errorCode } from '@/lib/analytics';
+import { logoForToken } from '@/lib/tokenLogos';
 import { formatUnits, parseUnits, walletChain } from '@/lib/wallet';
 import type {
     WalletChainId,
@@ -23,6 +26,7 @@ import {
     shortAddress,
     usdValue,
 } from '@/lib/wallet/format';
+import type { Holding } from '@/lib/wallet/holdings';
 import {
     announceWalletEvent,
     playWalletSound,
@@ -115,13 +119,6 @@ const groupedTo = computed(() => {
 });
 const firstTime = computed(
     () => to.value.trim() !== '' && isFirstTime(to.value, sentTo.value),
-);
-
-/** Tokens on this chain, offered next to the coin as things to send. */
-const assets = computed(() =>
-    (props.wallet.tokens.value[props.chain]?.items ?? []).filter(
-        (token) => token.balance > 0n,
-    ),
 );
 
 /** What the amount field counts in — the token's units, or the chain's. */
@@ -629,12 +626,71 @@ watch(asset, () => {
 const pickAsset = (next: WalletTokenBalance | null): void => {
     asset.value = next;
 };
+
+/** The list of everything sendable, open in place of the form. */
+const picking = ref(false);
+
+/**
+ * A token chosen on another network. Switching the network clears the asset
+ * (see the watch above), so the choice waits here and is applied once the
+ * new network has arrived.
+ */
+let pendingAsset: WalletTokenBalance | null = null;
+
+watch(
+    () => props.chain,
+    () => {
+        if (pendingAsset) {
+            asset.value = pendingAsset;
+            pendingAsset = null;
+        }
+    },
+);
+
+const choose = (row: Holding): void => {
+    picking.value = false;
+
+    if (row.chain === props.chain) {
+        pickAsset(row.token);
+
+        return;
+    }
+
+    pendingAsset = row.token;
+    emit('pick', row.chain);
+};
+
+/** What the chosen asset looks like on the button that changes it. */
+const assetLogo = computed(() =>
+    logoForToken(
+        chain.value.chainId,
+        asset.value?.address ?? null,
+        symbol.value,
+    ),
+);
+
+const balanceShown = computed(() =>
+    balance.value === null
+        ? '—'
+        : formatUnits(balance.value, decimals.value, 4),
+);
 </script>
 
 <template>
     <div v-if="account" class="cw-stack cw-screen">
+        <WalletAssetPicker
+            v-if="picking && phase === 'compose'"
+            :wallet="wallet"
+            :prices="prices"
+            :token-prices="tokenPrices"
+            :selected="{ chain: chain.id, address: asset?.address ?? null }"
+            @pick="choose"
+            @close="picking = false"
+            @add-network="emit('addNetwork')"
+        />
+
         <!-- Compose -->
-        <template v-if="phase !== 'status'">
+        <template v-else-if="phase !== 'status'">
             <div class="cw-row" style="margin-bottom: 20px">
                 <button type="button" class="cw-back" @click="emit('back')">
                     ← {{ t('back') }}
@@ -645,83 +701,34 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                 <span style="width: 44px"></span>
             </div>
 
-            <div class="cw-seg" style="margin-bottom: 20px">
-                <button
-                    v-for="candidate in wallet.accounts.value"
-                    :key="candidate.chain"
-                    type="button"
-                    class="cw-seg-item"
-                    :aria-pressed="candidate.chain === chain.id"
-                    @click="emit('pick', candidate.chain)"
-                >
-                    {{ candidate.label }}
-                    <span
-                        class="cw-seg-bar"
-                        :style="{
-                            background:
-                                candidate.chain === chain.id
-                                    ? candidate.mark.hue
-                                    : 'transparent',
-                        }"
-                    />
-                </button>
-                <button
-                    type="button"
-                    class="cw-seg-item"
-                    style="flex: 0 0 56px; color: var(--cw-muted)"
-                    :aria-label="t('addNetwork')"
-                    @click="emit('addNetwork')"
-                >
-                    +
-                    <span class="cw-seg-bar" />
-                </button>
-            </div>
-
             <!--
-              What is being sent, when the network holds more than its own coin.
-              A token shares this address and this chain's gas, so it belongs in
-              a row inside the network rather than as a network of its own.
+              What is being sent, and from which network, as one choice: the
+              button opens every sendable coin and token across networks.
             -->
-            <div
-                v-if="assets.length > 0 && account.capabilities.send"
-                class="cw-seg"
+            <button
+                type="button"
+                class="cw-asset cw-asset-current"
                 style="margin-bottom: 20px"
+                @click="picking = true"
             >
-                <button
-                    type="button"
-                    class="cw-seg-item"
-                    :aria-pressed="asset === null"
-                    @click="pickAsset(null)"
-                >
-                    {{ chain.symbol }}
-                    <span
-                        class="cw-seg-bar"
-                        :style="{
-                            background:
-                                asset === null ? chain.mark.hue : 'transparent',
-                        }"
-                    />
-                </button>
-                <button
-                    v-for="candidate in assets"
-                    :key="candidate.address"
-                    type="button"
-                    class="cw-seg-item"
-                    :aria-pressed="asset?.address === candidate.address"
-                    @click="pickAsset(candidate)"
-                >
-                    {{ candidate.symbol }}
-                    <span
-                        class="cw-seg-bar"
-                        :style="{
-                            background:
-                                asset?.address === candidate.address
-                                    ? chain.mark.hue
-                                    : 'transparent',
-                        }"
-                    />
-                </button>
-            </div>
+                <StockIcon
+                    v-if="assetLogo"
+                    :symbol="symbol"
+                    :src="assetLogo"
+                    :size="40"
+                />
+                <NetworkMark v-else :chain="chain.id" />
+                <span style="flex: 1; min-width: 0; text-align: left">
+                    <span class="cw-asset-name">{{ symbol }}</span>
+                    <span class="cw-asset-sub"
+                        >{{ account.label }} ·
+                        {{ t('sendAvailable', { amount: balanceShown }) }}</span
+                    >
+                </span>
+                <span class="cw-asset-sub" style="flex: none">{{
+                    t('sendChange')
+                }}</span>
+            </button>
 
             <p v-if="!account.capabilities.send" class="cw-note cw-note-warn">
                 <span>{{

@@ -3109,6 +3109,15 @@ html[data-app-window]:has(.cw-frame) {
     background: var(--cw-surface);
 }
 
+.cw-asset[aria-pressed='true'],
+.cw-asset-current {
+    background: var(--cw-surface);
+}
+
+.cw-asset[aria-pressed='true'] {
+    box-shadow: inset 0 0 0 1px var(--cw-accent);
+}
+
 .cw-asset .cw-stock-icon {
     border-radius: 50%;
 }

@@ -9,15 +9,15 @@ import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useWalletMode } from '@/composables/useWalletMode';
 import { canOpenProxySettings, openProxySettings } from '@/lib/native';
-import { logoForToken } from '@/lib/tokenLogos';
-import { WALLET_FAMILY_GROUPS, formatUnits, walletChain } from '@/lib/wallet';
+import { WALLET_FAMILY_GROUPS, formatUnits } from '@/lib/wallet';
 import type {
     WalletChainId,
     WalletTokenBalance,
     WalletTxStatus,
 } from '@/lib/wallet';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
-import { provenanceOf } from '@/lib/wallet/provenance';
+import { holdings } from '@/lib/wallet/holdings';
+import type { Holding } from '@/lib/wallet/holdings';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -309,90 +309,41 @@ const partial = computed(() =>
 
 const shownCaveat = computed(() => (partial.value ? caveat.value : null));
 
-type AssetRow = {
-    key: string;
-    chain: WalletChainId;
-    token: WalletTokenBalance | null;
-    name: string;
-    symbol: string;
-    amount: string;
-    usd: number | null;
-    logo?: string;
-    /** Bridged, wrapped or unverified — what this contract is, by address. */
-    tag?: string;
-};
-
 /**
- * The simple home lists what you hold, one asset a row — every network's own
- * coin that has a balance, then every token that is priced or that the
- * registry knows. Unpriced strangers (airdropped dust, almost always) stay on
- * the Tokens screen, counted in a link below the list.
+ * The simple home lists what you hold, one asset a row (`holdings`); unpriced
+ * strangers stay on the Tokens screen, counted in a link below the list.
  */
-const assets = computed<AssetRow[]>(() => {
-    const rows: AssetRow[] = [];
-
-    for (const card of cards.value) {
-        const { account } = card;
-
-        const chainId = walletChain(account.chain).chainId;
-
-        if (card.raw !== null && card.raw > 0n) {
-            rows.push({
-                key: account.chain,
-                chain: account.chain,
-                token: null,
-                name: account.label,
-                symbol: account.symbol,
-                amount: card.amount ?? '—',
-                usd: card.usd,
-                logo: logoForToken(chainId, null, account.symbol),
-            });
-        }
-
-        const quotes = props.tokenPrices[account.chain] ?? {};
-
-        for (const token of props.wallet.tokens.value[account.chain]?.items ??
-            []) {
-            const price = quotes[token.address.toLowerCase()];
-            const known = provenanceOf(chainId, token.address);
-
-            if (token.balance <= 0n || (price === undefined && !known)) {
-                continue;
-            }
-
-            const shown = formatUnits(token.balance, token.decimals, 4);
-
-            rows.push({
-                key: `${account.chain}:${token.address}`,
-                chain: account.chain,
-                token,
-                name: token.name || token.symbol,
-                symbol: token.symbol,
-                amount: shown === '0' ? '<0.0001' : shown,
-                usd: usdValue(token.balance, token.decimals, price ?? null),
-                logo: logoForToken(chainId, token.address, token.symbol),
-                tag:
-                    known?.kind === 'bridged'
-                        ? t('provBridged')
-                        : known?.kind === 'wrapped'
-                          ? t('provWrapped')
-                          : known || chainId === undefined
-                            ? undefined
-                            : t('provUnverified'),
-            });
-        }
-    }
-
-    return rows.sort((a, b) => (b.usd ?? -1) - (a.usd ?? -1));
-});
-
-const hiddenTokens = computed(
-    () =>
-        cards.value.reduce((sum, card) => sum + card.tokenCount, 0) -
-        assets.value.filter((row) => row.token !== null).length,
+const held = computed(() =>
+    holdings({
+        accounts: props.wallet.accounts.value,
+        balances: Object.fromEntries(
+            props.wallet.accounts.value.map((account) => [
+                account.chain,
+                props.wallet.balances.value[account.chain]?.value ?? null,
+            ]),
+        ),
+        tokens: Object.fromEntries(
+            Object.entries(props.wallet.tokens.value).map(([chain, state]) => [
+                chain,
+                state?.items ?? [],
+            ]),
+        ),
+        prices: props.prices,
+        tokenPrices: props.tokenPrices,
+    }),
 );
 
-const openAsset = (row: AssetRow): void => {
+const assets = computed(() => held.value.rows);
+
+const hiddenTokens = computed(() => held.value.hidden);
+
+const TAG_LABEL = {
+    bridged: 'provBridged',
+    wrapped: 'provWrapped',
+    unverified: 'provUnverified',
+} as const;
+
+const openAsset = (row: Holding): void => {
     if (row.token) {
         emit('token', row.chain, row.token);
     } else {
@@ -667,7 +618,7 @@ const recent = computed(() =>
                     <span class="cw-asset-sub"
                         >{{ row.amount }} {{ row.symbol }}
                         <span v-if="row.tag" class="cw-prov">{{
-                            row.tag
+                            t(TAG_LABEL[row.tag])
                         }}</span></span
                     >
                 </span>
