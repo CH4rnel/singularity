@@ -880,6 +880,8 @@ export const walletMessages: Messages = {
         statusConfirmed: 'Confirmed',
         statusPending: 'Pending',
         statusFailed: 'Failed',
+        // A failed transfer in a list: the amount never left, the fee did.
+        statusFailedFee: 'Failed · fee spent',
         loading: 'Reading…',
 
         // Receive
@@ -2912,6 +2914,7 @@ export const walletMessages: Messages = {
         statusConfirmed: 'Подтверждено',
         statusPending: 'В ожидании',
         statusFailed: 'Ошибка',
+        statusFailedFee: 'Не прошла · комиссия списана',
         loading: 'Читаем…',
 
         // Receive
@@ -4862,6 +4865,7 @@ export const walletMessages: Messages = {
         statusConfirmed: '已确认',
         statusPending: '待确认',
         statusFailed: '失败',
+        statusFailedFee: '失败 · 手续费已扣',
         loading: '读取中…',
 
         // Receive

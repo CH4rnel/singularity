@@ -97,7 +97,7 @@ const activeAccountWarning = computed(() => {
 const statusLabels = computed<Record<WalletTxStatus, string>>(() => ({
     confirmed: t('statusConfirmed'),
     pending: t('statusPending'),
-    failed: t('statusFailed'),
+    failed: t('statusFailedFee'),
 }));
 
 const cards = computed(() =>

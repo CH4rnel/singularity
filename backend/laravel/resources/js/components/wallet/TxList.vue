@@ -107,9 +107,15 @@ defineProps<{
                     "
                     :style="{
                         color:
-                            tx.direction === 'in'
-                                ? 'var(--cw-ok)'
-                                : 'var(--cw-text)',
+                            tx.status === 'failed'
+                                ? 'var(--cw-faint)'
+                                : tx.direction === 'in'
+                                  ? 'var(--cw-ok)'
+                                  : 'var(--cw-text)',
+                        // The amount of a failed transfer never moved: struck
+                        // through, so it can't be read as money that left.
+                        textDecoration:
+                            tx.status === 'failed' ? 'line-through' : undefined,
                     }"
                 >
                     {{ signedAmount(tx.amount, walletChain(chain).decimals) }}

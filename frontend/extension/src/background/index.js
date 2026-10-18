@@ -225,7 +225,13 @@ const requireAccount = async (origin, from) => {
     const allowed = await grantedAccounts(origin);
 
     if (allowed.length === 0) {
-        throw rpcError('unauthorized');
+        // Same code as before, so no dapp's handling changes — but a locked
+        // wallet used to be reported as a site that was never connected, and
+        // the person at the dapp went looking for a Connect button that would
+        // not help. The message now says what to do.
+        throw (await session())
+            ? rpcError('unauthorized')
+            : rpcError('unauthorized', 'Cyberia Wallet is locked. Open it and unlock to review this request.');
     }
 
     if (!from) {
