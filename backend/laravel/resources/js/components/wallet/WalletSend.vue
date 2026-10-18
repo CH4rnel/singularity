@@ -14,9 +14,15 @@ import type {
     WalletFeeTier,
     WalletTokenBalance,
 } from '@/lib/wallet';
+import { isFirstTime, lookalikeOf } from '@/lib/wallet/addressSafety';
 import { failureReason } from '@/lib/wallet/failure';
 import type { FailureReason } from '@/lib/wallet/failure';
-import { formatUsd, shortAddress, usdValue } from '@/lib/wallet/format';
+import {
+    addressGroups,
+    formatUsd,
+    shortAddress,
+    usdValue,
+} from '@/lib/wallet/format';
 import {
     announceWalletEvent,
     playWalletSound,
@@ -80,6 +86,35 @@ const account = computed(() =>
     props.wallet.accounts.value.find(
         (candidate) => candidate.chain === props.chain,
     ),
+);
+
+/** Addresses this wallet has sent to on this network, newest first. */
+const sentTo = computed(() =>
+    (props.wallet.history.value[props.chain]?.items ?? [])
+        .filter((tx) => tx.direction === 'out' && tx.counterparty)
+        .map((tx) => tx.counterparty as string),
+);
+
+/** Every address the recipient could be confused with: ours and our recipients. */
+const knownAddresses = computed(() => [
+    ...props.wallet.accounts.value.map((entry) => entry.address),
+    ...sentTo.value,
+    ...(props.wallet.history.value[props.chain]?.items ?? [])
+        .map((tx) => tx.counterparty)
+        .filter((address): address is string => !!address),
+]);
+
+const lookalike = computed(() => lookalikeOf(to.value, knownAddresses.value));
+
+/** The whole recipient in groups of four, counted after the `0x`. */
+const groupedTo = computed(() => {
+    const address = to.value.trim();
+    const hex = /^0x/i.test(address);
+
+    return `${hex ? '0x' : ''}${addressGroups(hex ? address.slice(2) : address).join(' ')}`;
+});
+const firstTime = computed(
+    () => to.value.trim() !== '' && isFirstTime(to.value, sentTo.value),
 );
 
 /** Tokens on this chain, offered next to the coin as things to send. */
@@ -1277,9 +1312,24 @@ const pickAsset = (next: WalletTokenBalance | null): void => {
                         <span
                             class="cw-kv-val"
                             style="max-width: 240px; font-weight: 400"
-                            >{{ to.trim() }}</span
+                            >{{ groupedTo }}</span
                         >
                     </div>
+                    <p
+                        v-if="lookalike"
+                        class="cw-note cw-note-warn"
+                        style="margin: 0"
+                        role="alert"
+                    >
+                        {{
+                            t('addrLookalike', {
+                                known: shortAddress(lookalike, 8, 6),
+                            })
+                        }}
+                    </p>
+                    <p v-else-if="firstTime" class="cw-note" style="margin: 0">
+                        {{ t('addrFirstTime') }}
+                    </p>
                     <!--
                       Which asset, named by its contract. Two tokens can share a
                       ticker; only the address says which one is about to move.

@@ -1072,6 +1072,10 @@ export const walletMessages: Messages = {
         vaultUnlockedLocal: 'unlocked · local',
         kTxHash: 'Transaction',
         kReason: 'Reason',
+        addrFirstTime:
+            'No transfers to this address in this wallet’s recent history.',
+        addrLookalike:
+            'Looks like {known} but isn’t — check every character. Scams send dust from look-alike addresses so you copy the wrong one.',
         adjustRetry: 'Adjust and retry',
         backToPortfolio: 'Back to portfolio',
         viewInExplorer: 'View in explorer',
@@ -3093,6 +3097,10 @@ export const walletMessages: Messages = {
         vaultUnlockedLocal: 'открыто · локально',
         kTxHash: 'Транзакция',
         kReason: 'Причина',
+        addrFirstTime:
+            'В недавней истории кошелька переводов на этот адрес нет.',
+        addrLookalike:
+            'Похож на {known}, но это другой адрес — сверьте каждый символ. Мошенники присылают пыль с похожих адресов, чтобы вы скопировали не тот.',
         adjustRetry: 'Исправить и повторить',
         backToPortfolio: 'Вернуться в портфель',
         viewInExplorer: 'Открыть в обозревателе',
@@ -5030,6 +5038,9 @@ export const walletMessages: Messages = {
         vaultUnlockedLocal: '已解锁 · 本地',
         kTxHash: '交易',
         kReason: '原因',
+        addrFirstTime: '这个钱包最近的记录里没有向这个地址转过账。',
+        addrLookalike:
+            '看起来像 {known}，但不是同一个地址 — 请逐个字符核对。骗子会从相似地址发来小额转账，让你复制错地址。',
         adjustRetry: '修改后重试',
         backToPortfolio: '回到资产',
         viewInExplorer: '在区块浏览器中查看',
