@@ -180,7 +180,7 @@ export const walletMessages: Messages = {
             'This phrase has never been written down. Show it below and keep it somewhere off this device: nobody, here or anywhere else, can restore a wallet without it.',
         noPasswordTitle: 'No password on this wallet',
         noPasswordBody:
-            'The phrase and the accounts are stored in the clear on this device. That is what was chosen, and it is a real choice — but anyone who can open this browser can spend from here. A password encrypts everything at rest and changes nothing else.',
+            'The phrase and the accounts are stored in the clear on this device. No password has been set yet, so anyone who can open this browser can spend from here. A password encrypts everything at rest and changes nothing else.',
         addPassword: 'Add a password',
         addingPassword: 'Encrypting…',
         words12: '12 words',
@@ -249,6 +249,8 @@ export const walletMessages: Messages = {
         priceSource: 'Prices: DexScreener · CoinGecko',
         pricePartial: 'Partial',
         priceMissing: '{count} of {total} networks unpriced',
+        balanceMissing: '{count} of {total} networks couldn’t be read',
+        tokensUnpriced: '{count} tokens have no price and aren’t in the total',
         /*
          * Nothing priced at all is one fact about the connection, not eight
          * facts about eight networks — and stamping "no price" on every row
@@ -2253,7 +2255,7 @@ export const walletMessages: Messages = {
             'Эта фраза ни разу не была записана. Покажите её ниже и сохраните вне этого устройства: без неё восстановить кошелёк не сможем ни мы, ни кто-либо ещё.',
         noPasswordTitle: 'На кошельке нет пароля',
         noPasswordBody:
-            'Фраза и счета хранятся на этом устройстве в открытом виде. Это осознанный выбор, но потратить средства сможет любой, кто откроет этот браузер. Пароль шифрует всё на диске и больше ничего не меняет.',
+            'Фраза и счета хранятся на этом устройстве в открытом виде. Пароль ещё не задан, поэтому потратить средства сможет любой, кто откроет этот браузер. Пароль шифрует всё на диске и больше ничего не меняет.',
         addPassword: 'Поставить пароль',
         addingPassword: 'Шифруем…',
         words12: '12 слов',
@@ -2315,6 +2317,8 @@ export const walletMessages: Messages = {
         priceSource: 'Цены: DexScreener · CoinGecko',
         pricePartial: 'Частично',
         priceMissing: 'без цены сетей: {count} из {total}',
+        balanceMissing: 'не прочитано сетей: {count} из {total}',
+        tokensUnpriced: 'токенов без цены: {count} — в итог не входят',
         priceOffline:
             'Цены сейчас прочитать не удалось. Остатки настоящие, их стоимость — нет.',
         networks: 'Сети',
@@ -4228,7 +4232,7 @@ export const walletMessages: Messages = {
             '这段助记词从未被抄写过。请在下面显示它并保存在本设备之外：没有它，我们和任何人都无法恢复这个钱包。',
         noPasswordTitle: '此钱包没有密码',
         noPasswordBody:
-            '助记词和账户以明文保存在本设备上。这是你做出的选择，但任何能打开这个浏览器的人都能从这里花钱。密码只会把静态数据加密，别的什么都不改变。',
+            '助记词和账户以明文保存在本设备上。还没有设置密码，所以任何能打开这个浏览器的人都能从这里花钱。密码只会把静态数据加密，别的什么都不改变。',
         addPassword: '设置密码',
         addingPassword: '正在加密…',
         words12: '12 个词',
@@ -4288,6 +4292,8 @@ export const walletMessages: Messages = {
         priceSource: '价格：DexScreener · CoinGecko',
         pricePartial: '不完整',
         priceMissing: '{total} 个网络中有 {count} 个没有价格',
+        balanceMissing: '{total} 个网络中有 {count} 个读不到余额',
+        tokensUnpriced: '{count} 个代币没有价格，未计入总额',
         priceOffline: '现在读不到价格。余额是实时的，它们的价值不是。',
         networks: '网络',
         derivedCount: '已派生 {count} 个',

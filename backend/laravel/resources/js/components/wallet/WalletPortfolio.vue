@@ -117,15 +117,21 @@ const cards = computed(() =>
             (token) => quotes[token.address.toLowerCase()] !== undefined,
         );
 
+        const raw = balance?.value ?? null;
+        const shown =
+            raw === null ? null : formatUnits(raw, account.decimals, 4);
+
         return {
             account,
             loading: balance?.loading ?? false,
             error: balance?.error ?? null,
             readable: account.capabilities.balance,
+            raw,
+            priced: price !== null,
+            // A balance too small for four decimals is still not zero: one wei
+            // read "0" beside "Nothing here yet", which is two wrong answers.
             amount:
-                balance?.value === undefined || balance?.value === null
-                    ? null
-                    : formatUnits(balance.value, account.decimals, 4),
+                raw !== null && raw > 0n && shown === '0' ? '<0.0001' : shown,
             usd: usdValue(balance?.value ?? null, account.decimals, price),
             tokenCount: held.length,
             unpricedTokens: held.length - priced.length,
@@ -233,19 +239,71 @@ const safety = computed(() => {
  * the first is what happened, on the screen that is also stamping "no price"
  * down the whole list.
  */
-const pricesOffline = computed(
-    () =>
-        cards.value.length > 0 &&
-        cards.value.every((card) => card.usd === null),
-);
+const pricesOffline = computed(() => {
+    // Only cards whose balance was read can say anything about prices: a node
+    // that didn't answer used to be reported as "no prices could be read".
+    const known = cards.value.filter((card) => card.raw !== null);
 
-/** Networks holding value the total cannot include — no price, or no read. */
-const unaccounted = computed(
+    return known.length > 0 && known.every((card) => !card.priced);
+});
+
+/** Readable networks whose balance couldn't be read — not zero, unknown. */
+const unread = computed(
     () =>
         cards.value.filter(
-            (card) => card.usd === null || card.unpricedTokens > 0,
+            (card) => card.readable && card.raw === null && !card.loading,
         ).length,
 );
+
+/** Networks whose coin has a balance but no price. */
+const unpricedNetworks = computed(
+    () =>
+        cards.value.filter((card) => card.raw !== null && !card.priced).length,
+);
+
+/** Tokens held without a price, across every network. */
+const unpricedTokens = computed(() =>
+    cards.value.reduce((sum, card) => sum + card.unpricedTokens, 0),
+);
+
+/** Anything the total cannot include. */
+const unaccounted = computed(
+    () => unread.value + unpricedNetworks.value + unpricedTokens.value,
+);
+
+/** Nothing could be read at all: there is no total to show, not a zero one. */
+const totalUnknown = computed(
+    () =>
+        cards.value.some((card) => card.readable) &&
+        cards.value.every(
+            (card) => !card.readable || (card.raw === null && !card.loading),
+        ),
+);
+
+/** The one sentence under the total that names what is missing from it. */
+const caveat = computed(() => {
+    if (unread.value > 0) {
+        return t('balanceMissing', {
+            count: unread.value,
+            total: cards.value.length,
+        });
+    }
+
+    if (pricesOffline.value) {
+        return t('priceOffline');
+    }
+
+    if (unpricedNetworks.value > 0) {
+        return t('priceMissing', {
+            count: unpricedNetworks.value,
+            total: cards.value.length,
+        });
+    }
+
+    return unpricedTokens.value > 0
+        ? t('tokensUnpriced', { count: unpricedTokens.value })
+        : null;
+});
 
 const total = computed(() =>
     cards.value.reduce((sum, card) => sum + (card.usd ?? 0) + card.tokenUsd, 0),
@@ -255,7 +313,10 @@ const isEmpty = computed(() =>
     cards.value.every(
         (card) =>
             !card.readable ||
-            (card.error === null && !card.loading && card.amount === '0'),
+            (card.error === null &&
+                !card.loading &&
+                card.raw === 0n &&
+                card.tokenCount === 0),
     ),
 );
 
@@ -394,7 +455,7 @@ const recent = computed(() =>
                 :style="
                     unaccounted > 0 ? { color: 'var(--cw-muted)' } : undefined
                 "
-                >{{ formatUsd(total, locale) }}</span
+                >{{ totalUnknown ? '—' : formatUsd(total, locale) }}</span
             >
         </div>
         <div
@@ -415,17 +476,10 @@ const recent = computed(() =>
                 >{{ t('pricePartial') }}</span
             >
             <span
-                v-if="pricesOffline || unaccounted > 0"
+                v-if="caveat"
                 class="cw-label"
                 style="color: var(--cw-faint)"
-                >{{
-                    pricesOffline
-                        ? t('priceOffline')
-                        : t('priceMissing', {
-                              count: unaccounted,
-                              total: cards.length,
-                          })
-                }}</span
+                >{{ caveat }}</span
             >
         </div>
 

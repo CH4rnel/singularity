@@ -18,22 +18,25 @@ const CLEAR_AFTER_MS = 30_000;
  */
 export const clipboardAutoClear = ref(true);
 
+/**
+ * The pending wipe lives here, not in a component. It used to belong to the
+ * screen that copied, and leaving that screen cancelled it — so copying the
+ * recovery phrase in Security and going back to the portfolio within 30 s left
+ * the phrase on the clipboard for good. Only a newer copy replaces it.
+ */
+let pendingClear: ReturnType<typeof setTimeout> | null = null;
+
 export const useSecureClipboard = (enabled = clipboardAutoClear) => {
     /** Key of whatever was copied last, so a button can show its own state. */
     const copied = ref<string | null>(null);
 
     let flashTimer: ReturnType<typeof setTimeout> | null = null;
-    let clearTimer: ReturnType<typeof setTimeout> | null = null;
 
+    /** The "copied" flash belongs to this screen; the wipe does not. */
     const cancel = (): void => {
         if (flashTimer !== null) {
             clearTimeout(flashTimer);
             flashTimer = null;
-        }
-
-        if (clearTimer !== null) {
-            clearTimeout(clearTimer);
-            clearTimer = null;
         }
     };
 
@@ -50,7 +53,13 @@ export const useSecureClipboard = (enabled = clipboardAutoClear) => {
             return;
         }
 
-        clearTimer = setTimeout(async () => {
+        if (pendingClear !== null) {
+            clearTimeout(pendingClear);
+        }
+
+        pendingClear = setTimeout(async () => {
+            pendingClear = null;
+
             try {
                 // Only wipe what we put there: if the user has copied
                 // something else since, that is theirs to keep.
