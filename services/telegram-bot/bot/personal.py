@@ -27,6 +27,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.error import TelegramError
 from telegram.ext import Application
 from web3 import Web3
+from web3.middleware import ExtraDataToPOAMiddleware
 
 from bot.announcers import _direction_label
 from bot.chain import (
@@ -363,8 +364,17 @@ def price_tick(w3: Web3, now: float) -> list[tuple[int, str]]:
     return out
 
 
-async def personal_loop(application: Application) -> None:
+def cyberia_web3() -> Web3:
+    """Cyberia is proof-of-authority: its blocks carry a long extraData that
+    web3 refuses to decode without this middleware — and reading whole blocks
+    is how native coin arriving is found."""
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
+    w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+    return w3
+
+
+async def personal_loop(application: Application) -> None:
+    w3 = cyberia_web3()
     while True:
         ticks = (
             ("bridge", bridge_tick),

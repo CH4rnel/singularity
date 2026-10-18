@@ -157,7 +157,9 @@ jobs:
             git -C "$repo" reset --hard origin/master
 
             if ! git -C "$repo" diff --quiet "$before" HEAD -- services/telegram-bot scripts/python/telegram_airdrop_bot.py; then
-              bot_pid=$(pgrep -o -f '[t]elegram_airdrop_bot\.py' || true)
+              # The bot runs as `python -m bot` from services/telegram-bot; the
+              # old single-file telegram_airdrop_bot.py is still recognised.
+              bot_pid=$(pgrep -o -f '[p]ython[0-9.]* -m bot$' || pgrep -o -f '[t]elegram_airdrop_bot\.py' || true)
               if [ -z "$bot_pid" ]; then
                 echo "Telegram bot process was not found; refusing to start an unverified second copy" >&2
                 exit 1
@@ -165,13 +167,19 @@ jobs:
               bot_cwd=$(readlink -f "/proc/$bot_pid/cwd")
               bot_python=$(readlink -f "/proc/$bot_pid/exe")
               test -x "$bot_python"
-              test -f "$bot_cwd/telegram_airdrop_bot.py"
-              "$bot_python" -c 'import telegram, sqlalchemy'
+              if [ -f "$bot_cwd/bot/__main__.py" ]; then
+                bot_start="-m bot"
+                (cd "$bot_cwd" && "$bot_python" -c 'import bot.app')
+              else
+                test -f "$bot_cwd/telegram_airdrop_bot.py"
+                bot_start="telegram_airdrop_bot.py"
+                "$bot_python" -c 'import telegram, sqlalchemy'
+              fi
               kill -TERM "$bot_pid"
               for _ in $(seq 1 20); do kill -0 "$bot_pid" 2>/dev/null || break; sleep 1; done
               ! kill -0 "$bot_pid" 2>/dev/null
               tmux new-session -d -s "telegram-bot-$(date -u +%Y%m%dT%H%M%SZ)" \
-                "cd '$bot_cwd' && exec '$bot_python' telegram_airdrop_bot.py"
+                "cd '$bot_cwd' && exec '$bot_python' $bot_start"
             fi
 
             bash /root/singularity/scripts/deploy-prod.sh
