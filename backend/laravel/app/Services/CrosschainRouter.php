@@ -296,6 +296,17 @@ class CrosschainRouter
             'recipient' => $request['recipient'],
             'amount' => (string) $request['amount'],
             'tradeType' => 'EXACT_INPUT',
+            /*
+             * Where a failed route pays the deposit back, named rather than
+             * left to Relay. Its refund guide says an unset `refundTo`
+             * disables automatic refunds; its quote reference says the
+             * recipient or the user is used instead. Either reading is wrong
+             * for us somewhere: no refund strands the deposit, and the
+             * recipient of an EVM → Solana route is a Solana address while
+             * the refund is paid on the EVM origin. The user is the address
+             * that signed the deposit, on the chain the refund is paid on.
+             */
+            'refundTo' => $request['user'],
         ];
 
         /*

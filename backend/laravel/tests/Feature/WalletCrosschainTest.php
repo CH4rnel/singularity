@@ -203,6 +203,14 @@ it('puts Cyberia’s fee into every quote it asks for', function () {
     });
 });
 
+it('asks for refunds to the address that signed the deposit', function () {
+    $payload = crossPayload();
+    $this->postJson('/api/wallet/crosschain/quote', $payload)->assertOk();
+
+    Http::assertSent(fn (Request $request) => ! str_ends_with($request->url(), '/quote')
+        || $request['refundTo'] === $payload['user']);
+});
+
 it('sends no referrer, because one costs the whole quote', function () {
     $this->postJson('/api/wallet/crosschain/quote', crossPayload())->assertOk();
 
