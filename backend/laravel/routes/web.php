@@ -557,6 +557,7 @@ Route::middleware(['auth'])->group(function () {
         // One subject switch instead of two analytics pages: installations of
         // the wallet, or browsers reading the site.
         Route::get('numbers', [ConsoleNumbersController::class, 'index'])->name('numbers');
+        Route::get('numbers/export', [ConsoleNumbersController::class, 'export'])->name('numbers.export');
         Route::get('installs/{user}', [ProductAnalyticsController::class, 'show'])->name('installs.show');
         // Marking an installation as ours, or taking the mark back. A POST
         // because it changes what every number on the console means.

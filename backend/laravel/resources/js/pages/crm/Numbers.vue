@@ -42,7 +42,17 @@ type Question = {
 const props = defineProps<{
     subject: string;
     subjects: string[];
-    filters: { days: number; from: string; to: string };
+    filters: {
+        days: number;
+        from: string;
+        to: string;
+        platform?: string | null;
+        app_version?: string | null;
+        source?: string | null;
+        campaign?: string | null;
+        chain?: string | null;
+        internal?: boolean;
+    };
     questions: Question[];
 }>();
 
@@ -65,6 +75,34 @@ function setWindow(days: number) {
         { preserveState: true, preserveScroll: true },
     );
 }
+
+const exportUrl = computed(() => {
+    const params = new URLSearchParams({
+        subject: props.subject,
+        from: props.filters.from,
+        to: props.filters.to,
+    });
+
+    for (const key of [
+        'platform',
+        'app_version',
+        'source',
+        'campaign',
+        'chain',
+    ] as const) {
+        const value = props.filters[key];
+
+        if (value) {
+            params.set(key, value);
+        }
+    }
+
+    if (props.filters.internal) {
+        params.set('internal', '1');
+    }
+
+    return `/crm/numbers/export?${params.toString()}`;
+});
 
 function answer(question: Question): string {
     const { value, unit } = question.answer;
@@ -275,6 +313,9 @@ const answerTone = computed(
                     {{ days }}
                 </button>
             </div>
+            <a :href="exportUrl" class="mk-btn" style="height: 28px">
+                {{ t('numbers.export') }}
+            </a>
         </div>
     </div>
 

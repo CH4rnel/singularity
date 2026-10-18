@@ -139,6 +139,29 @@ test('filters narrow what the lens reports', function () {
         ->assertInertia(fn (Assert $page) => $page->where('questions.0.answer.value', 2));
 });
 
+test('the numbers lens exports aggregate rows for the selected subject and window', function () {
+    anonymousUser([
+        'wallet_created_at' => now(),
+        'funded_at' => now(),
+        'activated_at' => now(),
+    ]);
+
+    $response = $this->actingAs(operator())
+        ->get('/crm/numbers/export?subject=installs&days=7');
+
+    $response->assertOk()
+        ->assertHeader('content-type', 'text/csv; charset=UTF-8')
+        ->assertHeader('content-disposition', 'attachment; filename=crm-product-installs-'.now()->format('Y-m-d').'.csv');
+
+    $csv = $response->streamedContent();
+
+    expect($csv)
+        ->toContain('subject,from,to,question,value,unit,evidence_type,evidence_json,caveat_key')
+        ->toContain('installs')
+        ->toContain('growth')
+        ->toContain('money');
+});
+
 test('the old dossier address still opens the dossier', function () {
     $user = anonymousUser();
 

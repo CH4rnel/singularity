@@ -8,6 +8,7 @@ use App\Services\Console\NumbersReport;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * "Числа" — six questions instead of two analytics pages.
@@ -39,5 +40,40 @@ class ConsoleNumbersController extends Controller
             'options' => $subject === 'installs' ? $this->metrics->filterOptions() : null,
             'questions' => $this->report->questions($subject, $filters),
         ]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        $subject = in_array($request->query('subject'), NumbersReport::SUBJECTS, true)
+            ? (string) $request->query('subject')
+            : 'installs';
+        $filters = AnalyticsFilters::fromRequest($request);
+        $questions = $this->report->questions($subject, $filters);
+        $filename = sprintf('crm-product-%s-%s.csv', $subject, now()->format('Y-m-d'));
+
+        return response()->streamDownload(function () use ($filters, $questions, $subject): void {
+            $out = fopen('php://output', 'w');
+
+            fputcsv($out, [
+                'subject', 'from', 'to', 'question', 'value', 'unit',
+                'evidence_type', 'evidence_json', 'caveat_key',
+            ]);
+
+            foreach ($questions as $question) {
+                fputcsv($out, [
+                    $subject,
+                    $filters->from->toDateString(),
+                    $filters->to->toDateString(),
+                    $question['key'],
+                    $question['answer']['value'],
+                    $question['answer']['unit'],
+                    $question['evidence']['type'] ?? null,
+                    json_encode($question['evidence'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    $question['caveat']['key'] ?? null,
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 }

@@ -470,6 +470,7 @@ export const consoleMessages: Messages = {
 
         /* numbers */
         'numbers.title': 'Numbers',
+        'numbers.export': 'Export CSV',
         'subject.installs': 'Wallet installations',
         'subject.sessions': 'Site sessions',
         'numbers.subjectNote':
@@ -1373,6 +1374,7 @@ export const consoleMessages: Messages = {
 
         /* numbers */
         'numbers.title': 'Числа',
+        'numbers.export': 'Экспорт CSV',
         'subject.installs': 'Установки кошелька',
         'subject.sessions': 'Сессии сайта',
         'numbers.subjectNote':
