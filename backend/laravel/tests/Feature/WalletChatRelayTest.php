@@ -5,6 +5,7 @@ use App\Models\WalletChatKey;
 use App\Models\WalletChatMessage;
 use Elliptic\EC;
 use Elliptic\EC\KeyPair;
+use Illuminate\Support\Facades\DB;
 use kornrunner\Keccak;
 
 /**
@@ -443,4 +444,167 @@ it('lists the site’s people to write to, and says who can be written to', func
         ->toHaveCount(1);
 
     expect($silent->name)->toBe('lurker');
+});
+
+/** A message that is not encrypted, as the browser sends one. */
+function chatNote(string $from, string $to, array $overrides = []): array
+{
+    return array_merge([
+        'id' => bin2hex(random_bytes(16)),
+        'from' => $from,
+        'to' => $to,
+        'sentAt' => now()->toIso8601ZuluString('millisecond'),
+        'text' => 'hey, saw your launch — want to talk?',
+    ], $overrides);
+}
+
+it('composes the same challenge the wallet signs without asking', function () {
+    // The wallet signs this challenge in the background, and only when the
+    // server's text matches its own copy exactly. If the two spellings drift,
+    // nothing breaks loudly — every wallet just stops checking its mail.
+    $source = (string) file_get_contents(base_path('resources/js/lib/wallet/chatCrypto.ts'));
+
+    preg_match('/export const chatChallenge =.*?\[(.*?)\]\.join/s', $source, $body);
+    preg_match_all('/^\s*[`\'](.+?)[`\'],$/m', $body[1] ?? '', $found);
+
+    $address = strtolower('0x'.str_repeat('ab', 20));
+    $message = $this->postJson('/api/wallet/chat/nonce', ['address' => $address])->json('message');
+    preg_match('/^Nonce: (.+)$/m', (string) $message, $nonce);
+
+    $browser = str_replace(
+        ['${address.toLowerCase()}', '${nonce}'],
+        [$address, $nonce[1] ?? ''],
+        implode("\n", $found[1]),
+    );
+
+    expect($found[1])->toHaveCount(4)
+        ->and($browser)->toBe($message);
+});
+
+it('delivers a plain message to an address that never opened chat', function () {
+    [$aliceKey, $alice] = chatWallet();
+    [$strangerKey, $stranger] = chatWallet();
+
+    // No key published on either side: a plain message needs only a proof.
+    chatProve($aliceKey, $alice)->assertOk();
+
+    $note = chatNote(strtolower($alice), strtolower($stranger));
+
+    $this->postJson('/api/wallet/chat/messages/plain', $note)
+        ->assertCreated()
+        ->assertJsonPath('message.plain', true)
+        ->assertJsonPath('message.text', $note['text'])
+        ->assertJsonPath('message.to', strtolower($stranger))
+        ->assertJsonMissingPath('message.body');
+
+    expect(WalletChatMessage::where('message_id', $note['id'])->value('sealed'))->toBeFalse();
+
+    chatProve($strangerKey, $stranger)->assertOk();
+
+    $this->getJson('/api/wallet/chat/messages')
+        ->assertOk()
+        ->assertJsonCount(1, 'messages')
+        ->assertJsonPath('messages.0.plain', true)
+        ->assertJsonPath('messages.0.text', $note['text']);
+});
+
+it('takes a plain message only from the wallet that proved itself', function () {
+    [$aliceKey, $alice] = chatWallet();
+    [, $bob] = chatWallet();
+
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($alice), strtolower($bob)))
+        ->assertStatus(403);
+
+    chatProve($aliceKey, $alice);
+
+    // Words are legible here, so attributing them to the wrong person would
+    // be worse than with an envelope nobody can open.
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($bob), strtolower($bob)))
+        ->assertStatus(403);
+
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($alice), strtolower($bob), ['text' => '   ']))
+        ->assertStatus(422);
+
+    expect(WalletChatMessage::count())->toBe(0);
+});
+
+it('treats a resent plain message as the same one, and keeps ids to their sender', function () {
+    [$aliceKey, $alice] = chatWallet();
+    [$malloryKey, $mallory] = chatWallet();
+    [, $bob] = chatWallet();
+
+    chatProve($aliceKey, $alice);
+    $note = chatNote(strtolower($alice), strtolower($bob));
+
+    $this->postJson('/api/wallet/chat/messages/plain', $note)->assertCreated();
+    $this->postJson('/api/wallet/chat/messages/plain', $note)->assertOk();
+
+    chatProve($malloryKey, $mallory);
+
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($mallory), strtolower($bob), [
+        'id' => $note['id'],
+        'text' => 'something else',
+    ]))->assertStatus(409);
+
+    expect(WalletChatMessage::count())->toBe(1)
+        ->and(WalletChatMessage::value('body'))->toBe($note['text']);
+});
+
+it('tells the recipient a message arrived, once a window, without saying who or what', function () {
+    [$aliceKey, $alice] = chatWallet();
+    [$bobKey, $bob] = chatWallet();
+
+    $recipient = User::factory()->create([
+        'wallet_address' => $bob,
+        'telegram_id' => 4242,
+    ]);
+
+    chatPublish($aliceKey, $alice);
+    chatPublish($bobKey, $bob);
+    chatProve($aliceKey, $alice);
+
+    $note = chatNote(strtolower($alice), strtolower($bob));
+
+    $this->postJson('/api/wallet/chat/messages/plain', $note)->assertCreated();
+    // A second message straight after, and a sealed one too: one reason to
+    // come back, not three buzzes.
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($alice), strtolower($bob)))->assertCreated();
+    $this->postJson('/api/wallet/chat/messages', chatEnvelope(strtolower($alice), strtolower($bob)))->assertCreated();
+
+    $notifications = $recipient->notifications()->get();
+
+    expect($notifications)->toHaveCount(1)
+        ->and($notifications[0]->data['type'])->toBe('chat.message')
+        ->and($notifications[0]->data['url'])->toBe('/wallet?section=chat')
+        ->and(json_encode($notifications[0]->data))->not->toContain(strtolower($alice))
+        ->and(json_encode($notifications[0]->data))->not->toContain('launch');
+
+    $outbox = DB::table('tg_outbox')->get();
+
+    expect($outbox)->toHaveCount(1)
+        ->and((int) $outbox[0]->tg_user_id)->toBe(4242)
+        ->and($outbox[0]->kind)->toBe('chat.message')
+        ->and($outbox[0]->text)->not->toContain('launch');
+
+    // A note to yourself is not news.
+    $sender = User::factory()->create(['wallet_address' => $alice]);
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($alice), strtolower($alice)))->assertCreated();
+
+    expect($sender->notifications()->count())->toBe(0);
+});
+
+it('names the correspondents a wallet already has, with their faces', function () {
+    $known = User::factory()->create([
+        'name' => 'netrunner',
+        'wallet_address' => '0x'.str_repeat('A', 40),
+    ]);
+    User::factory()->create(['name' => 'someone else', 'wallet_address' => '0x'.str_repeat('b', 40)]);
+
+    $people = $this->getJson('/api/wallet/chat/people?addresses='.strtolower($known->wallet_address).',not-an-address')
+        ->assertOk()
+        ->json('people');
+
+    expect($people)->toHaveCount(1)
+        ->and($people[0]['name'])->toBe('netrunner')
+        ->and($people[0])->toHaveKey('avatar');
 });

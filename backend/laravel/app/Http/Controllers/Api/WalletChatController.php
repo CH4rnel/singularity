@@ -7,23 +7,33 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\WalletChatKey;
 use App\Models\WalletChatMessage;
+use App\Services\Wallet\ChatMessageNotifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * The relay behind the wallet's end-to-end encrypted chat.
+ * The relay behind the wallet's chat.
  *
- * This controller carries messages it cannot read. Every body that passes
- * through it is AES-GCM ciphertext under a key derived from an ECDH between
- * two wallets, and neither half of that exchange has ever been on this server.
- * There is no decryption path here to disable later, no key escrow, and no
- * plaintext column: the privacy is structural rather than promised.
+ * Two kinds of message pass through it, and the difference is the sender's
+ * choice, made visibly in the composer.
  *
- * What it does do is three things.
+ * **Sealed** messages it cannot read. Their body is AES-GCM ciphertext under
+ * a key derived from an ECDH between two wallets, and neither half of that
+ * exchange has ever been on this server. There is no decryption path here to
+ * disable later and no key escrow: that privacy is structural, not promised.
+ *
+ * **Plain** messages it can. Sealing needs a published key at both ends, and
+ * most of the site's people have never opened the wallet's chat — so until
+ * this existed, most of them could not be written to at all. A plain message
+ * needs only an address; the sender is told, on the message itself, that
+ * Cyberia can read it.
+ *
+ * What it does with either is four things.
  *
  * **A directory.** An EVM address is a hash of a public key, so it cannot be
  * encrypted to on its own. Addresses publish a separate messaging key, signed
@@ -43,6 +53,11 @@ use Throwable;
  * window (`wallet:chat-prune`); the wallets at either end hold the
  * conversation.
  *
+ * **A doorbell.** A message the recipient never hears about is one they never
+ * read, so each new one tells the address — bell, push, Telegram — that
+ * something arrived, without saying who sent it or what it says
+ * (`ChatMessageNotifier`).
+ *
  * The honest limit, stated here because the UI states it too: the relay sees
  * who is talking to whom and when. Content is sealed, metadata is not.
  */
@@ -60,7 +75,10 @@ class WalletChatController extends Controller
     /** Long enough to absorb a screen opening, short enough to feel current. */
     private const PEOPLE_TTL_SECONDS = 60;
 
-    public function __construct(private RecoverEvmAddress $recover) {}
+    public function __construct(
+        private RecoverEvmAddress $recover,
+        private ChatMessageNotifier $notifier,
+    ) {}
 
     /* ------------------------------------------------------------ mailbox --- */
 
@@ -232,26 +250,41 @@ class WalletChatController extends Controller
     {
         $data = $request->validate([
             'q' => ['sometimes', 'nullable', 'string', 'max:64'],
+            // The correspondents already in a wallet's list, so a thread can
+            // carry a name and a face instead of twelve characters of hex.
+            'addresses' => ['sometimes', 'nullable', 'string', 'max:'.(43 * self::PEOPLE_LIMIT)],
         ]);
 
         $query = trim((string) ($data['q'] ?? ''));
-        $cacheKey = 'wallet.chat.people.'.md5(Str::lower($query));
+        $addresses = collect(explode(',', Str::lower((string) ($data['addresses'] ?? ''))))
+            ->map(fn (string $address): string => trim($address))
+            ->filter(fn (string $address): bool => (bool) preg_match('/^0x[0-9a-f]{40}$/', $address))
+            ->unique()
+            ->sort()
+            ->take(self::PEOPLE_LIMIT)
+            ->values()
+            ->all();
+
+        $cacheKey = 'wallet.chat.people.'.md5(Str::lower($query).'|'.implode(',', $addresses));
 
         return response()->json(Cache::remember(
             $cacheKey,
             self::PEOPLE_TTL_SECONDS,
-            fn (): array => ['people' => $this->peopleFor($query)],
+            fn (): array => ['people' => $this->peopleFor($query, $addresses)],
         ));
     }
 
     /**
-     * @return list<array{name: string, address: string, url: string|null, hasKey: bool}>
+     * @param  list<string>  $addresses
+     * @return list<array{name: string, address: string, url: string|null, avatar: string|null, hasKey: bool}>
      */
-    private function peopleFor(string $query): array
+    private function peopleFor(string $query, array $addresses = []): array
     {
         $users = User::query()
             ->whereNull('merged_into_id')
             ->whereNotNull('wallet_address')
+            ->when($addresses !== [], fn ($builder) => $builder
+                ->whereIn(DB::raw('lower(wallet_address)'), $addresses))
             ->when($query !== '', function ($builder) use ($query): void {
                 $like = '%'.Str::lower($query).'%';
 
@@ -279,6 +312,7 @@ class WalletChatController extends Controller
                 'name' => $user->name,
                 'address' => Str::lower((string) $user->wallet_address),
                 'url' => $user->profile_url,
+                'avatar' => $user->avatar,
                 'hasKey' => in_array(
                     Str::lower((string) $user->wallet_address),
                     $withKeys,
@@ -368,6 +402,80 @@ class WalletChatController extends Controller
             'body' => $data['body'],
         ]);
 
+        $this->ringDoorbell($from, $to);
+
+        return response()->json(['message' => $this->messagePayload($record)], 201);
+    }
+
+    /**
+     * Accept one message that is not encrypted.
+     *
+     * The sender is still the session's proven address, for the same reason as
+     * above: a relay that took anybody's word for who wrote something would
+     * let anyone put words in anyone's mouth — and here the words are legible.
+     *
+     * Unlike a sealed envelope, the recipient needs no published key. That is
+     * the whole point: somebody who has never opened the wallet's chat can
+     * still be written to, find the message waiting and be told it is there.
+     */
+    public function sendPlain(Request $request): JsonResponse
+    {
+        $from = $this->provenAddress($request);
+
+        if ($from === null) {
+            return response()->json([
+                'message' => 'Sign the challenge with your wallet to send messages.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'id' => ['required', 'string', 'regex:/^[0-9a-f]{32}$/'],
+            'to' => ['required', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
+            'sentAt' => ['required', 'string', 'max:40'],
+            'text' => ['required', 'string', 'max:'.config('wallet.chat.max_text_chars')],
+            'from' => ['sometimes', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
+        ]);
+
+        if (isset($data['from']) && Str::lower($data['from']) !== $from) {
+            return response()->json([
+                'message' => 'That message claims a different sender than this wallet proved.',
+            ], 403);
+        }
+
+        if ($this->parseTime($data['sentAt']) === null) {
+            return response()->json(['message' => 'That timestamp is not a date.'], 422);
+        }
+
+        $text = trim($data['text']);
+
+        if ($text === '') {
+            return response()->json(['message' => 'That message is empty.'], 422);
+        }
+
+        $existing = WalletChatMessage::query()->where('message_id', $data['id'])->first();
+
+        if ($existing !== null) {
+            // A retry, answered with what is stored. An id that already names
+            // somebody else's message is not this sender's to reuse.
+            if ($existing->from_address !== $from) {
+                return response()->json(['message' => 'That message id is taken.'], 409);
+            }
+
+            return response()->json(['message' => $this->messagePayload($existing)]);
+        }
+
+        $record = WalletChatMessage::query()->create([
+            'message_id' => $data['id'],
+            'from_address' => $from,
+            'to_address' => Str::lower($data['to']),
+            'sealed' => false,
+            'sent_at' => $data['sentAt'],
+            'iv' => null,
+            'body' => $text,
+        ]);
+
+        $this->ringDoorbell($from, $record->to_address);
+
         return response()->json(['message' => $this->messagePayload($record)], 201);
     }
 
@@ -424,15 +532,33 @@ class WalletChatController extends Controller
     /** @return array<string, mixed> */
     private function messagePayload(WalletChatMessage $record): array
     {
-        return [
+        $payload = [
             'seq' => (int) $record->id,
             'id' => $record->message_id,
             'from' => $record->from_address,
             'to' => $record->to_address,
             'sentAt' => $record->sent_at,
-            'iv' => $record->iv,
-            'body' => $record->body,
         ];
+
+        // A plain message travels as `text`, never as `body`: a client that
+        // has only ever seen ciphertext in `body` must not be handed words
+        // there and try to open them.
+        if (! $record->sealed) {
+            return [...$payload, 'plain' => true, 'text' => $record->body];
+        }
+
+        return [...$payload, 'iv' => $record->iv, 'body' => $record->body];
+    }
+
+    /**
+     * Tell the recipient after the response has gone: a slow push service is
+     * the sender's problem only if it delays their message, and it must not.
+     */
+    private function ringDoorbell(string $from, string $to): void
+    {
+        $notifier = $this->notifier;
+
+        dispatch(fn () => $notifier->notify($from, $to))->afterResponse();
     }
 
     /** The address this session proved, while the proof is still fresh. */
@@ -482,6 +608,12 @@ class WalletChatController extends Controller
      * The text a wallet signs to read its mail. Names the address, so a
      * signature cannot be presented as another wallet's proof, and resembles
      * no other message this site asks for.
+     *
+     * Must stay byte-identical to `chatChallenge` in
+     * resources/js/lib/wallet/chatCrypto.ts. The wallet signs this without
+     * asking — it is what lets it check for mail in the background — and it
+     * only does so for text that matches its own copy exactly, so a server
+     * that sent anything else would get no signature at all.
      */
     private function challenge(string $address, string $nonce): string
     {

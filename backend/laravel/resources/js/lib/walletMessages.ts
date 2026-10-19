@@ -1378,6 +1378,45 @@ export const walletMessages: Messages = {
             'Lain is unreachable right now. Try again in a moment.',
 
         // Encrypted chat between wallets
+        // Messages: plain or encrypted, the list, the thread, the toast.
+        chatSearch: 'Search people or paste an address',
+        chatUnreadableShort: 'Could not be opened',
+        chatEmptyTitle: 'No messages yet',
+        chatEmptyBody:
+            'Write to anyone with a wallet here — they get a notification, even if they have never opened chat.',
+        chatNothingFound: 'Nobody here matches that.',
+        chatPeopleNew: 'Write to someone new',
+        chatPeopleFound: 'People',
+        chatWriteTo: 'Write to {address}',
+        chatWriteToHint: 'Any EVM address works',
+        chatPersonEncrypts: 'Can receive encrypted messages',
+        chatEncryptOfferTitle: 'Turn on encryption',
+        chatEncryptOfferBody:
+            'Publish your chat key so messages with you can be sealed end to end. One signature; no funds move.',
+        chatEncryptOn: 'Turn on',
+        chatNotNow: 'Not now',
+        chatModeSealed: 'End-to-end encrypted',
+        chatModePlain: 'Not encrypted · Cyberia can read it',
+        chatHelloSealed:
+            'Messages here are sealed on your device. Cyberia relays them and cannot read them.',
+        chatHelloPlain:
+            'Say hi. This chat is not encrypted, so Cyberia can read it — tap the lock to encrypt. They get a notification when you write.',
+        chatToday: 'Today',
+        chatYesterday: 'Yesterday',
+        chatSealedMark: 'Encrypted',
+        chatPlainMark: 'Not encrypted',
+        chatSentMark: 'Sent',
+        chatLockOn: 'Encrypt messages in this chat',
+        chatLockOff: 'Send without encryption',
+        chatPlaceholderSealed: 'Encrypted message',
+        chatPlaceholderPlain: 'Message',
+        chatVerifyPlain: 'Unencrypted messages',
+        chatVerifyPlainVal: 'Readable by Cyberia, marked with an open lock',
+        chatPickThread: 'Pick a conversation, or write to someone new.',
+        chatRelayDown: 'The chat relay is unreachable right now.',
+        chatToastMore: '· {count} new',
+        chatToastClose: 'Dismiss',
+        chatToastSealed: 'Encrypted message',
         chatTitle: 'Messages',
         chatIntro:
             'Encrypted messages between wallets, addressed by EVM address. Everything is sealed and opened in this browser with a key derived from your account — Cyberia relays messages it cannot read.',
@@ -1414,7 +1453,7 @@ export const walletMessages: Messages = {
         chatWaitingCount: '{count} waiting to be sent',
         chatWaiting: 'waiting',
         chatWaitingNote:
-            'This address has not opened chat yet, so nothing can be encrypted to it. What you write is kept on this device and sent by itself the moment they do.',
+            'This address has not turned on encryption yet. Encrypted messages wait on this device and send themselves the moment they do — or tap the lock to send without encryption now.',
         chatPeople: 'People here',
         chatPeopleSearch: 'Name or address',
         chatPeopleNoKey: 'has not opened chat yet',
@@ -3581,6 +3620,45 @@ export const walletMessages: Messages = {
         lainUnreachable: 'Лейн сейчас недоступна. Попробуйте через минуту.',
 
         // Encrypted chat between wallets
+        // Messages: plain or encrypted, the list, the thread, the toast.
+        chatSearch: 'Поиск людей или адрес 0x…',
+        chatUnreadableShort: 'Не удалось открыть',
+        chatEmptyTitle: 'Сообщений пока нет',
+        chatEmptyBody:
+            'Напишите любому, у кого здесь есть кошелёк, — ему придёт уведомление, даже если он ни разу не открывал чат.',
+        chatNothingFound: 'Никого не нашлось.',
+        chatPeopleNew: 'Написать кому-то новому',
+        chatPeopleFound: 'Люди',
+        chatWriteTo: 'Написать на {address}',
+        chatWriteToHint: 'Подойдёт любой EVM-адрес',
+        chatPersonEncrypts: 'Может получать зашифрованные сообщения',
+        chatEncryptOfferTitle: 'Включите шифрование',
+        chatEncryptOfferBody:
+            'Опубликуйте ключ чата, чтобы переписка с вами шифровалась сквозным шифрованием. Одна подпись, средства не двигаются.',
+        chatEncryptOn: 'Включить',
+        chatNotNow: 'Не сейчас',
+        chatModeSealed: 'Сквозное шифрование',
+        chatModePlain: 'Без шифрования · Cyberia может прочитать',
+        chatHelloSealed:
+            'Сообщения здесь шифруются на вашем устройстве. Cyberia их передаёт, но прочитать не может.',
+        chatHelloPlain:
+            'Напишите первым. Этот чат не зашифрован, Cyberia может его прочитать — нажмите на замок, чтобы шифровать. Получателю придёт уведомление.',
+        chatToday: 'Сегодня',
+        chatYesterday: 'Вчера',
+        chatSealedMark: 'Зашифровано',
+        chatPlainMark: 'Без шифрования',
+        chatSentMark: 'Отправлено',
+        chatLockOn: 'Шифровать сообщения в этом чате',
+        chatLockOff: 'Отправлять без шифрования',
+        chatPlaceholderSealed: 'Зашифрованное сообщение',
+        chatPlaceholderPlain: 'Сообщение',
+        chatVerifyPlain: 'Сообщения без шифрования',
+        chatVerifyPlainVal: 'Видны Cyberia, отмечены открытым замком',
+        chatPickThread: 'Выберите переписку или напишите кому-то новому.',
+        chatRelayDown: 'Чат-релей сейчас недоступен.',
+        chatToastMore: '· новых: {count}',
+        chatToastClose: 'Закрыть',
+        chatToastSealed: 'Зашифрованное сообщение',
         chatTitle: 'Сообщения',
         chatIntro:
             'Зашифрованные сообщения между кошельками, адрес получателя — его EVM-адрес. Всё шифруется и расшифровывается в этом браузере ключом, выведенным из вашего счёта: Cyberia передаёт сообщения, которые не может прочитать.',
@@ -3606,7 +3684,7 @@ export const walletMessages: Messages = {
         chatWaitingCount: 'ждёт отправки: {count}',
         chatWaiting: 'ждёт',
         chatWaitingNote:
-            'Этот адрес ещё не открывал чат, поэтому зашифровать ему нечем. Написанное остаётся на этом устройстве и уйдёт само, как только он его откроет.',
+            'Этот адрес ещё не включил шифрование. Зашифрованные сообщения ждут на этом устройстве и уйдут сами, как только он его включит, — или нажмите на замок, чтобы отправить без шифрования сейчас.',
         chatPeople: 'Кто здесь есть',
         chatPeopleSearch: 'Имя или адрес',
         chatPeopleNoKey: 'ещё не открывал чат',
@@ -5687,6 +5765,45 @@ export const walletMessages: Messages = {
         lainUnreachable: 'Lain 现在连不上。过一会儿再试。',
 
         // Encrypted chat between wallets
+        // Messages: plain or encrypted, the list, the thread, the toast.
+        chatSearch: '搜索用户或粘贴地址',
+        chatUnreadableShort: '无法打开',
+        chatEmptyTitle: '还没有消息',
+        chatEmptyBody:
+            '可以写信给这里任何有钱包的人——即使对方从未打开过聊天，也会收到通知。',
+        chatNothingFound: '没有找到匹配的人。',
+        chatPeopleNew: '写给新的人',
+        chatPeopleFound: '用户',
+        chatWriteTo: '写给 {address}',
+        chatWriteToHint: '任何 EVM 地址都可以',
+        chatPersonEncrypts: '可以接收加密消息',
+        chatEncryptOfferTitle: '开启加密',
+        chatEncryptOfferBody:
+            '发布你的聊天密钥，与你往来的消息即可端到端加密。只需一次签名，不会动用资金。',
+        chatEncryptOn: '开启',
+        chatNotNow: '暂不',
+        chatModeSealed: '端到端加密',
+        chatModePlain: '未加密 · Cyberia 可以读取',
+        chatHelloSealed:
+            '这里的消息在你的设备上加密。Cyberia 只负责转发，无法读取。',
+        chatHelloPlain:
+            '打个招呼吧。这个对话未加密，Cyberia 可以读取——点击锁图标即可加密。你写信时对方会收到通知。',
+        chatToday: '今天',
+        chatYesterday: '昨天',
+        chatSealedMark: '已加密',
+        chatPlainMark: '未加密',
+        chatSentMark: '已发送',
+        chatLockOn: '在此对话中加密消息',
+        chatLockOff: '不加密发送',
+        chatPlaceholderSealed: '加密消息',
+        chatPlaceholderPlain: '消息',
+        chatVerifyPlain: '未加密的消息',
+        chatVerifyPlainVal: 'Cyberia 可读，以打开的锁标记',
+        chatPickThread: '选择一个对话，或写给新的人。',
+        chatRelayDown: '聊天中继暂时无法连接。',
+        chatToastMore: '· {count} 条新消息',
+        chatToastClose: '关闭',
+        chatToastSealed: '加密消息',
         chatTitle: '消息',
         chatIntro:
             '钱包之间的加密消息，以 EVM 地址为收件人。一切都在这个浏览器里用一把从你账户派生出的密钥封装和拆开 — Cyberia 转发的是它读不懂的内容。',
@@ -5711,7 +5828,7 @@ export const walletMessages: Messages = {
         chatWaitingCount: '{count} 条等待发送',
         chatWaiting: '等待中',
         chatWaitingNote:
-            '这个地址还没开过聊天，所以没有可加密的对象。你写的内容留在这台设备上，等对方开了聊天就会自动发出。',
+            '这个地址还没开启加密。加密消息会留在这台设备上，等对方开启后自动发出——也可以点击锁图标，现在就不加密发送。',
         chatPeople: '这里有谁',
         chatPeopleSearch: '名字或地址',
         chatPeopleNoKey: '还没开过聊天',

@@ -1,4 +1,4 @@
-"""Daily reminders: the wallet decides, the bot delivers.
+"""Daily reminders and "you have a message": the wallet decides, the bot delivers.
 
 Laravel's `gamification:remind` knows whose streak dies tonight and whose
 daily quest is one step short; it can't write to Telegram. It leaves each
@@ -85,9 +85,15 @@ def wallet_url(path: str | None) -> str:
     return f"{WALLET_MINI_APP_URL}?{query}" if query else WALLET_MINI_APP_URL
 
 
-def reminder_markup(path: str | None) -> InlineKeyboardMarkup:
+# What the button under a nudge says, by the outbox row's `kind`. A reminder
+# opens the Daily screen; a "somebody wrote to you" opens the wallet's chat.
+OPEN_LABELS = {"chat.message": "Открыть чат"}
+
+
+def reminder_markup(path: str | None, kind: str | None = None) -> InlineKeyboardMarkup:
+    label = OPEN_LABELS.get(kind or "", "Открыть Daily")
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Открыть Daily", web_app=WebAppInfo(url=wallet_url(path)))],
+        [InlineKeyboardButton(label, web_app=WebAppInfo(url=wallet_url(path)))],
         [InlineKeyboardButton("Выключить напоминания", callback_data=OFF_CALLBACK)],
     ])
 
@@ -133,18 +139,18 @@ async def deliver_pending(bot) -> int:
     """Send what Laravel left in the outbox; returns how many were sent."""
     with engine.connect() as conn:
         rows = conn.execute(
-            text("SELECT id, tg_user_id, text, url FROM tg_outbox WHERE sent_at IS NULL ORDER BY id LIMIT :n"),
+            text("SELECT id, tg_user_id, text, url, kind FROM tg_outbox WHERE sent_at IS NULL ORDER BY id LIMIT :n"),
             {"n": BATCH},
         ).fetchall()
 
     sent = 0
-    for row_id, tg_user_id, body, url in rows:
+    for row_id, tg_user_id, body, url, kind in rows:
         error = None
         if not is_opted_in(tg_user_id):
             error = "opted_out"
         else:
             try:
-                await bot.send_message(chat_id=tg_user_id, text=body, reply_markup=reminder_markup(url))
+                await bot.send_message(chat_id=tg_user_id, text=body, reply_markup=reminder_markup(url, kind))
                 sent += 1
             except TelegramError as exc:
                 # Blocked the bot, never started it, deleted account: recorded,

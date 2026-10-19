@@ -28,6 +28,11 @@ import type {
  * unlocked. A locked wallet, or a stolen laptop, holds no readable messages —
  * the same standard the vault already sets for keys, applied to what those keys
  * are for.
+ *
+ * That includes messages that were *not* encrypted on the way. The relay hands
+ * those over as text (`ChatRelayRow` with `plain`), and they are sealed to this
+ * account's own messaging key before they are stored — the way a queued message
+ * is — so `plain` on a stored row says how it travelled, not how it is kept.
  */
 
 const STORAGE_KEY = 'cyberia.wallet.chat.v1';
@@ -40,7 +45,21 @@ export type ChatRow = ChatMeta &
     ChatEnvelope & {
         /** The relay's own ordering. Transport only — never in the tag. */
         seq: number;
+        /**
+         * Sent without encryption, so the relay could read it. Stored sealed
+         * to this account's own key all the same, and opened with it.
+         */
+        plain?: boolean;
     };
+
+/**
+ * A row as the relay hands it over: an envelope, or — for a message its sender
+ * did not encrypt — the text itself. Never stored in this shape.
+ */
+export type ChatRelayRow = ChatMeta & { seq: number } & (
+        | (ChatEnvelope & { plain?: false })
+        | { plain: true; text: string }
+    );
 
 const csrfToken = (): string => {
     if (typeof document === 'undefined') {
@@ -170,6 +189,8 @@ export type ChatPerson = {
     name: string;
     address: string;
     url: string | null;
+    /** Their profile picture, when they have set one. */
+    avatar: string | null;
     /** False until that address has opened chat — nothing can be sealed to it. */
     hasKey: boolean;
 };
@@ -183,12 +204,28 @@ export type ChatPerson = {
  * a public profile page already, and every row says whether that address can be
  * written to at all.
  */
-export const fetchChatPeople = async (query = ''): Promise<ChatPerson[]> =>
-    (
+export const fetchChatPeople = async (
+    query = '',
+    addresses: string[] = [],
+): Promise<ChatPerson[]> => {
+    const params = new URLSearchParams();
+
+    if (query) {
+        params.set('q', query);
+    }
+
+    if (addresses.length > 0) {
+        params.set('addresses', addresses.join(','));
+    }
+
+    const search = params.toString();
+
+    return (
         await call<{ people: ChatPerson[] }>(
-            `/api/wallet/chat/people${query ? `?q=${encodeURIComponent(query)}` : ''}`,
+            `/api/wallet/chat/people${search ? `?${search}` : ''}`,
         )
     ).people;
+};
 
 export const sendChatEnvelope = (
     row: ChatMeta & ChatEnvelope,
@@ -198,10 +235,25 @@ export const sendChatEnvelope = (
         body: JSON.stringify(row),
     });
 
+/**
+ * Send a message without encrypting it.
+ *
+ * The relay can read this one, and the screen says so on the message. It needs
+ * no key at either end, which is what makes it the way to reach somebody who
+ * has never opened the wallet's chat.
+ */
+export const sendChatNote = (
+    note: ChatMeta & { text: string },
+): Promise<{ message: ChatRelayRow }> =>
+    call('/api/wallet/chat/messages/plain', {
+        method: 'POST',
+        body: JSON.stringify(note),
+    });
+
 /** Everything addressed to or sent by this account since a cursor. */
 export const fetchChatEnvelopes = (
     since: number,
-): Promise<{ messages: ChatRow[]; cursor: number }> =>
+): Promise<{ messages: ChatRelayRow[]; cursor: number }> =>
     call(`/api/wallet/chat/messages?since=${since}`);
 
 /* ---------------------------------------------------------------- store --- */
@@ -340,7 +392,19 @@ export const storeChatRows = (
     const bySeq = new Map(state.rows.map((row) => [row.seq, row]));
 
     for (const row of incoming) {
-        bySeq.set(row.seq, row);
+        // Only the fields a stored row has. A relay row that still carried
+        // its text would put readable mail in storage, which is the one thing
+        // this cache promises not to hold.
+        bySeq.set(row.seq, {
+            seq: row.seq,
+            id: row.id,
+            from: row.from,
+            to: row.to,
+            sentAt: row.sentAt,
+            iv: row.iv,
+            body: row.body,
+            ...(row.plain ? { plain: true } : {}),
+        });
     }
 
     const rows = [...bySeq.values()]
@@ -472,7 +536,6 @@ export const markChatRead = (
     });
 };
 
-/** Forget one account's messages, leaving every other account's alone. */
 /**
  * Everything written to somebody who could not yet be written to.
  *
@@ -511,6 +574,7 @@ export const dropChatPending = (
     return pending;
 };
 
+/** Forget one account's messages, leaving every other account's alone. */
 export const clearChat = (owner: string): void => {
     if (typeof window === 'undefined') {
         return;

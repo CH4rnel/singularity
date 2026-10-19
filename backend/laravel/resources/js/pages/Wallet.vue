@@ -23,6 +23,8 @@ import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
 import WalletBuy from '@/components/wallet/WalletBuy.vue';
 import WalletChart from '@/components/wallet/WalletChart.vue';
 import WalletChat from '@/components/wallet/WalletChat.vue';
+import WalletChatToast from '@/components/wallet/WalletChatToast.vue';
+import type { ChatToast } from '@/components/wallet/WalletChatToast.vue';
 import WalletContextBar from '@/components/wallet/WalletContextBar.vue';
 import WalletCrossSwap from '@/components/wallet/WalletCrossSwap.vue';
 import WalletDaily from '@/components/wallet/WalletDaily.vue';
@@ -71,6 +73,7 @@ import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useSwipeNav } from '@/composables/useSwipeNav';
 import { useWalletAuth } from '@/composables/useWalletAuth';
+import { useWalletChatInbox } from '@/composables/useWalletChatInbox';
 import { useWalletExperiments } from '@/composables/useWalletExperiments';
 import { useWalletMode } from '@/composables/useWalletMode';
 import { useWalletTheme } from '@/composables/useWalletTheme';
@@ -85,15 +88,18 @@ import {
 import {
     createMnemonic,
     formatUnits,
-    unreadChatCount,
     walletChain,
     walletChains,
 } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import type { BridgeConfig } from '@/lib/wallet/bridge';
 import type { QuestDestination } from '@/lib/wallet/daily';
+import { shortAddress } from '@/lib/wallet/format';
 import type { Market } from '@/lib/wallet/markets';
-import { announceWalletEvent } from '@/lib/wallet/notifications';
+import {
+    announceWalletEvent,
+    playWalletSound,
+} from '@/lib/wallet/notifications';
 import type { PlayerTrack } from '@/lib/wallet/player';
 import type { SwipeIntent } from '@/lib/wallet/swipe';
 import { signInWithTelegram } from '@/lib/wallet/sync';
@@ -523,27 +529,109 @@ const screenTitle = computed(() => {
 const unprotectedVault = computed(() => wallet.protection.value === 'none');
 
 /**
- * Messages waiting, for the badge on the tab bar and the rail.
+ * The wallet's mailbox, kept checking while the vault is open.
  *
- * Counted from the envelopes already cached on this device — the metadata
- * around a message, never what is inside one — so the number costs no key and
- * survives a locked vault. It is a `ref` and not a computed because
- * localStorage is not reactive: the chat screen says when it has changed, and
- * an account switch changes whose mail this is.
- *
- * It deliberately does not poll the relay in the background. Asking for mail
- * takes a signed proof, and a wallet that signs things nobody asked for is
- * worse than a badge that is one visit out of date.
+ * It used to be checked only from inside the chat screen, on the theory that
+ * asking for mail takes a signed proof and a wallet that signs things nobody
+ * asked for is worse than a stale badge. In practice that meant nobody was
+ * ever told they had a message. The proof it signs now is one the wallet
+ * composes itself and signs only verbatim (`useWalletChatInbox`), and the
+ * count it feeds — the badge on the tab bar and the rail, the number in the
+ * window title — is counted from envelope metadata, so it costs no key and
+ * survives a locked vault.
  */
-const unread = ref(0);
+const inbox = useWalletChatInbox();
+inbox.attach(wallet);
 
-const refreshUnread = (): void => {
-    const evm = wallet.accounts.value.find(
-        (account) => account.family === 'evm',
-    )?.address;
+const unread = computed(() => inbox.unread.value);
 
-    unread.value = evm ? unreadChatCount(evm) : 0;
+/** "Somebody wrote to you", shown over whatever screen is open. */
+const chatToast = ref<ChatToast | null>(null);
+
+/** Older than this and an arrival is history catching up, not news. */
+const FRESH_MESSAGE_MS = 3 * 86_400_000;
+
+const announceArrivals = async (
+    arrivals: {
+        row: { from: string; sentAt: string };
+        preview: string | null;
+    }[],
+): Promise<void> => {
+    const fresh = arrivals.filter(
+        (entry) => Date.now() - Date.parse(entry.row.sentAt) < FRESH_MESSAGE_MS,
+    );
+    const latest = fresh[fresh.length - 1];
+
+    if (!latest) {
+        return;
+    }
+
+    const from = latest.row.from.toLowerCase();
+    const visible =
+        typeof document === 'undefined' ||
+        document.visibilityState === 'visible';
+
+    // Already reading this thread: a quiet chime is all an arrival needs.
+    if (visible && section.value === 'chat' && inbox.viewing.value === from) {
+        playWalletSound('message');
+
+        return;
+    }
+
+    await inbox.resolve([from]);
+
+    const person = inbox.directory.value[from];
+    const name = person?.name || shortAddress(from);
+    const text = latest.preview ?? t('chatToastSealed');
+
+    announceWalletEvent({
+        title: name,
+        body: text,
+        sound: 'message',
+        tag: 'wallet-chat',
+    });
+
+    chatToast.value = {
+        peer: from,
+        name,
+        avatar: person?.avatar ?? null,
+        text,
+        count: fresh.filter((entry) => entry.row.from.toLowerCase() === from)
+            .length,
+        at: Date.now(),
+    };
 };
+
+const openChatToast = (peer: string): void => {
+    chatToast.value = null;
+    openChatWith(peer);
+};
+
+// Arriving in the chat by any other way answers the toast just as well.
+watch(section, (next) => {
+    if (next === 'chat') {
+        chatToast.value = null;
+    }
+});
+
+/*
+ * An installed app shows the count on its icon too, where the platform has a
+ * place for it. Best effort: a browser without the API simply has no badge.
+ */
+watch(unread, (count) => {
+    const badged = navigator as Navigator & {
+        setAppBadge?: (count?: number) => Promise<void>;
+        clearAppBadge?: () => Promise<void>;
+    };
+
+    try {
+        void (
+            count > 0 ? badged.setAppBadge?.(count) : badged.clearAppBadge?.()
+        )?.catch(() => undefined);
+    } catch {
+        // No badge here, which is fine.
+    }
+});
 
 /**
  * The network chip only belongs above the screens that are about one network.
@@ -1330,6 +1418,7 @@ const reportFunding = (): void => {
 
 let loadPromise: Promise<void> | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let stopArrivals: (() => void) | null = null;
 let historyPrimed = false;
 let historyGeneration = 0;
 let reloadAfterCurrent = false;
@@ -1561,7 +1650,14 @@ onMounted(() => {
     trackConnection();
     window.addEventListener('online', trackConnection);
     window.addEventListener('offline', trackConnection);
-    refreshUnread();
+    stopArrivals = inbox.onArrival(
+        (arrivals) => void announceArrivals(arrivals),
+    );
+
+    if (wallet.unlocked.value) {
+        inbox.start();
+    }
+
     void load();
     refreshTimer = setInterval(() => void load(), 60_000);
 });
@@ -1569,6 +1665,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener('online', trackConnection);
     window.removeEventListener('offline', trackConnection);
+    stopArrivals?.();
+    inbox.stop();
 
     if (refreshTimer !== null) {
         clearInterval(refreshTimer);
@@ -1598,7 +1696,6 @@ watch(
             chain.value = wallet.accounts.value[0]?.chain ?? 'cyberia';
         }
 
-        refreshUnread();
         void load();
     },
 );
@@ -1607,13 +1704,14 @@ watch(
 watch(
     () => wallet.unlocked.value,
     (unlocked) => {
-        refreshUnread();
-
         if (unlocked) {
+            inbox.start();
             resetHistoryNotifications();
             applySwapRequest();
             void load();
         } else {
+            inbox.stop();
+            chatToast.value = null;
             resetHistoryNotifications();
             overlay.value = null;
             section.value = 'portfolio';
@@ -1623,7 +1721,9 @@ watch(
 </script>
 
 <template>
-    <Head :title="`${screenTitle} | Cyberia`" />
+    <Head
+        :title="`${unread > 0 ? `(${unread}) ` : ''}${screenTitle} | Cyberia`"
+    />
 
     <!--
       `flex flex-col` is load-bearing and not decoration: `.cw-frame` hands the
@@ -1718,6 +1818,13 @@ watch(
             @touchcancel="swipe.onTouchCancel"
             @keydown="wallet.touch()"
         >
+            <WalletChatToast
+                v-if="stage === 'app'"
+                :toast="chatToast"
+                @open="openChatToast"
+                @dismiss="chatToast = null"
+            />
+
             <!-- Desktop rail -->
             <nav v-if="stage === 'app'" class="cw-rail">
                 <div
@@ -2057,7 +2164,6 @@ watch(
                         v-else-if="section === 'chat'"
                         :wallet="wallet"
                         :open-with="chatPeer"
-                        @unread="refreshUnread"
                         @opened="chatPeer = null"
                     />
 

@@ -57,6 +57,19 @@ class ReminderTests(unittest.TestCase):
         self.assertEqual(kwargs["reply_markup"].inline_keyboard[1][0].callback_data, reminders.OFF_CALLBACK)
         self.assertIsNotNone(self._row()[0])
 
+    def test_a_message_notice_opens_the_chat(self):
+        with self.engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO tg_outbox (tg_user_id, kind, text, url) VALUES (7, 'chat.message', 'Новое сообщение', '/wallet?section=chat')"),
+            )
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+
+        self.assertEqual(asyncio.run(reminders.deliver_pending(bot)), 1)
+        button = bot.send_message.call_args.kwargs["reply_markup"].inline_keyboard[0][0]
+        self.assertEqual(button.text, "Открыть чат")
+        self.assertEqual(button.web_app.url, f"{WALLET_MINI_APP_URL}?section=chat")
+
     def test_reminders_are_on_for_someone_who_never_touched_the_setting(self):
         self._queue(42)
         bot = MagicMock()

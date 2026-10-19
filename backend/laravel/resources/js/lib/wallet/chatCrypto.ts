@@ -169,6 +169,37 @@ export const chatKeyStatement = (
     ].join('\n');
 
 /**
+ * The challenge an address signs to open its mailbox at the relay.
+ *
+ * Must stay byte-identical to `WalletChatController::challenge`. The wallet
+ * signs it without asking — that is what lets it check for mail in the
+ * background and say "you have a new message" — so it never signs the text the
+ * server sends; it signs this, and only after the server's text turned out to
+ * be exactly this (`chatChallengeNonce`). A relay that slipped anything else
+ * in, a login challenge for this site or for another, gets no signature.
+ */
+export const chatChallenge = (address: string, nonce: string): string =>
+    [
+        'Cyberia wallet — open my encrypted chat.',
+        'This signature proves the address below so the relay will hand over messages addressed to it. It moves no funds and approves no transaction.',
+        `Address: ${address.toLowerCase()}`,
+        `Nonce: ${nonce}`,
+    ].join('\n');
+
+/**
+ * The nonce in a challenge the relay sent, or null if the text is anything
+ * other than this wallet's own challenge for this address.
+ */
+export const chatChallengeNonce = (
+    message: string,
+    address: string,
+): string | null => {
+    const nonce = /\nNonce: ([A-Za-z0-9]{16,64})$/.exec(message)?.[1];
+
+    return nonce && message === chatChallenge(address, nonce) ? nonce : null;
+};
+
+/**
  * Is this record really this address's key?
  *
  * Called on every key the relay serves, including ones it has served before.

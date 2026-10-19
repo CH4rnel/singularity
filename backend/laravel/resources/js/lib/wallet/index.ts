@@ -281,6 +281,8 @@ export {
 export type { LainTurn } from '@/lib/wallet/lainChat';
 export {
     MAX_MESSAGE_BYTES,
+    chatChallenge,
+    chatChallengeNonce,
     chatFingerprint,
     chatKeyStatement,
     chatMessageId,
@@ -316,10 +318,16 @@ export {
     readChatState,
     requestChatNonce,
     sendChatEnvelope,
+    sendChatNote,
     storeChatRows,
     unreadChatCount,
 } from '@/lib/wallet/chat';
-export type { ChatPerson, ChatRow, PendingMessage } from '@/lib/wallet/chat';
+export type {
+    ChatPerson,
+    ChatRelayRow,
+    ChatRow,
+    PendingMessage,
+} from '@/lib/wallet/chat';
 export {
     APPROVE_GAS,
     SWAP_GAS_CAP,

@@ -4,13 +4,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Wallet-to-wallet encrypted chat
+    | Wallet-to-wallet chat
     |--------------------------------------------------------------------------
     |
-    | The server is a relay for messages it cannot read, so nothing here is a
-    | policy about content — there is no content to have a policy about. These
-    | are the limits of the queue itself: how long an undelivered envelope is
-    | held, how large one may be, and how many are handed over per poll.
+    | The server is a relay. Encrypted messages are ones it cannot read; plain
+    | ones are text a sender chose not to encrypt, and the wallet marks them as
+    | readable here. Nothing below is a policy about content. These are the
+    | limits of the queue itself: how long an envelope is held, how large one
+    | may be, how many are handed over per poll, and how often an address is
+    | told that something arrived.
     |
     */
 
@@ -34,6 +36,23 @@ return [
          * exists so the relay cannot be used as free storage.
          */
         'max_body_chars' => (int) env('WALLET_CHAT_MAX_BODY', 8192),
+
+        /**
+         * Characters accepted in one message that is not encrypted.
+         *
+         * Matches the encrypted limit (4000 bytes of plaintext) closely enough
+         * that switching the lock off never turns a sendable message into one
+         * that is refused.
+         */
+        'max_text_chars' => (int) env('WALLET_CHAT_MAX_TEXT', 4000),
+
+        /**
+         * Minutes between two notices to one address about one sender.
+         *
+         * A conversation is several messages in a row, and each of them
+         * buzzing a phone is how notifications get switched off for good.
+         */
+        'notify_every_minutes' => (int) env('WALLET_CHAT_NOTIFY_EVERY', 10),
 
         /** Envelopes handed over in one poll. */
         'page' => 200,

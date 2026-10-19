@@ -440,12 +440,13 @@ Route::prefix('api/wallet/daily')->name('wallet.daily.')->group(function () {
 });
 
 /**
- * Wallet-to-wallet encrypted chat (WalletChatController).
+ * Wallet-to-wallet chat (WalletChatController).
  *
  * Public like the wallet, and addressed by EVM address rather than by account.
- * The server relays ciphertext it has no key for: it keeps a directory of
- * signed public keys so wallets can find each other, and a queue of sealed
- * envelopes it deletes on a retention window. Reading a mailbox means signing
+ * The server relays ciphertext it has no key for — and, when a sender turns
+ * encryption off, plain text it can read: it keeps a directory of signed
+ * public keys so wallets can find each other, and a queue of envelopes it
+ * deletes on a retention window. Reading a mailbox means signing
  * a challenge with the address's own key, exactly as the holders' room does.
  */
 Route::prefix('api/wallet/chat')->name('wallet.chat.')->group(function () {
@@ -464,6 +465,10 @@ Route::prefix('api/wallet/chat')->name('wallet.chat.')->group(function () {
         ->middleware('throttle:120,1')->name('messages');
     Route::post('messages', [WalletChatController::class, 'send'])
         ->middleware('throttle:60,1')->name('send');
+    // Not encrypted: the sender's choice, and the only way to reach an
+    // address that has never published a key.
+    Route::post('messages/plain', [WalletChatController::class, 'sendPlain'])
+        ->middleware('throttle:60,1')->name('send-plain');
 });
 
 /**

@@ -3,6 +3,8 @@ import test from 'node:test';
 import { Wallet } from 'ethers';
 import {
     MAX_MESSAGE_BYTES,
+    chatChallenge,
+    chatChallengeNonce,
     chatFingerprint,
     chatKeyStatement,
     chatKeyVerifiedAt,
@@ -17,7 +19,9 @@ import {
     pinChatKey,
     queueChatMessage,
     readChatPending,
+    readChatState,
     sealMessage,
+    storeChatRows,
     verifyChatKey,
 } from '@/lib/wallet';
 
@@ -365,6 +369,78 @@ test('a message to somebody with no key is kept, not lost', async () => {
 
     // Another account's queue is its own.
     assert.deepEqual(readChatPending(BOB.address.toLowerCase()), []);
+
+    delete globalThis.window;
+});
+
+test('the wallet signs its own mail challenge and nothing else', () => {
+    const me = ALICE.address.toLowerCase();
+    const nonce = 'Q'.repeat(40);
+    const challenge = chatChallenge(me, nonce);
+
+    // The exact text, for this address: signed in the background.
+    assert.equal(chatChallengeNonce(challenge, me), nonce);
+    assert.equal(chatChallengeNonce(challenge, ALICE.address), nonce);
+
+    // Anything a relay might slip in instead gets no signature: another
+    // address, an extra line, a login challenge that merely ends the same way.
+    assert.equal(chatChallengeNonce(challenge, BOB.address), null);
+    assert.equal(chatChallengeNonce(`${challenge}\nAlso: transfer`, me), null);
+    assert.equal(
+        chatChallengeNonce(
+            `Sign in to Cyberia\nAddress: ${me}\nNonce: ${nonce}`,
+            me,
+        ),
+        null,
+    );
+    assert.equal(
+        chatChallengeNonce(challenge.replace(nonce, 'not a nonce!'), me),
+        null,
+    );
+});
+
+test('a message that travelled as text is stored as ciphertext all the same', async () => {
+    globalThis.window = { localStorage: chatStorage() };
+
+    const me = ALICE.address.toLowerCase();
+    const mine = chatPrivateKey(ALICE.privateKey);
+    const meta = {
+        id: chatMessageId(),
+        from: BOB.address.toLowerCase(),
+        to: me,
+        sentAt: '2026-10-19T00:00:00.000Z',
+    };
+
+    // What the inbox does with a plain row: seal it to this account's own key.
+    const toSelf = await conversationKey(
+        mine,
+        chatPublicKey(mine),
+        me,
+        meta.from,
+    );
+    const envelope = await sealMessage(toSelf, meta, 'hello in the clear');
+
+    // A relay row that still carried its text must not leave it in storage.
+    storeChatRows(me, [
+        {
+            ...meta,
+            seq: 7,
+            ...envelope,
+            plain: true,
+            text: 'hello in the clear',
+        },
+    ]);
+
+    const stored = readChatState(me).rows;
+
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].plain, true);
+    assert.equal('text' in stored[0], false);
+    assert.ok(!JSON.stringify(stored).includes('hello in the clear'));
+    assert.equal(
+        await openMessage(toSelf, meta, stored[0]),
+        'hello in the clear',
+    );
 
     delete globalThis.window;
 });
