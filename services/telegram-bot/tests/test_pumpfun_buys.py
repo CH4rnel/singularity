@@ -7,9 +7,14 @@ looks at instructions, so an aggregated buy reads like a direct one.
 
 Env is pinned before bot.* imports because bot.config reads it at import time.
 """
+import asyncio
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from telegram.error import BadRequest, TimedOut
 
 _TMP = tempfile.mkdtemp(prefix="pumpfun_test_")
 os.environ.setdefault("DB_PATH", os.path.join(_TMP, "pumpfun_test.sqlite"))
@@ -293,26 +298,27 @@ class FormatBuyTest(unittest.TestCase):
         text = pumpfun.format_buy(buy, usd=52.51, market_cap=22662.0)
         lines = text.split("\n")
 
-        self.assertEqual(lines[0], '<a href="https://t.me/cyberia_network_chat">cyber.sol</a> Buy!')
-        self.assertEqual(lines[1], "⛓️‍💥🎲" * 11)
+        self.assertEqual(lines[0], '🔹 <b><a href="https://t.me/cyberia_network_chat">CYBER.sol</a> Buy!</b> · Solana')
+        self.assertEqual(lines[1], "")
+        self.assertEqual(lines[2], "🎲" * 11)
         # The blank lines are the layout: header, then the trade, then links.
-        self.assertEqual(lines[2], "")
-        self.assertEqual(lines[3], "🔀 0.9814 SOL ($52.51)")
-        self.assertEqual(lines[4], "🔀 3 133 447.2 CYBER.sol")
+        self.assertEqual(lines[3], "")
+        self.assertEqual(lines[4], "💵 <b>0.981431 SOL</b> (≈ $52.51)")
+        self.assertEqual(lines[5], "🪙 <b>3 133 447.2 CYBER.sol</b>")
         self.assertEqual(
-            lines[5],
-            f'👤 <a href="https://solscan.io/address/{BUYER}">Dox7A7...hSUJ</a> | '
+            lines[6],
+            f'🔷 <a href="https://solscan.io/address/{BUYER}">Dox7A7...hSUJ</a> | '
             f'<a href="https://solscan.io/tx/{SIGNATURE}">Txn</a>',
         )
-        self.assertEqual(lines[6], "⬆️ New Holder!")
-        self.assertEqual(lines[7], "💸 Market Cap $22 662")
-        self.assertEqual(lines[8], "")
+        self.assertEqual(lines[7], "⬆️ New Holder!")
+        self.assertEqual(lines[8], "🔼 FDV ≈ <b>$22 662</b>")
+        self.assertEqual(lines[9], "")
         self.assertEqual(
-            lines[9],
-            f'📈 <a href="https://dexscreener.com/solana/{MINT}">Chart</a>   '
-            f'🛒 <a href="https://pump.fun/coin/{MINT}">Buy</a>',
+            lines[10],
+            f'📈 <a href="https://dexscreener.com/solana/{MINT}">Chart</a>',
         )
-        self.assertEqual(len(lines), 10)
+        self.assertEqual(len(lines), 11)
+        self.assertLessEqual(len(text.encode("utf-16-le")) // 2, 1024)
 
     def test_growing_a_position_says_so_instead_of_new_holder(self):
         buy = pumpfun.parse_buy(_top_up(1_000_000_000_000, 340_000_000_000), POOL, MINT)
@@ -338,16 +344,61 @@ class FormatBuyTest(unittest.TestCase):
         self.assertNotIn("New Holder", text)
         self.assertNotIn("Position", text)
 
-    def test_unknown_market_cap_is_omitted_never_zero(self):
+    def test_unknown_fdv_is_omitted_never_zero(self):
         buy = pumpfun.parse_buy(REAL_BUY, POOL, MINT)
-        self.assertNotIn("Market Cap", pumpfun.format_buy(buy, usd=52.51, market_cap=None))
+        self.assertNotIn("FDV", pumpfun.format_buy(buy, usd=52.51, market_cap=None))
 
     def test_emoji_row_scales_with_size_and_is_capped(self):
-        self.assertEqual(pumpfun._emoji_row(5.0), "⛓️‍💥🎲")
-        self.assertEqual(pumpfun._emoji_row(100.0), "⛓️‍💥🎲" * 20)
-        self.assertEqual(pumpfun._emoji_row(10_000_000.0), "⛓️‍💥🎲" * 40)
+        self.assertEqual(pumpfun._emoji_row(5.0), "🎲")
+        self.assertEqual(pumpfun._emoji_row(100.0), "🎲" * 20)
+        self.assertEqual(pumpfun._emoji_row(10_000_000.0), "🎲" * 40)
         # A buy just over the floor still gets a row.
-        self.assertEqual(pumpfun._emoji_row(5.01), "⛓️‍💥🎲")
+        self.assertEqual(pumpfun._emoji_row(5.01), "🎲")
+
+
+class PhotoCardTest(unittest.TestCase):
+    def test_theme_buttons_link_to_cyberia_and_the_correct_solana_mint(self):
+        rows = pumpfun.keyboard().to_dict()["inline_keyboard"]
+        self.assertEqual(rows[0][0]["url"], f"https://pump.fun/coin/{MINT}")
+        self.assertEqual(rows[0][1]["url"], "https://x.com/cyberia_temple")
+        self.assertEqual(rows[1][0]["url"], "https://cyberia.church/whitepaper")
+        self.assertEqual(rows[1][1]["url"], "https://cyberia.church/wallet")
+        self.assertEqual(rows[1][1]["text"], "🎲 Cyberia Wallet")
+        self.assertTrue(all("style" not in b and "web_app" not in b for row in rows for b in row))
+        with patch.object(pumpfun, "PUMPFUN_TRADE_URL", ""):
+            self.assertNotIn("Buy on pump.fun", str(pumpfun.keyboard().to_dict()))
+
+    def test_purchase_is_a_photo_card_with_the_approved_image(self):
+        bot = SimpleNamespace(send_photo=AsyncMock(), send_message=AsyncMock())
+        buy = pumpfun.parse_buy(REAL_BUY, POOL, MINT)
+        asyncio.run(pumpfun.send_buy(bot, -1, buy, 52.51, 22662.0))
+        bot.send_photo.assert_awaited_once()
+        args = bot.send_photo.call_args.kwargs
+        self.assertEqual(args["photo"], "https://cyberia.church/token-icons/cyberia-buybot.png")
+        self.assertIn("reply_markup", args)
+        bot.send_message.assert_not_awaited()
+
+    def test_image_rejection_falls_back_but_timeout_never_double_sends(self):
+        buy = pumpfun.parse_buy(REAL_BUY, POOL, MINT)
+        bot = SimpleNamespace(send_photo=AsyncMock(side_effect=BadRequest("image rejected")),
+                              send_message=AsyncMock())
+        asyncio.run(pumpfun.send_buy(bot, -1, buy, 52.51, 22662.0))
+        bot.send_message.assert_awaited_once()
+        bot.send_message.reset_mock()
+        bot.send_photo.side_effect = TimedOut()
+        with self.assertRaises(TimedOut):
+            asyncio.run(pumpfun.send_buy(bot, -1, buy, 52.51, 22662.0))
+        bot.send_message.assert_not_awaited()
+
+    def test_opted_out_images_keep_the_keyboard_and_preview_label(self):
+        buy = pumpfun.parse_buy(REAL_BUY, POOL, MINT)
+        bot = SimpleNamespace(send_photo=AsyncMock(), send_message=AsyncMock())
+        with patch.object(pumpfun, "PUMPFUN_PHOTO_URL", ""):
+            asyncio.run(pumpfun.send_buy(bot, -1, buy, 52.51, 22662.0, preview=True))
+        bot.send_photo.assert_not_awaited()
+        args = bot.send_message.call_args.kwargs
+        self.assertTrue(args["text"].startswith("<b>PREVIEW · historical transaction</b>"))
+        self.assertIn("reply_markup", args)
 
 
 class CursorTest(unittest.TestCase):

@@ -25,6 +25,9 @@ import logging
 import time
 import urllib.request
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
+
 from bot.config import (
     SOLSCAN_URL, CYBER_SOL_MINT,
     DEXSCREENER_API_URL,
@@ -33,6 +36,7 @@ from bot.config import (
     PUMPFUN_TOKEN_LABEL, PUMPFUN_TOKEN_SYMBOL, PUMPFUN_TOKEN_URL,
     PUMPFUN_BUY_EMOJI, PUMPFUN_EMOJI_USD, PUMPFUN_EMOJI_MAX,
     PUMPFUN_MIN_POSITION_PCT, PUMPFUN_CHART_URL, PUMPFUN_TRADE_URL,
+    PUMPFUN_PHOTO_URL, PUMPFUN_ROADMAP_URL, PROJECT_X_URL, WALLET_MINI_APP_URL,
 )
 from bot.solana import solana_rpc
 from bot.utils import _short_addr
@@ -386,9 +390,17 @@ def _footer() -> str:
     links = []
     if PUMPFUN_CHART_URL:
         links.append(f'📈 <a href="{html.escape(PUMPFUN_CHART_URL, quote=True)}">Chart</a>')
-    if PUMPFUN_TRADE_URL:
-        links.append(f'🛒 <a href="{html.escape(PUMPFUN_TRADE_URL, quote=True)}">Buy</a>')
     return "   ".join(links)
+
+
+def keyboard():
+    """Trading and Cyberia links, using Telegram's own button theme."""
+    rows = [
+        [("Buy on pump.fun", PUMPFUN_TRADE_URL), ("X / Twitter", PROJECT_X_URL)],
+        [("Roadmap", PUMPFUN_ROADMAP_URL), ("🎲 Cyberia Wallet", WALLET_MINI_APP_URL)],
+    ]
+    buttons = [[InlineKeyboardButton(label, url=url) for label, url in row if url] for row in rows]
+    return InlineKeyboardMarkup([row for row in buttons if row])
 
 
 def format_buy(buy: dict, usd: float | None, market_cap: float | None) -> str:
@@ -407,25 +419,46 @@ def format_buy(buy: dict, usd: float | None, market_cap: float | None) -> str:
     )
     txn = f'<a href="{SOLSCAN_URL}/tx/{signature}">Txn</a>' if signature else "Txn"
 
-    sol_line = f"🔀 {buy['sol_amount']:.4f} SOL"
+    sol_line = f"💵 <b>{buy['sol_amount']:.6f} SOL</b>"
     if usd is not None:
-        sol_line += f" ({_fmt_usd(usd)})"
+        sol_line += f" (≈ {_fmt_usd(usd)})"
 
     lines = [
-        f'<a href="{html.escape(PUMPFUN_TOKEN_URL, quote=True)}">'
-        f"{html.escape(PUMPFUN_TOKEN_LABEL)}</a> Buy!",
+        f'🔹 <b><a href="{html.escape(PUMPFUN_TOKEN_URL, quote=True)}">'
+        f"{html.escape(PUMPFUN_TOKEN_LABEL)}</a> Buy!</b> · Solana",
+        "",
         _emoji_row(usd),
         "",
         sol_line,
-        f"🔀 {_fmt_grouped(buy['token_amount'], 1)} {html.escape(PUMPFUN_TOKEN_SYMBOL)}",
-        f"👤 {who} | {txn}",
+        f"🪙 <b>{_fmt_grouped(buy['token_amount'], 1)} {html.escape(PUMPFUN_TOKEN_SYMBOL)}</b>",
+        f"🔷 {who} | {txn}",
     ]
     position = _position_line(buy)
     if position:
         lines.append(position)
     if market_cap:
-        lines.append(f"💸 Market Cap ${_fmt_grouped(market_cap, 0)}")
+        lines.append(f"🔼 FDV ≈ <b>${_fmt_grouped(market_cap, 0)}</b>")
     footer = _footer()
     if footer:
         lines += ["", footer]
     return "\n".join(lines)
+
+
+async def send_buy(bot, chat_id, buy, usd, market_cap, preview=False):
+    caption = format_buy(buy, usd, market_cap)
+    if preview:
+        caption = "<b>PREVIEW · historical transaction</b>\n\n" + caption
+    if PUMPFUN_PHOTO_URL:
+        try:
+            return await bot.send_photo(
+                chat_id=chat_id, photo=PUMPFUN_PHOTO_URL, caption=caption,
+                parse_mode="HTML", reply_markup=keyboard(),
+            )
+        except BadRequest:
+            # Explicitly rejected images can fall back. A timeout is ambiguous
+            # and must propagate to retain the announcer's existing cursor.
+            pass
+    return await bot.send_message(
+        chat_id=chat_id, text=caption, parse_mode="HTML",
+        disable_web_page_preview=True, reply_markup=keyboard(),
+    )

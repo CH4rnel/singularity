@@ -156,7 +156,7 @@ def _address(address):
 def format_buy(buy, eth_usd=None, supply=None, preview=False):
     lines = (["<b>PREVIEW · historical transaction</b>"] if preview else [])
     lines += ["🔹 <b>LAIN Buy!</b> · Robinhood Chain", "",
-              "🐋" * min(20, max(1, int(buy["eth"] / Decimal("0.005")))), ""]
+              "🎲" * min(20, max(1, int(buy["eth"] / Decimal("0.005")))), ""]
     paid = f'💵 <b>{_amount(buy["eth"], 6)} ETH</b>'
     if eth_usd:
         paid += f' (≈ ${buy["eth"] * eth_usd:,.2f})'

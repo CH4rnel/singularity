@@ -169,7 +169,16 @@ Pool event layout: [Uniswap v4 IPoolManager](https://github.com/Uniswap/v4-core/
 Every CYBER.sol buy worth at least `PUMPFUN_MIN_BUY_USD` (default $5) gets its
 own post in `PUMPFUN_ANNOUNCE_CHAT` — amount in SOL and USD, amount in
 CYBER.sol, buyer and transaction on Solscan, what the buy did to the buyer's
-bag, and the market cap. Leave `PUMPFUN_ANNOUNCE_CHAT` empty to turn it off.
+bag, and indicative FDV. Leave `PUMPFUN_ANNOUNCE_CHAT` empty to turn it off.
+
+The English photo cards use the founder-provided Cyberia cube at
+`/token-icons/cyberia-buybot.png`, a 🎲 size row and buttons inheriting Telegram's
+theme: Buy on pump.fun, X / Twitter (`PROJECT_X_URL`), Roadmap
+(`PUMPFUN_ROADMAP_URL`, the public `/whitepaper` roadmap) and 🎲 Cyberia Wallet.
+`PUMPFUN_PHOTO_URL` selects the image; empty sends text. Explicit image
+rejections fall back to text; ambiguous timeouts retain the delivery cursor.
+The trade amount comes from the pool's balance delta, without a separate net
+amount after fees. FDV uses total supply, not verified circulating supply.
 
 The bag line is "New Holder!" when they held none before and
 "Position: N% Up!" when they did — the growth of everything that address holds

@@ -322,10 +322,10 @@ DEXSCREENER_API_URL = os.environ.get(
 
 # Post cosmetics: the headline links the coin's name to the community chat, and
 # the emoji row's length is how the post shows size at a glance.
-PUMPFUN_TOKEN_LABEL = os.environ.get("PUMPFUN_TOKEN_LABEL", "cyber.sol")
+PUMPFUN_TOKEN_LABEL = os.environ.get("PUMPFUN_TOKEN_LABEL", "CYBER.sol")
 PUMPFUN_TOKEN_SYMBOL = os.environ.get("PUMPFUN_TOKEN_SYMBOL", "CYBER.sol")
 PUMPFUN_TOKEN_URL = os.environ.get("PUMPFUN_TOKEN_URL", TELEGRAM_CHAT_URL)
-PUMPFUN_BUY_EMOJI = os.environ.get("PUMPFUN_BUY_EMOJI", "⛓️‍💥🎲")
+PUMPFUN_BUY_EMOJI = os.environ.get("PUMPFUN_BUY_EMOJI", "🎲")
 PUMPFUN_EMOJI_USD = float(
     os.environ.get("PUMPFUN_EMOJI_USD", str(PUMPFUN_MIN_BUY_USD or 5))
 )
@@ -334,12 +334,18 @@ PUMPFUN_EMOJI_MAX = int(os.environ.get("PUMPFUN_EMOJI_MAX", "40"))
 # already held grew. Rounding makes anything under a percent read as "0% Up!",
 # so below this floor the line is left out rather than printed empty.
 PUMPFUN_MIN_POSITION_PCT = float(os.environ.get("PUMPFUN_MIN_POSITION_PCT", "1"))
-# Footer links, one blank line under the post. Blank turns a link off.
+# Chart footer and trading button. Blank turns either link off.
 PUMPFUN_CHART_URL = os.environ.get(
     "PUMPFUN_CHART_URL", f"https://dexscreener.com/solana/{CYBER_SOL_MINT}"
 )
 PUMPFUN_TRADE_URL = os.environ.get(
     "PUMPFUN_TRADE_URL", f"https://pump.fun/coin/{CYBER_SOL_MINT}"
+)
+PUMPFUN_PHOTO_URL = os.environ.get(
+    "PUMPFUN_PHOTO_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/token-icons/cyberia-buybot.png"
+).strip()
+PUMPFUN_ROADMAP_URL = os.environ.get(
+    "PUMPFUN_ROADMAP_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/whitepaper"
 )
 
 # LAIN on Robinhood Chain: read-only Pons v4 buy notifications. Destinations

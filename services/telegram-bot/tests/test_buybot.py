@@ -104,6 +104,8 @@ class CardTests(unittest.TestCase):
         self.assertIn("latest ETH quote", caption)
         self.assertIn("💵 <b>0.021086 ETH</b> (≈ $49.74)", caption)
         self.assertNotIn("Pool input:", caption)
+        self.assertIn("🎲🎲🎲🎲", caption)
+        self.assertNotIn("🐋", caption)
 
     def test_missing_prices_leave_only_verified_amounts(self):
         caption = buybot.format_buy(buybot.parse_buy(RECEIPT))

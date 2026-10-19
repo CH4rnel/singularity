@@ -927,12 +927,7 @@ async def _announce_pumpfun_tick(bot) -> None:
             cap = market.get("market_cap")
 
         try:
-            await bot.send_message(
-                chat_id=PUMPFUN_ANNOUNCE_CHAT,
-                text=pumpfun.format_buy(buy, usd, cap),
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
+            await pumpfun.send_buy(bot, PUMPFUN_ANNOUNCE_CHAT, buy, usd, cap)
         except TelegramError as e:
             logger.error(f"pumpfun_announcer: send failed for {buy['signature']}: {e}")
             return  # cursor still before this buy; it retries next tick
