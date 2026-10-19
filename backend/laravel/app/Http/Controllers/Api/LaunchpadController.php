@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\LaunchpadToken;
 use App\Services\IpfsService;
 use App\Services\Launchpad\LaunchWatcher;
+use App\Services\Launchpad\Underground;
 use App\Services\LaunchpadSiteService;
 use App\Support\Handles;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,7 @@ class LaunchpadController extends Controller
         private readonly RecoverEvmAddress $recoverEvmAddress,
         private readonly LaunchpadSiteService $sites,
         private readonly IpfsService $ipfs,
+        private readonly Underground $underground,
     ) {}
 
     /** Return metadata for every token registered with the Launchpad. */
@@ -176,6 +178,8 @@ class LaunchpadController extends Controller
             // A CID names bytes: the old one describes the page just replaced.
             $payload['ipfs_cid'] = null;
             $payload['ipfs_pinned_at'] = null;
+            // "Last updated" in the underground means the page, not the logo.
+            $payload['site_updated_at'] = now();
         }
 
         $token = LaunchpadToken::updateOrCreate(
@@ -227,27 +231,30 @@ class LaunchpadController extends Controller
      * or hit same-origin endpoints — arbitrary HTML upload is otherwise an XSS
      * pit.
      */
-    public function showSite(string $address): Response
+    public function showSite(Request $request, string $address): Response
     {
         $token = LaunchpadToken::where('address', Str::lower($address))
             ->whereNotNull('html_path')
             ->first();
 
-        return $this->staticSiteResponse($token);
+        return $this->staticSiteResponse($request, $token);
     }
 
     /** Serve a token page for every path on its dedicated subdomain. */
-    public function showSubdomain(string $subdomain, ?string $path = null): Response
+    public function showSubdomain(Request $request, string $subdomain, ?string $path = null): Response
     {
         $token = LaunchpadToken::where('site_subdomain', Str::lower($subdomain))->first();
 
-        return $this->staticSiteResponse($token);
+        return $this->staticSiteResponse($request, $token);
     }
 
-    private function staticSiteResponse(?LaunchpadToken $token): Response
+    private function staticSiteResponse(Request $request, ?LaunchpadToken $token): Response
     {
         abort_if(! $token || ! $token->html_path, 404);
         abort_unless(Storage::disk('public')->exists($token->html_path), 404);
+
+        // The hit counter every homepage in the underground can show.
+        $this->underground->recordHit($token, $request->ip());
 
         $html = Storage::disk('public')->get($token->html_path);
 

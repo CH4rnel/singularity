@@ -64,6 +64,7 @@ use App\Http\Controllers\StakingController;
 use App\Http\Controllers\Teams\TeamInvitationController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\TrackerController;
+use App\Http\Controllers\UndergroundController;
 use App\Http\Controllers\UserFollowController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Controllers\WhitepaperController;
@@ -81,6 +82,33 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+/*
+ * The underground (UndergroundController): the directory of token homepages,
+ * its ring, counters and covers. Registered before the token wildcard below,
+ * which would otherwise take `underground.` for a token's subdomain — the
+ * name is reserved in config/launchpad.php so no token can claim it.
+ */
+Route::domain((string) parse_url(config('launchpad.underground_url'), PHP_URL_HOST))
+    ->controller(UndergroundController::class)
+    ->name('underground.')
+    ->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('lost', 'lost')->name('lost');
+        Route::get('ring/{direction}/{from?}', 'ring')
+            ->whereIn('direction', ['next', 'prev', 'random'])
+            ->where('from', '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?')
+            ->middleware('throttle:120,1')
+            ->name('ring');
+        Route::get('cover/{address}.svg', 'cover')
+            ->where('address', '0x[a-fA-F0-9]{40}')
+            ->middleware('throttle:240,1')
+            ->name('cover');
+        Route::get('counter/{subdomain}.svg', 'counter')
+            ->where('subdomain', '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?')
+            ->middleware('throttle:240,1')
+            ->name('counter');
+    });
+
 Route::get('/{path?}', [LaunchpadController::class, 'showSubdomain'])
     ->domain('{subdomain}.'.config('launchpad.sites_domain'))
     ->where([
@@ -91,6 +119,7 @@ Route::get('/{path?}', [LaunchpadController::class, 'showSubdomain'])
 
 Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
 Route::get('/thesis', fn () => response()->file(resource_path('views/landing/index1.html')))->name('thesis');
+Route::redirect('/underground', config('launchpad.underground_url'))->name('underground');
 Route::get('/robinhood-chain', function (BridgeConfigService $bridgeConfig) {
     $routes = array_values(array_filter(
         $bridgeConfig->publicRoutes(),

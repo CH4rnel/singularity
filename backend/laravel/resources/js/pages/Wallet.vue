@@ -28,6 +28,7 @@ import WalletCrossSwap from '@/components/wallet/WalletCrossSwap.vue';
 import WalletDaily from '@/components/wallet/WalletDaily.vue';
 import WalletDao from '@/components/wallet/WalletDao.vue';
 import WalletDeveloper from '@/components/wallet/WalletDeveloper.vue';
+import WalletDoctrine from '@/components/wallet/WalletDoctrine.vue';
 import WalletDomains from '@/components/wallet/WalletDomains.vue';
 import WalletEarn from '@/components/wallet/WalletEarn.vue';
 import WalletExperiments from '@/components/wallet/WalletExperiments.vue';
@@ -64,6 +65,8 @@ import WalletTokens from '@/components/wallet/WalletTokens.vue';
 import WalletTorrent from '@/components/wallet/WalletTorrent.vue';
 import WalletTracker from '@/components/wallet/WalletTracker.vue';
 import WalletTrackerPublish from '@/components/wallet/WalletTrackerPublish.vue';
+import WalletUnderground from '@/components/wallet/WalletUnderground.vue';
+import WalletWorkshop from '@/components/wallet/WalletWorkshop.vue';
 import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useSwipeNav } from '@/composables/useSwipeNav';
@@ -219,7 +222,10 @@ type Section =
     | 'domains'
     | 'developer'
     | 'experiments'
-    | 'gallery';
+    | 'gallery'
+    | 'underground'
+    | 'workshop'
+    | 'doctrine';
 type Overlay = 'send' | 'receive' | 'swap' | 'addNetwork';
 
 const section = ref<Section>('portfolio');
@@ -413,6 +419,9 @@ const TAB_OF: Record<Section, Section> = {
     developer: 'portfolio',
     experiments: 'portfolio',
     gallery: 'portfolio',
+    underground: 'portfolio',
+    workshop: 'portfolio',
+    doctrine: 'portfolio',
     feed: 'feed',
     profile: 'feed',
     launchpad: 'portfolio',
@@ -598,6 +607,9 @@ const PARENTS: Partial<Record<Section, Section>> = {
     developer: 'preferences',
     experiments: 'preferences',
     gallery: 'preferences',
+    underground: 'preferences',
+    workshop: 'preferences',
+    doctrine: 'preferences',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -856,6 +868,20 @@ const mintPreset = ref<string | null>(null);
  * portfolio three floors up from where they were.
  */
 const dailyFrom = ref<Section>('portfolio');
+
+/**
+ * The workshop opens on a token when somebody came for that token: from its
+ * launchpad screen, or from their own lot in the underground. Back goes to
+ * whichever of the two it was.
+ */
+const workshopPreset = ref<string | null>(null);
+const workshopFrom = ref<Section>('underground');
+
+const openWorkshop = (address: string | null, from: Section): void => {
+    workshopPreset.value = address;
+    workshopFrom.value = from;
+    openSection('workshop');
+};
 
 const openDaily = (from: Section): void => {
     dailyFrom.value = from;
@@ -2301,6 +2327,7 @@ watch(
                         @swap="openSwapContract"
                         @domains="openDomains(null)"
                         @dao="openSection('dao')"
+                        @homepage="openWorkshop($event, 'launchpad')"
                     />
 
                     <WalletDao v-else-if="section === 'dao'" :wallet="wallet" />
@@ -2426,6 +2453,7 @@ watch(
                         :wallet="wallet"
                         @back="openSection('developer')"
                         @gallery="openSection('gallery')"
+                        @underground="openSection('underground')"
                     />
 
                     <WalletGallery
@@ -2434,6 +2462,35 @@ watch(
                         :ipfs="props.ipfs"
                         @back="openSection('experiments')"
                         @mint="openMint"
+                        @underground="openSection('underground')"
+                    />
+
+                    <!--
+                      Below the gallery: the launchpad's homepages (08), the
+                      workshop that builds them (09) and the bottom (13).
+                    -->
+                    <WalletUnderground
+                        v-else-if="section === 'underground'"
+                        :wallet="wallet"
+                        @back="openSection('gallery')"
+                        @workshop="openWorkshop($event, 'underground')"
+                        @doctrine="openSection('doctrine')"
+                    />
+
+                    <WalletWorkshop
+                        v-else-if="section === 'workshop'"
+                        :key="workshopPreset ?? 'workshop'"
+                        :wallet="wallet"
+                        :preset="workshopPreset"
+                        @back="openSection(workshopFrom)"
+                        @launchpad="openSection('launchpad')"
+                    />
+
+                    <WalletDoctrine
+                        v-else-if="section === 'doctrine'"
+                        :wallet="wallet"
+                        @back="openSection('underground')"
+                        @workshop="openWorkshop(null, 'doctrine')"
                     />
 
                     <WalletPreferences

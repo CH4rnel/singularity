@@ -8,6 +8,7 @@ import type { DailySecret } from '@/lib/wallet/daily';
 import {
     EXPERIMENTS,
     GALLERY_LEVEL,
+    UNDERGROUND_LEVEL,
     claimSecret,
     isUnlocked,
     missLine,
@@ -30,7 +31,7 @@ import { walletMessages } from '@/lib/walletMessages';
 
 const props = defineProps<{ wallet: MultiWallet }>();
 
-const emit = defineEmits<{ back: []; gallery: [] }>();
+const emit = defineEmits<{ back: []; gallery: []; underground: [] }>();
 
 const { locale, t } = useLocale(walletMessages);
 
@@ -121,12 +122,19 @@ const submit = async (): Promise<void> => {
     }
 
     if (action.kind === 'open') {
-        if (galleryOpen.value) {
-            emit('gallery');
+        const needs =
+            action.target === 'gallery' ? GALLERY_LEVEL : UNDERGROUND_LEVEL;
+
+        if ((level.value ?? 1) >= needs) {
+            if (action.target === 'gallery') {
+                emit('gallery');
+            } else {
+                emit('underground');
+            }
         } else {
             print([
                 {
-                    text: t('layersGalleryLocked', { level: GALLERY_LEVEL }),
+                    text: t('layersGalleryLocked', { level: needs }),
                     tone: 'bad',
                 },
             ]);

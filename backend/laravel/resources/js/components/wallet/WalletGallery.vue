@@ -4,7 +4,7 @@ import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useWalletLayers } from '@/composables/useWalletLayers';
 import { pinFile, pinJson } from '@/lib/wallet/ipfs';
-import { isUnlocked } from '@/lib/wallet/layers';
+import { UNDERGROUND_LEVEL, isUnlocked } from '@/lib/wallet/layers';
 import type { Requirement } from '@/lib/wallet/layers';
 import {
     PIECES,
@@ -34,7 +34,11 @@ const props = defineProps<{
     ipfs: { enabled: boolean; maxBytes: number };
 }>();
 
-const emit = defineEmits<{ back: []; mint: [uri: string] }>();
+const emit = defineEmits<{
+    back: [];
+    mint: [uri: string];
+    underground: [];
+}>();
 
 const { locale, t } = useLocale(walletMessages);
 
@@ -107,6 +111,9 @@ const paint = (
 
     element.dataset.drawn = key;
 };
+
+/** The floor under this one, which is not on the plan until level 4. */
+const undergroundOpen = computed(() => (level.value ?? 1) >= UNDERGROUND_LEVEL);
 
 const open = (piece: Piece): void => {
     selected.value = piece;
@@ -307,6 +314,38 @@ const freshNote = computed(() =>
                     }}</span>
                 </button>
             </div>
+
+            <button
+                type="button"
+                class="cw-line-row"
+                style="margin-top: 26px"
+                :disabled="!undergroundOpen"
+                :style="{ opacity: undergroundOpen ? 1 : 0.62 }"
+                @click="emit('underground')"
+            >
+                <span style="flex: 1">
+                    {{ t('ugTitle') }}
+                    <span
+                        v-if="!undergroundOpen"
+                        class="cw-label"
+                        style="
+                            display: block;
+                            margin-top: 4px;
+                            text-transform: none;
+                            letter-spacing: 0;
+                        "
+                        >{{
+                            t('layersGalleryLockedNote', {
+                                level: UNDERGROUND_LEVEL,
+                            })
+                        }}</span
+                    >
+                </span>
+                <span class="cw-layer-tag">{{
+                    t('layersLayer', { n: '08' })
+                }}</span>
+                →
+            </button>
         </template>
     </div>
 </template>

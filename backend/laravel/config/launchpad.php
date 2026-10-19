@@ -4,6 +4,21 @@ return [
     'sites_domain' => env('LAUNCHPAD_SITES_DOMAIN', 'cyberia.church'),
 
     /*
+     * The underground: the directory of every token's homepage, its web ring,
+     * hit counters and generated covers (UndergroundController). It lives on a
+     * subdomain of its own, reserved below, so the ring and the counters have
+     * one address to put in somebody's page. Overridable for a local run
+     * (`http://underground.localhost:8000`).
+     */
+    'underground_url' => rtrim((string) env(
+        'LAUNCHPAD_UNDERGROUND_URL',
+        'https://underground.'.env('LAUNCHPAD_SITES_DOMAIN', 'cyberia.church'),
+    ), '/'),
+
+    /** Where "buy" on a homepage goes; the token is appended as `outputCurrency`. */
+    'swap_url' => env('LAUNCHPAD_SWAP_URL', 'https://swap.cyberia.church/#/swap'),
+
+    /*
      * Chains a token can be launched on. One launch may target several of
      * them; every deployment gets its own metadata row keyed by
      * (chain_id, address). The browser-side contract addresses live in
@@ -64,6 +79,7 @@ return [
         'static',
         'status',
         'swap',
+        'underground',
         'www',
     ],
 ];

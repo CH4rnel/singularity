@@ -476,6 +476,84 @@ return [
                 'zh' => '盯着第 07 层的噪声看。',
             ],
         ],
+
+        /*
+         * The underground (layers 08, 09 and 13) and what it hides: a header
+         * on underground.cyberia.church, a comment in its source, and the
+         * stop past the end of its ring.
+         */
+        [
+            'key' => 'layer_08',
+            'kind' => 'layer',
+            'hash' => '6e01fb16fcbb1a65dfdbe40a97aef8e57279b0f375e6a53cd56cef67227ea2b6',
+            'xp' => 100,
+            'title' => ['en' => 'Layer 08', 'ru' => 'Слой 08', 'zh' => '第 08 层'],
+            'hint' => [
+                'en' => 'Under the gallery there is a floor that is not on the plan. Level 4.',
+                'ru' => 'Под галереей есть этаж, которого нет на плане. Уровень 4.',
+                'zh' => '画廊下面还有一层，图纸上没有。4 级。',
+            ],
+        ],
+        [
+            'key' => 'layer_09',
+            'kind' => 'layer',
+            'hash' => '96d3142206c226771dee6c3e8d0f243e1e671a633903ff70075a801567afcb2c',
+            'xp' => 100,
+            'title' => ['en' => 'Layer 09', 'ru' => 'Слой 09', 'zh' => '第 09 层'],
+            'hint' => [
+                'en' => 'The underground has a workshop.',
+                'ru' => 'В подполье есть мастерская.',
+                'zh' => '地下有一个工坊。',
+            ],
+        ],
+        [
+            'key' => 'layer_13',
+            'kind' => 'layer',
+            'hash' => '4834e48aa866d71a7d0ee2e2abca5909792682bef60fefdfd35d501852e8129e',
+            'xp' => 150,
+            'title' => ['en' => 'Layer 13', 'ru' => 'Слой 13', 'zh' => '第 13 层'],
+            'hint' => [
+                'en' => 'Thirteen is the bottom. It opens at level 5.',
+                'ru' => 'Тринадцать — это дно. Открывается с уровня 5.',
+                'zh' => '十三是底层。5 级开放。',
+            ],
+        ],
+        [
+            'key' => 'header',
+            'kind' => 'word',
+            'hash' => '186e9a49c4b2db4c31d767ecf9f4fba306f8aa2b31895b24f0a5b761eed76e22',
+            'xp' => 100,
+            'title' => ['en' => 'Headers', 'ru' => 'Заголовки', 'zh' => '响应头'],
+            'hint' => [
+                'en' => 'The underground says more in its headers than on its page.',
+                'ru' => 'Подполье говорит в заголовках больше, чем на странице.',
+                'zh' => '地下在响应头里说的比页面上多。',
+            ],
+        ],
+        [
+            'key' => 'source',
+            'kind' => 'word',
+            'hash' => 'e3020ee5eaf6da1bb95bf1597064f021d54db9f0da4925caece6e6bfa1feccbf',
+            'xp' => 100,
+            'title' => ['en' => 'View source', 'ru' => 'Исходный код', 'zh' => '查看源代码'],
+            'hint' => [
+                'en' => 'View the source of the underground. It is a door.',
+                'ru' => 'Посмотри исходный код подполья. Это дверь.',
+                'zh' => '查看地下的源代码。那是一扇门。',
+            ],
+        ],
+        [
+            'key' => 'lost',
+            'kind' => 'word',
+            'hash' => '44b56d9f353131f1cb8002fe106205251b90b12d8bfb4ea442e3b5a41c8a12a4',
+            'xp' => 125,
+            'title' => ['en' => 'Past the last stop', 'ru' => 'За последней остановкой', 'zh' => '过了最后一站'],
+            'hint' => [
+                'en' => 'Ride the ring all the way round. Something is past the last stop.',
+                'ru' => 'Проедь кольцо целиком. За последней остановкой что-то есть.',
+                'zh' => '把网络环绕一整圈。最后一站之后还有东西。',
+            ],
+        ],
     ],
 
 ];

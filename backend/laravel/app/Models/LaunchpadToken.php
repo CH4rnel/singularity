@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use Database\Factories\LaunchpadTokenFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LaunchpadToken extends Model
 {
+    /** @use HasFactory<LaunchpadTokenFactory> */
+    use HasFactory;
+
     protected $fillable = [
         'chain_id',
         'address',
@@ -22,6 +27,8 @@ class LaunchpadToken extends Model
         'site_subdomain',
         'ipfs_cid',
         'ipfs_pinned_at',
+        'site_hits',
+        'site_updated_at',
         'launched_at',
         'launch_tx',
         'launch_block',
@@ -34,6 +41,8 @@ class LaunchpadToken extends Model
         return [
             'chain_id' => 'integer',
             'ipfs_pinned_at' => 'datetime',
+            'site_hits' => 'integer',
+            'site_updated_at' => 'datetime',
             'launched_at' => 'datetime',
             'launch_block' => 'integer',
         ];

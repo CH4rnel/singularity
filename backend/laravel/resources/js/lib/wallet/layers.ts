@@ -25,7 +25,13 @@ import { sessionCall } from '@/lib/wallet/session';
 /** The level the gallery opens at. Mirrors the hint on `layer_07`. */
 export const GALLERY_LEVEL = 3;
 
-export type LayerId = '02' | '03' | '07';
+/** The underground (layer 08) and its workshop (09). Mirrors `layer_08`. */
+export const UNDERGROUND_LEVEL = 4;
+
+/** The bottom. Mirrors the hint on `layer_13`. */
+export const DOCTRINE_LEVEL = 5;
+
+export type LayerId = '02' | '03' | '07' | '08' | '09' | '13';
 
 /** What the wallet sends when a layer is opened. Public on purpose. */
 export const layerCode = (layer: LayerId): string => `layer:${layer}`;
@@ -85,7 +91,7 @@ export type ExperimentId = (typeof EXPERIMENTS)[number]['id'];
 export type TerminalAction =
     | { kind: 'print'; lines: string[] }
     | { kind: 'clear' }
-    | { kind: 'open'; target: 'gallery' }
+    | { kind: 'open'; target: 'gallery' | 'underground' }
     | { kind: 'claim'; code: string }
     | { kind: 'none' };
 
@@ -125,6 +131,7 @@ export const runCommand = (
                 lines: [
                     [
                         'gallery/',
+                        'underground/',
                         'readme.txt',
                         ...(args.includes('-a') || args.includes('-la')
                             ? [HIDDEN_FILE]
@@ -148,15 +155,18 @@ export const runCommand = (
                 kind: 'print',
                 lines: [`cat: ${argument || '?'}: no such file`],
             };
-        case 'cd':
-            if (argument.replace(/\/$/, '') === 'gallery') {
-                return { kind: 'open', target: 'gallery' };
+        case 'cd': {
+            const where = argument.replace(/\/$/, '');
+
+            if (where === 'gallery' || where === 'underground') {
+                return { kind: 'open', target: where };
             }
 
             return {
                 kind: 'print',
                 lines: [`cd: ${argument || '~'}: no such layer`],
             };
+        }
         default:
             return { kind: 'claim', code: line };
     }

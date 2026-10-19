@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\WalletPushController;
 use App\Http\Controllers\Api\WalletStocksController;
 use App\Http\Controllers\Api\WalletTelegramLinkController;
 use App\Http\Controllers\BoardController;
+use App\Http\Controllers\UndergroundController;
 use App\Http\Middleware\AuthenticateAiApiKey;
 use App\Http\Middleware\X402Paywall;
 use App\Services\WalletPriceService;
@@ -195,6 +196,9 @@ Route::prefix('tracker')->group(function () {
 Route::post('nft/upload', [NFTController::class, 'upload'])->middleware('throttle:30,1');
 
 // Launchpad off-chain metadata and sandboxed token sites.
+// The underground's directory, for the wallet (UndergroundController).
+Route::get('underground', [UndergroundController::class, 'directory'])->middleware('throttle:60,1');
+
 Route::prefix('launchpad')->group(function () {
     Route::get('tokens', [LaunchpadController::class, 'index']);
     Route::post('tokens', [LaunchpadController::class, 'store'])->middleware('throttle:30,1');

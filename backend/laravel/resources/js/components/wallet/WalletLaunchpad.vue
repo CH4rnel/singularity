@@ -8,6 +8,8 @@ import { formatUnits } from '@/lib/wallet';
 import { formatUsd, shortAddress } from '@/lib/wallet/format';
 import { fetchLaunches, launchpadChains } from '@/lib/wallet/launchpad';
 import type { WalletLaunch } from '@/lib/wallet/launchpad';
+import { fetchUnderground } from '@/lib/wallet/underground';
+import type { UndergroundEntry } from '@/lib/wallet/underground';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -36,6 +38,8 @@ const emit = defineEmits<{
     swap: [contract: string];
     domains: [];
     dao: [];
+    /** Open the workshop on this token: its creator is building its homepage. */
+    homepage: [contract: string];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
@@ -70,9 +74,52 @@ const usd = (native: number | null): string | null =>
 const amount = (value: bigint, precision = 4): string =>
     formatUnits(value, 18, precision);
 
+/**
+ * Every token's homepage, from the underground's directory. A token that has
+ * one says so on its screen, and its creator gets the door to the workshop —
+ * which is the short way to it; the long way is the layers under Settings.
+ */
+const homepages = ref<Record<string, UndergroundEntry>>({});
+
+const loadHomepages = async (): Promise<void> => {
+    try {
+        const directory = await fetchUnderground();
+
+        homepages.value = Object.fromEntries(
+            [...directory.homes, ...directory.lots].map((entry) => [
+                entry.address,
+                entry,
+            ]),
+        );
+    } catch {
+        // The launchpad is the chain's; a directory that cannot be read only
+        // means the homepage row is not drawn.
+    }
+};
+
+const myAddresses = computed(() =>
+    props.wallet.accounts.value
+        .filter((account) => account.family === 'evm')
+        .map((account) => account.address.toLowerCase()),
+);
+
+const homepage = computed(() =>
+    detail.value === null
+        ? null
+        : (homepages.value[detail.value.address.toLowerCase()] ?? null),
+);
+
+const isCreator = computed(
+    () =>
+        homepage.value?.creator !== null &&
+        homepage.value?.creator !== undefined &&
+        myAddresses.value.includes(homepage.value.creator),
+);
+
 const load = async (): Promise<void> => {
     loading.value = true;
     failure.value = null;
+    void loadHomepages();
 
     try {
         launches.value = await fetchLaunches();
@@ -185,6 +232,42 @@ onMounted(load);
                         shortAddress(detail.address, 10, 8)
                     }}</span>
                 </div>
+            </div>
+
+            <div
+                v-if="homepage?.site_url || isCreator"
+                class="cw-card"
+                style="padding: 14px 16px; margin-top: 12px"
+            >
+                <div class="cw-kv">
+                    <span class="cw-kv-key">{{ t('lpHomepage') }}</span>
+                    <a
+                        v-if="homepage?.site_url"
+                        class="cw-kv-val"
+                        :href="homepage.site_url"
+                        target="_blank"
+                        rel="noopener"
+                        >{{
+                            homepage.site_url
+                                .replace(/^https?:\/\//, '')
+                                .replace(/\/$/, '')
+                        }}</a
+                    >
+                    <span v-else class="cw-kv-val">—</span>
+                </div>
+                <button
+                    v-if="isCreator"
+                    type="button"
+                    class="cw-btn cw-btn-secondary"
+                    style="height: 44px; margin-top: 10px; width: 100%"
+                    @click="emit('homepage', detail.address)"
+                >
+                    {{
+                        homepage?.site_url
+                            ? t('lpEditHomepage')
+                            : t('lpMakeHomepage')
+                    }}
+                </button>
             </div>
 
             <p class="cw-note" style="margin-top: 14px">
