@@ -27,7 +27,7 @@ bot/
   rps.py         rock-paper-scissors duels on that escrow
   slots.py       🎰 slot machine: Telegram's own dice, a per-chat bank
   pumpfun.py     pump.fun buy detection (Solana RPC + market feed) and the post
-  buybot.py      opt-in LAIN/Pons v4 buy cards and colored ecosystem buttons
+  buybot.py      opt-in LAIN/Pons v4 buy cards and ecosystem buttons
   announcers.py  background loops (bridge/swap/liquidity/lending/convert/
                  staking/pumpfun/digest/snapshot/whale) + run_snapshot_once
   app.py         build app, register handlers, schedule loops, main()
@@ -108,29 +108,31 @@ This first version watches **one verified pool**, not every venue or chain:
 
 Only successful pool Swap events count: sells, liquidity operations, unrelated
 transfers and net round trips do not become buy alerts. Multiple pool swaps in
-one transaction produce one net card. The sender and main token recipient
-are separate fields. Where token transfers identify a unique recipient with
-at least 90% of the pool output, the card shows the amount actually received
-and the gross output separately. Ambiguous recipients are left unspecified.
+one transaction produce one card. All buybot captions and command replies
+are in English. The token amount displayed is the pool Swap output; the
+recipient's amount after fees is not displayed. The sender and main token
+recipient are separate address fields. Where token transfers identify a unique
+recipient with at least 90% of the pool output, its address is shown.
+Ambiguous recipients are left unspecified.
 There is no unverified “New Holder” claim. FDV uses the event's post-swap
 price and total supply read at its block; it is **not circulating market cap**.
 USD/FDV are indicative, use the latest optional GeckoTerminal ETH quote and
 are omitted when unavailable. The alert still works without that feed.
 
-The inline URL keyboard uses Telegram's native `style` field (supported by
-the pinned python-telegram-bot 22.7):
+The inline URL keyboard omits `style` so Telegram uses the client's own
+button colors and theme:
 
-| Color | Button | Destination |
-| --- | --- | --- |
-| Blue (`primary`) | Cyberia Wallet | `WALLET_MINI_APP_URL` (our `/wallet`) |
-| Green (`success`) | Lain OS | `https://lain-os.com` |
-| Red (`danger`) | Cyberia Board | `PROJECT_WEBSITE_URL` + `/board` |
+| Button | Destination |
+| --- | --- |
+| Cyberia Wallet | `WALLET_MINI_APP_URL` (our `/wallet`) |
+| Lain OS | `https://lain-os.com` |
+| Cyberia Board | `PROJECT_WEBSITE_URL` + `/board` |
 
 Our exchange currently supports v2/v3 and does **not** route this Pons v4
 pool. The wallet button is labelled Wallet, not Buy. The verified transaction
-and pool chart remain linked in the caption. An old Telegram client may show
-the same working buttons without colors. The image reuses our existing Lain
-JPEG; set `LAIN_BUYBOT_PHOTO_URL` to a public JPEG/PNG to change it, or leave it
+and pool chart remain linked in the caption. The image uses the founder-provided
+Lain OS logo at `/token-icons/lain-os-buybot.png`, preserved unchanged. Set
+`LAIN_BUYBOT_PHOTO_URL` to a public JPEG/PNG to change it, or leave it
 empty for text. A rejected photo falls back to text with the same keyboard.
 
 Each group has a durable block/log cursor, initialized at the head with no

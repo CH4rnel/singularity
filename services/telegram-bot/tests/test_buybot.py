@@ -7,6 +7,7 @@ import asyncio
 import copy
 import json
 import os
+import re
 import tempfile
 import unittest
 from decimal import Decimal
@@ -72,15 +73,14 @@ class BuyParserTests(unittest.TestCase):
         buy = buybot.parse_buy(dict(RECEIPT, logs=[SWAP]))
         self.assertIsNone(buy["receiver"])
         self.assertIsNone(buy["received"])
-        self.assertIn("Pool output", buybot.format_buy(buy))
+        self.assertIn("1,322,154.96 LAIN", buybot.format_buy(buy))
         self.assertNotIn("Received:", buybot.format_buy(buy))
 
 
 class CardTests(unittest.TestCase):
-    def test_three_native_colors_and_only_owned_button_destinations(self):
+    def test_buttons_inherit_telegram_theme_and_only_link_to_owned_destinations(self):
         rows = buybot.keyboard().to_dict()["inline_keyboard"]
-        self.assertEqual([[b["style"] for b in row] for row in rows],
-                         [["primary", "success"], ["danger"]])
+        self.assertTrue(all("style" not in b for row in rows for b in row))
         self.assertEqual(rows[0][0]["url"], "https://cyberia.church/wallet")
         self.assertEqual(rows[0][1]["url"], "https://lain-os.com")
         self.assertEqual(rows[1][0]["url"], "https://cyberia.church/board")
@@ -90,8 +90,11 @@ class CardTests(unittest.TestCase):
     def test_caption_fits_photo_and_never_invents_holder_or_market_cap(self):
         caption = buybot.format_buy(buybot.parse_buy(RECEIPT), Decimal("2358.8"), Decimal(10**9))
         self.assertLessEqual(len(caption.encode("utf-16-le")) // 2, 1024)
-        self.assertIn("1,282,490.31 LAIN", caption)
+        self.assertNotIn("1,282,490.31", caption)
         self.assertIn("1,322,154.96 LAIN", caption)
+        self.assertNotIn("Received:", caption)
+        self.assertNotIn("fees", caption)
+        self.assertIsNone(re.search(r"[А-Яа-яЁё]", caption))
         self.assertIn("FDV", caption)
         self.assertNotIn("Market Cap", caption)
         self.assertNotIn("New Holder", caption)
@@ -252,6 +255,7 @@ class DeliveryTests(unittest.TestCase):
             asyncio.run(buybot.command(update, context))
             self.assertEqual(buybot._subscriptions(), [])
             message.reply_text.assert_awaited_once()
+            self.assertIsNone(re.search(r"[А-Яа-яЁё]", message.reply_text.call_args.args[0]))
 
     def test_admin_can_opt_in_preview_and_disable(self):
         message = SimpleNamespace(reply_text=AsyncMock())
@@ -262,6 +266,8 @@ class DeliveryTests(unittest.TestCase):
         with patch.object(buybot, "Reader", return_value=self.reader):
             asyncio.run(buybot.command(update, context))
             self.assertEqual(buybot._subscriptions(), [-1])
+            self.assertIn("enabled", message.reply_text.call_args.args[0])
+            self.assertIsNone(re.search(r"[А-Яа-яЁё]", message.reply_text.call_args.args[0]))
             self.bot.send_photo.assert_not_awaited()
             context.args = ["preview"]
             asyncio.run(buybot.command(update, context))
@@ -269,6 +275,7 @@ class DeliveryTests(unittest.TestCase):
             context.args = ["off"]
             asyncio.run(buybot.command(update, context))
             self.assertEqual(buybot._subscriptions(), [])
+            self.assertIn("disabled", message.reply_text.call_args.args[0])
 
 
 class RpcTests(unittest.TestCase):

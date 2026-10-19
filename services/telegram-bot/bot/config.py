@@ -356,7 +356,7 @@ LAIN_BUYBOT_CONFIRMATIONS = max(1, int(os.environ.get("LAIN_BUYBOT_CONFIRMATIONS
 LAIN_BUYBOT_MIN_ETH = os.environ.get("LAIN_BUYBOT_MIN_ETH", "0.001")
 LAIN_BUYBOT_MAX_AGE_SECONDS = max(60, int(os.environ.get("LAIN_BUYBOT_MAX_AGE_SECONDS", "600")))
 LAIN_BUYBOT_PHOTO_URL = os.environ.get(
-    "LAIN_BUYBOT_PHOTO_URL", "https://cyberia.church/token-icons/lain.jpg"
+    "LAIN_BUYBOT_PHOTO_URL", "https://cyberia.church/token-icons/lain-os-buybot.png"
 ).strip()
 
 # Ecosystem links surfaced as inline URL buttons under /start and /help.

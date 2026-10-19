@@ -141,9 +141,9 @@ def keyboard():
     button is deliberately labelled Wallet; it makes no promise of a route.
     """
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("👛 Cyberia Wallet", url=WALLET_MINI_APP_URL, style="primary"),
-         InlineKeyboardButton("🧠 Lain OS", url="https://lain-os.com", style="success")],
-        [InlineKeyboardButton("💬 Cyberia Board", url=PROJECT_WEBSITE_URL.rstrip("/") + "/board", style="danger")],
+        [InlineKeyboardButton("👛 Cyberia Wallet", url=WALLET_MINI_APP_URL),
+         InlineKeyboardButton("🧠 Lain OS", url="https://lain-os.com")],
+        [InlineKeyboardButton("💬 Cyberia Board", url=PROJECT_WEBSITE_URL.rstrip("/") + "/board")],
     ])
 
 
@@ -163,12 +163,8 @@ def format_buy(buy, eth_usd=None, supply=None, preview=False):
     if eth_usd:
         paid += f' (≈ ${buy["eth"] * eth_usd:,.2f})'
     lines.append(paid)
-    if buy["received"] is not None:
-        lines.append(f'🪙 Received: <b>{_amount(buy["received"])} LAIN</b>')
-        if buy["received"] != buy["tokens"]:
-            lines.append(f'Pool output before fees: {_amount(buy["tokens"])} LAIN')
-    else:
-        lines.append(f'🪙 Pool output: <b>{_amount(buy["tokens"])} LAIN</b>')
+    # Display the amount reported by Swap, not the recipient's net transfer.
+    lines.append(f'🪙 <b>{_amount(buy["tokens"])} LAIN</b>')
     lines.append("🔷 Sender: " + _address(buy["sender"]))
     if buy["receiver"] and buy["receiver"] != buy["sender"]:
         lines.append("👛 Receiver: " + _address(buy["receiver"]))
@@ -361,15 +357,15 @@ async def command(update, context):
     message = update.effective_message
     action = context.args[0].lower() if context.args else "status"
     if chat.type not in ("group", "supergroup"):
-        await message.reply_text("Добавьте бота в группу. Администратор группы включает покупки LAIN командой /buybot on.")
+        await message.reply_text("Add the bot to a group. A group administrator can enable LAIN buy alerts with /buybot on.")
         return
     try:
         member = await context.bot.get_chat_member(chat.id, user.id)
     except TelegramError:
-        await message.reply_text("Не удалось проверить права администратора. Попробуйте ещё раз.")
+        await message.reply_text("Could not verify administrator permissions. Please try again.")
         return
     if member.status not in ("creator", "administrator"):
-        await message.reply_text("Настройки buybot доступны администраторам группы.")
+        await message.reply_text("Only group administrators can change buybot settings.")
         return
     if action not in ("on", "off", "status", "reset", "preview"):
         await message.reply_text("/buybot on · off · status · reset · preview")
@@ -383,7 +379,7 @@ async def command(update, context):
                 raise RuntimeError("sample purchase could not be verified")
             await send_buy(context.bot, chat.id, buy, preview=True)
         except Exception:
-            await message.reply_text("Не удалось загрузить пример покупки из сети. Попробуйте позже.")
+            await message.reply_text("Could not load the sample purchase from the chain. Please try again later.")
         return
     enabled = _kv_get(CHAT_PREFIX + str(chat.id)) == "on"
     if action == "reset" or (action == "on" and not enabled):
@@ -395,18 +391,18 @@ async def command(update, context):
             _kv_set(CHAT_PREFIX + str(chat.id), "on")
             _kv_set(_state_key(chat.id) + ":error", "")
         except Exception:
-            await message.reply_text("Robinhood RPC недоступен. Настройки не изменены; попробуйте позже.")
+            await message.reply_text("Robinhood RPC is unavailable. Settings were not changed. Please try again later.")
             return
     elif action == "off":
         _kv_set(CHAT_PREFIX + str(chat.id), "off")
     enabled = _kv_get(CHAT_PREFIX + str(chat.id)) == "on"
     error = _kv_get(_state_key(chat.id) + ":error") if enabled else None
-    status = f"LAIN buybot: {'включён' if enabled else 'выключен'} в этой группе.\n"
+    status = f"LAIN buybot: {'enabled' if enabled else 'disabled'} in this group.\n"
     if error:
-        status += f"Ошибка последнего опроса: {error}\n"
+        status += f"Last polling error: {error}\n"
     await message.reply_text(
-        status + f"Robinhood Chain · ETH/LAIN · от {MIN_ETH} ETH.\n"
-        "Команды: /buybot on · off · status · reset · preview\n"
-        "После включения публикуются только новые покупки; старая история не рассылается.",
+        status + f"Robinhood Chain · ETH/LAIN · minimum {MIN_ETH} ETH.\n"
+        "Commands: /buybot on · off · status · reset · preview\n"
+        "Only new purchases are announced after enabling alerts. Historical purchases are not replayed.",
         reply_markup=keyboard(),
     )
