@@ -14,9 +14,11 @@ use App\Http\Controllers\Api\WalletDaoVoteController;
 use App\Http\Controllers\Api\WalletLainController;
 use App\Http\Controllers\Api\WalletPostController;
 use App\Http\Controllers\Api\WalletSocialController;
+use App\Http\Controllers\Api\WalletSyncController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\ArenaController;
+use App\Http\Controllers\Auth\TelegramWebAppLoginController;
 use App\Http\Controllers\Auth\TwitterAuthController;
 use App\Http\Controllers\Auth\Web3LoginController;
 use App\Http\Controllers\BoardController;
@@ -276,6 +278,20 @@ Route::prefix('arena')->name('arena.')->group(function () {
 Route::get('leaderboard', LeaderboardController::class)->name('leaderboard');
 
 Route::post('login/web3', Web3LoginController::class)->name('web3.login');
+// Inside the Telegram Mini App: Telegram's signed launch data is the login.
+Route::post('login/telegram-webapp', TelegramWebAppLoginController::class)
+    ->middleware('throttle:20,1')->name('telegram-webapp.login');
+
+/**
+ * The profile's wallet, sealed in the browser (WalletSyncController): the same
+ * phrase on the site, in Telegram and in the apps. Session-bound, because the
+ * subject is the profile and not an address.
+ */
+Route::middleware(['auth', 'throttle:30,1'])->prefix('api/wallet/sync')->name('wallet.sync.')->group(function () {
+    Route::get('/', [WalletSyncController::class, 'show'])->name('show');
+    Route::put('/', [WalletSyncController::class, 'store'])->name('store');
+    Route::delete('/', [WalletSyncController::class, 'destroy'])->name('destroy');
+});
 
 // X (Twitter) OAuth: guests log in / register, signed-in users link the
 // account to their profile.

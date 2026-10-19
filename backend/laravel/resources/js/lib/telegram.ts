@@ -8,10 +8,11 @@
  * main button along the bottom.
  *
  * **Telegram is told nothing.** The SDK is loaded only when the page is
- * actually running inside Telegram, `initData` is never forwarded anywhere, and
- * nothing touches `CloudStorage`: a vault synced through Telegram's servers
- * would be a vault Telegram holds, which is the opposite of the promise this
- * wallet makes. The keys stay in this device's storage, as everywhere else.
+ * actually running inside Telegram, and nothing touches `CloudStorage`: a vault
+ * synced through Telegram's servers would be a vault Telegram holds, which is
+ * the opposite of the promise this wallet makes. `initData` goes to Cyberia
+ * only, as the login for the profile (`lib/wallet/sync.ts`), so the wallet the
+ * profile keeps — sealed under the person's own sync password — can open here.
  *
  * @see https://core.telegram.org/bots/webapps
  */
@@ -46,8 +47,8 @@ export interface TelegramWebApp {
     initData: string;
     /**
      * Only ever read for `start_param`, the campaign payload a Mini App was
-     * opened with. Nothing else in here is touched: `initData` identifies a
-     * Telegram account, and this wallet does not want to know one.
+     * opened with. The signed `initData` above is what identifies the
+     * Telegram account, and it is checked on the server, never trusted here.
      */
     initDataUnsafe?: { start_param?: string };
     version: string;

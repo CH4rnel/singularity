@@ -319,11 +319,7 @@ export {
     storeChatRows,
     unreadChatCount,
 } from '@/lib/wallet/chat';
-export type {
-    ChatPerson,
-    ChatRow,
-    PendingMessage,
-} from '@/lib/wallet/chat';
+export type { ChatPerson, ChatRow, PendingMessage } from '@/lib/wallet/chat';
 export {
     APPROVE_GAS,
     SWAP_GAS_CAP,
@@ -387,14 +383,17 @@ export {
     createMnemonic,
     forgetVault,
     hasVault,
+    installVault,
     isValidMnemonic,
     normalizeMnemonic,
+    openFromSync,
     openUnprotectedVault,
     openVault,
     protectVault,
     readVault,
     saveOpenVault,
     saveVault,
+    sealForSync,
     seedFromMnemonic,
     unsealVault,
     vaultProtection,

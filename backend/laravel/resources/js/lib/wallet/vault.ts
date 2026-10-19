@@ -494,3 +494,66 @@ export const openVault = async (
  */
 export const forgetVault = (storage: VaultStorage = defaultStorage()): void =>
     storage.removeItem(STORAGE_KEY);
+
+/**
+ * The sealed copy kept with the profile (sync), made under the sync password.
+ *
+ * The same record a password-protected vault writes to this device, built in
+ * memory and handed back instead of stored: the server receives ciphertext and
+ * the parameters to derive the key again, never the phrase or the password.
+ */
+export const sealForSync = async (
+    contents: VaultContents,
+    password: string,
+): Promise<SealedVaultRecord> => {
+    if (password.length < 8) {
+        throw new Error('Sync password must be at least 8 characters');
+    }
+
+    const storage = memoryStorage();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await deriveKey(password, salt, PBKDF2_ITERATIONS);
+
+    return (await seal(
+        contents,
+        key,
+        salt,
+        PBKDF2_ITERATIONS,
+        storage,
+    )) as SealedVaultRecord;
+};
+
+/** Open the profile's sealed copy. Throws on a wrong password (GCM tag). */
+export const openFromSync = async (
+    record: SealedVaultRecord,
+    password: string,
+): Promise<VaultContents> => {
+    const storage = memoryStorage();
+
+    storage.setItem(STORAGE_KEY, JSON.stringify(record));
+
+    const opened = await unsealVault(password, storage);
+
+    return {
+        phrase: opened.phrase,
+        accounts: opened.accounts,
+        activeId: opened.activeId,
+        backedUp: opened.backedUp,
+    };
+};
+
+/**
+ * Make a restored wallet this device's vault, with no password on it — the
+ * same state a first launch leaves, holding the profile's phrase and accounts.
+ */
+export const installVault = (
+    contents: VaultContents,
+    storage: VaultStorage = defaultStorage(),
+): OpenedVault => {
+    write(contents, storage);
+
+    return {
+        ...contents,
+        reseal: async (next) => write(next, storage),
+    };
+};

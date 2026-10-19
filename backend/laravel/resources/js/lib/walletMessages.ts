@@ -210,6 +210,30 @@ export const walletMessages: Messages = {
         telegramOfferBody:
             'We’ll write when money arrives, a bridge delivers or a streak is about to end.',
         telegramConnect: 'Connect',
+        syncTitle: 'One wallet everywhere',
+        syncPitch:
+            'Keep this wallet in your profile under a password, and open it on the site, in Telegram and in the apps.',
+        syncOn: 'On. Your profile keeps {address}; open it anywhere you sign in.',
+        syncOther:
+            'Your profile keeps another wallet, {address}. Enter the sync password to open it here.',
+        syncRestored: 'Done — this is your profile’s wallet now.',
+        syncSignIn: 'Sign in with this wallet',
+        syncPasswordNew: 'Sync password',
+        syncPasswordRepeat: 'Repeat the password',
+        syncPasswordHint:
+            'At least 8 characters. We never see it: the wallet is encrypted here, before it is sent. Forget it and your recovery phrase still works.',
+        syncEnable: 'Turn on',
+        syncPassword: 'Sync password',
+        syncRestore: 'Open it here',
+        syncRestoreConfirm: 'Replace and open',
+        syncReplaceWarning:
+            'The wallet on this device ({address}) will be replaced. If it holds money, save its recovery phrase first.',
+        syncShowPhrase: 'Show the phrase',
+        syncDisable: 'Remove from profile',
+        syncKeepThis: 'Keep this device’s wallet in the profile instead',
+        syncPasswordShort: 'The password needs at least 8 characters.',
+        syncPasswordMismatch: 'The passwords don’t match.',
+        syncWrongPassword: 'That isn’t the sync password.',
         telegramDismiss: 'Hide',
         telegramOpened: 'Telegram is opening — press Start in the bot.',
         telegramOpenAgain: 'Open again',
@@ -2306,6 +2330,30 @@ export const walletMessages: Messages = {
         telegramOfferBody:
             'Напишем, когда придут деньги, дойдёт мост или серия будет под угрозой.',
         telegramConnect: 'Подключить',
+        syncTitle: 'Один кошелёк везде',
+        syncPitch:
+            'Сохраните кошелёк в профиле под паролем — и открывайте его на сайте, в Telegram и в приложениях.',
+        syncOn: 'Включено. В профиле хранится {address}; он откроется везде, где вы вошли.',
+        syncOther:
+            'В профиле хранится другой кошелёк — {address}. Введите пароль синхронизации, чтобы открыть его здесь.',
+        syncRestored: 'Готово — теперь здесь кошелёк из вашего профиля.',
+        syncSignIn: 'Войти этим кошельком',
+        syncPasswordNew: 'Пароль синхронизации',
+        syncPasswordRepeat: 'Повторите пароль',
+        syncPasswordHint:
+            'Не короче 8 символов. Мы его не видим: кошелёк шифруется здесь, до отправки. Если забудете — фраза восстановления по-прежнему работает.',
+        syncEnable: 'Включить',
+        syncPassword: 'Пароль синхронизации',
+        syncRestore: 'Открыть здесь',
+        syncRestoreConfirm: 'Заменить и открыть',
+        syncReplaceWarning:
+            'Кошелёк на этом устройстве ({address}) будет заменён. Если на нём есть деньги, сначала сохраните его фразу.',
+        syncShowPhrase: 'Показать фразу',
+        syncDisable: 'Убрать из профиля',
+        syncKeepThis: 'Хранить в профиле кошелёк с этого устройства',
+        syncPasswordShort: 'Пароль — не короче 8 символов.',
+        syncPasswordMismatch: 'Пароли не совпадают.',
+        syncWrongPassword: 'Это не пароль синхронизации.',
         telegramDismiss: 'Скрыть',
         telegramOpened: 'Открывается Telegram — нажмите «Запустить» в боте.',
         telegramOpenAgain: 'Открыть ещё раз',
@@ -4309,6 +4357,30 @@ export const walletMessages: Messages = {
         telegramOfferBody:
             '有钱到账、跨链桥送达或连续签到即将中断时，我们会通知你。',
         telegramConnect: '连接',
+        syncTitle: '处处同一个钱包',
+        syncPitch:
+            '用密码把这个钱包保存在你的账户里，就能在网站、Telegram 和应用中打开它。',
+        syncOn: '已开启。你的账户保存着 {address}，在任何登录的地方都能打开。',
+        syncOther:
+            '你的账户保存着另一个钱包 {address}。输入同步密码即可在这里打开。',
+        syncRestored: '完成——现在这里是你账户中的钱包。',
+        syncSignIn: '用这个钱包登录',
+        syncPasswordNew: '同步密码',
+        syncPasswordRepeat: '再次输入密码',
+        syncPasswordHint:
+            '至少 8 个字符。我们看不到它：钱包在发送前就在这里加密。即使忘记，恢复短语依然有效。',
+        syncEnable: '开启',
+        syncPassword: '同步密码',
+        syncRestore: '在这里打开',
+        syncRestoreConfirm: '替换并打开',
+        syncReplaceWarning:
+            '这台设备上的钱包（{address}）将被替换。如果里面有资金，请先保存它的恢复短语。',
+        syncShowPhrase: '显示短语',
+        syncDisable: '从账户中移除',
+        syncKeepThis: '改为在账户中保存这台设备的钱包',
+        syncPasswordShort: '密码至少需要 8 个字符。',
+        syncPasswordMismatch: '两次输入的密码不一致。',
+        syncWrongPassword: '这不是同步密码。',
         telegramDismiss: '隐藏',
         telegramOpened: '正在打开 Telegram — 在机器人中点击“开始”。',
         telegramOpenAgain: '再次打开',

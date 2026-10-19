@@ -147,6 +147,12 @@ class User extends Authenticatable
         return $this->hasOne(UserStat::class);
     }
 
+    /** The wallet this profile keeps, sealed in the browser (sync). */
+    public function walletSyncBackup(): HasOne
+    {
+        return $this->hasOne(WalletSyncBackup::class);
+    }
+
     public function xpEntries(): HasMany
     {
         return $this->hasMany(XpEntry::class);

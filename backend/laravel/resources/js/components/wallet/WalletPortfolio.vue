@@ -5,6 +5,7 @@ import StockIcon from '@/components/wallet/StockIcon.vue';
 import TxList from '@/components/wallet/TxList.vue';
 import WalletPlaces from '@/components/wallet/WalletPlaces.vue';
 import type { WalletPlace } from '@/components/wallet/WalletPlaces.vue';
+import WalletSync from '@/components/wallet/WalletSync.vue';
 import WalletTelegramLink from '@/components/wallet/WalletTelegramLink.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
@@ -41,6 +42,8 @@ const props = defineProps<{
     /** Chain id → (lowercased contract → USD price). */
     tokenPrices: Record<string, Record<string, number>>;
     online: boolean;
+    /** A profile is signed in — sync can read and store its copy. */
+    authenticated?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -54,6 +57,8 @@ const emit = defineEmits<{
     place: [place: WalletPlace];
     accounts: [];
     security: [];
+    /** Sync put the profile's wallet on this device. */
+    restored: [];
 }>();
 
 const { locale, t } = useLocale(walletMessages);
@@ -568,6 +573,16 @@ const recent = computed(() =>
                 {{ t('swapTitle') }}
             </button>
         </div>
+
+        <WalletSync
+            v-if="!orphaned"
+            :wallet="wallet"
+            :authenticated="authenticated ?? false"
+            :funded="!isEmpty"
+            variant="card"
+            @security="emit('security')"
+            @restored="emit('restored')"
+        />
 
         <WalletTelegramLink v-if="!orphaned" :wallet="wallet" variant="card" />
 

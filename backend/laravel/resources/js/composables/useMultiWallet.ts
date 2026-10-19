@@ -28,10 +28,13 @@ import {
     readNetworkChoices,
     readManualTokens,
     sameToken,
+    installVault,
+    openFromSync,
     openUnprotectedVault,
     protectVault,
     saveOpenVault,
     saveVault,
+    sealForSync,
     seedAccountId,
     seedFromMnemonic,
     seedSource,
@@ -59,6 +62,7 @@ import type {
     ManualToken,
     NetworkChoices,
     OpenedVault,
+    SealedVaultRecord,
     VaultContents,
     VaultProtection,
     WalletAccount,
@@ -563,6 +567,72 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         await vault.reseal(next);
         vault = { ...next, reseal: vault.reseal };
         backedUp.value = true;
+    };
+
+    /**
+     * Sync: the vault sealed under the sync password, for the profile. The
+     * phrase and accounts are sealed here; only the record leaves.
+     */
+    const sealForProfile = async (
+        password: string,
+    ): Promise<SealedVaultRecord> => {
+        if (!vault) {
+            throw new Error('The wallet is not open');
+        }
+
+        return sealForSync(
+            {
+                phrase: vault.phrase,
+                accounts: vault.accounts,
+                activeId: vault.activeId,
+                backedUp: vault.backedUp,
+            },
+            password,
+        );
+    };
+
+    /**
+     * Sync: the address that names this vault — the phrase's own first
+     * Cyberia address, whichever account is active.
+     */
+    const syncAddress = (): string | null => {
+        const primary = vault?.accounts.find(
+            (record) => record.id === PRIMARY_ACCOUNT_ID,
+        );
+
+        if (!vault || !primary) {
+            return null;
+        }
+
+        return (
+            deriveAccounts(vault.phrase, primary).find(
+                (account) => account.chain === 'cyberia',
+            )?.address ?? null
+        );
+    };
+
+    /**
+     * Sync: replace this device's wallet with the profile's. The record is
+     * opened first, so a wrong password changes nothing; the restored vault
+     * is written with no device password, as a first launch leaves one.
+     */
+    const restoreFromProfile = async (
+        record: SealedVaultRecord,
+        password: string,
+    ): Promise<void> => {
+        busy.value = true;
+
+        try {
+            const contents = await openFromSync(record, password);
+
+            vault = installVault(contents);
+            touch();
+            refreshExists();
+            clearReads();
+            load();
+        } finally {
+            busy.value = false;
+        }
     };
 
     const unlock = async (password: string): Promise<void> => {
@@ -1844,6 +1914,9 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         adopt,
         protect,
         markBackedUp,
+        sealForProfile,
+        restoreFromProfile,
+        syncAddress,
         unlock,
         lock,
         touch,

@@ -124,6 +124,14 @@ return [
     // The community bot (`services/telegram-bot`), for links into it.
     'telegram_bot' => [
         'username' => env('TELEGRAM_BOT_USERNAME', 'cyberia_network_bot'),
+        // The numeric half of the bot token before the colon — public, and
+        // all a Mini App's initData needs to be checked without the token:
+        // Telegram signs it with Ed25519 for third parties (Bot API 8.0).
+        'id' => env('TELEGRAM_BOT_ID', '7709137739'),
+        'webapp_public_key' => env(
+            'TELEGRAM_WEBAPP_PUBLIC_KEY',
+            'e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d',
+        ),
     ],
 
     'telegram_ops' => [

@@ -89,6 +89,7 @@ import type { Market } from '@/lib/wallet/markets';
 import { announceWalletEvent } from '@/lib/wallet/notifications';
 import type { PlayerTrack } from '@/lib/wallet/player';
 import type { SwipeIntent } from '@/lib/wallet/swipe';
+import { signInWithTelegram } from '@/lib/wallet/sync';
 import { canStream, torrentBridge } from '@/lib/wallet/torrent';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -1454,7 +1455,27 @@ const trackConnection = (): void => {
     online.value = navigator.onLine;
 };
 
+/**
+ * Inside Telegram the profile signs in by itself: Telegram's signed launch data
+ * is the login, so the wallet the profile keeps (sync) can open here with
+ * nothing but its password.
+ */
+const signInInsideTelegram = async (): Promise<void> => {
+    if (authenticated.value) {
+        return;
+    }
+
+    try {
+        if (await signInWithTelegram()) {
+            router.reload({ only: ['auth'] });
+        }
+    } catch {
+        // No profile is a wallet that still works; sync just isn't offered.
+    }
+};
+
 onMounted(() => {
+    void signInInsideTelegram();
     void startFresh();
     takeSectionRequest();
     takeSwapRequest();
@@ -1937,8 +1958,10 @@ watch(
                             :prices="prices"
                             :token-prices="tokenPrices"
                             :online="online"
+                            :authenticated="authenticated"
                             @open="openChain"
                             @token="openToken"
+                            @restored="load()"
                             @send="openSend()"
                             @swap="openSwap()"
                             @receive="overlay = 'receive'"
@@ -2332,6 +2355,8 @@ watch(
                     <WalletPreferences
                         v-else-if="section === 'preferences'"
                         :wallet="wallet"
+                        :authenticated="authenticated"
+                        @restored="load()"
                         @security="openSection('security')"
                         @accounts="openSection('accounts')"
                         @networks="openSection('networks')"
