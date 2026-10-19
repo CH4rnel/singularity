@@ -253,8 +253,9 @@ class LaunchpadController extends Controller
         abort_if(! $token || ! $token->html_path, 404);
         abort_unless(Storage::disk('public')->exists($token->html_path), 404);
 
-        // The hit counter every homepage in the underground can show.
-        $this->underground->recordHit($token, $request->ip());
+        // The hit counter every homepage in the underground can show. Counting
+        // is decoration: a failure there is reported and the page still loads.
+        rescue(fn () => $this->underground->recordHit($token, $request->ip()));
 
         $html = Storage::disk('public')->get($token->html_path);
 

@@ -153,10 +153,20 @@ class Underground
         $key = 'underground:hit:'.$token->getKey().':'
             .hash('sha256', config('app.key').'|'.$ip.'|'.$day->toDateString());
 
-        if (Cache::add($key, true, $day->copy()->endOfDay())) {
+        if (! Cache::add($key, true, $day->copy()->endOfDay())) {
+            return;
+        }
+
+        try {
             // Through the base query: a hit is not an edit and must not move
             // `updated_at`, which the directory reads as "last changed".
             LaunchpadToken::query()->whereKey($token->getKey())->toBase()->increment('site_hits');
+        } catch (\Throwable $exception) {
+            // Not counted, so not remembered as counted either: the next
+            // visit today gets another chance.
+            Cache::forget($key);
+
+            throw $exception;
         }
     }
 

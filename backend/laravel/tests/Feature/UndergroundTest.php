@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\LaunchpadToken;
+use App\Services\Launchpad\Underground;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
@@ -112,4 +113,17 @@ it('hands the wallet the directory as data', function () {
         ->assertJsonPath('homes.0.counter_url', 'https://underground.cyberia.church/counter/minecraft.svg')
         ->assertJsonPath('lots.0.symbol', 'TOS')
         ->assertJsonPath('lots.0.site_url', null);
+});
+
+it('serves the homepage even when the counter cannot count', function () {
+    $token = LaunchpadToken::factory()->withSite('minecraft')->create();
+    Storage::disk('public')->put($token->html_path, '<h1>blocks</h1>');
+
+    $this->mock(Underground::class)
+        ->shouldReceive('recordHit')
+        ->andThrow(new RuntimeException('no such column: site_hits'));
+
+    $this->get('https://minecraft.cyberia.church/')
+        ->assertOk()
+        ->assertSee('blocks');
 });
