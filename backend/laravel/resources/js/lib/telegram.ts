@@ -170,6 +170,22 @@ export function telegramPlatform(): string | null {
     );
 }
 
+/**
+ * The signed launch data, for the profile login: from the SDK once it has
+ * loaded, else straight from the launch parameters Telegram put in the URL —
+ * which exist from the first frame, before the SDK has even been fetched.
+ */
+export async function telegramInitData(): Promise<string | null> {
+    if (!isTelegramMiniApp()) {
+        return null;
+    }
+
+    const app = await initializeTelegram();
+    const data = app?.initData || launchParams()?.tgWebAppData || '';
+
+    return data !== '' ? data : null;
+}
+
 export function telegramWebApp(): TelegramWebApp | null {
     return window.Telegram?.WebApp ?? null;
 }

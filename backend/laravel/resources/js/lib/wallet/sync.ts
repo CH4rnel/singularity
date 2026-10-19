@@ -1,4 +1,4 @@
-import { isTelegramMiniApp, telegramWebApp } from '@/lib/telegram';
+import { telegramInitData } from '@/lib/telegram';
 import type { SealedVaultRecord } from '@/lib/wallet';
 import { sessionCall } from '@/lib/wallet/session';
 
@@ -40,9 +40,11 @@ export const dropBackup = (): Promise<unknown> =>
  * Returns whether a session now exists.
  */
 export const signInWithTelegram = async (): Promise<boolean> => {
-    const initData = telegramWebApp()?.initData;
+    // Awaited, not read: on mount the SDK is usually still loading, and
+    // reading `initData` then found nothing and gave up without a word.
+    const initData = await telegramInitData();
 
-    if (!isTelegramMiniApp() || !initData) {
+    if (!initData) {
         return false;
     }
 

@@ -31,8 +31,10 @@ const props = withDefaults(
         variant?: 'card' | 'panel';
         /** Whether this device's wallet holds anything (the card's cue). */
         funded?: boolean;
+        /** The wallet the profile signed in with, when it has one. */
+        profileAddress?: string | null;
     }>(),
-    { variant: 'panel', funded: false },
+    { variant: 'panel', funded: false, profileAddress: null },
 );
 
 const emit = defineEmits<{
@@ -58,7 +60,14 @@ const localAddress = computed(() =>
     props.wallet.unlocked.value ? props.wallet.syncAddress() : null,
 );
 
-const state = computed<'signedOut' | 'off' | 'on' | 'other' | 'loading'>(() => {
+const same = (
+    a: string | null | undefined,
+    b: string | null | undefined,
+): boolean => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+
+const state = computed<
+    'signedOut' | 'off' | 'on' | 'other' | 'elsewhere' | 'loading'
+>(() => {
     if (!props.authenticated) {
         return 'signedOut';
     }
@@ -68,13 +77,15 @@ const state = computed<'signedOut' | 'off' | 'on' | 'other' | 'loading'>(() => {
     }
 
     if (backup.value === null) {
-        return 'off';
+        // The profile belongs to a wallet that isn't on this device and hasn't
+        // been stored yet: storing this one would be the wrong way round.
+        return props.profileAddress &&
+            !same(props.profileAddress, localAddress.value)
+            ? 'elsewhere'
+            : 'off';
     }
 
-    return backup.value.address.toLowerCase() ===
-        localAddress.value?.toLowerCase()
-        ? 'on'
-        : 'other';
+    return same(backup.value.address, localAddress.value) ? 'on' : 'other';
 });
 
 const shown = computed(() => {
@@ -84,7 +95,9 @@ const shown = computed(() => {
 
     return (
         state.value === 'other' ||
-        (state.value === 'off' && props.funded) ||
+        state.value === 'elsewhere' ||
+        ((state.value === 'off' || state.value === 'signedOut') &&
+            props.funded) ||
         opened.value
     );
 });
@@ -228,6 +241,11 @@ const disable = (): Promise<void> =>
                             address: shortAddress(backup!.address, 6, 4),
                         })
                     }}</template>
+                    <template v-else-if="state === 'elsewhere'">{{
+                        t('syncElsewhere', {
+                            address: shortAddress(profileAddress ?? '', 6, 4),
+                        })
+                    }}</template>
                     <template v-else>{{ t('syncPitch') }}</template>
                 </span>
             </span>
@@ -326,6 +344,16 @@ const disable = (): Promise<void> =>
                 {{ t('syncKeepThis') }}
             </button>
         </template>
+
+        <button
+            v-if="state === 'elsewhere' && variant === 'panel' && !replacing"
+            type="button"
+            class="cw-ghost"
+            style="align-self: flex-start"
+            @click="replacing = true"
+        >
+            {{ t('syncKeepThis') }}
+        </button>
 
         <button
             v-if="state === 'on' && variant === 'panel'"

@@ -24,6 +24,16 @@ test('the launch parameters are read from the fragment Telegram appends', () => 
     assert.equal(params.tgWebAppVersion, '7.0');
 });
 
+test('the signed launch data comes out of the URL exactly as Telegram signed it', () => {
+    // What the profile login sends: initData decoded once from the fragment,
+    // its own fields still URL-encoded, the signature intact.
+    const initData =
+        'auth_date=1760000000&query_id=AAH&user=%7B%22id%22%3A777%7D&signature=abc-_&hash=ff';
+    const url = `https://cyberia.church/wallet#tgWebAppData=${encodeURIComponent(initData)}&tgWebAppPlatform=ios&tgWebAppVersion=8.0`;
+
+    assert.equal(telegramLaunchParams(url).tgWebAppData, initData);
+});
+
 test('a Mini App opened without initData is still a Mini App', () => {
     // An inline button in a channel launches the app with no user payload; the
     // platform is the parameter every client sends.

@@ -229,6 +229,8 @@ export const walletMessages: Messages = {
         syncOn: 'On. Your profile keeps {address}; open it anywhere you sign in.',
         syncOther:
             'Your profile keeps another wallet, {address}. Enter the sync password to open it here.',
+        syncElsewhere:
+            'Your profile belongs to wallet {address}, which isn’t stored yet. Open the wallet where it lives (the site), turn this on there with a sync password — and it will open here too.',
         syncRestored: 'Done — this is your profile’s wallet now.',
         syncSignIn: 'Sign in with this wallet',
         syncPasswordNew: 'Sync password',
@@ -2363,6 +2365,8 @@ export const walletMessages: Messages = {
         syncOn: 'Включено. В профиле хранится {address}; он откроется везде, где вы вошли.',
         syncOther:
             'В профиле хранится другой кошелёк — {address}. Введите пароль синхронизации, чтобы открыть его здесь.',
+        syncElsewhere:
+            'Ваш профиль — это кошелёк {address}, но он ещё не сохранён. Откройте кошелёк там, где он есть (на сайте), включите там синхронизацию с паролем — и он откроется и здесь.',
         syncRestored: 'Готово — теперь здесь кошелёк из вашего профиля.',
         syncSignIn: 'Войти этим кошельком',
         syncPasswordNew: 'Пароль синхронизации',
@@ -4403,6 +4407,8 @@ export const walletMessages: Messages = {
         syncOn: '已开启。你的账户保存着 {address}，在任何登录的地方都能打开。',
         syncOther:
             '你的账户保存着另一个钱包 {address}。输入同步密码即可在这里打开。',
+        syncElsewhere:
+            '你的账户属于钱包 {address}，但它还没有保存。在它所在的地方（网站）打开钱包并设置同步密码开启同步，它就会在这里打开。',
         syncRestored: '完成——现在这里是你账户中的钱包。',
         syncSignIn: '用这个钱包登录',
         syncPasswordNew: '同步密码',

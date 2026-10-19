@@ -146,6 +146,16 @@ const page = usePage();
 /** Signing in adds only the XMR payout binding; the wallet itself needs none. */
 const authenticated = computed(() => !!page.props.auth?.user);
 
+/** The wallet the signed-in profile belongs to (sync compares against it). */
+const signedInAddress = computed(
+    () =>
+        (
+            page.props.auth?.user as
+                | { wallet_address?: string | null }
+                | undefined
+        )?.wallet_address ?? null,
+);
+
 /**
  * Whether the reader runs the place — the console gate's own flag, shared on
  * every page. It decides one line on the swap screen and nothing else: what a
@@ -1959,6 +1969,7 @@ watch(
                             :token-prices="tokenPrices"
                             :online="online"
                             :authenticated="authenticated"
+                            :profile-address="signedInAddress"
                             @open="openChain"
                             @token="openToken"
                             @restored="load()"
@@ -2356,6 +2367,7 @@ watch(
                         v-else-if="section === 'preferences'"
                         :wallet="wallet"
                         :authenticated="authenticated"
+                        :profile-address="signedInAddress"
                         @restored="load()"
                         @security="openSection('security')"
                         @accounts="openSection('accounts')"

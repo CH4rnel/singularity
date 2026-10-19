@@ -44,6 +44,7 @@ defineProps<{
     /** For sync and the Telegram link; Preferences reads nothing else. */
     wallet?: MultiWallet;
     authenticated?: boolean;
+    profileAddress?: string | null;
 }>();
 
 defineEmits<{
@@ -412,6 +413,7 @@ onBeforeUnmount(unsubscribe);
             v-if="wallet"
             :wallet="wallet"
             :authenticated="authenticated ?? false"
+            :profile-address="profileAddress"
             style="margin-bottom: 18px"
             @security="$emit('security')"
             @restored="$emit('restored')"

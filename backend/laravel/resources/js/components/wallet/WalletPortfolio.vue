@@ -44,6 +44,8 @@ const props = defineProps<{
     online: boolean;
     /** A profile is signed in — sync can read and store its copy. */
     authenticated?: boolean;
+    /** The wallet that profile signed in with, if any. */
+    profileAddress?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -579,6 +581,7 @@ const recent = computed(() =>
             :wallet="wallet"
             :authenticated="authenticated ?? false"
             :funded="!isEmpty"
+            :profile-address="profileAddress"
             variant="card"
             @security="emit('security')"
             @restored="emit('restored')"
