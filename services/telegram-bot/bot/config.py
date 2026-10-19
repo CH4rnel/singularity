@@ -342,6 +342,23 @@ PUMPFUN_TRADE_URL = os.environ.get(
     "PUMPFUN_TRADE_URL", f"https://pump.fun/coin/{CYBER_SOL_MINT}"
 )
 
+# LAIN on Robinhood Chain: read-only Pons v4 buy notifications. Destinations
+# are opted in by a chat administrator with /buybot on, never inferred from
+# the Cyberia announcers' destination. No trading/signing key is used.
+LAIN_BUYBOT_RPC_URLS = tuple(filter(None, (
+    part.strip() for part in os.environ.get(
+        "LAIN_BUYBOT_RPC_URLS",
+        "https://robinhood.drpc.org,https://rpc.mainnet.chain.robinhood.com",
+    ).split(",")
+)))
+LAIN_BUYBOT_POLL_SECONDS = max(10, int(os.environ.get("LAIN_BUYBOT_POLL_SECONDS", "30")))
+LAIN_BUYBOT_CONFIRMATIONS = max(1, int(os.environ.get("LAIN_BUYBOT_CONFIRMATIONS", "64")))
+LAIN_BUYBOT_MIN_ETH = os.environ.get("LAIN_BUYBOT_MIN_ETH", "0.001")
+LAIN_BUYBOT_MAX_AGE_SECONDS = max(60, int(os.environ.get("LAIN_BUYBOT_MAX_AGE_SECONDS", "600")))
+LAIN_BUYBOT_PHOTO_URL = os.environ.get(
+    "LAIN_BUYBOT_PHOTO_URL", "https://cyberia.church/token-icons/lain.jpg"
+).strip()
+
 # Ecosystem links surfaced as inline URL buttons under /start and /help.
 # Defaults derive the marketplace/pixel-battle pages from the project website.
 SWAP_URL = os.environ.get("SWAP_URL", "https://swap.cyberia.church")

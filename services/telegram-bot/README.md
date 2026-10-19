@@ -27,6 +27,7 @@ bot/
   rps.py         rock-paper-scissors duels on that escrow
   slots.py       🎰 slot machine: Telegram's own dice, a per-chat bank
   pumpfun.py     pump.fun buy detection (Solana RPC + market feed) and the post
+  buybot.py      opt-in LAIN/Pons v4 buy cards and colored ecosystem buttons
   announcers.py  background loops (bridge/swap/liquidity/lending/convert/
                  staking/pumpfun/digest/snapshot/whale) + run_snapshot_once
   app.py         build app, register handlers, schedule loops, main()
@@ -81,6 +82,83 @@ A wallet can be created inside the frame as well as imported, with the same
 risk notice, held reveal and backup check the site uses. The one warning added
 there is that the vault lives in Telegram's own storage, which Telegram clears
 without asking — the recovery phrase is what brings it back.
+
+### LAIN buybot (Robinhood Chain)
+
+An administrator adds the existing bot **@cyberia_network_bot** as a group
+administrator with permission to post, then sends `/buybot on` there. No second BotFather token,
+new process, paid model or signing key is needed. Destinations are **off by
+default** and stored in the existing `bot_kv` table. `/buybot off` disables
+only that group's LAIN notices. `/buybot status` shows configuration and any
+last polling error; `/buybot reset` starts at the current confirmed head again.
+Repeated `/buybot on` is idempotent and never skips a pending purchase.
+
+`/buybot preview` sends a card only when an administrator requests it. It
+loads the operator-provided historical transaction from the chain and labels
+the card **PREVIEW · historical transaction**. It does not subscribe the group
+or move its cursor. Tests use the same receipt without contacting Telegram.
+
+This first version watches **one verified pool**, not every venue or chain:
+
+- Chain: Robinhood mainnet, **4663**.
+- Token: `0x2b79a071a75dd40f1aca68146d7978204efd156a` (LAIN, 18 decimals).
+- Manager: `0x8366a39cc670b4001a1121b8f6a443a643e40951`.
+- Native ETH/LAIN pool id: `0x9103c042ae23fbcc5141b202dee6d9016d57b649bdc6e9c2a5764b0ad9f2cf9c`.
+- Reference: [operator's purchase](https://robin.etherscan.io/tx/0x2bb92603b4fe4d41310de00eccedc19f3b7f7ab8faf49aab459bff9700c7933d).
+
+Only successful pool Swap events count: sells, liquidity operations, unrelated
+transfers and net round trips do not become buy alerts. Multiple pool swaps in
+one transaction produce one net card. The sender and main token recipient
+are separate fields. Where token transfers identify a unique recipient with
+at least 90% of the pool output, the card shows the amount actually received
+and the gross output separately. Ambiguous recipients are left unspecified.
+There is no unverified “New Holder” claim. FDV uses the event's post-swap
+price and total supply read at its block; it is **not circulating market cap**.
+USD/FDV are indicative, use the latest optional GeckoTerminal ETH quote and
+are omitted when unavailable. The alert still works without that feed.
+
+The inline URL keyboard uses Telegram's native `style` field (supported by
+the pinned python-telegram-bot 22.7):
+
+| Color | Button | Destination |
+| --- | --- | --- |
+| Blue (`primary`) | Cyberia Wallet | `WALLET_MINI_APP_URL` (our `/wallet`) |
+| Green (`success`) | Lain OS | `https://lain-os.com` |
+| Red (`danger`) | Cyberia Board | `PROJECT_WEBSITE_URL` + `/board` |
+
+Our exchange currently supports v2/v3 and does **not** route this Pons v4
+pool. The wallet button is labelled Wallet, not Buy. The verified transaction
+and pool chart remain linked in the caption. An old Telegram client may show
+the same working buttons without colors. The image reuses our existing Lain
+JPEG; set `LAIN_BUYBOT_PHOTO_URL` to a public JPEG/PNG to change it, or leave it
+empty for text. A rejected photo falls back to text with the same keyboard.
+
+Each group has a durable block/log cursor, initialized at the head with no
+backfill. Defaults: 30-second poll, 64-block confirmation depth, 0.001 ETH
+minimum pool input, 10-minute maximum alert age. RPC requests run off the
+event loop and check chain id; unavailable providers fall back. A changed
+cursor block hash stops that group until `/buybot reset` (which deliberately
+skips the intervening history). Depth reduces shallow reorg exposure; it is
+not L1 finality. An explicit send failure retains the cursor for retry. Telegram
+does not offer an idempotency key: a successful send whose response is lost,
+or a crash before saving its cursor, can still cause a duplicate. No claim of
+exactly-once delivery is made. Failed groups do not block other destinations.
+No RPC or market requests run when every group is opted out. Public RPC and
+price services have availability/rate limits; no paid API is required.
+
+Verify offline:
+
+```bash
+PYTHONPATH=services/telegram-bot DB_PATH=/tmp/bot-tests.sqlite \
+  python -m unittest discover -s services/telegram-bot/tests -p test_buybot.py -v
+```
+
+CI runs each Telegram test file in a separate interpreter because some older
+tests pin process-wide configuration before the bot's first import.
+
+Telegram references: [InlineKeyboardButton](https://core.telegram.org/bots/api#inlinekeyboardbutton),
+[python-telegram-bot 22.7](https://docs.python-telegram-bot.org/en/v22.7/telegram.inlinekeyboardbutton.html).
+Pool event layout: [Uniswap v4 IPoolManager](https://github.com/Uniswap/v4-core/blob/main/src/interfaces/IPoolManager.sol).
 
 ### pump.fun buy bot
 
