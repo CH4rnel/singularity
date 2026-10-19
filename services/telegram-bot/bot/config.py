@@ -358,6 +358,12 @@ LAIN_BUYBOT_MAX_AGE_SECONDS = max(60, int(os.environ.get("LAIN_BUYBOT_MAX_AGE_SE
 LAIN_BUYBOT_PHOTO_URL = os.environ.get(
     "LAIN_BUYBOT_PHOTO_URL", "https://cyberia.church/token-icons/lain-os-buybot.png"
 ).strip()
+LAIN_BUYBOT_PONS_URL = os.environ.get(
+    "LAIN_BUYBOT_PONS_URL",
+    "https://ponsfamily.com/launchpad/0x2b79A071a75dd40f1aca68146d7978204eFD156A",
+)
+LAIN_BUYBOT_X_URL = os.environ.get("LAIN_BUYBOT_X_URL", "https://x.com/lain___os")
+LAIN_BUYBOT_ROADMAP_URL = os.environ.get("LAIN_BUYBOT_ROADMAP_URL", "https://lain-os.com/roadmap")
 
 # Ecosystem links surfaced as inline URL buttons under /start and /help.
 # Defaults derive the marketplace/pixel-battle pages from the project website.

@@ -22,7 +22,8 @@ from bot.config import (
     LAIN_BUYBOT_RPC_URLS, LAIN_BUYBOT_POLL_SECONDS,
     LAIN_BUYBOT_CONFIRMATIONS, LAIN_BUYBOT_MIN_ETH,
     LAIN_BUYBOT_MAX_AGE_SECONDS, LAIN_BUYBOT_PHOTO_URL,
-    PROJECT_WEBSITE_URL, WALLET_MINI_APP_URL,
+    LAIN_BUYBOT_PONS_URL, LAIN_BUYBOT_X_URL, LAIN_BUYBOT_ROADMAP_URL,
+    WALLET_MINI_APP_URL,
 )
 from bot.db import engine, _kv_get, _kv_set
 from bot.pumpfun import _http_json
@@ -135,15 +136,12 @@ def parse_buy(receipt):
 
 
 def keyboard():
-    """URL buttons work in groups too; no web_app or wallet signing here.
-
-    Our exchange currently serves v2/v3, not this Pons v4 pool. The wallet
-    button is deliberately labelled Wallet; it makes no promise of a route.
-    """
+    """LAIN trading and project links; Telegram supplies the button theme."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("👛 Cyberia Wallet", url=WALLET_MINI_APP_URL),
-         InlineKeyboardButton("🧠 Lain OS", url="https://lain-os.com")],
-        [InlineKeyboardButton("💬 Cyberia Board", url=PROJECT_WEBSITE_URL.rstrip("/") + "/board")],
+        [InlineKeyboardButton("Buy on Pons", url=LAIN_BUYBOT_PONS_URL),
+         InlineKeyboardButton("X / Twitter", url=LAIN_BUYBOT_X_URL)],
+        [InlineKeyboardButton("Roadmap", url=LAIN_BUYBOT_ROADMAP_URL),
+         InlineKeyboardButton("🎲 Cyberia Wallet", url=WALLET_MINI_APP_URL)],
     ])
 
 
@@ -159,7 +157,7 @@ def format_buy(buy, eth_usd=None, supply=None, preview=False):
     lines = (["<b>PREVIEW · historical transaction</b>"] if preview else [])
     lines += ["🔹 <b>LAIN Buy!</b> · Robinhood Chain", "",
               "🐋" * min(20, max(1, int(buy["eth"] / Decimal("0.005")))), ""]
-    paid = f'💵 Pool input: <b>{_amount(buy["eth"], 6)} ETH</b>'
+    paid = f'💵 <b>{_amount(buy["eth"], 6)} ETH</b>'
     if eth_usd:
         paid += f' (≈ ${buy["eth"] * eth_usd:,.2f})'
     lines.append(paid)

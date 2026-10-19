@@ -124,13 +124,15 @@ button colors and theme:
 
 | Button | Destination |
 | --- | --- |
-| Cyberia Wallet | `WALLET_MINI_APP_URL` (our `/wallet`) |
-| Lain OS | `https://lain-os.com` |
-| Cyberia Board | `PROJECT_WEBSITE_URL` + `/board` |
+| Buy on Pons | `LAIN_BUYBOT_PONS_URL` (LAIN's token page on `ponsfamily.com`) |
+| X / Twitter | `LAIN_BUYBOT_X_URL` (`https://x.com/lain___os`) |
+| Roadmap | `LAIN_BUYBOT_ROADMAP_URL` (`https://lain-os.com/roadmap`) |
+| 🎲 Cyberia Wallet | `WALLET_MINI_APP_URL` (our `/wallet`) |
 
-Our exchange currently supports v2/v3 and does **not** route this Pons v4
-pool. The wallet button is labelled Wallet, not Buy. The verified transaction
-and pool chart remain linked in the caption. The image uses the founder-provided
+The trading button opens LAIN's page on Pons; the wallet opens Cyberia Wallet.
+The payment line contains only the ETH amount and optional approximate USD
+value. The verified transaction and pool chart remain linked in the caption.
+The image uses the founder-provided
 Lain OS logo at `/token-icons/lain-os-buybot.png`, preserved unchanged. Set
 `LAIN_BUYBOT_PHOTO_URL` to a public JPEG/PNG to change it, or leave it
 empty for text. A rejected photo falls back to text with the same keyboard.

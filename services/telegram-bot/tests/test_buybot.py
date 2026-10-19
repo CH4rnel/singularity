@@ -78,14 +78,17 @@ class BuyParserTests(unittest.TestCase):
 
 
 class CardTests(unittest.TestCase):
-    def test_buttons_inherit_telegram_theme_and_only_link_to_owned_destinations(self):
+    def test_buttons_inherit_telegram_theme_and_link_to_lain_trading_and_project_pages(self):
         rows = buybot.keyboard().to_dict()["inline_keyboard"]
         self.assertTrue(all("style" not in b for row in rows for b in row))
-        self.assertEqual(rows[0][0]["url"], "https://cyberia.church/wallet")
-        self.assertEqual(rows[0][1]["url"], "https://lain-os.com")
-        self.assertEqual(rows[1][0]["url"], "https://cyberia.church/board")
+        self.assertEqual(rows[0][0]["url"],
+                         "https://ponsfamily.com/launchpad/0x2b79A071a75dd40f1aca68146d7978204eFD156A")
+        self.assertEqual(rows[0][1]["url"], "https://x.com/lain___os")
+        self.assertEqual(rows[1][0]["url"], "https://lain-os.com/roadmap")
+        self.assertEqual(rows[1][1]["url"], "https://cyberia.church/wallet")
+        self.assertEqual(rows[1][1]["text"], "🎲 Cyberia Wallet")
         self.assertTrue(all("web_app" not in b for row in rows for b in row))
-        self.assertNotIn("Buy", rows[0][0]["text"])  # no supported Pons route yet
+        self.assertNotIn("Buy", rows[1][1]["text"])  # wallet is not a Pons trading route
 
     def test_caption_fits_photo_and_never_invents_holder_or_market_cap(self):
         caption = buybot.format_buy(buybot.parse_buy(RECEIPT), Decimal("2358.8"), Decimal(10**9))
@@ -99,6 +102,8 @@ class CardTests(unittest.TestCase):
         self.assertNotIn("Market Cap", caption)
         self.assertNotIn("New Holder", caption)
         self.assertIn("latest ETH quote", caption)
+        self.assertIn("💵 <b>0.021086 ETH</b> (≈ $49.74)", caption)
+        self.assertNotIn("Pool input:", caption)
 
     def test_missing_prices_leave_only_verified_amounts(self):
         caption = buybot.format_buy(buybot.parse_buy(RECEIPT))
