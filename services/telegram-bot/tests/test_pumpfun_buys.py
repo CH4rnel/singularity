@@ -357,6 +357,17 @@ class FormatBuyTest(unittest.TestCase):
 
 
 class PhotoCardTest(unittest.TestCase):
+    def test_feed_fdv_is_distinct_from_circulating_market_cap(self):
+        pair = {"chainId": "solana", "baseToken": {"address": MINT},
+                "quoteToken": {"address": WSOL}, "pairAddress": POOL,
+                "priceUsd": "0.0001", "priceNative": "0.000001",
+                "fdv": 100000, "marketCap": 80000}
+        with patch.object(pumpfun, "_market_cache", None), \
+                patch.object(pumpfun, "_http_json", return_value={"pairs": [pair]}):
+            market = pumpfun.market_snapshot(MINT)
+        self.assertEqual(market["fdv"], 100000)
+        self.assertEqual(market["market_cap"], 80000)
+
     def test_theme_buttons_link_to_cyberia_and_the_correct_solana_mint(self):
         rows = pumpfun.keyboard().to_dict()["inline_keyboard"]
         self.assertEqual(rows[0][0]["url"], f"https://pump.fun/coin/{MINT}")

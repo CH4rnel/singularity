@@ -134,6 +134,7 @@ def market_snapshot(mint: str = CYBER_SOL_MINT) -> dict | None:
         "sol_usd": price_usd / price_native,
         "price_usd": price_usd,
         "market_cap": _as_float(best.get("marketCap")),
+        "fdv": _as_float(best.get("fdv")),
     }
     _market_fetched_at = now
     return _market_cache

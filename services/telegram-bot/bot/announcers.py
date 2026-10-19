@@ -924,7 +924,7 @@ async def _announce_pumpfun_tick(bot) -> None:
         # in when the reserves or the supply could not be read.
         cap = pumpfun.market_cap_after(buy, market["sol_usd"], supply)
         if cap is None:
-            cap = market.get("market_cap")
+            cap = market.get("fdv")
 
         try:
             await pumpfun.send_buy(bot, PUMPFUN_ANNOUNCE_CHAT, buy, usd, cap)
