@@ -7,7 +7,11 @@ import WalletTelegramLink from '@/components/wallet/WalletTelegramLink.vue';
 import { LOCALE_LABELS, useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { WALLET_MODES, useWalletMode } from '@/composables/useWalletMode';
-import { WALLET_THEMES, useWalletTheme } from '@/composables/useWalletTheme';
+import {
+    WALLET_THEMES,
+    setThemeFile,
+    useWalletTheme,
+} from '@/composables/useWalletTheme';
 import {
     hasNativeTray,
     nativeShell,
@@ -26,6 +30,14 @@ import {
 } from '@/lib/wallet/notifications';
 import { disablePush, enablePush, pushState } from '@/lib/wallet/push';
 import type { PushState } from '@/lib/wallet/push';
+import { CUSTOM_PALETTE, WALLET_PALETTES } from '@/lib/wallet/theme';
+import {
+    BUILT_IN_THEME_FILES,
+    FILE_PALETTE,
+    THEME_TEMPLATE_URL,
+    builtInThemeUrl,
+    parseThemeFile,
+} from '@/lib/wallet/themeFile';
 import { walletMessages } from '@/lib/walletMessages';
 
 defineProps<{
@@ -53,7 +65,98 @@ const { t, locale, available, setLocale } = useLocale(walletMessages);
  * rather than as a cycle — a button that only shows the next value makes you
  * press it twice to find out what the third one was.
  */
-const { theme } = useWalletTheme();
+const { theme, palette, themeFile } = useWalletTheme();
+
+/**
+ * Looks: the wallet's palettes, the theme files it ships, and one CSS file of
+ * the person's own (`lib/wallet/themeFile.ts` — variables only).
+ */
+type LookOption = { id: string; label: string };
+
+const looks = computed<LookOption[]>(() => [
+    ...WALLET_PALETTES.filter((entry) => entry.id !== CUSTOM_PALETTE).map(
+        (entry) => ({ id: entry.id, label: t(entry.label) }),
+    ),
+    ...BUILT_IN_THEME_FILES.map((file) => ({
+        id: `file:${file.id}`,
+        label: file.name,
+    })),
+    ...(themeFile.value && themeFile.value.source === null
+        ? [{ id: 'file:own', label: themeFile.value.name }]
+        : []),
+]);
+
+const activeLook = computed(() => {
+    if (palette.value !== FILE_PALETTE) {
+        return palette.value;
+    }
+
+    return `file:${themeFile.value?.source ?? 'own'}`;
+});
+
+const lookError = ref<string | null>(null);
+const lookSkipped = ref<string[]>([]);
+
+const chooseLook = async (id: string): Promise<void> => {
+    lookError.value = null;
+    lookSkipped.value = [];
+
+    if (!id.startsWith('file:')) {
+        palette.value = id;
+
+        return;
+    }
+
+    const source = id.slice('file:'.length);
+
+    if (source !== 'own') {
+        try {
+            const response = await fetch(builtInThemeUrl(source));
+            const css = await response.text();
+            const name =
+                BUILT_IN_THEME_FILES.find((file) => file.id === source)?.name ??
+                source;
+
+            setThemeFile({ source, css, name });
+        } catch {
+            lookError.value = t('themeFileUnreachable');
+
+            return;
+        }
+    }
+
+    palette.value = FILE_PALETTE;
+};
+
+const loadThemeFile = async (event: Event): Promise<void> => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    input.value = '';
+    lookError.value = null;
+    lookSkipped.value = [];
+
+    if (!file) {
+        return;
+    }
+
+    const css = await file.text();
+    const parsed = parseThemeFile(css, file.name.replace(/\.css$/i, ''));
+
+    if (
+        Object.keys(parsed.base).length === 0 &&
+        Object.keys(parsed.light).length === 0
+    ) {
+        lookError.value = t('themeFileEmpty');
+        lookSkipped.value = parsed.skipped;
+
+        return;
+    }
+
+    setThemeFile({ source: null, css, name: parsed.name });
+    lookSkipped.value = parsed.skipped;
+    palette.value = FILE_PALETTE;
+};
 const { mode } = useWalletMode();
 
 const modeLabel = (option: (typeof WALLET_MODES)[number]): string =>
@@ -371,6 +474,63 @@ onBeforeUnmount(unsubscribe);
                     />
                 </button>
             </div>
+
+            <div class="cw-label" style="margin: 18px 0 9px">
+                {{ t('preferencesLook') }}
+            </div>
+            <div class="cw-seg">
+                <button
+                    v-for="option in looks"
+                    :key="option.id"
+                    type="button"
+                    class="cw-seg-item"
+                    :aria-pressed="activeLook === option.id"
+                    @click="chooseLook(option.id)"
+                >
+                    {{ option.label }}
+                </button>
+            </div>
+            <div
+                style="
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-top: 10px;
+                "
+            >
+                <label class="cw-ghost" style="cursor: pointer">
+                    {{ t('themeFileLoad') }}
+                    <input
+                        type="file"
+                        accept=".css,text/css"
+                        style="display: none"
+                        @change="loadThemeFile"
+                    />
+                </label>
+                <a
+                    class="cw-ghost"
+                    :href="THEME_TEMPLATE_URL"
+                    download="cyberia-wallet-theme.css"
+                    style="text-decoration: none"
+                    >{{ t('themeFileTemplate') }}</a
+                >
+            </div>
+            <span class="cw-hint" style="margin-top: 8px">{{
+                t('themeFileHint')
+            }}</span>
+            <span
+                v-if="lookError"
+                class="cw-hint"
+                style="margin-top: 6px; color: var(--cw-bad-soft)"
+                >{{ lookError }}</span
+            >
+            <span
+                v-if="lookSkipped.length > 0"
+                class="cw-hint"
+                style="margin-top: 6px; color: var(--cw-pending)"
+                >{{ t('themeFileSkipped', { count: lookSkipped.length }) }}
+                {{ lookSkipped.slice(0, 3).join(' · ') }}</span
+            >
 
             <div class="cw-label" style="margin: 18px 0 9px">
                 {{ t('preferencesLanguage') }}

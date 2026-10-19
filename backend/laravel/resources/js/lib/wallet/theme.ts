@@ -1,3 +1,5 @@
+import { FILE_PALETTE } from '@/lib/wallet/themeFile';
+
 /**
  * Palettes: the wallet's colours as a choice rather than as a constant.
  *
@@ -625,6 +627,7 @@ export const paletteCss = (custom: CustomTheme | null): string => {
 
 const isPaletteId = (value: unknown): boolean =>
     value === CUSTOM_PALETTE ||
+    value === FILE_PALETTE ||
     WALLET_PALETTES.some((palette) => palette.id === value);
 
 export const readPalette = (): string => {

@@ -1,0 +1,65 @@
+/* Theme: Neon */
+/*
+ * The wallet's first look: a console of hairlines on near-black, one cyan
+ * accent, mono capitals and a scan line. Dark in both faces.
+ *
+ * A theme file sets the wallet's own variables (--cw-*) on `.cw`, and the
+ * light face's on `.cw[data-cw-theme='light']`. Nothing else in a file is
+ * applied — see template.css for every variable there is.
+ */
+.cw {
+    --cw-canvas: #05070a;
+    --cw-app: #0a0d11;
+    --cw-surface: #0f1318;
+    --cw-raised: #161c22;
+    --cw-panel: #0c1014;
+    --cw-sunken: #12161b;
+    --cw-elevated: #181d23;
+    --cw-well: #1a2027;
+    --cw-input-bg: #0b0f13;
+    --cw-hairline: #262c33;
+    --cw-line: #242a31;
+    --cw-line-strong: #2e353d;
+    --cw-border: #3f4954;
+    --cw-border-soft: #333b44;
+    --cw-border-hover: #6a7785;
+
+    --cw-fainter: #7b848d;
+    --cw-faint: #b4bdc7;
+    --cw-dim: #b9c2cc;
+    --cw-muted: #bec7d1;
+    --cw-body: #e4eaf0;
+    --cw-text: #f0f4f8;
+    --cw-bright: #fbfdff;
+
+    --cw-accent: #2fe9e0;
+    --cw-accent-hover: #5cf2eb;
+    --cw-accent-ink: #04191a;
+    --cw-accent-tint: rgba(47, 233, 224, 0.05);
+    --cw-net-cyberia: #2fe9e0;
+
+    --cw-ok: #5bd6a0;
+    --cw-pending: #e8b44a;
+    --cw-bad: #ff5c68;
+    --cw-bad-soft: #ff9aa2;
+    --cw-pending-soft: #d9c08a;
+
+    --cw-grid: rgba(255, 255, 255, 0.028);
+    --cw-raster-ink: rgba(255, 255, 255, 0.062);
+    --cw-scan-ink: rgba(47, 233, 224, 0.035);
+    --cw-atmosphere: block;
+
+    --cw-sans: 'Space Grotesk', Manrope, ui-sans-serif, system-ui, sans-serif;
+    --cw-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+    --cw-label-font: 'IBM Plex Mono', ui-monospace, monospace;
+    --cw-label-case: uppercase;
+    --cw-label-tracking: 0.07em;
+
+    --cw-radius-shell: 8px;
+    --cw-radius-sheet: 12px;
+    --cw-radius-card: 5px;
+    --cw-radius-control: 4px;
+    --cw-radius-field: 4px;
+    --cw-radius-small: 3px;
+    --cw-radius-pill: 3px;
+}

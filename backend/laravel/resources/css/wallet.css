@@ -156,6 +156,23 @@
     --cw-mono: Manrope, ui-sans-serif, system-ui, sans-serif;
     --cw-code: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
+    /*
+     * Shape, set here so a theme file can reshape the wallet as well as
+     * repaint it (`lib/wallet/themeFile.ts`): corner radii, how labels are
+     * cased and spaced, and whether the scan line and raster are drawn.
+     */
+    --cw-radius-shell: 20px;
+    --cw-radius-sheet: 24px;
+    --cw-radius-card: 18px;
+    --cw-radius-control: 16px;
+    --cw-radius-field: 14px;
+    --cw-radius-small: 10px;
+    --cw-radius-pill: 999px;
+    --cw-label-font: var(--cw-sans);
+    --cw-label-case: none;
+    --cw-label-tracking: 0;
+    --cw-atmosphere: none;
+
     color: var(--cw-text);
     font-family: var(--cw-sans);
     -webkit-font-smoothing: antialiased;
@@ -2864,8 +2881,7 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-shell {
     border-color: transparent;
-    border-radius: 20px;
-    background-image: none;
+    border-radius: var(--cw-radius-shell);
 }
 
 .cw-shell-native {
@@ -2874,7 +2890,7 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-raster,
 .cw-scan {
-    display: none;
+    display: var(--cw-atmosphere);
 }
 
 .cw-addr,
@@ -2883,9 +2899,9 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 .cw-label {
-    font: 600 13px/1.3 var(--cw-sans);
-    letter-spacing: 0;
-    text-transform: none;
+    font: 600 13px/1.3 var(--cw-label-font);
+    letter-spacing: var(--cw-label-tracking);
+    text-transform: var(--cw-label-case);
 }
 
 .cw-num {
@@ -2893,7 +2909,7 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 .cw-total {
-    font: 700 46px/1 var(--cw-sans);
+    font: 700 46px/1 var(--cw-mono);
     letter-spacing: -0.03em;
 }
 
@@ -2902,7 +2918,7 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 .cw-btn {
-    border-radius: 16px;
+    border-radius: var(--cw-radius-control);
     font-weight: 700;
 }
 
@@ -2924,21 +2940,21 @@ html[data-app-window]:has(.cw-frame) {
 .cw-ghost,
 .cw-ghost-dashed {
     border-color: transparent;
-    border-radius: 999px;
+    border-radius: var(--cw-radius-pill);
     background: var(--cw-raised);
-    font: 600 14px/1 var(--cw-sans);
-    letter-spacing: 0;
-    text-transform: none;
+    font: 600 14px/1 var(--cw-label-font);
+    letter-spacing: var(--cw-label-tracking);
+    text-transform: var(--cw-label-case);
 }
 
 .cw-back {
-    font: 600 15px/1 var(--cw-sans);
-    letter-spacing: 0;
+    font: 600 15px/1 var(--cw-label-font);
+    letter-spacing: var(--cw-label-tracking);
 }
 
 .cw-icon-btn {
     border-color: transparent;
-    border-radius: 999px;
+    border-radius: var(--cw-radius-pill);
     background: var(--cw-raised);
 }
 
@@ -2949,7 +2965,7 @@ html[data-app-window]:has(.cw-frame) {
 .cw-input,
 .cw-textarea {
     border-color: transparent;
-    border-radius: 14px;
+    border-radius: var(--cw-radius-field);
     background: var(--cw-raised);
 }
 
@@ -2960,7 +2976,7 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-card {
     border-color: transparent;
-    border-radius: 18px;
+    border-radius: var(--cw-radius-card);
 }
 
 .cw-card-button:hover {
@@ -2974,7 +2990,7 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-note {
     border-color: transparent;
-    border-radius: 16px;
+    border-radius: var(--cw-radius-control);
 }
 
 .cw-note::before {
@@ -2987,7 +3003,7 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-chip {
     border-color: transparent;
-    border-radius: 999px;
+    border-radius: var(--cw-radius-pill);
     background: var(--cw-raised);
 }
 
@@ -3000,27 +3016,27 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 .cw-chip-sub {
-    letter-spacing: 0;
-    text-transform: none;
+    letter-spacing: var(--cw-label-tracking);
+    text-transform: var(--cw-label-case);
 }
 
 .cw-pick {
-    border-radius: 14px;
+    border-radius: var(--cw-radius-field);
 }
 
 .cw-seg {
     gap: 4px;
     padding: 4px;
     border: 0;
-    border-radius: 14px;
+    border-radius: var(--cw-radius-field);
     background: var(--cw-sunken);
 }
 
 .cw-seg-item {
-    border-radius: 10px;
+    border-radius: var(--cw-radius-small);
     background: transparent;
-    font: 600 14px/1 var(--cw-sans);
-    letter-spacing: 0;
+    font: 600 14px/1 var(--cw-label-font);
+    letter-spacing: var(--cw-label-tracking);
 }
 
 .cw-seg-item[aria-pressed='true'] {
@@ -3037,7 +3053,7 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-rail-item {
     border-left: 0;
-    border-radius: 12px;
+    border-radius: var(--cw-radius-small);
 }
 
 .cw-rail-item[aria-current='page'] {
@@ -3053,8 +3069,8 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-tab {
     border-top: 0;
-    font: 600 11px/1 var(--cw-sans);
-    letter-spacing: 0;
+    font: 600 11px/1 var(--cw-label-font);
+    letter-spacing: var(--cw-label-tracking);
 }
 
 .cw-tab[aria-current='page'] {
@@ -3070,7 +3086,7 @@ html[data-app-window]:has(.cw-frame) {
 }
 
 .cw-quick-item {
-    border-radius: 16px;
+    border-radius: var(--cw-radius-control);
     background: var(--cw-surface);
     font-weight: 600;
 }
@@ -3082,12 +3098,12 @@ html[data-app-window]:has(.cw-frame) {
 
 .cw-sheet-panel {
     border-top: 0;
-    border-radius: 24px 24px 0 0;
+    border-radius: var(--cw-radius-sheet) var(--cw-radius-sheet) 0 0;
 }
 
 .cw-badge,
 .cw-prov {
-    border-radius: 999px;
+    border-radius: var(--cw-radius-pill);
 }
 
 /* The offer to link Telegram, between the actions and the holdings. */
@@ -3105,7 +3121,7 @@ html[data-app-window]:has(.cw-frame) {
     gap: 14px;
     padding: 12px 14px;
     border: 0;
-    border-radius: 18px;
+    border-radius: var(--cw-radius-card);
     background: transparent;
     color: var(--cw-text);
     cursor: pointer;

@@ -1,0 +1,85 @@
+/* Theme: My theme */
+/*
+ * A Cyberia Wallet theme. Copy this file, change the values, and choose it in
+ * Preferences → Appearance → "Theme from a file".
+ *
+ * Rules:
+ *   - `.cw { … }` sets both faces; `.cw[data-cw-theme='light'] { … }` sets the
+ *     light face on top of it. Leave a variable out to keep the wallet's own.
+ *   - Only variables that start with --cw- are applied. Selectors, url(),
+ *     @import and anything else are skipped: a theme can repaint and reshape
+ *     the wallet, never hide or rewrite what it says.
+ *   - Fonts must already be installed or be one the wallet loads: Manrope,
+ *     Space Grotesk, Archivo, IBM Plex Mono.
+ *   - Keep text readable: quiet text (faint/dim/muted) should stay at about
+ *     8:1 against the grounds, the wallet's own themes do.
+ *
+ * The values below are the wallet's dark defaults.
+ */
+.cw {
+    /* Grounds, from the outermost in. */
+    --cw-canvas: #0b0c10;
+    --cw-app: #111318;
+    --cw-surface: #191b22;
+    --cw-raised: #22252e;
+    --cw-panel: #111318;
+    --cw-sunken: #1d2028;
+    --cw-elevated: #23262f;
+    --cw-well: #1f222a;
+    --cw-input-bg: #15171d;
+
+    /* Lines. */
+    --cw-hairline: #2c303a;
+    --cw-line: #22252d;
+    --cw-line-strong: #30343e;
+    --cw-border: #444a57;
+    --cw-border-soft: #2e323c;
+    --cw-border-hover: #59606e;
+
+    /* Ink, quietest to loudest. `fainter` is never text. */
+    --cw-fainter: #7b848d;
+    --cw-faint: #bac2cc;
+    --cw-dim: #bdc5cf;
+    --cw-muted: #c2cad4;
+    --cw-body: #e4eaf0;
+    --cw-text: #f0f4f8;
+    --cw-bright: #fbfdff;
+
+    /* The one accent: primary buttons, the current tab, links. */
+    --cw-accent: #72dccf;
+    --cw-accent-hover: #8fe5da;
+    --cw-accent-ink: #062420;
+    --cw-accent-tint: rgba(114, 220, 207, 0.08);
+
+    /* States — keep them green, amber and red: they mean something. */
+    --cw-ok: #5bd6a0;
+    --cw-pending: #e8b44a;
+    --cw-bad: #ff5c68;
+    --cw-bad-soft: #ff9aa2;
+
+    /* Type. */
+    --cw-sans: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --cw-mono: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --cw-code: 'IBM Plex Mono', ui-monospace, monospace;
+    --cw-label-font: Manrope, ui-sans-serif, sans-serif;
+    --cw-label-case: none;
+    --cw-label-tracking: 0;
+
+    /* Shape. */
+    --cw-radius-shell: 20px;
+    --cw-radius-sheet: 24px;
+    --cw-radius-card: 18px;
+    --cw-radius-control: 16px;
+    --cw-radius-field: 14px;
+    --cw-radius-small: 10px;
+    --cw-radius-pill: 999px;
+
+    /* Atmosphere: `block` draws the grid's scan line and raster. */
+    --cw-grid: transparent;
+    --cw-atmosphere: none;
+}
+
+.cw[data-cw-theme='light'] {
+    /* Light-face overrides go here, e.g.: */
+    /* --cw-accent: #0f766e; */
+}

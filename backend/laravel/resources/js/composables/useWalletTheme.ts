@@ -10,6 +10,13 @@ import {
     writePalette,
 } from '@/lib/wallet/theme';
 import type { CustomTheme } from '@/lib/wallet/theme';
+import {
+    parseThemeFile,
+    readThemeFile,
+    themeFileCss,
+    writeThemeFile,
+} from '@/lib/wallet/themeFile';
+import type { StoredThemeFile } from '@/lib/wallet/themeFile';
 
 export const WALLET_THEMES = ['system', 'dark', 'light'] as const;
 
@@ -95,6 +102,11 @@ const custom = ref<CustomTheme | null>(
     typeof window === 'undefined' ? null : readCustomTheme(),
 );
 
+/** The theme file in use (palette `file`): a built-in one or the person's. */
+const themeFile = ref<StoredThemeFile | null>(
+    typeof window === 'undefined' ? null : readThemeFile(),
+);
+
 watch(palette, writePalette);
 
 /**
@@ -113,7 +125,14 @@ if (typeof document !== 'undefined') {
     document.head.append(sheet);
 
     watchEffect(() => {
-        sheet.textContent = paletteCss(custom.value);
+        sheet.textContent = [
+            paletteCss(custom.value),
+            themeFileCss(
+                themeFile.value
+                    ? parseThemeFile(themeFile.value.css, themeFile.value.name)
+                    : null,
+            ),
+        ].join('\n\n');
     });
 }
 
@@ -156,6 +175,12 @@ watch(theme, (next) => {
  * being written and the person is still free to walk away on a palette they
  * already had.
  */
+/** Use a theme file, or drop the stored one with null. */
+export function setThemeFile(next: StoredThemeFile | null): void {
+    themeFile.value = next;
+    writeThemeFile(next);
+}
+
 export function setCustomTheme(next: CustomTheme): void {
     custom.value = next;
     writeCustomTheme(next);
@@ -169,5 +194,5 @@ export function setCustomTheme(next: CustomTheme): void {
  * definition of the same setting waiting to disagree with the first.
  */
 export function useWalletTheme() {
-    return { theme, scheme, palette, custom, setCustomTheme };
+    return { theme, scheme, palette, custom, setCustomTheme, themeFile };
 }
