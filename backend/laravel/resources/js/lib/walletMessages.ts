@@ -645,6 +645,65 @@ export const walletMessages: Messages = {
         dailyLedgerNote:
             'One ledger: everything you do on Cyberia — here, on the site, on chain — pays into the same experience the profile page shows. Nothing on this screen is a second score.',
         tileDailyHint: 'Streak · quests · what today pays',
+        layersDoor: 'For developers',
+        layersVersionLine: 'Cyberia Wallet · layer 01',
+        layersTapsLeft: '{count} more…',
+        layersSevenTaps:
+            'Protocol seven. Type it into the terminal, two layers down.',
+        layersLayer: 'Layer {n}',
+        layers02Body:
+            'Nothing here is needed to use the wallet. It gets stranger further down.',
+        layersProgress: 'Progress',
+        layersProgressAnon:
+            'Progress belongs to an account. Sign in with this wallet — it is a signature, not a payment.',
+        layersProgressOpen: 'Quests, streak and the board',
+        layersFound: 'found {found} of {total}',
+        layersFresh: '+{xp} XP · found: {title}',
+        layersExperimentsDoor: 'Experiments',
+        layersFrameProbe: 'Window diagnostics',
+        layersRefresh: 'refresh',
+        layers03Body:
+            'Switches that do nothing useful. Each one asks for a level or a find. They stay on this device.',
+        xCrt: 'Tube',
+        xCrtHint: 'Scanlines and the flicker of an old monitor.',
+        xRain: 'Wired rain',
+        xRainHint: 'Glyphs falling behind every screen.',
+        xWhispers: 'Whispers',
+        xWhispersHint:
+            'Lines from the Wired, now and then. Some of them are hints.',
+        xGlitch: 'Glitch',
+        xGlitchHint: 'Headings and the balance lose their signal for a moment.',
+        xPsyche: 'Psyche processor',
+        xPsycheHint: 'Colours drift, slowly, forever.',
+        xInvert: 'Wrong side',
+        xInvertHint: 'The wallet, inside out.',
+        layersNeedsLevel: 'Opens at level {level}',
+        layersNeedsFind: 'Needs a find: {hint}',
+        layersTerminal: 'Terminal',
+        layersTerminalHint: 'type help',
+        layersHelp:
+            'help — this\nls, cat <file> — look around\nwhoami — who is asking\ncd gallery — layer 07\nanything else is a guess',
+        layersReadme:
+            'Words are hidden in the wallet, on the site and in the pictures.\nType one here. If it is real, the Wired answers.',
+        layersAccepted: 'accepted · {title} · +{xp} XP',
+        layersAlready: 'already yours · {title}',
+        layersSignInToKeep:
+            'sign in with this wallet so the Wired remembers what you find.',
+        layersGalleryLocked: 'permission denied: level {level}',
+        layersFinds: 'Finds',
+        layersGalleryDoor: 'Gallery',
+        layersGalleryLockedNote: 'Opens at level {level}',
+        layers07Body:
+            'Net art drawn by code. Every piece has endless editions — the number is the seed. Mint the one you like as an NFT on Cyberia.',
+        layersEdition: 'Edition #{seed}',
+        layersAnother: 'Another edition',
+        layersSavePng: 'Save PNG',
+        layersMint: 'Mint as NFT',
+        layersMinting: 'Pinning…',
+        layersMintOff:
+            'Minting needs IPFS, which is off on this server. The PNG is yours either way.',
+        layersNftDescription:
+            '{title}, edition #{seed}. Generative net art from layer 07 of the Cyberia Wallet.',
 
         gasStation: 'Gas station',
         gasStationBody:
@@ -2753,6 +2812,65 @@ export const walletMessages: Messages = {
         dailyLedgerNote:
             'Один журнал: всё, что вы делаете в Cyberia — здесь, на сайте, в цепи — идёт в тот же опыт, который показывает страница профиля. Ничего на этом экране не является вторым счётом.',
         tileDailyHint: 'Серия · задания · чем оплачивается день',
+        layersDoor: 'Для разработчиков',
+        layersVersionLine: 'Cyberia Wallet · слой 01',
+        layersTapsLeft: 'Ещё {count}…',
+        layersSevenTaps:
+            'Protocol seven. Введи это в терминал двумя слоями ниже.',
+        layersLayer: 'Слой {n}',
+        layers02Body:
+            'Ничего отсюда не нужно, чтобы пользоваться кошельком. Дальше вниз — страннее.',
+        layersProgress: 'Прокачка',
+        layersProgressAnon:
+            'Прокачка привязана к аккаунту. Войдите этим кошельком — это подпись, а не платёж.',
+        layersProgressOpen: 'Задания, серия и рейтинг',
+        layersFound: 'найдено {found} из {total}',
+        layersFresh: '+{xp} XP · найдено: {title}',
+        layersExperimentsDoor: 'Эксперименты',
+        layersFrameProbe: 'Диагностика окна',
+        layersRefresh: 'обновить',
+        layers03Body:
+            'Переключатели, от которых нет никакой пользы. Каждый просит уровень или находку. Всё остаётся на этом устройстве.',
+        xCrt: 'Кинескоп',
+        xCrtHint: 'Строки развёртки и мерцание старого монитора.',
+        xRain: 'Дождь из Wired',
+        xRainHint: 'Символы, падающие за каждым экраном.',
+        xWhispers: 'Шёпот',
+        xWhispersHint:
+            'Строчки из Wired, время от времени. Некоторые из них — подсказки.',
+        xGlitch: 'Сбой',
+        xGlitchHint: 'Заголовки и баланс на миг теряют сигнал.',
+        xPsyche: 'Процессор «Психея»',
+        xPsycheHint: 'Цвета плывут — медленно и бесконечно.',
+        xInvert: 'Изнанка',
+        xInvertHint: 'Кошелёк, вывернутый наизнанку.',
+        layersNeedsLevel: 'Откроется на уровне {level}',
+        layersNeedsFind: 'Нужна находка: {hint}',
+        layersTerminal: 'Терминал',
+        layersTerminalHint: 'введите help',
+        layersHelp:
+            'help — это\nls, cat <файл> — осмотреться\nwhoami — кто спрашивает\ncd gallery — слой 07\nвсё остальное — попытка ответа',
+        layersReadme:
+            'Слова спрятаны в кошельке, на сайте и в картинках.\nВведи слово здесь. Если оно настоящее, Wired ответит.',
+        layersAccepted: 'принято · {title} · +{xp} XP',
+        layersAlready: 'уже ваше · {title}',
+        layersSignInToKeep:
+            'войдите этим кошельком, чтобы Wired запомнил находку.',
+        layersGalleryLocked: 'доступ запрещён: нужен уровень {level}',
+        layersFinds: 'Находки',
+        layersGalleryDoor: 'Галерея',
+        layersGalleryLockedNote: 'Откроется на уровне {level}',
+        layers07Body:
+            'Нетарт, нарисованный кодом. У каждой работы бесконечно много выпусков — номер и есть зерно. Понравившийся можно выпустить как NFT в Cyberia.',
+        layersEdition: 'Выпуск #{seed}',
+        layersAnother: 'Другой выпуск',
+        layersSavePng: 'Сохранить PNG',
+        layersMint: 'Выпустить NFT',
+        layersMinting: 'Закрепляем…',
+        layersMintOff:
+            'Для выпуска нужен IPFS, а на этом сервере он выключен. PNG ваш в любом случае.',
+        layersNftDescription:
+            '{title}, выпуск #{seed}. Генеративный нетарт с седьмого слоя Cyberia Wallet.',
 
         gasStation: 'Газовая станция',
         gasStationBody:
@@ -4782,6 +4900,59 @@ export const walletMessages: Messages = {
         dailyLedgerNote:
             '同一本账：你在 Cyberia 所做的一切——这里、站点上、链上——都计入个人主页显示的同一份经验。此屏幕上没有第二套分数。',
         tileDailyHint: '连续签到 · 任务 · 今天能挣到什么',
+        layersDoor: '开发者',
+        layersVersionLine: 'Cyberia Wallet · 第 01 层',
+        layersTapsLeft: '还差 {count} 次…',
+        layersSevenTaps: 'Protocol seven。把它输入往下两层的终端。',
+        layersLayer: '第 {n} 层',
+        layers02Body: '使用钱包不需要这里的任何东西。越往下越奇怪。',
+        layersProgress: '成长',
+        layersProgressAnon: '成长属于账户。用此钱包登录——只是签名，不是付款。',
+        layersProgressOpen: '任务、连续签到和排行榜',
+        layersFound: '已找到 {found} / {total}',
+        layersFresh: '+{xp} XP · 找到：{title}',
+        layersExperimentsDoor: '实验',
+        layersFrameProbe: '窗口诊断',
+        layersRefresh: '刷新',
+        layers03Body:
+            '一些毫无用处的开关。每个都需要一个等级或一次发现。设置只保存在这台设备上。',
+        xCrt: '显像管',
+        xCrtHint: '扫描线和旧显示器的闪烁。',
+        xRain: 'Wired 之雨',
+        xRainHint: '每个屏幕后面落下的字符。',
+        xWhispers: '低语',
+        xWhispersHint: '不时出现的来自 Wired 的句子。其中一些是提示。',
+        xGlitch: '故障',
+        xGlitchHint: '标题和余额会短暂失去信号。',
+        xPsyche: 'Psyche 处理器',
+        xPsycheHint: '颜色缓慢地、永远地漂移。',
+        xInvert: '反面',
+        xInvertHint: '翻过来的钱包。',
+        layersNeedsLevel: '{level} 级开放',
+        layersNeedsFind: '需要一次发现：{hint}',
+        layersTerminal: '终端',
+        layersTerminalHint: '输入 help',
+        layersHelp:
+            'help — 本说明\nls, cat <文件> — 四处看看\nwhoami — 谁在问\ncd gallery — 第 07 层\n其他任何输入都是一次猜测',
+        layersReadme:
+            '钱包里、网站上和图片里都藏着词语。\n在这里输入一个。如果它是真的，Wired 会回答。',
+        layersAccepted: '已接受 · {title} · +{xp} XP',
+        layersAlready: '已经是你的了 · {title}',
+        layersSignInToKeep: '用此钱包登录，Wired 才会记住你的发现。',
+        layersGalleryLocked: '权限被拒绝：需要 {level} 级',
+        layersFinds: '发现',
+        layersGalleryDoor: '画廊',
+        layersGalleryLockedNote: '{level} 级开放',
+        layers07Body:
+            '用代码绘制的网络艺术。每件作品都有无数个版本——编号就是种子。把喜欢的那个在 Cyberia 上铸造成 NFT。',
+        layersEdition: '版本 #{seed}',
+        layersAnother: '换一个版本',
+        layersSavePng: '保存 PNG',
+        layersMint: '铸造 NFT',
+        layersMinting: '正在固定…',
+        layersMintOff: '铸造需要 IPFS，而此服务器未开启。PNG 无论如何都归你。',
+        layersNftDescription:
+            '{title}，版本 #{seed}。来自 Cyberia Wallet 第 07 层的生成式网络艺术。',
 
         gasStation: '加油站',
         gasStationBody:

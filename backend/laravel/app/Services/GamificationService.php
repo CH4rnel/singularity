@@ -374,6 +374,96 @@ class GamificationService
         });
     }
 
+    /**
+     * The hash a secret's answer is stored as.
+     *
+     * Forgiving on purpose: "Present day, present time!" and "present day
+     * present time" are the same answer, and a terminal that refused one of
+     * them over a comma would be marking punctuation rather than finding.
+     */
+    public static function secretHash(string $code): string
+    {
+        $folded = mb_strtolower(str_replace(["'", '’'], '', $code));
+        $folded = trim((string) preg_replace('/[^\p{L}\p{N}]+/u', ' ', $folded));
+
+        return hash('sha256', $folded);
+    }
+
+    /**
+     * The secrets catalogue as somebody looking for them sees it.
+     *
+     * A title is withheld until its secret is found — the hint is what is
+     * shown instead — and the hash never leaves this class.
+     *
+     * @return array<int, array{key: string, kind: string, xp: int, found: bool, title: ?array<string, string>, hint: array<string, string>}>
+     */
+    public function secretsFor(?User $user): array
+    {
+        $found = $user === null ? [] : $this->foundSecrets($user);
+
+        return array_map(function (array $secret) use ($found): array {
+            $has = in_array($secret['key'], $found, true);
+
+            return [
+                'key' => $secret['key'],
+                'kind' => $secret['kind'],
+                'xp' => (int) $secret['xp'],
+                'found' => $has,
+                'title' => $has ? $secret['title'] : null,
+                'hint' => $secret['hint'],
+            ];
+        }, (array) config('gamification.secrets', []));
+    }
+
+    /** @return array<int, string> keys of the secrets this account has found */
+    public function foundSecrets(User $user): array
+    {
+        return XpEntry::query()
+            ->where('user_id', $user->id)
+            ->where('source', 'secret')
+            ->pluck('reference')
+            ->all();
+    }
+
+    /**
+     * Try a phrase. Pays the secret's XP the first time it is found and
+     * nothing after; a repeat is still `found`, so the terminal can say
+     * "already yours" instead of "wrong".
+     *
+     * Quests and the streak move only on a fresh find, so typing a known
+     * phrase again cannot be used to tick "Dig deeper" every week.
+     *
+     * @return array{found: bool, fresh: bool, granted: int, secret: ?array{key: string, kind: string, xp: int, title: array<string, string>}}
+     */
+    public function claimSecret(User $user, string $code): array
+    {
+        $hash = self::secretHash($code);
+        $secret = collect((array) config('gamification.secrets', []))
+            ->first(fn (array $entry): bool => hash_equals($entry['hash'], $hash));
+
+        if ($secret === null) {
+            return ['found' => false, 'fresh' => false, 'granted' => 0, 'secret' => null];
+        }
+
+        $granted = $this->award($user, 'secret', $secret['key'], (int) $secret['xp']);
+
+        if ($granted > 0) {
+            $granted += $this->recordAction($user, 'secret', $secret['key']);
+        }
+
+        return [
+            'found' => true,
+            'fresh' => $granted > 0,
+            'granted' => $granted,
+            'secret' => [
+                'key' => $secret['key'],
+                'kind' => $secret['kind'],
+                'xp' => (int) $secret['xp'],
+                'title' => $secret['title'],
+            ],
+        ];
+    }
+
     public function levelFor(int $xp): int
     {
         $step = max(1, (int) config('gamification.level_step', 50));

@@ -54,6 +54,7 @@ defineEmits<{
     accounts: [];
     networks: [];
     proxy: [];
+    developer: [];
 }>();
 
 const { t, locale, available, setLocale } = useLocale(walletMessages);
@@ -293,73 +294,28 @@ const unsubscribe = subscribeWalletPreferences((next) => {
 });
 
 /**
- * TEMPORARY — a readout of how this window is actually laid out.
- *
- * The frame's bottom edge is wrong on one person's iPhone and right on every
- * emulator here, and no Safari on this side of the cable can be attached to a
- * home-screen app. So the app states its own numbers and a screenshot carries
- * them back. Delete this block, `frameProbe` and the panel below it as soon as
- * that is answered.
+ * The line nobody reads, and what it says to somebody who taps it seven
+ * times — the way a phone unlocks its own developer options. What it says is
+ * one of the secrets of the layers underneath (`lib/wallet/layers.ts`).
  */
-const frameProbe = ref<string[]>([]);
+const SEVEN = 7;
+const taps = ref(0);
 
-const readFrameProbe = (): void => {
-    const px = (value: number | undefined): string =>
-        value === undefined ? '—' : String(Math.round(value));
-
-    const probe = document.createElement('div');
-    probe.style.cssText =
-        'position:fixed;top:0;left:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);visibility:hidden;pointer-events:none';
-    document.body.append(probe);
-    const insets = getComputedStyle(probe);
-    const safe = `${insets.paddingTop} / ${insets.paddingBottom}`;
-    probe.remove();
-
-    const rect = (selector: string): string => {
-        const element = document.querySelector(selector);
-
-        if (!element) {
-            return 'нет';
-        }
-
-        const box = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-
-        return `${px(box.top)}–${px(box.bottom)} pad ${style.paddingTop}/${style.paddingBottom}`;
-    };
-
-    frameProbe.value = [
-        `win ${px(window.innerWidth)}×${px(window.innerHeight)} vv ${px(window.visualViewport?.height)} scr ${px(window.screen.height)}`,
-        `client ${px(document.documentElement.clientHeight)} vh ${(() => {
-            const unit = document.createElement('div');
-            unit.style.cssText =
-                'position:fixed;top:0;left:0;width:1px;height:100vh;visibility:hidden;pointer-events:none';
-            document.body.append(unit);
-            const height = unit.getBoundingClientRect().height;
-            unit.remove();
-
-            return px(height);
-        })()}`,
-        `safe ${safe}`,
-        `insets=${document.documentElement.dataset.windowInsets ?? '—'} boot ${
-            document.documentElement.dataset.bootHeight ?? '—'
-        }`,
-        `vp ${document.querySelector<HTMLMetaElement>('meta[name=viewport]')?.content ?? '—'}`,
-        `app=${document.documentElement.dataset.appWindow ?? '0'} sa=${
-            (window.navigator as { standalone?: boolean }).standalone === true
-                ? 1
-                : 0
-        } dm=${window.matchMedia('(display-mode: standalone)').matches ? 1 : 0}`,
-        `frame ${rect('.cw-frame')}`,
-        `shell ${rect('.cw-shell')}`,
-        `tabs ${rect('.cw-tabs')}`,
-        `html ${getComputedStyle(document.documentElement).backgroundColor}`,
-        `body ${getComputedStyle(document.body).backgroundColor}`,
-    ];
+const tapVersion = (): void => {
+    taps.value = Math.min(SEVEN, taps.value + 1);
 };
 
+const versionNote = computed(() => {
+    if (taps.value >= SEVEN) {
+        return t('layersSevenTaps');
+    }
+
+    return taps.value >= 3
+        ? t('layersTapsLeft', { count: SEVEN - taps.value })
+        : null;
+});
+
 onMounted(async () => {
-    readFrameProbe();
     push.value = await pushState(vapidKey.value);
     startup.value = await refreshNativeStartup();
 });
@@ -708,28 +664,29 @@ onBeforeUnmount(unsubscribe);
             {{ t('openSite') }}
         </a>
 
-        <!-- TEMPORARY: see `readFrameProbe`. Remove with it. -->
-        <div
-            style="
-                margin-top: 20px;
-                padding: 10px 12px;
-                border: 1px dashed var(--cw-border);
-                font: 500 13px/1.6 var(--cw-mono);
-                color: var(--cw-faint);
-            "
+        <!--
+          The door down. Quiet on purpose: the wallet above works without
+          anything behind it, and whoever opens it already wanted more.
+        -->
+        <button
+            type="button"
+            class="cw-line-row"
+            style="margin-top: 28px"
+            @click="$emit('developer')"
         >
-            <div style="margin-bottom: 4px; color: var(--cw-dim)">
-                РАМКА ОКНА · ВРЕМЕННО
-            </div>
-            <div v-for="line in frameProbe" :key="line">{{ line }}</div>
-            <button
-                type="button"
-                class="cw-ghost"
-                style="margin-top: 6px"
-                @click="readFrameProbe()"
-            >
-                обновить
-            </button>
-        </div>
+            <span style="flex: 1">{{ t('layersDoor') }}</span>
+            →
+        </button>
+
+        <button type="button" class="cw-layer-version" @click="tapVersion">
+            {{ t('layersVersionLine') }}
+        </button>
+        <span
+            v-if="versionNote"
+            class="cw-hint"
+            style="margin-top: 4px; text-align: center"
+            aria-live="polite"
+            >{{ versionNote }}</span
+        >
     </div>
 </template>

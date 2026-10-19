@@ -43,6 +43,8 @@ class GamificationRecountCommand extends Command
          */
         $paying[] = 'quest';
         $paying[] = 'streak';
+        // Priced per secret in `gamification.secrets`, same as a quest bonus.
+        $paying[] = 'secret';
 
         /*
          * Except the ones whose quest is gone. `daily_explore` paid 20 XP for

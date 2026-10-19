@@ -405,6 +405,9 @@ Route::prefix('api/wallet/daily')->name('wallet.daily.')->group(function () {
         ->middleware('throttle:60,1')->name('show');
     Route::post('check-in', [WalletDailyController::class, 'checkIn'])
         ->middleware('throttle:20,1')->name('check-in');
+    // The terminal on layer 03. Tight on purpose: a phrase is guessable.
+    Route::post('secret', [WalletDailyController::class, 'secret'])
+        ->middleware('throttle:12,1')->name('secret');
 });
 
 /**

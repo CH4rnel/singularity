@@ -80,6 +80,32 @@ class WalletDailyController extends Controller
     }
 
     /**
+     * The terminal on layer 03: somebody typed a phrase.
+     *
+     * A miss is an ordinary answer and not an error — the terminal prints it
+     * and waits for the next line — so it is a 200 with `found: false`. The
+     * throttle on the route is what keeps this from being a dictionary.
+     */
+    public function secret(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return response()->json([
+                'message' => 'Sign in with this wallet so the find is kept.',
+            ], 401);
+        }
+
+        $data = $request->validate([
+            'code' => ['required', 'string', 'max:120'],
+        ]);
+
+        $claim = $this->gamification->claimSecret($user, $data['code']);
+
+        return response()->json([...$this->board($user), 'claim' => $claim]);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function board(?User $user): array
@@ -94,6 +120,11 @@ class WalletDailyController extends Controller
             'standing' => $user === null ? null : $this->standing($user),
             'quests' => $this->quests($user),
             'nextUnlock' => $this->nextUnlock($user),
+            /*
+             * The layers under Settings: what has been found and what is
+             * still a hint. Signed out it is the catalogue, nothing found.
+             */
+            'secrets' => $this->gamification->secretsFor($user),
             /*
              * What a streak is worth, as a table rather than a sentence: the
              * strip on the screen has to be able to say what day 7 pays before

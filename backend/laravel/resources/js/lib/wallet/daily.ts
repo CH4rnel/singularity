@@ -63,6 +63,19 @@ export type DailyUnlock = {
     state: 'owned' | 'ready' | 'level' | 'xp' | 'requires';
 };
 
+/**
+ * One secret in the layers under Settings (`lib/wallet/layers.ts`). The title
+ * is null until it is found; the answer never leaves the server.
+ */
+export type DailySecret = {
+    key: string;
+    kind: 'layer' | 'word';
+    xp: number;
+    found: boolean;
+    title: Record<string, string> | null;
+    hint: Record<string, string>;
+};
+
 export type DailyBoardRow = {
     position: number;
     name: string;
@@ -84,6 +97,7 @@ export type DailyBoard = {
     standing: DailyStanding | null;
     quests: DailyQuest[];
     nextUnlock: DailyUnlock | null;
+    secrets: DailySecret[];
     streakBonuses: Record<string, number>;
     xpPerAction: Record<string, number>;
     board: DailyBoardRow[];

@@ -3180,3 +3180,299 @@ html[data-app-window]:has(.cw-frame) {
         border-radius: 0;
     }
 }
+
+/*
+ * The layers under Settings (`lib/wallet/layers.ts`): developer settings,
+ * experiments, the terminal and the gallery. The wallet above stays calm; down
+ * here it is allowed to be strange, so these lean on the mono face and on the
+ * tube the old look was built from.
+ */
+.cw {
+    /* The soft look sets --cw-mono to its sans; down here it is a terminal. */
+    --cw-layer-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+
+.cw-layer-tag {
+    font: 500 11px/1.4 var(--cw-layer-mono);
+    letter-spacing: 0.14em;
+    color: var(--cw-accent);
+    text-transform: uppercase;
+}
+
+.cw-layer-fresh {
+    margin-bottom: 16px;
+    border-color: var(--cw-accent);
+    color: var(--cw-accent);
+    font-family: var(--cw-layer-mono);
+}
+
+.cw-layer-probe {
+    padding: 10px 12px;
+    border: 1px dashed var(--cw-border);
+    font: 500 13px/1.6 var(--cw-layer-mono);
+    color: var(--cw-faint);
+    overflow-wrap: anywhere;
+}
+
+/* The line nobody reads. It is a button only to whoever presses it. */
+.cw-layer-version {
+    margin: 22px auto 0;
+    padding: 6px 10px;
+    border: 0;
+    background: none;
+    font: 500 12px/1.4 var(--cw-layer-mono);
+    letter-spacing: 0.06em;
+    color: var(--cw-fainter);
+    cursor: default;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cw-layer-mark {
+    width: 18px;
+    font-family: var(--cw-layer-mono);
+    color: var(--cw-fainter);
+}
+
+.cw-layer-mark-on {
+    color: var(--cw-accent);
+}
+
+.cw-term {
+    border: 1px solid var(--cw-border);
+    border-radius: 6px;
+    background: #050607;
+    font: 500 13px/1.55 var(--cw-layer-mono);
+    color: #cfe9e4;
+    overflow: hidden;
+}
+
+.cw-term-screen {
+    max-height: 220px;
+    min-height: 96px;
+    padding: 10px 12px 4px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.cw-term-in {
+    color: #8b97a3;
+}
+
+.cw-term-ok {
+    color: #72dccf;
+}
+
+.cw-term-bad {
+    color: #ff9aa2;
+}
+
+.cw-term-dim {
+    color: #6c7782;
+}
+
+.cw-term-prompt {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px 10px;
+    border-top: 1px solid #16191d;
+    color: #72dccf;
+}
+
+.cw-term-prompt input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    font-size: 16px;
+    color: #f0f4f8;
+    caret-color: #72dccf;
+}
+
+.cw-art-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+}
+
+.cw-art-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 0 8px;
+    border: 1px solid var(--cw-border-soft);
+    border-radius: 6px;
+    background: var(--cw-surface);
+    text-align: left;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.cw-art-tile:disabled {
+    cursor: default;
+}
+
+.cw-art-tile canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+}
+
+.cw-art-locked {
+    filter: grayscale(1) brightness(0.55);
+}
+
+.cw-art-name {
+    padding: 0 10px;
+    font: 500 13px/1.3 var(--cw-layer-mono);
+    color: var(--cw-text);
+}
+
+.cw-art-why {
+    padding: 0 10px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--cw-faint);
+}
+
+.cw-art-full {
+    display: block;
+    width: 100%;
+    max-width: 560px;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    margin: 0 auto 14px;
+}
+
+.cw-art-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+/* --- experiments: overlays that never take a click --------------------- */
+
+.cw-x {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.cw-x-rain {
+    z-index: 4;
+    width: 100%;
+    height: 100%;
+    opacity: 0.14;
+}
+
+.cw-x-crt {
+    z-index: 6;
+    background:
+        repeating-linear-gradient(
+            180deg,
+            rgba(0, 0, 0, 0.28) 0 1px,
+            transparent 1px 3px
+        ),
+        radial-gradient(
+            ellipse at center,
+            transparent 55%,
+            rgba(0, 0, 0, 0.45) 100%
+        );
+    animation: cw-x-flicker 0.12s steps(2) infinite;
+}
+
+.cw-x-psyche {
+    z-index: 6;
+    backdrop-filter: hue-rotate(0deg);
+    animation: cw-x-psyche 40s linear infinite;
+}
+
+.cw-x-invert {
+    z-index: 6;
+    backdrop-filter: invert(1) hue-rotate(180deg);
+}
+
+.cw-x-whisper {
+    position: absolute;
+    right: 16px;
+    bottom: 84px;
+    left: 16px;
+    z-index: 7;
+    pointer-events: none;
+    text-align: center;
+    font: 500 13px/1.4 var(--cw-layer-mono);
+    letter-spacing: 0.04em;
+    color: var(--cw-accent);
+    text-shadow: 0 0 12px var(--cw-accent);
+    animation: cw-x-whisper 6s ease-in-out both;
+}
+
+.cw-x-glitch .cw-title,
+.cw-x-glitch .cw-total {
+    animation: cw-x-glitch 7s steps(1) infinite;
+}
+
+@keyframes cw-x-flicker {
+    50% {
+        opacity: 0.86;
+    }
+}
+
+@keyframes cw-x-psyche {
+    from {
+        backdrop-filter: hue-rotate(0deg);
+    }
+    to {
+        backdrop-filter: hue-rotate(360deg);
+    }
+}
+
+@keyframes cw-x-whisper {
+    0%,
+    100% {
+        opacity: 0;
+    }
+    15%,
+    85% {
+        opacity: 0.9;
+    }
+}
+
+@keyframes cw-x-glitch {
+    0%,
+    91%,
+    100% {
+        transform: none;
+        text-shadow: none;
+    }
+    92% {
+        transform: translateX(-3px) skewX(-8deg);
+        text-shadow:
+            3px 0 rgba(255, 40, 70, 0.8),
+            -3px 0 rgba(40, 255, 200, 0.8);
+    }
+    94% {
+        transform: translateX(2px);
+        text-shadow:
+            -2px 0 rgba(255, 40, 70, 0.8),
+            2px 0 rgba(40, 255, 200, 0.8);
+    }
+    96% {
+        transform: translateX(-1px) skewX(4deg);
+        text-shadow: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cw-x-crt,
+    .cw-x-psyche,
+    .cw-x-glitch .cw-title,
+    .cw-x-glitch .cw-total {
+        animation: none;
+    }
+}

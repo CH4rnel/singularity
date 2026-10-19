@@ -3,7 +3,6 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { useMediaQuery } from '@vueuse/core';
 import {
     Bot,
-    CalendarCheck,
     ExternalLink,
     Images,
     Landmark,
@@ -28,9 +27,13 @@ import WalletContextBar from '@/components/wallet/WalletContextBar.vue';
 import WalletCrossSwap from '@/components/wallet/WalletCrossSwap.vue';
 import WalletDaily from '@/components/wallet/WalletDaily.vue';
 import WalletDao from '@/components/wallet/WalletDao.vue';
+import WalletDeveloper from '@/components/wallet/WalletDeveloper.vue';
 import WalletDomains from '@/components/wallet/WalletDomains.vue';
 import WalletEarn from '@/components/wallet/WalletEarn.vue';
+import WalletExperiments from '@/components/wallet/WalletExperiments.vue';
+import WalletExperimentsLayer from '@/components/wallet/WalletExperimentsLayer.vue';
 import WalletFeed from '@/components/wallet/WalletFeed.vue';
+import WalletGallery from '@/components/wallet/WalletGallery.vue';
 import WalletGasStation from '@/components/wallet/WalletGasStation.vue';
 import WalletImportAccount from '@/components/wallet/WalletImportAccount.vue';
 import WalletIpfs from '@/components/wallet/WalletIpfs.vue';
@@ -65,6 +68,7 @@ import { useLocale } from '@/composables/useLocale';
 import { useMultiWallet } from '@/composables/useMultiWallet';
 import { useSwipeNav } from '@/composables/useSwipeNav';
 import { useWalletAuth } from '@/composables/useWalletAuth';
+import { useWalletExperiments } from '@/composables/useWalletExperiments';
 import { useWalletMode } from '@/composables/useWalletMode';
 import { useWalletTheme } from '@/composables/useWalletTheme';
 import { analytics } from '@/lib/analytics';
@@ -212,7 +216,10 @@ type Section =
     | 'crosschain'
     | 'daily'
     | 'browse'
-    | 'domains';
+    | 'domains'
+    | 'developer'
+    | 'experiments'
+    | 'gallery';
 type Overlay = 'send' | 'receive' | 'swap' | 'addNetwork';
 
 const section = ref<Section>('portfolio');
@@ -403,6 +410,9 @@ const TAB_OF: Record<Section, Section> = {
     crosschain: 'portfolio',
     daily: 'portfolio',
     browse: 'portfolio',
+    developer: 'portfolio',
+    experiments: 'portfolio',
+    gallery: 'portfolio',
     feed: 'feed',
     profile: 'feed',
     launchpad: 'portfolio',
@@ -420,17 +430,23 @@ const TAB_OF: Record<Section, Section> = {
 
 const { simple } = useWalletMode();
 
+const experiments = useWalletExperiments();
+
 /**
- * Simple mode's rail and tab bar: the balance (recent movement is on it), the
- * daily loop and the community, with every other place behind More (`WalletMore` carries the
+ * Simple mode's rail and tab bar: the balance (recent movement is on it) and
+ * the community, with every other place behind More (`WalletMore` carries the
  * grid). Full mode is `RAIL` and `TABS` as they were.
+ *
+ * The daily board used to be a tab here, which put levels and streaks in
+ * front of somebody who had not sent anything yet. Progress now starts under
+ * Settings (`lib/wallet/layers.ts`): whoever goes looking there already wants
+ * more than a wallet, and that is who it is for.
  */
 const SIMPLE_RAIL: { heading: () => string; items: RailEntry[] }[] = [
     {
         heading: () => t('railInWallet'),
         items: [
             { id: 'portfolio', label: () => t('navPortfolio') },
-            { id: 'daily', label: () => t('dailyTitle') },
             { id: 'feed', label: () => t('feed') },
             { id: 'chat', label: () => t('chatTitle') },
             { id: 'more', label: () => t('navMore') },
@@ -441,7 +457,6 @@ const SIMPLE_RAIL: { heading: () => string; items: RailEntry[] }[] = [
 
 const SIMPLE_TABS: { id: Section; label: () => string; icon: Component }[] = [
     { id: 'portfolio', label: () => t('tabWallet'), icon: WalletCards },
-    { id: 'daily', label: () => t('tileDaily'), icon: CalendarCheck },
     { id: 'feed', label: () => t('feed'), icon: Newspaper },
     { id: 'chat', label: () => t('tabChat'), icon: MessageCircle },
     { id: 'more', label: () => t('navMore'), icon: MoreHorizontal },
@@ -580,6 +595,9 @@ const PARENTS: Partial<Record<Section, Section>> = {
     gas: 'more',
     preferences: 'portfolio',
     accounts: 'preferences',
+    developer: 'preferences',
+    experiments: 'preferences',
+    gallery: 'preferences',
     profile: 'feed',
     nftMint: 'nft',
     ipfs: 'nft',
@@ -831,6 +849,18 @@ const applySwapRequest = (): void => {
  * than one screen quietly doing both.
  */
 const mintPreset = ref<string | null>(null);
+
+/**
+ * Where back from the daily board goes. In simple mode it is reached from
+ * layer 02 and nowhere else, and back should not drop somebody on the
+ * portfolio three floors up from where they were.
+ */
+const dailyFrom = ref<Section>('portfolio');
+
+const openDaily = (from: Section): void => {
+    dailyFrom.value = from;
+    openSection('daily');
+};
 
 const openMint = (uri: string | null): void => {
     mintPreset.value = uri;
@@ -1484,7 +1514,19 @@ const signInInsideTelegram = async (): Promise<void> => {
     }
 };
 
+/**
+ * For whoever opens the console. One of the layers' secrets is in here.
+ */
+const greetConsole = (): void => {
+    console.log(
+        '%cCYBERIA // LAYER 01%c\nYou opened the console. That already says something about you.\nThe phrase is: let’s all love Lain. Two layers under Settings there is a terminal that wants it.',
+        'font: 700 14px monospace; color: #72dccf',
+        'font: 12px monospace; color: inherit',
+    );
+};
+
 onMounted(() => {
+    greetConsole();
     void signInInsideTelegram();
     void startFresh();
     takeSectionRequest();
@@ -1568,7 +1610,10 @@ watch(
         class="cw cw-frame flex flex-col"
         :data-cw-theme="scheme"
         :data-cw-palette="palette"
-        :class="native ? 'p-3 sm:p-4' : 'p-3 sm:p-5'"
+        :class="[
+            native ? 'p-3 sm:p-4' : 'p-3 sm:p-5',
+            { 'cw-x-glitch': experiments.isOn('glitch') },
+        ]"
     >
         <!--
           The masthead, and only where a window needs one.
@@ -2163,7 +2208,7 @@ watch(
                     <WalletDaily
                         v-else-if="section === 'daily'"
                         :wallet="wallet"
-                        @back="openSection('portfolio')"
+                        @back="openSection(dailyFrom)"
                         @gas="openSection('gas')"
                         @go="openQuest"
                     />
@@ -2363,6 +2408,34 @@ watch(
                         @back="openSection('preferences')"
                     />
 
+                    <!--
+                      The layers under Settings: progress, strange switches,
+                      a terminal, and at the bottom the gallery. Nothing above
+                      Settings shows any of it.
+                    -->
+                    <WalletDeveloper
+                        v-else-if="section === 'developer'"
+                        :wallet="wallet"
+                        @back="openSection('preferences')"
+                        @experiments="openSection('experiments')"
+                        @daily="openDaily('developer')"
+                    />
+
+                    <WalletExperiments
+                        v-else-if="section === 'experiments'"
+                        :wallet="wallet"
+                        @back="openSection('developer')"
+                        @gallery="openSection('gallery')"
+                    />
+
+                    <WalletGallery
+                        v-else-if="section === 'gallery'"
+                        :wallet="wallet"
+                        :ipfs="props.ipfs"
+                        @back="openSection('experiments')"
+                        @mint="openMint"
+                    />
+
                     <WalletPreferences
                         v-else-if="section === 'preferences'"
                         :wallet="wallet"
@@ -2373,6 +2446,7 @@ watch(
                         @accounts="openSection('accounts')"
                         @networks="openSection('networks')"
                         @proxy="openSection('proxy')"
+                        @developer="openSection('developer')"
                         @back="openSection('portfolio')"
                     />
 
@@ -2455,6 +2529,7 @@ watch(
 
             <div class="cw-raster" aria-hidden="true"></div>
             <div class="cw-scan" aria-hidden="true"></div>
+            <WalletExperimentsLayer v-if="experiments.anyOn.value" />
         </div>
     </div>
 </template>

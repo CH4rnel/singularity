@@ -312,6 +312,170 @@ return [
             'target' => 1,
             'xp' => 180,
         ],
+        [
+            'key' => 'weekly_digger',
+            'period' => 'weekly',
+            'title' => ['en' => 'Dig deeper', 'ru' => 'Копнуть глубже', 'zh' => '再挖深一点'],
+            'description' => [
+                'en' => 'Find one secret in the layers under Settings.',
+                'ru' => 'Найти один секрет в слоях под настройками.',
+                'zh' => '在设置下面的层里找到一个秘密。',
+            ],
+            'actions' => ['secret'],
+            'target' => 1,
+            'xp' => 60,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Secrets: the layers under Settings
+    |--------------------------------------------------------------------------
+    |
+    | The wallet's face is a plain wallet and carries no experience at all.
+    | Progress lives *down*: Settings → Developer (layer 02) → Experiments
+    | (layer 03) → the gallery (layer 07). Somebody who went looking in
+    | Settings already wanted something, and that is who this is for.
+    |
+    | A secret is a phrase hidden somewhere — the browser console, robots.txt,
+    | the theme template, a picture in the gallery, the terminal itself — and
+    | typed into the terminal on layer 03. Opening a layer is a secret too,
+    | with a code the wallet sends by itself.
+    |
+    | Only the hash of the answer lives here, because this repository is
+    | public: sha256 of the phrase lowercased, apostrophes dropped and every
+    | other run of non-letters folded into one space (see
+    | GamificationService::secretHash). Each pays once per account, through
+    | the same ledger as everything else (`source` = `secret`, `reference` =
+    | the key), so it buys the same things everything else buys and nothing
+    | that moves money.
+    |
+    | `kind` is `layer` or `word`. The title is withheld until it is found;
+    | the hint is what somebody still looking is shown.
+    |
+    */
+
+    'secrets' => [
+        [
+            'key' => 'layer_02',
+            'kind' => 'layer',
+            'hash' => '923ebe402801afd0462cd3abb21facb936edb15abee666d3a71b87b7134a25a7',
+            'xp' => 25,
+            'title' => ['en' => 'Layer 02', 'ru' => 'Слой 02', 'zh' => '第 02 层'],
+            'hint' => [
+                'en' => 'At the very bottom of Settings.',
+                'ru' => 'В самом низу настроек.',
+                'zh' => '在设置的最底部。',
+            ],
+        ],
+        [
+            'key' => 'layer_03',
+            'kind' => 'layer',
+            'hash' => '5f72e425b7aec5cd0c51cf97b9b4dbca03f09f1577afae6b315bbdd5db4a69e5',
+            'xp' => 50,
+            'title' => ['en' => 'Layer 03', 'ru' => 'Слой 03', 'zh' => '第 03 层'],
+            'hint' => [
+                'en' => 'Developer settings have a door further down.',
+                'ru' => 'В настройках для разработчиков есть дверь ниже.',
+                'zh' => '开发者设置里还有一扇更深的门。',
+            ],
+        ],
+        [
+            'key' => 'layer_07',
+            'kind' => 'layer',
+            'hash' => '60183d4c0c39830e65a9ab299b930a27ff2a04c9157b8bf7593e4e0b2dbf17d1',
+            'xp' => 100,
+            'title' => ['en' => 'Layer 07', 'ru' => 'Слой 07', 'zh' => '第 07 层'],
+            'hint' => [
+                'en' => 'The deepest layer opens at level 3.',
+                'ru' => 'Самый глубокий слой открывается с уровня 3.',
+                'zh' => '最深的一层在 3 级时打开。',
+            ],
+        ],
+        [
+            'key' => 'seven',
+            'kind' => 'word',
+            'hash' => '2f5e87743c776270549b5beeb7ccf1729faea48f36b00e7fcfc967ff94548e0d',
+            'xp' => 50,
+            'title' => ['en' => 'Seven taps', 'ru' => 'Семь нажатий', 'zh' => '七次点击'],
+            'hint' => [
+                'en' => 'Tap seven times on the line nobody reads.',
+                'ru' => 'Семь раз нажми на строчку, которую никто не читает.',
+                'zh' => '在没人读的那一行上点七下。',
+            ],
+        ],
+        [
+            'key' => 'present',
+            'kind' => 'word',
+            'hash' => '87cafc23bf1a5a0f126d774999ed85607802998cf7dbf61ca8e324a5a626f3ef',
+            'xp' => 50,
+            'title' => ['en' => 'Present day', 'ru' => 'Настоящий день', 'zh' => '现在的日子'],
+            'hint' => [
+                'en' => 'What day is it? What time is it?',
+                'ru' => 'Какой сейчас день? Какое время?',
+                'zh' => '今天是哪一天？现在是什么时间？',
+            ],
+        ],
+        [
+            'key' => 'navi',
+            'kind' => 'word',
+            'hash' => '21305f1bcd6152755435b325874ae7333e07065caeafec6dbfbf04a6869abfa9',
+            'xp' => 75,
+            'title' => ['en' => 'Hidden file', 'ru' => 'Скрытый файл', 'zh' => '隐藏文件'],
+            'hint' => [
+                'en' => 'ls does not show everything.',
+                'ru' => 'ls показывает не всё.',
+                'zh' => 'ls 并不显示一切。',
+            ],
+        ],
+        [
+            'key' => 'console',
+            'kind' => 'word',
+            'hash' => '56a48ae47598bf75baeea057c058fdd754ec0760aac271557be17c8e11aad37f',
+            'xp' => 75,
+            'title' => ['en' => 'The console', 'ru' => 'Консоль', 'zh' => '控制台'],
+            'hint' => [
+                'en' => 'The wallet talks to whoever opens the browser console.',
+                'ru' => 'Кошелёк разговаривает с теми, кто открыл консоль браузера.',
+                'zh' => '钱包会和打开浏览器控制台的人说话。',
+            ],
+        ],
+        [
+            'key' => 'robots',
+            'kind' => 'word',
+            'hash' => '9928843eb95501531cca2a1fb33ca40e924e0f3072724c8e3d0be318e9111fd9',
+            'xp' => 75,
+            'title' => ['en' => 'Not for robots', 'ru' => 'Не для роботов', 'zh' => '不给机器人看'],
+            'hint' => [
+                'en' => 'Ask what robots are told. Read it backwards.',
+                'ru' => 'Спроси, что говорят роботам. Читай задом наперёд.',
+                'zh' => '看看对机器人说了什么。倒着读。',
+            ],
+        ],
+        [
+            'key' => 'theme',
+            'kind' => 'word',
+            'hash' => 'ffeb23f8c72cbe93c636dc0eecbb1497facb92bf673fc2a69c70f9a9e8d52a2b',
+            'xp' => 75,
+            'title' => ['en' => 'The template', 'ru' => 'Шаблон', 'zh' => '模板'],
+            'hint' => [
+                'en' => 'Whoever makes their own theme reads the template to the end.',
+                'ru' => 'Тот, кто делает свою тему, читает шаблон до конца.',
+                'zh' => '自己做主题的人会把模板读到最后。',
+            ],
+        ],
+        [
+            'key' => 'noise',
+            'kind' => 'word',
+            'hash' => '5b5df1850499eb3b649f60ed3eca76c76734dcee000d08be943b470cb2458b4b',
+            'xp' => 100,
+            'title' => ['en' => 'In the noise', 'ru' => 'В шуме', 'zh' => '噪声里'],
+            'hint' => [
+                'en' => 'Look into the noise on layer 07.',
+                'ru' => 'Вглядись в шум седьмого слоя.',
+                'zh' => '盯着第 07 层的噪声看。',
+            ],
+        ],
     ],
 
 ];

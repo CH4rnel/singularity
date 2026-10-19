@@ -13,6 +13,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import WalletRouteSwap from '@/components/wallet/WalletRouteSwap.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useWalletMode } from '@/composables/useWalletMode';
 import { analytics, errorCode } from '@/lib/analytics';
 import { KNOWN_TOKENS } from '@/lib/cyberiaTokens';
 import { CYBERIA_CHAIN_ID } from '@/lib/evmChains';
@@ -1173,6 +1174,8 @@ const retryRouter = async (): Promise<void> => {
  */
 const daily = ref<DailyBoard | null>(null);
 
+const { simple } = useWalletMode();
+
 const swapXp = computed<number | null>(() => {
     const paid = daily.value?.xpPerAction?.swap;
 
@@ -1534,6 +1537,12 @@ const assetKind = (asset: SwapAsset | null): string =>
           : t('swapKindToken', { chain: chain.value.label });
 
 onMounted(() => {
+    // Simple mode keeps experience off the wallet's face; the board is a
+    // layer under Settings there, and a swap is just a swap.
+    if (simple.value) {
+        return;
+    }
+
     void dailyBoardCached().then((board) => {
         daily.value = board;
     });
