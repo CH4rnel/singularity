@@ -560,19 +560,19 @@ const recent = computed(() =>
             </button>
             <button
                 type="button"
-                class="cw-btn cw-btn-primary"
-                style="height: 48px"
-                @click="emit('receive')"
-            >
-                {{ t('receive') }}
-            </button>
-            <button
-                type="button"
                 class="cw-btn cw-btn-secondary"
                 style="height: 48px"
                 @click="emit('swap')"
             >
                 {{ t('swapTitle') }}
+            </button>
+            <button
+                type="button"
+                class="cw-btn cw-btn-primary"
+                style="height: 48px"
+                @click="emit('receive')"
+            >
+                {{ t('receive') }}
             </button>
         </div>
 

@@ -249,14 +249,6 @@ watch(() => props.chain, load);
             >
                 {{ t('send') }}
             </button>
-            <button
-                type="button"
-                class="cw-btn cw-btn-secondary"
-                style="height: 48px"
-                @click="emit('receive')"
-            >
-                {{ t('receive') }}
-            </button>
             <!--
               Wherever the trade can actually be filled — our own pools, or a
               router that serves this chain. Not "wherever we deployed an
@@ -272,6 +264,14 @@ watch(() => props.chain, load);
                 @click="emit('swap')"
             >
                 {{ t('swapTitle') }}
+            </button>
+            <button
+                type="button"
+                class="cw-btn cw-btn-secondary"
+                style="height: 48px"
+                @click="emit('receive')"
+            >
+                {{ t('receive') }}
             </button>
         </div>
 
