@@ -444,3 +444,33 @@ test('a message that travelled as text is stored as ciphertext all the same', as
 
     delete globalThis.window;
 });
+
+test('a row the relay renumbered replaces its old copy instead of doubling', () => {
+    globalThis.window = { localStorage: chatStorage() };
+
+    const me = ALICE.address.toLowerCase();
+    const row = (seq, id) => ({
+        seq,
+        id,
+        from: BOB.address.toLowerCase(),
+        to: me,
+        sentAt: '2026-10-19T09:00:00.000Z',
+        iv: 'AAAA',
+        body: 'BBBB',
+    });
+
+    storeChatRows(me, [row(6, 'a'.repeat(32)), row(7, 'b'.repeat(32))]);
+    const state = storeChatRows(me, [
+        row(10006, 'a'.repeat(32)),
+        row(10007, 'b'.repeat(32)),
+        row(10008, 'c'.repeat(32)),
+    ]);
+
+    assert.deepEqual(
+        state.rows.map((entry) => entry.seq),
+        [10006, 10007, 10008],
+    );
+    assert.equal(state.cursor, 10008);
+
+    delete globalThis.window;
+});

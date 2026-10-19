@@ -66,8 +66,18 @@ class WalletChatController extends Controller
     /** How long a challenge stays signable. */
     private const NONCE_TTL_SECONDS = 300;
 
-    /** Session key holding the address that proved itself, and when. */
-    private const SESSION_KEY = 'wallet_chat_address';
+    /**
+     * Session key holding every address that proved itself, and when.
+     *
+     * A map and not one slot, because one browser holds one session and a
+     * wallet can hold several accounts — two tabs on two accounts used to
+     * overwrite each other's proof on every beat, and each was handed whichever
+     * mailbox had been proved last.
+     */
+    private const SESSION_KEY = 'wallet_chat_proofs';
+
+    /** Where a single proof used to live, read for sessions that still hold one. */
+    private const LEGACY_SESSION_KEY = 'wallet_chat_address';
 
     /** People in one answer of the directory. */
     private const PEOPLE_LIMIT = 60;
@@ -126,10 +136,12 @@ class WalletChatController extends Controller
             ], 401);
         }
 
-        $request->session()->put(self::SESSION_KEY, [
-            'address' => $address,
-            'proved_at' => now()->timestamp,
-        ]);
+        // Moved to the end, so the newest proof is also the last one.
+        $proofs = $this->freshProofs($request);
+        unset($proofs[$address]);
+        $proofs[$address] = now()->timestamp;
+
+        $request->session()->put(self::SESSION_KEY, $proofs);
 
         return response()->json(['address' => $address]);
     }
@@ -341,14 +353,6 @@ class WalletChatController extends Controller
      */
     public function send(Request $request): JsonResponse
     {
-        $from = $this->provenAddress($request);
-
-        if ($from === null) {
-            return response()->json([
-                'message' => 'Sign the challenge with your wallet to send messages.',
-            ], 403);
-        }
-
         $data = $request->validate([
             'id' => ['required', 'string', 'regex:/^[0-9a-f]{32}$/'],
             'to' => ['required', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
@@ -361,13 +365,15 @@ class WalletChatController extends Controller
                 'regex:/^[A-Za-z0-9+\/]+={0,2}$/',
             ],
             // Present in the request because the tag covers it; checked against
-            // the session rather than trusted.
+            // the session's proofs rather than trusted.
             'from' => ['sometimes', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
         ]);
 
-        if (isset($data['from']) && Str::lower($data['from']) !== $from) {
+        $from = $this->provenAddress($request, $data['from'] ?? null);
+
+        if ($from === null) {
             return response()->json([
-                'message' => 'That message claims a different sender than this wallet proved.',
+                'message' => 'Sign the challenge with your wallet to send messages.',
             ], 403);
         }
 
@@ -420,14 +426,6 @@ class WalletChatController extends Controller
      */
     public function sendPlain(Request $request): JsonResponse
     {
-        $from = $this->provenAddress($request);
-
-        if ($from === null) {
-            return response()->json([
-                'message' => 'Sign the challenge with your wallet to send messages.',
-            ], 403);
-        }
-
         $data = $request->validate([
             'id' => ['required', 'string', 'regex:/^[0-9a-f]{32}$/'],
             'to' => ['required', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
@@ -436,9 +434,11 @@ class WalletChatController extends Controller
             'from' => ['sometimes', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
         ]);
 
-        if (isset($data['from']) && Str::lower($data['from']) !== $from) {
+        $from = $this->provenAddress($request, $data['from'] ?? null);
+
+        if ($from === null) {
             return response()->json([
-                'message' => 'That message claims a different sender than this wallet proved.',
+                'message' => 'Sign the challenge with your wallet to send messages.',
             ], 403);
         }
 
@@ -486,20 +486,26 @@ class WalletChatController extends Controller
      * decrypt them (the conversation key is shared), so a wallet restored on a
      * second device recovers its own half of the conversation without the
      * relay ever holding a readable copy.
+     *
+     * `address` names the mailbox, and must be one this session proved; the
+     * answer names it back, so a wallet never files one account's mail under
+     * another. Without it, the most recently proved mailbox is read — what a
+     * wallet that predates the parameter still expects.
      */
     public function messages(Request $request): JsonResponse
     {
-        $address = $this->provenAddress($request);
+        $data = $request->validate([
+            'since' => ['sometimes', 'integer', 'min:0'],
+            'address' => ['sometimes', 'string', 'regex:/^0x[a-fA-F0-9]{40}$/'],
+        ]);
+
+        $address = $this->provenAddress($request, $data['address'] ?? null);
 
         if ($address === null) {
             return response()->json([
                 'message' => 'Sign the challenge with your wallet to read messages.',
             ], 403);
         }
-
-        $data = $request->validate([
-            'since' => ['sometimes', 'integer', 'min:0'],
-        ]);
 
         $rows = WalletChatMessage::query()
             ->where('id', '>', (int) ($data['since'] ?? 0))
@@ -511,6 +517,7 @@ class WalletChatController extends Controller
             ->get();
 
         return response()->json([
+            'address' => $address,
             'messages' => $rows->map(fn (WalletChatMessage $row) => $this->messagePayload($row))->all(),
             'cursor' => (int) ($rows->last()?->id ?? $data['since'] ?? 0),
         ]);
@@ -561,24 +568,57 @@ class WalletChatController extends Controller
         dispatch(fn () => $notifier->notify($from, $to))->afterResponse();
     }
 
-    /** The address this session proved, while the proof is still fresh. */
-    private function provenAddress(Request $request): ?string
+    /**
+     * The address a request may act as: the one it names, if this session
+     * proved it and the proof is still fresh — or, when it names none, the one
+     * proved most recently.
+     */
+    private function provenAddress(Request $request, ?string $wanted = null): ?string
     {
-        $proof = $request->session()->get(self::SESSION_KEY);
+        $proofs = $this->freshProofs($request);
 
-        if (! is_array($proof) || ! is_string($proof['address'] ?? null)) {
-            return null;
+        if ($wanted !== null) {
+            $wanted = Str::lower($wanted);
+
+            return array_key_exists($wanted, $proofs) ? $wanted : null;
         }
 
-        $age = now()->timestamp - (int) ($proof['proved_at'] ?? 0);
+        // The newest proof is the last one written (`verify` moves it there).
+        $latest = array_key_last($proofs);
 
-        if ($age > (int) config('wallet.chat.proof_minutes') * 60) {
-            $request->session()->forget(self::SESSION_KEY);
+        return $latest === null ? null : (string) $latest;
+    }
 
-            return null;
+    /**
+     * Every proof this session holds that has not aged out, address → when.
+     *
+     * @return array<string, int>
+     */
+    private function freshProofs(Request $request): array
+    {
+        $session = $request->session();
+        $proofs = $session->get(self::SESSION_KEY);
+        $proofs = is_array($proofs) ? $proofs : [];
+
+        $legacy = $session->pull(self::LEGACY_SESSION_KEY);
+
+        if (is_array($legacy) && is_string($legacy['address'] ?? null)) {
+            $proofs[$legacy['address']] = (int) ($legacy['proved_at'] ?? 0);
         }
 
-        return $proof['address'];
+        $oldest = now()->timestamp - (int) config('wallet.chat.proof_minutes') * 60;
+
+        $fresh = array_filter(
+            $proofs,
+            fn ($at, $address): bool => is_string($address) && is_int($at) && $at >= $oldest,
+            ARRAY_FILTER_USE_BOTH,
+        );
+
+        if ($fresh !== $proofs) {
+            $session->put(self::SESSION_KEY, $fresh);
+        }
+
+        return $fresh;
     }
 
     private function requestedAddress(Request $request): string

@@ -250,11 +250,19 @@ export const sendChatNote = (
         body: JSON.stringify(note),
     });
 
-/** Everything addressed to or sent by this account since a cursor. */
+/**
+ * Everything addressed to or sent by this account since a cursor.
+ *
+ * The mailbox is named, because one browser session can have proved several
+ * accounts, and the relay names it back in `address`.
+ */
 export const fetchChatEnvelopes = (
     since: number,
-): Promise<{ messages: ChatRelayRow[]; cursor: number }> =>
-    call(`/api/wallet/chat/messages?since=${since}`);
+    address?: string,
+): Promise<{ messages: ChatRelayRow[]; cursor: number; address?: string }> =>
+    call(
+        `/api/wallet/chat/messages?since=${since}${address ? `&address=${address.toLowerCase()}` : ''}`,
+    );
 
 /* ---------------------------------------------------------------- store --- */
 
@@ -381,15 +389,22 @@ export const readChatState = (owner: string): OwnerState => ({
  * Merge in what the relay just handed over.
  *
  * Deduplicated by the relay's own sequence, so a poll that overlaps a previous
- * one cannot double a message, and sorted by it so the thread reads in the
- * order the relay accepted things.
+ * one cannot double a message, and by the message's own id, so a row the relay
+ * has renumbered replaces the copy kept under its old number instead of
+ * appearing twice. Sorted by sequence so the thread reads in the order the
+ * relay accepted things.
  */
 export const storeChatRows = (
     owner: string,
     incoming: ChatRow[],
 ): OwnerState => {
     const state = readChatState(owner);
-    const bySeq = new Map(state.rows.map((row) => [row.seq, row]));
+    const incomingIds = new Set(incoming.map((row) => row.id));
+    const bySeq = new Map(
+        state.rows
+            .filter((row) => !incomingIds.has(row.id))
+            .map((row) => [row.seq, row]),
+    );
 
     for (const row of incoming) {
         // Only the fields a stored row has. A relay row that still carried

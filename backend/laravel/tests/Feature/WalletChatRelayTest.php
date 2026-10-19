@@ -608,3 +608,67 @@ it('names the correspondents a wallet already has, with their faces', function (
         ->and($people[0]['name'])->toBe('netrunner')
         ->and($people[0])->toHaveKey('avatar');
 });
+
+it('keeps two proven mailboxes in one session apart', function () {
+    [$aliceKey, $alice] = chatWallet();
+    [$bobKey, $bob] = chatWallet();
+    [, $carol] = chatWallet();
+
+    // One browser, two accounts: both prove themselves in the same session.
+    chatProve($aliceKey, $alice)->assertOk();
+    chatProve($bobKey, $bob)->assertOk();
+
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($alice), strtolower($bob)))->assertCreated();
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($bob), strtolower($carol)))->assertCreated();
+
+    // Each mailbox is asked for by name and answered by name — the second
+    // proof no longer replaces the first.
+    $this->getJson('/api/wallet/chat/messages?address='.$alice)
+        ->assertOk()
+        ->assertJsonPath('address', strtolower($alice))
+        ->assertJsonCount(1, 'messages');
+
+    $this->getJson('/api/wallet/chat/messages?address='.$bob)
+        ->assertOk()
+        ->assertJsonPath('address', strtolower($bob))
+        ->assertJsonCount(2, 'messages');
+
+    // A mailbox this session never proved stays shut.
+    $this->getJson('/api/wallet/chat/messages?address='.$carol)->assertStatus(403);
+    $this->postJson('/api/wallet/chat/messages/plain', chatNote(strtolower($carol), strtolower($alice)))
+        ->assertStatus(403);
+});
+
+it('moves ids handed out after a table rebuild above every old cursor', function () {
+    foreach (range(1, 3) as $index) {
+        WalletChatMessage::query()->create([
+            'message_id' => bin2hex(random_bytes(16)),
+            'from_address' => '0x'.str_repeat('a', 40),
+            'to_address' => '0x'.str_repeat('b', 40),
+            'sealed' => false,
+            'sent_at' => now()->toIso8601ZuluString(),
+            'body' => "message {$index}",
+        ]);
+    }
+
+    $migration = require database_path('migrations/2026_10_19_090744_lift_wallet_chat_message_ids_past_old_cursors.php');
+    $migration->up();
+
+    expect(WalletChatMessage::query()->orderBy('id')->pluck('id')->all())->toBe([10001, 10002, 10003]);
+
+    // And numbering carries on from there rather than from the rows it left.
+    $next = WalletChatMessage::query()->create([
+        'message_id' => bin2hex(random_bytes(16)),
+        'from_address' => '0x'.str_repeat('a', 40),
+        'to_address' => '0x'.str_repeat('b', 40),
+        'sealed' => false,
+        'sent_at' => now()->toIso8601ZuluString(),
+        'body' => 'after',
+    ]);
+
+    expect($next->id)->toBe(10004);
+
+    // Run again, it touches nothing.
+    $migration->up();
+    expect(WalletChatMessage::query()->max('id'))->toBe(10004);
+});

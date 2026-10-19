@@ -250,16 +250,35 @@ const toStored = async (
     };
 };
 
-/** Fold relay rows into the cache and the screen's copy of it. */
-const keep = async (incoming: ChatRelayRow[]): Promise<ChatArrival[]> => {
-    const self = owner.value;
+/**
+ * Fold relay rows into one account's cache, and into the screen's copy of it
+ * while that account is still the one on screen.
+ *
+ * Only rows this account sent or received are kept: a relay answer that
+ * carried anybody else's mail — a proof from another tab, an account switched
+ * mid-request — must not be filed here, or its ids would move this mailbox's
+ * cursor past mail it has not read. What is new is judged by message id, not by
+ * the relay's number, which has been renumbered once already.
+ */
+const keep = async (
+    self: string,
+    incoming: ChatRelayRow[],
+): Promise<ChatArrival[]> => {
+    const mine = incoming.filter(
+        (row) =>
+            row.from.toLowerCase() === self || row.to.toLowerCase() === self,
+    );
 
-    if (!self || incoming.length === 0) {
+    if (mine.length === 0 || owner.value !== self) {
         return [];
     }
 
-    const known = new Set(rows.value.map((row) => row.seq));
-    const converted = await Promise.all(incoming.map(toStored));
+    const known = new Set(rows.value.map((row) => row.id));
+    const converted = await Promise.all(mine.map(toStored));
+
+    if (owner.value !== self) {
+        return [];
+    }
 
     rows.value = storeChatRows(
         self,
@@ -268,7 +287,7 @@ const keep = async (incoming: ChatRelayRow[]): Promise<ChatArrival[]> => {
 
     return converted.filter(
         (entry) =>
-            !known.has(entry.row.seq) && entry.row.from.toLowerCase() !== self,
+            !known.has(entry.row.id) && entry.row.from.toLowerCase() !== self,
     );
 };
 
@@ -297,11 +316,24 @@ const pull = async (): Promise<ChatArrival[]> => {
 
             for (let page = 0; page < MAX_PAGES; page++) {
                 const cursor = readChatState(self).cursor;
-                const batch = await fetchChatEnvelopes(cursor);
+                const batch = await fetchChatEnvelopes(cursor, self);
 
-                arrivals.push(...(await keep(batch.messages)));
+                // A relay that answered for another mailbox (one that does not
+                // know the `address` parameter yet) is answered by proving
+                // this one again, not by filing its mail here.
+                if (batch.address && batch.address.toLowerCase() !== self) {
+                    proven.value = false;
 
-                if (batch.messages.length === 0 || batch.cursor <= cursor) {
+                    break;
+                }
+
+                arrivals.push(...(await keep(self, batch.messages)));
+
+                if (
+                    owner.value !== self ||
+                    batch.messages.length === 0 ||
+                    batch.cursor <= cursor
+                ) {
                     break;
                 }
             }
@@ -408,9 +440,9 @@ const markRead = (peer: string): void => {
 
 /** A row the screen sent itself, kept the same way as one that arrived. */
 const keepSent = async (row: ChatRelayRow): Promise<ChatRow> => {
-    await keep([row]);
+    await keep(row.from.toLowerCase(), [row]);
 
-    return rows.value.find((entry) => entry.seq === row.seq) as ChatRow;
+    return rows.value.find((entry) => entry.id === row.id) as ChatRow;
 };
 
 /** Send without encryption, and keep what was sent. */

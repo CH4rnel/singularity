@@ -231,7 +231,17 @@ const decrypt = async (): Promise<void> => {
 
     try {
         for (const row of inbox.rows.value) {
-            if (opened.value[row.id]) {
+            const known = opened.value[row.id];
+
+            if (known) {
+                // Already open; only the relay's number for it may have moved.
+                if (known.row.seq !== row.seq) {
+                    opened.value = {
+                        ...opened.value,
+                        [row.id]: { ...known, row },
+                    };
+                }
+
                 continue;
             }
 
