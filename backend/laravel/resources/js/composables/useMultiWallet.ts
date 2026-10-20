@@ -2,12 +2,16 @@ import { computed, ref } from 'vue';
 import { nftChain } from '@/lib/nftChains';
 import {
     PRIMARY_ACCOUNT_ID,
+    arenaCommitment,
+    commitArenaMove,
     catalogueWalletChains,
     chatPublicKey,
     conversationKey,
     customWalletChain,
     deriveAccounts,
     deriveAddress,
+    createArenaGame,
+    createArenaSecret,
     evmChatKey,
     forgetLainChats,
     forgetVault,
@@ -25,6 +29,7 @@ import {
     mergeTokens,
     phraseAccountId,
     readCustomNetworks,
+    joinArenaGame,
     readNetworkChoices,
     readManualTokens,
     sameToken,
@@ -35,6 +40,7 @@ import {
     saveOpenVault,
     saveVault,
     sealForSync,
+    revealArenaMove,
     seedAccountId,
     seedFromMnemonic,
     seedSource,
@@ -44,6 +50,7 @@ import {
     shippedChains,
     HOME_CHAIN,
     setCustomWalletChains,
+    settleArenaGame,
     unsealVault,
     vaultProtection,
     validateCustomNetwork,
@@ -74,6 +81,11 @@ import type {
     WalletKeySource,
     WalletTokenBalance,
     WalletTx,
+} from '@/lib/wallet';
+import type {
+    ArenaMove,
+    ArenaSecretRecord,
+    ArenaSettlement,
 } from '@/lib/wallet';
 import { accountBackupPhrase } from '@/lib/wallet/accounts';
 import { lockOnEvm } from '@/lib/wallet/bridge';
@@ -301,6 +313,8 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
             phrase: vault.phrase,
             accounts: next.accounts ?? vault.accounts,
             activeId: next.activeId ?? vault.activeId,
+            arenaSecrets: next.arenaSecrets ?? vault.arenaSecrets,
+            backedUp: next.backedUp ?? vault.backedUp,
         };
 
         await vault.reseal(merged);
@@ -541,6 +555,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
                     phrase: vault.phrase,
                     accounts: vault.accounts,
                     activeId: vault.activeId,
+                    arenaSecrets: vault.arenaSecrets,
                     backedUp: vault.backedUp,
                 },
                 password,
@@ -562,6 +577,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
             phrase: vault.phrase,
             accounts: vault.accounts,
             activeId: vault.activeId,
+            arenaSecrets: vault.arenaSecrets,
             backedUp: true,
         };
 
@@ -586,6 +602,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
                 phrase: vault.phrase,
                 accounts: vault.accounts,
                 activeId: vault.activeId,
+                arenaSecrets: vault.arenaSecrets,
                 backedUp: vault.backedUp,
             },
             password,
@@ -1857,6 +1874,196 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         }
     };
 
+    /* ------------------------------------------------------------- arena --- */
+
+    const arenaSecretKey = (
+        contract: string,
+        gameId: bigint,
+        player: string,
+    ): string => `${contract.toLowerCase()}:${gameId}:${player.toLowerCase()}`;
+
+    const arenaSecret = (
+        contract: string,
+        gameId: bigint,
+        player: string,
+    ): ArenaSecretRecord | null => {
+        if (!vault) {
+            return null;
+        }
+
+        const key = arenaSecretKey(contract, gameId, player);
+
+        return (
+            vault.arenaSecrets.find(
+                (candidate) =>
+                    arenaSecretKey(
+                        candidate.contract,
+                        BigInt(candidate.gameId),
+                        candidate.player,
+                    ) === key,
+            ) ?? null
+        );
+    };
+
+    const arenaCreate = async (
+        contract: string,
+        stake: bigint,
+    ): Promise<{ hash: string; gameId?: bigint }> => {
+        busy.value = true;
+
+        try {
+            return await createArenaGame(
+                sourceFor('cyberia'),
+                contract,
+                stake,
+                rpcFor('cyberia'),
+            );
+        } finally {
+            busy.value = false;
+        }
+    };
+
+    const arenaJoin = async (
+        contract: string,
+        gameId: bigint,
+        stake: bigint,
+    ): Promise<string> => {
+        busy.value = true;
+
+        try {
+            return (
+                await joinArenaGame(
+                    sourceFor('cyberia'),
+                    contract,
+                    gameId,
+                    stake,
+                    rpcFor('cyberia'),
+                )
+            ).hash;
+        } finally {
+            busy.value = false;
+        }
+    };
+
+    /** Seal the reveal material before broadcasting the commitment. */
+    const arenaCommit = async (
+        contract: string,
+        gameId: bigint,
+        player: string,
+        move: ArenaMove,
+    ): Promise<string> => {
+        if (!vault) {
+            throw new Error('Wallet is locked');
+        }
+
+        const existing = arenaSecret(contract, gameId, player);
+
+        if (existing && existing.move !== move) {
+            throw new Error('A different move is already sealed for this game');
+        }
+
+        const record: ArenaSecretRecord = existing ?? {
+            contract,
+            gameId: gameId.toString(),
+            player,
+            move,
+            secret: createArenaSecret(),
+            createdAt: new Date().toISOString(),
+        };
+
+        if (!existing) {
+            await commit({ arenaSecrets: [...vault.arenaSecrets, record] });
+        }
+
+        busy.value = true;
+
+        try {
+            return (
+                await commitArenaMove(
+                    sourceFor('cyberia'),
+                    contract,
+                    gameId,
+                    arenaCommitment(
+                        contract,
+                        gameId,
+                        player,
+                        move,
+                        record.secret,
+                    ),
+                    rpcFor('cyberia'),
+                )
+            ).hash;
+        } finally {
+            busy.value = false;
+        }
+    };
+
+    const arenaReveal = async (
+        contract: string,
+        gameId: bigint,
+        player: string,
+    ): Promise<string> => {
+        const saved = arenaSecret(contract, gameId, player);
+
+        if (!saved) {
+            throw new Error('This vault has no reveal secret for that game');
+        }
+
+        busy.value = true;
+
+        try {
+            const result = await revealArenaMove(
+                sourceFor('cyberia'),
+                contract,
+                gameId,
+                saved.move,
+                saved.secret,
+                rpcFor('cyberia'),
+            );
+
+            if (!vault) {
+                throw new Error('Wallet locked before the reveal was saved');
+            }
+
+            await commit({
+                arenaSecrets: vault.arenaSecrets.filter(
+                    (candidate) =>
+                        arenaSecretKey(
+                            candidate.contract,
+                            BigInt(candidate.gameId),
+                            candidate.player,
+                        ) !== arenaSecretKey(contract, gameId, player),
+                ),
+            });
+
+            return result.hash;
+        } finally {
+            busy.value = false;
+        }
+    };
+
+    const arenaSettle = async (
+        contract: string,
+        gameId: bigint,
+        method: ArenaSettlement,
+    ): Promise<string> => {
+        busy.value = true;
+
+        try {
+            return (
+                await settleArenaGame(
+                    sourceFor('cyberia'),
+                    contract,
+                    gameId,
+                    method,
+                    rpcFor('cyberia'),
+                )
+            ).hash;
+        } finally {
+            busy.value = false;
+        }
+    };
+
     return {
         chains: computed(() => {
             // The registry is module state, invisible to Vue; these two are
@@ -1947,5 +2154,11 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         refreshHistory,
         refreshFees,
         send,
+        arenaSecret,
+        arenaCreate,
+        arenaJoin,
+        arenaCommit,
+        arenaReveal,
+        arenaSettle,
     };
 };

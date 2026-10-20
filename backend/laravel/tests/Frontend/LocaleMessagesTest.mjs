@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { arcadeMessages } from '@/lib/arcadeMessages';
 import { arenaMessages } from '@/lib/arenaMessages';
 import { consoleMessages } from '@/lib/consoleMessages';
 import { downloadMessages } from '@/lib/downloadMessages';
@@ -20,6 +21,7 @@ import { walletMessages } from '@/lib/walletMessages';
 
 const DICTS = {
     arenaMessages,
+    arcadeMessages,
     walletMessages,
     downloadMessages,
     progressMessages,
