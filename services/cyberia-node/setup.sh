@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-IMAGE="0xpolygon/polygon-edge:latest"
+IMAGE="${POLYGON_EDGE_IMAGE:-0xpolygon/polygon-edge:latest}"
 BOOTNODE_IP="2.26.24.177"        # current production validator public IPv4
 BOOTNODE_PORT="1337"
 NODE_ID="16Uiu2HAmGYqgBskF5GLAgMbYaB1rDyYbVnEWN6qapYZGesUTm9go"
