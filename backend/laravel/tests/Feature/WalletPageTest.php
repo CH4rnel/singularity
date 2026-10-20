@@ -75,9 +75,9 @@ it('never sends key material to the browser', function () {
 });
 
 it('hands the wallet only public Arena coordinates and exposes its deep link', function () {
-    config(['arena.contract_address' => '0x1111111111111111111111111111111111111111']);
+    config(['arcade.contract_address' => '0x1111111111111111111111111111111111111111']);
 
-    $this->get('/arena')->assertRedirect('/wallet?screen=arena');
+    $this->get('/arcade')->assertRedirect('/wallet?screen=arena');
     $this->get('/wallet')->assertInertia(fn (AssertableInertia $page) => $page
         ->where('arena.enabled', true)
         ->where('arena.contractAddress', '0x1111111111111111111111111111111111111111')
