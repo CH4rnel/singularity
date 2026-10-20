@@ -1,0 +1,5 @@
+Pioneer checkpoint 3: a real swap on Cyberia, above the campaign minimum.
+
+The server reads it from the chain's indexer, so a screenshot proves nothing and a real transaction proves everything. Checkpoint 4 is the next step after it: add liquidity or stake.
+
+cyberia.church/wallet

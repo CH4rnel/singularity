@@ -1,0 +1,5 @@
+Ship log, week of Oct 21:
+
+• [[FILL: 3–5 lines from git log --since=2026-10-21, one user-visible change per line]]
+
+Everything is in the changelog: cyberia.church/changelog

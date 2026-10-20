@@ -1,0 +1,7 @@
+Cyberia is its own chain, not a token with a whitepaper.
+
+Chain ID 49406
+RPC rpc.cyberia.church
+Explorer explorer.cyberia.church
+
+Add it to any EVM wallet in 30 seconds, or just open ours. Every block is public.

@@ -1,0 +1,5 @@
+All of Cyberia is in one public repository: the chain config, bridge, DEX, wallet, launchpad, DAO, bots and games.
+
+The backend suite alone is 1,400+ tests. Read the code before you trust it.
+
+github.com/cyberia-temple/singularity

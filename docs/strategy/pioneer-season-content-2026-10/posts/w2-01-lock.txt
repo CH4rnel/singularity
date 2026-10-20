@@ -1,0 +1,5 @@
+The CYBER.sol team allocation is locked on Streamflow until March 10, 2027.
+
+Contract: app.streamflow.finance/contract/solana/mainnet/GCvmxEr4cAiSVeye9iD2tF8GsTHDyM4CB3n9AUrjkmFd
+
+Our public roadmap runs at least to that date. Check the lock yourself instead of taking our word for it.

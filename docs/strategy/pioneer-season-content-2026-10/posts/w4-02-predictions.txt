@@ -1,0 +1,5 @@
+Cyberia prediction markets settle themselves.
+
+A question ends with a tag like [px:SOL>80@coingecko]. After close, the server reads the first quote and resolves it. If a question can't be settled in time, it's cancelled with full refunds.
+
+cyberia.church/predictions

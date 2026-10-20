@@ -1,0 +1,5 @@
+.cyber domains are NFTs, and the holder writes the DNS.
+
+A launchpad token named .<zone> with a DOT<ZONE> ticker opens its own zone. Names there are paid in that token, and the payment is burned.
+
+Our DNS won't serve any zone the real root delegates, so nobody can hijack .com.

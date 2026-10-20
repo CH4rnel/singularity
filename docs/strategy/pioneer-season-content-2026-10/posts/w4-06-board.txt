@@ -1,0 +1,5 @@
+Every launchpad token can have its own homepage, pinned to IPFS, with a hit counter that can't take the page down.
+
+It's the underground: a small neocities for the tokens on Cyberia.
+
+underground.cyberia.church

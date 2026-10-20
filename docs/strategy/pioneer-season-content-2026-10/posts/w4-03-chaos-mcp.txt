@@ -1,0 +1,5 @@
+chaos-mcp is one MCP server for Cyberia, Lain OS and the market around them.
+
+Plug it into any MCP client and ask your agent about the chain, the launchpad or pump.fun. You authenticate with a Lain OS key.
+
+chaos.fm/mcp

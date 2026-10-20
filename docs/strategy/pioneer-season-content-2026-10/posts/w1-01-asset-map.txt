@@ -1,0 +1,7 @@
+There are three CYBERs. One map:
+
+CYBER.sol: the token on Solana. Mint E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump
+CYBER: the native coin of Cyberia, an EVM L1 (chain 49406)
+wrapped CYBER.sol: CYBER.sol bridged onto Cyberia
+
+How they connect: cyberia.church/cyber

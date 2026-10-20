@@ -1,0 +1,5 @@
+Ship log, week of Oct 28:
+
+• [[FILL: 3–5 user-visible changes]]
+
+Creator fees this week: [[FILL: received / spent / reserve, SOL]], and the full ledger is pinned in Telegram.

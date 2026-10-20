@@ -1,0 +1,3 @@
+53 tokenized stocks and funds on Robinhood Chain (NVDA, TSLA, SPY, GLD…) are in the Cyberia wallet.
+
+Addresses come from Robinhood's own registry, because "NVDA" alone matches nine contracts on that chain. The price shown is the issuer's quote, and the pool quotes what you'd pay.

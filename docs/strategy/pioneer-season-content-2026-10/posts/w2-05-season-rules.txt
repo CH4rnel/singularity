@@ -1,0 +1,9 @@
+Pioneer Season rules, before it opens:
+
+✓ counts: what you do on chain (bridge, swap, LP, stake)
+✓ counts: coming back another day
+✗ doesn't: buying, volume, follows, reposts, replies
+
+Rewards are status and on-chain badges. No tokens.
+
+cyberia.church/pioneer-season

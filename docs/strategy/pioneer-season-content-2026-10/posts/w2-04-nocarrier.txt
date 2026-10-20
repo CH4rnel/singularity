@@ -1,0 +1,5 @@
+Happy Halloween from the wired.
+
+NO CARRIER is a first-person netstalking horror game we built in Godot. You dial into dead networks and decode anomalies. In the browser build you can mint what you find as an NFT on Cyberia.
+
+cyberia.church/game/nocarrier (sign in with your wallet)

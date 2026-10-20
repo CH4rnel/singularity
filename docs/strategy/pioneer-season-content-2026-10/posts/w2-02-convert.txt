@@ -1,0 +1,5 @@
+CYBER.sol → native CYBER at a fixed 1000:1.
+
+No order book, no slippage. The bridged CYBER.sol you convert is burned on Cyberia (sent to 0x…dEaD) by the CyberSolBurnSwap contract, and you get the native coin of the chain.
+
+cyberia.church/convert

@@ -1,0 +1,5 @@
+The wallet now lives in Telegram too.
+
+Open @cyberia_network_bot and press Open. It's the same wallet as on the site and in the desktop app: one vault, synced, and the keys stay on your device.
+
+Telegram tells you when someone writes to your wallet.

@@ -1,0 +1,8 @@
+Pioneer bounties are open, paid in SOL out of CYBER.sol creator fees and nothing else.
+
+• a reproduced bug
+• a translation
+• a guide or 60s demo
+• an integration or token site
+
+Every payout goes in a public ledger. List: [[FILL: GitHub issues link, label pioneer-bounty]]

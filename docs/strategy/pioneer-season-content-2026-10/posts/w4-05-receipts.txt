@@ -1,0 +1,5 @@
+Bounty receipts, week 1:
+
+[[FILL: one line each: what was done → SOL paid → tx link]]
+
+Paid from creator fees: [[FILL]] SOL. Kept in reserve: [[FILL]] SOL. Ledger: [[FILL: pinned TG message link]]

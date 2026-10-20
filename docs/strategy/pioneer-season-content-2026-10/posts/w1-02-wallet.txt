@@ -1,0 +1,7 @@
+One recovery phrase. Eight networks.
+
+Cyberia, Robinhood Chain, BNB, Base, Solana, Bitcoin, Litecoin, Monero. Same EVM address on all four EVM chains.
+
+Generated in your browser and never sent to us. Open it, and it's ready.
+
+cyberia.church/wallet

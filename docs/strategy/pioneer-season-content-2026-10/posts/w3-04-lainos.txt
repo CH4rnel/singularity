@@ -1,0 +1,5 @@
+Lain is our open-source AI agent framework. It runs as a daemon with tools and a Cyberia chain plugin.
+
+Every wish it forges and every watch it fires shows up on our public ops board, so you can see what the machine did, not only what we said.
+
+github.com/lain-labs/os

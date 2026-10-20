@@ -1,0 +1,5 @@
+The Cyberia wallet extension is out for Chrome and Firefox.
+
+It connects only to sites you grant, one origin at a time. Every signature opens its own approval window and waits for you, and it never injects into every page.
+
+cyberia.church/download/extension

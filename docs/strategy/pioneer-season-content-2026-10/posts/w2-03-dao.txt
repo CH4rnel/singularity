@@ -1,0 +1,5 @@
+You can vote in Cyberia DAOs straight from the wallet.
+
+Sign once and your vote counts as your address, weighted by voting power, not by head count. You can propose too: pick 1, 3, 7 or 14 days and publish.
+
+cyberia.church/wallet → DAO
