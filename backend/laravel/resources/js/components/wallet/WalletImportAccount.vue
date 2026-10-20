@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
-import { isValidMnemonic, walletChain } from '@/lib/wallet';
-import type { WalletChainId } from '@/lib/wallet';
+import { isValidMnemonic, knownChain, shippedChains } from '@/lib/wallet';
+import type { WalletChain, WalletChainId } from '@/lib/wallet';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -49,6 +49,24 @@ const KINDS: { id: Kind; label: string; hint: string }[] = [
 ];
 
 /**
+ * Every network an account can be brought to: all the shipped ones, switched
+ * on or not — importing onto one switches it on — and whatever catalogue or
+ * custom network is on already. Listing only the switched-on ones left a new
+ * wallet with Cyberia alone, and a Solana key pasted there was read as an EVM
+ * one and refused.
+ */
+const reachableChains = computed<readonly WalletChain[]>(() => {
+    const shipped = shippedChains();
+
+    return [
+        ...shipped,
+        ...props.wallet.chains.value.filter(
+            (entry) => !shipped.some((candidate) => candidate.id === entry.id),
+        ),
+    ];
+});
+
+/**
  * Which networks can take a pasted key at all.
  *
  * Monero is absent on purpose rather than by omission: nothing here can spend
@@ -56,11 +74,11 @@ const KINDS: { id: Kind; label: string; hint: string }[] = [
  * derives at the price of holding a secret for no capability.
  */
 const keyChains = computed(() =>
-    props.wallet.chains.value.filter((entry) => entry.importKey !== undefined),
+    reachableChains.value.filter((entry) => entry.importKey !== undefined),
 );
 
 /** A watched address needs no key, so every network can hold one. */
-const watchChains = computed(() => props.wallet.chains.value);
+const watchChains = reachableChains;
 
 const chains = computed(() =>
     kind.value === 'key' ? keyChains.value : watchChains.value,
@@ -83,11 +101,7 @@ const looksValid = computed(() => {
     }
 
     if (kind.value === 'watch') {
-        try {
-            return walletChain(chain.value).isValidAddress(value);
-        } catch {
-            return false;
-        }
+        return knownChain(chain.value)?.isValidAddress(value) ?? false;
     }
 
     return value.replace(/^0x/, '').length >= 32;
@@ -139,6 +153,44 @@ watch([kind, keyChains], () => {
         !keyChains.value.some((entry) => entry.id === chain.value)
     ) {
         chain.value = keyChains.value[0]?.id ?? 'cyberia';
+    }
+});
+
+/** Whether `network` would take what has been pasted, for the kind picked. */
+const accepts = (network: WalletChain, value: string): boolean => {
+    try {
+        if (kind.value === 'watch') {
+            return network.isValidAddress(value);
+        }
+
+        network.importKey?.(value);
+
+        return network.importKey !== undefined;
+    } catch {
+        return false;
+    }
+};
+
+// A Solana key or address pasted while another network is picked is the usual
+// slip, and no other network here reads that base58 — so the picker follows
+// the paste rather than the import failing on a network it was never for.
+watch(secret, (value) => {
+    const trimmed = value.trim();
+    const picked = knownChain(chain.value);
+    const solana = chains.value.find((entry) => entry.family === 'solana');
+
+    if (
+        kind.value === 'phrase' ||
+        trimmed.length === 0 ||
+        !solana ||
+        picked?.family === 'solana' ||
+        (picked !== null && accepts(picked, trimmed))
+    ) {
+        return;
+    }
+
+    if (accepts(solana, trimmed)) {
+        chain.value = solana.id;
     }
 });
 
@@ -258,10 +310,7 @@ const submit = async (): Promise<void> => {
                 </button>
             </div>
             <p
-                v-if="
-                    kind === 'key' &&
-                    keyChains.length < wallet.chains.value.length
-                "
+                v-if="kind === 'key' && keyChains.length < watchChains.length"
                 class="cw-label"
                 style="margin-top: 8px; color: var(--cw-faint)"
             >

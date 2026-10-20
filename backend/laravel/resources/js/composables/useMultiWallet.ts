@@ -38,6 +38,7 @@ import {
     seedAccountId,
     seedFromMnemonic,
     seedSource,
+    knownChain,
     setCatalogueWalletChains,
     setShippedWalletChains,
     shippedChains,
@@ -824,7 +825,12 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
             return null;
         }
 
-        const chain = walletChain(draft.chain);
+        const chain = knownChain(draft.chain);
+
+        if (!chain) {
+            return `Unknown network "${draft.chain}"`;
+        }
+
         const secret = draft.secret.trim();
         let address: string;
 
@@ -871,6 +877,13 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
                       address,
                       label: draft.label,
                   };
+
+        // Bringing an account to a network that is off switches it on — an
+        // account the portfolio never reads would be imported and then be
+        // nowhere to be seen.
+        if (!walletChains().some((entry) => entry.id === draft.chain)) {
+            setNetwork(draft.chain, true);
+        }
 
         clearReads();
         await commit({
@@ -1845,7 +1858,15 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     };
 
     return {
-        chains: computed(() => walletChains()),
+        chains: computed(() => {
+            // The registry is module state, invisible to Vue; these two are
+            // what change whenever it does, so without them the list a screen
+            // first read is the list it keeps until a reload.
+            void enabledNetworks.value;
+            void customNetworks.value;
+
+            return walletChains();
+        }),
         customNetworks: computed(() => customNetworks.value),
         addNetwork,
         removeNetwork,

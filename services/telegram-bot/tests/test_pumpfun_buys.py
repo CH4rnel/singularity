@@ -371,7 +371,7 @@ class PhotoCardTest(unittest.TestCase):
     def test_theme_buttons_link_to_cyberia_and_the_correct_solana_mint(self):
         rows = pumpfun.keyboard().to_dict()["inline_keyboard"]
         self.assertEqual(rows[0][0]["url"], f"https://pump.fun/coin/{MINT}")
-        self.assertEqual(rows[0][1]["url"], "https://x.com/cyberia_temple")
+        self.assertEqual(rows[0][1]["url"], "https://x.com/cyberia_chain")
         self.assertEqual(rows[1][0]["url"], "https://cyberia.church/whitepaper")
         self.assertEqual(rows[1][1]["url"], "https://cyberia.church/wallet")
         self.assertEqual(rows[1][1]["text"], "🎲 Cyberia Wallet")

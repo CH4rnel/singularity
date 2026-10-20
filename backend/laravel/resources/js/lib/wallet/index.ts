@@ -207,6 +207,7 @@ export {
     WALLET_FAMILY_GROUPS,
     WALLET_FEE_TIERS,
     formatUnits,
+    knownChain,
     nativeSendGas,
     parseUnits,
     setCatalogueWalletChains,
