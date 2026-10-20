@@ -55,6 +55,7 @@ import {
 } from '@/lib/evmChains';
 import { formatUsd } from '@/lib/tokenFormat';
 import { track } from '@/lib/track';
+import { swap } from '@/routes';
 import { login as walletLogin } from '@/routes/wallet';
 
 const props = defineProps<{
@@ -89,7 +90,7 @@ const PENDING_REFRESH_MS = 15000;
 const GAS_RESERVE = parseUnits('0.02', 18);
 const EXPLORER = 'https://explorer.cyberia.church';
 const SOLSCAN = 'https://solscan.io/tx/';
-const DEX_URL = 'https://swap.cyberia.church';
+const DEX_URL = swap().url;
 
 // MasterChef pools that are not real staking pools and must never surface
 // here: EmissionChannel placeholders (they carve a satellite chain's ASH

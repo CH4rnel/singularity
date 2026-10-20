@@ -16,10 +16,10 @@ submitting forms, opening pull requests, or publishing adapters.
 | Public RPC            | `https://rpc.cyberia.church`                                      | `backend/laravel/resources/js/lib/evmChains.ts` |
 | Explorer              | `https://explorer.cyberia.church`                                 | `backend/laravel/resources/js/lib/evmChains.ts` |
 | Website               | `https://cyberia.church`                                          | root `AGENTS.md`                                |
-| DEX                   | `https://swap.cyberia.church`                                     | root `AGENTS.md`                                |
+| DEX                   | `https://cyberia.church/swap`                                     | root `AGENTS.md`                                |
 | Bridge                | `https://bridge.cyberia.church`                                   | root `AGENTS.md`                                |
 | Source                | `https://github.com/cyberia-temple/singularity`                   | landing page                                    |
-| X                     | `https://x.com/cyberia_temple`                                    | landing page                                    |
+| X                     | `https://x.com/cyberia_chain`                                    | landing page                                    |
 | X community           | `https://x.com/i/chat/group_join/g2052379607618179294/V3aEe965FJ` | landing page                                    |
 | Discord               | `https://discord.gg/J7H5VNhnW`                                    | landing page                                    |
 | Telegram              | `https://t.me/cyberia_network`                                    | landing page                                    |
@@ -52,15 +52,14 @@ absent.
 | Component            | Address                                      | Explorer                                                                                       |
 | -------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | WCYBER               | `0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9` | [contract](https://explorer.cyberia.church/address/0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9) |
-| Ritual V2 factory    | `0xB0aC30907c04b61F1482e62eA66eF4562a690917` | [contract](https://explorer.cyberia.church/address/0xB0aC30907c04b61F1482e62eA66eF4562a690917) |
-| Ritual V2 router     | `0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62` | [contract](https://explorer.cyberia.church/address/0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62) |
+| Cyberia V2 factory    | `0xB0aC30907c04b61F1482e62eA66eF4562a690917` | [contract](https://explorer.cyberia.church/address/0xB0aC30907c04b61F1482e62eA66eF4562a690917) |
+| Cyberia V2 router     | `0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62` | [contract](https://explorer.cyberia.church/address/0x8bECfB12Ab113586D8deD3D343aEfFd8eD54FD62) |
 | ASH MasterChef       | `0xd540DEa828567160FFDe5e792ca359aDD1f6B03D` | [contract](https://explorer.cyberia.church/address/0xd540DEa828567160FFDe5e792ca359aDD1f6B03D) |
 | EVM bridge           | `0xEf2c8E731006EEDD8F44f5Ea03A389635BB28f90` | [contract](https://explorer.cyberia.church/address/0xEf2c8E731006EEDD8F44f5Ea03A389635BB28f90) |
 | Lending comptroller  | `0xe66aa9842dc74F1c10ede19cA20Ece6E08F1CC88` | [contract](https://explorer.cyberia.church/address/0xe66aa9842dc74F1c10ede19cA20Ece6E08F1CC88) |
 | Lending price oracle | `0x8fEA279fb70D3D1B20a0E50cbC649c83C41Dc4D1` | [contract](https://explorer.cyberia.church/address/0x8fEA279fb70D3D1B20a0E50cbC649c83C41Dc4D1) |
 | ASH                  | `0x992Fca0a89DD95afb17751f6CC233Adb9B089df5` | [token](https://explorer.cyberia.church/token/0x992Fca0a89DD95afb17751f6CC233Adb9B089df5)      |
 | HATCHER              | `0x621021F18b6404123f98b1395c418868418ACF36` | [token](https://explorer.cyberia.church/token/0x621021F18b6404123f98b1395c418868418ACF36)      |
-| ORBV                 | `0x19E92D8475522FF6c8f3660372B9dc6674d85cC8` | [token](https://explorer.cyberia.church/token/0x19E92D8475522FF6c8f3660372B9dc6674d85cC8)      |
 
 Additional token, market, and pool addresses live in:
 
@@ -73,8 +72,8 @@ Additional token, market, and pool addresses live in:
 | Component         | Address                                      | Explorer                                                                                             |
 | ----------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | aeWETH            | `0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73` | [contract](https://robinhoodchain.blockscout.com/address/0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73) |
-| Ritual V2 factory | `0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86` | [contract](https://robinhoodchain.blockscout.com/address/0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86) |
-| Ritual V2 router  | `0xB0aC30907c04b61F1482e62eA66eF4562a690917` | [contract](https://robinhoodchain.blockscout.com/address/0xB0aC30907c04b61F1482e62eA66eF4562a690917) |
+| Cyberia V2 factory | `0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86` | [contract](https://robinhoodchain.blockscout.com/address/0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86) |
+| Cyberia V2 router  | `0xB0aC30907c04b61F1482e62eA66eF4562a690917` | [contract](https://robinhoodchain.blockscout.com/address/0xB0aC30907c04b61F1482e62eA66eF4562a690917) |
 | FundedFarm        | `0x4798F67D8D741DC09ae4409Da2D180524E72A99C` | [contract](https://robinhoodchain.blockscout.com/address/0x4798F67D8D741DC09ae4409Da2D180524E72A99C) |
 | CYBER             | `0x753979e6585CCa139fbB1918966D563a25eEB3B2` | [token](https://robinhoodchain.blockscout.com/token/0x753979e6585CCa139fbB1918966D563a25eEB3B2)      |
 | Bridged ASH       | `0xa284bF7D1d941ED8dEd25f8E592003E9e5373284` | [token](https://robinhoodchain.blockscout.com/token/0xa284bF7D1d941ED8dEd25f8E592003E9e5373284)      |
@@ -109,7 +108,6 @@ block.
 | ASH emission start                               | block `6374644` in `cyberia-ash-emission.json`                                            |
 | BNB/CYBER farm pool addition                     | block `12342276`, tx `0x7dc8942380af237162fcb0c7cc36c6d303f9a639399b9988e81adc12671684f6` |
 | SPY/CYBER farm pool addition                     | block `13678632`, tx `0x86bf8e6bda65857744fbf0b9ff344b6e490210edc61533386cce0fab4da13975` |
-| ORBV/CYBER farm pool addition                    | block `13850280`, tx `0x255c4ec5aa14eaa41ce6237365f1b1d6b45771b9ff31509933ffaf951bb20e65` |
 | Cyberia bridge manifest timestamp                | `2026-05-02T17:43:22.752Z`                                                                |
 | Current Robinhood funded farm manifest timestamp | `2026-07-24T23:18:23.101Z`                                                                |
 
@@ -140,7 +138,7 @@ Readiness:
 
 - [x] Public EVM RPC, chain ID, native currency, explorer, factory, and router
       are documented.
-- [x] Ritual has on-chain liquidity contracts suitable for a protocol adapter.
+- [x] Cyberia has on-chain liquidity contracts suitable for a protocol adapter.
 - [ ] Decide canonical DefiLlama slug/short name: proposed `cyberia`, owner
       approval required.
 - [ ] Confirm archive RPC support from the first adapter block.
@@ -153,7 +151,7 @@ Readiness:
 
 Proposed scope:
 
-- Ritual DEX TVL: enumerate pairs from factory
+- Cyberia DEX TVL: enumerate pairs from factory
   `0xB0aC30907c04b61F1482e62eA66eF4562a690917` and count reserves without
   double-counting staked LP tokens.
 - Lending TVL: count supplied underlying balances across markets listed by
@@ -175,7 +173,7 @@ Official adapter guide:
 
 ## DefiLlama DEX volume adapter
 
-Proposed scope: index `Swap` events from every Ritual pair created by the
+Proposed scope: index `Swap` events from every Cyberia pair created by the
 Cyberia factory. Return `dailyVolume` in token balances using the current
 dimension-adapter API.
 
@@ -188,7 +186,7 @@ dimension-adapter API.
 ## DefiLlama fees/revenue adapter
 
 For a Uniswap V2-style DEX, LP fees are generally embedded in pool reserves.
-The exact Ritual fee and any protocol-fee destination must be confirmed from
+The exact Cyberia fee and any protocol-fee destination must be confirmed from
 the deployed bytecode/source and factory configuration before publishing a
 methodology.
 
@@ -272,7 +270,7 @@ screenshots, and live smart-contract addresses.
 Recommended submission:
 
 - Primary category: DeFi.
-- Product: Ritual/Cyberia, with factory, router, farm, bridge, and lending
+- Product: Cyberia/Cyberia, with factory, router, farm, bridge, and lending
   controller disclosed as separate contracts.
 - Landing URL: `https://cyberia.church/robinhood-chain` for the acquisition
   campaign, or the canonical `https://cyberia.church` for the ecosystem.

@@ -40,7 +40,7 @@ No pool path currently connects the pair with enough depth for your size. Try a 
 The pool for that pair is shallow. Trade smaller, or check whether a better-routed pair exists on the [tokens page](https://cyberia.church/tokens).
 
 **What's WCYBER?**
-Wrapped native CYBER — the ERC-20 form the DEX pools use internally. The swap UI wraps/unwraps automatically; you only touch it directly on Ritual's Wrap page.
+Wrapped native CYBER — the ERC-20 form the DEX pools use internally. The swap UI wraps/unwraps automatically; open **More → Wrap / unwrap** in [Cyberia Wallet](https://cyberia.church/wallet?wrap=wrap) to convert CYBER ↔ WCYBER directly.
 
 ## Assets
 

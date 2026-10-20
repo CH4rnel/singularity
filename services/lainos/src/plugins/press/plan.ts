@@ -3,7 +3,7 @@
  * standing brief that governs how any of it is said.
  *
  * It is data, not code, because it comes from outside the daemon — an analyst
- * read the last fifty posts of @cyberia_temple and wrote a 28-day calendar out
+ * read the last fifty posts of @cyberia_chain and wrote a 28-day calendar out
  * of what actually worked. `content-plan.json` next to `soul.md` is that
  * document, parsed once and then only read. Everything here is pure so the
  * whole schedule can be tested against a fixed clock.

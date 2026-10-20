@@ -6,7 +6,7 @@ The Cyberia bridge moves assets between external chains and Cyberia: <https://cy
 
 Availability is read from the running bridge. Open the source and destination selectors to see the routes accepting new requests now; the page also shows when a prepared corridor is not yet accepting submissions.
 
-Cyberia's bridge configuration includes connectors for Solana, TON, Robinhood Chain, BNB Chain, Base, Yenten, Bitcoin, Litecoin, and Monero. Assets configured across those connectors include CYBER.sol, USDC, USDT, SOL, TON, ETH, SPY, HATCHER, ORBV, KRSQ, GOAL, YTN, BTC, LTC, XMR, CYBER, and BNB. The selectable combination in the live bridge is the source of truth for a new transfer.
+Cyberia's bridge configuration includes connectors for Solana, TON, Robinhood Chain, BNB Chain, Base, Yenten, Bitcoin, Litecoin, and Monero. Assets configured across those connectors include CYBER.sol, USDC, USDT, SOL, TON, ETH, SPY, HATCHER, KRSQ, GOAL, YTN, BTC, LTC, XMR, CYBER, and BNB. The selectable combination in the live bridge is the source of truth for a new transfer.
 
 To check a route:
 

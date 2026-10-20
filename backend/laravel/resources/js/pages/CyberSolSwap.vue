@@ -24,6 +24,7 @@ import {
     cyberiaReadRpcUrl,
     ensureCyberiaNetwork,
 } from '@/lib/evmChains';
+import { swap } from '@/routes';
 
 // Two fixed-rate redeemers convert bridged CYBER.sol -> native CYBER at 1000 : 1.
 // They share the same swap logic and payout mechanism (native balance held by
@@ -845,7 +846,7 @@ watch(mode, () => {
                         </p>
                     </a>
                     <a
-                        href="https://swap.cyberia.church/"
+                        :href="swap().url"
                         target="_blank"
                         rel="noopener noreferrer"
                         class="group rounded-2xl border border-border bg-card p-5 transition hover:border-foreground/30"

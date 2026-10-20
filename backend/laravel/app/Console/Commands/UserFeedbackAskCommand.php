@@ -41,8 +41,8 @@ class UserFeedbackAskCommand extends Command
         }
 
         $title = (string) ($this->option('title') ?: 'How did it go?');
-        $body = (string) ($this->option('body') ?: 'We would like to hear what happened. Telegram @rtutin, or @cyberia_temple on X.');
-        $url = (string) ($this->option('url') ?: 'https://x.com/cyberia_temple');
+        $body = (string) ($this->option('body') ?: 'We would like to hear what happened. Telegram @rtutin, or @cyberia_chain on X.');
+        $url = (string) ($this->option('url') ?: 'https://x.com/cyberia_chain');
 
         $this->newLine();
         $this->line("  to     #{$user->id}  {$user->name}");

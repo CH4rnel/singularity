@@ -70,12 +70,12 @@ const outbound = computed(() =>
 
 const contracts = [
     {
-        label: 'Ritual router',
+        label: 'Cyberia router',
         address: ROBINHOOD_GROWTH.dex.router,
         url: `${ROBINHOOD_GROWTH.dex.explorer}/address/${ROBINHOOD_GROWTH.dex.router}`,
     },
     {
-        label: 'Ritual factory',
+        label: 'Cyberia factory',
         address: ROBINHOOD_GROWTH.dex.factory,
         url: `${ROBINHOOD_GROWTH.dex.explorer}/address/${ROBINHOOD_GROWTH.dex.factory}`,
     },
@@ -195,7 +195,7 @@ onMounted(() => {
             <PageHero
                 eyebrow="Robinhood Chain · Chain ID 4663"
                 title="Bridge, trade and earn with Robinhood Chain"
-                description="Cyberia connects a live bridge corridor with Ritual swaps, liquidity and funded LP farms. Every executable action below points to an on-chain application."
+                description="Cyberia connects a live bridge corridor with Cyberia swaps, liquidity and funded LP farms. Every executable action below points to an on-chain application."
             >
                 <template #actions>
                     <Badge variant="outline" class="gap-1.5">
@@ -402,7 +402,7 @@ onMounted(() => {
             <Card>
                 <CardHeader>
                     <p class="text-xs text-brand-cyan">04</p>
-                    <CardTitle>Trade through Ritual DEX</CardTitle>
+                    <CardTitle>Trade through Cyberia DEX</CardTitle>
                 </CardHeader>
                 <CardContent class="flex h-full flex-col">
                     <p class="text-sm text-muted-foreground">

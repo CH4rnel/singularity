@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Cyberia — The liquidity home of Ritual DEX</title>
+<title>Cyberia — Wallet, Bridge and Swap</title>
 <!--
  On iOS the page you are looking at when you press "Add to Home Screen" is the
  page the icon launches, manifest or not — and it is also the document iOS sizes
@@ -58,16 +58,16 @@
   }
 })();
 </script>
-<meta name="description" content="Bridge, trade and earn where about 90% of Ritual liquidity is concentrated: Cyberia. Robinhood Chain is natively supported." />
+<meta name="description" content="One wallet to bridge, trade and earn on Cyberia and supported networks, including Robinhood Chain." />
 <link rel="canonical" href="https://cyberia.church/" />
-<meta property="og:title" content="Cyberia — The liquidity home of Ritual DEX" />
-<meta property="og:description" content="About 90% of Ritual liquidity is concentrated on Cyberia, with native support for Robinhood Chain." />
+<meta property="og:title" content="Cyberia — Wallet, Bridge and Swap" />
+<meta property="og:description" content="Bridge, swap and manage liquidity on Cyberia, with native support for Robinhood Chain." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://cyberia.church/" />
 <meta property="og:image" content="https://cyberia.church/cyberia_logo.png" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Cyberia — The liquidity home of Ritual DEX" />
-<meta name="twitter:description" content="About 90% of Ritual liquidity is concentrated on Cyberia, with native support for Robinhood Chain." />
+<meta name="twitter:title" content="Cyberia — Wallet, Bridge and Swap" />
+<meta name="twitter:description" content="Bridge, swap and manage liquidity on Cyberia, with native support for Robinhood Chain." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1425,7 +1425,7 @@ function Hero(){
         <p className="hero-eyebrow">Cyberia-native bridge · DEX · Yield</p>
         <h1>The liquidity home of the Cyberia ecosystem</h1>
         <p className="hero-description">
-          About 90% of Ritual liquidity is concentrated on Cyberia. Bridge
+          Swap and manage liquidity directly on Cyberia. Bridge
           assets in, trade across its pools and put liquidity to work through
           on-chain staking.
         </p>
@@ -1450,7 +1450,7 @@ function Hero(){
           <div className="proof-row">
             <div className="proof-k">Liquidity home</div>
             <div className="proof-v">
-              <span className="proof-live"><strong>Cyberia</strong> · 49406 · ≈90% of Ritual liquidity</span>
+              <span className="proof-live"><strong>Cyberia</strong> · 49406 · native liquidity hub</span>
             </div>
           </div>
           <div className="proof-row">
@@ -1461,7 +1461,7 @@ function Hero(){
           </div>
           <div className="proof-row">
             <div className="proof-k">Products</div>
-            <div className="proof-v">Bridge · Ritual DEX · Liquidity · Solo &amp; LP staking</div>
+            <div className="proof-v">Bridge · Cyberia Swap · Liquidity · Solo &amp; LP staking</div>
           </div>
           <div className="hero-stats" aria-label="Live on-chain metrics">
             <LiveBlock />
@@ -1741,7 +1741,7 @@ function Rite(){
 
 function Contact(){
   const channels = [
-    { label: 'X',           handle: '@cyberia_temple',   href: 'https://x.com/cyberia_temple',
+    { label: 'X',           handle: '@cyberia_chain',   href: 'https://x.com/cyberia_chain',
       icon: (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26L23 21.75h-6.66l-5.214-6.817L5.156 21.75H1.845l7.73-8.835L1 2.25h6.828l4.713 6.231 5.703-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644z"/></svg>) },
     { label: 'X community', handle: 'Group chat',        href: 'https://x.com/i/chat/group_join/g2052379607618179294/V3aEe965FJ',
       icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="9" cy="10" r="3"/><circle cx="17" cy="8" r="2.2"/><path d="M3 20c.6-3 3-5 6-5s5.4 2 6 5"/><path d="M14 18c.4-2 2-3.6 4-3.6 1.6 0 3 .8 3.6 2.6"/></svg>) },
@@ -1900,7 +1900,7 @@ const ICONS = {
 const ECO_APPS = [
   { ic:'wallet', k:'Wallet', name:'Cyberia Wallet', href:'/download', status:'live',
     desc:'One seed phrase for Cyberia, Solana, Bitcoin, Litecoin, Monero and every EVM network you add — plus encrypted messages between wallets. In the browser, or installed on Windows, macOS, Linux and Android.' },
-  { ic:'swap', k:'DEX', name:'Ritual Swap', href:'/swap', status:'live',
+  { ic:'swap', k:'DEX', name:'Cyberia Swap', href:'/swap', status:'live',
     desc:'The native exchange of Cyberia. AMM pools for CYBER and every ecosystem token, with routing across the whole pair graph.' },
   { ic:'bridge', k:'Interchain', name:'Bridge', href:'/bridge', status:'live',
     desc:'Move value between Solana, TON, BSC, Bitcoin-family chains and Cyberia — personal deposit addresses included, plus direct $CYBER.sol ⇄ CYBER conversion.' },
@@ -1993,10 +1993,6 @@ function Ecosystem(){
         <a className="partner" href="/partners/hatcher" onClick={()=>trackStatic('partner_cta_clicked',{partner:'hatcher',token:'HATCHER',action_type:'partner_page'})}>
           <img src="/token-icons/hatcher.jpg" alt="Hatcher logo"/>
           Hatcher
-        </a>
-        <a className="partner" href="/partners/orbserv" onClick={()=>trackStatic('partner_cta_clicked',{partner:'orbserv',token:'ORBV',action_type:'partner_page'})}>
-          <img src="/token-icons/orbserv.jpg" alt="Orbserv logo"/>
-          Orbserv
         </a>
       </div>
 

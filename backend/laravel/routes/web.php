@@ -128,7 +128,7 @@ Route::get('/robinhood-chain', function (BridgeConfigService $bridgeConfig) {
     $faq = [
         [
             'question' => 'Is the Cyberia Robinhood Chain DEX live?',
-            'answer' => 'Yes. Ritual has live Robinhood Chain contracts and non-zero ETH/CYBER and ETH/ASH liquidity pools. Users can switch the existing swap and liquidity interfaces to chain ID 4663.',
+            'answer' => 'Yes. Cyberia has live Robinhood Chain contracts and non-zero ETH/CYBER and ETH/ASH liquidity pools. Users can switch the existing swap and liquidity interfaces to chain ID 4663.',
         ],
         [
             'question' => 'How can I bridge to Robinhood Chain through Cyberia?',
@@ -136,7 +136,7 @@ Route::get('/robinhood-chain', function (BridgeConfigService $bridgeConfig) {
         ],
         [
             'question' => 'Which tokens can I trade on Robinhood Chain?',
-            'answer' => 'The curated Ritual interface currently exposes native ETH, bridged CYBER and bridged ASH on Robinhood Chain.',
+            'answer' => 'The curated Cyberia interface currently exposes native ETH, bridged CYBER and bridged ASH on Robinhood Chain.',
         ],
         [
             'question' => 'Does Robinhood Chain staking have a fixed APY?',
@@ -144,7 +144,7 @@ Route::get('/robinhood-chain', function (BridgeConfigService $bridgeConfig) {
         ],
     ];
     $title = 'Robinhood Chain Bridge, DEX and Staking | Cyberia';
-    $description = 'Use Cyberia with Robinhood Chain: connect a wallet, switch to chain ID 4663, bridge supported assets, trade on Ritual DEX, add liquidity and use variable-reward farms.';
+    $description = 'Use Cyberia with Robinhood Chain: connect a wallet, switch to chain ID 4663, bridge supported assets, trade on Cyberia Swap, add liquidity and use variable-reward farms.';
 
     return Inertia::render('Growth/RobinhoodChain', [
         'bridgeRoutes' => $routes,

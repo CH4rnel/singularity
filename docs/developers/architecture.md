@@ -11,9 +11,6 @@ Users and operators
         |      Laravel 13 + Inertia + Vue 3
         |      site, wallet, bridge, social, DAO, console, APIs
         |
-        +-- swap.cyberia.church
-        |      Ritual React DEX
-        |
         +-- desktop / mobile / extension
         |      native shells and browser extension
         |
@@ -40,7 +37,7 @@ Cyberia EVM L1 (chain 49406)
 | Path | Responsibility | Stack |
 | --- | --- | --- |
 | `backend/laravel/` | Main site, bridge, wallet surface, APIs, jobs, operator console | Laravel, Inertia, Vue |
-| `frontend/ritual/` | Full DEX UI | React, CRA, react-app-rewired |
+| `frontend/ritual/` | Retired DEX UI, retained for reference | React, CRA, react-app-rewired |
 | `frontend/landing/`, `frontend/jekyll/` | Static brand and blog content | HTML, Jekyll |
 | `frontend/desktop/` | Desktop shell over the live site | Electron |
 | `frontend/mobile/` | Android and iOS shells | Capacitor |

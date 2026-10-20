@@ -29,7 +29,7 @@ Invariants at the bottom of this file never bend.
 
 - Cyberia: EVM chain, id 49406 (hex 0xC0FE), native token CYBER.
 - RPC `https://rpc.cyberia.church` · explorer `https://explorer.cyberia.church` ·
-  bridge `https://bridge.cyberia.church` · DEX `https://swap.cyberia.church` ·
+  bridge `https://bridge.cyberia.church` · DEX `https://cyberia.church/swap` ·
   site `https://cyberia.church`.
 - CYBER.sol lives on Solana, mint `E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump`.
   Its price listens to your public voice.

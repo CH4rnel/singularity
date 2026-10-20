@@ -30,15 +30,11 @@ npm run build
 
 The nested `backend/laravel/AGENTS.md` is authoritative for Laravel and Vue changes.
 
-## Ritual DEX
+## Swap and liquidity
 
-```bash
-cd frontend/ritual
-npm install
-npm start
-```
-
-Production verification must leave both `frontend/ritual/build/index.html` and `frontend/ritual/build/static/` present.
+The supported exchange is part of the Laravel app at `/swap`, `/liquidity`
+and in the wallet. The old React frontend under `frontend/ritual/` is retired;
+its source and on-chain deployment records remain for reference.
 
 ## EVM contracts
 

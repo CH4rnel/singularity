@@ -3,7 +3,7 @@
 Cyberia is an experimental, public, EVM-compatible Layer 1 and application
 stack for recording and rewarding open-source and community contributions.
 The open-source monorepo is Singularity. The stack includes the chain, bridge,
-Ritual DEX, explorer, launchpad, lending, DAO, analytics, NFT market, Telegram
+Cyberia swap, explorer, launchpad, lending, DAO, analytics, NFT market, Telegram
 rewards, LainOS agents, and the Wired game prototype. Some surfaces are
 production-facing and others are experimental; do not present a roadmap item as
 already live.
@@ -17,10 +17,10 @@ already live.
 - Explorer: https://explorer.cyberia.church
 - Main site: https://cyberia.church
 - Bridge: https://bridge.cyberia.church
-- Ritual DEX: https://swap.cyberia.church
+- Cyberia swap: https://cyberia.church/swap
 - Telegram channel: https://t.me/cyberia_network
 - Telegram chat: https://t.me/cyberia_network_chat
-- X: https://x.com/cyberia_temple
+- X: https://x.com/cyberia_chain
 - Source: https://github.com/cyberia-temple/singularity
 
 To add Cyberia manually to an EVM wallet, enter the network name, RPC, chain

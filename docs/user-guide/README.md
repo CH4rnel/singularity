@@ -38,7 +38,6 @@ Follow these pages in order if this is your first crypto wallet:
 | Main site | <https://cyberia.church> | Landing, ecosystem overview |
 | Cyberia Wallet | <https://cyberia.church/wallet> | Non-custodial multichain wallet |
 | Bridge | <https://cyberia.church/bridge> (also <https://bridge.cyberia.church>) | Cross-chain transfers |
-| Ritual DEX | <https://swap.cyberia.church> | Swap, pools, farm, wrap |
 | In-app swap | <https://cyberia.church/swap> | Swap directly on the main site |
 | Liquidity | <https://cyberia.church/liquidity> | Add/remove DEX liquidity |
 | Converter | <https://cyberia.church/convert> | Redeem CYBER.sol for native CYBER (1000 : 1) |

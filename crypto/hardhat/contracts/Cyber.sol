@@ -17,7 +17,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///           - robinhood_to_evm (bridge IN): user transfers CYBER to the
 ///             relayer EOA here, relayer burnFrom()s it and pays native CYBER
 ///             on Cyberia — supply stays 1:1 with the Cyberia-side reserve.
-/// @dev    Mirrors the Hatcher/Orbserv wrapper pattern (Ownable + mint +
+/// @dev    Mirrors the Hatcher wrapper pattern (Ownable + mint +
 ///         owner-gated burnFrom). 18 decimals to match the native coin.
 contract Cyber is ERC20, ERC20Burnable, ERC20Permit, Ownable {
     constructor(address initialOwner)

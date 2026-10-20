@@ -106,7 +106,7 @@ https://cyberia.church/partners/{{slug}}?utm_source={{partner_channel}}&utm_medi
 Conventions:
 
 - `utm_source`: stable publisher identifier, for example `ash`, `hatcher`,
-  `orbserv`, `cyberia_x`, or `partner_discord`.
+  `cyberia_x`, or `partner_discord`.
 - `utm_medium`: placement type, for example `social`, `community`,
   `newsletter`, `docs`, or `video`.
 - `utm_campaign`: lowercase campaign identifier, for example
@@ -160,7 +160,7 @@ Confirmed scope in the current repository:
 ### Integration live
 
 ```text
-ASH is live across Ritual on Cyberia and Robinhood Chain.
+ASH is live across Cyberia on Cyberia and Robinhood Chain.
 
 Trade ASH, add liquidity, and stake eligible LP tokens through Cyberia's
 on-chain interfaces. ASH single-token staking and the ASH lending market are
@@ -192,7 +192,7 @@ Confirmed scope in the current repository:
 
 - HATCHER Token-2022 mint on Solana and bridged ERC-20 on Cyberia.
 - Solana ↔ Cyberia HATCHER bridge route.
-- Ritual trading and liquidity, HATCHER single-token staking, a
+- Cyberia trading and liquidity, HATCHER single-token staking, a
   CYBER/HATCHER LP farm, and lending/borrowing on Cyberia.
 
 ### Integration live
@@ -200,7 +200,7 @@ Confirmed scope in the current repository:
 ```text
 HATCHER is live across Solana and Cyberia.
 
-Bridge HATCHER between Solana and Cyberia, then trade it on Ritual, add
+Bridge HATCHER between Solana and Cyberia, then trade it on Cyberia, add
 liquidity, stake HATCHER or an eligible CYBER/HATCHER LP token, or open the
 Cyberia lending market.
 
@@ -219,47 +219,9 @@ How to move and use HATCHER on Cyberia
 2. Connect the wallet required by the selected bridge direction.
 3. Bridge HATCHER between Solana and Cyberia.
 4. Wait for completion and verify both network transactions.
-5. Open Ritual to trade, add liquidity, stake, farm or use the lending market.
+5. Open Cyberia to trade, add liquidity, stake, farm or use the lending market.
 
 Guide: https://cyberia.church/partners/hatcher?utm_source=hatcher&utm_medium=tutorial&utm_campaign=cyberia_partner_launch_2026q3
-```
-
-## Orbserv / ORBV campaign copy
-
-Confirmed scope in the current repository:
-
-- ORBV Token-2022 mint on Solana and bridged ERC-20 on Cyberia.
-- Solana ↔ Cyberia ORBV bridge route.
-- Ritual trading and liquidity, ORBV single-token staking, an ORBV/CYBER LP
-  farm, and lending/borrowing on Cyberia.
-
-### Integration live
-
-```text
-ORBV is live across Solana and Cyberia.
-
-Bridge ORBV between Solana and Cyberia, trade it on Ritual, add liquidity,
-stake ORBV or an eligible ORBV/CYBER LP token, or open the Cyberia lending
-market.
-
-Start: https://cyberia.church/partners/orbserv?utm_source=orbserv&utm_medium=social&utm_campaign=cyberia_partner_launch_2026q3
-
-All actions settle on-chain. Reward and borrowing rates are variable and DeFi
-positions involve smart-contract, liquidity and liquidation risk.
-```
-
-### Tutorial
-
-```text
-How to move and use ORBV on Cyberia
-
-1. Open the Orbserv partner page.
-2. Connect the wallet required by the selected bridge direction.
-3. Bridge ORBV between Solana and Cyberia.
-4. Wait for completion and verify both network transactions.
-5. Open Ritual to trade, add liquidity, stake, farm or use the lending market.
-
-Guide: https://cyberia.church/partners/orbserv?utm_source=orbserv&utm_medium=tutorial&utm_campaign=cyberia_partner_launch_2026q3
 ```
 
 ## Launch gate

@@ -81,3 +81,23 @@ it('prices a token and lists its pools from the DEX pool graph', function () {
             ->where('pools.0.other_symbol', 'USDC')
             ->where('pools.0.other_known', true));
 });
+
+it('links trading to the supported exchange with the selected output token', function () {
+    $this->get('/token/'.USDC)
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('token.links.0.label', 'Trade on Cyberia')
+            ->where('token.links.0.url', '/swap?chain=49406&out='.USDC)
+            ->where('token.links.0.external', false));
+});
+
+it('ships every token directory icon locally and links wrapping to the wallet', function () {
+    expect(config('tokens.logo_base'))->toBe('/token-icons');
+    foreach (config('tokens.list') as $token) {
+        expect(is_file(public_path('token-icons'.$token['logo'])))->toBeTrue($token['symbol']);
+    }
+    $this->get('/token/'.WCYBER)
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('token.links.0.url', '/wallet?wrap=wrap')
+            ->where('token.links.0.external', false));
+});

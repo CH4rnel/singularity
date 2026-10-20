@@ -1,7 +1,7 @@
 /**
  * Adds single-asset staking pools to the live ASH MasterChef for the /staking
  * page: native CYBER (staked as WCYBER — MasterChef only accepts ERC-20, the
- * site wraps/unwraps around deposit and withdrawal), HATCHER and ORBV.
+ * site wraps/unwraps around deposit and withdrawal) and HATCHER.
  * Pools that already exist with the expected allocPoint are skipped, so the
  * script is safe to re-run.
  *
@@ -34,10 +34,6 @@ const SOLO_POOLS = [
   {
     symbol: "HATCHER",
     token: "0x621021F18b6404123f98b1395c418868418ACF36" as const,
-  },
-  {
-    symbol: "ORBV",
-    token: "0x19E92D8475522FF6c8f3660372B9dc6674d85cC8" as const,
   },
 ];
 

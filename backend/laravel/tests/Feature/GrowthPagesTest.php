@@ -16,7 +16,7 @@ test('the landing centers Cyberia liquidity and links the whitepaper', function 
         ->toContain('<a href="/cyber">CYBER</a>')
         ->toContain('<a href="https://docs.cyberia.church" target="_blank" rel="noopener noreferrer">Docs</a>')
         ->toContain('The liquidity home of the Cyberia ecosystem')
-        ->toContain('About 90% of Ritual liquidity is concentrated on Cyberia')
+        ->toContain('Swap and manage liquidity directly on Cyberia')
         ->toContain('Robinhood Chain is natively supported')
         ->toContain('Open Cyberia bridge')
         ->toContain('Explore DEX')
@@ -63,7 +63,7 @@ test('partner campaigns render from the shared campaign page', function (string 
         ->assertInertia(fn (Assert $page) => $page
             ->component('Growth/Partner')
             ->where('partnerSlug', $partner));
-})->with(['ash', 'hatcher', 'orbserv']);
+})->with(['ash', 'hatcher']);
 
 test('pioneer season is available as a coming soon experience', function () {
     $this->get('/pioneer-season')

@@ -28,6 +28,14 @@ export type MarketView = {
     exchangeRate: bigint;
 };
 
+// Markets the comptroller still lists but the interface no longer offers. A
+// comptroller cannot drop a market once it is listed, so a delisted token is
+// hidden here instead; only an empty market (no supply, no borrows) belongs
+// on this list, since hiding one would hide somebody's position with it.
+const DELISTED_MARKETS = new Set(
+    ['0x0cb6D096F029177f17d94Ac84F217c1b5568573a'].map((a) => a.toLowerCase()),
+);
+
 export const COMPTROLLER_ABI = [
     'function getAllMarkets() view returns (address[])',
     'function getAssetsIn(address) view returns (address[])',
@@ -321,7 +329,7 @@ export function useLending() {
                 getAllMarketsIface,
                 'getAllMarkets',
                 r1[1].returnData,
-            );
+            ).filter((address) => !DELISTED_MARKETS.has(address.toLowerCase()));
             const enteredList = decodeAddressArray(
                 comptrollerIface,
                 'getAssetsIn',

@@ -12,7 +12,7 @@ The fee is calculated by the network and shown in the wallet before you confirm.
 
 ### Connects DEX markets
 
-Ritual pools use WCYBER, the ERC-20 wrapper of native CYBER, as a common quote and routing asset. This makes it possible for the DEX to find routes between many tokens, including pairs that do not have a direct pool.
+Cyberia pools use WCYBER, the ERC-20 wrapper of native CYBER, as a common quote and routing asset. This makes it possible for the DEX to find routes between many tokens, including pairs that do not have a direct pool.
 
 The swap interface handles wrapping and unwrapping when native CYBER is used. One CYBER wraps into one WCYBER and can be unwrapped back into one CYBER.
 
@@ -41,7 +41,7 @@ CYBER.sol can be bridged to Cyberia and converted at the documented fixed rate o
 ### From another supported asset
 
 1. [Bridge](bridge.md) a supported asset into Cyberia.
-2. Open <https://cyberia.church/swap> or <https://swap.cyberia.church>.
+2. Open <https://cyberia.church/swap>.
 3. Select the asset you received as the input and CYBER as the output.
 4. Review the amount, route, price impact, and network fee.
 5. Approve the input token if the wallet asks for an ERC-20 approval.

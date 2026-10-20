@@ -13,7 +13,7 @@
 | Explorer | `https://explorer.cyberia.church` |
 | Main site | `https://cyberia.church` |
 | Bridge | `https://bridge.cyberia.church` |
-| DEX | `https://swap.cyberia.church` |
+| DEX | `https://cyberia.church/swap` |
 
 ## Wallet configuration object
 

@@ -104,14 +104,14 @@ const commonCyberiaActions = (symbol: string): PartnerAction[] => [
     {
         type: 'trade',
         label: `Trade ${symbol}`,
-        description: 'Open the live Ritual swap interface on Cyberia.',
+        description: 'Open the live Cyberia swap interface on Cyberia.',
         href: swap().url,
         network: 'Cyberia',
     },
     {
         type: 'liquidity',
         label: 'Add liquidity',
-        description: 'Create or add to a Ritual liquidity position.',
+        description: 'Create or add to a Cyberia liquidity position.',
         href: liquidity().url,
         network: 'Cyberia',
     },
@@ -135,7 +135,6 @@ const commonCyberiaActions = (symbol: string): PartnerAction[] => [
 const ashCyberia = cyberiaTokenAddress('ASH');
 const ashRobinhood = robinhoodTokenAddress('ASH');
 const hatcher = BRIDGE_TOKENS.HATCHER;
-const orbv = BRIDGE_TOKENS.ORBV;
 
 export const ROBINHOOD_GROWTH = {
     chain: robinhoodDex.evmChain,
@@ -161,7 +160,7 @@ export const PARTNER_CAMPAIGNS = {
         symbol: 'ASH',
         logo: '/token-icons/ash.png',
         description:
-            'ASH is the emission token of Ritual. It rewards liquidity providers through live farms on Cyberia and a funded, bridged farm on Robinhood Chain.',
+            'ASH is the emission token of Cyberia. It rewards liquidity providers through live farms on Cyberia and a funded, bridged farm on Robinhood Chain.',
         website: 'https://cyberia.church/token/ASH',
         networks: ['Cyberia', 'Robinhood Chain'],
         contracts: [
@@ -178,7 +177,7 @@ export const PARTNER_CAMPAIGNS = {
                 type: 'trade',
                 label: 'Trade ASH',
                 description:
-                    'Swap ASH through the live Ritual pools on Cyberia or Robinhood Chain.',
+                    'Swap ASH through the live Cyberia pools on Cyberia or Robinhood Chain.',
                 href: swap().url,
                 network: 'Cyberia / Robinhood Chain',
             },
@@ -241,38 +240,6 @@ export const PARTNER_CAMPAIGNS = {
                 label: 'Farm CYBER / HATCHER LP',
                 description:
                     'Stake the live CYBER / HATCHER LP token for variable ASH rewards.',
-                href: farm().url,
-                network: 'Cyberia',
-            },
-        ],
-    },
-    orbserv: {
-        slug: 'orbserv',
-        name: 'Orbserv',
-        symbol: 'ORBV',
-        logo: '/token-icons/orbserv.jpg',
-        description:
-            'Orbserv is a financial layer for the agent economy. Canonical ORBV lives on Solana and its bridged Cyberia representation is available across Ritual and lending.',
-        website: 'https://orbserv.co',
-        networks: ['Solana', 'Cyberia'],
-        contracts: [
-            cyberiaContract('ORBV', orbv.evmAddress),
-            solanaContract(orbv.solanaMint),
-        ],
-        actions: [
-            {
-                type: 'bridge',
-                label: 'Bridge ORBV',
-                description: 'Move ORBV between Solana and Cyberia.',
-                href: bridge().url,
-                network: 'Solana ↔ Cyberia',
-            },
-            ...commonCyberiaActions('ORBV'),
-            {
-                type: 'farm',
-                label: 'Farm ORBV / CYBER LP',
-                description:
-                    'Stake the live ORBV / CYBER LP token for variable ASH rewards.',
                 href: farm().url,
                 network: 'Cyberia',
             },

@@ -114,6 +114,5 @@ buying is a share of exactly that.
 - <https://cyberia.church/liquidity> — the same v2 pools on the site, plus
   **V3 ranges**, where a position is an NFT holding a price range rather than a
   fungible LP token. A v3 position is not what the farm stakes.
-- <https://swap.cyberia.church> — the Ritual DEX, with its own pools and farm
   pages.
 - [DEX — swapping and liquidity](dex.md) — the trading side.

@@ -34,7 +34,8 @@ export type FarmChainConfig = {
     /**
      * Chef pools to hide from the UI, by lpToken address (lowercase). Used for
      * EmissionChannel placeholder pools — they carve a satellite chain's ASH
-     * share on the Cyberia chef but are not real farms.
+     * share on the Cyberia chef but are not real farms — and for the retired
+     * pools of a delisted token.
      */
     hiddenPools?: string[];
 };
@@ -43,6 +44,14 @@ export type FarmChainConfig = {
 // share of ASH emission to the funding keeper — never a real farm.
 const CYBERIA_ROBINHOOD_CHANNEL =
     '0x7De888cEf3CF3c24c20845E61A2964937Be6b199'.toLowerCase();
+
+// Pools of a delisted token, retired on the chef (allocPoint 0). /farm and
+// /staking already skip a zero weight; the wallet's Earn lists retired pools
+// on purpose so a position can still be withdrawn, so these are named here.
+const CYBERIA_DELISTED_POOLS = [
+    '0x2c3F33c0a91D5eaf7f01d52338A6eA72c95120D2',
+    '0x19E92D8475522FF6c8f3660372B9dc6674d85cC8',
+].map((address) => address.toLowerCase());
 
 const ROBINHOOD_CHAIN = EVM_CHAINS.find((c) => c.chainId === 4663)!;
 
@@ -63,8 +72,8 @@ export const FARM_CHAINS: readonly FarmChainConfig[] = [
             '0x94845aF24a3E431593A2b941b2b31836dE45185D', // USDT
         ],
         explorer: 'https://explorer.cyberia.church',
-        dexUrl: 'https://swap.cyberia.church',
-        hiddenPools: [CYBERIA_ROBINHOOD_CHANNEL],
+        dexUrl: '/liquidity',
+        hiddenPools: [CYBERIA_ROBINHOOD_CHANNEL, ...CYBERIA_DELISTED_POOLS],
     },
     {
         chainId: ROBINHOOD_CHAIN_ID,

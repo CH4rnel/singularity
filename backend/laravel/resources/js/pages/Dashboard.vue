@@ -74,7 +74,7 @@ const sections: Section[] = [
             },
             {
                 title: 'Swap',
-                description: 'Trade tokens on the Ritual DEX.',
+                description: 'Trade tokens on the Cyberia DEX.',
                 href: '/swap',
                 icon: ArrowRightLeft,
             },

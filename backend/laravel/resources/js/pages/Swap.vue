@@ -1110,7 +1110,7 @@ const feeNote = computed(() => {
  */
 const venueLabel = computed(() => {
     if (quote.value?.venue !== 'v3') {
-        return 'Ritual DEX (v2)';
+        return 'Cyberia DEX (v2)';
     }
 
     /*
@@ -1130,14 +1130,14 @@ const venueLabel = computed(() => {
 /**
  * What this chain actually offers, said before anything is picked.
  *
- * The page used to promise "Ritual (Uniswap V2)" everywhere, which was true of
+ * The page used to promise "Cyberia (Uniswap V2)" everywhere, which was true of
  * every chain it served until one of them turned out to have a second venue
  * with more liquidity in it than ours.
  */
 const venuesLine = computed(() =>
     activeChain.value.v3
         ? 'Trade tokens across both venues — the v2 pools and the concentrated ones, whichever pays better'
-        : 'Trade tokens on Ritual (Uniswap V2)',
+        : 'Trade tokens on Cyberia (Uniswap V2)',
 );
 
 /**
@@ -2431,12 +2431,12 @@ onBeforeUnmount(() => {
                           Two charts and two captions, because they are drawn
                           by different people. Ours is rebuilt from the pools'
                           own reserves; the other is somebody else's index of
-                          somebody else's pool, and saying "Ritual market" over
+                          somebody else's pool, and saying "Cyberia market" over
                           it would take credit for a market this project has
                           nothing in.
                         -->
                         <h2 class="font-semibold">
-                            {{ showsIndexedChart ? 'Market' : 'Ritual market' }}
+                            {{ showsIndexedChart ? 'Market' : 'Cyberia market' }}
                             <!--
                               The pair the chart is *of*, not the pair being
                               traded. They are usually the same and sometimes

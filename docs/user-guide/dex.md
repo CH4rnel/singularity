@@ -1,11 +1,8 @@
 # DEX — Swapping
 
-There are two trading surfaces, backed by the same on-chain QuickSwap-style (Uniswap v2) pools:
+Trade at <https://cyberia.church/swap> with a connected EVM wallet, or use the built-in exchange in [Cyberia Wallet](https://cyberia.church/wallet). Liquidity and farming remain at <https://cyberia.church/liquidity> and <https://cyberia.church/farm>. The separate legacy DEX frontend is retired; the existing on-chain pools remain available.
 
-- **Ritual DEX** — <https://swap.cyberia.church>: the full DEX with swap, pools, farm, and wrap pages.
-- **In-app swap** — <https://cyberia.church/swap> and <https://cyberia.church/liquidity> on the main site.
-
-Both need a connected EVM wallet on the Cyberia network and a little CYBER for gas ([getting started](getting-started.md)).
+A little native CYBER is needed for gas ([getting started](getting-started.md)).
 
 ## Before you swap
 
@@ -52,10 +49,10 @@ Providing liquidity earns the on-chain **Liquidity Farmer** achievement; a first
 
 ## Farm and Wrap
 
-Ritual also has:
+The main site and wallet also offer:
 
-- **Farm** — stake LP tokens in reward farms where available.
-- **Wrap** — wrap/unwrap native CYBER ↔ WCYBER (`0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9`) manually. Normally you don't need this; the swap pages handle wrapping for you.
+- **Farm** — <https://cyberia.church/farm>: stake LP tokens in reward farms where available.
+- **Wrap** — [Wallet → More → Wrap / unwrap](https://cyberia.church/wallet?wrap=wrap): wrap/unwrap native CYBER ↔ WCYBER (`0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9`) manually. Normally you don't need this; the swap pages handle wrapping for you.
 
 ## Getting tokens to trade
 

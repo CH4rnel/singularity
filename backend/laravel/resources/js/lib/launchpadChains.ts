@@ -39,7 +39,7 @@ export type LaunchpadChain = {
     wrappedNative: string;
     /** Blockscout instance used for log queries and address links. */
     explorerUrl: string;
-    /** Ritual DEX deep link base (the DEX follows the wallet's chain). */
+    /** Built-in swap deep link base; the URL also names the chain. */
     swapUrl: string;
     /** Suggested native liquidity, matching the contract's minLiquidity. */
     defaultLiquidity: string;
@@ -84,7 +84,7 @@ export const LAUNCHPAD_CHAINS: readonly LaunchpadChain[] = [
         factory: '0xB0aC30907c04b61F1482e62eA66eF4562a690917',
         wrappedNative: '0x78272aAd03E4b9d7A9134e874BA6d419B534F6c9',
         explorerUrl: 'https://explorer.cyberia.church',
-        swapUrl: 'https://swap.cyberia.church/#/swap',
+        swapUrl: '/swap',
         defaultLiquidity: '10',
     },
     {
@@ -95,7 +95,7 @@ export const LAUNCHPAD_CHAINS: readonly LaunchpadChain[] = [
         factory: '0xd199e6ae74b992f017f8940b26fa18a7dd30ee86',
         wrappedNative: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73',
         explorerUrl: 'https://robinhoodchain.blockscout.com',
-        swapUrl: 'https://swap.cyberia.church/#/swap',
+        swapUrl: '/swap',
         defaultLiquidity: '0.01',
     },
 ];
@@ -133,4 +133,4 @@ export const launchpadSwapUrl = (
     target: LaunchpadChain,
     tokenAddress: string,
 ): string =>
-    `${target.swapUrl}?inputCurrency=ETH&outputCurrency=${tokenAddress}`;
+    `${target.swapUrl}?chain=${target.chain.chainId}&out=${encodeURIComponent(tokenAddress)}`;

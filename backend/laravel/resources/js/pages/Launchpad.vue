@@ -2044,7 +2044,7 @@ onMounted(async () => {
                 <h1>Cyberia <span class="heroGrad">Launchpad</span></h1>
                 <p>
                     Launch your own ERC-20 on Cyberia in one transaction. The
-                    full supply is paired with your CYBER on Ritual DEX and the
+                    full supply is paired with your CYBER on Cyberia DEX and the
                     LP tokens are burned on the spot — liquidity can never be
                     pulled.
                 </p>

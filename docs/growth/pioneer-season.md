@@ -24,7 +24,7 @@ anti-sybil controls.
 | ---------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------- |
 | Connect wallet         | Server-authenticated wallet ownership challenge                                               | UX funnel only; never proof            |
 | Bridge supported asset | Finalized source transaction plus finalized destination mint/release linked by bridge request | `bridge_completed` is diagnostic only  |
-| Swap                   | Finalized Ritual pair `Swap` event involving the wallet                                       | `swap_completed` is diagnostic only    |
+| Swap                   | Finalized Cyberia pair `Swap` event involving the wallet                                       | `swap_completed` is diagnostic only    |
 | Add liquidity or stake | Finalized pair mint/deposit or farm/staking deposit event                                     | `staking_completed` is diagnostic only |
 | Return on another day  | A second eligible finalized action in a later UTC date bucket                                 | No client-only proof                   |
 
@@ -107,7 +107,7 @@ the season is activated.
 
 - Bridge: request/deposit plus completion/mint/release events and the existing
   bridge request linkage.
-- Ritual pairs: `Swap`, `Mint`, and `Burn`.
+- Cyberia pairs: `Swap`, `Mint`, and `Burn`.
 - MasterChef/FundedFarm: deposit and withdraw events by pool ID.
 - Single-token staking: deposit/stake and withdraw/unstake events.
 - Lending is not part of the first mission set, but supplied/borrowed events can

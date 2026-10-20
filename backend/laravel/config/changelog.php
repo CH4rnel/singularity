@@ -285,7 +285,7 @@ return [
                         'Ritual DEX on Robinhood Chain: swap and provide liquidity in ETH, CYBER and ASH, with an ETH/CYBER market.',
                         'Farming, liquidity and swaps are now multichain — the page follows your wallet\'s network, and Robinhood markets, balances and pools stay entirely separate from Cyberia\'s.',
                         'Bridge native CYBER between Cyberia and Robinhood Chain.',
-                        'Single-token staking page (/staking) for CYBER, Hatcher and Orbserv solo pools.',
+                        'Single-token staking page (/staking) for CYBER and Hatcher solo pools.',
                     ],
                 ],
                 [

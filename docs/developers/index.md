@@ -15,7 +15,7 @@ There is no single root application to start. Pick a component, follow its neste
 | Integrate the chain | [Network reference](network-reference.md) | Cyberia EVM L1 |
 | Build a user-facing page or API | Laravel [`AGENTS.md`](https://github.com/cyberia-temple/singularity/blob/master/backend/laravel/AGENTS.md) | `backend/laravel/` |
 | Build or test EVM contracts | [`crypto/hardhat/README.md`](https://github.com/cyberia-temple/singularity/blob/master/crypto/hardhat/README.md) | `crypto/hardhat/` |
-| Work on the DEX | [`frontend/ritual/README.md`](https://github.com/cyberia-temple/singularity/blob/master/frontend/ritual/README.md) | `frontend/ritual/` |
+| Work on swap and liquidity | [Local development](local-development.md#laravel-application) | `backend/laravel/` |
 | Use Cyberia-hosted inference | [Inference API](../ai-api.md) | `/api/ai/v1` |
 | Work on autonomous agents | [LainOS](https://github.com/cyberia-temple/singularity/blob/master/services/lainos/README.md) | `services/lainos/` |
 

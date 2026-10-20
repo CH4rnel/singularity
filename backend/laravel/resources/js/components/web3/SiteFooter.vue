@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { download } from '@/routes';
+import { download, swap } from '@/routes';
 
 const links = [
-    { title: 'Swap', href: 'https://swap.cyberia.church/' },
     { title: 'Explorer', href: 'https://explorer.cyberia.church/' },
     { title: 'Bridge', href: 'https://bridge.cyberia.church/' },
     { title: 'cyberia.church', href: 'https://cyberia.church/' },
@@ -19,6 +18,9 @@ const links = [
                 Cyberia<span class="text-brand-cyan">_</span>
             </p>
             <div class="flex flex-wrap items-center justify-center gap-4">
+                <Link :href="swap().url" class="hover:text-foreground">
+                    Swap
+                </Link>
                 <Link :href="download().url" class="hover:text-foreground">
                     Get the app
                 </Link>

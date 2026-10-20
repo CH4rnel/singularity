@@ -74,11 +74,6 @@ export const navGroups: Web3NavGroup[] = [
             { title: 'Staking', href: staking().url },
             { title: 'Launchpad', href: launchpad().url },
             { title: 'Tokens', href: tokensIndex().url },
-            {
-                title: 'Ritual DEX',
-                href: 'https://swap.cyberia.church/',
-                external: true,
-            },
         ],
     },
     {

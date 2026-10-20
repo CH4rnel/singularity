@@ -7,7 +7,7 @@ Use this page to find the smallest part of Singularity that owns the behavior yo
 | Product | Primary path | Stack | First local command |
 | --- | --- | --- | --- |
 | Main site, wallet, bridge, profile, DeFi and APIs | `backend/laravel/` | Laravel 13, Inertia, Vue 3 | `composer run dev` |
-| Ritual DEX | `frontend/ritual/` | React 18, react-app-rewired | `npm start` |
+| Retired DEX | `frontend/ritual/` | React 18, react-app-rewired | Reference only |
 | Landing pages | `frontend/landing/` | Static HTML/CSS/JS | Serve the directory locally |
 | Blog | `frontend/jekyll/` | Jekyll | Follow its `Gemfile` and `_config.yml` |
 | Desktop shell | `frontend/desktop/` | Electron | `npm start` |

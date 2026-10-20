@@ -125,14 +125,5 @@
     "transactionHash": "0x86bf8e6bda65857744fbf0b9ff344b6e490210edc61533386cce0fab4da13975",
     "blockNumber": 13678632,
     "timestamp": "2026-07-21T23:42:39Z"
-  },
-  "orbvCyberFarm": {
-    "pid": 26,
-    "label": "ORBV/CYBER LP",
-    "lpToken": "0x2c3F33c0a91D5eaf7f01d52338A6eA72c95120D2",
-    "allocPoint": 100,
-    "transactionHash": "0x255c4ec5aa14eaa41ce6237365f1b1d6b45771b9ff31509933ffaf951bb20e65",
-    "blockNumber": 13850280,
-    "timestamp": "2026-07-23T23:04:04Z"
   }
 }

@@ -86,9 +86,6 @@ const TOKENS: { symbol: string; address: `0x${string}` }[] = [
   { symbol: "MINE", address: "0xD8c1f812ADd03ccdE8D3c7F86FeAD181980CD7Ec" },
   { symbol: "TG", address: "0x3d32FE83ad0C1157fdDCA0a3280764c495cdAD6D" },
   { symbol: "GOAL", address: "0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe" },
-  // ORBV has no Cyberia pool yet — fallback priced via its canonical Solana
-  // market (see SOLANA_MINTS below).
-  { symbol: "ORBV", address: "0x19E92D8475522FF6c8f3660372B9dc6674d85cC8" },
 ];
 
 // Solana-native tokens with no (token, WCYBER) and no (token, RUB) pool on
@@ -97,9 +94,7 @@ const TOKENS: { symbol: string; address: `0x${string}` }[] = [
 // WCYBER/USDC price, so the new market's valuation stays consistent with the
 // USDC market. Once someone seeds a (token, WCYBER) pool the oracle switches
 // to it automatically and the fallback goes stale/unused.
-const SOLANA_MINTS: Record<string, string> = {
-  ORBV: "HQJwmK24WN3e87aQzNHnUVK4SaNgYfrR3tDkGgWTpump",
-};
+const SOLANA_MINTS: Record<string, string> = {};
 
 const ARTIFACTS = {
   Comptroller: "./artifacts/contracts/lending/LendingComptroller.sol/LendingComptroller.json",

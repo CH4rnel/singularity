@@ -44,7 +44,6 @@ export const TOKEN_LOGOS: Record<string, string> = {
     // lettered fallback on the one screen that opens on them by default.
     USDG: '/token-icons/usdg.png',
     WETH: '/token-icons/eth.svg',
-    ORBV: '/token-icons/orbserv.jpg',
 };
 
 // Symbols whose <img> failed to load (404). Module-level so a single failure is

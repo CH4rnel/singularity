@@ -7,7 +7,7 @@
 |
 | Human-readable metadata for the ERC-20 tokens that live on the Cyberia
 | chain, powering the public token pages (/tokens and /token/{address|symbol})
-| that the analytics page links to. Addresses mirror the Ritual DEX token list
+| that the analytics page links to. Addresses mirror the Cyberia DEX token list
 | (frontend/ritual/public/ritual-tokens.json) and the Hardhat token registry
 | (crypto/hardhat/deployments/cyberia-tokens.json); the descriptions are the
 | "what is it / why is it here" copy those on-chain sources don't carry.
@@ -16,7 +16,7 @@
 |   symbol   - ticker as shown on the DEX
 |   name     - full ERC-20 name
 |   decimals - token decimals
-|   logo     - path under `logo_base` (the Ritual DEX serves these at its root)
+|   logo     - path under `logo_base` (vendored in public/token-icons/)
 |   category - one of `categories` below; drives grouping on /tokens
 |   tagline  - one line, shown under the title
 |   what     - what the token is
@@ -28,12 +28,8 @@
 
 return [
 
-    // Logos are served from the Ritual DEX (its public/ dir is the token-list
-    // source of truth), so a single base keeps this file in sync with it.
-    'logo_base' => env('CYBERIA_TOKEN_LOGO_BASE', env('CYBERIA_SWAP_URL', 'https://swap.cyberia.church')),
-
-    // Base URL of the Ritual DEX, used to build "Trade" deep links.
-    'swap_url' => env('CYBERIA_SWAP_URL', 'https://swap.cyberia.church'),
+    // Token icons ship with the site and do not depend on the retired DEX UI.
+    'logo_base' => env('CYBERIA_TOKEN_LOGO_BASE', '/token-icons'),
 
     // Ordered category labels. The token pages render groups in this order.
     'categories' => [
@@ -58,9 +54,9 @@ return [
             'category' => 'native',
             'tagline' => 'The tradable form of Cyberia\'s native gas coin.',
             'what' => 'WCYBER is the ERC-20 wrapper around CYBER, the coin used to pay gas on the Cyberia chain — the same relationship WETH has to ETH. Each WCYBER is redeemable 1:1 for native CYBER at any time.',
-            'why' => 'AMMs and most contracts can\'t hold the raw native coin, so CYBER is wrapped into WCYBER to be traded, pooled and farmed on the Ritual DEX. It is the base asset most liquidity pairs are quoted against.',
+            'why' => 'AMMs and most contracts can\'t hold the raw native coin, so CYBER is wrapped into WCYBER to be traded, pooled and farmed on the Cyberia DEX. It is the base asset most liquidity pairs are quoted against.',
             'links' => [
-                ['label' => 'Wrap / unwrap', 'url' => 'https://swap.cyberia.church/wrap'],
+                ['label' => 'Wrap / unwrap', 'url' => '/wallet?wrap=wrap'],
             ],
         ],
 
@@ -82,13 +78,13 @@ return [
             'symbol' => 'ASH',
             'name' => 'Ash',
             'decimals' => 18,
-            'logo' => '/logo_circle.png',
+            'logo' => '/ash.png',
             'category' => 'native',
-            'tagline' => 'The reward token of the Ritual DEX.',
-            'what' => 'Ash is the emission token of Ritual, Cyberia\'s DEX. Only a 1-ASH premint exists at genesis; all further supply is minted by the farm (MasterChef) contract and handed to liquidity providers.',
+            'tagline' => 'The reward token of the Cyberia DEX.',
+            'what' => 'Ash is the emission token of Cyberia, Cyberia\'s DEX. Only a 1-ASH premint exists at genesis; all further supply is minted by the farm (MasterChef) contract and handed to liquidity providers.',
             'why' => '"Every swap burns an offering — out of the fire rises Ash." Ash rewards the people who supply liquidity and keep the markets deep. Stake your LP tokens in the farms to earn it.',
             'links' => [
-                ['label' => 'Farm ASH', 'url' => 'https://swap.cyberia.church/farm'],
+                ['label' => 'Farm ASH', 'url' => '/farm'],
             ],
         ],
 
@@ -166,7 +162,7 @@ return [
             'symbol' => 'ETH',
             'name' => 'Ethereum',
             'decimals' => 18,
-            'logo' => '/ethereum-eth-logo-colored.svg',
+            'logo' => '/eth.svg',
             'category' => 'crypto',
             'tagline' => 'Ether, bridged onto Cyberia.',
             'what' => 'ETH is a bridged representation of Ethereum\'s ether, 18 decimals (wei), backed 1:1 by ETH in reserve and driven by the bridge relayer.',
@@ -229,27 +225,10 @@ return [
             'category' => 'partner',
             'tagline' => 'Partner project — bridged to Cyberia from Solana.',
             'what' => 'Hatcher is a managed AI Agents hosting platform. It has features like easy agent deployment just by chatting, out-of-box preconfigured agents, mobile apps available, a full 3D city and rooms for agents, e-mails and many more.',
-            'why' => 'As a partner token it trades on the Ritual DEX and is a listed lending market, bringing its community and Solana liquidity onto the Cyberia chain.',
+            'why' => 'As a partner token it trades on the Cyberia DEX and is a listed lending market, bringing its community and Solana liquidity onto the Cyberia chain.',
             'links' => [
                 ['label' => 'Website', 'url' => 'https://hatcher.host/'],
                 ['label' => 'pump.fun', 'url' => 'https://pump.fun/coin/Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump'],
-            ],
-        ],
-
-        '0x19e92d8475522ff6c8f3660372b9dc6674d85cc8' => [
-            'symbol' => 'ORBV',
-            'name' => 'Orbserv',
-            'decimals' => 6,
-            'logo' => '/orbserv.jpg',
-            'category' => 'partner',
-            'tagline' => 'Partner project — bridged to Cyberia from Solana.',
-            'what' => 'Orbserv is the financial layer for the agent economy, enabling autonomous agents to earn, spend, transact, and create value independently. The canonical ORBV supply lives on Solana; this token is its bridged form on Cyberia.',
-            'why' => 'As a partner token it trades on the Ritual DEX and is a listed lending market, bringing its community and Solana liquidity onto the Cyberia chain.',
-            'links' => [
-                ['label' => 'Website', 'url' => 'https://orbserv.co'],
-                ['label' => 'X (Twitter)', 'url' => 'https://x.com/orbserv'],
-                ['label' => 'Telegram', 'url' => 'https://t.me/orbservco'],
-                ['label' => 'pump.fun', 'url' => 'https://pump.fun/coin/HQJwmK24WN3e87aQzNHnUVK4SaNgYfrR3tDkGgWTpump'],
             ],
         ],
 
@@ -257,11 +236,11 @@ return [
             'symbol' => 'KRSQ',
             'name' => 'KARASIQUE',
             'decimals' => 18,
-            'logo' => '/KARASIQUE.webp',
+            'logo' => '/karasique.webp',
             'category' => 'partner',
             'tagline' => 'Partner project — the KARASIQUE token.',
             'what' => 'KRSQ (KARASIQUE) is a partner project\'s token on Cyberia, an owner-minted ERC-20 with 18 decimals.',
-            'why' => 'A partner in the Cyberia ecosystem: trade KRSQ on Ritual, supply or borrow it in the lending market, and take part in its community.',
+            'why' => 'A partner in the Cyberia ecosystem: trade KRSQ on Cyberia, supply or borrow it in the lending market, and take part in its community.',
             'links' => [
                 ['label' => 'Website', 'url' => 'https://akvarium228.ru/'],
                 ['label' => 'Telegram', 'url' => 'https://t.me/akvarium228'],
@@ -272,11 +251,11 @@ return [
             'symbol' => 'YTN',
             'name' => 'Yenten',
             'decimals' => 18,
-            'logo' => '/Yenten-logo.png',
+            'logo' => '/yenten.png',
             'category' => 'partner',
             'tagline' => 'Partner project — Yenten, a CPU-mined PoW coin.',
             'what' => 'YTN is the Cyberia token for Yenten, a CPU-mineable proof-of-work cryptocurrency listed as a partner project. 18 decimals, owner-minted.',
-            'why' => 'As a partner token, Yenten gets an on-chain market and liquidity on Cyberia — tradable on Ritual and available in the lending market.',
+            'why' => 'As a partner token, Yenten gets an on-chain market and liquidity on Cyberia — tradable on Cyberia and available in the lending market.',
             'links' => [
                 ['label' => 'Website', 'url' => 'https://yentencoin.info/'],
             ],
@@ -292,7 +271,7 @@ return [
             'category' => 'launchpad',
             'tagline' => 'Launched on the Cyberia launchpad.',
             'what' => 'LAIN is a community token minted through the Cyberia launchpad, themed on the Serial-Experiments-Lain motif that runs through the whole ecosystem. ERC-20, 18 decimals.',
-            'why' => 'One of the tokens created on Cyberia\'s own launchpad. It leans into the Lain aesthetic — present everywhere, connected to everything. Trade it on Ritual.',
+            'why' => 'One of the tokens created on Cyberia\'s own launchpad. It leans into the Lain aesthetic — present everywhere, connected to everything. Trade it on Cyberia.',
             'links' => [
                 ['label' => 'Cyberia launchpad', 'url' => '/launchpad'],
             ],
@@ -306,7 +285,7 @@ return [
             'category' => 'launchpad',
             'tagline' => 'Launched on the Cyberia launchpad — Minecraft-themed.',
             'what' => 'MINE is a community token minted through the Cyberia launchpad, themed after Minecraft. ERC-20, 18 decimals.',
-            'why' => 'A launchpad-born token for the gaming corner of Cyberia; trade and pool it on Ritual.',
+            'why' => 'A launchpad-born token for the gaming corner of Cyberia; trade and pool it on Cyberia.',
             'links' => [
                 ['label' => 'Cyberia launchpad', 'url' => '/launchpad'],
             ],
@@ -333,7 +312,7 @@ return [
             'category' => 'community',
             'tagline' => 'Goal Bear Coin — a community meme token.',
             'what' => 'GOAL (Goal Bear Coin) is a community/meme ERC-20 on Cyberia, 18 decimals, owner-minted.',
-            'why' => 'A lighthearted community token; trade and pool it on Ritual.',
+            'why' => 'A lighthearted community token; trade and pool it on Cyberia.',
         ],
 
     ],

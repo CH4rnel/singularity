@@ -235,11 +235,11 @@ return [
 
         'swap' => [
             'group' => 'web',
-            'label' => 'swap.cyberia.church',
+            'label' => 'Cyberia swap',
             'critical' => true,
-            'url' => 'https://swap.cyberia.church',
-            'note' => 'Ritual DEX. Its own build, deployed separately from the site.',
-            'check' => ['type' => 'http', 'url' => 'https://swap.cyberia.church'],
+            'url' => 'https://cyberia.church/swap',
+            'note' => 'Built-in swap; deployed with the site.',
+            'check' => ['type' => 'http', 'url' => 'https://cyberia.church/swap'],
             'usage' => null,
         ],
 

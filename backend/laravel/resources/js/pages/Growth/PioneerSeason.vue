@@ -31,8 +31,8 @@ const missions = [
     },
     {
         title: 'Complete a swap',
-        description: 'Execute a real Ritual swap above the campaign minimum.',
-        verifier: 'Indexed Ritual Swap event',
+        description: 'Execute a real Cyberia swap above the campaign minimum.',
+        verifier: 'Indexed Cyberia Swap event',
     },
     {
         title: 'Add liquidity or stake',

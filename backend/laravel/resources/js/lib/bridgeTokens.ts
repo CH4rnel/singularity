@@ -6,7 +6,6 @@ export type BridgeTokenSymbol =
     | 'USDG'
     | 'JupUSD'
     | 'HATCHER'
-    | 'ORBV'
     | 'YTN'
     | 'BTC'
     | 'LTC'
@@ -112,18 +111,6 @@ export const BRIDGE_TOKENS: Record<string, BridgeTokenInfo> = {
         evmAddress: '0x621021F18b6404123f98b1395c418868418ACF36',
         solanaMint: 'Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump',
         evmDecimals: 9,
-        solanaDecimals: 6,
-        model: 'mint',
-        solanaTokenProgram: 'token-2022',
-    },
-    // ORBV (Orbserv) — Solana-native pump.fun token bridged to Cyberia, same
-    // mint model as HATCHER. Both the SPL mint (Token-2022) and the Cyberia
-    // wrapper are 6 decimals.
-    ORBV: {
-        symbol: 'ORBV',
-        evmAddress: '0x19E92D8475522FF6c8f3660372B9dc6674d85cC8',
-        solanaMint: 'HQJwmK24WN3e87aQzNHnUVK4SaNgYfrR3tDkGgWTpump',
-        evmDecimals: 6,
         solanaDecimals: 6,
         model: 'mint',
         solanaTokenProgram: 'token-2022',
@@ -237,7 +224,6 @@ export const SUPPORTED_TOKEN_SYMBOLS: BridgeTokenSymbol[] = [
     'USDG',
     'JupUSD',
     'HATCHER',
-    'ORBV',
     'YTN',
     'BTC',
     'LTC',

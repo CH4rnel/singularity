@@ -210,7 +210,7 @@ class TokenController extends Controller
 
     /**
      * Call-to-action links: any custom ones from config first, then the
-     * always-present Trade (on the Ritual DEX) and Explorer links.
+     * always-present Trade (on the Cyberia DEX) and Explorer links.
      *
      * @param  array<string, mixed>  $meta
      * @return list<array{label: string, url: string, external: bool}>
@@ -224,11 +224,10 @@ class TokenController extends Controller
                 'external' => str_starts_with($link['url'], 'http'),
             ]);
 
-        $swap = rtrim((string) config('tokens.swap_url'), '/');
         $links->push([
-            'label' => 'Trade on Ritual',
-            'url' => "{$swap}/swap?currency1={$addr}",
-            'external' => true,
+            'label' => 'Trade on Cyberia',
+            'url' => route('swap', ['chain' => 49406, 'out' => $addr], absolute: false),
+            'external' => false,
         ]);
         $links->push([
             'label' => 'View on explorer',

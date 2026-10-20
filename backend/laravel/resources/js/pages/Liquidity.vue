@@ -686,7 +686,7 @@ const loadPositions = async (): Promise<void> => {
         }
     } catch {
         positionsError.value =
-            'Could not scan LP positions from the Ritual factory. Please retry.';
+            'Could not scan LP positions from the Cyberia factory. Please retry.';
     } finally {
         positionsLoading.value = false;
     }
@@ -904,7 +904,7 @@ watch(
                 <h1 class="text-2xl font-bold">Liquidity</h1>
                 <p class="text-sm text-muted-foreground">
                     <template v-if="venue === 'v2'">
-                        Provide or withdraw liquidity on Ritual (Uniswap V2) on
+                        Provide or withdraw liquidity on Cyberia (Uniswap V2) on
                         {{ activeChain.evmChain.name }}. Native
                         {{ activeChain.nativeSymbol }} is supported directly.
                     </template>

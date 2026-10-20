@@ -29,7 +29,7 @@ Live or implemented surfaces in this repo:
 | Cyberia L1 | `https://rpc.cyberia.church`, chain `49406` | Live RPC/network config |
 | Explorer | `https://explorer.cyberia.church` | Blockscout deployment config |
 | Main site / bridge app | `https://cyberia.church`, `https://bridge.cyberia.church` | Laravel + Vue/Inertia app |
-| DEX | `https://swap.cyberia.church` | Ritual/QuickSwap-derived React app |
+| DEX | `https://cyberia.church/swap` | Built-in Cyberia swap |
 | Documentation | `https://docs.cyberia.church` | VitePress user and developer manuals |
 | Bridge | `backend/laravel`, `crypto/hardhat`, `crypto/anchor` | EVM/Solana bridge UI, contracts, relayer scripts |
 | Launchpad | `backend/laravel/resources/js/pages/Launchpad.vue` | Token launch UI + metadata storage |
@@ -50,7 +50,7 @@ This is an active experimental stack. Some components are production-facing, som
 Singularity is a polyglot monorepo. The main product surfaces are:
 
 - **Laravel + Vue** (`backend/laravel/`): bridge/site app, launchpad, analytics, DAO pages, lending UI, slots UI.
-- **React** (`frontend/ritual/`): Ritual DEX frontend.
+- **React** (`frontend/ritual/`): Retired DEX frontend, retained for reference.
 - **Solidity / TypeScript** (`crypto/hardhat/`): Cyberia EVM contracts and deployment scripts.
 - **Rust / TypeScript** (`crypto/anchor/`): Solana bridge program and relayer scripts.
 - **TypeScript** (`services/lainos/`): LainOS autonomous AI agent framework.
@@ -58,7 +58,7 @@ Singularity is a polyglot monorepo. The main product surfaces are:
 
 The block explorer (`services/blockscout/`) is **deployment configuration only** — Docker Compose files that run the official Blockscout images. The explorer's own (Elixir) source is not vendored in this repository.
 
-If you want to inspect the user-facing product, start with `backend/laravel/` and `frontend/ritual/`.
+If you want to inspect the user-facing product, start with `backend/laravel/`.
 
 ## Token Utility
 
@@ -206,7 +206,7 @@ Native token: CYBER
 Explorer: https://explorer.cyberia.church
 Bridge: https://bridge.cyberia.church
 Site: https://cyberia.church
-DEX: https://swap.cyberia.church
+DEX: https://cyberia.church/swap
 CYBER.sol mint: E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump
 ```
 
@@ -215,7 +215,7 @@ CYBER.sol mint: E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump
 ```text
 singularity/
 ├── backend/laravel/       # Laravel 13 + Vue 3 + Inertia app
-├── frontend/ritual/       # Ritual DEX, React 18 / CRA / react-app-rewired
+├── frontend/ritual/       # Retired DEX frontend, kept for reference
 ├── frontend/landing/      # Static landing and brand pages
 ├── frontend/jekyll/       # Jekyll blog/static site
 ├── crypto/hardhat/        # EVM contracts, Hardhat 3 + viem
@@ -249,7 +249,9 @@ npm run build
 composer run dev
 ```
 
-### Ritual DEX
+### Retired Ritual DEX
+
+Use the built-in site and wallet exchange. The following legacy commands are for reference only.
 
 ```bash
 cd frontend/ritual

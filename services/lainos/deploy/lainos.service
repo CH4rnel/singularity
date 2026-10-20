@@ -1,13 +1,14 @@
 [Unit]
-Description=LainOS Cyberia agent (HTTP + Telegram + sentinel + forge)
-Documentation=file:///home/lain/random/singularity/services/lainos/README.md
+Description=LainOS Cyberia agent (HTTP + Telegram + sentinel + forge) — runs from ~/random/os
+Documentation=file:///home/lain/random/os/README.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/lain/random/singularity/services/lainos
+WorkingDirectory=/home/lain/random/os
 Environment=NODE_ENV=production
+Environment=LAINOS_ENV_FILE=/home/lain/.config/lainos/daemon.env
 # ~/.local/bin holds the forge's coding agents (claude, codex); ~/.opencode/bin
 # is where the opencode installer drops the binary.
 Environment=PATH=/home/lain/.local/bin:/home/lain/.opencode/bin:/home/lain/.nvm/versions/node/v24.10.0/bin:/usr/local/bin:/usr/bin:/bin
