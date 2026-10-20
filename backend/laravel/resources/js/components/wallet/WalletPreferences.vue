@@ -6,6 +6,7 @@ import WalletSync from '@/components/wallet/WalletSync.vue';
 import WalletTelegramLink from '@/components/wallet/WalletTelegramLink.vue';
 import { LOCALE_LABELS, useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useWalletBlocklist } from '@/composables/useWalletBlocklist';
 import { WALLET_MODES, useWalletMode } from '@/composables/useWalletMode';
 import {
     WALLET_THEMES,
@@ -19,6 +20,7 @@ import {
     refreshNativeStartup,
     setNativeStartup,
 } from '@/lib/native';
+import { storeEdition } from '@/lib/storeEdition';
 import {
     enableWalletNotifications,
     playWalletSound,
@@ -30,6 +32,7 @@ import {
 } from '@/lib/wallet/notifications';
 import { disablePush, enablePush, pushState } from '@/lib/wallet/push';
 import type { PushState } from '@/lib/wallet/push';
+import { sessionCall, signInWithWallet } from '@/lib/wallet/session';
 import { CUSTOM_PALETTE, WALLET_PALETTES } from '@/lib/wallet/theme';
 import {
     BUILT_IN_THEME_FILES,
@@ -40,8 +43,8 @@ import {
 } from '@/lib/wallet/themeFile';
 import { walletMessages } from '@/lib/walletMessages';
 
-defineProps<{
-    /** For sync and the Telegram link; Preferences reads nothing else. */
+const props = defineProps<{
+    /** For sync, the Telegram link and deleting the account. */
     wallet?: MultiWallet;
     authenticated?: boolean;
     profileAddress?: string | null;
@@ -172,6 +175,48 @@ const startup = ref(nativeStartup());
 const startupBusy = ref(false);
 const startupError = ref(false);
 const desktop = nativeShell() === 'desktop';
+
+/*
+ * Deleting the Cyberia account this wallet signed in to — the signature is
+ * the proof, made fresh right before the request (WalletAccountController).
+ */
+const deleting = ref<'idle' | 'confirm' | 'busy' | 'done'>('idle');
+const deleteProblem = ref<string | null>(null);
+
+const deleteAccount = async (): Promise<void> => {
+    const wallet = props.wallet;
+    const address = wallet?.accounts.value.find(
+        (account) => account.chain === 'cyberia',
+    )?.address;
+
+    if (!wallet || !address || deleting.value === 'busy') {
+        return;
+    }
+
+    deleting.value = 'busy';
+    deleteProblem.value = null;
+
+    try {
+        await signInWithWallet(address, (message) =>
+            wallet.signMessage('cyberia', message),
+        );
+        await sessionCall('/api/wallet/account', {
+            method: 'DELETE',
+            body: JSON.stringify({ confirm: 'delete' }),
+        });
+        deleting.value = 'done';
+    } catch (error) {
+        deleteProblem.value =
+            error instanceof Error ? error.message : String(error);
+        deleting.value = 'confirm';
+    }
+};
+
+/** Addresses blocked in the feed or the chat, undone in one place. */
+const blocklist = useWalletBlocklist();
+
+/** A store build stays on the wallet, so there is no site to open (`lib/storeEdition.ts`). */
+const storeBuild = storeEdition() !== null;
 const tray = hasNativeTray();
 
 /**
@@ -650,12 +695,81 @@ onBeforeUnmount(unsubscribe);
             {{ t('preferencesTest') }}
         </button>
 
+        <div
+            v-if="blocklist.blocked.value.length > 0"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-top: 16px;
+            "
+        >
+            <span class="cw-prose" style="flex: 1; margin: 0">{{
+                t('prefsBlocked', { count: blocklist.blocked.value.length })
+            }}</span>
+            <button
+                type="button"
+                class="cw-ghost"
+                @click="blocklist.unblockAll()"
+            >
+                {{ t('prefsUnblockAll') }}
+            </button>
+        </div>
+
+        <!--
+          An account made by signing in from the wallet can be deleted from
+          the wallet. Both stores require it, and a signature-made account has
+          no password for the site's own form to ask for.
+        -->
+        <template v-if="(authenticated && wallet) || deleting === 'done'">
+            <p
+                v-if="deleting === 'done'"
+                class="cw-prose"
+                role="status"
+                style="margin: 16px 0 0"
+            >
+                {{ t('prefsDeleteAccountDone') }}
+            </p>
+            <button
+                v-else-if="deleting === 'idle'"
+                type="button"
+                class="cw-line-row"
+                style="margin-top: 16px"
+                @click="deleting = 'confirm'"
+            >
+                <span style="flex: 1">{{ t('prefsDeleteAccount') }}</span>
+            </button>
+            <div v-else class="cw-stack" style="margin-top: 16px">
+                <p class="cw-prose" style="margin: 0 0 10px">
+                    {{ t('prefsDeleteAccountNote') }}
+                </p>
+                <button
+                    type="button"
+                    class="cw-btn cw-btn-secondary"
+                    style="height: 44px; color: var(--cw-bad)"
+                    :disabled="deleting === 'busy'"
+                    @click="deleteAccount"
+                >
+                    {{ t('prefsDeleteAccountConfirm') }}
+                </button>
+                <p
+                    v-if="deleteProblem"
+                    class="cw-prose"
+                    role="alert"
+                    style="margin: 8px 0 0; color: var(--cw-bad)"
+                >
+                    {{ deleteProblem }}
+                </p>
+            </div>
+        </template>
+
         <!--
           The rest of Cyberia. The wallet has no site header over it in any
           container now, and the shells' masthead carries this link; a browser
           tab has its own history but not everybody arrived through it.
         -->
         <a
+            v-if="!storeBuild"
             href="/"
             class="cw-btn cw-btn-secondary"
             style="height: 48px; margin-top: 8px; text-decoration: none"

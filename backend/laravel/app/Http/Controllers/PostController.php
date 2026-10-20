@@ -16,6 +16,7 @@ class PostController extends Controller
     {
         return Inertia::render('Feed', [
             'posts' => Post::query()
+                ->visible()
                 ->with(['user:id,name,onchain_nickname,avatar_path,wallet_address'])
                 ->latest('id')
                 ->paginate(20),

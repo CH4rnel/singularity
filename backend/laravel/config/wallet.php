@@ -212,6 +212,11 @@ return [
 
     'feed' => [
         'trade_floor_usd' => (float) env('WALLET_TRADE_FLOOR_USD', 0),
+
+        // How many different people have to report a post before it leaves
+        // the feed. Every report reaches the operators on Telegram either way;
+        // this only decides when the post stops being shown while they look.
+        'hide_after_reports' => (int) env('WALLET_FEED_HIDE_AFTER_REPORTS', 3),
     ],
 
 ];

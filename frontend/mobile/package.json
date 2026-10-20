@@ -16,7 +16,10 @@
         "android:apk": "npm run sync:android && cd android && ./gradlew assembleDebug",
         "android:release": "npm run sync:android && cd android && ./gradlew bundleRelease",
         "doctor": "cap doctor",
-        "test": "node --test test/*.test.js"
+        "test": "node --test test/*.test.js",
+        "sync:play": "CYBERIA_STORE=play npm run sync:android",
+        "sync:appstore": "CYBERIA_STORE=appstore npm run sync:ios",
+        "android:bundle": "npm run sync:play && cd android && ./gradlew bundleRelease"
     },
     "dependencies": {
         "@capacitor/android": "^8.5.0",

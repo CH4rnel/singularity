@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\MoneroWalletController;
 use App\Http\Controllers\Api\SiteEventController;
 use App\Http\Controllers\Api\SolanaStakingController;
 use App\Http\Controllers\Api\TgWhaleController;
+use App\Http\Controllers\Api\WalletAccountController;
 use App\Http\Controllers\Api\WalletAttachController;
 use App\Http\Controllers\Api\WalletChatController;
 use App\Http\Controllers\Api\WalletDailyController;
@@ -550,6 +551,14 @@ Route::middleware(['auth'])->group(function () {
      */
     Route::post('api/wallet/feed', [WalletPostController::class, 'store'])
         ->middleware('throttle:10,1')->name('wallet.social.post');
+    // Reporting a post from the wallet (store requirement for anything people
+    // write to each other); same session, one report per person and post.
+    Route::post('api/wallet/feed/{post}/report', [WalletPostController::class, 'report'])
+        ->whereNumber('post')->middleware('throttle:20,1')->name('wallet.social.report');
+    // Deleting the account from the wallet, after a fresh signature
+    // (store requirement: an account made in the app can be deleted there).
+    Route::delete('api/wallet/account', [WalletAccountController::class, 'destroy'])
+        ->middleware('throttle:5,1')->name('wallet.account.destroy');
 
     // Voting on a DAO proposal from the wallet — same session, same rule as
     // the site's vote panel (`ProposalVoter`), cast as the signed-in address.

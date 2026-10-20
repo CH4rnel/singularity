@@ -7,7 +7,11 @@ first submitted as the one-button phrase generator (1.0.0, built from
 
 ## Package
 
-Upload **`Cyberia-extension.zip` from the `app-v*` GitHub release** under
+`.github/workflows/stores.yml` uploads and submits the package through the
+Chrome Web Store API v2 on every `app-v*` tag (staged: it goes live when
+somebody presses Publish after review); see
+`docs/developers/store-distribution.md` for the secrets. By hand: upload
+**`Cyberia-extension.zip` from the `app-v*` GitHub release** under
 *Package → Upload new package* — the same version the Firefox add-on and
 `/download` carry (the tag is the version; see the README). 1.4.2 is higher than
 the item's 1.0.0, which is all the store requires. To check the file, run at the
@@ -60,6 +64,23 @@ Private by design. No account, no email, no analytics. The wallet talks only to 
 **Support URL:** https://cyberia.church
 
 **Mature content:** No
+
+## Store listing — Russian
+
+Dashboard → Store listing → language *Русский*. The name and the summary come
+from the manifest and stay English; the description is per language.
+
+**Description (ru)**
+
+Cyberia Wallet хранит ключи в вашем браузере и больше нигде.
+
+Одна фраза — все аккаунты. Создайте кошелёк или импортируйте фразу восстановления, которой уже пользуетесь на cyberia.church: та же фраза даёт те же аккаунты. CYBER и токены в Cyberia, Robinhood Chain, BNB Chain и Base — на одном адресе.
+
+Сайты видят кошелёк, только когда вы разрешили. Кошелёк не появляется ни на одном сайте, пока вы не нажмёте «Подключить». Неподключённый сайт даже не узнает, что кошелёк установлен.
+
+Каждая подпись — ваша. Транзакции и сообщения открываются в отдельном окне, где видно, что именно вы подписываете (безлимитное разрешение на токен так и подписано), и подпись ставится удержанием кнопки.
+
+Приватность по устройству. Ни аккаунта, ни почты, ни аналитики. Кошелёк общается только с самими блокчейн-сетями. По желанию запросы можно пустить через Tor, I2P или свой SOCKS5-прокси; Chrome применяет его ко всему браузеру, и кошелёк предупреждает об этом до включения.
 
 ## Privacy practices
 

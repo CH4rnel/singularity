@@ -151,6 +151,8 @@ cd frontend/extension && npm install && npm test && npm run zip
 
 Windows/macOS installers and the Android APK come from `.github/workflows/apps.yml` (tag `app-v*` or manual dispatch); the Android build needs a local SDK otherwise. A tag also publishes the GitHub release that `/download` serves. `frontend/mobile/www/` and `frontend/desktop/dist/` are generated; `frontend/mobile/android/` and `ios/` are committed because they carry the deep-link intent filters and icons.
 
+The same `app-v*` tag also runs `.github/workflows/stores.yml`, which publishes to Google Play (internal track), the App Store (TestFlight), the Chrome Web Store (staged) and addons.mozilla.org (listed) through each store's API, skipping any store whose secrets are unset. The mobile store builds set `CYBERIA_STORE=play|appstore`, which appends `CyberiaStore/<edition>` to the user agent; the site then serves the **store edition** (`resources/js/lib/storeEdition.ts` hides the launchpad, tokenised stocks and, on iOS, torrents; `ConfineStoreEdition` keeps page loads on `/wallet`). The APK, desktop app, extension and browsers never carry the token. Secrets, console steps, Data safety / App Privacy answers and the policy reasoning are in `docs/developers/store-distribution.md`. Feed posts can be reported (`POST /api/wallet/feed/{post}/report`, `post_reports`, hidden after `wallet.feed.hide_after_reports`), authors blocked on the device (`lib/wallet/blocklist.ts`), and an account deleted from the wallet after a fresh signature (`DELETE /api/wallet/account`) — store requirements for user-generated content and accounts.
+
 ### Static Frontends
 
 ```bash

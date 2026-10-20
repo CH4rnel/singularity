@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { nativeShell } from '@/lib/native';
+import { isDappHiddenIn, storeEdition } from '@/lib/storeEdition';
 import {
     CYBERIA_DAPPS,
     dappBridgeMode,
@@ -86,7 +87,9 @@ const INTERNAL: Record<
 };
 
 const rows = computed(() =>
-    CYBERIA_DAPPS.map((dapp) => ({
+    CYBERIA_DAPPS.filter(
+        (dapp) => !isDappHiddenIn(storeEdition(), dapp.key),
+    ).map((dapp) => ({
         ...dapp,
         label: t(`dapp${dapp.key.charAt(0).toUpperCase()}${dapp.key.slice(1)}`),
         note: t(

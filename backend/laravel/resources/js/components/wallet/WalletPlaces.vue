@@ -19,8 +19,10 @@ import {
     Rocket,
     Route,
 } from 'lucide-vue-next';
+import { computed } from 'vue';
 import type { Component } from 'vue';
 import { useLocale } from '@/composables/useLocale';
+import { visibleInStore } from '@/lib/storeEdition';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -48,9 +50,12 @@ export type WalletPlace =
     | 'lain'
     | 'more';
 
-defineProps<{
+const props = defineProps<{
     places: WalletPlace[];
 }>();
+
+/** A store build of the mobile app leaves some places out (`lib/storeEdition.ts`). */
+const shown = computed(() => visibleInStore(props.places));
 
 const emit = defineEmits<{
     place: [place: WalletPlace];
@@ -83,7 +88,7 @@ const PLACES: Record<WalletPlace, { icon: Component; label: () => string }> = {
 <template>
     <div class="cw-quick">
         <button
-            v-for="place in places"
+            v-for="place in shown"
             :key="place"
             type="button"
             class="cw-quick-item"

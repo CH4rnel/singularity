@@ -88,6 +88,34 @@ function allowNavigation(appUrl) {
     return [hostname, `*.${hostname}`, ...EXTRA_NAVIGABLE_HOSTS];
 }
 
+/** The stores a build may be made for; see `resolveStoreEdition`. */
+const STORE_EDITIONS = ['play', 'appstore'];
+
+/**
+ * Which store this build is for, from CYBERIA_STORE, or null for the APK the
+ * site serves at /download.
+ *
+ * A store build says so in its user agent and the site answers it with the
+ * store edition of the wallet (`resources/js/lib/storeEdition.ts` and the
+ * `ConfineStoreEdition` middleware): the screens those stores do not take from
+ * an unlicensed developer are left out, and the app stays on the wallet. An
+ * edition this file does not know is not a store build, so a typo ships the
+ * whole wallet to nobody rather than a half-confined one to a store.
+ */
+function resolveStoreEdition(env = process.env) {
+    const candidate = String(env.CYBERIA_STORE ?? '').trim().toLowerCase();
+
+    return STORE_EDITIONS.includes(candidate) ? candidate : null;
+}
+
+/** What the shell appends to the WebView's user agent. */
+function resolveUserAgent(env = process.env, version = '1.0.0') {
+    const edition = resolveStoreEdition(env);
+    const own = `CyberiaMobile/${env.CYBERIA_VERSION_NAME || version}`;
+
+    return edition ? `${own} CyberiaStore/${edition}` : own;
+}
+
 module.exports = {
     DEFAULT_APP_PATH,
     DEFAULT_APP_URL,
@@ -96,4 +124,7 @@ module.exports = {
     resolveAppPath,
     resolveAppUrl,
     resolveStartUrl,
+    resolveStoreEdition,
+    resolveUserAgent,
+    STORE_EDITIONS,
 };

@@ -27,4 +27,23 @@ return [
         'app_id' => env('APP_IOS_APP_ID', ''),
     ],
 
+    /*
+    | The Google Play and App Store builds of the mobile app stay on the wallet:
+    | a page load from one of them (`CyberiaStore/<edition>` in the user agent)
+    | to any other path is sent back to /wallet. See ConfineStoreEdition.
+    */
+    'store' => [
+        'allowed_paths' => [
+            'wallet',
+            'wallet/*',
+            'login',
+            'login/*',
+            'auth/*',
+            'oauth/*',
+            'logout',
+            'privacy/*',
+            '.well-known/*',
+        ],
+    ],
+
 ];

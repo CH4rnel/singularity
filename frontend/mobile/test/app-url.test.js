@@ -16,6 +16,8 @@ const {
     resolveAppPath,
     resolveAppUrl,
     resolveStartUrl,
+    resolveStoreEdition,
+    resolveUserAgent,
 } = require('../src/app-url');
 
 test('falls back to the production URL', () => {
@@ -83,4 +85,22 @@ test('keeps the encrypted wallet vault out of Android backups', () => {
     );
 
     assert.match(manifest, /android:allowBackup="false"/);
+});
+
+test('only a known store names a store edition', () => {
+    assert.equal(resolveStoreEdition({}), null);
+    assert.equal(resolveStoreEdition({ CYBERIA_STORE: 'play' }), 'play');
+    assert.equal(resolveStoreEdition({ CYBERIA_STORE: ' AppStore ' }), 'appstore');
+    assert.equal(resolveStoreEdition({ CYBERIA_STORE: 'huawei' }), null);
+});
+
+test('the user agent carries the store token only in a store build', () => {
+    assert.equal(resolveUserAgent({}, '1.2.3'), 'CyberiaMobile/1.2.3');
+    assert.equal(resolveUserAgent({ CYBERIA_VERSION_NAME: '2.0.0' }, '1.2.3'), 'CyberiaMobile/2.0.0');
+    assert.equal(
+        resolveUserAgent({ CYBERIA_STORE: 'play' }, '1.2.3'),
+        'CyberiaMobile/1.2.3 CyberiaStore/play',
+    );
+    // The site matches exactly this token (resources/js/lib/storeEdition.ts).
+    assert.match(resolveUserAgent({ CYBERIA_STORE: 'appstore' }), /\bCyberiaStore\/(play|appstore)\b/);
 });

@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useWalletLayers } from '@/composables/useWalletLayers';
+import { hiddenInStore } from '@/lib/storeEdition';
 import {
     HOMEPAGE_MAX_BYTES,
     HOMEPAGE_TEMPLATES,
@@ -291,6 +292,7 @@ const freshNote = computed(() =>
             <template v-if="!loading && mine.length === 0">
                 <p class="cw-prose">{{ t('wsNone') }}</p>
                 <button
+                    v-if="!hiddenInStore('launchpad')"
                     type="button"
                     class="cw-btn cw-btn-primary"
                     style="height: 48px; margin-top: 14px"

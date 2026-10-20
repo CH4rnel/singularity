@@ -1,5 +1,6 @@
 import { computed, effectScope, ref, shallowRef, watch } from 'vue';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useWalletBlocklist } from '@/composables/useWalletBlocklist';
 import {
     chatChallenge,
     chatChallengeNonce,
@@ -113,6 +114,9 @@ const owner = computed<string | null>(() => {
     return account ? account.address.toLowerCase() : null;
 });
 
+/** Mail from an address blocked on this device neither counts nor rings. */
+const blocklist = useWalletBlocklist();
+
 const peerOf = (row: ChatRow, self: string): string =>
     row.from.toLowerCase() === self
         ? row.to.toLowerCase()
@@ -130,7 +134,11 @@ const unreadByPeer = computed<Record<string, number>>(() => {
     for (const row of rows.value) {
         const from = row.from.toLowerCase();
 
-        if (from !== self && row.seq > (readMarks.value[from] ?? 0)) {
+        if (
+            from !== self &&
+            !blocklist.isBlocked(from) &&
+            row.seq > (readMarks.value[from] ?? 0)
+        ) {
             counts[from] = (counts[from] ?? 0) + 1;
         }
     }
@@ -287,7 +295,9 @@ const keep = async (
 
     return converted.filter(
         (entry) =>
-            !known.has(entry.row.id) && entry.row.from.toLowerCase() !== self,
+            !known.has(entry.row.id) &&
+            entry.row.from.toLowerCase() !== self &&
+            !blocklist.isBlocked(entry.row.from),
     );
 };
 

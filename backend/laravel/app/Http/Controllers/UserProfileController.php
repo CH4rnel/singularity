@@ -174,6 +174,7 @@ class UserProfileController extends Controller
             'onchain' => $this->onchain($user),
             'unlocks' => $gamification->owned($user),
             'posts' => $user->posts()
+                ->visible()
                 ->with(['user:id,name,onchain_nickname,avatar_path,wallet_address'])
                 ->latest('id')
                 ->paginate(10, pageName: 'posts'),

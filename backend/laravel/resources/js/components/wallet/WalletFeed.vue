@@ -1,13 +1,26 @@
 <script setup lang="ts">
-import { ExternalLink, MessageSquare } from 'lucide-vue-next';
+import { Ban, ExternalLink, Flag, MessageSquare } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useWalletBlocklist } from '@/composables/useWalletBlocklist';
+import { storeEdition } from '@/lib/storeEdition';
 import { growComposer } from '@/lib/wallet/composer';
 import { relativeTime, shortAddress } from '@/lib/wallet/format';
 import { signInWithWallet } from '@/lib/wallet/session';
-import { fetchFeed, publishPost } from '@/lib/wallet/social';
-import type { FeedItem, FeedOnchain, FeedTab } from '@/lib/wallet/social';
+import {
+    REPORT_REASONS,
+    fetchFeed,
+    postIdOf,
+    publishPost,
+    reportPost,
+} from '@/lib/wallet/social';
+import type {
+    FeedItem,
+    FeedOnchain,
+    FeedTab,
+    ReportReason,
+} from '@/lib/wallet/social';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -229,6 +242,113 @@ const publish = async (): Promise<void> => {
     }
 };
 
+/* ------------------------------------------------ report and block --- */
+
+const blocklist = useWalletBlocklist();
+
+/*
+ * What the reader sees: nothing from an address they blocked, and in a store
+ * build of the app no launch cards, since that build has no launchpad to
+ * send anybody to (`lib/storeEdition.ts`).
+ */
+const storeBuild = storeEdition() !== null;
+
+const shown = computed(() =>
+    items.value.filter(
+        (item) =>
+            !blocklist.isBlocked(item.who?.address) &&
+            !(storeBuild && item.kind === 'launch'),
+    ),
+);
+
+const REASON_KEYS: Record<ReportReason, string> = {
+    spam: 'feedReportSpam',
+    abuse: 'feedReportAbuse',
+    scam: 'feedReportScam',
+    illegal: 'feedReportIllegal',
+    other: 'feedReportOther',
+};
+
+/** The post whose reasons are open, one at a time. */
+const reporting = ref<string | null>(null);
+const reported = ref<Set<string>>(new Set());
+const reportProblem = ref<string | null>(null);
+const sendingReport = ref(false);
+const justBlocked = ref<string | null>(null);
+
+const toggleReport = (item: FeedItem): void => {
+    reportProblem.value = null;
+    reporting.value = reporting.value === item.id ? null : item.id;
+};
+
+/**
+ * Report, signing in first when there is no session yet: a report counts a
+ * person, so it travels behind the same signature as a post.
+ */
+const report = async (item: FeedItem, reason: ReportReason): Promise<void> => {
+    const id = postIdOf(item);
+
+    if (id === null || sendingReport.value) {
+        return;
+    }
+
+    sendingReport.value = true;
+    reportProblem.value = null;
+
+    const send = () => reportPost(id, reason);
+
+    try {
+        let answer: { hidden: boolean };
+
+        try {
+            answer = await send();
+        } catch (error) {
+            const status = (error as { status?: number }).status;
+
+            if ((status !== 401 && status !== 419) || !canSign.value) {
+                throw error;
+            }
+
+            await signInWithWallet(signer.value as string, (message) =>
+                props.wallet.signMessage(SIGNING_CHAIN, message),
+            );
+            emit('signedIn');
+            answer = await send();
+        }
+
+        reported.value = new Set([...reported.value, item.id]);
+        reporting.value = null;
+
+        if (answer.hidden) {
+            items.value = items.value.filter((entry) => entry.id !== item.id);
+        }
+    } catch (error) {
+        reportProblem.value =
+            error instanceof Error ? error.message : String(error);
+    } finally {
+        sendingReport.value = false;
+    }
+};
+
+const blockAuthor = (item: FeedItem): void => {
+    const address = item.who?.address;
+
+    if (!address) {
+        return;
+    }
+
+    blocklist.block(address);
+    justBlocked.value = address;
+    reporting.value = null;
+};
+
+const undoBlock = (): void => {
+    if (justBlocked.value !== null) {
+        blocklist.unblock(justBlocked.value);
+        justBlocked.value = null;
+    }
+};
+
 watch(tab, load);
 onMounted(load);
 </script>
@@ -325,7 +445,7 @@ onMounted(load);
         </p>
 
         <p
-            v-else-if="items.length === 0"
+            v-else-if="shown.length === 0"
             class="cw-prose"
             style="margin-top: 18px"
         >
@@ -333,8 +453,26 @@ onMounted(load);
         </p>
 
         <div v-else class="cw-stack" style="gap: 12px; margin-top: 18px">
+            <div
+                v-if="justBlocked"
+                class="cw-card"
+                role="status"
+                style="
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    padding: 12px 16px;
+                "
+            >
+                <span class="cw-prose" style="flex: 1; margin: 0">{{
+                    t('feedBlocked', { who: shortAddress(justBlocked) })
+                }}</span>
+                <button type="button" class="cw-ghost" @click="undoBlock">
+                    {{ t('feedUnblock') }}
+                </button>
+            </div>
             <article
-                v-for="item in items"
+                v-for="item in shown"
                 :key="item.id"
                 class="cw-card"
                 style="padding: 16px"
@@ -607,6 +745,88 @@ onMounted(load);
                     "
                 >
                     <span class="cw-label">{{ item.meta }}</span>
+                </div>
+                <!--
+                  Anything somebody wrote can be reported to the operators and
+                  its author blocked on this device — both stores require it of
+                  an app where people write to each other, and both are worth
+                  having regardless. Records of what happened on chain are not
+                  anybody talking, so they carry neither.
+                -->
+                <div
+                    v-if="item.kind === 'post' && postIdOf(item) !== null"
+                    style="
+                        display: flex;
+                        flex-wrap: wrap;
+                        align-items: center;
+                        gap: 12px;
+                        margin-top: 14px;
+                        padding-top: 12px;
+                        border-top: 1px solid var(--cw-line);
+                    "
+                >
+                    <span
+                        v-if="reported.has(item.id)"
+                        class="cw-label"
+                        style="flex: 1"
+                        >{{ t('feedReported') }}</span
+                    >
+                    <button
+                        v-else
+                        type="button"
+                        class="cw-ghost"
+                        :aria-expanded="reporting === item.id"
+                        @click="toggleReport(item)"
+                    >
+                        <Flag :size="13" aria-hidden="true" />
+                        {{ t('feedReport') }}
+                    </button>
+                    <span class="cw-fill"></span>
+                    <button
+                        v-if="item.who?.address"
+                        type="button"
+                        class="cw-ghost"
+                        @click="blockAuthor(item)"
+                    >
+                        <Ban :size="13" aria-hidden="true" />
+                        {{ t('feedBlock') }}
+                    </button>
+                    <div
+                        v-if="reporting === item.id"
+                        style="flex-basis: 100%"
+                        class="cw-stack"
+                    >
+                        <p class="cw-prose" style="margin: 0 0 8px">
+                            {{ t('feedReportWhy') }}
+                            <template v-if="!canSign">
+                                {{ t('feedWatchOnly') }}</template
+                            >
+                            <template v-else>
+                                {{ t('feedReportSignIn') }}</template
+                            >
+                        </p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                            <button
+                                v-for="reason in REPORT_REASONS"
+                                :key="reason"
+                                type="button"
+                                class="cw-btn cw-btn-secondary"
+                                style="height: 36px; padding: 0 12px"
+                                :disabled="sendingReport"
+                                @click="report(item, reason)"
+                            >
+                                {{ t(REASON_KEYS[reason]) }}
+                            </button>
+                        </div>
+                        <p
+                            v-if="reportProblem"
+                            class="cw-prose"
+                            role="alert"
+                            style="margin: 8px 0 0; color: var(--cw-bad)"
+                        >
+                            {{ reportProblem }}
+                        </p>
+                    </div>
                 </div>
             </article>
         </div>

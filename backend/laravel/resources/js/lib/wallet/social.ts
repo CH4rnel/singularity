@@ -136,6 +136,41 @@ export const publishPost = async (body: string): Promise<FeedItem> =>
         })
     ).post;
 
+/** What a report may say about a post. Mirrors `WalletPostController::REPORT_REASONS`. */
+export const REPORT_REASONS = [
+    'spam',
+    'abuse',
+    'scam',
+    'illegal',
+    'other',
+] as const;
+
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+/** The post's own id out of a feed row's (`post-42`), or null for anything else. */
+export const postIdOf = (
+    item: Pick<FeedItem, 'id' | 'kind'>,
+): number | null => {
+    const match = item.kind === 'post' ? /^post-(\d+)$/.exec(item.id) : null;
+
+    return match ? Number(match[1]) : null;
+};
+
+/**
+ * Report a post to the operators, as whoever this browser is signed in as.
+ *
+ * `hidden` is true when this report was the one that took the post out of the
+ * feed; either way the operators have it.
+ */
+export const reportPost = async (
+    id: number,
+    reason: ReportReason,
+): Promise<{ hidden: boolean }> =>
+    sessionCall<{ hidden: boolean }>(`/api/wallet/feed/${id}/report`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+    });
+
 export const fetchDao = (): Promise<{
     daos: DaoSummary[];
     proposals: ProposalSummary[];

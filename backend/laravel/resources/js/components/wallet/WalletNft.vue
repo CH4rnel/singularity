@@ -4,6 +4,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { mintableChains } from '@/lib/nftChains';
+import { hiddenInStore } from '@/lib/storeEdition';
 import { walletChains } from '@/lib/wallet';
 import { shortAddress } from '@/lib/wallet/format';
 import { fetchOwnedNfts } from '@/lib/wallet/nft';
@@ -234,6 +235,7 @@ watch(
               was minted becomes something other people can find.
             -->
             <button
+                v-if="!hiddenInStore('tracker')"
                 type="button"
                 class="cw-btn cw-btn-secondary"
                 style="height: 44px; margin-top: 12px"

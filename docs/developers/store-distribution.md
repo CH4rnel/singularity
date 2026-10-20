@@ -1,0 +1,187 @@
+# Store distribution
+
+The Cyberia apps ship through four stores. Each one is published by
+`.github/workflows/stores.yml` through the store's own API, and each one stops
+one step short of the public: a person promotes the release in the store's
+console.
+
+| Store | What ships | Built from | The workflow uploads to |
+|---|---|---|---|
+| Google Play | Cyberia Wallet for Android, store edition | `frontend/mobile` (AAB) | the internal track, as a draft until the first review passes |
+| App Store | Cyberia Wallet for iPhone, store edition | `frontend/mobile` (IPA) | TestFlight |
+| Chrome Web Store | Cyberia Wallet extension | `frontend/extension` (`Cyberia-extension.zip`) | review, then staged: published by pressing Publish |
+| addons.mozilla.org | Cyberia Wallet extension | `frontend/extension` (`dist-firefox` + source zip) | review on the listed channel; AMO publishes on approval |
+
+Push a tag (`git tag app-v1.5.0 && git push origin app-v1.5.0`) and both
+`apps.yml` (GitHub release, `/download`) and `stores.yml` run. A manual run
+(Actions → Stores) picks one store, the Play track and whether Chrome
+publishes on approval. A store whose secrets are missing is skipped with a
+notice, so the four can be switched on one at a time.
+
+LainOS (`lain-labs/os`) is a command-line agent framework and chaos.fm is a
+website; neither is a store app, so nothing from those repositories ships here.
+
+## The store edition
+
+The mobile app renders the live site, so a reviewer judges everything the app
+can reach. A store build appends `CyberiaStore/play` or `CyberiaStore/appstore`
+to its user agent (`CYBERIA_STORE`, set by `npm run sync:play` /
+`sync:appstore`), and the site answers with the store edition:
+
+- `resources/js/lib/storeEdition.ts` leaves out the launchpad and tokenised
+  stocks in both stores, and torrents and the tracker in the App Store build;
+  The Wired drops rows that lead off the wallet (predictions, staking, lending,
+  token list) and the feed drops launch cards.
+- `App\Http\Middleware\ConfineStoreEdition` sends any page load from a store
+  build outside `/wallet` (and sign-in, `/privacy`, `/.well-known`) back to
+  `/wallet`, so prediction markets, the slot machine and the launchpad page
+  cannot be reached by any link. The wallet's own POSTs and JSON reads are
+  untouched.
+
+The APK on `/download`, the desktop app, the extension and every browser carry
+no token and get the whole wallet. **Deploy the site before submitting a store
+build**: the edition is decided on the server.
+
+### Why those screens
+
+| Rule | Applies to | Effect here |
+|---|---|---|
+| App Store 3.1.5(i): wallets only from developers enrolled as an *organization* | the whole iPhone app | the Apple Developer account must be an organization (D-U-N-S) |
+| App Store 3.1.5(iv): ICOs and crypto-securities only from banks, brokers, licensed institutions | launchpad, tokenised stocks | hidden |
+| App Store 3.1.5(v): no currency for completing tasks | Pioneer season, quests that pay tokens | not in the wallet; XP is not currency |
+| Google Play: Cryptocurrency exchanges and software wallets | the wallet | non-custodial wallets are out of scope; nothing to license |
+| Google Play: real-money gambling, Apple 5.3 | prediction markets, slots | site-only, confined away |
+| Google Play financial features declaration; securities trading | tokenised stocks | hidden |
+| Apple 1.2 and Play UGC policy: report, block, act on reports | feed, chat | Report on every post (operators notified on Telegram, hidden after `WALLET_FEED_HIDE_AFTER_REPORTS` reports), Block author in the feed and in a chat, unblock in Settings |
+| Apple 5.1.1(v), Play account deletion | accounts made by signing in | Settings → Delete my Cyberia account (fresh signature, `DELETE /api/wallet/account`) |
+| Apple 4.2: more than a repackaged website | the iPhone app | the risk that remains; see below |
+
+**Apple 4.2.** The iPhone app is a WebView over the live site. It is a full
+wallet with signing, encrypted messaging and local key storage, which is the
+argument to make in review notes, but Apple rejects thin wrappers often. The
+stronger answer is what the desktop app already does: bundle the wallet into
+the app (`vite.desktop.config.ts`) so the code that holds keys ships in the
+binary. That is a separate piece of work.
+
+## Secrets
+
+Repository → Settings → Secrets and variables → Actions. Nothing here is
+created by the workflow and nothing is committed.
+
+| Secret | Store | Where it comes from |
+|---|---|---|
+| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Play | already used by `apps.yml`; `frontend/mobile/scripts/make-keystore.sh` makes them. This key is Play's *upload* key |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Play | Google Cloud console → IAM → Service accounts → create, Keys → Add key → JSON. Enable *Google Play Android Developer API* in that project. Play Console → Users and permissions → Invite the service account's email with *Release apps to testing tracks* (and *Release to production* if production releases should go through the API) for this app |
+| `CWS_SERVICE_ACCOUNT_JSON` | Chrome | a service account JSON as above (the same account may be reused). Enable *Chrome Web Store API* in its project. Chrome Web Store developer dashboard → Account → Service accounts → add its email |
+| `CWS_PUBLISHER_ID` | Chrome | developer dashboard → Account (the publisher id) |
+| `CWS_EXTENSION_ID` | Chrome | the item's id, from its dashboard URL |
+| `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | AMO | https://addons.mozilla.org/developers/addon/api/key/ |
+| `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64` | App Store | App Store Connect → Users and Access → Integrations → App Store Connect API → Team keys → generate with the **Admin** role (cloud-managed signing needs it). The `.p8` downloads once: `base64 -i AuthKey_XXXX.p8` into `ASC_KEY_P8_BASE64` |
+| `APPLE_TEAM_ID` | App Store | developer.apple.com → Membership details |
+
+Optional repository variable `PLAY_RELEASE_STATUS`: `draft` until the app's
+first review passes (a never-reviewed Play app only accepts drafts), then
+`completed`.
+
+No certificate or provisioning profile is stored for iOS: Xcode signs with
+cloud-managed certificates through the API key (`-allowProvisioningUpdates`).
+
+## One-time setup in each console
+
+### Google Play Console
+
+1. Create the app *Cyberia Wallet*, package `church.cyberia.app`, free, app.
+2. **App signing.** If `Cyberia.apk` was ever published on `/download`, choose
+   *Use a different key* and upload the existing keystore with Google's PEPK
+   tool, so the Play build updates a sideloaded install in place — otherwise
+   moving to Play means uninstalling, which erases a vault whose phrase was not
+   written down. If it never was, let Google generate the signing key. Either
+   way, add Play's app-signing SHA-256 (App integrity page) to
+   `APP_ANDROID_SHA256_FINGERPRINT`, comma separated, for App Links.
+3. Upload the first AAB by hand once (Testing → Internal → Create release),
+   from a manual run's build or `npm run android:bundle`; the API takes over
+   after that.
+4. App content: privacy policy
+   `https://cyberia.church/privacy/cyberia-wallet-app.html`; ads: none; target
+   audience 18+; content rating questionnaire (no gambling — prediction
+   markets are not in this build; users interact; shares no location);
+   **Financial features**: cryptocurrency wallet, non-custodial; account
+   deletion URL `https://cyberia.church/privacy/cyberia-wallet-app.html` (it
+   describes the in-app path).
+5. **Data safety**, from what the app does:
+   - Collected: *App activity → App interactions* (anonymous events; analytics;
+     optional — Security switch), *Device or other IDs* (the app-generated
+     install id; analytics; optional), *Financial info → Other* (wallet
+     address on Cyberia/Robinhood/Solana, to confirm funding; analytics),
+     *Personal info → User IDs* and *Messages → Other in-app messages*
+     (only after signing in: account id, feed posts, unencrypted chat;
+     app functionality; optional).
+   - Not collected: location, contacts, photos, audio, files, health, web
+     history. End-to-end encrypted messages are not "collected" — nobody but
+     the two wallets can read them.
+   - Shared: none. Addresses sent to blockchain nodes, and what a user hands to
+     an on-ramp or the cross-chain router, are user-initiated transfers.
+   - Encrypted in transit: yes. Users can request deletion: yes.
+6. Store listing text and graphics are uploaded by the workflow from
+   `frontend/mobile/fastlane/metadata/android` (en-US, ru-RU).
+
+### App Store Connect
+
+1. The account must be an **organization** (3.1.5(i)).
+2. Certificates, Identifiers & Profiles → Identifiers → register
+   `church.cyberia.app`. App Store Connect → Apps → New App, iOS, that bundle
+   id, SKU `cyberia-wallet`.
+3. App Privacy: *Usage Data → Product Interaction* (not linked, analytics),
+   *Identifiers → Device ID* (not linked, analytics), *Financial Info → Other*
+   (not linked, analytics), *Identifiers → User ID* and *User Content → Other*
+   (linked, app functionality, only after sign-in). Tracking: no.
+4. Age rating: 17+ (*Unrestricted Web Access* — The Wired opens sites by name).
+5. App Review Information: a contact, and the notes in
+   `frontend/mobile/fastlane/metadata/ios/review_information/notes.txt`.
+   `bundle exec fastlane ios listing` uploads the text and screenshots.
+6. Export compliance is answered in the binary
+   (`ITSAppUsesNonExemptEncryption = false`: HTTPS and standard
+   AES/ECDH for the user's own data only).
+7. After TestFlight processing, add the build to the version and submit.
+
+### Chrome Web Store
+
+The item already exists (first published as the 1.0.0 phrase generator).
+Add the service account under Account, paste the listing from
+`frontend/extension/cws/listing.md` (English, plus the Russian block there for
+the `ru` listing), and the privacy policy URL
+`https://cyberia.church/privacy/cyberia-wallet-extension.html`. Publishing a
+staged release is a button on the item.
+
+### addons.mozilla.org
+
+The add-on is listed. Generate API credentials; everything else is in
+`frontend/extension/amo/`.
+
+## Screenshots
+
+`node scripts/stores/screenshots.mjs` (after `npx playwright install chromium`)
+loads the live wallet at both store sizes with each store's user agent, in
+English and Russian, and writes them where fastlane uploads from. Run it after
+the store edition is deployed, so the shots show what the store build shows.
+The Play icon (512×512) and feature graphic (1024×500) are committed under
+`fastlane/metadata/android/en-US/images/`.
+
+## Building iPhone apps without a Mac
+
+`stores.yml` builds on GitHub's `macos-15` runners. For a public repository
+they cost nothing; for a private one, about $0.06 a minute (2026 price), so a
+15-minute build is about a dollar. Nothing has to be rented.
+
+| Option | Cost, roughly | Fit |
+|---|---|---|
+| GitHub Actions macOS runners | free (public repo) | what this uses |
+| Codemagic | 500 free macOS minutes a month, then per minute | a hosted alternative with its own signing UI |
+| Bitrise | free hobby tier with limits, paid plans per month | as above |
+| Scaleway Mac mini | about €0.10–0.20 an hour, 24-hour minimum | a Mac to log into, by the day |
+| MacStadium / MacinCloud | from tens of dollars a month | a Mac kept around |
+| AWS EC2 Mac | about $0.65 an hour, 24-hour minimum (~$470 a month if kept) | only if the rest already lives in AWS |
+
+A Mac to log into is only needed for things CI cannot do: opening the project
+in Xcode, debugging on a device, or the first manual steps of App Store
+Connect, which are all in a browser anyway.

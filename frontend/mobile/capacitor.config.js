@@ -1,6 +1,7 @@
 'use strict';
 
-const { allowNavigation, resolveAppUrl, resolveStartUrl } = require('./src/app-url');
+const { allowNavigation, resolveAppUrl, resolveStartUrl, resolveUserAgent } = require('./src/app-url');
+const { version } = require('./package.json');
 
 const appUrl = resolveAppUrl();
 const startUrl = resolveStartUrl();
@@ -19,8 +20,10 @@ const config = {
     appName: 'Cyberia',
     webDir: 'www',
     backgroundColor: '#0b0f10',
-    // Lets the backend recognise the native shell (see resources/js/lib/native.ts).
-    appendUserAgent: 'CyberiaMobile/1.0.0',
+    // Lets the backend recognise the native shell (see resources/js/lib/native.ts)
+    // and, for a Google Play or App Store build (CYBERIA_STORE=play|appstore),
+    // which store edition of the wallet to serve (resources/js/lib/storeEdition.ts).
+    appendUserAgent: resolveUserAgent(process.env, version),
     zoomEnabled: false,
     server: {
         url: startUrl,

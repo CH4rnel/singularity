@@ -1,0 +1,9 @@
+Cyberia is a non-custodial wallet. No account or login is needed: on first launch the app creates a wallet on the device and opens the portfolio.
+
+Keys: the recovery phrase is generated on the device (BIP-39) and stored only in the app's local storage; it is never sent to our servers. The developer cannot access, move or recover users' funds.
+
+What the app does: shows balances, sends and receives crypto the user signs, swaps on the Cyberia decentralised exchange (smart contracts, no order book, no custody), adds liquidity, bridges, mints NFTs, votes in the DAO, and end-to-end encrypted wallet-to-wallet messages. This App Store build does not include the token launchpad, tokenised stocks or BitTorrent features.
+
+User-generated content: feed posts can be reported (Report → reason; operators are notified, and a post reported by several users is hidden pending review) and any author or chat contact can be blocked. Posting requires signing in with the wallet; the account can be deleted in Wallet → Settings → Delete my Cyberia account.
+
+To test: open the app, wait for the portfolio, tap Receive to see the address. Sending needs funds; the Gas station (More → Gas station) can sponsor a small Cyberia network fee for an address that holds Cyberia assets.

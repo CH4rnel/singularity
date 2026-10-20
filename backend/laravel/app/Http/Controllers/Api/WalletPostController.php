@@ -6,8 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Services\GamificationService;
 use App\Services\Social\PostAnnouncer;
+use App\Services\TelegramOpsNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Writing into the feed from the wallet.
@@ -56,6 +61,63 @@ class WalletPostController extends Controller
         dispatch(fn () => $announcer->announce($post))->afterResponse();
 
         return response()->json(['post' => $this->present($post)], 201);
+    }
+
+    /** What a report may say about a post — a reason, never free text. */
+    public const REPORT_REASONS = ['spam', 'abuse', 'scam', 'illegal', 'other'];
+
+    /**
+     * Reporting a post.
+     *
+     * Both stores require that whatever people write to each other can be
+     * reported from inside the app, and that somebody acts on it. Every report
+     * reaches the operators on Telegram; once `wallet.feed.hide_after_reports`
+     * different people have reported a post it leaves the feed (`hidden_at`)
+     * until a person decides, because waiting for that person is the gap the
+     * rule exists to close. Behind the same session as posting, so a report
+     * counts a person rather than a request, and repeating one changes nothing.
+     */
+    public function report(Request $request, Post $post, TelegramOpsNotifier $notifier): JsonResponse
+    {
+        abort_if($post->hidden_at !== null, 404);
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', Rule::in(self::REPORT_REASONS)],
+        ]);
+
+        $user = $request->user();
+
+        $fresh = DB::table('post_reports')->insertOrIgnore([
+            'post_id' => $post->id,
+            'user_id' => $user->id,
+            'reason' => $validated['reason'],
+            'created_at' => now(),
+        ]) > 0;
+
+        $reports = DB::table('post_reports')->where('post_id', $post->id)->count();
+        $hidden = $reports >= max(1, (int) config('wallet.feed.hide_after_reports'));
+
+        if ($hidden) {
+            $post->forceFill(['hidden_at' => now()])->save();
+            Cache::forget('wallet.feed.all');
+            Cache::forget('wallet.feed.posts');
+        }
+
+        if ($fresh) {
+            $text = sprintf(
+                "Жалоба на пост #%d в ленте (%s), всего жалоб: %d%s\nАвтор: %s\n«%s»",
+                $post->id,
+                $validated['reason'],
+                $reports,
+                $hidden ? '. Пост скрыт из ленты до решения оператора.' : '',
+                $post->user()->value('wallet_address') ?? "user #{$post->user_id}",
+                Str::limit($post->body, 300),
+            );
+
+            dispatch(fn () => $notifier->send($text))->afterResponse();
+        }
+
+        return response()->json(['reported' => true, 'hidden' => $hidden], 202);
     }
 
     /**

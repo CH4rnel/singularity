@@ -12,6 +12,7 @@ import type { WalletPlace } from '@/components/wallet/WalletPlaces.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useWalletMode } from '@/composables/useWalletMode';
+import { hiddenInStore } from '@/lib/storeEdition';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -104,7 +105,12 @@ const { simple } = useWalletMode();
                 <Fuel :size="20" :stroke-width="1.5" aria-hidden="true" />
                 <span style="flex: 1">{{ t('gasStation') }}</span>
             </button>
-            <button type="button" class="cw-line-row" @click="emit('torrent')">
+            <button
+                v-if="!hiddenInStore('torrent')"
+                type="button"
+                class="cw-line-row"
+                @click="emit('torrent')"
+            >
                 <Download :size="20" :stroke-width="1.5" aria-hidden="true" />
                 <span style="flex: 1">{{ t('torrentTitle') }}</span>
             </button>

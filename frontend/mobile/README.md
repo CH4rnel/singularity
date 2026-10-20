@@ -115,8 +115,18 @@ The tag is also the version: CI passes it in as `CYBERIA_VERSION_NAME`, with
 `CYBERIA_VERSION_CODE` derived from it (`1.2.3` → `10203`), so nothing here has to
 be committed per release.
 
-`android:release` still produces the `.aab` Play wants; the store listing needs a
-developer account and Google's crypto policy on top of that.
+## Store builds
+
+Google Play and the App Store get the **store edition**: `npm run sync:play` /
+`npm run sync:appstore` set `CYBERIA_STORE`, which appends
+`CyberiaStore/<edition>` to the user agent, and the site leaves out what those
+stores do not take from an unlicensed developer (the launchpad, tokenised
+stocks, torrents on iOS) and keeps the app on `/wallet`. `npm run
+android:bundle` builds the Play AAB. `.github/workflows/stores.yml` builds and
+uploads both through `fastlane/Fastfile` (Play internal track, TestFlight),
+with the listing text and graphics in `fastlane/metadata/`. Secrets and the
+console steps are in `docs/developers/store-distribution.md`; `android:release`
+still builds an AAB of the whole wallet, which is not the one to send to Play.
 
 ## Known limits
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\AiApiException;
+use App\Http\Middleware\ConfineStoreEdition;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetTeamUrlDefaults;
@@ -40,6 +41,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['api/events']);
 
         $middleware->web(append: [
+            ConfineStoreEdition::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

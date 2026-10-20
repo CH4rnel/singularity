@@ -52,6 +52,11 @@ class Web3LoginController extends Controller
 
             auth()->login($user, true);
 
+            // When this session last proved the key, for the few acts that
+            // want a fresh signature rather than a remembered cookie
+            // (deleting the account from the wallet, WalletAccountController).
+            request()->session()->put('auth.wallet_signed_at', time());
+
             return $team;
         });
 

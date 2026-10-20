@@ -79,6 +79,7 @@ import { useWalletMode } from '@/composables/useWalletMode';
 import { useWalletTheme } from '@/composables/useWalletTheme';
 import { analytics } from '@/lib/analytics';
 import { isNativeShell, nativeShell } from '@/lib/native';
+import { hiddenInStore, storeEdition } from '@/lib/storeEdition';
 import {
     hideMainButton,
     setBackButton,
@@ -478,8 +479,26 @@ const SIMPLE_TABS: { id: Section; label: () => string; icon: Component }[] = [
     { id: 'more', label: () => t('navMore'), icon: MoreHorizontal },
 ];
 
-const rail = computed(() => (simple.value ? SIMPLE_RAIL : RAIL));
-const tabs = computed(() => (simple.value ? SIMPLE_TABS : TABS));
+/*
+ * A store build of the mobile app leaves a few screens out
+ * (`lib/storeEdition.ts`); the lists are filtered once here, and
+ * `openSection` refuses the same screens, so a link naming one lands on the
+ * portfolio instead.
+ */
+const rail = computed(() =>
+    (simple.value ? SIMPLE_RAIL : RAIL).map((group) => ({
+        ...group,
+        items: group.items.filter((entry) => !hiddenInStore(entry.id)),
+    })),
+);
+const tabs = computed(() =>
+    (simple.value ? SIMPLE_TABS : TABS).filter(
+        (entry) => !hiddenInStore(entry.id),
+    ),
+);
+
+/** A store build stays on the wallet, so the masthead has no site to open. */
+const storeBuild = storeEdition() !== null;
 
 const inSimpleTabs = (id: Section): boolean =>
     SIMPLE_TABS.some((entry) => entry.id === id);
@@ -643,7 +662,7 @@ const showNetworkBar = computed(
 );
 
 const openSection = (next: Section): void => {
-    section.value = next;
+    section.value = hiddenInStore(next) ? 'portfolio' : next;
     overlay.value = null;
 };
 
@@ -1842,7 +1861,12 @@ watch(
               the shell. In a browser the same link is on the Preferences
               screen, since a tab still has its own history.
             -->
-            <a href="/" class="cw-ghost" style="text-decoration: none">
+            <a
+                v-if="!storeBuild"
+                href="/"
+                class="cw-ghost"
+                style="text-decoration: none"
+            >
                 <ExternalLink :size="14" aria-hidden="true" />
                 {{ t('openSite') }}
             </a>

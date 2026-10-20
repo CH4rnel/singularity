@@ -1,0 +1,6 @@
+source 'https://rubygems.org'
+
+# Store uploads only (fastlane/Fastfile): Google Play through the Developer
+# API, the App Store through App Store Connect's API key. Nothing here signs
+# with a key of its own — Gradle and Xcode do that.
+gem 'fastlane', '~> 2.228'

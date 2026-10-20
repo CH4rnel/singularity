@@ -3,6 +3,7 @@ import { useMediaQuery } from '@vueuse/core';
 import {
     ArrowLeft,
     ArrowUp,
+    Ban,
     Check,
     Clock,
     Loader2,
@@ -27,6 +28,7 @@ import {
 import WalletChatAvatar from '@/components/wallet/WalletChatAvatar.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { useWalletBlocklist } from '@/composables/useWalletBlocklist';
 import { useWalletChatInbox } from '@/composables/useWalletChatInbox';
 import {
     chatFingerprint,
@@ -100,6 +102,13 @@ const emit = defineEmits<{
 const { t, tag } = useLocale(walletMessages);
 
 const inbox = useWalletChatInbox();
+
+/*
+ * Addresses blocked on this device (`lib/wallet/blocklist.ts`). Their threads
+ * leave the list and their mail stops ringing; a blocked address typed into
+ * the search still opens, so the block can be undone from where it was made.
+ */
+const blocklist = useWalletBlocklist();
 inbox.attach(props.wallet);
 
 /** Two panes side by side on a desktop; one at a time on a phone. */
@@ -479,6 +488,7 @@ const threads = computed(() => {
     }
 
     return [...byPeer.values()]
+        .filter((entry) => !blocklist.isBlocked(entry.peer))
         .map((entry) => ({
             ...entry,
             unread: inbox.unreadByPeer.value[entry.peer] ?? 0,
@@ -1404,7 +1414,41 @@ onBeforeUnmount(() => {
                         />
                         <Shield v-else :size="19" aria-hidden="true" />
                     </button>
+                    <button
+                        type="button"
+                        class="cw-dm-icon cw-dm-icon-bare"
+                        :title="
+                            blocklist.isBlocked(peer)
+                                ? t('chatUnblock')
+                                : t('chatBlock')
+                        "
+                        :aria-label="
+                            blocklist.isBlocked(peer)
+                                ? t('chatUnblock')
+                                : t('chatBlock')
+                        "
+                        :aria-pressed="blocklist.isBlocked(peer)"
+                        @click="
+                            blocklist.isBlocked(peer)
+                                ? blocklist.unblock(peer)
+                                : blocklist.block(peer)
+                        "
+                    >
+                        <Ban
+                            :size="19"
+                            :class="{ 'cw-dm-warn': blocklist.isBlocked(peer) }"
+                            aria-hidden="true"
+                        />
+                    </button>
                 </header>
+                <p
+                    v-if="blocklist.isBlocked(peer)"
+                    class="cw-prose"
+                    role="status"
+                    style="margin: 0; padding: 10px 16px"
+                >
+                    {{ t('chatBlockedNote') }}
+                </p>
 
                 <div ref="transcript" class="cw-dm-log" @scroll="onScroll">
                     <!-- A new thread: who this is, and how it travels. -->

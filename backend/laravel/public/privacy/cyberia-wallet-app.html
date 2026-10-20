@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cyberia app: Privacy Policy</title>
+  <meta name="description" content="Privacy policy of the Cyberia wallet app for Android and iPhone.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --ink: #14181c;
+      --quiet: #56636c;
+      --line: #dfe5e9;
+      --accent: #007f7a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #07090c;
+        --ink: #e6f1f5;
+        --quiet: #93a7b1;
+        --line: #1f2a33;
+        --accent: #3ff0e6;
+      }
+    }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 system-ui, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; padding: 48px 16px 64px; }
+    h1 { font-size: 30px; line-height: 1.25; margin: 0 0 8px; }
+    h2 { font-size: 20px; margin: 36px 0 8px; padding-top: 20px; border-top: 1px solid var(--line); }
+    p, li { margin: 8px 0; }
+    .meta { color: var(--quiet); margin: 0 0 24px; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Cyberia app: Privacy Policy</h1>
+    <p class="meta">Applies to the Cyberia app for Android (Google Play and the APK at cyberia.church/download) and iPhone (App Store). Last updated October 20, 2026. <a href="#ru">Русская версия ниже.</a></p>
+
+    <p>Cyberia is a non-custodial wallet. Your recovery phrase and private keys are created on your phone and stored only there. They are never sent to Cyberia or to anyone else, and nobody, Cyberia included, can recover them for you. The app is excluded from Android cloud backup, so the wallet does not leave the device that way either.</p>
+
+    <h2>What the wallet sends, and why</h2>
+    <ul>
+      <li><strong>Your public addresses</strong> go to each network's node and index to read balances, tokens and history: Cyberia's own (rpc.cyberia.church, explorer.cyberia.church); the public nodes of Robinhood Chain, BNB Chain, Base and any other network you switch on; Solana through Cyberia's relay (cyberia.church/api/solana/rpc), which signs nothing; Bitcoin and Litecoin through mempool.space and litecoinspace.org.</li>
+      <li><strong>Transactions you approve</strong> are broadcast to that network. Once on a blockchain, a transaction is public and permanent.</li>
+      <li><strong>Prices</strong> come from cyberia.church/api/wallet/prices. The request carries no address.</li>
+      <li><strong>Gas station.</strong> If you ask Cyberia to pay a small network fee for you, your Cyberia address is checked against public on-chain data before the fee is sent to it.</li>
+    </ul>
+    <p>Every one of these services sees your IP address, as any web request does.</p>
+
+    <h2>Usage statistics</h2>
+    <p>To learn whether the wallet works for people, the app records anonymous events such as "wallet created" or "swap settled". They are tied to a random identifier made on your phone, never to your name or phone number. Amounts are recorded in US dollars, tokens by symbol, errors as short codes; we do not record your IP address, device fingerprint or advertising ID. Your address is stored only for networks Cyberia can read itself (Cyberia, Robinhood Chain, Solana), to confirm that a wallet was funded. You can turn statistics off in Wallet → Security; the app also honours Do Not Track and Global Privacy Control.</p>
+
+    <h2>If you sign in</h2>
+    <p>The wallet works without an account. Posting in the feed, voting in a DAO, the daily board and reporting a post ask you to sign a login message once, which creates a Cyberia account tied to your Cyberia address. What you post and how you vote is public. You can delete the account at any time in Wallet → Settings → Delete my Cyberia account; this removes your profile, posts, experience and sessions. It cannot remove anything already on a blockchain.</p>
+
+    <h2>Messages</h2>
+    <p>Wallet-to-wallet messages pass through Cyberia's relay. Encrypted messages are sealed on your phone with a key derived from your wallet, and Cyberia cannot read them; it does see which addresses talk to each other and when. Messages sent without encryption (the app shows when a conversation is in that mode) can be read by Cyberia. Old messages are deleted from the relay automatically. You can block any address on your phone: its posts and messages are hidden and stop notifying you.</p>
+
+    <h2>Reports</h2>
+    <p>If you report a post, Cyberia's operators receive the post, the reason you chose and your account. A post several people report is hidden until an operator reviews it.</p>
+
+    <h2>Lain</h2>
+    <p>What you write to Lain, Cyberia's AI assistant, is sent to Cyberia's server and an AI model provider to produce an answer. Cyberia does not store the conversation; the transcript stays on your phone.</p>
+
+    <h2>Services you choose to use</h2>
+    <p>Some actions hand you to another company, and its own privacy policy applies to what you give it there: buying crypto with a card (the payment provider you pick, who may ask for identity verification), cross-chain swaps (the router Relay receives the swap you request), and price charts (DexScreener, loaded only when you open a chart).</p>
+
+    <h2>What is not collected</h2>
+    <p>No contacts, photos, location, microphone or camera data. No advertising, no advertising identifiers, no selling or sharing of data with anyone for any other purpose.</p>
+
+    <h2>Children</h2>
+    <p>The app is not directed at children under 13 and is rated for adults in the stores.</p>
+
+    <h2>Deleting your data</h2>
+    <p>Uninstalling the app deletes the wallet and everything stored on the phone; keep your recovery phrase, it is the only way back. Account data is deleted from Settings as described above, or on request through the contact below. Usage events are not linked to an account; on request we delete those recorded under your app identifier; turning statistics off also makes the phone forget that identifier.</p>
+
+    <h2>Contact</h2>
+    <p>Write to the developer address shown on the app's store page, or reach us at <a href="https://cyberia.church">https://cyberia.church</a>.</p>
+
+    <h2 id="ru">Политика конфиденциальности (русская версия)</h2>
+    <p>Действует для приложения Cyberia на Android (Google Play и APK с cyberia.church/download) и iPhone (App Store). Обновлено 20 октября 2026 года.</p>
+    <p>Cyberia — некастодиальный кошелёк. Фраза восстановления и закрытые ключи создаются на вашем телефоне и хранятся только там. Они никогда не отправляются ни Cyberia, ни кому-либо ещё, и никто, включая Cyberia, не сможет их восстановить. Приложение исключено из облачного резервного копирования Android.</p>
+    <p><strong>Что отправляет кошелёк.</strong> Публичные адреса уходят узлам и индексаторам сетей, чтобы показать балансы, токены и историю: собственные узлы Cyberia, публичные узлы Robinhood Chain, BNB Chain, Base и других включённых вами сетей; Solana через ретранслятор Cyberia, который ничего не подписывает; Bitcoin и Litecoin через mempool.space и litecoinspace.org. Подтверждённые вами транзакции отправляются в сеть и становятся публичными навсегда. Цены запрашиваются у cyberia.church без адреса. Если вы просите газовую станцию оплатить комиссию, ваш адрес Cyberia сверяется с публичными данными блокчейна. Все эти сервисы видят ваш IP-адрес, как при любом веб-запросе.</p>
+    <p><strong>Статистика использования.</strong> Приложение записывает анонимные события («кошелёк создан», «обмен прошёл») под случайным идентификатором, созданным на телефоне. Суммы — в долларах, токены — по символу, ошибки — короткими кодами. IP-адрес, отпечаток устройства и рекламный идентификатор не сохраняются. Адрес сохраняется только для сетей, которые Cyberia читает сама (Cyberia, Robinhood Chain, Solana), чтобы подтвердить пополнение. Статистику можно выключить в разделе Кошелёк → Безопасность; сигналы Do Not Track и Global Privacy Control соблюдаются.</p>
+    <p><strong>Вход.</strong> Кошелёк работает без аккаунта. Для постов в ленте, голосования в DAO, ежедневных заданий и жалоб нужно один раз подписать сообщение входа: так создаётся аккаунт Cyberia, привязанный к вашему адресу. Посты и голоса публичны. Аккаунт можно удалить в любой момент: Кошелёк → Настройки → «Удалить мой аккаунт Cyberia». Удаляются профиль, посты, опыт и сессии; записанное в блокчейн удалить невозможно.</p>
+    <p><strong>Сообщения.</strong> Сообщения между кошельками проходят через ретранслятор Cyberia. Зашифрованные сообщения запечатываются на телефоне, и Cyberia не может их прочитать, но видит, какие адреса и когда переписываются. Незашифрованные сообщения (приложение показывает этот режим) Cyberia прочитать может. Старые сообщения удаляются с ретранслятора автоматически. Любой адрес можно заблокировать на телефоне: его посты и сообщения скрываются и не присылают уведомлений.</p>
+    <p><strong>Жалобы.</strong> При жалобе на пост операторы Cyberia получают пост, выбранную причину и ваш аккаунт. Пост, на который пожаловались несколько человек, скрывается до проверки.</p>
+    <p><strong>Lain.</strong> То, что вы пишете ИИ-ассистенту Lain, отправляется на сервер Cyberia и поставщику ИИ-модели для ответа. Cyberia не хранит разговор, он остаётся на телефоне.</p>
+    <p><strong>Сторонние сервисы по вашему выбору:</strong> покупка криптовалюты картой (выбранный вами платёжный провайдер может запросить верификацию личности), кросс-чейн обмен (маршрутизатор Relay), графики цен (DexScreener, загружается при открытии графика). На данные, переданные им, распространяются их политики.</p>
+    <p><strong>Не собирается:</strong> контакты, фото, геолокация, микрофон и камера. Нет рекламы и рекламных идентификаторов, данные никому не продаются и не передаются для других целей. Приложение не предназначено для детей младше 13 лет.</p>
+    <p><strong>Удаление данных.</strong> Удаление приложения стирает кошелёк и всё, что хранится на телефоне; сохраните фразу восстановления. Данные аккаунта удаляются в настройках или по запросу через контакт ниже. События статистики не привязаны к аккаунту; по запросу мы удалим записанные под идентификатором вашего приложения, а выключение статистики стирает этот идентификатор на телефоне.</p>
+    <p><strong>Контакт:</strong> адрес разработчика на странице приложения в магазине или <a href="https://cyberia.church">https://cyberia.church</a>.</p>
+  </main>
+</body>
+</html>

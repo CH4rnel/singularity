@@ -274,6 +274,7 @@ class WalletSocialController extends Controller
 
         if ($tab === 'all' || $tab === 'posts') {
             $items = array_merge($items, Post::query()
+                ->visible()
                 ->with('user:id,name,avatar_path,wallet_address')
                 ->latest('id')
                 ->limit(self::FEED_LIMIT)

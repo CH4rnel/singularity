@@ -1,0 +1,347 @@
+name: Stores
+
+# Publishes the apps to the four stores, through each store's own API:
+#
+#   Google Play         the Android app (frontend/mobile), signed AAB → internal track
+#   App Store           the iPhone app (frontend/mobile) → TestFlight
+#   Chrome Web Store    the extension (frontend/extension) → submitted for review, staged
+#   addons.mozilla.org  the extension → submitted for review on the listed channel
+#
+# Every job stops one step short of the public: an internal track, TestFlight,
+# a staged Chrome release and an AMO review are all stages a person promotes
+# by hand, because a store release is the one step in this repository that
+# cannot be taken back. Promoting is a button in each console.
+#
+# A store whose secrets are not set is skipped with a notice rather than
+# failing the run, so the four can be switched on one at a time. Which secrets
+# each needs, and where each comes from, is in docs/developers/store-distribution.md.
+#
+# The mobile builds are the *store edition* (CYBERIA_STORE): the site serves
+# them a wallet without the screens those stores do not take from an
+# unlicensed developer (backend/laravel/resources/js/lib/storeEdition.ts).
+# The APK on /download stays the whole wallet; apps.yml builds that one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      stores:
+        description: Which stores
+        type: choice
+        default: all
+        options: [all, play, appstore, chrome, firefox]
+      play_track:
+        description: Google Play track
+        type: choice
+        default: internal
+        options: [internal, alpha, beta, production]
+      chrome_publish:
+        description: Chrome Web Store, after review
+        type: choice
+        default: staged
+        options: [staged, default]
+  push:
+    tags:
+      - 'app-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stores-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  play:
+    name: Google Play
+    if: github.event_name == 'push' || inputs.stores == 'all' || inputs.stores == 'play'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/mobile
+    steps:
+      - name: Secrets present
+        id: gate
+        env:
+          PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        working-directory: .
+        run: |
+          if [ -z "$PLAY_JSON" ] || [ -z "$KEYSTORE" ]; then
+            echo "::notice title=Google Play skipped::PLAY_SERVICE_ACCOUNT_JSON and the ANDROID_KEYSTORE_* secrets are needed (docs/developers/store-distribution.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+        if: steps.gate.outputs.ready == 'true'
+
+      - uses: ruby/setup-ruby@v1
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: frontend/mobile
+
+      - name: Install and test
+        if: steps.gate.outputs.ready == 'true'
+        run: npm ci && npm test
+
+      # The same key that signs Cyberia.apk is the Play *upload* key; Play
+      # re-signs with its app-signing key (docs/developers/store-distribution.md explains the choice).
+      - name: Signing material
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/cyberia-release.jks
+          cat > android/keystore.properties <<EOF2
+          storeFile=cyberia-release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF2
+
+      # The tag is the version; a manual run gets package.json's plus the run
+      # number, because Play refuses a versionCode it has seen before.
+      - name: Version
+        if: steps.gate.outputs.ready == 'true'
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#app-v}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          IFS=. read -r MAJOR MINOR PATCH <<< "${VERSION%%-*}"
+          CODE=$(( ${MAJOR:-0} * 10000 + ${MINOR:-0} * 100 + ${PATCH:-0} ))
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            CODE=$(( CODE * 1000 + GITHUB_RUN_NUMBER % 1000 ))
+          fi
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Build the store bundle
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          CYBERIA_STORE: play
+          CYBERIA_VERSION_NAME: ${{ steps.version.outputs.name }}
+          CYBERIA_VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          npm run sync:play
+          (cd android && ./gradlew bundleRelease --no-daemon)
+
+      - name: Upload to Google Play
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PLAY_TRACK: ${{ inputs.play_track || 'internal' }}
+          PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}
+        run: bundle exec fastlane android play
+
+  appstore:
+    name: App Store (TestFlight)
+    if: github.event_name == 'push' || inputs.stores == 'all' || inputs.stores == 'appstore'
+    # GitHub's macOS runners are free for a public repository, which is why
+    # nobody has to rent a Mac for this (docs/developers/store-distribution.md compares the options).
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: frontend/mobile
+    steps:
+      - name: Secrets present
+        id: gate
+        env:
+          KEY: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        working-directory: .
+        run: |
+          if [ -z "$KEY" ] || [ -z "$KEY_ID" ] || [ -z "$ISSUER" ] || [ -z "$TEAM" ]; then
+            echo "::notice title=App Store skipped::ASC_KEY_P8_BASE64, ASC_KEY_ID, ASC_ISSUER_ID and APPLE_TEAM_ID are needed (docs/developers/store-distribution.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/mobile/package-lock.json
+
+      - uses: ruby/setup-ruby@v1
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: frontend/mobile
+
+      - name: Install and test
+        if: steps.gate.outputs.ready == 'true'
+        run: npm ci && npm test
+
+      - name: Version
+        if: steps.gate.outputs.ready == 'true'
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "name=${GITHUB_REF_NAME#app-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync the store edition
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          CYBERIA_STORE: appstore
+          CYBERIA_VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: npm run sync:appstore
+
+      - name: Build and upload to TestFlight
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CYBERIA_VERSION_NAME: ${{ steps.version.outputs.name }}
+          # TestFlight refuses a build number it has seen for this version.
+          CYBERIA_BUILD_NUMBER: ${{ github.run_number }}
+        run: bundle exec fastlane ios testflight_upload
+
+  chrome:
+    name: Chrome Web Store
+    if: github.event_name == 'push' || inputs.stores == 'all' || inputs.stores == 'chrome'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/extension
+    steps:
+      - name: Secrets present
+        id: gate
+        env:
+          ACCOUNT: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          PUBLISHER: ${{ secrets.CWS_PUBLISHER_ID }}
+          ITEM: ${{ secrets.CWS_EXTENSION_ID }}
+        working-directory: .
+        run: |
+          if [ -z "$ACCOUNT" ] || [ -z "$PUBLISHER" ] || [ -z "$ITEM" ]; then
+            echo "::notice title=Chrome Web Store skipped::CWS_SERVICE_ACCOUNT_JSON, CWS_PUBLISHER_ID and CWS_EXTENSION_ID are needed (docs/developers/store-distribution.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/extension/package-lock.json
+
+      - name: Test and pack
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          npm ci && npm test
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            npm version "${GITHUB_REF_NAME#app-v}" --no-git-tag-version --allow-same-version
+          fi
+          npm run zip
+
+      - name: Upload and submit
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        run: |
+          CWS_TOKEN=$(node ../../scripts/stores/google-token.mjs https://www.googleapis.com/auth/chromewebstore)
+          echo "::add-mask::$CWS_TOKEN"
+          CWS_TOKEN="$CWS_TOKEN" node ../../scripts/stores/chrome-web-store.mjs Cyberia-extension.zip "${{ inputs.chrome_publish || 'staged' }}"
+
+  firefox:
+    name: addons.mozilla.org
+    if: github.event_name == 'push' || inputs.stores == 'all' || inputs.stores == 'firefox'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/extension
+    steps:
+      - name: Secrets present
+        id: gate
+        env:
+          ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        working-directory: .
+        run: |
+          if [ -z "$ISSUER" ] || [ -z "$SECRET" ]; then
+            echo "::notice title=AMO skipped::AMO_JWT_ISSUER and AMO_JWT_SECRET are needed (docs/developers/store-distribution.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/extension/package-lock.json
+
+      - name: Test, pack and lint
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          npm ci && npm test
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            npm version "${GITHUB_REF_NAME#app-v}" --no-git-tag-version --allow-same-version
+          fi
+          npm run zip
+          npx --yes web-ext@8.10.0 lint --source-dir=dist-firefox
+
+      # Listed: AMO reviews it and publishes it on approval. The source zip is
+      # required for a bundled add-on and is exactly what `npm run zip` builds
+      # from. --approval-timeout 0 hands the review to AMO instead of holding
+      # a runner for it.
+      - name: Submit to AMO
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          npx --yes web-ext@8.10.0 sign \
+            --source-dir=dist-firefox \
+            --channel=listed \
+            --upload-source-code=Cyberia-extension-source.zip \
+            --approval-timeout=0 \
+            --artifacts-dir=web-ext-artifacts

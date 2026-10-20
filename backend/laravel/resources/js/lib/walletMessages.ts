@@ -1740,6 +1740,33 @@ export const walletMessages: Messages = {
         feedSigningIn: 'Signing…',
         feedWatchOnly: 'This account is watch-only, so it cannot sign or post.',
         feedMessage: 'Message',
+        feedReport: 'Report',
+        feedReportWhy: 'What is wrong with this post?',
+        feedReportSpam: 'Spam',
+        feedReportAbuse: 'Abuse or harassment',
+        feedReportScam: 'Scam',
+        feedReportIllegal: 'Illegal content',
+        feedReportOther: 'Something else',
+        feedReported:
+            'Reported. The operators see every report, and a post several people report leaves the feed while they look.',
+        feedReportSignIn:
+            'Reporting needs one signature, so a report counts a person and not a request.',
+        feedBlock: 'Block author',
+        feedBlocked:
+            '{who} is blocked on this device: their posts and messages are hidden.',
+        feedUnblock: 'Undo',
+        chatBlock: 'Block',
+        chatUnblock: 'Unblock',
+        chatBlockedNote:
+            'You blocked this address on this device. Its messages are hidden and do not notify you.',
+        prefsBlocked: 'Blocked on this device: {count}',
+        prefsUnblockAll: 'Unblock everyone',
+        prefsDeleteAccount: 'Delete my Cyberia account',
+        prefsDeleteAccountNote:
+            'Deletes the account this wallet signed in to: your profile, posts, experience and sessions. Your keys, balances and anything on chain stay exactly where they are — they were never on our server. You sign once more to confirm.',
+        prefsDeleteAccountConfirm: 'Sign and delete',
+        prefsDeleteAccountDone:
+            'The account is deleted. The wallet itself is untouched.',
         feedUnreadable: 'Could not reach Cyberia for the feed.',
         feedOpen: 'Open',
         feedOpenSite: 'On the site',
@@ -2334,7 +2361,8 @@ export const walletMessages: Messages = {
         domainsZoneTaken: 'This zone is already open.',
         browserOwnSite:
             "This name leads to a page of Cyberia itself. It is not shown inside the wallet: a frame that shared this site's origin could reach the vault.",
-        browserDesktopSite: 'External sites open in your browser. The local wallet stays isolated.',
+        browserDesktopSite:
+            'External sites open in your browser. The local wallet stays isolated.',
         browserOwnOpen: 'Open the page',
     },
     ru: {
@@ -3978,6 +4006,32 @@ export const walletMessages: Messages = {
         feedWatchOnly:
             'Этот счёт только для наблюдения: он не может подписывать и писать.',
         feedMessage: 'Написать',
+        feedReport: 'Пожаловаться',
+        feedReportWhy: 'Что не так с этим постом?',
+        feedReportSpam: 'Спам',
+        feedReportAbuse: 'Оскорбления или травля',
+        feedReportScam: 'Мошенничество',
+        feedReportIllegal: 'Незаконный контент',
+        feedReportOther: 'Другое',
+        feedReported:
+            'Жалоба отправлена. Операторы видят каждую жалобу, а пост, на который пожаловались несколько человек, скрывается из ленты, пока они разбираются.',
+        feedReportSignIn:
+            'Для жалобы нужна одна подпись: так жалоба считается от человека, а не от запроса.',
+        feedBlock: 'Заблокировать автора',
+        feedBlocked:
+            '{who} заблокирован на этом устройстве: его посты и сообщения скрыты.',
+        feedUnblock: 'Отменить',
+        chatBlock: 'Заблокировать',
+        chatUnblock: 'Разблокировать',
+        chatBlockedNote:
+            'Вы заблокировали этот адрес на этом устройстве. Его сообщения скрыты и не присылают уведомлений.',
+        prefsBlocked: 'Заблокировано на этом устройстве: {count}',
+        prefsUnblockAll: 'Разблокировать всех',
+        prefsDeleteAccount: 'Удалить мой аккаунт Cyberia',
+        prefsDeleteAccountNote:
+            'Удаляет аккаунт, в который вошёл этот кошелёк: профиль, посты, опыт и сессии. Ключи, балансы и всё, что в блокчейне, остаются на месте: на нашем сервере их никогда не было. Для подтверждения нужна ещё одна подпись.',
+        prefsDeleteAccountConfirm: 'Подписать и удалить',
+        prefsDeleteAccountDone: 'Аккаунт удалён. Сам кошелёк не тронут.',
         feedUnreadable: 'Не удалось получить ленту из Cyberia.',
         feedOpen: 'Открыть',
         feedOpenSite: 'На сайте',
@@ -4557,7 +4611,8 @@ export const walletMessages: Messages = {
         domainsZoneTaken: 'Эта зона уже открыта.',
         browserOwnSite:
             'Это имя ведёт на страницу самого Cyberia. Внутри кошелька она не показывается: фрейм с тем же источником, что у сайта, дотянулся бы до хранилища ключей.',
-        browserDesktopSite: 'Внешние сайты открываются в браузере. Локальный кошелёк остаётся изолированным.',
+        browserDesktopSite:
+            'Внешние сайты открываются в браузере. Локальный кошелёк остаётся изолированным.',
         browserOwnOpen: 'Открыть страницу',
     },
     zh: {
@@ -6110,6 +6165,31 @@ export const walletMessages: Messages = {
         feedSigningIn: '签名中…',
         feedWatchOnly: '这是只读账户，无法签名或发帖。',
         feedMessage: '私信',
+        feedReport: '举报',
+        feedReportWhy: '这条帖子有什么问题？',
+        feedReportSpam: '垃圾信息',
+        feedReportAbuse: '辱骂或骚扰',
+        feedReportScam: '诈骗',
+        feedReportIllegal: '违法内容',
+        feedReportOther: '其他',
+        feedReported:
+            '已举报。运营人员会看到每一条举报，被多人举报的帖子会在处理期间从动态中隐藏。',
+        feedReportSignIn:
+            '举报需要签名一次，这样一条举报代表一个人，而不是一次请求。',
+        feedBlock: '屏蔽作者',
+        feedBlocked: '已在此设备上屏蔽 {who}：其帖子和消息均已隐藏。',
+        feedUnblock: '撤销',
+        chatBlock: '屏蔽',
+        chatUnblock: '取消屏蔽',
+        chatBlockedNote:
+            '你已在此设备上屏蔽该地址。其消息被隐藏，也不会通知你。',
+        prefsBlocked: '此设备上已屏蔽：{count}',
+        prefsUnblockAll: '全部取消屏蔽',
+        prefsDeleteAccount: '删除我的 Cyberia 账户',
+        prefsDeleteAccountNote:
+            '删除此钱包登录的账户：个人资料、帖子、经验和会话。你的密钥、余额以及链上的一切都保持原样——它们从未存放在我们的服务器上。确认时需要再签名一次。',
+        prefsDeleteAccountConfirm: '签名并删除',
+        prefsDeleteAccountDone: '账户已删除。钱包本身不受影响。',
         feedUnreadable: '连不上 Cyberia，拿不到动态。',
         feedOpen: '打开',
         feedOpenSite: '在网站上',

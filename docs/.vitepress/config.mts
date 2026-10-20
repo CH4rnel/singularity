@@ -52,6 +52,8 @@ export default defineConfig({
         'product-analytics.md',
         'RELEASES.md',
         'developers/running-a-node.md',
+        // Operator steps for the four app stores (consoles, secrets).
+        'developers/store-distribution.md',
     ],
     head: [
         ['meta', { name: 'theme-color', content: '#9d6cff' }],

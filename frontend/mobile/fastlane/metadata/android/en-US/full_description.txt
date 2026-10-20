@@ -1,0 +1,21 @@
+Cyberia is a non-custodial crypto wallet. Your recovery phrase and keys are created on your phone and never leave it: there is no account to open, no email, and nobody — Cyberia included — can move your coins or recover them for you.
+
+ONE PHRASE, EVERY NETWORK
+One recovery phrase gives you accounts on Cyberia, Robinhood Chain, BNB Chain, Base, Solana, Bitcoin, Litecoin and Monero (receive), plus 120 more EVM networks you can switch on. The same phrase works on cyberia.church, in the desktop app and in the browser extension.
+
+SEND, RECEIVE, SWAP
+Send coins and tokens with a plain-language summary of what you are signing, and hold the button to sign. Swap on Cyberia's own exchange with the route, price impact and minimum received shown before you agree, and wrap or unwrap CYBER one for one.
+
+EARN AND PROVIDE LIQUIDITY
+Add liquidity to a pool, stake the LP tokens in the farm and watch the reward accrue block by block.
+
+NFTS, DOMAINS AND THE DAO
+Mint files as NFTs, pin them to IPFS, register a .cyber domain, and vote on proposals in the Cyberia DAO.
+
+ENCRYPTED MESSAGES
+Write to any wallet address. Messages between wallets that turned encryption on are end-to-end encrypted with a key derived from the wallet; you can verify a contact's safety number and block anyone.
+
+PRIVATE BY DESIGN
+No ads, no trackers, no advertising ID. Anonymous usage statistics can be switched off in Security. The vault is excluded from cloud backup.
+
+Cyberia is a self-custody wallet: you are responsible for keeping your recovery phrase. Crypto assets are volatile and transactions on a blockchain cannot be reversed. Cyberia does not sell crypto; buying with a card is provided by third-party payment providers where available.

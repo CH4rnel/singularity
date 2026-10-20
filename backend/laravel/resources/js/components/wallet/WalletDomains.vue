@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
+import { hiddenInStore } from '@/lib/storeEdition';
 import { formatUnits } from '@/lib/wallet';
 import {
     ROOT_ZONE,
@@ -951,6 +952,7 @@ watch(
                 }}
             </p>
             <button
+                v-if="!hiddenInStore('launchpad')"
                 type="button"
                 class="cw-ghost"
                 style="margin-top: 10px"
