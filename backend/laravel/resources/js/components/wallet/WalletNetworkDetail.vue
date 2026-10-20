@@ -42,6 +42,7 @@ const emit = defineEmits<{
     send: [token?: WalletTokenBalance];
     receive: [];
     swap: [];
+    wrap: [];
     openToken: [token: WalletTokenBalance];
 }>();
 
@@ -274,6 +275,17 @@ watch(() => props.chain, load);
                 {{ t('receive') }}
             </button>
         </div>
+
+        <button
+            v-if="hasSwap(chain.chainId)"
+            type="button"
+            class="cw-btn cw-btn-secondary"
+            style="height: 48px; margin-bottom: 16px"
+            :disabled="!account.capabilities.send"
+            @click="emit('wrap')"
+        >
+            {{ t('wrapTitle') }} · {{ chain.symbol }} ↔ W{{ chain.symbol }}
+        </button>
 
         <TokenList
             :wallet="wallet"

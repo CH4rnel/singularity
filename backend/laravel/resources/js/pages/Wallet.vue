@@ -104,6 +104,7 @@ import type { PlayerTrack } from '@/lib/wallet/player';
 import type { SwipeIntent } from '@/lib/wallet/swipe';
 import { signInWithTelegram } from '@/lib/wallet/sync';
 import { canStream, torrentBridge } from '@/lib/wallet/torrent';
+import type { WrapDirection } from '@/lib/wallet/wrap';
 import { walletMessages } from '@/lib/walletMessages';
 
 /**
@@ -511,7 +512,7 @@ const screenTitle = computed(() => {
     const overlayTitle: Record<Overlay, string> = {
         send: t('send'),
         receive: t('receive'),
-        swap: t('swapTitle'),
+        swap: t(swapMode.value === 'wrap' ? 'wrapTitle' : 'swapTitle'),
         addNetwork: t('addNetwork'),
     };
 
@@ -773,10 +774,25 @@ const swapToken = ref<WalletTokenBalance | null>(null);
 
 /** A contract to buy, from a screen that knows an address and nothing else. */
 const swapContract = ref<string | null>(null);
+const swapMode = ref<'swap' | 'wrap'>('swap');
+const swapDirection = ref<WrapDirection>('wrap');
 
 const openSwap = (token?: WalletTokenBalance): void => {
+    swapMode.value = 'swap';
     swapToken.value = token ?? null;
     swapContract.value = null;
+    overlay.value = 'swap';
+};
+
+const openWrap = (
+    direction: WrapDirection = 'wrap',
+    on: WalletChainId = chain.value,
+): void => {
+    chain.value = on;
+    swapToken.value = null;
+    swapContract.value = null;
+    swapMode.value = 'wrap';
+    swapDirection.value = direction;
     overlay.value = 'swap';
 };
 
@@ -818,6 +834,7 @@ const openSwapContract = (
     contract: string,
     on: WalletChainId = 'cyberia',
 ): void => {
+    swapMode.value = 'swap';
     swapToken.value = null;
     swapContract.value = contract;
     /*
@@ -850,6 +867,34 @@ const openSwapContract = (
 const requestedSwap = ref<{ contract: string; chain: WalletChainId } | null>(
     null,
 );
+const requestedWrap = ref<WrapDirection | null>(null);
+
+const takeWrapRequest = (): void => {
+    const url = new URL(window.location.href);
+    const wanted = url.searchParams.get('wrap');
+
+    if (wanted !== 'wrap' && wanted !== 'unwrap') {
+        return;
+    }
+
+    requestedWrap.value = wanted;
+    url.searchParams.delete('wrap');
+    window.history.replaceState(
+        window.history.state,
+        '',
+        url.pathname + url.search + url.hash,
+    );
+};
+
+const applyWrapRequest = (): void => {
+    if (requestedWrap.value === null || !wallet.unlocked.value) {
+        return;
+    }
+
+    const wanted = requestedWrap.value;
+    requestedWrap.value = null;
+    openWrap(wanted, 'cyberia');
+};
 
 /**
  * A link that names a screen: `/wallet?section=feed`.
@@ -916,7 +961,11 @@ const takeSwapRequest = (): void => {
 
     url.searchParams.delete('swap');
     url.searchParams.delete('chain');
-    window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    window.history.replaceState(
+        window.history.state,
+        '',
+        url.pathname + url.search + url.hash,
+    );
 
     // Anything that is not an address is somebody's typo or somebody's probe;
     // the swap screen reads the contract from the chain either way, but there
@@ -1645,7 +1694,9 @@ onMounted(() => {
     void signInInsideTelegram();
     void startFresh();
     takeSectionRequest();
+    takeWrapRequest();
     takeSwapRequest();
+    applyWrapRequest();
     applySwapRequest();
     trackConnection();
     window.addEventListener('online', trackConnection);
@@ -1708,6 +1759,7 @@ watch(
             inbox.start();
             resetHistoryNotifications();
             applySwapRequest();
+            applyWrapRequest();
             void load();
         } else {
             inbox.stop();
@@ -2092,6 +2144,8 @@ watch(
                         :token-prices="tokenPrices"
                         :token="swapToken"
                         :contract="swapContract"
+                        :initial-mode="swapMode"
+                        :initial-direction="swapDirection"
                         :operator="operator"
                         @back="overlay = null"
                         @pick="chain = $event"
@@ -2209,6 +2263,7 @@ watch(
                         @back="openSection('portfolio')"
                         @buy="openSection('buy')"
                         @gas="openSection('gas')"
+                        @wrap="openWrap('wrap', 'cyberia')"
                         @torrent="openNftPlace('torrent', 'more')"
                         @dao="openSection('dao')"
                         @preferences="openSection('preferences')"
@@ -2261,6 +2316,7 @@ watch(
                         @back="openSection(tokenOrigin)"
                         @send="openSend"
                         @swap="openSwap"
+                        @unwrap="openWrap('unwrap')"
                         @hidden="openSection(tokenOrigin)"
                     />
 
@@ -2405,6 +2461,7 @@ watch(
                         @send="openSend"
                         @swap="openSwap()"
                         @receive="overlay = 'receive'"
+                        @wrap="openWrap()"
                         @open-token="openToken(chain, $event)"
                     />
 

@@ -104,6 +104,8 @@ const props = defineProps<{
      * the chain before it is used, so its decimals are never assumed.
      */
     contract?: string | null;
+    initialMode?: 'swap' | 'wrap';
+    initialDirection?: WrapDirection;
     /**
      * Whether the reader runs the place, which decides one line on this screen.
      *
@@ -136,10 +138,10 @@ type Outcome =
     | 'failed'
     | 'reverted';
 
-const mode = ref<Mode>('swap');
+const mode = ref<Mode>(props.initialMode ?? 'swap');
 const phase = ref<Phase>('compose');
 const outcome = ref<Outcome>('signing');
-const direction = ref<WrapDirection>('wrap');
+const direction = ref<WrapDirection>(props.initialDirection ?? 'wrap');
 
 const amount = ref('');
 const slippageBps = ref(50);
@@ -1056,7 +1058,8 @@ watch(
     () => {
         // Assets belong to the network they live on: keeping one across a
         // switch would quote a contract that is not there.
-        mode.value = 'swap';
+        mode.value = props.initialMode ?? 'swap';
+        direction.value = props.initialDirection ?? 'wrap';
         from.value = coin.value;
         to.value = null;
         amount.value = '';
@@ -1575,7 +1578,9 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                     margin: 22px 0 6px;
                 "
             >
-                <h2 class="cw-title" style="margin: 0">{{ t('swapTitle') }}</h2>
+                <h2 class="cw-title" style="margin: 0">
+                    {{ mode === 'wrap' ? t('wrapTitle') : t('swapTitle') }}
+                </h2>
                 <button
                     type="button"
                     class="cw-back"
@@ -1585,7 +1590,11 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                     {{ t('markets') }} →
                 </button>
             </div>
-            <div class="cw-label" style="color: var(--cw-dim)">
+            <div
+                v-if="mode !== 'wrap'"
+                class="cw-label"
+                style="color: var(--cw-dim)"
+            >
                 {{ t('swapEyebrow') }}
             </div>
 
@@ -1701,7 +1710,7 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                         :aria-pressed="mode === 'wrap'"
                         @click="mode = 'wrap'"
                     >
-                        {{ t('wrapTab') }}
+                        {{ t('wrapTitle') }}
                         <span
                             class="cw-seg-bar"
                             :style="{
@@ -1711,6 +1720,41 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                                         : 'transparent',
                             }"
                         />
+                    </button>
+                </div>
+
+                <div
+                    v-if="mode === 'wrap'"
+                    class="cw-seg"
+                    style="margin-bottom: 16px"
+                >
+                    <button
+                        v-for="choice in ['wrap', 'unwrap'] as const"
+                        :key="choice"
+                        type="button"
+                        class="cw-seg-item"
+                        :aria-pressed="direction === choice"
+                        @click="direction = choice"
+                    >
+                        {{
+                            t(choice === 'wrap' ? 'wrapAction' : 'unwrapAction')
+                        }}
+                        <span
+                            class="cw-label"
+                            style="display: block; margin-top: 6px"
+                        >
+                            {{
+                                choice === 'wrap'
+                                    ? chain.symbol
+                                    : (wrapped?.symbol ?? `W${chain.symbol}`)
+                            }}
+                            →
+                            {{
+                                choice === 'wrap'
+                                    ? (wrapped?.symbol ?? `W${chain.symbol}`)
+                                    : chain.symbol
+                            }}
+                        </span>
                     </button>
                 </div>
 
@@ -2237,7 +2281,11 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                     :disabled="!ready || quoting"
                     @click="review()"
                 >
-                    {{ quoting ? t('swapQuoting') : t('swapReview') }}
+                    {{
+                        quoting
+                            ? t(mode === 'wrap' ? 'wrapQuoting' : 'swapQuoting')
+                            : t(mode === 'wrap' ? 'wrapReview' : 'swapReview')
+                    }}
                 </button>
 
                 <div
@@ -2287,7 +2335,9 @@ watch([amount, from, to, slippageBps, mode, direction], scheduleQuote);
                     :aria-expanded="adv"
                     @click="adv = !adv"
                 >
-                    <span>{{ t('swapAdvanced') }}</span>
+                    <span>{{
+                        t(mode === 'wrap' ? 'wrapDetails' : 'swapAdvanced')
+                    }}</span>
                     <span>{{ adv ? '−' : '+' }}</span>
                 </button>
 

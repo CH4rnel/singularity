@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    ArrowRightLeft,
     CreditCard,
     Download,
     Fuel,
@@ -40,6 +41,7 @@ const emit = defineEmits<{
     back: [];
     buy: [];
     gas: [];
+    wrap: [];
     torrent: [];
     dao: [];
     preferences: [];
@@ -84,6 +86,15 @@ const { simple } = useWalletMode();
         />
 
         <div class="cw-stack" style="gap: 0">
+            <button type="button" class="cw-line-row" @click="emit('wrap')">
+                <ArrowRightLeft
+                    :size="20"
+                    :stroke-width="1.5"
+                    aria-hidden="true"
+                />
+                <span style="flex: 1">{{ t('wrapTitle') }}</span>
+                <span class="cw-label">CYBER ↔ WCYBER</span>
+            </button>
             <button type="button" class="cw-line-row" @click="emit('buy')">
                 <CreditCard :size="20" :stroke-width="1.5" aria-hidden="true" />
                 <span style="flex: 1">{{ t('tileBuy') }}</span>

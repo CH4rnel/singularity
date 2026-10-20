@@ -121,9 +121,24 @@ onBeforeUnmount(stop);
                 position: relative;
                 font: 600 15px/1 var(--cw-mono);
                 letter-spacing: 0.07em;
-                color: var(--cw-text);
-                mix-blend-mode: difference;
+                color: #f0f4f8;
             "
+        >
+            {{ label }}
+        </span>
+        <span
+            aria-hidden="true"
+            style="
+                position: absolute;
+                inset: 0;
+                display: grid;
+                place-items: center;
+                font: 600 15px/1 var(--cw-mono);
+                letter-spacing: 0.07em;
+                color: var(--cw-accent-ink);
+                pointer-events: none;
+            "
+            :style="{ clipPath: `inset(0 ${(1 - progress) * 100}% 0 0)` }"
         >
             {{ label }}
         </span>

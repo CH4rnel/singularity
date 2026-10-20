@@ -21,11 +21,17 @@ const isFile = (url) => {
 
 registerHooks({
     resolve(specifier, context, nextResolve) {
-        if (!specifier.startsWith('@/')) {
+        const alias = specifier.startsWith('@/');
+        const localModule =
+            specifier.startsWith('.') &&
+            context.parentURL?.startsWith(ROOT.href);
+        if (!alias && !localModule) {
             return nextResolve(specifier, context);
         }
 
-        const base = new URL(specifier.slice(2), ROOT);
+        const base = alias
+            ? new URL(specifier.slice(2), ROOT)
+            : new URL(specifier, context.parentURL);
 
         for (const suffix of CANDIDATES) {
             const candidate = new URL(base.href + suffix);
@@ -35,6 +41,6 @@ registerHooks({
             }
         }
 
-        throw new Error(`Cannot resolve "${specifier}" under resources/js/`);
+        return nextResolve(specifier, context);
     },
 });

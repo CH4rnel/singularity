@@ -4,6 +4,7 @@ import AddressField from '@/components/wallet/AddressField.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
+import { LIQUIDITY_CHAINS } from '@/lib/liquidityChains';
 import { formatUnits, hasSwap, sameToken, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import { isRoutedChain } from '@/lib/wallet/crosschain';
@@ -36,6 +37,7 @@ const emit = defineEmits<{
     back: [];
     send: [token: WalletTokenBalance];
     swap: [token: WalletTokenBalance];
+    unwrap: [];
     /** The token was dropped from the list and this screen has nothing left. */
     hidden: [];
 }>();
@@ -44,6 +46,13 @@ const { locale, t } = useLocale(walletMessages);
 const clipboard = useSecureClipboard();
 
 const chain = computed(() => walletChain(props.chain));
+const isWrappedNative = computed(() =>
+    LIQUIDITY_CHAINS.some(
+        (config) =>
+            config.chainId === chain.value.chainId &&
+            config.wrappedNative.toLowerCase() === props.address.toLowerCase(),
+    ),
+);
 
 const account = computed(() =>
     props.wallet.accounts.value.find(
@@ -269,6 +278,17 @@ const hide = async (): Promise<void> => {
                     {{ t('viewInExplorer') }} ↗
                 </a>
             </div>
+            <button
+                v-if="isWrappedNative"
+                type="button"
+                class="cw-btn cw-btn-secondary"
+                style="height: 48px; margin-top: 12px"
+                :disabled="!account.capabilities.send || token.balance === 0n"
+                @click="emit('unwrap')"
+            >
+                {{ t('unwrapAction') }} · {{ token.symbol }} →
+                {{ chain.symbol }}
+            </button>
             <button
                 v-if="token.manual"
                 type="button"

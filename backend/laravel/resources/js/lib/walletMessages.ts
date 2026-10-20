@@ -812,7 +812,7 @@ export const walletMessages: Messages = {
         // about this address, and the screen never merges the two.
         earnTitle: 'Earn',
         earnBody:
-            'Ritual pools, settled on the network they trade on. What a position earns is swap fees plus emissions — both variable, neither promised, and both paid out of what other people trade.',
+            'Cyberia pools, settled on the network they trade on. What a position earns is swap fees plus emissions — both variable, neither promised, and both paid out of what other people trade.',
         earnPools: 'Pools',
         earnSupplied: 'Supplied',
         earnUnclaimed: 'Unclaimed',
@@ -866,7 +866,7 @@ export const walletMessages: Messages = {
         poolBody:
             'A pool is two assets held together at one price. You put both sides in and get an LP token — your claim on a share of them — and every trade through the pool pays fees into that share. Both sides come back out together, in whatever mix the pool holds by then.',
         poolNoDex:
-            'There is no Ritual exchange on this network, so there are no pools to add to from here.',
+            'There is no Cyberia exchange on this network, so there are no pools to add to from here.',
         poolOpenEarn: 'Farm',
         poolTabAdd: 'Add',
         poolTabMine: 'Your pools',
@@ -1000,7 +1000,7 @@ export const walletMessages: Messages = {
         browseLeavingNote:
             'Opening a page leaves the wallet. It is an ordinary page on this site and it will look for a wallet of its own — the ones marked “open in the wallet” are the same thing done here, signed by this key with nothing in between.',
         dappSwap: 'Swap',
-        dappSwapNote: 'Trade one asset for another through the Ritual pools.',
+        dappSwapNote: 'Trade one asset for another through the Cyberia pools.',
         dappLiquidity: 'Liquidity',
         dappLiquidityNote:
             'Put two assets into a pool and take the trading fees on them.',
@@ -1860,6 +1860,12 @@ export const walletMessages: Messages = {
             'Today is already counted; the trade still pays {xp} XP.',
         swapTab: 'Swap',
         wrapTab: 'Wrap',
+        wrapTitle: 'Wrap / unwrap',
+        wrapReview: 'Review transaction',
+        wrapQuoting: 'Checking the gas fee…',
+        wrapDetails: 'Rate and gas fee',
+        wrapAction: 'Wrap',
+        unwrapAction: 'Unwrap',
         swapPay: 'You pay',
         swapReceive: 'You receive',
         swapPick: 'Select',
@@ -2328,6 +2334,7 @@ export const walletMessages: Messages = {
         domainsZoneTaken: 'This zone is already open.',
         browserOwnSite:
             "This name leads to a page of Cyberia itself. It is not shown inside the wallet: a frame that shared this site's origin could reach the vault.",
+        browserDesktopSite: 'External sites open in your browser. The local wallet stays isolated.',
         browserOwnOpen: 'Open the page',
     },
     ru: {
@@ -3083,7 +3090,7 @@ export const walletMessages: Messages = {
         // Доход: пул — это утверждение о цепочке, позиция — об этом адресе.
         earnTitle: 'Доход',
         earnBody:
-            'Пулы Ritual, рассчитанные в той сети, где они торгуют. Позиция зарабатывает комиссии свопов плюс эмиссию — и то и другое переменное, ничего не обещано, и платится это из того, чем торгуют другие.',
+            'Пулы Cyberia, рассчитанные в той сети, где они торгуют. Позиция зарабатывает комиссии свопов плюс эмиссию — и то и другое переменное, ничего не обещано, и платится это из того, чем торгуют другие.',
         earnPools: 'Пулы',
         earnSupplied: 'Вложено',
         earnUnclaimed: 'Не забрано',
@@ -3136,7 +3143,7 @@ export const walletMessages: Messages = {
         poolBody:
             'Пул — это два актива, которые держат вместе по одной цене. Вы вносите обе стороны и получаете LP-токен, свою долю в них; каждая сделка через пул платит комиссию в эту долю. Обратно обе стороны выходят вместе — в том соотношении, какое будет в пуле к тому моменту.',
         poolNoDex:
-            'В этой сети нет биржи Ritual, поэтому отсюда некуда вносить ликвидность.',
+            'В этой сети нет биржи Cyberia, поэтому отсюда некуда вносить ликвидность.',
         poolOpenEarn: 'Фарм',
         poolTabAdd: 'Внести',
         poolTabMine: 'Ваши пулы',
@@ -3266,7 +3273,7 @@ export const walletMessages: Messages = {
         browseLeavingNote:
             'Открытая страница уводит из кошелька. Это обычная страница этого сайта, и она будет искать свой кошелёк, — а помеченные «открыть в кошельке» делают то же самое здесь, подписывая этим ключом и без посредников.',
         dappSwap: 'Обмен',
-        dappSwapNote: 'Поменять один актив на другой через пулы Ritual.',
+        dappSwapNote: 'Поменять один актив на другой через пулы Cyberia.',
         dappLiquidity: 'Ликвидность',
         dappLiquidityNote:
             'Внести два актива в пул и получать с них комиссии сделок.',
@@ -4081,6 +4088,12 @@ export const walletMessages: Messages = {
         swapDailyKept: 'Сегодня уже засчитано; сделка всё равно даёт {xp} XP.',
         swapTab: 'Обмен',
         wrapTab: 'Обёртка',
+        wrapTitle: 'Врап / анврап',
+        wrapReview: 'Проверить операцию',
+        wrapQuoting: 'Считаем комиссию за газ…',
+        wrapDetails: 'Курс и комиссия за газ',
+        wrapAction: 'Завернуть',
+        unwrapAction: 'Развернуть',
         swapPay: 'Отдаёте',
         swapReceive: 'Получаете',
         swapPick: 'Выбрать',
@@ -4544,6 +4557,7 @@ export const walletMessages: Messages = {
         domainsZoneTaken: 'Эта зона уже открыта.',
         browserOwnSite:
             'Это имя ведёт на страницу самого Cyberia. Внутри кошелька она не показывается: фрейм с тем же источником, что у сайта, дотянулся бы до хранилища ключей.',
+        browserDesktopSite: 'Внешние сайты открываются в браузере. Локальный кошелёк остаётся изолированным.',
         browserOwnOpen: 'Открыть страницу',
     },
     zh: {
@@ -5263,7 +5277,7 @@ export const walletMessages: Messages = {
         // 赚取：池子是关于链的一个说法，仓位是关于这个地址的另一个说法。
         earnTitle: '赚取',
         earnBody:
-            'Ritual 的池子，在它们交易的那条链上结算。一个仓位赚的是交易手续费加排放 — 两者都会变，都不是承诺，而且都来自别人交易付出的钱。',
+            'Cyberia 的池子，在它们交易的那条链上结算。一个仓位赚的是交易手续费加排放 — 两者都会变，都不是承诺，而且都来自别人交易付出的钱。',
         earnPools: '池子',
         earnSupplied: '已投入',
         earnUnclaimed: '未领取',
@@ -5313,7 +5327,7 @@ export const walletMessages: Messages = {
         poolTitle: '流动性',
         poolBody:
             '一个池子就是按同一个价格放在一起的两种资产。你两边都投进去，拿到一个 LP 代币，也就是你对其中一部分的所有权；每一笔经过这个池子的交易，都会把手续费付进这一份里。两边是一起取回来的，比例是那时池子里的比例。',
-        poolNoDex: '这条链上没有 Ritual 交易所，所以这里没有可以投的池子。',
+        poolNoDex: '这条链上没有 Cyberia 交易所，所以这里没有可以投的池子。',
         poolOpenEarn: '农场',
         poolTabAdd: '投入',
         poolTabMine: '你的池子',
@@ -5436,7 +5450,7 @@ export const walletMessages: Messages = {
         browseLeavingNote:
             '打开一个页面就离开了钱包。那是本站的普通页面，它会去找自己的钱包 — 标着「在钱包里打开」的那些，是同一件事在这里做，用这把密钥签，中间没有别的东西。',
         dappSwap: '兑换',
-        dappSwapNote: '通过 Ritual 的池子把一种资产换成另一种。',
+        dappSwapNote: '通过 Cyberia 的池子把一种资产换成另一种。',
         dappLiquidity: '流动性',
         dappLiquidityNote: '把两种资产放进池子，拿它们的交易手续费。',
         dappFarm: '农场',
@@ -6201,6 +6215,12 @@ export const walletMessages: Messages = {
         swapDailyKept: '今天已经计入；这笔交易仍可得 {xp} XP。',
         swapTab: '兑换',
         wrapTab: '封装',
+        wrapTitle: '封装 / 解封',
+        wrapReview: '核对交易',
+        wrapQuoting: '正在估算 gas 费…',
+        wrapDetails: '汇率和 gas 费',
+        wrapAction: '封装',
+        unwrapAction: '解封',
         swapPay: '你支付',
         swapReceive: '你收到',
         swapPick: '选择',
@@ -6646,6 +6666,7 @@ export const walletMessages: Messages = {
         domainsZoneTaken: '此区域已开启。',
         browserOwnSite:
             '此名称指向 Cyberia 自己的页面。它不会在钱包内显示：与本站同源的框架能触及保险库。',
+        browserDesktopSite: '外部网站将在浏览器中打开，本地钱包保持隔离。',
         browserOwnOpen: '打开页面',
     },
 };
