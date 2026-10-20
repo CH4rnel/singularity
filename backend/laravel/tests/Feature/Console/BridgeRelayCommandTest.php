@@ -15,6 +15,9 @@ beforeEach(function () {
 function makeStuckRequest(array $overrides = []): BridgeRequest
 {
     return BridgeRequest::create(array_merge([
+        // Signed by the sender: these tests are about the relay, not B03.
+        'recipient_proof' => 'signature',
+        'recipient_proven_at' => now(),
         'direction' => 'sol_to_evm',
         'token' => 'USDC',
         'source_chain' => 'solana',
@@ -152,6 +155,8 @@ test('a payout-confirmed request that is not completed is still never re-paid', 
     ]);
 
     Process::fake();
+    // The retry may only ask the destination chain about that hash (B07).
+    Http::fake(['*' => Http::response(['result' => null])]);
 
     $this->artisan("bridge:relay {$request->id} --force")
         ->expectsOutputToContain('will not be paid again')

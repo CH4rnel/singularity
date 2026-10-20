@@ -181,6 +181,8 @@ const statusColor = (status: string) => {
         // A confirmed deposit the destination cannot pay yet. Not a failure
         // and not in flight — the row says "held", because the money is.
         case 'awaiting_liquidity':
+        // Recorded, but nobody has proven the sender chose the recipient.
+        case 'awaiting_recipient':
             return 'text-amber-500';
         default:
             return 'text-muted-foreground';

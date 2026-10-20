@@ -293,6 +293,9 @@ function makeXmrPayoutRequest(array $overrides = []): BridgeRequest
         'direction' => 'evm_to_xmr',
         'token' => 'XMR',
         'source_chain' => 'cyberia',
+        // Signed by the sender: these tests are about the payout, not B03.
+        'recipient_proof' => 'signature',
+        'recipient_proven_at' => now(),
         'source_tx_hash' => '0xevmxmr'.uniqid(),
         'source_nonce' => random_int(1, PHP_INT_MAX),
         'sender_address' => '0x5555555555555555555555555555555555555555',

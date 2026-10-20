@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessBridgeRequest;
 use App\Models\BridgeRequest;
+use App\Models\BridgeReservation;
 use App\Rules\ValidDestinationAddress;
 use App\Services\BridgeAdmissionService;
 use App\Services\BridgeConfigService;
@@ -16,6 +17,7 @@ use App\Services\BridgeService;
 use App\Services\CyberiaRpcService;
 use App\Services\TonApiService;
 use App\Support\BridgeCapacity;
+use App\Support\BridgeIntent;
 use App\Support\BridgeSubmission;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -159,6 +161,7 @@ class BridgeController extends Controller
             'amount' => ['required', 'numeric', 'gt:0', 'regex:/^\d+(?:\.\d{1,18})?$/D'],
             'convert_to_native' => ['nullable', 'boolean'],
             'reservation' => ['nullable', 'string', 'max:64'],
+            'intent_signature' => ['nullable', 'string', 'max:200'],
             'session_id' => ['nullable', 'uuid'],
         ]);
 
@@ -190,7 +193,28 @@ class BridgeController extends Controller
             $validated['recipient_address'], (string) $validated['amount'], $convertToNative,
         );
 
-        if ($existing = $this->existingSubmission($sourceChain, $sourceTxHash)) {
+        // B03: verifying the transfer proves money arrived, not who may name
+        // where it goes, so the sender has to sign the recipient. A claim
+        // without a valid signature is not refused — the coins have moved
+        // either way, and refusing would lose the only record of them — but
+        // it is held, uncounted and unpaid, until somebody proves it.
+        $requirement = BridgeIntent::requirement($validated['direction'], $token);
+        $signedIntent = $requirement === BridgeIntent::SIGNATURE
+            && filled($validated['intent_signature'] ?? null)
+            && $this->intentIsSigned($validated, $token, $sourceChain, $sourceTxHash);
+        $recipientProven = $requirement !== BridgeIntent::SIGNATURE || $signedIntent;
+        $unprovenReason = filled($validated['intent_signature'] ?? null) ? 'intent_signature_invalid' : 'recipient_unproven';
+
+        $existing = $this->existingSubmission($sourceChain, $sourceTxHash);
+
+        // Somebody registered this deposit first without proving anything.
+        // That is exactly the race B03 describes, and the depositor's signed
+        // claim wins it: the unproven row is rewritten to what the sender
+        // signed, and only then does anything move.
+        $takeover = $existing !== null && $signedIntent
+            && $existing->isAwaitingRecipient() && ! $existing->hasPayout();
+
+        if ($existing !== null && ! $takeover) {
             return $this->repeatSubmission($existing, $fingerprint);
         }
 
@@ -233,29 +257,71 @@ class BridgeController extends Controller
             $validated['recipient_address'],
         );
 
+        $proof = [
+            'submitted_intent_hash' => $fingerprint,
+            'submitted_source_tx_hash' => $sourceTxHash,
+            'recipient_proof' => $signedIntent ? BridgeIntent::SIGNATURE : ($recipientProven ? $requirement : null),
+            'recipient_proven_at' => $signedIntent ? now() : null,
+        ];
+
         try {
-            $bridgeRequest = DB::transaction(function () use ($request, $validated, $sourceChain, $sourceTxHash, $token, $fee, $gasDropPlanned, $gasDropAmount, $convertToNative, $fingerprint) {
-                $bridgeRequest = $this->bridgeService->createRequest(
-                    userId: $request->user()?->id,
-                    direction: $validated['direction'],
-                    sourceChain: $sourceChain,
-                    sourceTxHash: $sourceTxHash,
-                    sourceNonce: $validated['source_nonce'],
-                    senderAddress: $validated['sender_address'],
-                    recipientAddress: $validated['recipient_address'],
-                    amount: $validated['amount'],
-                    token: $token,
-                    feeAmount: $fee['fee_amount'],
-                    feeUsd: $fee['fee_usd'],
-                    gasDropPlanned: $gasDropPlanned,
-                    gasDropAmount: $gasDropAmount,
-                    convertToNative: $convertToNative,
-                );
-                $bridgeRequest->update([
-                    'submitted_intent_hash' => $fingerprint,
-                    'submitted_source_tx_hash' => $sourceTxHash,
-                ]);
-                app(BridgeAdmissionService::class)->commit($bridgeRequest, $validated['reservation'] ?? null);
+            $bridgeRequest = DB::transaction(function () use ($request, $validated, $sourceChain, $sourceTxHash, $token, $fee, $gasDropPlanned, $gasDropAmount, $convertToNative, $proof, $recipientProven, $unprovenReason, $takeover, $existing) {
+                if ($takeover) {
+                    $bridgeRequest = BridgeRequest::whereKey($existing->id)->lockForUpdate()->first();
+
+                    if ($bridgeRequest === null || ! $bridgeRequest->isAwaitingRecipient() || $bridgeRequest->hasPayout()) {
+                        return null;
+                    }
+
+                    $bridgeRequest->update([
+                        'user_id' => $request->user()?->id ?? $bridgeRequest->user_id,
+                        'direction' => $validated['direction'],
+                        'token' => $token,
+                        'source_chain' => $sourceChain,
+                        'source_nonce' => $validated['source_nonce'],
+                        'sender_address' => $validated['sender_address'],
+                        'recipient_address' => $validated['recipient_address'],
+                        'amount' => $validated['amount'],
+                        'fee_amount' => $fee['fee_amount'],
+                        'fee_usd' => $fee['fee_usd'],
+                        'gas_drop_planned' => $gasDropPlanned,
+                        'gas_drop_amount' => $gasDropAmount,
+                        'convert_to_native' => $convertToNative,
+                        'status' => BridgeRequest::PENDING,
+                        'error_message' => null,
+                        ...$proof,
+                    ]);
+                } else {
+                    $bridgeRequest = $this->bridgeService->createRequest(
+                        userId: $request->user()?->id,
+                        direction: $validated['direction'],
+                        sourceChain: $sourceChain,
+                        sourceTxHash: $sourceTxHash,
+                        sourceNonce: $validated['source_nonce'],
+                        senderAddress: $validated['sender_address'],
+                        recipientAddress: $validated['recipient_address'],
+                        amount: $validated['amount'],
+                        token: $token,
+                        feeAmount: $fee['fee_amount'],
+                        feeUsd: $fee['fee_usd'],
+                        gasDropPlanned: $gasDropPlanned,
+                        gasDropAmount: $gasDropAmount,
+                        convertToNative: $convertToNative,
+                        status: $recipientProven ? BridgeRequest::PENDING : BridgeRequest::AWAITING_RECIPIENT,
+                    );
+                    $bridgeRequest->update($proof + ($recipientProven ? [] : [
+                        'error_message' => $unprovenReason === 'intent_signature_invalid'
+                            ? 'Deposit recorded; the payout authorization did not verify against the sending wallet'
+                            : 'Deposit recorded; the sending wallet has not signed its payout recipient',
+                    ]));
+                }
+
+                // An unproven claim is not an obligation yet: counting it
+                // against the pool would let anyone exhaust capacity with
+                // hashes nobody will ever prove.
+                if ($recipientProven) {
+                    app(BridgeAdmissionService::class)->commit($bridgeRequest, $validated['reservation'] ?? null);
+                }
 
                 return $bridgeRequest;
             });
@@ -267,6 +333,16 @@ class BridgeController extends Controller
             }
 
             return $this->repeatSubmission($existing, $fingerprint);
+        }
+
+        if ($bridgeRequest === null) {
+            // Lost a race for the same unproven row; whoever won has the
+            // current answer.
+            $current = $this->existingSubmission($sourceChain, $sourceTxHash);
+
+            return $current !== null
+                ? $this->repeatSubmission($current, $fingerprint)
+                : response()->json(['message' => 'This transfer changed while it was being registered. Submit it again.'], 409);
         }
 
         if (! empty($validated['session_id'])) {
@@ -282,6 +358,10 @@ class BridgeController extends Controller
             ], $request);
         }
 
+        if (! $recipientProven) {
+            return $this->submissionResponse($bridgeRequest, false, 202, $unprovenReason);
+        }
+
         if ($this->shouldAutoProcess($validated['direction'])) {
             ProcessBridgeRequest::dispatchSync($bridgeRequest->id, $validated['session_id'] ?? null);
         }
@@ -289,6 +369,56 @@ class BridgeController extends Controller
         $bridgeRequest->refresh();
 
         return $this->submissionResponse($bridgeRequest, false);
+    }
+
+    /**
+     * Did the sending wallet sign this payout recipient for this transfer?
+     *
+     * Two references are accepted, and both are single-use: the reservation
+     * the transfer was claimed under, signed before anything was sent — only
+     * while that reservation is still unconsumed and was made for this same
+     * sender, recipient, corridor and token — or the source hash itself,
+     * which the depositor can sign afterwards to claim a deposit that was
+     * never registered.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function intentIsSigned(array $validated, string $token, string $sourceChain, string $sourceTxHash): bool
+    {
+        $chainType = (string) config("bridge.chains.{$sourceChain}.type", '');
+        $sign = fn (string $reference) => BridgeIntent::signedBy(
+            $chainType,
+            (string) $validated['sender_address'],
+            BridgeIntent::message(
+                $validated['direction'],
+                $token,
+                (string) $validated['sender_address'],
+                (string) $validated['recipient_address'],
+                $reference,
+            ),
+            (string) $validated['intent_signature'],
+        );
+
+        if ($sign($sourceTxHash)) {
+            return true;
+        }
+
+        $reference = $validated['reservation'] ?? null;
+
+        if (! is_string($reference) || $reference === '') {
+            return false;
+        }
+
+        $reservation = BridgeReservation::where('reference', $reference)->first();
+
+        return $reservation !== null
+            && $reservation->bridge_request_id === null
+            && $reservation->direction === $validated['direction']
+            && $reservation->token === $token
+            && $reservation->sender_address !== null
+            && BridgeIntent::normalize($reservation->sender_address) === BridgeIntent::normalize((string) $validated['sender_address'])
+            && BridgeIntent::normalize($reservation->recipient_address) === BridgeIntent::normalize((string) $validated['recipient_address'])
+            && $sign($reference);
     }
 
     private function existingSubmission(string $sourceChain, string $sourceTxHash): ?BridgeRequest
@@ -314,10 +444,15 @@ class BridgeController extends Controller
         return $this->submissionResponse($bridgeRequest, true);
     }
 
-    private function submissionResponse(BridgeRequest $bridgeRequest, bool $replayed): JsonResponse
+    private function submissionResponse(BridgeRequest $bridgeRequest, bool $replayed, ?int $status = null, ?string $reason = null): JsonResponse
     {
-        return response()->json([
-            'message' => $bridgeRequest->isCompleted() ? 'Bridge completed' : 'Bridge request submitted',
+        return response()->json(array_filter([
+            'message' => match (true) {
+                $bridgeRequest->isCompleted() => 'Bridge completed',
+                $bridgeRequest->isAwaitingRecipient() => 'Deposit recorded. It will be paid out once the sending wallet signs the payout authorization for it.',
+                default => 'Bridge request submitted',
+            },
+            'reason' => $reason ?? ($bridgeRequest->isAwaitingRecipient() ? 'recipient_unproven' : null),
             'replayed' => $replayed,
             'bridge_request' => [
                 'id' => $bridgeRequest->id,
@@ -335,7 +470,7 @@ class BridgeController extends Controller
                 'error_message' => $bridgeRequest->error_message,
                 'created_at' => $bridgeRequest->created_at,
             ],
-        ], $replayed ? 200 : 201);
+        ], fn ($value) => $value !== null), $status ?? ($replayed ? 200 : 201));
     }
 
     /**

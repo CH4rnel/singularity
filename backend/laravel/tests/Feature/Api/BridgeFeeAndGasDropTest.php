@@ -11,7 +11,7 @@ beforeEach(function () {
 });
 
 test('submit persists USD fee for USDC bridge', function () {
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'evm_to_sol',
         'token' => 'USDC',
         'source_tx_hash' => '0xabc',
@@ -19,7 +19,7 @@ test('submit persists USD fee for USDC bridge', function () {
         'sender_address' => '0xsender',
         'recipient_address' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w',
         'amount' => '50',
-    ])->assertStatus(201)
+    ]))->assertStatus(201)
         ->assertJsonPath('bridge_request.fee_usd', '0.10000000');
 
     $request = BridgeRequest::latest('id')->first();
@@ -33,7 +33,7 @@ test('gas drop is planned for sol_to_evm into an empty recipient', function () {
             ->andReturn('0');
     });
 
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'sol_to_evm',
         'token' => 'USDC',
         'source_tx_hash' => 'soltx',
@@ -41,7 +41,7 @@ test('gas drop is planned for sol_to_evm into an empty recipient', function () {
         'sender_address' => 'AbCd',
         'recipient_address' => '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
         'amount' => '5',
-    ])->assertStatus(201)
+    ]))->assertStatus(201)
         ->assertJsonPath('bridge_request.gas_drop_planned', true);
 
     expect(BridgeRequest::latest('id')->first()->gas_drop_planned)->toBeTrue();
@@ -53,7 +53,7 @@ test('gas drop is skipped when recipient has balance', function () {
             ->andReturn('1000000000000000000');
     });
 
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'sol_to_evm',
         'token' => 'USDC',
         'source_tx_hash' => 'soltx2',
@@ -61,7 +61,7 @@ test('gas drop is skipped when recipient has balance', function () {
         'sender_address' => 'AbCd',
         'recipient_address' => '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
         'amount' => '5',
-    ])->assertStatus(201)
+    ]))->assertStatus(201)
         ->assertJsonPath('bridge_request.gas_drop_planned', false);
 });
 
@@ -70,7 +70,7 @@ test('gas drop is never planned for evm_to_sol direction', function () {
         $mock->shouldNotReceive('nativeBalanceWei');
     });
 
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'evm_to_sol',
         'token' => 'USDC',
         'source_tx_hash' => '0xevmtx',
@@ -78,7 +78,7 @@ test('gas drop is never planned for evm_to_sol direction', function () {
         'sender_address' => '0xsender',
         'recipient_address' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w',
         'amount' => '5',
-    ])->assertStatus(201)
+    ]))->assertStatus(201)
         ->assertJsonPath('bridge_request.gas_drop_planned', false);
 });
 
@@ -89,7 +89,7 @@ test('gas drop respects enabled=false config', function () {
         $mock->shouldNotReceive('nativeBalanceWei');
     });
 
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'sol_to_evm',
         'token' => 'USDC',
         'source_tx_hash' => 'soltx3',
@@ -97,6 +97,6 @@ test('gas drop respects enabled=false config', function () {
         'sender_address' => 'AbCd',
         'recipient_address' => '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
         'amount' => '5',
-    ])->assertStatus(201)
+    ]))->assertStatus(201)
         ->assertJsonPath('bridge_request.gas_drop_planned', false);
 });

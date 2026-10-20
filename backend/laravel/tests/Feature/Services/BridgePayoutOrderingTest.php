@@ -50,6 +50,9 @@ function solWallet(string $lamports, ?array $signature = ['err' => null]): objec
 function solOutRequest(array $overrides = []): BridgeRequest
 {
     return BridgeRequest::create(array_merge([
+        // Signed by the sender: these tests are about the relay, not B03.
+        'recipient_proof' => 'signature',
+        'recipient_proven_at' => now(),
         'direction' => 'evm_to_sol',
         'token' => 'SOL',
         'source_chain' => 'cyberia',

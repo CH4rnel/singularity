@@ -27,6 +27,9 @@ beforeEach(function () {
 function nativeSourceRequest(string $direction, string $amount = '1'): BridgeRequest
 {
     $request = BridgeRequest::create([
+        // Signed by the sender: these tests are about the relay, not B03.
+        'recipient_proof' => 'signature',
+        'recipient_proven_at' => now(),
         'direction' => $direction, 'token' => 'CYBER.sol',
         'source_chain' => $direction === 'evm_to_sol' ? 'cyberia' : 'solana',
         'source_tx_hash' => $direction === 'evm_to_sol' ? '0x'.str_repeat('ab', 32) : str_repeat('3', 88),

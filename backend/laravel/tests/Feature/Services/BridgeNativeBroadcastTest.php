@@ -21,6 +21,9 @@ beforeEach(function () {
 function nativeBroadcastRequest(bool $convert): BridgeRequest
 {
     $request = BridgeRequest::create([
+        // Signed by the sender: these tests are about the relay, not B03.
+        'recipient_proof' => 'signature',
+        'recipient_proven_at' => now(),
         'direction' => 'sol_to_evm',
         'token' => 'CYBER.sol',
         'source_chain' => 'solana',

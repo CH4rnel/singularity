@@ -58,3 +58,4 @@ function something()
 */
 
 require_once __DIR__.'/Feature/Analytics/Helpers.php';
+require_once __DIR__.'/Feature/Api/BridgeIntentHelpers.php';

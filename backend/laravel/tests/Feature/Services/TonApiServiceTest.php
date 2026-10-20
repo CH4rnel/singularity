@@ -77,6 +77,7 @@ test('verifyJettonDeposit returns the raw amount for a matching transfer', funct
                         'recipient' => ['address' => $recipient],
                         'jetton' => ['address' => $master],
                         'amount' => '1500000000',
+                        'comment' => 'cyberia-bridge:0x00000000000000000000000000000000000000aa',
                     ],
                 ],
             ],
@@ -93,6 +94,8 @@ test('verifyJettonDeposit returns the raw amount for a matching transfer', funct
     expect($verified)->toBe([
         'amount' => '1500000000',
         'event_id' => str_repeat('ef', 32),
+        // The recipient memo travels back so the relay can check it (B03).
+        'comment' => 'cyberia-bridge:0x00000000000000000000000000000000000000aa',
     ]);
 });
 
@@ -120,7 +123,7 @@ test('verifyNativeDeposit returns nanotons for a matching TonTransfer', function
     ]);
 
     expect(tonService()->verifyNativeDeposit(str_repeat('ab', 32), $sender, $recipient))
-        ->toBe(['amount' => '1500000000', 'event_id' => str_repeat('cd', 32)]);
+        ->toBe(['amount' => '1500000000', 'event_id' => str_repeat('cd', 32), 'comment' => null]);
 });
 
 test('verifyNativeDeposit rejects a transfer to the wrong recipient', function () {
@@ -176,7 +179,7 @@ test('an external-message hash resolves to its transaction before event lookup',
     ]);
 
     expect(tonService()->verifyNativeDeposit($msgHash, $sender, $recipient))
-        ->toBe(['amount' => '777', 'event_id' => $txHash]);
+        ->toBe(['amount' => '777', 'event_id' => $txHash, 'comment' => null]);
 });
 
 test('verifyJettonDeposit rejects wrong jetton or recipient', function () {
@@ -235,5 +238,5 @@ test('verifyJettonDeposit retries a 404 until the event is indexed', function ()
     ]);
 
     expect(tonService()->verifyJettonDeposit($txHash, $sender, $master, $recipient))
-        ->toBe(['amount' => '777', 'event_id' => $txHash]);
+        ->toBe(['amount' => '777', 'event_id' => $txHash, 'comment' => null]);
 });

@@ -8,6 +8,7 @@ use App\Services\Bitcoin\UtxoPool;
 use App\Services\Monero\MoneroWalletRpc;
 use App\Support\BridgeAmount;
 use App\Support\BridgeCapacity;
+use App\Support\BridgeIntent;
 use App\Support\Environment;
 use App\Support\TokenAmount;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -584,6 +585,12 @@ class BridgeService
                 return $this->resumeAfterPayout($request, $context);
             }
 
+            if (! BridgeIntent::isProven($request)) {
+                $this->holdForRecipientProof($request);
+
+                return false;
+            }
+
             $feeAmount = (string) ($request->fee_amount ?: '0');
             $nativeGasFee = BridgeAmount::sourceFee($request->direction, $request->token,
                 app(BridgeFeeService::class)->nativePayoutFee($request->direction, $request->token), $request);
@@ -607,6 +614,12 @@ class BridgeService
             $verified = $this->verifySourceDeposit($request, $sourceChain, $sourceToken);
 
             if ($verified === null) {
+                // A TON deposit that arrived without the comment naming its
+                // recipient is real money with no proven owner: held, not failed.
+                if ($request->isAwaitingRecipient()) {
+                    return false;
+                }
+
                 $this->failRelay($request, "Could not verify {$sourceChain['label']} deposit transaction");
 
                 return false;
@@ -927,6 +940,24 @@ class BridgeService
         app(BridgeAdmissionService::class)->releaseFor($request, 'request failed before a verified deposit');
     }
 
+    /**
+     * Nobody has proven this claimant may name the recipient (B03). Nothing is
+     * paid; a claim that was never verified stops counting against the pool,
+     * while a verified deposit stays on the books as an obligation.
+     */
+    private function holdForRecipientProof(BridgeRequest $request): void
+    {
+        $request->markAwaitingRecipient(
+            'Payout held: the sending wallet has not proven that it chose this recipient',
+        );
+        app(BridgeAdmissionService::class)->releaseFor($request, 'recipient not proven');
+
+        Log::warning('Bridge: payout held until the recipient is proven', [
+            'id' => $request->id,
+            'direction' => $request->direction,
+        ]);
+    }
+
     private function liquidityReason(BridgeCapacity $capacity, string $netRaw, int $decimals): string
     {
         if ($capacity->isUnavailable()) {
@@ -1023,6 +1054,16 @@ class BridgeService
         }
 
         if ($verified === null) {
+            return null;
+        }
+
+        // The comment is the depositor's own statement of the recipient. A
+        // transfer without it proves money arrived and nothing about whose it
+        // is — unless an operator has already established that by hand.
+        if ($request->recipient_proven_at === null
+            && ! hash_equals(BridgeIntent::memo((string) $request->recipient_address), trim((string) ($verified['comment'] ?? '')))) {
+            $this->holdForRecipientProof($request);
+
             return null;
         }
 
@@ -2222,6 +2263,32 @@ class BridgeService
         return $credit;
     }
 
+    /**
+     * A native release whose hash is already on the row (B07). Its existence
+     * proves a broadcast, not a delivery, so the destination chain is asked:
+     * confirmed completes it, unknown waits in `paying_out` for the next
+     * reconcile, and a revert stops for an operator — the hash is kept,
+     * because whether a second release is safe is a question about the
+     * contract's nonce, not one this method can answer by sending.
+     */
+    private function reconcileNativePayout(BridgeRequest $request, string $destinationChain): bool
+    {
+        $chain = config('bridge.chains', [])[$destinationChain] ?? [];
+        $hash = (string) $request->destination_tx_hash;
+
+        return match ($this->payoutSucceeded(is_array($chain) ? $chain : [], $hash)) {
+            true => tap(true, fn () => $request->markCompleted($hash)),
+            null => tap(false, fn () => $request->update([
+                'status' => BridgeRequest::PAYING_OUT,
+                'error_message' => 'Payout broadcast; waiting for confirmation on the destination chain',
+            ])),
+            false => tap(false, fn () => $request->update([
+                'status' => BridgeRequest::FAILED,
+                'error_message' => 'Recorded payout reverted on chain; an operator must review it before any new release',
+            ])),
+        };
+    }
+
     private function awaitNativeSourceProof(BridgeRequest $request): void
     {
         $request->update([
@@ -2247,9 +2314,14 @@ class BridgeService
                 'id' => $request->id,
                 'tx' => $request->destination_tx_hash,
             ]);
-            $request->markCompleted((string) $request->destination_tx_hash);
 
-            return true;
+            return $this->reconcileNativePayout($request, 'cyberia');
+        }
+
+        if (! BridgeIntent::isProven($request)) {
+            $this->holdForRecipientProof($request);
+
+            return false;
         }
 
         $request->markProcessing();
@@ -2402,9 +2474,8 @@ class BridgeService
                 'id' => $request->id,
                 'tx' => $request->destination_tx_hash,
             ]);
-            $request->markCompleted((string) $request->destination_tx_hash);
 
-            return true;
+            return $this->reconcileNativePayout($request, 'solana');
         }
 
         $request->markProcessing();

@@ -85,6 +85,14 @@ class BridgeRelayCommand extends Command
                 return $this->finish($request);
             }
 
+            // Broadcast but unconfirmed: the retry asks the destination chain
+            // about the recorded hash and nothing else (B07).
+            if ($request->status === BridgeRequest::PAYING_OUT) {
+                $this->line('  checking the recorded payout on chain…');
+
+                return $this->finish($request);
+            }
+
             return self::FAILURE;
         }
 
@@ -185,6 +193,7 @@ class BridgeRelayCommand extends Command
     private function showStuckList(): void
     {
         $stuck = BridgeRequest::whereIn('status', [
+            BridgeRequest::AWAITING_RECIPIENT,
             BridgeRequest::PENDING,
             BridgeRequest::PROCESSING,
             BridgeRequest::AWAITING_LIQUIDITY,
@@ -222,5 +231,6 @@ class BridgeRelayCommand extends Command
         $this->line('Run with id to retry one:   <fg=cyan>php artisan bridge:relay {id}</>');
         $this->line('Or retry every failure:     <fg=cyan>php artisan bridge:relay --all-failed</>');
         $this->line('A row holding a payout hash is never paid twice, --force included.');
+        $this->line('awaiting_recipient rows are released only by <fg=cyan>bridge:attest-recipient</> or the sender\'s signature.');
     }
 }

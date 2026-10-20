@@ -85,6 +85,13 @@ const manualReview = computed(() => !bridgeRoute(props.direction).autoProcess);
  */
 const awaitingLiquidity = computed(() => status.value === 'awaiting_liquidity');
 
+/**
+ * The deposit is recorded but nobody has proven the sending wallet chose its
+ * recipient (B03), so nothing will be paid until that happens. Polling on
+ * would show a spinner for a transfer that is waiting on a person.
+ */
+const awaitingRecipient = computed(() => status.value === 'awaiting_recipient');
+
 /** The payout has left; only the bridge's own bookkeeping is outstanding. */
 const payoutInFlight = computed(
     () => status.value === 'paying_out' || status.value === 'burn_pending',
@@ -133,7 +140,10 @@ const poll = async () => {
             return;
         }
 
-        pollTimer.value = setTimeout(poll, 3000);
+        pollTimer.value = setTimeout(
+            poll,
+            data.status === 'awaiting_recipient' ? 30000 : 3000,
+        );
     } catch {
         pollTimer.value = setTimeout(poll, 5000);
     }
@@ -161,7 +171,9 @@ const steps = computed(() => [
     {
         label: manualReview.value
             ? 'Operator review'
-            : awaitingLiquidity.value
+            : awaitingRecipient.value
+              ? 'Waiting for proof of the recipient'
+              : awaitingLiquidity.value
               ? 'Waiting for destination liquidity'
               : 'Relayer processing',
         state:
@@ -193,13 +205,25 @@ const steps = computed(() => [
                     ? 'Bridge complete'
                     : status === 'failed'
                       ? 'Bridge failed'
-                      : awaitingLiquidity
-                        ? 'Waiting for liquidity'
+                      : awaitingRecipient
+                        ? 'Deposit held'
+                        : awaitingLiquidity
+                          ? 'Waiting for liquidity'
                         : manualReview
                           ? 'Request pending review'
                           : 'Bridging your funds…'
             }}
         </h2>
+
+        <p
+            v-if="awaitingRecipient"
+            class="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400"
+        >
+            Your deposit is recorded, but the sending wallet did not sign where
+            it should be paid out, so the bridge is holding it rather than
+            paying whoever registered it. Nothing has been paid or burned.
+            Contact support with the source transaction to release it.
+        </p>
 
         <p
             v-if="awaitingLiquidity"

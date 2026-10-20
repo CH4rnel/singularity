@@ -1,3 +1,4 @@
+import { bridgeIntentMessage } from '@/lib/bridgeIntent';
 import { reserve } from '@/routes/bridge';
 
 export type BridgeIntent = {
@@ -84,16 +85,49 @@ export const reserveBridgeCapacity = async (
     }
 };
 
-/** A failed or malformed claim can never reach the irreversible source leg. */
+/**
+ * A failed or malformed claim can never reach the irreversible source leg.
+ *
+ * `authorize`, when given, is asked to sign the payout-recipient statement
+ * for this claim (B03) between the claim and the transfer: a refusal there
+ * still costs nothing, because nothing has been sent yet.
+ */
 export const withBridgeReservation = async <T>(
     intent: BridgeIntent,
     deposit: () => Promise<T>,
-): Promise<{ deposit: T; reservation: string }> => {
+    authorize?: (message: string) => Promise<string | null>,
+): Promise<{ deposit: T; reservation: string; intentSignature?: string }> => {
     const claim = await reserveBridgeCapacity(intent);
 
     if (!claim.ok) {
         throw new Error(claim.message);
     }
 
-    return { deposit: await deposit(), reservation: claim.reference };
+    let intentSignature: string | undefined;
+
+    if (authorize) {
+        const signature = await authorize(
+            bridgeIntentMessage({
+                direction: intent.direction,
+                token: intent.token,
+                sender: intent.senderAddress ?? '',
+                recipient: intent.recipientAddress,
+                reference: claim.reference,
+            }),
+        );
+
+        if (!signature) {
+            throw new Error(
+                'The payout recipient was not signed. Nothing was sent.',
+            );
+        }
+
+        intentSignature = signature;
+    }
+
+    return {
+        deposit: await deposit(),
+        reservation: claim.reference,
+        intentSignature,
+    };
 };

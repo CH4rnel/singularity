@@ -287,6 +287,8 @@ export type BridgeSubmission = {
     /** Human amount, as the bridge API wants it — not smallest units. */
     amount: string;
     convertToNative?: boolean;
+    /** The sender's signature naming this recipient (lib/bridgeIntent.ts). */
+    intentSignature?: string;
 };
 
 /**
@@ -327,6 +329,7 @@ export const submitBridge = async (
                 recipient_address: request.recipient,
                 amount: request.amount,
                 convert_to_native: request.convertToNative,
+                intent_signature: request.intentSignature,
             }),
         });
     } catch {

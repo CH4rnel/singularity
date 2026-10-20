@@ -26,9 +26,10 @@ class TonApiService
      * successful JettonTransfer of $expectedJettonMasterRaw from
      * $expectedSenderRaw to $expectedRecipientRaw. All addresses raw-form
      * ("wc:hex64", see normalizeAddress). Returns the raw jetton amount
-     * (smallest units) plus the canonical event id, or null.
+     * (smallest units), the canonical event id and the transfer's text
+     * comment (the bridge's recipient memo), or null.
      *
-     * @return array{amount: string, event_id: string}|null
+     * @return array{amount: string, event_id: string, comment: string|null}|null
      */
     public function verifyJettonDeposit(
         string $txHash,
@@ -70,7 +71,11 @@ class TonApiService
                 continue;
             }
 
-            return ['amount' => $amount, 'event_id' => $this->eventId($event, $txHash)];
+            return [
+                'amount' => $amount,
+                'event_id' => $this->eventId($event, $txHash),
+                'comment' => is_string($transfer['comment'] ?? null) ? $transfer['comment'] : null,
+            ];
         }
 
         Log::warning('Bridge: no matching JettonTransfer in TON event', [
@@ -85,9 +90,10 @@ class TonApiService
     /**
      * Verify a NATIVE Toncoin deposit: the event behind $txHash must contain a
      * successful TonTransfer from $expectedSenderRaw to $expectedRecipientRaw.
-     * Returns the amount in nanotons plus the canonical event id, or null.
+     * Returns the amount in nanotons, the canonical event id and the
+     * transfer's text comment, or null.
      *
-     * @return array{amount: string, event_id: string}|null
+     * @return array{amount: string, event_id: string, comment: string|null}|null
      */
     public function verifyNativeDeposit(
         string $txHash,
@@ -124,7 +130,11 @@ class TonApiService
                 continue;
             }
 
-            return ['amount' => $amount, 'event_id' => $this->eventId($event, $txHash)];
+            return [
+                'amount' => $amount,
+                'event_id' => $this->eventId($event, $txHash),
+                'comment' => is_string($transfer['comment'] ?? null) ? $transfer['comment'] : null,
+            ];
         }
 
         Log::warning('Bridge: no matching TonTransfer in TON event', [

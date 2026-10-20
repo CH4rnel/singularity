@@ -29,7 +29,7 @@ $submit = fn (array $overrides = []) => array_merge([
 ], $overrides);
 
 test('convert_to_native persists for sol_to_evm CYBER.sol', function () use ($submit) {
-    $this->postJson('/bridge/submit', $submit())
+    $this->postJson('/bridge/submit', signedBridgeSubmit($submit()))
         ->assertStatus(201)
         ->assertJsonPath('bridge_request.convert_to_native', true);
 
@@ -37,7 +37,7 @@ test('convert_to_native persists for sol_to_evm CYBER.sol', function () use ($su
 });
 
 test('convert_to_native defaults to false when omitted', function () use ($submit) {
-    $this->postJson('/bridge/submit', $submit(['convert_to_native' => null]))
+    $this->postJson('/bridge/submit', signedBridgeSubmit($submit(['convert_to_native' => null])))
         ->assertStatus(201)
         ->assertJsonPath('bridge_request.convert_to_native', false);
 
@@ -45,16 +45,16 @@ test('convert_to_native defaults to false when omitted', function () use ($submi
 });
 
 test('convert_to_native is ignored for evm_to_sol', function () use ($submit) {
-    $this->postJson('/bridge/submit', $submit([
+    $this->postJson('/bridge/submit', signedBridgeSubmit($submit([
         'direction' => 'evm_to_sol',
         'sender_address' => '0xsender',
         'recipient_address' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w',
-    ]))->assertStatus(201)
+    ])))->assertStatus(201)
         ->assertJsonPath('bridge_request.convert_to_native', false);
 });
 
 test('convert_to_native is ignored for non-CYBER.sol tokens', function () use ($submit) {
-    $this->postJson('/bridge/submit', $submit(['token' => 'USDC']))
+    $this->postJson('/bridge/submit', signedBridgeSubmit($submit(['token' => 'USDC'])))
         ->assertStatus(201)
         ->assertJsonPath('bridge_request.convert_to_native', false);
 });
@@ -62,13 +62,13 @@ test('convert_to_native is ignored for non-CYBER.sol tokens', function () use ($
 test('convert_to_native respects enabled=false config', function () use ($submit) {
     config()->set('bridge.convert.enabled', false);
 
-    $this->postJson('/bridge/submit', $submit())
+    $this->postJson('/bridge/submit', signedBridgeSubmit($submit()))
         ->assertStatus(201)
         ->assertJsonPath('bridge_request.convert_to_native', false);
 });
 
 test('status endpoint exposes conversion fields', function () use ($submit) {
-    $this->postJson('/bridge/submit', $submit())->assertStatus(201);
+    $this->postJson('/bridge/submit', signedBridgeSubmit($submit()))->assertStatus(201);
 
     $request = BridgeRequest::latest('id')->first();
     $request->update(['converted' => true]);

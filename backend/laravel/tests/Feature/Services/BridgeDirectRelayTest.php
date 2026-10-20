@@ -39,6 +39,9 @@ function solanaInventory(string $lamports = '500000000', string $splRaw = '10000
 function makeDirectRequest(array $overrides = []): BridgeRequest
 {
     return BridgeRequest::create(array_merge([
+        // Signed by the sender: these tests are about the relay, not B03.
+        'recipient_proof' => 'signature',
+        'recipient_proven_at' => now(),
         'direction' => 'sol_to_evm',
         'token' => 'USDC',
         'source_chain' => 'solana',

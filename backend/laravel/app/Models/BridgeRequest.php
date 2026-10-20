@@ -15,6 +15,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $source_tx_hash
  * @property string|null $submitted_intent_hash
  * @property string|null $submitted_source_tx_hash
+ * @property string|null $recipient_proof
+ * @property Carbon|null $recipient_proven_at
  * @property int $source_nonce
  * @property string|null $sender_address
  * @property string $recipient_address
@@ -47,6 +49,11 @@ class BridgeRequest extends Model
      * them. Every name here is a different answer to "what does a retry do?".
      *
      *   awaiting_deposit  — a one-time address is watched; nothing owed yet.
+     *   awaiting_recipient— a transfer is claimed but nobody has proven that
+     *                       the claimant may name its recipient (B03). It
+     *                       is recorded, never paid, and never counted
+     *                       against capacity, until the depositor signs or an
+     *                       operator attests (`bridge:attest-recipient`).
      *   pending           — the source transfer is claimed, not yet verified.
      *   processing        — a worker holds this request right now.
      *   awaiting_liquidity— the deposit is REAL and the destination cannot pay
@@ -60,6 +67,8 @@ class BridgeRequest extends Model
      *   completed / failed / expired — terminal.
      */
     public const AWAITING_DEPOSIT = 'awaiting_deposit';
+
+    public const AWAITING_RECIPIENT = 'awaiting_recipient';
 
     public const PENDING = 'pending';
 
@@ -96,6 +105,7 @@ class BridgeRequest extends Model
      */
     public const IN_FLIGHT = [
         self::AWAITING_DEPOSIT,
+        self::AWAITING_RECIPIENT,
         self::PENDING,
         self::PROCESSING,
         self::AWAITING_LIQUIDITY,
@@ -111,6 +121,8 @@ class BridgeRequest extends Model
         'source_tx_hash',
         'submitted_intent_hash',
         'submitted_source_tx_hash',
+        'recipient_proof',
+        'recipient_proven_at',
         'source_nonce',
         'sender_address',
         'recipient_address',
@@ -155,6 +167,7 @@ class BridgeRequest extends Model
             'source_verified_at' => 'datetime',
             'payout_broadcast_at' => 'datetime',
             'payout_confirmed_at' => 'datetime',
+            'recipient_proven_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
     }
@@ -275,6 +288,23 @@ class BridgeRequest extends Model
     public function hasPayout(): bool
     {
         return $this->destination_tx_hash !== null && $this->destination_tx_hash !== '';
+    }
+
+    public function isAwaitingRecipient(): bool
+    {
+        return $this->status === self::AWAITING_RECIPIENT;
+    }
+
+    /**
+     * Hold a claimed transfer whose recipient nobody has proven. Never used on
+     * a row that has already paid: {@see hasPayout()} outranks it.
+     */
+    public function markAwaitingRecipient(string $reason): void
+    {
+        $this->update([
+            'status' => self::AWAITING_RECIPIENT,
+            'error_message' => $reason,
+        ]);
     }
 
     public function isAwaitingLiquidity(): bool

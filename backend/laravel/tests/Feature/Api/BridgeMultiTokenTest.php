@@ -8,20 +8,20 @@ beforeEach(function () {
 });
 
 test('defaults to CYBER.sol when token is omitted', function () {
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'evm_to_sol',
         'source_tx_hash' => '0xabc',
         'source_nonce' => 1,
         'sender_address' => '0xsender',
         'recipient_address' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w',
         'amount' => '1.0',
-    ])->assertStatus(201);
+    ]))->assertStatus(201);
 
     expect(BridgeRequest::latest('id')->first()->token)->toBe('CYBER.sol');
 });
 
 test('persists USDC token', function () {
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'evm_to_sol',
         'token' => 'USDC',
         'source_tx_hash' => '0xabc',
@@ -29,14 +29,14 @@ test('persists USDC token', function () {
         'sender_address' => '0xsender',
         'recipient_address' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w',
         'amount' => '12.5',
-    ])->assertStatus(201)
+    ]))->assertStatus(201)
         ->assertJsonPath('bridge_request.token', 'USDC');
 
     expect(BridgeRequest::latest('id')->first()->token)->toBe('USDC');
 });
 
 test('persists USDT token', function () {
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'sol_to_evm',
         'token' => 'USDT',
         'source_tx_hash' => 'solana-tx',
@@ -44,13 +44,13 @@ test('persists USDT token', function () {
         'sender_address' => 'AbCd',
         'recipient_address' => '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
         'amount' => '10.0',
-    ])->assertStatus(201);
+    ]))->assertStatus(201);
 
     expect(BridgeRequest::latest('id')->first()->token)->toBe('USDT');
 });
 
 test('rejects unknown token', function () {
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'evm_to_sol',
         'token' => 'DOGE',
         'source_tx_hash' => '0xabc',
@@ -58,14 +58,14 @@ test('rejects unknown token', function () {
         'sender_address' => '0xsender',
         'recipient_address' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w',
         'amount' => '1.0',
-    ])->assertStatus(422)
+    ]))->assertStatus(422)
         ->assertJsonValidationErrors(['token']);
 });
 
 test('direct-transfer tokens persist with expected token symbol', function () {
     Queue::fake();
 
-    $this->postJson('/bridge/submit', [
+    $this->postJson('/bridge/submit', signedBridgeSubmit([
         'direction' => 'evm_to_sol',
         'token' => 'USDC',
         'source_tx_hash' => '0xabc',
@@ -73,7 +73,7 @@ test('direct-transfer tokens persist with expected token symbol', function () {
         'sender_address' => '0xsender',
         'recipient_address' => 'E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w',
         'amount' => '1.0',
-    ])->assertStatus(201);
+    ]))->assertStatus(201);
 
     $request = BridgeRequest::latest('id')->first();
     expect($request->token)->toBe('USDC');

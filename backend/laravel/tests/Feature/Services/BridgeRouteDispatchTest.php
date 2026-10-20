@@ -34,6 +34,9 @@ beforeEach(function () {
 function makeRequest(array $attributes): BridgeRequest
 {
     return BridgeRequest::create(array_merge([
+        // Signed by the sender: these tests are about the relay, not B03.
+        'recipient_proof' => 'signature',
+        'recipient_proven_at' => now(),
         'source_nonce' => random_int(1, PHP_INT_MAX),
         'amount' => '1.5',
         'fee_amount' => '0',
@@ -82,6 +85,7 @@ test('ton_to_evm verifies the jetton deposit and mints with 9→18 scaling', fun
                         'recipient' => ['address' => TonApiService::normalizeAddress(TON_DEPOSIT)],
                         'jetton' => ['address' => TonApiService::normalizeAddress(KRSQ_MASTER)],
                         'amount' => '1500000000', // 1.5 KRSQ in 9-dec raw
+                        'comment' => 'cyberia-bridge:0xd8da6bf26964af9d7eed9e03e53415d37aa96045', // B03: the depositor names the recipient on chain
                     ],
                 ],
             ],
@@ -99,6 +103,8 @@ test('ton_to_evm verifies the jetton deposit and mints with 9→18 scaling', fun
         'source_tx_hash' => str_repeat('ab', 32),
         'sender_address' => $sender,
         'recipient_address' => '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+        'recipient_proof' => 'memo',
+        'recipient_proven_at' => null,
     ]);
 
     expect(app(BridgeService::class)->processDirectRelay($request))->toBeTrue();
@@ -116,6 +122,48 @@ test('ton_to_evm verifies the jetton deposit and mints with 9→18 scaling', fun
             && str_contains($command, '1500000000000000000');
     });
 });
+
+test('a TON deposit whose comment does not name the claimed recipient is held, not paid (B03)', function (?string $comment) {
+    $sender = 'UQDv2p2r_iB1nR7J8Ze5LGUeXENN-te4ezlHqU6JZvS9l9Ix';
+    $transfer = [
+        'sender' => ['address' => TonApiService::normalizeAddress($sender)],
+        'recipient' => ['address' => TonApiService::normalizeAddress(TON_DEPOSIT)],
+        'jetton' => ['address' => TonApiService::normalizeAddress(KRSQ_MASTER)],
+        'amount' => '1500000000',
+    ];
+
+    if ($comment !== null) {
+        $transfer['comment'] = $comment;
+    }
+
+    Http::fake(['tonapi.test/*' => Http::response([
+        'in_progress' => false,
+        'actions' => [['type' => 'JettonTransfer', 'status' => 'ok', 'JettonTransfer' => $transfer]],
+    ])]);
+    Process::fake();
+
+    // Somebody else's public deposit, claimed with their own address.
+    $request = makeRequest([
+        'direction' => 'ton_to_evm',
+        'token' => 'KRSQ',
+        'source_chain' => 'ton',
+        'source_tx_hash' => str_repeat('ab', 32),
+        'sender_address' => $sender,
+        'recipient_address' => '0x00000000000000000000000000000000000000aa',
+        'recipient_proof' => 'memo',
+        'recipient_proven_at' => null,
+    ]);
+
+    expect(app(BridgeService::class)->processDirectRelay($request))->toBeFalse();
+
+    $request->refresh();
+    expect($request->status)->toBe(BridgeRequest::AWAITING_RECIPIENT)
+        ->and($request->destination_tx_hash)->toBeNull();
+    Process::assertNothingRan();
+})->with([
+    'no comment' => [null],
+    'someone else' => ['cyberia-bridge:0xd8da6bf26964af9d7eed9e03e53415d37aa96045'],
+]);
 
 test('evm_to_ton burns the wrapper and pays out via the TON relay script', function () {
     $sender = '0x5555555555555555555555555555555555555555';
@@ -405,6 +453,7 @@ test('ton_to_evm verifies a native TON deposit, canonicalizes the hash and mints
                         'sender' => ['address' => TonApiService::normalizeAddress($sender)],
                         'recipient' => ['address' => TonApiService::normalizeAddress(TON_DEPOSIT)],
                         'amount' => 1500000000, // 1.5 TON in nanotons
+                        'comment' => 'cyberia-bridge:0xd8da6bf26964af9d7eed9e03e53415d37aa96045', // B03: the depositor names the recipient on chain
                     ],
                 ],
             ],
@@ -422,6 +471,8 @@ test('ton_to_evm verifies a native TON deposit, canonicalizes the hash and mints
         'source_tx_hash' => $msgHash,
         'sender_address' => $sender,
         'recipient_address' => '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',
+        'recipient_proof' => 'memo',
+        'recipient_proven_at' => null,
     ]);
 
     expect(app(BridgeService::class)->processDirectRelay($request))->toBeTrue();

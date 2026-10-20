@@ -36,11 +36,11 @@ function idempotentBridgePayload(array $overrides = []): array
 
 test('a lost submit response can be recovered without another obligation, job or event', function () {
     $payload = idempotentBridgePayload(['session_id' => '0679b41c-7a5d-4ae6-a7d6-01c991dc74d5']);
-    $id = $this->postJson('/bridge/submit', $payload)->assertCreated()->json('bridge_request.id');
+    $id = $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertCreated()->json('bridge_request.id');
     $events = BridgeEvent::count();
     $reservations = BridgeReservation::count();
 
-    $this->postJson('/bridge/submit', $payload)
+    $this->postJson('/bridge/submit', signedBridgeSubmit($payload))
         ->assertOk()->assertJsonPath('replayed', true)->assertJsonPath('bridge_request.id', $id);
 
     expect(BridgeRequest::count())->toBe(1)
@@ -52,7 +52,7 @@ test('a lost submit response can be recovered without another obligation, job or
 
 test('replay returns current destination settlement without changing the authoritative ledger', function () {
     $payload = idempotentBridgePayload();
-    $this->postJson('/bridge/submit', $payload)->assertCreated();
+    $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertCreated();
     $request = BridgeRequest::first();
     $reservation = BridgeReservation::where('bridge_request_id', $request->id)->first();
     $reservation->update(['net_raw' => '23456789', 'status' => BridgeReservation::SETTLED]);
@@ -60,7 +60,7 @@ test('replay returns current destination settlement without changing the authori
     $request->markCompleted('destination-hash');
     $before = $reservation->fresh()->getAttributes();
 
-    $this->postJson('/bridge/submit', $payload)
+    $this->postJson('/bridge/submit', signedBridgeSubmit($payload))
         ->assertOk()->assertJsonPath('bridge_request.status', 'completed')
         ->assertJsonPath('bridge_request.destination_tx_hash', 'destination-hash')
         ->assertJsonPath('bridge_request.amount', '24.000000000000000000');
@@ -69,28 +69,28 @@ test('replay returns current destination settlement without changing the authori
 
 test('recovering an existing request works after its route has been closed', function () {
     $payload = idempotentBridgePayload();
-    $id = $this->postJson('/bridge/submit', $payload)->assertCreated()->json('bridge_request.id');
+    $id = $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertCreated()->json('bridge_request.id');
     config()->set('bridge.routes.evm_to_sol.enabled', false);
     Http::fake(fn () => throw new RuntimeException('Replay must not query any chain'));
 
-    $this->postJson('/bridge/submit', $payload)->assertOk()->assertJsonPath('bridge_request.id', $id);
+    $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertOk()->assertJsonPath('bridge_request.id', $id);
 });
 
 test('decimal formatting and EVM letter case do not create another transfer', function () {
-    $this->postJson('/bridge/submit', idempotentBridgePayload())->assertCreated();
-    $this->postJson('/bridge/submit', idempotentBridgePayload([
+    $this->postJson('/bridge/submit', signedBridgeSubmit(idempotentBridgePayload()))->assertCreated();
+    $this->postJson('/bridge/submit', signedBridgeSubmit(idempotentBridgePayload([
         'source_tx_hash' => '0x'.str_repeat('AB', 32),
         'amount' => '025.0000010',
         'reservation' => 'a-different-expired-reference',
-    ]))->assertOk();
+    ])))->assertOk();
     expect(BridgeRequest::count())->toBe(1);
 });
 
 test('changed transfer details conflict without overwriting or relaying the first request', function ($overrides) {
-    $this->postJson('/bridge/submit', idempotentBridgePayload())->assertCreated();
+    $this->postJson('/bridge/submit', signedBridgeSubmit(idempotentBridgePayload()))->assertCreated();
     $before = BridgeRequest::first()->getAttributes();
 
-    $this->postJson('/bridge/submit', idempotentBridgePayload($overrides))
+    $this->postJson('/bridge/submit', signedBridgeSubmit(idempotentBridgePayload($overrides)))
         ->assertStatus(409)->assertJsonPath('reason', 'source_transaction_conflict');
 
     expect(BridgeRequest::first()->getAttributes())->toBe($before)
@@ -114,10 +114,10 @@ test('conversion remains part of the original intent even after server configura
         'source_tx_hash' => 'solana-signature', 'sender_address' => 'SolanaSender',
         'recipient_address' => '0x'.str_repeat('6', 40), 'convert_to_native' => true,
     ]);
-    $this->postJson('/bridge/submit', $payload)->assertCreated();
+    $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertCreated();
     config()->set('bridge.convert.enabled', false);
-    $this->postJson('/bridge/submit', $payload)->assertOk();
-    $this->postJson('/bridge/submit', array_replace($payload, ['convert_to_native' => false]))->assertStatus(409);
+    $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertOk();
+    $this->postJson('/bridge/submit', signedBridgeSubmit(array_replace($payload, ['convert_to_native' => false])))->assertStatus(409);
 });
 
 test('original TON message hashes remain recoverable after verification replaces the source event id', function () {
@@ -129,19 +129,19 @@ test('original TON message hashes remain recoverable after verification replaces
         'sender_address' => '0:'.str_repeat('b', 64),
         'recipient_address' => '0x'.str_repeat('6', 40),
     ]);
-    $id = $this->postJson('/bridge/submit', $payload)->assertCreated()->json('bridge_request.id');
+    $id = $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertCreated()->json('bridge_request.id');
     BridgeRequest::find($id)->update(['source_tx_hash' => str_repeat('c', 64)]);
 
-    $this->postJson('/bridge/submit', array_replace($payload, ['source_tx_hash' => str_repeat('ab', 32)]))
+    $this->postJson('/bridge/submit', signedBridgeSubmit(array_replace($payload, ['source_tx_hash' => str_repeat('ab', 32)])))
         ->assertOk()->assertJsonPath('bridge_request.id', $id);
     expect(BridgeRequest::count())->toBe(1);
 });
 
 test('pre-migration requests can be looked up without changing their transfer details', function () {
     $payload = idempotentBridgePayload();
-    $this->postJson('/bridge/submit', $payload)->assertCreated();
+    $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertCreated();
     BridgeRequest::first()->update(['submitted_intent_hash' => null, 'submitted_source_tx_hash' => null]);
-    $this->postJson('/bridge/submit', $payload)->assertOk();
+    $this->postJson('/bridge/submit', signedBridgeSubmit($payload))->assertOk();
 });
 
 test('a failed obligation write cannot leave a request recorded without its ledger', function () {
@@ -149,14 +149,14 @@ test('a failed obligation write cannot leave a request recorded without its ledg
     $this->mock(BridgeAdmissionService::class, fn ($mock) => $mock
         ->shouldReceive('commit')->once()->andThrow(new RuntimeException('Ledger unavailable')));
 
-    expect(fn () => $this->postJson('/bridge/submit', idempotentBridgePayload()))
+    expect(fn () => $this->postJson('/bridge/submit', signedBridgeSubmit(idempotentBridgePayload())))
         ->toThrow(RuntimeException::class, 'Ledger unavailable');
     expect(BridgeRequest::count())->toBe(0)->and(BridgeReservation::count())->toBe(0);
     Process::assertNothingRan();
 });
 
 test('scientific notation and excess precision are refused before decimal bridge arithmetic', function ($amount) {
-    $this->postJson('/bridge/submit', idempotentBridgePayload(['amount' => $amount]))
+    $this->postJson('/bridge/submit', signedBridgeSubmit(idempotentBridgePayload(['amount' => $amount])))
         ->assertUnprocessable()->assertJsonValidationErrors('amount');
     expect(BridgeRequest::count())->toBe(0);
 })->with(['1e3', '0.0000000000000000001']);

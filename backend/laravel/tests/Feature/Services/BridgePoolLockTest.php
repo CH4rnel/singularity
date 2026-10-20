@@ -26,6 +26,9 @@ beforeEach(function () {
 function poolLockBridgeRequest(string $token): BridgeRequest
 {
     $request = BridgeRequest::create([
+        // Signed by the sender: these tests are about the relay, not B03.
+        'recipient_proof' => 'signature',
+        'recipient_proven_at' => now(),
         'direction' => 'evm_to_sol',
         'token' => $token,
         'source_chain' => 'cyberia',

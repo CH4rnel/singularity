@@ -139,6 +139,12 @@ export async function sendTonDeposit(options: {
     amount: string;
     depositAddress: string;
     senderRawAddress: string;
+    /**
+     * Text comment naming the payout recipient (`bridgeIntentMemo()`): the
+     * relayer pays a TON deposit only to the recipient its own transfer
+     * names, since anybody can read a deposit and claim it otherwise.
+     */
+    memo: string;
 }): Promise<{ txHash: string; nonce: number }> {
     const ui = await getTonConnectUI();
     const amountRaw = toRawUnits(options.amount, options.tokenEntry.decimals);
@@ -148,11 +154,17 @@ export async function sendTonDeposit(options: {
     }
 
     let message: { address: string; amount: string; payload?: string };
+    // TEP-74 text comment: op 0, then the UTF-8 text.
+    const comment = beginCell()
+        .storeUint(0, 32)
+        .storeStringTail(options.memo)
+        .endCell();
 
     if (options.tokenEntry.native) {
         message = {
             address: options.depositAddress,
             amount: amountRaw.toString(),
+            payload: comment.toBoc().toString('base64'),
         };
     } else {
         if (!options.tokenEntry.master) {
@@ -178,7 +190,8 @@ export async function sendTonDeposit(options: {
             .storeAddress(Address.parse(options.senderRawAddress)) // excess back
             .storeBit(false) // no custom payload
             .storeCoins(1n) // forward_ton_amount: 1 nanoton notification
-            .storeBit(false) // no forward payload
+            .storeBit(true) // forward payload in a ref: the recipient memo
+            .storeRef(comment)
             .endCell();
 
         message = {

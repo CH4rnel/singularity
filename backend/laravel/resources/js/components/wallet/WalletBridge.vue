@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import HoldButton from '@/components/wallet/HoldButton.vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
@@ -7,6 +7,13 @@ import type { MultiWallet } from '@/composables/useMultiWallet';
 import { analytics, errorCode } from '@/lib/analytics';
 import { toRawUnits } from '@/lib/bridgeCapacity';
 import { computeFee, feeTokenAmount } from '@/lib/bridgeFee';
+import {
+    continueBridgeDeposit,
+    loadBridgeRecovery,
+    markBridgeDepositRegistered,
+    rememberBridgeDeposit,
+} from '@/lib/bridgeRecovery';
+import type { BridgeRecoveryEntry } from '@/lib/bridgeRecovery';
 import { withBridgeReservation } from '@/lib/bridgeReservation';
 import {
     ERC20_TRANSFER_GAS_CAP,
@@ -23,7 +30,7 @@ import {
     depositAddressFor,
     submitBridge,
 } from '@/lib/wallet/bridge';
-import type { BridgeConfig } from '@/lib/wallet/bridge';
+import type { BridgeConfig, BridgeSubmission } from '@/lib/wallet/bridge';
 import { formatUsd, usdValue } from '@/lib/wallet/format';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -533,6 +540,55 @@ const traits = () => ({
     fee_usd: networkFeeUsd.value ?? undefined,
 });
 
+/**
+ * The device's own record of deposits already sent (lib/bridgeRecovery.ts).
+ * Storage that cannot be written must not stop a transfer the server would
+ * accept, so every touch of it is best-effort.
+ */
+const remember = (submission: BridgeSubmission): BridgeRecoveryEntry | null => {
+    try {
+        return rememberBridgeDeposit(submission);
+    } catch {
+        return null;
+    }
+};
+
+const settle = (
+    entry: BridgeRecoveryEntry,
+    outcome: Parameters<typeof markBridgeDepositRegistered>[1],
+): void => {
+    try {
+        markBridgeDepositRegistered(entry, outcome);
+    } catch {
+        // The server has it; a journal that cannot be written loses nothing.
+    }
+};
+
+/**
+ * Deposits this device sent whose registration never got an answer. The
+ * submit is idempotent on the source hash, so asking again either records the
+ * transfer or returns the one already recorded — it never sends anything.
+ */
+const resumeUnregistered = async (): Promise<void> => {
+    let entries: BridgeRecoveryEntry[] = [];
+
+    try {
+        entries = loadBridgeRecovery();
+    } catch {
+        return;
+    }
+
+    for (const entry of entries) {
+        if (entry.requestId === null && entry.nonceReady) {
+            await continueBridgeDeposit(entry).catch(() => undefined);
+        }
+    }
+};
+
+onMounted(() => {
+    void resumeUnregistered();
+});
+
 const sign = async (): Promise<void> => {
     const chain = sourceWalletChain.value;
     const chainId = sourceChain.value?.evmChainId ?? null;
@@ -588,7 +644,11 @@ const sign = async (): Promise<void> => {
     const tracking = traits();
 
     try {
-        const { deposit: lock, reservation } = await withBridgeReservation(
+        const {
+            deposit: lock,
+            reservation,
+            intentSignature,
+        } = await withBridgeReservation(
             intent,
             () => {
                 const current = props.wallet.accounts.value.find(
@@ -603,6 +663,9 @@ const sign = async (): Promise<void> => {
 
                 return props.wallet.bridgeDeposit(chain, leg);
             },
+            // The same key that is about to send states where the deposit is
+            // paid out (B03); without it the relayer holds the transfer.
+            (message) => props.wallet.signMessage(chain, message),
         );
         // The transfer is broadcast. Whatever the relayer says next, this hash
         // exists and is the only thing that proves the deposit.
@@ -620,7 +683,7 @@ const sign = async (): Promise<void> => {
             duration_ms: Date.now() - startedAt,
         });
 
-        const outcome = await submitBridge({
+        const submission = {
             direction: intent.direction,
             token: intent.token,
             sourceTxHash: lock.txHash,
@@ -629,7 +692,17 @@ const sign = async (): Promise<void> => {
             sender: intent.senderAddress ?? '',
             recipient: intent.recipientAddress,
             amount: intent.amount,
-        });
+            intentSignature,
+        };
+        // Written down before the server is asked (B06): if the answer is
+        // lost or this screen closes, the next visit registers the same
+        // deposit again instead of it being a transfer nobody claimed.
+        const journal = remember(submission);
+        const outcome = await submitBridge(submission);
+
+        if (journal && outcome.ok && outcome.id !== null) {
+            settle(journal, { ...outcome, id: outcome.id });
+        }
 
         done.value = {
             ...done.value,

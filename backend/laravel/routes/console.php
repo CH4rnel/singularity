@@ -46,6 +46,11 @@ Schedule::command('bridge:sweep-deposits')->everyTwoMinutes()->withoutOverlappin
 // counting against liquidity the moment they expire — this only closes the
 // row, and it never touches a hold that has a transfer behind it.
 Schedule::command('bridge:release-reservations')->everyFiveMinutes()->withoutOverlapping();
+// Transfers a relay left unfinished — a payout broadcast whose receipt timed
+// out, a burn still owed, a deposit parked for liquidity, a worker that died.
+// A false from the relay is not retried by the queue, so without this they
+// waited for somebody to look. A row holding a payout hash is only read.
+Schedule::command('bridge:reconcile')->everyFiveMinutes()->withoutOverlapping(30);
 // The wallet chat relay is a queue, not an archive: drop delivered and
 // undelivered envelopes alike once they are past the retention window, so the
 // server stops holding a record of who talked to whom.

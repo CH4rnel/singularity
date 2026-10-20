@@ -18,6 +18,11 @@ import {
     tokensForRoute,
 } from '@/lib/bridgeConfig';
 import type { BridgeFeeConfig } from '@/lib/bridgeFee';
+import {
+    bridgeIntentMemo,
+    bridgeIntentMessage,
+    bridgeIntentRequirement,
+} from '@/lib/bridgeIntent';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import { sendTonDeposit, TON_GAS_RESERVE } from '@/lib/tonBridge';
@@ -74,6 +79,8 @@ const gasDropPlanned = ref(false);
 // the hold becomes the obligation rather than a second claim on the same
 // reserve. Null on manual-source routes, which have nothing to sign.
 const reservationReference = ref<string | null>(null);
+// The sender's signature naming the recipient of this transfer (B03).
+const intentSignature = ref<string | null>(null);
 
 const checkEvmRecipientNeedsGas = async (
     recipient: string,
@@ -539,17 +546,65 @@ const handleConfirm = async () => {
         }
 
         reservationReference.value = reserved.reference;
+        intentSignature.value = null;
+
+        const tokenInfo = BRIDGE_TOKENS[flow.context.token];
+        const sourceChainKey = bridgeRoute(flow.context.direction).source;
+        const sourceChainType = bridgeChainInfo(sourceChainKey)?.type;
 
         flow.beginSigning();
+
+        // The sending wallet states where this deposit is paid out (B03).
+        // Asked before the transfer, so declining it still costs nothing; a
+        // deposit submitted without it is recorded but never paid.
+        if (
+            bridgeIntentRequirement({
+                direction: flow.context.direction,
+                sourceType: sourceChainType,
+                tokenModel: tokenInfo?.model,
+            }) === 'signature'
+        ) {
+            if (!flow.context.sourceAddress) {
+                flow.markFailed(
+                    'Connect the sending wallet first. Nothing was sent.',
+                );
+
+                return;
+            }
+
+            const message = bridgeIntentMessage({
+                direction: flow.context.direction,
+                token: flow.context.token,
+                sender: flow.context.sourceAddress,
+                recipient: flow.context.destinationAddress,
+                reference: reserved.reference,
+            });
+            const signature =
+                sourceChainType === 'solana'
+                    ? await solanaWallet.signMessage(message)
+                    : await evmWallet.signMessage(message);
+
+            if (!signature) {
+                analytics.track('lock_tx_rejected', {
+                    direction: flow.context.direction,
+                    amount: flow.context.amount,
+                    error_message: 'payout recipient not signed',
+                });
+                flow.markFailed(
+                    'The payout recipient was not signed. Nothing was sent.',
+                );
+
+                return;
+            }
+
+            intentSignature.value = signature;
+        }
+
         analytics.track('lock_tx_submitted', {
             direction: flow.context.direction,
             amount: flow.context.amount,
             metadata: { token: flow.context.token },
         });
-
-        const tokenInfo = BRIDGE_TOKENS[flow.context.token];
-        const sourceChainKey = bridgeRoute(flow.context.direction).source;
-        const sourceChainType = bridgeChainInfo(sourceChainKey)?.type;
 
         try {
             let result: { txHash: string; nonce: number } | null;
@@ -575,6 +630,9 @@ const handleConfirm = async () => {
                     amount: flow.context.amount,
                     depositAddress,
                     senderRawAddress: tonWallet.rawAddress.value,
+                    // A TON wallet cannot sign a statement this server can
+                    // check, but the transfer itself can name the recipient.
+                    memo: bridgeIntentMemo(flow.context.destinationAddress),
                 });
             } else if (tokenInfo?.model === 'native') {
                 // CYBER — through CyberBridge contract
@@ -690,6 +748,7 @@ const handleConfirm = async () => {
                 amount: flow.context.amount,
                 convert_to_native: flow.context.convertToNative,
                 reservation: reservationReference.value,
+                intent_signature: intentSignature.value ?? undefined,
                 session_id: analytics.sessionId,
             }),
         });

@@ -82,12 +82,13 @@ test('submit consumes the reservation it was given', function () {
     $reference = $this->postJson('/bridge/reserve', [
         'direction' => 'evm_to_sol',
         'token' => 'SOL',
-        'sender_address' => '0x5555555555555555555555555555555555555555',
+        // The key the submit below signs with (BridgeIntentHelpers).
+        'sender_address' => bridgeTestSender('0x5555555555555555555555555555555555555555', 'evm_to_sol'),
         'recipient_address' => 'HAUCigT3SuHwXDD7c2H6aaT4yDntXCpue2SkrzpDt2uG',
         'amount' => '0.5',
     ])->assertCreated()->json('reservation.reference');
 
-    $this->postJson('/bridge/submit', solSubmitPayload(['reservation' => $reference]))
+    $this->postJson('/bridge/submit', signedBridgeSubmit(solSubmitPayload(['reservation' => $reference])))
         ->assertCreated();
 
     $reservation = BridgeReservation::where('reference', $reference)->first();
@@ -106,7 +107,7 @@ test('submit without a reservation still records the obligation', function () {
     Process::fake();
     fakeSolanaBalance('1010000000');
 
-    $this->postJson('/bridge/submit', solSubmitPayload())->assertCreated();
+    $this->postJson('/bridge/submit', signedBridgeSubmit(solSubmitPayload()))->assertCreated();
 
     $request = BridgeRequest::first();
 
@@ -121,17 +122,18 @@ test('a used reservation cannot be handed in a second time', function () {
     $reference = $this->postJson('/bridge/reserve', [
         'direction' => 'evm_to_sol',
         'token' => 'SOL',
-        'sender_address' => '0x5555555555555555555555555555555555555555',
+        // The key the submit below signs with (BridgeIntentHelpers).
+        'sender_address' => bridgeTestSender('0x5555555555555555555555555555555555555555', 'evm_to_sol'),
         'recipient_address' => 'HAUCigT3SuHwXDD7c2H6aaT4yDntXCpue2SkrzpDt2uG',
         'amount' => '0.5',
     ])->assertCreated()->json('reservation.reference');
 
-    $this->postJson('/bridge/submit', solSubmitPayload(['reservation' => $reference]))->assertCreated();
-    $this->postJson('/bridge/submit', solSubmitPayload([
+    $this->postJson('/bridge/submit', signedBridgeSubmit(solSubmitPayload(['reservation' => $reference])))->assertCreated();
+    $this->postJson('/bridge/submit', signedBridgeSubmit(solSubmitPayload([
         'reservation' => $reference,
         'source_tx_hash' => '0x'.str_repeat('cd', 32),
         'source_nonce' => 2,
-    ]))->assertCreated();
+    ])))->assertCreated();
 
     // Two transfers, two obligations. Reusing the reference did not let the
     // second one ride on the first one's claim.

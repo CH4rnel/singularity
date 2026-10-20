@@ -35,6 +35,9 @@ const cleanSubmission = (value: BridgeSubmission): BridgeSubmission => ({
     amount: value.amount,
     reservation: value.reservation,
     convertToNative: value.convertToNative ?? false,
+    // A recipient authorization is not wallet material: it can only ever pay
+    // the address this wallet already chose.
+    intentSignature: value.intentSignature,
 });
 
 export const loadBridgeRecovery = (
@@ -57,6 +60,7 @@ export const loadBridgeRecovery = (
             !/^\d+(?:\.\d{1,18})?$/.test(submission.amount) ||
             (submission.reservation !== undefined && typeof submission.reservation !== 'string') ||
             (submission.convertToNative !== undefined && typeof submission.convertToNative !== 'boolean') ||
+            (submission.intentSignature !== undefined && typeof submission.intentSignature !== 'string') ||
             typeof value.nonceReady !== 'boolean' ||
             (value.requestId !== null && (!Number.isSafeInteger(value.requestId) || value.requestId <= 0)) ||
             (value.status !== null && typeof value.status !== 'string') ||
@@ -102,6 +106,11 @@ export const rememberBridgeDeposit = (
 ): BridgeRecoveryEntry => {
     const existing = loadBridgeRecovery(storage).find((entry) =>
         bridgeRecoveryId(entry) === bridgeRecoveryId({ submission } as BridgeRecoveryEntry));
+    // An entry the loader would reject must never be written: one bad row
+    // makes the whole journal unreadable for every later deposit.
+    const candidate = { submission: cleanSubmission(submission), nonceReady, requestId: null,
+        status: null, destinationTxHash: null, message: null, savedAt: new Date().toISOString() };
+    loadBridgeRecovery({ getItem: () => JSON.stringify([candidate]), setItem: () => undefined });
     return persist({
         submission: cleanSubmission(submission),
         nonceReady,
@@ -112,6 +121,14 @@ export const rememberBridgeDeposit = (
         savedAt: existing?.savedAt ?? new Date().toISOString(),
     }, storage);
 };
+
+/** The server answered the registration made elsewhere; keep its id. */
+export const markBridgeDepositRegistered = (
+    entry: BridgeRecoveryEntry,
+    outcome: { id: number; status: string | null; destinationTxHash: string | null; message: string | null },
+    storage?: RecoveryStorage,
+): BridgeRecoveryEntry => persist({ ...entry, requestId: outcome.id, status: outcome.status,
+    destinationTxHash: outcome.destinationTxHash, message: outcome.message }, storage);
 
 /** This path can only register a deposit or read its status; it has no signer. */
 export const continueBridgeDeposit = async (
