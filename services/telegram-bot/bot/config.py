@@ -132,16 +132,26 @@ MIN_ANNOUNCE_USD = float(os.environ.get("MIN_ANNOUNCE_USD", "1.0"))
 BIG_ANNOUNCE_USD = float(os.environ.get("BIG_ANNOUNCE_USD", "10.0"))
 
 # Periodic on-chain activity digest: swap volume, top tokens, liquidity flows,
-# bridges, lending and the CYBER price — one summary message instead of a
-# stream of per-event posts. Set DIGEST_INTERVAL_SECONDS=0 to disable.
+# bridges and lending, plus new market gaps. The full price table is /stats-only.
+# Set DIGEST_INTERVAL_SECONDS=0 to disable automatic summaries.
 DIGEST_ANNOUNCE_CHAT = os.environ.get("DIGEST_ANNOUNCE_CHAT", BRIDGE_ANNOUNCE_CHAT)
 DIGEST_INTERVAL_SECONDS = int(os.environ.get("DIGEST_INTERVAL_SECONDS", str(6 * 3600)))
 # Recorded events older than this are pruned (the digest never looks that far back).
 DIGEST_RETENTION_DAYS = int(os.environ.get("DIGEST_RETENTION_DAYS", "30"))
-# Hide tiny price wiggles in the regular digest. Default: 100 bps = 1%.
+# Hide tiny CYBER price wiggles in /stats. Default: 100 bps = 1%.
 DIGEST_PRICE_CHANGE_MIN_BPS = int(os.environ.get("DIGEST_PRICE_CHANGE_MIN_BPS", "100"))
-# Number of priced tokens to include in the digest's market line.
+# Number of priced tokens to include in the /stats price table.
 DIGEST_PRICE_TOKEN_LIMIT = max(0, int(os.environ.get("DIGEST_PRICE_TOKEN_LIMIT", "8")))
+
+# Compare executable V2 sizes against external reference markets. Repeated gaps
+# stay silent until their edge changes by MARKET_GAP_CHANGE_BPS basis points.
+MARKET_GAPS_ENABLED = os.environ.get("MARKET_GAPS_ENABLED", "1").lower() in ("1", "true", "yes")
+MARKET_GAP_SIZES_USD = os.environ.get("MARKET_GAP_SIZES_USD", "1,10,100")
+MARKET_GAP_MIN_BPS = max(0, int(os.environ.get("MARKET_GAP_MIN_BPS", "300")))
+MARKET_GAP_MIN_USD = os.environ.get("MARKET_GAP_MIN_USD", "0.25")
+MARKET_GAP_CHANGE_BPS = max(1, int(os.environ.get("MARKET_GAP_CHANGE_BPS", "200")))
+MARKET_GAP_SLIPPAGE_BPS = max(0, min(9999, int(os.environ.get("MARKET_GAP_SLIPPAGE_BPS", "50"))))
+MARKET_GAP_MAX_AGE_SECONDS = max(1, int(os.environ.get("MARKET_GAP_MAX_AGE_SECONDS", "300")))
 
 # Tokens pegged to $1 — anchor points for the price walker. Comma-separated
 # addresses. Default: USDC + USDT on Cyberia.
@@ -281,7 +291,7 @@ except ValueError:
 # Plain one-word messages people drop in chat ("ca?", "x") asking for the
 # project's social link or token contract address. Answered both as /x, /ca
 # commands and as bare-text triggers. All values are env-overridable.
-PROJECT_X_URL = os.environ.get("PROJECT_X_URL", "https://x.com/cyberia_temple")
+PROJECT_X_URL = os.environ.get("PROJECT_X_URL", "https://x.com/cyberia_chain")
 PROJECT_WEBSITE_URL = os.environ.get("PROJECT_WEBSITE_URL", "https://cyberia.church")
 TELEGRAM_CHANNEL_URL = os.environ.get("TELEGRAM_CHANNEL_URL", "https://t.me/cyberia_network")
 TELEGRAM_CHAT_URL = os.environ.get("TELEGRAM_CHAT_URL", "https://t.me/cyberia_network_chat")
@@ -373,7 +383,7 @@ LAIN_BUYBOT_ROADMAP_URL = os.environ.get("LAIN_BUYBOT_ROADMAP_URL", "https://lai
 
 # Ecosystem links surfaced as inline URL buttons under /start and /help.
 # Defaults derive the marketplace/pixel-battle pages from the project website.
-SWAP_URL = os.environ.get("SWAP_URL", "https://swap.cyberia.church")
+SWAP_URL = os.environ.get("SWAP_URL", "https://cyberia.church/swap")
 NFT_MARKET_URL = os.environ.get("NFT_MARKET_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/market")
 PIXEL_BATTLE_URL = os.environ.get("PIXEL_BATTLE_URL", PROJECT_WEBSITE_URL.rstrip("/") + "/pixels")
 # The wallet app download page. /app answers with this instead of an APK file

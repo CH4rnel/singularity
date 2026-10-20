@@ -26,7 +26,7 @@ from bot.config import (
     MIN_ANNOUNCE_USD, BIG_ANNOUNCE_USD, RITUAL_V2_FACTORY,
     RITUAL_V2_ROUTER, CYBERIA_V3_ROUTER,
     DIGEST_ANNOUNCE_CHAT, DIGEST_INTERVAL_SECONDS, DIGEST_RETENTION_DAYS,
-    DIGEST_PRICE_CHANGE_MIN_BPS, DIGEST_PRICE_TOKEN_LIMIT,
+    DIGEST_PRICE_CHANGE_MIN_BPS, DIGEST_PRICE_TOKEN_LIMIT, MARKET_GAPS_ENABLED,
     MARKET_SNAPSHOT_SECONDS, CYBER_CA_EVM,
     CYBER_SOL_MINT, CYBER_SOL_DECIMALS, WHALE_MIN_RAW,
     WHALE_CHAT_ID, WHALE_POLL_SECONDS, WHALE_RECHECK_SECONDS, DB_PATH,
@@ -51,7 +51,7 @@ from bot.utils import (
     _short_addr, _format_decimal_amount, _format_token_amount, _fmt_usd,
     _format_window, _fmt_amount, _fmt_price_usd, _plural,
 )
-from bot import pumpfun
+from bot import pumpfun, market_gaps
 
 logger = logging.getLogger(__name__)
 
@@ -401,7 +401,7 @@ async def _announce_swap_tick(bot, venue: str = "v2") -> None:
                     continue
 
                 text_lines = [
-                    "🔄 Swap on Ritual",
+                    "🔄 Swap on Cyberia",
                     f"{_format_token_amount(ann['in_amt'], ann['in_dec'])} {ann['in_sym']} → "
                     f"{_format_token_amount(ann['out_amt'], ann['out_dec'])} {ann['out_sym']}",
                 ]
@@ -540,7 +540,7 @@ async def _announce_liquidity_tick(bot) -> None:
             verb = "added" if is_add else "removed"
             sign = "+" if is_add else "-"
             text_lines = [
-                f"💧 Liquidity {verb} on Ritual",
+                f"💧 Liquidity {verb} on Cyberia",
                 f"{sign}{_format_token_amount(amount0, dec0)} {sym0} + "
                 f"{sign}{_format_token_amount(amount1, dec1)} {sym1}",
             ]
@@ -1242,9 +1242,12 @@ def _market_price_block() -> list[str]:
     return _price_block(pairs)
 
 
-def _build_digest_text(since: str, window_label: str) -> str | None:
+def _build_digest_text(
+    since: str, window_label: str, *, include_prices: bool = True,
+) -> str | None:
     """Summary of activity_events recorded after `since` (sqlite UTC text).
-    Returns None when the window is empty so quiet periods stay silent."""
+    Returns None when the window is empty so quiet periods stay silent.
+    Prices are optional context for /stats, omitted from automatic posts."""
     with engine.connect() as conn:
         swap_count, swap_vol, traders, unpriced = conn.execute(
             text("""
@@ -1433,9 +1436,10 @@ def _build_digest_text(since: str, window_label: str) -> str | None:
             line += f" · {b_new} new"
         blocks.append([line])
 
-    prices = _market_price_block()
-    if prices:
-        blocks.append(prices)
+    if include_prices:
+        prices = _market_price_block()
+        if prices:
+            blocks.append(prices)
 
     lines = [f"📊 <b>Cyberia · last {_esc(window_label)}</b>"]
     for block in blocks:
@@ -1462,30 +1466,37 @@ async def _digest_tick(bot) -> None:
         return
 
     since = last.strftime(_SQLITE_TS)
-    digest = await asyncio.to_thread(_build_digest_text, since, _format_window(elapsed))
+    digest = await asyncio.to_thread(
+        _build_digest_text, since, _format_window(elapsed), include_prices=False,
+    )
+    gap_state = None
+    gap_markup = None
+    if MARKET_GAPS_ENABLED:
+        result = await asyncio.to_thread(market_gaps.scan)
+        gap_text, gap_markup, gap_state = market_gaps.prepare(result, _kv_get(market_gaps.STATE_KEY))
+        if gap_text:
+            digest = digest + "\n\n" + gap_text if digest else gap_text
     if digest is None:
         # Quiet window: advance silently so the next digest doesn't double-count,
         # but keep the price base fresh.
         _kv_set(_KV_LAST_DIGEST_AT, now.strftime(_SQLITE_TS))
+        if gap_state is not None:
+            _kv_set(market_gaps.STATE_KEY, gap_state)
         await asyncio.to_thread(_cyber_price_line, True)
         logger.info(f"digest: no activity since {since}, skipping post")
         return
 
-    price_line = await asyncio.to_thread(_cyber_price_line, False, False)
-    if price_line:
-        digest += "\n\n" + price_line
-
     try:
         await bot.send_message(
             chat_id=DIGEST_ANNOUNCE_CHAT, text=digest,
-            parse_mode="HTML", disable_web_page_preview=True,
+            parse_mode="HTML", disable_web_page_preview=True, reply_markup=gap_markup,
         )
     except TelegramError as e:
         logger.warning(f"digest: HTML rejected ({e}); sending it as plain text")
         try:
             await bot.send_message(
                 chat_id=DIGEST_ANNOUNCE_CHAT, text=_plain(digest),
-                disable_web_page_preview=True,
+                disable_web_page_preview=True, reply_markup=gap_markup,
             )
         except TelegramError as plain_error:
             # Window stays open; the next tick retries with a wider range.
@@ -1493,6 +1504,8 @@ async def _digest_tick(bot) -> None:
             return
 
     _kv_set(_KV_LAST_DIGEST_AT, now.strftime(_SQLITE_TS))
+    if gap_state is not None:
+        _kv_set(market_gaps.STATE_KEY, gap_state)
     await asyncio.to_thread(_cyber_price_line, True)
     logger.info(f"digest: posted window since {since}")
 

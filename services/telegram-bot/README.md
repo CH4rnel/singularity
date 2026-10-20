@@ -28,6 +28,7 @@ bot/
   slots.py       🎰 slot machine: Telegram's own dice, a per-chat bank
   pumpfun.py     pump.fun buy detection (Solana RPC + market feed) and the post
   buybot.py      opt-in LAIN/Pons v4 buy cards and ecosystem buttons
+  market_gaps.py sized V2 buy/sell comparisons against outside reference markets
   announcers.py  background loops (bridge/swap/liquidity/lending/convert/
                  staking/pumpfun/digest/snapshot/whale) + run_snapshot_once
   app.py         build app, register handlers, schedule loops, main()
@@ -246,8 +247,12 @@ logged: these URLs carry api keys. `tests/test_solana_failover.py` pins it.
 
 ### Activity digest
 
-Posted every `DIGEST_INTERVAL_SECONDS` (`0` mutes it), and on demand via
-`/stats [window]`. Sent as Telegram HTML in blocks separated by blank lines —
+Automatic summaries cover new activity since the previous window and new or
+materially changed market gaps, at most once per `DIGEST_INTERVAL_SECONDS`
+(`0` mutes them). With neither, the window stays silent. The full price table
+and CYBER.sol price line are available on demand via `/stats [window]`.
+
+Sent as Telegram HTML in blocks separated by blank lines —
 Telegram gives every line the same weight, so eight stacked lines read as one
 grey paragraph. Each block leads with its headline number in bold and carries
 its detail as `•` bullets under it; prices are an aligned `<pre>` table rather
@@ -258,9 +263,40 @@ scientific notation (a five-million-CYBER.sol bridge used to arrive as
 `5.14993e+06`), `_fmt_usd` keeps three significant figures below a cent instead
 of rounding to `$0.0000`, and `_fmt_price_usd` keeps four so a sub-cent coin
 still differs from the next one. Token symbols come off pairs anyone may
-create, so every dynamic string is HTML-escaped. Small price changes are hidden
-by default (`DIGEST_PRICE_CHANGE_MIN_BPS=100`) and `DIGEST_PRICE_TOKEN_LIMIT`
-caps the price table. `tests/test_digest_format.py` pins the formatting.
+create, so every dynamic string is HTML-escaped. In `/stats`, small changes in
+the separate CYBER.sol price line are hidden by default
+(`DIGEST_PRICE_CHANGE_MIN_BPS=100`) and `DIGEST_PRICE_TOKEN_LIMIT` caps the price
+table. `tests/test_digest_format.py` pins the formatting.
+
+Market gaps compare BTC, LTC, SOL, ETH, BNB, XMR, TRX and YTN wrappers from
+`crypto/hardhat/deployments/cyberia-tokens.json` against CoinGecko IDs, and
+CYBER.sol against its exact Solana mint on DexScreener. Unmapped assets such as
+WCYBER and ASH are not matched to unrelated coins by ticker. Missing, stale or
+unreadable references produce no signal; the Solana feed must have a trade in
+its five-minute bucket and at least $1,000 of liquidity. USDC/USDT use their
+external USD quotes rather than an assumed peg.
+
+The scanner reads V2 reserves at one fresh Cyberia block, walks routes through
+the configured anchors/relays (up to three pools), and calculates raw integer
+outputs with each pool's 0.3% fee. It tries $1, $10 and $100 by default
+(`MARKET_GAP_SIZES_USD`) and applies a 0.5% output buffer
+(`MARKET_GAP_SLIPPAGE_BPS`). Only an edge of at least 3%
+(`MARKET_GAP_MIN_BPS`) and $0.25 (`MARKET_GAP_MIN_USD`) is posted as an English
+URL button, buys first and sells second. Each button names Cyberia, the token,
+and the discount/premium, and opens `/swap` with the
+correct input/output tokens on chain 49406. The message carries only a short
+caption and the costs excluded from the comparison. This is a V2 comparison, not a
+search of V3 or an executable quote on the outside venue. Gas, bridge capacity,
+bridge fees and outside execution costs are not measured, so the post labels
+the difference before these costs and never calls it net arbitrage profit.
+
+An unchanged gap is not repeated. The next post requires a new token/side or a
+change of at least two percentage points from the last published edge
+(`MARKET_GAP_CHANGE_BPS`). A confirmed disappearance resets the signal; a
+failed read preserves it. State is written to `bot_kv` only after delivery (or
+a silent window with confirmed disappearances), so a failed Telegram send can
+retry. `MARKET_GAPS_ENABLED=0` disables comparisons without muting activity.
+`tests/test_market_gaps.py` covers sizing, price impact, freshness and delivery.
 
 ### AI assistant
 
