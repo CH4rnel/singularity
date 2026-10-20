@@ -358,7 +358,7 @@ class FormatBuyTest(unittest.TestCase):
 
 class PhotoCardTest(unittest.TestCase):
     def test_feed_fdv_is_distinct_from_circulating_market_cap(self):
-        pair = {"chainId": "solana", "baseToken": {"address": MINT},
+        pair = {"chainId": "solana", "dexId": "pumpswap", "baseToken": {"address": MINT},
                 "quoteToken": {"address": WSOL}, "pairAddress": POOL,
                 "priceUsd": "0.0001", "priceNative": "0.000001",
                 "fdv": 100000, "marketCap": 80000}

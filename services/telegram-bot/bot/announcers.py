@@ -1,6 +1,7 @@
 """Background announcer loops and the periodic market snapshot."""
 import asyncio
 import html
+import json
 import re
 import time
 import logging
@@ -51,9 +52,21 @@ from bot.utils import (
     _short_addr, _format_decimal_amount, _format_token_amount, _fmt_usd,
     _format_window, _fmt_amount, _fmt_price_usd, _plural,
 )
-from bot import pumpfun, market_gaps
+from bot import pumpfun, market_gaps, projects
 
 logger = logging.getLogger(__name__)
+
+
+async def _send_cyber_message(bot, **kwargs):
+    """Keep ecosystem broadcasts out of groups configured for another project."""
+    destination = str(kwargs["chat_id"])
+    chat_id = int(destination) if destination.lstrip("-").isdigit() else (await bot.get_chat(destination)).id
+    raw = _kv_get(projects.PREFIX + str(chat_id))
+    if raw and not json.loads(raw).get("cyber"):
+        return
+    if not raw and _kv_get("lain_buybot_chat:" + str(chat_id)) in {"on", "off"}:
+        return
+    await bot.send_message(**dict(kwargs, chat_id=chat_id))
 
 
 # Bridge direction keys are '{source}_to_{dest}' over these per-chain
@@ -147,7 +160,7 @@ async def _announce_bridge_tick(bot) -> None:
         if dst_link:
             lines.append(f"Destination: {dst_link}")
         try:
-            await bot.send_message(
+            await _send_cyber_message(bot,
                 chat_id=BRIDGE_ANNOUNCE_CHAT,
                 text="\n".join(lines),
                 disable_web_page_preview=True,
@@ -418,7 +431,7 @@ async def _announce_swap_tick(bot, venue: str = "v2") -> None:
                 continue
 
             try:
-                await bot.send_message(
+                await _send_cyber_message(bot,
                     chat_id=SWAP_ANNOUNCE_CHAT,
                     text="\n".join(text_lines),
                     disable_web_page_preview=True,
@@ -557,7 +570,7 @@ async def _announce_liquidity_tick(bot) -> None:
             continue
 
         try:
-            await bot.send_message(
+            await _send_cyber_message(bot,
                 chat_id=LIQUIDITY_ANNOUNCE_CHAT,
                 text="\n".join(text_lines),
                 disable_web_page_preview=True,
@@ -703,7 +716,7 @@ async def _announce_lending_tick(bot) -> None:
             continue
 
         try:
-            await bot.send_message(
+            await _send_cyber_message(bot,
                 chat_id=LENDING_ANNOUNCE_CHAT,
                 text="\n".join(text_lines),
                 disable_web_page_preview=True,
@@ -818,7 +831,7 @@ async def _announce_cybersol_swap_tick(bot) -> None:
             continue
 
         try:
-            await bot.send_message(
+            await _send_cyber_message(bot,
                 chat_id=CYBERSOL_SWAP_ANNOUNCE_CHAT,
                 text="\n".join(text_lines),
                 disable_web_page_preview=True,
@@ -855,6 +868,16 @@ async def _announce_pumpfun_tick(bot) -> None:
     if not PUMPFUN_ANNOUNCE_CHAT:
         return
 
+    # Numeric destinations can be checked locally. Public handles need their
+    # Telegram id because group configuration is always keyed by numeric id.
+    destination = str(PUMPFUN_ANNOUNCE_CHAT)
+    if destination.lstrip("-").isdigit():
+        destination_id = int(destination)
+    else:
+        destination_id = (await bot.get_chat(PUMPFUN_ANNOUNCE_CHAT)).id
+    publish = (projects.saved(destination_id) is None
+               and _kv_get("lain_buybot_chat:" + str(destination_id)) not in {"on", "off"})
+
     market = await asyncio.to_thread(pumpfun.market_snapshot, CYBER_SOL_MINT)
     if not market:
         # No SOL price means no way to size a buy against the threshold. Hold
@@ -886,6 +909,9 @@ async def _announce_pumpfun_tick(bot) -> None:
     )
 
     for buy in buys:
+        if publish and (projects.saved(destination_id) is not None
+                        or _kv_get("lain_buybot_chat:" + str(destination_id)) in {"on", "off"}):
+            publish = False
         usd = buy["sol_amount"] * market["sol_usd"]
         event_kwargs = dict(
             kind="pumpfun_buy", usd=usd,
@@ -897,12 +923,12 @@ async def _announce_pumpfun_tick(bot) -> None:
 
         # Buys under the floor never get their own post; they are recorded and
         # surface in the periodic digest instead of firehosing the chat.
-        if usd < PUMPFUN_MIN_BUY_USD:
+        if not publish or usd < PUMPFUN_MIN_BUY_USD:
             _record_activity(**event_kwargs)
             _set_block_cursor("last_announced_pumpfun_cursor", buy["slot"], buy["tx_index"])
             logger.info(
                 f"pumpfun_announcer: digest-only tx={buy['signature']} "
-                f"usd={usd:.2f} < {PUMPFUN_MIN_BUY_USD:g}"
+                f"usd={usd:.2f}"
             )
             continue
 
@@ -927,7 +953,7 @@ async def _announce_pumpfun_tick(bot) -> None:
             cap = market.get("fdv")
 
         try:
-            await pumpfun.send_buy(bot, PUMPFUN_ANNOUNCE_CHAT, buy, usd, cap)
+            await pumpfun.send_buy(bot, destination_id, buy, usd, cap)
         except TelegramError as e:
             logger.error(f"pumpfun_announcer: send failed for {buy['signature']}: {e}")
             return  # cursor still before this buy; it retries next tick
@@ -1107,7 +1133,7 @@ async def _announce_staking_tick(bot) -> None:
             continue
 
         try:
-            await bot.send_message(
+            await _send_cyber_message(bot,
                 chat_id=STAKING_ANNOUNCE_CHAT,
                 text="\n".join(text_lines),
                 disable_web_page_preview=True,
@@ -1487,14 +1513,14 @@ async def _digest_tick(bot) -> None:
         return
 
     try:
-        await bot.send_message(
+        await _send_cyber_message(bot,
             chat_id=DIGEST_ANNOUNCE_CHAT, text=digest,
             parse_mode="HTML", disable_web_page_preview=True, reply_markup=gap_markup,
         )
     except TelegramError as e:
         logger.warning(f"digest: HTML rejected ({e}); sending it as plain text")
         try:
-            await bot.send_message(
+            await _send_cyber_message(bot,
                 chat_id=DIGEST_ANNOUNCE_CHAT, text=_plain(digest),
                 disable_web_page_preview=True, reply_markup=gap_markup,
             )

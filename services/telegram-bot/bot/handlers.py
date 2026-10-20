@@ -17,7 +17,6 @@ from bot.config import (
     RPC_URL, CHAIN_ID, EXPLORER_URL,
     TELEGRAM_TOKEN_FACTORY, DEPLOYER_PK,
     PROJECT_X_URL, PROJECT_WEBSITE_URL, TELEGRAM_CHANNEL_URL, TELEGRAM_CHAT_URL,
-    CYBER_CA_SOLANA, CYBER_CA_EVM,
     WHALE_CHAT_ID, WHALE_MIN_CYBER_SOL, WHALE_VERIFY_URL, WHALE_LINK_TTL_MINUTES,
     SWAP_URL, NFT_MARKET_URL, PIXEL_BATTLE_URL, APP_DOWNLOAD_URL,
     WALLET_MINI_APP_URL,
@@ -26,6 +25,7 @@ from bot.config import (
     AI_MODEL_CHOICE,
 )
 from bot.db import engine
+from bot import projects
 from bot.utils import (
     is_valid_eth_address, parse_interval, format_interval, slugify_symbol,
     _format_window, _format_token_amount, _short_addr,
@@ -36,7 +36,7 @@ from bot.chain import next_nonce
 logger = logging.getLogger(__name__)
 
 
-def _main_menu_kb() -> InlineKeyboardMarkup:
+def _main_menu_kb(chat=None) -> InlineKeyboardMarkup:
     """Inline keyboard of ecosystem links shown under /start and /help.
 
     URL buttons only — no callbacks — so it cannot interfere with any command
@@ -51,6 +51,14 @@ def _main_menu_kb() -> InlineKeyboardMarkup:
         ("𝕏 Twitter", PROJECT_X_URL),
         ("📣 Channel", TELEGRAM_CHANNEL_URL),
     ]
+    if chat is not None:
+        project = projects.for_chat(chat)
+        pairs = [("📱 Cyberia Wallet", APP_DOWNLOAD_URL)]
+        if project:
+            pairs += [(label, project.get(field)) for label, field in (
+                ("🌐 Website", "website"), ("𝕏 Twitter", "x"),
+                ("📣 Channel", "channel"), ("Chat", "telegram"), ("Trade", "trade"),
+            )]
     buttons = [InlineKeyboardButton(label, url=url) for label, url in pairs if url]
     rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     return InlineKeyboardMarkup(rows)
@@ -185,7 +193,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Example: /set_wallet 0x1234567890abcdef1234567890abcdef12345678",
         ]
 
-    await update.message.reply_text("\n".join(lines), reply_markup=_main_menu_kb())
+    await update.message.reply_text("\n".join(lines), reply_markup=_main_menu_kb(update.effective_chat))
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -225,8 +233,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/github <username> <address> - link GitHub for GITHUB token airdrop\n"
         "/whale - verify CYBER.sol holdings to join the whales chat\n"
         "/x - X (Twitter) and Telegram links (also replies to \"x\")\n"
-        "/ca - CYBER contract address (also replies to \"ca\")\n"
-        "/stats [window] - on-chain activity digest (default 24h, e.g. /stats 6h)\n"
+        "/ca - this chat's token contract address (also replies to \"ca\")\n"
+        "/buybot - (admins) configure this chat's project and buy alerts\n"
+        "/stats [window] - this chat's project stats (Cyberia digest: /stats 6h)\n"
         + ai_lines +
         "/set_channel_wallet <@channel> <0x..> - (channel admins) wallet that receives post NFTs\n"
         "/app - download the Cyberia wallet app\n"
@@ -234,12 +243,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         + ai_hint +
         "You can chat in groups without a wallet -- rewards will be saved as "
         "pending and minted in one go when you /set_wallet.",
-        reply_markup=_main_menu_kb(),
+        reply_markup=_main_menu_kb(update.effective_chat),
     )
 
 
 async def website_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(PROJECT_WEBSITE_URL)
+    project = projects.for_chat(update.effective_chat)
+    await update.message.reply_text(
+        project.get("website") or "Website is not configured for this chat."
+        if project else "No project is configured for this chat.\n" + projects.SETUP_HINT
+    )
 
 
 def mini_app_markup(is_private: bool) -> InlineKeyboardMarkup:
@@ -341,56 +354,36 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-def _build_x_reply() -> str:
-    """X (Twitter) link, plus the Telegram channel/chat for good measure."""
-    lines = [f"𝕏 (Twitter): {PROJECT_X_URL}"]
-    if TELEGRAM_CHANNEL_URL:
-        lines.append(f"Channel: {TELEGRAM_CHANNEL_URL}")
-    if TELEGRAM_CHAT_URL:
-        lines.append(f"Chat: {TELEGRAM_CHAT_URL}")
-    return "\n".join(lines)
+def _build_x_reply(chat) -> str:
+    return projects.x_reply(projects.for_chat(chat))
 
 
-def _build_ca_reply() -> str:
-    """CYBER contract address(es). Solana mint first (the pump.fun token people
-    trade), then the bridged EVM token with an explorer link."""
-    if not CYBER_CA_SOLANA and not CYBER_CA_EVM:
-        return "Contract address is not configured on this bot yet."
-    # Addresses are wrapped in backticks so Telegram renders them as inline
-    # code (tap-to-copy). Sent with parse_mode="Markdown"; neither the
-    # addresses nor the explorer URL contain legacy-Markdown-special chars.
-    lines = ["📜 CYBER contract address:"]
-    if CYBER_CA_SOLANA:
-        lines.append(f"Solana (CYBER.sol): `{CYBER_CA_SOLANA}`")
-    if CYBER_CA_EVM:
-        lines.append(f"Cyberia EVM: `{CYBER_CA_EVM}`")
-        lines.append(f"{EXPLORER_URL}/address/{CYBER_CA_EVM}")
-    return "\n".join(lines)
+def _build_ca_reply(chat) -> str:
+    return projects.ca_reply(projects.for_chat(chat))
 
 
 async def x_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/x — reply with the project's X (Twitter) and Telegram links."""
-    await update.message.reply_text(_build_x_reply())
+    await update.message.reply_text(_build_x_reply(update.effective_chat))
 
 
 async def ca_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/ca — reply with the CYBER token contract address(es)."""
+    """/ca — reply with this group's configured token contract address."""
     await update.message.reply_text(
-        _build_ca_reply(), parse_mode="Markdown", disable_web_page_preview=True
+        _build_ca_reply(update.effective_chat), parse_mode="HTML", disable_web_page_preview=True
     )
 
 
 # Bare-text triggers -> reply builder. Synonyms map to the same answer so that
 # "ca", "contract" or "address" all surface the contract address.
-# trigger -> (reply builder, parse_mode). The CA replies use Markdown so the
-# backtick-wrapped addresses render as tap-to-copy inline code; the X/links
-# reply stays plain text (its URLs may contain Markdown-special chars).
+# trigger -> (reply builder, parse_mode). HTML escapes project-controlled text
+# while retaining tap-to-copy contract addresses.
 _QUICK_REPLIES = {
     "x": (_build_x_reply, None),
     "twitter": (_build_x_reply, None),
-    "ca": (_build_ca_reply, "Markdown"),
-    "contract": (_build_ca_reply, "Markdown"),
-    "address": (_build_ca_reply, "Markdown"),
+    "ca": (_build_ca_reply, "HTML"),
+    "contract": (_build_ca_reply, "HTML"),
+    "address": (_build_ca_reply, "HTML"),
 }
 
 # Matches a message that is *only* a trigger word, optionally wrapped in
@@ -433,7 +426,7 @@ async def quick_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     builder, parse_mode = entry
     await update.message.reply_text(
-        builder(), parse_mode=parse_mode, disable_web_page_preview=True
+        builder(update.effective_chat), parse_mode=parse_mode, disable_web_page_preview=True
     )
 
 
@@ -2007,6 +2000,28 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/stats [window] — on-demand activity digest, default last 24h.
     Examples: /stats, /stats 6h, /stats 3d. Read-only: never moves the
     periodic digest's window or its price comparison base."""
+    project = projects.for_chat(update.effective_chat)
+    if not project:
+        await update.message.reply_text("No project is configured for this chat.\n" + projects.SETUP_HINT)
+        return
+    if not project.get("cyber"):
+        if project["chain"] != "solana":
+            await update.message.reply_text("Activity statistics are not available for this project's network.")
+            return
+        from bot import pumpfun
+        market = await asyncio.to_thread(pumpfun.market_snapshot, project["address"])
+        if not market:
+            await update.message.reply_text("Market data is unavailable for this chat's token.")
+            return
+        lines = [f"{project['symbol']} · Solana · latest available market snapshot"]
+        for label, field in (("Price", "price_usd"), ("FDV", "fdv"),
+                             ("Liquidity", "liquidity"), ("24h volume", "volume_24h")):
+            value = market.get(field)
+            lines.append(f"{label}: ${value:,.10g}" if value is not None else f"{label}: unavailable")
+        if market.get("read_at"):
+            lines.append("Read at: " + datetime.fromtimestamp(market["read_at"], timezone.utc).isoformat())
+        await update.message.reply_text("\n".join(lines))
+        return
     args = context.args or []
     seconds = 24 * 3600
     if args:

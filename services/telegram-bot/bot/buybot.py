@@ -6,6 +6,7 @@ pool count. USD is optional, indicative market data; it never gates delivery.
 This module reads chain data and sends notices. It cannot trade or mint.
 """
 import asyncio
+import html
 import json
 import logging
 import time
@@ -153,7 +154,7 @@ def _address(address):
     return f'<a href="{EXPLORER}/address/{address}">{address[:6]}…{address[-4:]}</a>'
 
 
-def format_buy(buy, eth_usd=None, supply=None, preview=False):
+def format_buy(buy, eth_usd=None, supply=None, preview=False, project=None):
     lines = (["<b>PREVIEW · historical transaction</b>"] if preview else [])
     lines += ["🔹 <b>LAIN Buy!</b> · Robinhood Chain", "",
               "🎲" * min(20, max(1, int(buy["eth"] / Decimal("0.005")))), ""]
@@ -171,8 +172,11 @@ def format_buy(buy, eth_usd=None, supply=None, preview=False):
         lines.append(f'🔼 FDV ≈ <b>${cap:,.0f}</b>')
     if eth_usd:
         lines.append("<i>USD estimates use the latest ETH quote.</i>")
-    lines += ["", f'<a href="{EXPLORER}/tx/{buy["tx"]}">Transaction</a> · '
-              f'<a href="https://www.geckoterminal.com/robinhood/pools/{POOL_ID}">Chart</a>']
+    chart = project["chart"] if project is not None else f"https://www.geckoterminal.com/robinhood/pools/{POOL_ID}"
+    footer = f'<a href="{EXPLORER}/tx/{buy["tx"]}">Transaction</a>'
+    if chart:
+        footer += f' · <a href="{html.escape(chart, quote=True)}">Chart</a>'
+    lines += ["", footer]
     return "\n".join(lines)
 
 
@@ -259,22 +263,26 @@ def _save(chat_id, block, index, block_hash):
     _kv_set(_state_key(chat_id), json.dumps({"block": block, "index": index, "hash": _hex(block_hash)}))
 
 
-async def send_buy(bot, chat_id, buy, quote=None, supply=None, preview=False):
-    caption = format_buy(buy, quote, supply, preview)
-    if LAIN_BUYBOT_PHOTO_URL:
+async def send_buy(bot, chat_id, buy, quote=None, supply=None, preview=False, project=None):
+    from bot import pumpfun
+    markup = pumpfun.keyboard(project) if project else keyboard()
+    photo = project["photo"] if project else LAIN_BUYBOT_PHOTO_URL
+    caption = format_buy(buy, quote, supply, preview, project)
+    if photo:
         try:
-            await bot.send_photo(chat_id=chat_id, photo=LAIN_BUYBOT_PHOTO_URL,
-                                 caption=caption, parse_mode="HTML", reply_markup=keyboard())
+            await bot.send_photo(chat_id=chat_id, photo=photo,
+                                 caption=caption, parse_mode="HTML", reply_markup=markup)
             return
         except BadRequest:
             # A rejected image must not suppress the chain event. A timeout
             # is ambiguous, so it propagates instead of sending a second copy.
             pass
     await bot.send_message(chat_id=chat_id, text=caption, parse_mode="HTML",
-                           disable_web_page_preview=True, reply_markup=keyboard())
+                           disable_web_page_preview=True, reply_markup=markup)
 
 
 async def tick(bot, reader=None, now=None):
+    from bot import projects
     chats = _subscriptions()
     if not chats:
         return  # no chain/market traffic before a chat opts in
@@ -323,7 +331,7 @@ async def tick(bot, reader=None, now=None):
                     quote = await asyncio.to_thread(eth_quote)
                     supply = await asyncio.to_thread(reader.supply, position[0]) if quote else None
                     if _kv_get(CHAT_PREFIX + str(chat_id)) == "on":
-                        await send_buy(bot, chat_id, buy, quote, supply)
+                        await send_buy(bot, chat_id, buy, quote, supply, project=projects.saved(chat_id))
                 # Persist only after successful send (or a classified skip).
                 # Telegram has no idempotency key: a lost successful response
                 # or a crash before this write can still cause a duplicate.
@@ -349,6 +357,7 @@ async def loop(application):
 
 
 async def command(update, context):
+    from bot import projects, pumpfun
     chat, user = update.effective_chat, update.effective_user
     if not chat or not user or not update.effective_message:
         return
@@ -375,7 +384,7 @@ async def command(update, context):
             buy = parse_buy(receipt)
             if not buy:
                 raise RuntimeError("sample purchase could not be verified")
-            await send_buy(context.bot, chat.id, buy, preview=True)
+            await send_buy(context.bot, chat.id, buy, preview=True, project=projects.saved(chat.id))
         except Exception:
             await message.reply_text("Could not load the sample purchase from the chain. Please try again later.")
         return
@@ -402,5 +411,5 @@ async def command(update, context):
         status + f"Robinhood Chain · ETH/LAIN · minimum {MIN_ETH} ETH.\n"
         "Commands: /buybot on · off · status · reset · preview\n"
         "Only new purchases are announced after enabling alerts. Historical purchases are not replayed.",
-        reply_markup=keyboard(),
+        reply_markup=pumpfun.keyboard(projects.saved(chat.id)) if projects.saved(chat.id) else keyboard(),
     )

@@ -19,11 +19,15 @@ at, while the pump.fun page the post links to quotes the pool's reserves. So
 the cap is computed here from the reserves the announced buy left behind — see
 market_cap_after().
 """
+import asyncio
 import html
 import json
 import logging
 import time
 import urllib.request
+import uuid
+
+from sqlalchemy import text
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
@@ -37,7 +41,10 @@ from bot.config import (
     PUMPFUN_BUY_EMOJI, PUMPFUN_EMOJI_USD, PUMPFUN_EMOJI_MAX,
     PUMPFUN_MIN_POSITION_PCT, PUMPFUN_CHART_URL, PUMPFUN_TRADE_URL,
     PUMPFUN_PHOTO_URL, PUMPFUN_ROADMAP_URL, PROJECT_X_URL, WALLET_MINI_APP_URL,
+    PUMPFUN_MAX_AGE_SECONDS,
+    PUMPFUN_POLL_SECONDS,
 )
+from bot import db
 from bot.solana import solana_rpc
 from bot.utils import _short_addr
 
@@ -50,8 +57,7 @@ SOL_DECIMALS = 9
 
 # Last good market snapshot. Kept across ticks so a DexScreener blip prices the
 # next buy off a slightly stale quote instead of dropping it.
-_market_cache: dict | None = None
-_market_fetched_at: float = 0.0
+_market_cache: dict[str, tuple[dict, float]] = {}
 
 # mint -> (supply, monotonic time it was read). A supply only moves when
 # somebody burns, so this is read rarely and the last answer outlives a blip.
@@ -86,28 +92,31 @@ def _as_float(value) -> float | None:
 
 # --- market feed --------------------------------------------------------------
 def market_snapshot(mint: str = CYBER_SOL_MINT) -> dict | None:
-    """{pool, sol_usd, price_usd, market_cap} for the deepest SOL-quoted pair,
+    """{pool, sol_usd, price_usd, market_cap} for the deepest SOL-quoted PumpSwap pair,
     or the last good snapshot when the feed is unreadable, or None if we have
     never read one. Cached for PUMPFUN_MARKET_TTL_SECONDS. Blocking.
 
     `market_cap` is the feed's own figure and is only a fallback: it lags a
     buy by that buy's own price impact. market_cap_after() is the number the
     post prints."""
-    global _market_cache, _market_fetched_at
+    global _market_cache
 
     now = time.monotonic()
-    if _market_cache and now - _market_fetched_at < PUMPFUN_MARKET_TTL_SECONDS:
-        return _market_cache
+    cached, fetched_at = (_market_cache or {}).get(mint, (None, 0))
+    if cached and now - fetched_at < PUMPFUN_MARKET_TTL_SECONDS:
+        return cached
 
     try:
         data = _http_json(f"{DEXSCREENER_API_URL}/latest/dex/tokens/{mint}")
     except Exception as e:
         logger.warning(f"pumpfun: market feed unreadable ({e}); keeping last snapshot")
-        return _market_cache
+        return cached
 
     best_liq, best = -1.0, None
     for pair in (data.get("pairs") or []):
         if (pair.get("chainId") or "") != "solana":
+            continue
+        if pair.get("dexId") != "pumpswap":
             continue
         if ((pair.get("baseToken") or {}).get("address") or "") != mint:
             continue
@@ -119,25 +128,33 @@ def market_snapshot(mint: str = CYBER_SOL_MINT) -> dict | None:
 
     if best is None:
         logger.warning(f"pumpfun: no SOL-quoted pair for {mint} in the market feed")
-        return _market_cache
+        return cached
 
     # SOL/USD is the pair's own two quotes divided out — the same trade priced
     # in USD and in SOL — so the buy is sized against the venue it happened on.
     price_usd = _as_float(best.get("priceUsd"))
     price_native = _as_float(best.get("priceNative"))
-    if not price_usd or not price_native:
+    if price_usd is None or price_native is None or price_usd <= 0 or price_native <= 0:
         logger.warning("pumpfun: market feed carries no usable price; keeping last snapshot")
-        return _market_cache
+        return cached
+    sol_usd = _as_float(price_usd / price_native)
+    if sol_usd is None or sol_usd <= 0:
+        return cached
 
-    _market_cache = {
+    snapshot = {
         "pool": best.get("pairAddress"),
-        "sol_usd": price_usd / price_native,
+        "sol_usd": sol_usd,
         "price_usd": price_usd,
         "market_cap": _as_float(best.get("marketCap")),
         "fdv": _as_float(best.get("fdv")),
+        "liquidity": _as_float((best.get("liquidity") or {}).get("usd")),
+        "volume_24h": _as_float((best.get("volume") or {}).get("h24")),
+        "read_at": time.time(),
     }
-    _market_fetched_at = now
-    return _market_cache
+    if _market_cache is None:
+        _market_cache = {}
+    _market_cache[mint] = (snapshot, now)
+    return snapshot
 
 
 # --- chain scan ---------------------------------------------------------------
@@ -370,10 +387,12 @@ def _fmt_usd(value: float) -> str:
     return f"${_fmt_grouped(value, 2)}"
 
 
-def _emoji_row(usd: float | None) -> str:
+def _emoji_row(usd: float | None, project: dict | None = None) -> str:
     """One emoji per PUMPFUN_EMOJI_USD of the buy: the row's length is the size."""
-    steps = 1 if not usd or PUMPFUN_EMOJI_USD <= 0 else round(usd / PUMPFUN_EMOJI_USD)
-    return PUMPFUN_BUY_EMOJI * max(1, min(int(steps), PUMPFUN_EMOJI_MAX))
+    step = project["emoji_usd"] if project is not None else PUMPFUN_EMOJI_USD
+    emoji = project["emoji"] if project is not None else PUMPFUN_BUY_EMOJI
+    steps = 1 if not usd or step <= 0 else round(min(PUMPFUN_EMOJI_MAX, usd / step))
+    return html.escape(emoji) * max(1, min(int(steps), PUMPFUN_EMOJI_MAX))
 
 
 def _position_line(buy: dict) -> str | None:
@@ -387,24 +406,31 @@ def _position_line(buy: dict) -> str | None:
     return f"⬆️ Position: {_fmt_grouped(pct, 0)}% Up!"
 
 
-def _footer() -> str:
+def _footer(project: dict | None = None) -> str:
     links = []
-    if PUMPFUN_CHART_URL:
-        links.append(f'📈 <a href="{html.escape(PUMPFUN_CHART_URL, quote=True)}">Chart</a>')
+    chart = project["chart"] if project is not None else PUMPFUN_CHART_URL
+    if chart:
+        links.append(f'📈 <a href="{html.escape(chart, quote=True)}">Chart</a>')
     return "   ".join(links)
 
 
-def keyboard():
+def keyboard(project: dict | None = None):
     """Trading and Cyberia links, using Telegram's own button theme."""
     rows = [
         [("Buy on pump.fun", PUMPFUN_TRADE_URL), ("X / Twitter", PROJECT_X_URL)],
         [("Roadmap", PUMPFUN_ROADMAP_URL), ("🎲 Cyberia Wallet", WALLET_MINI_APP_URL)],
     ]
+    if project is not None:
+        rows = [
+            [("Trade", project.get("trade")), ("X / Twitter", project.get("x"))],
+            [("Website", project.get("website")), ("Roadmap", project.get("roadmap"))],
+        ]
     buttons = [[InlineKeyboardButton(label, url=url) for label, url in row if url] for row in rows]
     return InlineKeyboardMarkup([row for row in buttons if row])
 
 
-def format_buy(buy: dict, usd: float | None, market_cap: float | None) -> str:
+def format_buy(buy: dict, usd: float | None, market_cap: float | None,
+               project: dict | None = None) -> str:
     """The chat post, in Telegram HTML.
 
     Three blocks separated by blank lines — what happened, the trade itself,
@@ -424,14 +450,17 @@ def format_buy(buy: dict, usd: float | None, market_cap: float | None) -> str:
     if usd is not None:
         sol_line += f" (≈ {_fmt_usd(usd)})"
 
+    label = html.escape(project["name"] if project is not None else PUMPFUN_TOKEN_LABEL)
+    symbol = html.escape(project["symbol"] if project is not None else PUMPFUN_TOKEN_SYMBOL)
+    token_url = (project.get("telegram") or project.get("website") or project["trade"]) if project is not None else PUMPFUN_TOKEN_URL
+    headline = f'<a href="{html.escape(token_url, quote=True)}">{label}</a>' if token_url else label
     lines = [
-        f'🔹 <b><a href="{html.escape(PUMPFUN_TOKEN_URL, quote=True)}">'
-        f"{html.escape(PUMPFUN_TOKEN_LABEL)}</a> Buy!</b> · Solana",
+        f'🔹 <b>{headline} Buy!</b> · Solana',
         "",
-        _emoji_row(usd),
+        _emoji_row(usd, project),
         "",
         sol_line,
-        f"🪙 <b>{_fmt_grouped(buy['token_amount'], 1)} {html.escape(PUMPFUN_TOKEN_SYMBOL)}</b>",
+        f"🪙 <b>{_fmt_grouped(buy['token_amount'], 1)} {symbol}</b>",
         f"🔷 {who} | {txn}",
     ]
     position = _position_line(buy)
@@ -439,21 +468,22 @@ def format_buy(buy: dict, usd: float | None, market_cap: float | None) -> str:
         lines.append(position)
     if market_cap:
         lines.append(f"🔼 FDV ≈ <b>${_fmt_grouped(market_cap, 0)}</b>")
-    footer = _footer()
+    footer = _footer(project)
     if footer:
         lines += ["", footer]
     return "\n".join(lines)
 
 
-async def send_buy(bot, chat_id, buy, usd, market_cap, preview=False):
-    caption = format_buy(buy, usd, market_cap)
+async def send_buy(bot, chat_id, buy, usd, market_cap, preview=False, project=None):
+    caption = format_buy(buy, usd, market_cap, project)
     if preview:
         caption = "<b>PREVIEW · historical transaction</b>\n\n" + caption
-    if PUMPFUN_PHOTO_URL:
+    photo = project["photo"] if project is not None else PUMPFUN_PHOTO_URL
+    if photo:
         try:
             return await bot.send_photo(
-                chat_id=chat_id, photo=PUMPFUN_PHOTO_URL, caption=caption,
-                parse_mode="HTML", reply_markup=keyboard(),
+                chat_id=chat_id, photo=photo, caption=caption,
+                parse_mode="HTML", reply_markup=keyboard(project),
             )
         except BadRequest:
             # Explicitly rejected images can fall back. A timeout is ambiguous
@@ -461,5 +491,67 @@ async def send_buy(bot, chat_id, buy, usd, market_cap, preview=False):
             pass
     return await bot.send_message(
         chat_id=chat_id, text=caption, parse_mode="HTML",
-        disable_web_page_preview=True, reply_markup=keyboard(),
+        disable_web_page_preview=True, reply_markup=keyboard(project),
     )
+
+
+def project_cursor_key(chat_id: int, project: dict) -> str:
+    return f"project_buys:{chat_id}:{project['address']}:{project['pool']}:{project['epoch']}"
+
+
+async def project_tick(bot) -> None:
+    """Each group owns its cursor; failures never consume another group's buy."""
+    from bot import projects
+    with db.engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT key, value FROM bot_kv WHERE substr(key, 1, :length) = :prefix"
+        ), {"length": len(projects.PREFIX), "prefix": projects.PREFIX}).fetchall()
+    for key, raw in rows:
+        chat_id = int(key[len(projects.PREFIX):])
+        try:
+            project = json.loads(raw)
+            if project["chain"] != "solana" or not project.get("enabled"):
+                continue
+            market = await asyncio.to_thread(market_snapshot, project["address"])
+            if not market or not market.get("pool"):
+                continue
+            if project.get("pool") != market["pool"] or not project.get("epoch"):
+                # A migrated pool starts at its head, never replays its history.
+                cursor = await asyncio.to_thread(head_cursor, market["pool"])
+                if projects.saved(chat_id) != project:
+                    continue
+                project = dict(project, pool=market["pool"], epoch=uuid.uuid4().hex)
+                db._set_block_cursor(project_cursor_key(chat_id, project), *cursor)
+                projects.save(chat_id, project)
+                continue
+            cursor_key = project_cursor_key(chat_id, project)
+            cursor = db._get_block_cursor(cursor_key)
+            if cursor is None:
+                cursor = await asyncio.to_thread(head_cursor, project["pool"])
+                db._set_block_cursor(cursor_key, *cursor)
+                continue
+            buys, scanned = await asyncio.to_thread(collect_buys, project["pool"], project["address"], cursor)
+            supply = await asyncio.to_thread(token_supply, project["address"])
+            for buy in buys:
+                if projects.saved(chat_id) != project:
+                    break
+                usd = buy["sol_amount"] * market["sol_usd"]
+                age = time.time() - float(buy.get("block_time") or 0)
+                if usd >= project["min_usd"] and buy.get("block_time") and 0 <= age <= PUMPFUN_MAX_AGE_SECONDS:
+                    cap = market_cap_after(buy, market["sol_usd"], supply)
+                    await send_buy(bot, chat_id, buy, usd, cap, project=project)
+                db._set_block_cursor(cursor_key, buy["slot"], buy["tx_index"])
+            else:
+                if scanned > cursor:
+                    db._set_block_cursor(cursor_key, *scanned)
+        except Exception as error:
+            logger.warning("Project buy alerts chat=%s: %s", chat_id, type(error).__name__)
+
+
+async def project_loop(application) -> None:
+    while True:
+        try:
+            await project_tick(application.bot)
+        except Exception as error:
+            logger.warning("Project buy alerts: %s", type(error).__name__)
+        await asyncio.sleep(PUMPFUN_POLL_SECONDS)

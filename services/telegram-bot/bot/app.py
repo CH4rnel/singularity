@@ -61,7 +61,7 @@ from bot.announcers import (
     run_snapshot_once,
 )
 from bot.watchers import WATCHERS, event_watcher_loop
-from bot import buybot
+from bot import buybot, projects, pumpfun
 from bot.personal import ensure_personal_schema, personal_loop
 
 logger = logging.getLogger(__name__)
@@ -87,9 +87,9 @@ async def post_init(application: Application):
             BotCommand("app", "Download the Cyberia wallet app"),
             BotCommand("open", "Open the wallet inside Telegram"),
             BotCommand("x", "Show X (Twitter) and Telegram links"),
-            BotCommand("ca", "Show the CYBER contract address"),
-            BotCommand("stats", "On-chain activity digest (default 24h)"),
-            BotCommand("buybot", "(admins) LAIN buy alerts: on / off / preview"),
+            BotCommand("ca", "Show this chat's token contract address"),
+            BotCommand("stats", "This chat's market data or activity digest"),
+            BotCommand("buybot", "(admins) Project settings and buy alerts"),
             BotCommand("ask", "Ask the Cyberia AI assistant"),
             *(
                 [BotCommand("model", "Choose which free AI model answers you")]
@@ -110,6 +110,7 @@ async def post_init(application: Application):
     application.create_task(slots_sweep_loop(application))
     logger.info("Bot commands published to Telegram")
     application.create_task(buybot.loop(application))
+    application.create_task(pumpfun.project_loop(application))
 
     # The ☰ beside the input box becomes the wallet. This is the entry point
     # people actually find — a command has to be remembered, a button does not
@@ -297,7 +298,7 @@ def run_dispatcher():
     application.add_handler(CommandHandler("x", x_command))
     application.add_handler(CommandHandler("ca", ca_command))
     application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("buybot", buybot.command))
+    application.add_handler(CommandHandler("buybot", projects.command))
     if AI_ENABLED:
         application.add_handler(CommandHandler("ask", ask_command))
     # Which model answers is a per-user preference, so the picker is a command
