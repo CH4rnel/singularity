@@ -80,7 +80,7 @@ class SybilGuard
      *     state_reason?: ?string,
      *     counted_same_day: int,
      * }  $candidate
-     * @return ?string  null when it counts, otherwise the reason it does not
+     * @return ?string null when it counts, otherwise the reason it does not
      */
     public function refusal(array $candidate): ?string
     {

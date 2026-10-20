@@ -24,7 +24,7 @@ class MerkleTree
     /** @var list<string> hex without 0x, tree[0] is the root */
     private array $tree = [];
 
-    /** @var array<string, int> leaf hex => position in $tree */
+    /** @var array<string, int> leaf hex => position in */
     private array $positions = [];
 
     /**

@@ -18,7 +18,7 @@ class EpochAllocator
 {
     /**
      * @param  array<string, int>  $points  address => points (hundredths)
-     * @return array<string, string>  address => raw amount, only non-zero shares
+     * @return array<string, string> address => raw amount, only non-zero shares
      */
     public function allocate(string $poolRaw, array $points, int $maxShareBps, int $minPoints): array
     {

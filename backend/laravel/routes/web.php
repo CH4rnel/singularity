@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\AnalyticsController;
-use App\Http\Controllers\Api\ContributionsController;
 use App\Http\Controllers\Api\BridgeController;
+use App\Http\Controllers\Api\ContributionsController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\MoneroWalletController;
 use App\Http\Controllers\Api\SiteEventController;
