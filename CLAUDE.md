@@ -32,7 +32,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `services/lainos/` | TypeScript, Node, Anthropic SDK, viem | LainOS: autonomous AI agent framework (ElizaOS-like) with a Cyberia chain plugin |
 | `game/wired/` | Godot 4, GDScript | Wired: 3D on-chain game; NPCs think via LainOS, world reacts to the Cyberia chain |
 | `game/nocarrier/` | Godot 4, GDScript | NO CARRIER: first-person netstalking survival-horror sim (en/ru); world/UI/audio built procedurally in code; browser build connects a wallet and mints decoded anomalies as CyberiaNFTs |
-| `scripts/` | Python, JS, Lisp | Airdrop bots, crawlers, price scripts, operations |
+| `scripts/` | Python, JS, shell | Airdrop bots, crawlers, price scripts, operations |
 | `linux/` | Linux build notes/config | Cyberia OS artifacts |
 
 The current LainOS source checkout is `~/random/os` (`/home/lain/random/os`). For LainOS work, start there; do not assume `services/lainos/` is the current implementation.

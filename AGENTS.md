@@ -411,7 +411,6 @@ Be careful editing compose files: some paths are production-host-specific, e.g. 
 Paths:
 
 - `services/lisp/` for daemon/http service code
-- `scripts/lisp/` for small script experiments
 
 Common commands:
 
