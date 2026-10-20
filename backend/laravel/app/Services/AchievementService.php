@@ -43,9 +43,13 @@ class AchievementService
 
     public const NETRUNNER = 6;
 
+    /** An approved Pioneer Season completion (PioneerSeasonService). */
+    public const PIONEER = 7;
+
     public function __construct(
         private readonly ProfileOnchainService $onchain,
         private readonly ChainIndex $chain,
+        private readonly PioneerSeasonService $pioneer,
     ) {}
 
     /**
@@ -60,6 +64,7 @@ class AchievementService
             ['id' => self::CONVERTER, 'key' => 'converter', 'title' => 'Converter', 'description' => 'Convert CYBER.sol into native CYBER.', 'icon' => 'convert'],
             ['id' => self::LENDER, 'key' => 'lender', 'title' => 'Lender', 'description' => 'Use the lending market.', 'icon' => 'lend'],
             ['id' => self::NETRUNNER, 'key' => 'netrunner', 'title' => 'Netrunner', 'description' => 'Claim an on-chain nickname.', 'icon' => 'nickname'],
+            ['id' => self::PIONEER, 'key' => 'pioneer', 'title' => 'Pioneer', 'description' => 'Complete every checkpoint of a Pioneer Season.', 'icon' => 'pioneer'],
         ];
     }
 
@@ -176,6 +181,7 @@ class AchievementService
             // reading it first would only cost a query.
             self::LENDER => $this->chain->usedLending($wallet) === true,
             self::NETRUNNER => $this->onchain->nicknameOf((string) $user->wallet_address) !== null,
+            self::PIONEER => $this->pioneer->isApprovedPioneer($user),
             default => false,
         };
     }

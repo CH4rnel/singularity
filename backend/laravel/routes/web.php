@@ -53,6 +53,7 @@ use App\Http\Controllers\LinkController;
 use App\Http\Controllers\LiquidityController;
 use App\Http\Controllers\NoCarrierController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PioneerSeasonController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\ProductAnalyticsController;
 use App\Http\Controllers\ProfileController;
@@ -175,7 +176,11 @@ Route::get('/robinhood-chain', function (BridgeConfigService $bridgeConfig) {
 Route::get('/partners/{partner}', fn (string $partner) => Inertia::render('Growth/Partner', [
     'partnerSlug' => $partner,
 ]))->name('partners.show');
-Route::inertia('/pioneer-season', 'Growth/PioneerSeason')->name('growth.pioneer');
+// Pioneer Season: opening the page verifies the visitor's checkpoints, hence
+// the throttle on what is otherwise a public read.
+Route::get('/pioneer-season', PioneerSeasonController::class)
+    ->middleware('throttle:30,1')
+    ->name('growth.pioneer');
 // Cached per-pool LP APR (written by the scheduled dex:apr command). Public:
 // the landing hero and any external site can quote real yield numbers.
 Route::get('/api/dex/apr', fn () => response()->json(

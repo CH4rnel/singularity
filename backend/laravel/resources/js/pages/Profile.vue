@@ -6,6 +6,7 @@ import {
     AtSign,
     Camera,
     Check,
+    Compass,
     Copy,
     Droplets,
     HandCoins,
@@ -101,6 +102,7 @@ const ACHIEVEMENT_ICONS: Record<string, unknown> = {
     convert: Repeat2,
     lend: HandCoins,
     nickname: AtSign,
+    pioneer: Compass,
 };
 
 const nicknameForm = useForm({ nickname: props.nickname ?? '' });

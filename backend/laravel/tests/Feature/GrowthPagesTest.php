@@ -65,9 +65,11 @@ test('partner campaigns render from the shared campaign page', function (string 
             ->where('partnerSlug', $partner));
 })->with(['ash', 'hatcher']);
 
-test('pioneer season is available as a coming soon experience', function () {
+test('pioneer season renders the season and its checkpoints to guests', function () {
     $this->get('/pioneer-season')
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('Growth/PioneerSeason'));
+            ->component('Growth/PioneerSeason')
+            ->has('checkpoints', 5)
+            ->where('me', null));
 });

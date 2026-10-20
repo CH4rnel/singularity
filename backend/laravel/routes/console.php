@@ -102,6 +102,9 @@ Schedule::command('analytics:digest --send')
 // Bounded per run and rotating, because a badge is not urgent; --alert says so
 // when the mint itself is what failed, which was previously silent.
 Schedule::command('achievements:sync --alert')->hourly()->withoutOverlapping();
+// Pioneer Season checkpoints for everyone who acted and did not open the page.
+// Idempotent and a no-op outside the season window.
+Schedule::command('pioneer:verify')->everyFifteenMinutes()->withoutOverlapping();
 // The one notification that brings anybody back. Everything else the
 // gamification system sends is a receipt for something already done, which is
 // why nobody remembers the quests exist. Once a day, in the evening, in the
