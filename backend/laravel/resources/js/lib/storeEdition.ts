@@ -32,8 +32,15 @@ export type StoreEdition = 'play' | 'appstore';
 const STORE_TOKEN = /\bCyberiaStore\/(play|appstore)\b/;
 
 const HIDDEN: Record<StoreEdition, readonly string[]> = {
-    play: ['launchpad', 'stocks'],
-    appstore: ['launchpad', 'stocks', 'torrent', 'tracker', 'trackerPublish'],
+    play: ['launchpad', 'stocks', 'arena'],
+    appstore: [
+        'launchpad',
+        'stocks',
+        'arena',
+        'torrent',
+        'tracker',
+        'trackerPublish',
+    ],
 };
 
 /** Rows of The Wired that lead off the wallet onto a page a store build cannot open. */

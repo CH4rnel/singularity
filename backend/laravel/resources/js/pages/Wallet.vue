@@ -250,7 +250,9 @@ const requestedScreen = new URLSearchParams(window.location.search).get(
     'screen',
 );
 const section = ref<Section>(
-    requestedScreen === 'arena' ? 'arena' : 'portfolio',
+    requestedScreen === 'arena' && !hiddenInStore('arena')
+        ? 'arena'
+        : 'portfolio',
 );
 const overlay = ref<Overlay | null>(null);
 const chain = ref<WalletChainId>('cyberia');

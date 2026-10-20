@@ -52,6 +52,12 @@ test('both stores leave out the launchpad and tokenised stocks', () => {
     }
 });
 
+test('staked games are left out of both store builds', () => {
+    assert.equal(isHiddenIn(null, 'arena'), false);
+    assert.equal(isHiddenIn('play', 'arena'), true);
+    assert.equal(isHiddenIn('appstore', 'arena'), true);
+});
+
 test('torrents are left out of the App Store build only', () => {
     assert.equal(isHiddenIn('play', 'torrent'), false);
     assert.equal(isHiddenIn('appstore', 'torrent'), true);
