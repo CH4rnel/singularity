@@ -9,6 +9,7 @@ use App\Services\Monero\MoneroWalletRpc;
 use App\Support\BridgeCapacity;
 use App\Support\Environment;
 use App\Support\TokenAmount;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Support\Facades\Http;
@@ -681,7 +682,9 @@ class BridgeService
 
         $lock = $admission->poolLock($pool);
 
-        if (! $lock->block((int) config('bridge.inventory.pool_lock_wait_seconds', 5), fn () => true)) {
+        try {
+            $lock->block((int) config('bridge.inventory.pool_lock_wait_seconds', 5));
+        } catch (LockTimeoutException) {
             // Somebody else is paying out of this balance. Nothing has been
             // burned or sent, so parking is free and the retry is safe.
             $request->markAwaitingLiquidity('Another payout is using the destination reserve — retrying shortly');
@@ -1869,13 +1872,26 @@ class BridgeService
      * Pull the relayer tx hash from EVM relay-script stdout, newest line first.
      * Accepts the confirmed {"txHash":...} line and the pre-receipt
      * {"broadcastTxHash":...} line the scripts print the moment the tx is
-     * broadcast, so a receipt-wait timeout can still recover the hash.
+     * broadcast, so a receipt-wait timeout can still recover the hash. The
+     * native conversion path keeps the first mint broadcast as its retry
+     * guard, even when later conversion broadcasts share an output chunk.
      */
-    private function extractRelayTxHash(string $output): ?string
+    private function extractRelayTxHash(string $output, bool $firstBroadcast = false): ?string
     {
-        $lines = array_reverse(array_filter(array_map('trim', explode("\n", $output))));
+        $lines = array_filter(array_map('trim', explode("\n", $output)));
 
-        foreach ($lines as $line) {
+        if ($firstBroadcast) {
+            foreach ($lines as $line) {
+                $json = json_decode($line, true);
+                $hash = is_array($json) ? ($json['broadcastTxHash'] ?? null) : null;
+
+                if (is_string($hash) && $hash !== '') {
+                    return $hash;
+                }
+            }
+        }
+
+        foreach (array_reverse($lines) as $line) {
             $json = json_decode($line, true);
 
             if (! is_array($json)) {
@@ -1947,6 +1963,263 @@ class BridgeService
     }
 
     /**
+     * Read-only native source proof. A missing RPC answer is retryable; a
+     * transaction that proves a different transfer must never reach a signer.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function nativeSourceRpc(string $url, string $method, array $params): ?array
+    {
+        try {
+            $response = Http::timeout(30)->post($url, [
+                'jsonrpc' => '2.0', 'id' => 1, 'method' => $method, 'params' => $params,
+            ]);
+
+            $result = $response->successful() ? $response->json('result') : null;
+
+            return is_array($result) && $result !== [] ? $result : null;
+        } catch (\Exception) {
+            Log::warning('Bridge: native source RPC unavailable', ['method' => $method]);
+
+            return null;
+        }
+    }
+
+    private function solanaRecipientHex(string $address): ?string
+    {
+        $alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+        $number = '0';
+
+        if (strlen($address) < 32 || strlen($address) > 44) {
+            return null;
+        }
+
+        foreach (str_split($address) as $character) {
+            $digit = strpos($alphabet, $character);
+
+            if ($digit === false) {
+                return null;
+            }
+
+            $number = bcadd(bcmul($number, '58', 0), (string) $digit, 0);
+        }
+
+        $bytes = '';
+        while (bccomp($number, '0', 0) > 0) {
+            $bytes = chr((int) bcmod($number, '256')).$bytes;
+            $number = bcdiv($number, '256', 0);
+        }
+        $bytes = str_repeat("\x00", strspn($address, '1')).$bytes;
+
+        return strlen($bytes) === 32 ? bin2hex($bytes) : null;
+    }
+
+    /**
+     * The wrapper burn proves gross; RedeemCyberSol proves net and recipient.
+     * This also supports a smart wallet calling the bridge internally. Only
+     * direct calls get an additional calldata check; no current fee is read.
+     *
+     * @return array{gross: string, net: string}|null
+     */
+    private function verifyNativeEvmRedemption(BridgeRequest $request): ?array
+    {
+        $bridge = strtolower((string) (config('services.bridge.evm_bridge_address') ?: '0xEf2c8E731006EEDD8F44f5Ea03A389635BB28f90'));
+        $wrapper = strtolower((string) (config('bridge.tokens', [])['CYBER.sol']['chains']['cyberia']['address'] ?? ''));
+        $sender = strtolower((string) $request->sender_address);
+        $recipient = $this->solanaRecipientHex((string) $request->recipient_address);
+        $hash = strtolower((string) $request->source_tx_hash);
+
+        if (! preg_match('/^0x[0-9a-f]{64}$/', $hash)
+            || ! preg_match('/^0x[0-9a-f]{40}$/', $sender)
+            || ! preg_match('/^0x[0-9a-f]{40}$/', $bridge)
+            || ! preg_match('/^0x[0-9a-f]{40}$/', $wrapper)
+            || $recipient === null || $request->source_nonce < 0) {
+            throw new \UnexpectedValueException('Native redemption source details are missing or invalid');
+        }
+
+        $rpc = (string) config('bridge.chains.cyberia.rpc_url');
+        $receipt = $this->nativeSourceRpc($rpc, 'eth_getTransactionReceipt', [$hash]);
+        $transaction = $this->nativeSourceRpc($rpc, 'eth_getTransactionByHash', [$hash]);
+
+        if ($receipt === null || $transaction === null) {
+            return null;
+        }
+
+        if (! isset($receipt['status'], $receipt['transactionHash'], $receipt['logs'], $transaction['hash'])) {
+            return null;
+        }
+
+        if (($receipt['status'] ?? null) !== '0x1'
+            || strtolower((string) ($receipt['transactionHash'] ?? '')) !== $hash
+            || strtolower((string) ($transaction['hash'] ?? '')) !== $hash) {
+            throw new \UnexpectedValueException('Native redemption transaction did not succeed');
+        }
+
+        $redeemTopic = '0xb0f588ab32e51856c4eb70cdd8ace980ec59d74616c821513d605629ec06b610';
+        $transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+        $senderTopic = '0x'.str_pad(substr($sender, 2), 64, '0', STR_PAD_LEFT);
+        $burn = null;
+        $proof = null;
+
+        foreach ($receipt['logs'] ?? [] as $log) {
+            $address = strtolower((string) ($log['address'] ?? ''));
+            $topics = array_map(fn ($topic) => is_string($topic) ? strtolower($topic) : '', $log['topics'] ?? []);
+            $data = strtolower((string) ($log['data'] ?? ''));
+
+            if ($address === $wrapper && $topics === [$transferTopic, $senderTopic, '0x'.str_repeat('0', 64)]
+                && preg_match('/^0x[0-9a-f]{64}$/', $data) && ! ($log['removed'] ?? false)) {
+                $burn = TokenAmount::hexToDec($data);
+            }
+
+            if ($address !== $bridge || ($topics[0] ?? null) !== $redeemTopic) {
+                continue;
+            }
+
+            if ($topics === [$redeemTopic, $senderTopic]
+                && preg_match('/^0x[0-9a-f]{192}$/', $data)
+                && substr($data, 66, 64) === $recipient
+                && TokenAmount::hexToDec(substr($data, 130, 64)) === (string) $request->source_nonce
+                && ! ($log['removed'] ?? false)) {
+                $net = TokenAmount::hexToDec(substr($data, 2, 64));
+
+                if ($proof !== null || $burn === null || bccomp($burn, '0', 0) <= 0
+                    || bccomp($net, '0', 0) <= 0 || bccomp($net, $burn, 0) > 0) {
+                    throw new \UnexpectedValueException('Native redemption burn and event do not agree');
+                }
+
+                $proof = ['gross' => $burn, 'net' => $net];
+            }
+
+            // A burn belongs to its following redemption, never to a later
+            // nonce in a wallet batch containing several bridge calls.
+            $burn = null;
+        }
+
+        if ($proof === null) {
+            throw new \UnexpectedValueException('No matching native redemption and wrapper burn');
+        }
+
+        if (strtolower((string) ($transaction['to'] ?? '')) === $bridge) {
+            $input = strtolower((string) ($transaction['input'] ?? ''));
+
+            if (strtolower((string) ($transaction['from'] ?? '')) !== $sender
+                || ! preg_match('/^0x6714c820[0-9a-f]{128}$/', $input)
+                || TokenAmount::hexToDec(substr($input, 10, 64)) !== $proof['gross']
+                || substr($input, 74, 64) !== $recipient) {
+                throw new \UnexpectedValueException('Native redemption calldata does not agree with its receipt');
+            }
+        }
+
+        // Stored legacy decimal amounts can lose sub-microtoken precision.
+        // Tolerate less than one deliverable microtoken, including a rounded
+        // value just below an exact boundary. Payout still uses receipt units.
+        $decimals = (int) (config('bridge.tokens', [])['CYBER.sol']['chains']['solana']['decimals'] ?? 6);
+        $difference = bcsub(TokenAmount::toRaw((string) $request->amount, 18), $proof['gross'], 0);
+        if (bccomp($difference, '0', 0) < 0) {
+            $difference = bcsub('0', $difference, 0);
+        }
+        if (bccomp($difference, bcpow('10', (string) (18 - $decimals), 0), 0) >= 0) {
+            throw new \UnexpectedValueException('Claimed amount does not match the native redemption gross amount');
+        }
+
+        return $proof;
+    }
+
+    /**
+     * Verify native Token-2022 deposits by actual account deltas. Index by
+     * account, then sum by owner: a second account must not overwrite a first.
+     */
+    private function verifyNativeSolanaDeposit(BridgeRequest $request): ?string
+    {
+        $hash = (string) $request->source_tx_hash;
+        $sender = (string) $request->sender_address;
+        $recipient = $this->solanaHotWallet();
+        $token = config('bridge.tokens', [])['CYBER.sol']['chains']['solana'] ?? [];
+        $mint = (string) ($token['mint'] ?? '');
+        $decimals = (int) ($token['decimals'] ?? 6);
+
+        if ($hash === '' || $sender === '' || $recipient === '' || $mint === '' || $sender === $recipient) {
+            throw new \UnexpectedValueException('Native Solana source details are missing or invalid');
+        }
+
+        $result = $this->nativeSourceRpc($this->solanaRpc(), 'getTransaction', [
+            $hash, ['encoding' => 'jsonParsed', 'commitment' => 'confirmed', 'maxSupportedTransactionVersion' => 0],
+        ]);
+
+        if ($result === null) {
+            return null;
+        }
+
+        $keys = $result['transaction']['message']['accountKeys'] ?? [];
+        $signer = collect($keys)->contains(fn ($key) => is_array($key)
+            && ($key['pubkey'] ?? null) === $sender && ($key['signer'] ?? false) === true);
+
+        if (! array_key_exists('err', $result['meta'] ?? [])
+            || ! isset($result['transaction']['signatures'], $result['transaction']['message']['accountKeys'], $result['meta']['preTokenBalances'], $result['meta']['postTokenBalances'])) {
+            return null;
+        }
+
+        if ($result['meta']['err'] !== null
+            || ! in_array($hash, $result['transaction']['signatures'] ?? [], true) || ! $signer) {
+            throw new \UnexpectedValueException('Native Solana deposit did not succeed for the claimed sender');
+        }
+
+        $accounts = [];
+        foreach (['pre' => 'preTokenBalances', 'post' => 'postTokenBalances'] as $side => $field) {
+            foreach ($result['meta'][$field] ?? [] as $balance) {
+                if (($balance['mint'] ?? null) !== $mint) {
+                    continue;
+                }
+
+                $index = $balance['accountIndex'] ?? null;
+                $owner = $balance['owner'] ?? null;
+                $raw = $balance['uiTokenAmount']['amount'] ?? null;
+
+                if ($owner === null || $raw === null) {
+                    return null;
+                }
+
+                if (! is_int($index) || $index < 0 || ! is_string($owner)
+                    || ! is_string($raw) || ! ctype_digit($raw)
+                    || ($balance['uiTokenAmount']['decimals'] ?? null) !== $decimals
+                    || (isset($balance['programId']) && $balance['programId'] !== 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
+                    || isset($accounts[$index][$side])
+                    || (isset($accounts[$index]['owner']) && $accounts[$index]['owner'] !== $owner)) {
+                    throw new \UnexpectedValueException('Native Solana token balance proof is invalid');
+                }
+
+                $accounts[$index]['owner'] = $owner;
+                $accounts[$index][$side] = $raw;
+            }
+        }
+
+        $credit = '0';
+        $debit = '0';
+        foreach ($accounts as $account) {
+            $delta = bcsub($account['post'] ?? '0', $account['pre'] ?? '0', 0);
+            if ($account['owner'] === $recipient) {
+                $credit = bcadd($credit, $delta, 0);
+            } elseif ($account['owner'] === $sender) {
+                $debit = bcsub($debit, $delta, 0);
+            }
+        }
+
+        if (bccomp($credit, '0', 0) <= 0 || bccomp($debit, $credit, 0) !== 0) {
+            throw new \UnexpectedValueException('Native Solana deposit has no matching sender debit and hot-wallet credit');
+        }
+
+        return $credit;
+    }
+
+    private function awaitNativeSourceProof(BridgeRequest $request): void
+    {
+        $request->update([
+            'status' => BridgeRequest::PENDING,
+            'error_message' => 'Source transaction could not be read yet — retrying verification before any payout',
+        ]);
+    }
+
+    /**
      * Process Solana->EVM: verify deposit, then call relay script to mint CYBER.sol on EVM.
      */
     public function processSolToEvm(BridgeRequest $request): bool
@@ -1973,13 +2246,10 @@ class BridgeService
 
         try {
             // Verify the Solana transaction is a real deposit to our hot wallet
-            $verifiedAmount = $this->verifySolanaDeposit(
-                $request->source_tx_hash,
-                $request->sender_address,
-            );
+            $verifiedAmount = $this->verifyNativeSolanaDeposit($request);
 
             if ($verifiedAmount === null) {
-                $this->failRelay($request, 'Could not verify Solana deposit transaction');
+                $this->awaitNativeSourceProof($request);
 
                 return false;
             }
@@ -1990,17 +2260,14 @@ class BridgeService
                 'claimed_amount' => $request->amount,
             ]);
 
+            $solanaDecimals = (int) (config('bridge.tokens', [])['CYBER.sol']['chains']['solana']['decimals'] ?? 6);
+            $verifiedHuman = TokenAmount::fromRaw($verifiedAmount, $solanaDecimals);
+            $amountWei = TokenAmount::toRaw($verifiedHuman, 18);
+            $request->update(['amount' => $verifiedHuman, 'fee_amount' => '0']);
             $request->markSourceVerified();
-
-            // Use the per-request fee_amount (computed by BridgeFeeService at
-            // submit time). For CYBER.sol this is 0 — only stables carry a
-            // fee. Falls back to legacy 1% if no fee was stored (very old rows).
-            $feeAmount = $request->fee_amount !== null
-                ? (string) $request->fee_amount
-                : self::calculateFee((string) $request->amount);
-
-            $amountAfterFee = bcsub((string) $request->amount, $feeAmount, 18);
-            $amountWei = TokenAmount::toRaw($amountAfterFee, 18);
+            app(BridgeAdmissionService::class)->commit($request, null)?->update([
+                'amount' => $verifiedHuman, 'net_raw' => $amountWei,
+            ]);
 
             // Optional native-CYBER gas drop for empty recipients.
             $gasDropWei = '0';
@@ -2008,11 +2275,10 @@ class BridgeService
                 $gasDropWei = TokenAmount::toRaw((string) $request->gas_drop_amount, 18);
             }
 
-            Log::info('Bridge: sol_to_evm fee applied', [
+            Log::info('Bridge: sol_to_evm verified payout', [
                 'id' => $request->id,
-                'original' => $request->amount,
-                'fee' => $feeAmount,
-                'after_fee' => $amountAfterFee,
+                'verified_amount_raw' => $verifiedAmount,
+                'payout_wei' => $amountWei,
                 'gas_drop_wei' => $gasDropWei,
                 'convert_to_native' => $request->convert_to_native,
             ]);
@@ -2042,7 +2308,7 @@ class BridgeService
                     $request->convert_to_native ? '1' : '0',
                 ], function (string $type, string $buffer) use (&$captured, $request) {
                     $captured .= $buffer;
-                    $this->recordBroadcast($request, $this->extractRelayTxHash($captured));
+                    $this->recordBroadcast($request, $this->extractRelayTxHash($captured, firstBroadcast: true));
                 });
 
             Log::info('Bridge relay sol_to_evm', [
@@ -2052,7 +2318,7 @@ class BridgeService
                 'exit' => $result->exitCode(),
             ]);
 
-            $this->recordBroadcast($request, $this->extractRelayTxHash($result->output()));
+            $this->recordBroadcast($request, $this->extractRelayTxHash($result->output(), firstBroadcast: true));
 
             if ($result->exitCode() !== 0) {
                 if (! $request->hasPayout()) {
@@ -2131,34 +2397,48 @@ class BridgeService
         }
 
         $request->markProcessing();
-        // The user's tokens are already burned on Cyberia by their own
-        // transaction: this is an obligation from the first moment.
-        $request->markSourceVerified();
         $captured = '';
 
         try {
-            $feeAmount = $request->fee_amount !== null
-                ? (string) $request->fee_amount
-                : self::calculateFee((string) $request->amount);
+            $proof = $this->verifyNativeEvmRedemption($request);
 
-            $amountAfterFee = bcsub((string) $request->amount, $feeAmount, 18);
+            if ($proof === null) {
+                $this->awaitNativeSourceProof($request);
 
-            Log::info('Bridge: evm_to_sol fee applied', [
-                'id' => $request->id,
-                'original' => $request->amount,
-                'fee' => $feeAmount,
-                'after_fee' => $amountAfterFee,
-            ]);
+                return false;
+            }
 
             // Convert amount to Solana smallest units (CYBER.sol mint decimals).
             $solanaDecimals = (int) (config('bridge.tokens', [])['CYBER.sol']['chains']['solana']['decimals'] ?? 6);
-            $amountRaw = TokenAmount::toRaw($amountAfterFee, $solanaDecimals);
+            $amountRaw = TokenAmount::toRaw(TokenAmount::fromRaw($proof['net'], 18), $solanaDecimals);
+
+            $request->update([
+                'amount' => TokenAmount::fromRaw($proof['gross'], 18),
+                'fee_amount' => TokenAmount::fromRaw(bcsub($proof['gross'], $proof['net'], 0), 18),
+            ]);
+            $request->markSourceVerified();
+            app(BridgeAdmissionService::class)->commit($request, null)?->update([
+                'amount' => TokenAmount::fromRaw($proof['gross'], 18), 'net_raw' => $amountRaw,
+            ]);
+
+            if (bccomp($amountRaw, '0', 0) <= 0) {
+                $request->markAwaitingLiquidity('Verified redemption is below the Solana payout precision — manual reconciliation is required');
+
+                return false;
+            }
+
+            Log::info('Bridge: evm_to_sol verified payout', [
+                'id' => $request->id, 'gross_wei' => $proof['gross'], 'net_wei' => $proof['net'],
+                'payout_raw' => $amountRaw,
+            ]);
 
             $admission = app(BridgeAdmissionService::class);
             $pool = app(BridgeInventoryService::class)->poolKey($request->direction, $request->token);
             $lock = $pool === null ? null : $admission->poolLock($pool);
 
-            if ($lock !== null && ! $lock->block((int) config('bridge.inventory.pool_lock_wait_seconds', 5), fn () => true)) {
+            try {
+                $lock?->block((int) config('bridge.inventory.pool_lock_wait_seconds', 5));
+            } catch (LockTimeoutException) {
                 $request->markAwaitingLiquidity('Another payout is using the destination reserve — retrying shortly');
 
                 return false;
@@ -2235,6 +2515,10 @@ class BridgeService
             } finally {
                 $lock?->release();
             }
+        } catch (\UnexpectedValueException $e) {
+            $this->failRelay($request, $e->getMessage());
+
+            return false;
         } catch (\Exception $e) {
             if (! $request->hasPayout()) {
                 $request->markFailed($e->getMessage());

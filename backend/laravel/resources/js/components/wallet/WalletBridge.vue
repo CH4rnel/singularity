@@ -5,6 +5,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { analytics, errorCode } from '@/lib/analytics';
+import { withBridgeReservation } from '@/lib/bridgeReservation';
 import {
     ERC20_TRANSFER_GAS_CAP,
     formatUnits,
@@ -527,23 +528,48 @@ const sign = async (): Promise<void> => {
         (entry) => entry.chain === chain,
     );
 
-    try {
-        const lock = await props.wallet.bridgeDeposit(chain, {
-            chainId,
-            rpcUrl,
-            deposit: to,
-            contract: sourceToken.value?.native
-                ? null
-                : (sourceToken.value?.address ?? null),
-            amount: amountUnits.value,
-            gasPrice: gasPrice.value,
-            gasLimit: gasLimit.value,
-        });
+    // Capture one intent before the first await: editing the screen cannot
+    // change the recipient or amount between the claim and its submission.
+    const intent = {
+        direction: route.value.direction,
+        token: symbol.value,
+        senderAddress: account?.address ?? null,
+        recipientAddress: recipient.value.trim(),
+        amount: amount.value.trim(),
+    };
+    const leg = {
+        chainId,
+        rpcUrl,
+        deposit: to,
+        contract: sourceToken.value?.native
+            ? null
+            : (sourceToken.value?.address ?? null),
+        amount: amountUnits.value,
+        gasPrice: gasPrice.value,
+        gasLimit: gasLimit.value,
+    };
+    const explorer = sourceChain.value?.explorerTx ?? null;
+    const tracking = traits();
 
+    try {
+        const { deposit: lock, reservation } = await withBridgeReservation(
+            intent,
+            () => {
+                const current = props.wallet.accounts.value.find(
+                    (entry) => entry.chain === chain,
+                );
+
+                if (current?.address !== intent.senderAddress) {
+                    throw new Error(
+                        'The sending account changed. Nothing was sent — review the transfer again.',
+                    );
+                }
+
+                return props.wallet.bridgeDeposit(chain, leg);
+            },
+        );
         // The transfer is broadcast. Whatever the relayer says next, this hash
         // exists and is the only thing that proves the deposit.
-        const explorer = sourceChain.value?.explorerTx ?? null;
-
         done.value = {
             hash: lock.txHash,
             url: explorer ? explorer.replace('{hash}', lock.txHash) : null,
@@ -553,19 +579,20 @@ const sign = async (): Promise<void> => {
 
         // The source leg is on chain. Everything after this is the relayer's,
         // and it is a separate step precisely because it can fail on its own.
-        analytics.track('bridge_deposit_confirmed', {
-            ...traits(),
+        analytics.track('transaction_submitted', {
+            ...tracking,
             duration_ms: Date.now() - startedAt,
         });
 
         const outcome = await submitBridge({
-            direction: route.value.direction,
-            token: symbol.value,
+            direction: intent.direction,
+            token: intent.token,
             sourceTxHash: lock.txHash,
             sourceNonce: lock.nonce,
-            sender: account?.address ?? '',
-            recipient: recipient.value.trim(),
-            amount: amount.value.trim(),
+            reservation,
+            sender: intent.senderAddress ?? '',
+            recipient: intent.recipientAddress,
+            amount: intent.amount,
         });
 
         done.value = {
@@ -574,17 +601,22 @@ const sign = async (): Promise<void> => {
             message: outcome.message,
         };
 
-        /*
-         * "Completed" here means the deposit registered with the relayer, not
-         * that the payout landed — the wallet never learns that, and it says
-         * so on screen. A deposit that broadcast but failed to register is the
-         * failure worth counting, because it is the one that needs a human.
-         */
-        analytics.track(outcome.ok ? 'bridge_completed' : 'bridge_failed', {
-            ...traits(),
-            duration_ms: Date.now() - startedAt,
-            ...(outcome.ok ? {} : { error_code: 'server_refused' as const }),
-        });
+        if (
+            outcome.ok &&
+            outcome.status === 'completed' &&
+            outcome.destinationTxHash
+        ) {
+            analytics.track('bridge_completed', {
+                ...tracking,
+                duration_ms: Date.now() - startedAt,
+            });
+        } else if (!outcome.ok) {
+            analytics.track('bridge_failed', {
+                ...tracking,
+                duration_ms: Date.now() - startedAt,
+                error_code: 'server_refused',
+            });
+        }
 
         amount.value = '';
         await props.wallet.refreshBalances();

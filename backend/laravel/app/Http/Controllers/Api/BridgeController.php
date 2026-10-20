@@ -16,9 +16,11 @@ use App\Services\BridgeService;
 use App\Services\CyberiaRpcService;
 use App\Services\TonApiService;
 use App\Support\BridgeCapacity;
+use App\Support\BridgeSubmission;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class BridgeController extends Controller
@@ -93,7 +95,7 @@ class BridgeController extends Controller
                 'string',
                 new ValidDestinationAddress(is_string($direction) ? $direction : ''),
             ],
-            'amount' => ['required', 'numeric', 'gt:0'],
+            'amount' => ['required', 'numeric', 'gt:0', 'regex:/^\d+(?:\.\d{1,18})?$/D'],
         ]);
 
         $token = $validated['token'] ?? 'CYBER.sol';
@@ -154,7 +156,7 @@ class BridgeController extends Controller
                 'string',
                 new ValidDestinationAddress(is_string($direction) ? $direction : ''),
             ],
-            'amount' => ['required', 'numeric', 'gt:0'],
+            'amount' => ['required', 'numeric', 'gt:0', 'regex:/^\d+(?:\.\d{1,18})?$/D'],
             'convert_to_native' => ['nullable', 'boolean'],
             'reservation' => ['nullable', 'string', 'max:64'],
             'session_id' => ['nullable', 'uuid'],
@@ -168,6 +170,29 @@ class BridgeController extends Controller
 
         $sourceChain = (string) $route['source_chain'];
         $token = $validated['token'] ?? 'CYBER.sol';
+
+        $convertToNative = ($validated['convert_to_native'] ?? false)
+            && $validated['direction'] === 'sol_to_evm'
+            && $token === 'CYBER.sol';
+        $sourceTxHash = BridgeSubmission::sourceHash($sourceChain, $validated['source_tx_hash']);
+
+        if ($sourceChain === 'ton') {
+            $sourceTxHash = TonApiService::normalizeTxHash($sourceTxHash);
+
+            if ($sourceTxHash === null) {
+                return response()->json(['message' => 'Invalid TON transaction hash.'], 422);
+            }
+        }
+
+        $fingerprint = BridgeSubmission::fingerprint(
+            $validated['direction'], $token, $sourceChain, $sourceTxHash,
+            $validated['source_nonce'], $validated['sender_address'],
+            $validated['recipient_address'], (string) $validated['amount'], $convertToNative,
+        );
+
+        if ($existing = $this->existingSubmission($sourceChain, $sourceTxHash)) {
+            return $this->repeatSubmission($existing, $fingerprint);
+        }
 
         if (! isset($this->bridgeConfig->tokensForRoute($validated['direction'])[$token])) {
             return response()->json(['message' => 'Token is not supported on this bridge route.'], 422);
@@ -195,10 +220,7 @@ class BridgeController extends Controller
 
         // Auto-conversion into native CYBER only applies to CYBER.sol arriving
         // on Cyberia, and only when the feature is enabled server-side.
-        $convertToNative = ($validated['convert_to_native'] ?? false)
-            && $validated['direction'] === 'sol_to_evm'
-            && $token === 'CYBER.sol'
-            && config('bridge.convert.enabled', true);
+        $convertToNative = $convertToNative && config('bridge.convert.enabled', true);
 
         $fee = $this->feeService->feeForBridge(
             $token,
@@ -211,53 +233,41 @@ class BridgeController extends Controller
             $validated['recipient_address'],
         );
 
-        // Normalize TON hashes (hex vs base64 encodings of the same tx) so the
-        // source_tx_hash unique constraint can't be replayed via re-encoding.
-        $sourceTxHash = $validated['source_tx_hash'];
+        try {
+            $bridgeRequest = DB::transaction(function () use ($request, $validated, $sourceChain, $sourceTxHash, $token, $fee, $gasDropPlanned, $gasDropAmount, $convertToNative, $fingerprint) {
+                $bridgeRequest = $this->bridgeService->createRequest(
+                    userId: $request->user()?->id,
+                    direction: $validated['direction'],
+                    sourceChain: $sourceChain,
+                    sourceTxHash: $sourceTxHash,
+                    sourceNonce: $validated['source_nonce'],
+                    senderAddress: $validated['sender_address'],
+                    recipientAddress: $validated['recipient_address'],
+                    amount: $validated['amount'],
+                    token: $token,
+                    feeAmount: $fee['fee_amount'],
+                    feeUsd: $fee['fee_usd'],
+                    gasDropPlanned: $gasDropPlanned,
+                    gasDropAmount: $gasDropAmount,
+                    convertToNative: $convertToNative,
+                );
+                $bridgeRequest->update([
+                    'submitted_intent_hash' => $fingerprint,
+                    'submitted_source_tx_hash' => $sourceTxHash,
+                ]);
+                app(BridgeAdmissionService::class)->commit($bridgeRequest, $validated['reservation'] ?? null);
 
-        if ($sourceChain === 'ton') {
-            $normalized = TonApiService::normalizeTxHash($sourceTxHash);
+                return $bridgeRequest;
+            });
+        } catch (UniqueConstraintViolationException $exception) {
+            $existing = $this->existingSubmission($sourceChain, $sourceTxHash);
 
-            if ($normalized === null) {
-                return response()->json(['message' => 'Invalid TON transaction hash.'], 422);
+            if ($existing === null) {
+                throw $exception;
             }
 
-            $sourceTxHash = $normalized;
+            return $this->repeatSubmission($existing, $fingerprint);
         }
-
-        try {
-            $bridgeRequest = $this->bridgeService->createRequest(
-                userId: $request->user()?->id,
-                direction: $validated['direction'],
-                sourceChain: $sourceChain,
-                sourceTxHash: $sourceTxHash,
-                sourceNonce: $validated['source_nonce'],
-                senderAddress: $validated['sender_address'],
-                recipientAddress: $validated['recipient_address'],
-                amount: $validated['amount'],
-                token: $token,
-                feeAmount: $fee['fee_amount'],
-                feeUsd: $fee['fee_usd'],
-                gasDropPlanned: $gasDropPlanned,
-                gasDropAmount: $gasDropAmount,
-                convertToNative: $convertToNative,
-            );
-        } catch (UniqueConstraintViolationException) {
-            return response()->json([
-                'message' => 'This transaction has already been submitted to the bridge.',
-            ], 422);
-        }
-
-        // Turn the claim into an obligation — or record one for a transfer
-        // that never claimed anything (someone who sent tokens straight to the
-        // relayer's public address). Submit is reached only AFTER the source
-        // transfer is signed, so it can refuse nothing: what it can do is make
-        // sure the relayer knows it owes this payout before deciding whether
-        // it can make it. See BridgeAdmissionService::commit().
-        app(BridgeAdmissionService::class)->commit(
-            $bridgeRequest,
-            $validated['reservation'] ?? null,
-        );
 
         if (! empty($validated['session_id'])) {
             $this->eventLogger->log('bridge_request_created', [
@@ -278,8 +288,37 @@ class BridgeController extends Controller
 
         $bridgeRequest->refresh();
 
+        return $this->submissionResponse($bridgeRequest, false);
+    }
+
+    private function existingSubmission(string $sourceChain, string $sourceTxHash): ?BridgeRequest
+    {
+        return BridgeRequest::query()
+            ->where('submitted_source_tx_hash', $sourceTxHash)
+            ->orWhere(fn ($query) => $query
+                ->when(config("bridge.chains.{$sourceChain}.type") === 'evm',
+                    fn ($query) => $query->whereRaw('LOWER(source_tx_hash) = ?', [$sourceTxHash]),
+                    fn ($query) => $query->where('source_tx_hash', $sourceTxHash)))
+            ->first();
+    }
+
+    private function repeatSubmission(BridgeRequest $bridgeRequest, string $fingerprint): JsonResponse
+    {
+        if (! BridgeSubmission::matches($bridgeRequest, $fingerprint)) {
+            return response()->json([
+                'message' => 'This source transaction is already registered with different transfer details. Continue the original request.',
+                'reason' => 'source_transaction_conflict',
+            ], 409);
+        }
+
+        return $this->submissionResponse($bridgeRequest, true);
+    }
+
+    private function submissionResponse(BridgeRequest $bridgeRequest, bool $replayed): JsonResponse
+    {
         return response()->json([
             'message' => $bridgeRequest->isCompleted() ? 'Bridge completed' : 'Bridge request submitted',
+            'replayed' => $replayed,
             'bridge_request' => [
                 'id' => $bridgeRequest->id,
                 'direction' => $bridgeRequest->direction,
@@ -296,7 +335,7 @@ class BridgeController extends Controller
                 'error_message' => $bridgeRequest->error_message,
                 'created_at' => $bridgeRequest->created_at,
             ],
-        ], 201);
+        ], $replayed ? 200 : 201);
     }
 
     /**

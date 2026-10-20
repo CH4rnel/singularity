@@ -6,6 +6,7 @@ import type {
 } from '@/lib/bridgeConfig';
 import { evmSigner } from '@/lib/wallet/keys';
 import type { WalletKeySource } from '@/lib/wallet/keys';
+import { submit } from '@/routes/bridge';
 
 /**
  * Bridging from inside the wallet.
@@ -251,10 +252,12 @@ export type BridgeSubmission = {
     token: string;
     sourceTxHash: string;
     sourceNonce: number;
+    reservation?: string;
     sender: string;
     recipient: string;
     /** Human amount, as the bridge API wants it — not smallest units. */
     amount: string;
+    convertToNative?: boolean;
 };
 
 /**
@@ -277,7 +280,7 @@ export const submitBridge = async (
     let response: Response;
 
     try {
-        response = await fetch('/bridge/submit', {
+        response = await fetch(submit().url, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -286,6 +289,7 @@ export const submitBridge = async (
                 'X-XSRF-TOKEN': csrfToken(),
             },
             body: JSON.stringify({
+                reservation: request.reservation,
                 direction: request.direction,
                 token: request.token,
                 source_tx_hash: request.sourceTxHash,
@@ -293,6 +297,7 @@ export const submitBridge = async (
                 sender_address: request.sender,
                 recipient_address: request.recipient,
                 amount: request.amount,
+                convert_to_native: request.convertToNative,
             }),
         });
     } catch {
@@ -310,17 +315,22 @@ export const submitBridge = async (
             id?: number;
             status?: string;
             destination_tx_hash?: string | null;
+            error_message?: string | null;
         };
         message?: string;
     };
 
     return {
-        ok: response.ok,
+        ok:
+            response.ok &&
+            Number.isSafeInteger(body.bridge_request?.id) &&
+            (body.bridge_request?.id ?? 0) > 0 &&
+            typeof body.bridge_request?.status === 'string',
         id: body.bridge_request?.id ?? null,
         status: body.bridge_request?.status ?? null,
         // An auto-processed corridor is often already paid out by the time
         // this returns, and the hash is the only proof of that worth showing.
         destinationTxHash: body.bridge_request?.destination_tx_hash ?? null,
-        message: body.message ?? null,
+        message: body.bridge_request?.error_message ?? body.message ?? null,
     };
 };

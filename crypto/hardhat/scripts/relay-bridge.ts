@@ -26,7 +26,7 @@ if (!RELAYER_PK) {
 const pk = (RELAYER_PK.startsWith("0x") ? RELAYER_PK : `0x${RELAYER_PK}`) as `0x${string}`;
 const account = privateKeyToAccount(pk);
 
-const configuredBridgeAddress = process.env.BRIDGE_EVM_CONTRACT_ADDRESS || "0x0065AA95709ABB09dA8293F469FA9713f79544Eb";
+const configuredBridgeAddress = process.env.BRIDGE_EVM_CONTRACT_ADDRESS || "0xEf2c8E731006EEDD8F44f5Ea03A389635BB28f90";
 const BRIDGE_ADDRESS = configuredBridgeAddress as `0x${string}`;
 
 // CyberSolBurnSwap: fixed-rate redeemer, burns CYBER.sol to 0x...dEaD and pays
@@ -84,6 +84,7 @@ async function releaseCyberSol(to: `0x${string}`, amount: bigint, nonce: bigint)
     args: [to, amount, nonce],
   });
 
+  console.log(JSON.stringify({ broadcastTxHash: hash }));
   console.log("TX:", hash);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   console.log("Block:", receipt.blockNumber);
@@ -171,6 +172,7 @@ async function releaseAndConvert(
     functionName: "swap",
     args: [amountIn],
   });
+  console.log(JSON.stringify({ broadcastTxHash: swapHash }));
   const swapReceipt = await publicClient.waitForTransactionReceipt({ hash: swapHash });
   console.log("Swap TX:", swapHash, "status:", swapReceipt.status);
   if (swapReceipt.status !== "success") {
@@ -182,6 +184,7 @@ async function releaseAndConvert(
     to: recipient,
     value: amountOut,
   });
+  console.log(JSON.stringify({ broadcastTxHash: payoutHash }));
   const payoutReceipt = await publicClient.waitForTransactionReceipt({ hash: payoutHash });
   console.log("Payout TX:", payoutHash, "status:", payoutReceipt.status);
   if (payoutReceipt.status !== "success") {

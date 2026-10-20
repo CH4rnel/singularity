@@ -151,7 +151,7 @@ return [
 
     'bridge' => [
         'evm_rpc_url' => env('BRIDGE_EVM_RPC_URL', env('CYBERIA_RPC_URL')),
-        'evm_bridge_address' => env('BRIDGE_EVM_CONTRACT_ADDRESS'),
+        'evm_bridge_address' => env('BRIDGE_EVM_CONTRACT_ADDRESS', '0xEf2c8E731006EEDD8F44f5Ea03A389635BB28f90'),
         // The relayer is the same EOA as the contract deployer / owner.
         // BRIDGE_RELAYER_PRIVATE_KEY exists for backwards compat; canonical
         // name is DEPLOYER_PK. `?:` (not the env() default) is used because

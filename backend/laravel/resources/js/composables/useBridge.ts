@@ -29,6 +29,7 @@ import {
     unreadableCapacity,
 } from '@/lib/bridgeCapacity';
 import { bridgeChainInfo, tokenOnChain } from '@/lib/bridgeConfig';
+import { reserveBridgeCapacity } from '@/lib/bridgeReservation';
 import { BRIDGE_TOKENS } from '@/lib/bridgeTokens';
 import type { BridgeTokenInfo, BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import { getSelectedEvmProvider } from '@/lib/evmProvider';
@@ -958,72 +959,17 @@ export const useBridge = () => {
         | { ok: true; reference: string; expiresAt: string | null }
         | { ok: false; message: string; reason: string }
     > => {
-        const csrfToken = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1];
+        const result = await reserveBridgeCapacity(params);
 
-        try {
-            const res = await fetch('/bridge/reserve', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-XSRF-TOKEN': csrfToken
-                        ? decodeURIComponent(csrfToken)
-                        : '',
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify({
-                    direction: params.direction,
-                    token: params.token,
-                    sender_address: params.senderAddress,
-                    recipient_address: params.recipientAddress,
-                    amount: params.amount,
-                }),
-            });
-
-            const json = await res.json().catch(() => ({}));
-
-            if (!res.ok) {
-                // Show the number that caused the refusal, not the stale one
-                // the screen was drawn with.
-                if (json?.capacity) {
-                    destinationCapacities.value = {
-                        ...destinationCapacities.value,
-                        [capacityKey(params.direction, params.token)]:
-                            parseCapacity(json.capacity),
-                    };
-                }
-
-                return {
-                    ok: false,
-                    reason:
-                        typeof json?.reason === 'string'
-                            ? json.reason
-                            : 'refused',
-                    message:
-                        typeof json?.message === 'string'
-                            ? json.message
-                            : 'The bridge cannot take this transfer right now.',
-                };
-            }
-
-            return {
-                ok: true,
-                reference: json.reservation.reference,
-                expiresAt: json.reservation.expires_at ?? null,
-            };
-        } catch (e) {
-            console.error('[bridge] reserveDestinationCapacity failed', e);
-
-            // Never fall through to a signature on a failed reservation: the
-            // point of the whole mechanism is that an irreversible source-side
-            // step must not begin uncovered.
-            return {
-                ok: false,
-                reason: 'unreachable',
-                message:
-                    'Could not reach the bridge to hold liquidity for this transfer. Nothing was sent — try again.',
+        if (!result.ok && result.capacity) {
+            destinationCapacities.value = {
+                ...destinationCapacities.value,
+                [capacityKey(params.direction, params.token)]:
+                    parseCapacity(result.capacity),
             };
         }
+
+        return result;
     };
 
     return {

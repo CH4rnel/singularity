@@ -13,6 +13,8 @@ use Illuminate\Support\Carbon;
  * @property string $token
  * @property string $source_chain
  * @property string|null $source_tx_hash
+ * @property string|null $submitted_intent_hash
+ * @property string|null $submitted_source_tx_hash
  * @property int $source_nonce
  * @property string|null $sender_address
  * @property string $recipient_address
@@ -107,6 +109,8 @@ class BridgeRequest extends Model
         'token',
         'source_chain',
         'source_tx_hash',
+        'submitted_intent_hash',
+        'submitted_source_tx_hash',
         'source_nonce',
         'sender_address',
         'recipient_address',
