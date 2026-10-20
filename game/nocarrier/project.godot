@@ -28,6 +28,7 @@ Wallet="*res://scripts/autoload/Wallet.gd"
 Signer="*res://scripts/autoload/Signer.gd"
 Ledger="*res://scripts/autoload/Ledger.gd"
 Events="*res://scripts/autoload/Events.gd"
+Trace="*res://scripts/autoload/Trace.gd"
 Game="*res://scripts/autoload/Game.gd"
 
 [display]

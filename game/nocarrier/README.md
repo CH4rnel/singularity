@@ -61,6 +61,32 @@ Unlabeled tapes and old paperwork spawn around the station: bring them to
 the streamer and the scanner. A node with zero working disks gets a refurb
 drive shipped on credit — no dead ends, only debt.
 
+### REVERSE CARRIER
+
+The signal can now come from inside the station. **R** raises the **R-07
+passive receiver**: a directional meter, an oscilloscope and clicks that get
+faster as you approach and face the source. Follow the peak to one of four
+marked junction boxes. It works during a total blackout.
+
+Through the receiver the box opens into a moving, impossible corridor —
+ray-marched on the GPU, with parallax and twisting nested arches. Keep the
+junction in sight within 2.8 m and **hold E for 3.5 seconds** to ground it.
+The corridor straightens and turns green as the lock builds. Releasing E,
+looking away, lowering the receiver, opening a menu or sleeping interrupts
+it. Walls block grounding even when the radio signal passes through them.
+
+Grounding costs **6 energy**, removes **8 line noise**, and files a bilingual
+maintenance report in MAIL. An unresolved source adds **0.6 noise/hour**
+before ordinary passive noise decay, including during sleep. The first shift
+always has a source near the corridor; later shifts can spawn one when noise
+reaches 15. Sources rotate between four locations, persist until grounded,
+and cannot respawn on the day they were closed. Opening the receiver the
+first time delivers its instructions in MAIL.
+
+Lower the receiver with **R** before using normal equipment. Its guide,
+source and completion history persist in saves; partial locks do not. Older
+saves gain the new system automatically.
+
 ### No dead ends
 
 Broke, dark and out of fuel is a situation, not a game over:
@@ -82,6 +108,7 @@ Broke, dark and out of fuel is a situation, not a game over:
 | `Shift` · `Space` | sprint · jump |
 | `E` | interact (terminal, bed, kettle, generator, dynamo, racks, hatch, phone, streamer, degausser, printer, scanner…) |
 | `F` | flashlight |
+| `R` | raise/lower passive receiver; hold `E` on a nearby source to ground it |
 | `C` | connect MetaMask (web build; desktop uses the in-game wallet) |
 | `Esc` | menu (pause) / leave terminal |
 | `1-9` | terminal apps: SCAN · TAPS · FILES · MARKET · SHOP · MAIL · SYS · UPLINK · MEDIA |
@@ -155,6 +182,21 @@ godot4 --headless --import .              # first time only: build class cache
 godot4 --headless --path . -s tests/smoke.gd
 ```
 
+The reverse-carrier regression suite additionally drives source lifetime,
+directional reception, interruption, costs, old-save migration, localization,
+all four world locations, collision occlusion and the physical E input path:
+
+```bash
+godot4 --headless --path . -s tests/trace_test.gd
+```
+
+These tests reset/save the simulation. To keep a playthrough and its local
+wallet separate, run tests with an isolated user-data directory, for example:
+
+```bash
+XDG_DATA_HOME="$(mktemp -d /tmp/nocarrier-test.XXXXXX)" godot4 --headless --path . -s tests/trace_test.gd
+```
+
 Exit code 0 means every check passed. Debug knobs: `NC_TIME_SCALE` (game
 minutes per real second) and `NC_ANOMALY` (starting noise) as env vars.
 
@@ -182,6 +224,11 @@ scripts/autoload/Media.gd  DEAD MEDIA: hard disks, tapes, CD-Rs, paper;
                            heat damage, tape rot, noise leaks
 scripts/autoload/Events.gd anomaly-gated event director (flickers → phone →
                            knocks → blackouts → the thing in the corridor)
+scripts/autoload/Trace.gd  reverse-carrier lifecycle, reception, grounding,
+                           noise leak, maintenance logs and persistence
+scripts/world/TraceField.gd junction geometry, visibility, raycast contact
+scripts/ui/Receiver.gd     directional scope and grounding progress reticle
+shaders/carrier_breach.gdshader  ray-marched impossible corridor
 scripts/autoload/Sfx.gd    procedural synth: every sound is generated PCM
 scripts/autoload/Chain.gd  Cyberia JSON-RPC reads (block, CYBER balance)
 scripts/autoload/Wallet.gd browser wallet via JavaScriptBridge (EIP-1193)

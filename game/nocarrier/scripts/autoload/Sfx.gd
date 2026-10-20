@@ -66,6 +66,13 @@ func _build(name: String) -> AudioStreamWAV:
 			wav.loop_begin = 0
 			wav.loop_end = s.size()
 			return wav
+		"trace_tick":
+			return _pcm(_tone(1320.0, 0.035, 0.32, 65.0))
+		"trace_close":
+			var s := _tone(220.0, 0.16, 0.3, 12.0)
+			s.append_array(_tone(440.0, 0.18, 0.3, 10.0))
+			s.append_array(_tone(660.0, 0.35, 0.25, 8.0))
+			return _pcm(s)
 		"beep":
 			return _pcm(_tone(880.0, 0.12, 0.5, 14.0))
 		"blip":

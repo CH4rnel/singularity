@@ -30,6 +30,7 @@ var hud: NcHud
 var terminal: NcTerminal
 var menu: NcMenu
 var player: SysopPlayer
+var trace_field: NcTraceField
 
 var _rooms := {}            # name -> {"lights": Array, "fixtures": Array}
 var _signs: Array = []      # [[Label3D, loc_key], ...]
@@ -84,6 +85,9 @@ func _ready() -> void:
 	_spawn_docs(2)
 	Game.day_tick.connect(_daily_spawns)
 	Loc.lang_changed.connect(_relabel_signs)
+	trace_field = NcTraceField.new()
+	trace_field.main = self
+	add_child(trace_field)
 	Events.register_main(self)
 	Game.power_changed.connect(_apply_power)
 	_apply_power(Game.power_on())

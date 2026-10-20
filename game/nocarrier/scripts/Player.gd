@@ -73,7 +73,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key and key.pressed and not key.echo:
 		match key.physical_keycode:
+			KEY_R:
+				if main != null:
+					main.trace_field.toggle_receiver()
 			KEY_E:
+				if main != null and main.trace_field.receiver_on:
+					return
 				if _focus != null:
 					_focus.run()
 			KEY_F:
@@ -132,7 +137,7 @@ func _physics_process(delta: float) -> void:
 func _update_focus() -> void:
 	var prev := _focus
 	_focus = null
-	if not frozen:
+	if not frozen and (main == null or not main.trace_field.receiver_on):
 		var from := _camera.global_position
 		var to := from - _camera.global_transform.basis.z * REACH
 		var query := PhysicsRayQueryParameters3D.create(from, to)

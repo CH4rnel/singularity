@@ -186,6 +186,9 @@ func _refresh() -> void:
 		Loc.t("ui.noise"), noise,
 	]
 
+	if Trace.source >= 0:
+		_status.text += "\n[color=#ffc252]%s[/color]" % Loc.t("trace.hud")
+
 	_needs.text = "[color=#4d8a63]%s [color=#%s]%s[/color]\n%s [color=#%s]%s[/color][/color]" % [
 		Loc.t("ui.energy"), _bar_color(Game.energy), _bar(Game.energy),
 		Loc.t("ui.food"), _bar_color(Game.hunger), _bar(Game.hunger),

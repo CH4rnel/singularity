@@ -188,6 +188,7 @@ func _step(m: float) -> void:
 
 	Net.advance(m)
 	Media.advance(m)
+	Trace.advance(m)
 	Events.advance(m)
 
 	# clock
@@ -690,13 +691,14 @@ func finish(kind: String) -> void:
 
 func _first_day() -> void:
 	Net.new_day()
+	Trace.ensure_source()
 	var m: Array = SCRIPTED_MAIL[1]
 	add_mail(m[0], m[1], [], m[2], [])
 
 
 func save() -> void:
 	var data := {
-		"v": 3,
+		"v": 4,
 		"day": day, "time_min": time_min, "money": money,
 		"lifetime_earned": lifetime_earned,
 		"energy": energy, "hunger": hunger, "anomaly": anomaly,
@@ -712,6 +714,7 @@ func save() -> void:
 		"anomaly_mail_sent": _anomaly_mail_sent,
 		"net": Net.get_state(),
 		"media": Media.get_state(),
+		"trace": Trace.get_state(),
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f:
@@ -765,6 +768,7 @@ func _load() -> void:
 	var net_data: Dictionary = data.get("net", {})
 	Media.set_state(data.get("media", {}), float(net_data.get("disk_total", 512.0)))
 	Net.set_state(net_data)
+	Trace.set_state(data.get("trace", {}))
 	_was_power = power_on()
 	_was_gen = gen_running()
 	_fuel_warned = int(fuel)
@@ -813,6 +817,7 @@ func reset_all() -> void:
 	Media.reset()
 	Net.reset()
 	Events.reset()
+	Trace.reset()
 	_first_day()
 	if is_inside_tree() and get_tree().current_scene != null:
 		get_tree().call_deferred("reload_current_scene")

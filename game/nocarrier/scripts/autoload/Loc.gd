@@ -11,6 +11,29 @@ const CFG_PATH := "user://nocarrier_cfg.json"
 var lang := "en"
 
 const S := {
+	# --- reverse carrier / portable receiver ------------------------------------
+	"trace.receiver": {"en": "PASSIVE RECEIVER", "ru": "ПАССИВНЫЙ ПРИЁМНИК"},
+	"trace.hud": {"en": "[R] receiver — reverse carrier detected", "ru": "[R] приёмник — обратная несущая"},
+	"trace.appeared": {"en": "A carrier is coming from inside the station. [R] receiver.", "ru": "Несущая идёт изнутри станции. [R] приёмник."},
+	"trace.signal": {"en": "SIGNAL %02d%%", "ru": "СИГНАЛ %02d%%"},
+	"trace.left": {"en": "<< LEFT", "ru": "<< СЛЕВА"},
+	"trace.right": {"en": "RIGHT >>", "ru": "СПРАВА >>"},
+	"trace.ahead": {"en": "AHEAD", "ru": "ВПЕРЕДИ"},
+	"trace.behind": {"en": "BEHIND", "ru": "ПОЗАДИ"},
+	"trace.clear": {"en": "LINE QUIET", "ru": "ЛИНИЯ ТИХА"},
+	"trace.search": {"en": "Follow the peak. Find the junction.", "ru": "Ищи пик. Найди коробку связи."},
+	"trace.hold": {"en": "HOLD [E] — GROUND %03d%%", "ru": "ДЕРЖИ [E] — СБРОС %03d%%"},
+	"trace.tired": {"en": "Need 6 energy. Rest before grounding.", "ru": "Нужно 6 сил. Сначала отдохни."},
+	"trace.lower": {"en": "[R] lower receiver / use station", "ru": "[R] убрать / работать со станцией"},
+	"trace.guide.short": {"en": "Listen for the peak. Keep the source in sight. Hold E to ground it.", "ru": "Ищи пик сигнала. Смотри на источник. Держи E, чтобы замкнуть его на землю."},
+	"trace.closed": {"en": "Carrier grounded. Noise -%d, energy -%d. Trace filed in MAIL.", "ru": "Несущая погашена. Шум -%d, силы -%d. Протокол в ПОЧТЕ."},
+	"trace.guide.subj": {"en": "R-07: reverse carrier procedure", "ru": "R-07: порядок гашения обратной несущей"},
+	"trace.guide.body": {"en": "sysop,\n\nif the signal is strongest with the terminal off, it is already in the walls.\n\nR raises the passive receiver. Sweep the station slowly: the meter and click rate rise when you face the source. It works without station power.\n\nFind the marked junction. Through the receiver it may look deeper than the wall. That is not a service tunnel.\n\nApproach within arm's reach, look directly into it and hold E for 3.5 seconds. Looking away, letting go, or opening a menu breaks the lock. Grounding costs 6 energy and removes 8 line noise.\n\nLower the receiver with R before using other equipment. One source may surface per shift, once the line is noisy enough. An ungrounded source remains until dealt with.\n\nDo not follow the corridor.",
+		"ru": "сисоп,\n\nесли при выключенном терминале сигнал сильнее, он уже в стенах.\n\nR поднимает пассивный приёмник. Медленно обойди станцию: уровень и частота щелчков растут, когда смотришь на источник. Питание станции не требуется.\n\nНайди маркированную коробку связи. Через приёмник она может оказаться глубже стены. Это не служебный тоннель.\n\nПодойди на расстояние вытянутой руки, смотри прямо внутрь и держи E 3,5 секунды. Отпустишь кнопку, отвернёшься или откроешь меню — захват сорвётся. Гашение стоит 6 сил и снимает 8 шума линии.\n\nПеред работой с оборудованием убери приёмник кнопкой R. Не больше одного источника за смену, если линия достаточно шумная. Непогашенный остаётся до устранения.\n\nНе иди по коридору."},
+	"trace.log.subj": {"en": "grounding record %03d", "ru": "протокол гашения %03d"},
+	"trace.log.body": {"en": "J-%02d / NODE-07. Shift %d.\n\nReverse carrier isolated. The measured depth exceeded the wall thickness.\n\nNo service tunnel exists behind this junction.\n\nThe receiver continued to report footsteps for three seconds after grounding. Record closed.",
+		"ru": "J-%02d / NODE-07. Смена %d.\n\nОбратная несущая изолирована. Измеренная глубина превысила толщину стены.\n\nЗа этой коробкой нет служебного тоннеля.\n\nПосле гашения приёмник ещё три секунды регистрировал шаги. Протокол закрыт."},
+
 	# --- apps / terminal chrome -------------------------------------------------
 	"app.scan": {"en": "SCAN", "ru": "СКАН"},
 	"app.taps": {"en": "TAPS", "ru": "ТАПЫ"},
@@ -604,8 +627,8 @@ const S := {
 	"menu.save": {"en": "save", "ru": "сохранить"},
 	"menu.paused": {"en": "— PAUSED —", "ru": "— ПАУЗА —"},
 	"menu.hint": {"en": "↑↓ + enter · esc", "ru": "↑↓ + enter · esc"},
-	"menu.controls": {"en": "WASD move · E interact · F flashlight · C wallet · esc menu",
-		"ru": "WASD движение · E действие · F фонарик · C кошелёк · esc меню"},
+	"menu.controls": {"en": "WASD move · E interact · R receiver · F flashlight · C wallet · esc menu",
+		"ru": "WASD движение · E действие · R приёмник · F фонарик · C кошелёк · esc меню"},
 
 	# --- mail: senders + scripted -----------------------------------------------------------------------------------
 	"from.op": {"en": "OPERATOR", "ru": "ОПЕРАТОР"},
