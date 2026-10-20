@@ -42,6 +42,7 @@ singularity/
 ├── services/irc/         # Ergo IRC server (irc.cyberia.church:6697, TLS only)
 ├── services/cyberia-dns/ # DNS for CyberiaDomains NFTs: .cyber + launchpad-token zones (UDP/TCP 53 + DoH)
 ├── services/monero/      # The bridge's Monero wallet (monerod + monero-wallet-rpc): the XMR corridor is unreadable without one
+├── services/compute-agent/ # Compute hosting: runs CyberiaCompute leases (CYBER per second, paid by each service's ServiceTreasury) and meters them
 ├── services/lisp/        # Common Lisp daemon/http services
 ├── services/telegram-bot/ # Cyberia Telegram bot (Python): rewards, announcers, pump.fun buy bot, whales gate, wallet Mini App, AI assistant with a per-user free-model picker
 ├── services/lainos/      # LainOS: autonomous AI agent framework (TypeScript), Cyberia chain plugin

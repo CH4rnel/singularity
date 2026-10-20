@@ -1,0 +1,146 @@
+{
+  "schema": "cyberia.compute.catalog/v1",
+  "note": "Every Cyberia service as a compute lease would describe it. `wave` is the migration order (docs: services/compute-agent/README.md). `treasury` names the ServiceTreasury that pays; `commons` is the Cyberia DAO fund for services with no revenue of their own. `image` is the repository; the digest is filled in by CI when a manifest is rendered.",
+  "services": [
+    {
+      "service": "landing",
+      "wave": 1,
+      "tier": "public",
+      "treasury": "commons",
+      "build": "frontend/landing",
+      "image": "ghcr.io/cyberia-temple/landing",
+      "resources": { "cpus": 0.25, "memoryMb": 64, "pids": 64 },
+      "ports": [{ "container": 80, "protocol": "tcp" }],
+      "health": { "port": 80, "path": "/" },
+      "readOnly": false
+    },
+    {
+      "service": "blog",
+      "wave": 1,
+      "tier": "public",
+      "treasury": "commons",
+      "build": "frontend/jekyll",
+      "image": "ghcr.io/cyberia-temple/blog",
+      "resources": { "cpus": 0.25, "memoryMb": 64, "pids": 64 },
+      "ports": [{ "container": 80, "protocol": "tcp" }],
+      "health": { "port": 80, "path": "/" },
+      "readOnly": false
+    },
+    {
+      "service": "cyberia-dns",
+      "wave": 1,
+      "tier": "public",
+      "treasury": "domains",
+      "build": "services/cyberia-dns",
+      "image": "ghcr.io/cyberia-temple/cyberia-dns",
+      "env": {
+        "CYBERIA_DOMAINS_ADDRESS": "0xA827D058a5738EaC28DB1d658D3e8cFb82CBb66B",
+        "CYBERIA_RPC_URL": "https://rpc.cyberia.church",
+        "DNS_PORT": "53",
+        "DOH_PORT": "8053",
+        "DNS_FORWARD_UDP": "0"
+      },
+      "resources": { "cpus": 0.5, "memoryMb": 256, "pids": 128 },
+      "ports": [
+        { "container": 53, "host": 53, "protocol": "udp" },
+        { "container": 53, "host": 53, "protocol": "tcp" },
+        { "container": 8053, "protocol": "tcp" }
+      ],
+      "health": { "port": 8053, "path": "/health" }
+    },
+    {
+      "service": "cyberia-rpc-follower",
+      "wave": 1,
+      "tier": "public",
+      "treasury": "commons",
+      "image": "docker.io/0xpolygon/polygon-edge",
+      "command": ["server", "--data-dir=/data", "--chain=/genesis.json", "--jsonrpc=0.0.0.0:8545", "--libp2p=0.0.0.0:1337", "--seal=false", "--price-limit=1000000000"],
+      "resources": { "cpus": 2, "memoryMb": 4096, "pids": 512 },
+      "ports": [
+        { "container": 8545, "protocol": "tcp" },
+        { "container": 1337, "host": 1337, "protocol": "tcp" }
+      ],
+      "volumes": [{ "name": "data", "path": "/data" }],
+      "health": { "port": 8545, "path": "/" },
+      "readOnly": false,
+      "notes": "A non-sealing follower, the same node services/cyberia-node prepares. Needs genesis.json baked into a derived image (TODO) — the validator never moves: its key is the chain."
+    },
+    {
+      "service": "ipfs",
+      "wave": 2,
+      "tier": "public",
+      "treasury": "nft",
+      "image": "docker.io/ipfs/kubo",
+      "env": { "IPFS_PROFILE": "server" },
+      "resources": { "cpus": 1, "memoryMb": 2048, "pids": 512 },
+      "ports": [
+        { "container": 4001, "host": 4001, "protocol": "tcp" },
+        { "container": 4001, "host": 4001, "protocol": "udp" },
+        { "container": 8080, "protocol": "tcp" }
+      ],
+      "volumes": [{ "name": "repo", "path": "/data/ipfs" }],
+      "health": { "port": 8080, "path": "/ipfs/bafkqaaa" },
+      "readOnly": false,
+      "notes": "Gateway and swarm only. The pinning API (5001) can run any node command and stays on the trusted host until pins are replicated by CID from it."
+    },
+    {
+      "service": "explorer",
+      "wave": 2,
+      "tier": "public",
+      "treasury": "commons",
+      "image": "ghcr.io/blockscout/blockscout",
+      "resources": { "cpus": 4, "memoryMb": 8192, "pids": 1024 },
+      "ports": [{ "container": 4000, "protocol": "tcp" }],
+      "volumes": [{ "name": "db", "path": "/var/lib/postgresql/data" }],
+      "health": { "port": 4000, "path": "/api/v2/stats" },
+      "readOnly": false,
+      "notes": "Its database is derived from the chain, so it holds nothing a provider could steal; it is a multi-container stack, so this lease is the first one that needs manifest v2 (several containers per lease)."
+    },
+    {
+      "service": "irc",
+      "wave": 2,
+      "tier": "trusted",
+      "treasury": "commons",
+      "image": "ghcr.io/ergochat/ergo",
+      "secrets": ["ERGO__OPERS__ADMIN__PASSWORD"],
+      "resources": { "cpus": 0.5, "memoryMb": 256, "pids": 128 },
+      "ports": [{ "container": 6697, "host": 6697, "protocol": "tcp" }],
+      "volumes": [{ "name": "data", "path": "/ircd" }],
+      "notes": "Trusted because the TLS key for irc.cyberia.church lets whoever holds it impersonate the server."
+    },
+    {
+      "service": "telegram-bot",
+      "wave": 3,
+      "tier": "trusted",
+      "treasury": "commons",
+      "build": "services/telegram-bot",
+      "image": "ghcr.io/cyberia-temple/telegram-bot",
+      "secrets": ["TELEGRAM_BOT_TOKEN", "DEPLOYER_PK"],
+      "env": { "DB_PATH": "/data/database.sqlite" },
+      "resources": { "cpus": 0.5, "memoryMb": 512, "pids": 128 },
+      "volumes": [{ "name": "data", "path": "/data" }],
+      "readOnly": false,
+      "notes": "Writes into Laravel's SQLite file, so it moves with the site."
+    },
+    {
+      "service": "site",
+      "wave": 3,
+      "tier": "trusted",
+      "treasury": "commons",
+      "build": "backend/laravel",
+      "image": "ghcr.io/cyberia-temple/site",
+      "secrets": ["APP_KEY", "BRIDGE_RELAYER_PRIVATE_KEY", "GAS_SPONSOR_PRIVATE_KEY", "OPS_HEARTBEAT_TOKEN"],
+      "resources": { "cpus": 2, "memoryMb": 2048, "pids": 512 },
+      "ports": [{ "container": 9001, "protocol": "tcp" }],
+      "volumes": [{ "name": "storage", "path": "/var/www/html/storage" }],
+      "health": { "port": 9001, "path": "/up" },
+      "readOnly": false,
+      "notes": "cyberia.church, the bridge, swap, wallet API, console, AI gateway. Holds every hot key; stays on the trusted provider until keys are split out of it."
+    }
+  ],
+  "neverLeased": [
+    { "service": "polygon-edge validator", "reason": "its key is the chain's only sealer; a provider holding it is the chain" },
+    { "service": "monero wallet-rpc", "reason": "a hot wallet: its operator can spend the bridge's XMR" },
+    { "service": "lainos daemon", "reason": "trades from its own wallet and spawns coding agents with the operator's credentials" }
+  ]
+}

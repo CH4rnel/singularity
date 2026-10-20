@@ -1,0 +1,20 @@
+{
+  "name": "cyberia-compute-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs Cyberia service containers for CyberiaCompute leases, meters them, and gets paid by the second.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/agent.mjs",
+    "watch": "node src/agent.mjs --watch",
+    "hash": "node src/agent.mjs --hash",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
+}

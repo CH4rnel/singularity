@@ -27,6 +27,7 @@ This file provides Claude Code guidance for the Singularity repository. Keep it 
 | `services/irc/` | Ergo IRC server, Docker Compose | Cyberia IRC: `irc.cyberia.church:6697`, TLS only (Let's Encrypt via the shared certbot, SIGHUP cron reloads it), `#cyberia`; oper hash only in the gitignored `.env` |
 | `services/cyberia-dns/` | Node (stdlib only), Docker Compose | Cyberia DNS: domain NFTs from `CyberiaDomains` (`0xA827…b66B`) — `.cyber` plus a zone per launchpad token named `.<zone>`/`DOT<ZONE>` — as authoritative DNS on `2.26.24.177:53` (UDP+TCP, v4+v6), DoH + JSON (`/api/resolve`, `/api/zones`) at `dns.cyberia.church`, and the `:80` default-server web gateway; zones the real root delegates are never served; UDP recursion refused on purpose |
 | `services/monero/` | Docker Compose (monerod + monero-wallet-rpc) | The bridge's Monero wallet: the XMR corridor cannot be read by anyone who does not hold one |
+| `services/compute-agent/` | Node, ethers v6, Docker CLI | Cyberia compute: runs service containers for `CyberiaCompute` leases (native CYBER, paid per second by each service's `ServiceTreasury`), meters them from `docker stats`, commits hourly usage hashes; `--watch` is the payer's health watcher; `catalog.json` lists every service by tier and migration wave |
 | `services/lisp/` | Common Lisp/SBCL | Daemon and HTTP services |
 | `services/telegram-bot/` | Python, python-telegram-bot, web3, SQLAlchemy | Cyberia Telegram bot: wallet rewards, chat tokens, on-chain announcers, pump.fun buy bot, whales gate, AI assistant with a per-user free-model picker (`/model`) |
 | `services/lainos/` | TypeScript, Node, Anthropic SDK, viem | LainOS: autonomous AI agent framework (ElizaOS-like) with a Cyberia chain plugin |
@@ -257,4 +258,5 @@ Use the smallest relevant check:
 - Bitcoin/Litecoin relay: `cd crypto/utxo && npm test && npm run typecheck` (the corridor's PHP half is `BridgeUtxoCorridorTest`)
 - Monero bridge wallet: `cd services/monero && docker compose config` (the corridor itself is covered by `MoneroWalletRpcTest` + `BridgeMoneroCorridorTest`)
 - Cyberia DNS: `cd services/cyberia-dns && npm test` (the registry: `cd crypto/hardhat && npx hardhat test test/CyberiaDomains.ts`; the wallet half: `tests/Frontend/WalletDomainsTest.mjs`)
+- Compute hosting: `cd services/compute-agent && npm test` (the contracts: `cd crypto/hardhat && npx hardhat test test/CyberiaCompute.ts`, which also pins the agent's accrual arithmetic to the contract's)
 - Host heartbeat script: `bash -n scripts/ops/heartbeat.sh`, then `OPS_HEARTBEAT_PRINT=1 OPS_HEARTBEAT_TOKEN=x ENV_FILE=/dev/null bash scripts/ops/heartbeat.sh | python3 -m json.tool` — it builds JSON by hand, so a malformed field is only visible in the payload
