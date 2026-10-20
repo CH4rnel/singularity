@@ -731,7 +731,7 @@ export class PressService implements Service {
 export function writerSystemPrompt(plan: ContentPlan): string {
   const lang = plan.language === "en" ? "English" : plan.language;
   return [
-    `You write the public posts for Cyberia (${plan.account ?? "@cyberia_temple"} on X, mirrored`,
+    `You write the public posts for Cyberia (${plan.account ?? "@cyberia_chain"} on X, mirrored`,
     `to its Telegram channel). What you produce is published as written — it is the post itself,`,
     `not a draft to be discussed, and no one edits it after you.`,
     ``,

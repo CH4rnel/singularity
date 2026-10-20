@@ -20,7 +20,7 @@ already live.
 - Ritual DEX: https://swap.cyberia.church
 - Telegram channel: https://t.me/cyberia_network
 - Telegram chat: https://t.me/cyberia_network_chat
-- X: https://x.com/cyberia_temple
+- X: https://x.com/cyberia_chain
 - Source: https://github.com/cyberia-temple/singularity
 
 To add Cyberia manually to an EVM wallet, enter the network name, RPC, chain

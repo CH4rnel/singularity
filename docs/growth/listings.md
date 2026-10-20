@@ -19,7 +19,7 @@ submitting forms, opening pull requests, or publishing adapters.
 | DEX                   | `https://swap.cyberia.church`                                     | root `AGENTS.md`                                |
 | Bridge                | `https://bridge.cyberia.church`                                   | root `AGENTS.md`                                |
 | Source                | `https://github.com/cyberia-temple/singularity`                   | landing page                                    |
-| X                     | `https://x.com/cyberia_temple`                                    | landing page                                    |
+| X                     | `https://x.com/cyberia_chain`                                     | landing page                                    |
 | X community           | `https://x.com/i/chat/group_join/g2052379607618179294/V3aEe965FJ` | landing page                                    |
 | Discord               | `https://discord.gg/J7H5VNhnW`                                    | landing page                                    |
 | Telegram              | `https://t.me/cyberia_network`                                    | landing page                                    |

@@ -281,7 +281,7 @@ except ValueError:
 # Plain one-word messages people drop in chat ("ca?", "x") asking for the
 # project's social link or token contract address. Answered both as /x, /ca
 # commands and as bare-text triggers. All values are env-overridable.
-PROJECT_X_URL = os.environ.get("PROJECT_X_URL", "https://x.com/cyberia_temple")
+PROJECT_X_URL = os.environ.get("PROJECT_X_URL", "https://x.com/cyberia_chain")
 PROJECT_WEBSITE_URL = os.environ.get("PROJECT_WEBSITE_URL", "https://cyberia.church")
 TELEGRAM_CHANNEL_URL = os.environ.get("TELEGRAM_CHANNEL_URL", "https://t.me/cyberia_network")
 TELEGRAM_CHAT_URL = os.environ.get("TELEGRAM_CHAT_URL", "https://t.me/cyberia_network_chat")
