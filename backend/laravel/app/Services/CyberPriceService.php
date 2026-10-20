@@ -13,7 +13,7 @@ class CyberPriceService
     public function get(): ?array
     {
         try {
-            $response = Http::get($this->url.$this->mint);
+            $response = Http::timeout(8)->get($this->url.$this->mint);
 
             if ($response->successful()) {
                 $data = $response->json();

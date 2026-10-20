@@ -46,6 +46,17 @@ export const TOKEN_LOGOS: Record<string, string> = {
     WETH: '/token-icons/eth.svg',
 };
 
+/**
+ * Tokens on networks with no EVM chain id, keyed by mint.
+ *
+ * A base58 mint names one token on one chain and cannot be spoofed by a
+ * contract elsewhere, so here the address alone decides — case-sensitively,
+ * because base58 is.
+ */
+const MINT_SYMBOLS: Record<string, string> = {
+    E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump: 'CYBER.sol',
+};
+
 // Symbols whose <img> failed to load (404). Module-level so a single failure is
 // remembered across every icon of that token on the page.
 const failed = reactive<Record<string, boolean>>({});
@@ -72,6 +83,12 @@ export const logoForToken = (
     if (!address) {
         // A chain's own coin has no contract; its symbol is the only key.
         return TOKEN_LOGOS[symbol];
+    }
+
+    if (chainId === undefined) {
+        const symbol = MINT_SYMBOLS[address];
+
+        return symbol ? TOKEN_LOGOS[symbol] : undefined;
     }
 
     if (chainId === ROBINHOOD_STOCK_CHAIN_ID) {

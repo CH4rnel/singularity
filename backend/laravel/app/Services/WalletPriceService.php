@@ -50,6 +50,7 @@ class WalletPriceService
     public function __construct(
         private CyberiaPrices $tokenPrices,
         private RobinhoodStockService $stocks,
+        private CyberPriceService $cyberSol,
     ) {}
 
     /**
@@ -93,26 +94,37 @@ class WalletPriceService
     }
 
     /**
-     * USD prices for the ERC20s the wallet may hold, keyed by chain and then by
-     * lowercased contract address.
+     * USD prices for the tokens the wallet may hold, keyed by chain and then by
+     * lowercased contract address — or mint, on Solana, lowercased the same way
+     * because that is how every wallet screen looks a price up.
      *
-     * Only Cyberia has an answer here, and it is the same one the token pages
-     * and the analytics dashboard give: prices walked outward from the USD
-     * anchors through the DEX pool graph. Tokens on chains with no such graph
-     * are simply absent, and the wallet renders them as unpriced rather than
-     * inventing a number for a balance someone is about to spend.
+     * Cyberia's answer is the same one the token pages and the analytics
+     * dashboard give: prices walked outward from the USD anchors through the
+     * DEX pool graph. On Solana only the project's own CYBER.sol is priced,
+     * from its pool on DexScreener. Anything else is simply absent, and the
+     * wallet renders it as unpriced rather than inventing a number for a
+     * balance someone is about to spend.
      *
      * @return array<string, array<string, float>>
      */
     private function tokenUsd(): array
     {
-        if (! Schema::hasTable('dex_pools')) {
-            return [];
+        $tokens = [];
+
+        if (Schema::hasTable('dex_pools')) {
+            $tokens['cyberia'] = $this->tokenPrices->priceFromPools(
+                DB::table('dex_pools')->get()
+            );
         }
 
-        return ['cyberia' => $this->tokenPrices->priceFromPools(
-            DB::table('dex_pools')->get()
-        )];
+        $cyberSol = $this->cyberSol->get()['priceUsd'] ?? null;
+
+        if (is_numeric($cyberSol) && (float) $cyberSol > 0) {
+            $mint = strtolower((string) config('cyber.contracts.cyber_sol_mint'));
+            $tokens['solana'] = [$mint => (float) $cyberSol];
+        }
+
+        return $tokens;
     }
 
     /**

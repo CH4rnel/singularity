@@ -37,6 +37,29 @@ test("a chain's own coin, which has no contract, still finds its logo by symbol"
     );
 });
 
+test('CYBER.sol on Solana, which has no chain id, finds its logo by mint', () => {
+    const mint = 'E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump';
+
+    assert.equal(
+        logoForToken(undefined, mint, 'CYBER.sol'),
+        '/token-icons/CYBER.png',
+    );
+    assert.equal(
+        logoForToken(undefined, mint.toLowerCase(), 'CYBER.sol'),
+        undefined,
+        'base58 is case-sensitive',
+    );
+    assert.equal(
+        logoForToken(
+            undefined,
+            'So11111111111111111111111111111111111111112',
+            'CYBER.sol',
+        ),
+        undefined,
+        'a ticker alone earns no logo',
+    );
+});
+
 test('bridged assets are marked bridged, and lookups ignore address case', () => {
     assert.equal(provenanceOf(CYBERIA, BRIDGED_USDC)?.kind, 'bridged');
     assert.equal(

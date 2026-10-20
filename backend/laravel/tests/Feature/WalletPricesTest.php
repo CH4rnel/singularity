@@ -146,7 +146,22 @@ it('serves a wallet with no indexer at all rather than failing', function () {
 
     // dex_pools is created by the indexer bot, not by a migration, so a fresh
     // deployment genuinely does not have it.
-    expect(app(WalletPriceService::class)->quotes()['tokens'])->toBe([]);
+    expect(app(WalletPriceService::class)->quotes()['tokens'])->not->toHaveKey('cyberia');
+});
+
+it('prices CYBER.sol on Solana by its mint, the way the wallet looks it up', function () {
+    fakePriceFeeds();
+
+    $tokens = app(WalletPriceService::class)->quotes()['tokens'];
+
+    expect($tokens['solana'][strtolower('E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump')])
+        ->toBe(0.0742);
+});
+
+it('leaves CYBER.sol unpriced when its market does not answer', function () {
+    fakePriceFeeds([DEXSCREENER_URL => Http::response('rate limited', 429)]);
+
+    expect(app(WalletPriceService::class)->quotes()['tokens'])->not->toHaveKey('solana');
 });
 
 it('asks the price feed for each coin once, not once per chain', function () {

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import AddressField from '@/components/wallet/AddressField.vue';
+import StockIcon from '@/components/wallet/StockIcon.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useSecureClipboard } from '@/composables/useSecureClipboard';
 import { LIQUIDITY_CHAINS } from '@/lib/liquidityChains';
+import { logoForToken } from '@/lib/tokenLogos';
 import { formatUnits, hasSwap, sameToken, walletChain } from '@/lib/wallet';
 import type { WalletChainId, WalletTokenBalance } from '@/lib/wallet';
 import { isRoutedChain } from '@/lib/wallet/crosschain';
@@ -105,6 +107,16 @@ const tag = computed(() =>
     ).toUpperCase(),
 );
 
+const logo = computed(() =>
+    token.value === null
+        ? undefined
+        : logoForToken(
+              chain.value.chainId,
+              token.value.address,
+              token.value.symbol,
+          ),
+);
+
 const priceLabel = computed(() => formatUsdPrice(price.value, locale.value));
 
 const explorerUrl = computed(() =>
@@ -132,7 +144,14 @@ const hide = async (): Promise<void> => {
                     margin: 22px 0;
                 "
             >
+                <StockIcon
+                    v-if="logo"
+                    :symbol="token.symbol"
+                    :src="logo"
+                    :size="38"
+                />
                 <span
+                    v-else
                     :style="{
                         display: 'flex',
                         width: '38px',
