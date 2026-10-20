@@ -37,6 +37,7 @@ const props = defineProps<{
     launchpad: { min_cyber: number; lp_burned: boolean };
     corridors: Corridor[];
     market: Market;
+    lock: { date: string; href: string; amount: string; share: string };
 }>();
 
 /** Explorer address page — the receipt behind a claim. */
@@ -472,6 +473,37 @@ const usd = (value: number | null): string =>
                     <p class="mt-1 text-sm text-muted-foreground">
                         A non-custodial wallet that already knows this chain.
                     </p>
+                </Link>
+            </div>
+        </section>
+
+        <!-- The lock is disclosed here because holders ask about it here. The
+             date is the roadmap's horizon; the amount and schedule are read
+             from the stream itself rather than restated, so they cannot drift. -->
+        <section class="space-y-4">
+            <h2 class="text-xl font-bold">The locked supply</h2>
+            <p class="max-w-2xl text-sm text-muted-foreground">
+                {{ lock.amount }} ({{ lock.share }}) are locked in a public
+                Streamflow stream on Solana and unlock at once on
+                {{ lock.date }}. All of it goes to the DAO fund. The stream
+                itself is the receipt, and the roadmap runs at least to that
+                day, with a dated milestone for every deliverable.
+            </p>
+            <div class="flex flex-wrap gap-3 text-sm">
+                <a
+                    :href="lock.href"
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex items-center gap-1 rounded border border-border px-3 py-1.5 transition hover:border-input"
+                >
+                    The lock on Streamflow
+                    <ExternalLink class="h-3.5 w-3.5" />
+                </a>
+                <Link
+                    href="/whitepaper"
+                    class="rounded border border-border px-3 py-1.5 transition hover:border-input"
+                >
+                    Milestones to the unlock
                 </Link>
             </div>
         </section>

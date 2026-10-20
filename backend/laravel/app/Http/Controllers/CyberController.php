@@ -46,6 +46,9 @@ class CyberController extends Controller
             'contracts' => (array) config('cyber.contracts'),
             'launchpad' => (array) config('cyber.launchpad'),
             'corridors' => $this->corridors(),
+            // The unlock date the roadmap runs to, stated where holders read
+            // about the coin — one config entry, so the two pages agree.
+            'lock' => (array) config('whitepaper.horizon'),
             'market' => Cache::remember(
                 'cyber.page.market',
                 (int) config('cyber.cache_ttl', 300),

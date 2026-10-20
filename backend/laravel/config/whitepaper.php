@@ -38,7 +38,28 @@ return [
 
     'document' => '/Cyberia_Roadmap.docx',
     'document_date' => '2026-06-07',
-    'reviewed_at' => '2026-09-13',
+    'reviewed_at' => '2026-10-20',
+
+    /*
+    |--------------------------------------------------------------------------
+    | The horizon
+    |--------------------------------------------------------------------------
+    |
+    | The roadmap runs at least to the day the locked $CYBER supply unlocks
+    | (the Streamflow stream below). Holders are asked to wait until then, so
+    | the plan has to say what will exist by then — and the page prints the
+    | stream so the date can be checked rather than believed.
+    |
+    */
+
+    'horizon' => [
+        'date' => '2027-03-10',
+        'title' => 'Token unlock',
+        'amount' => '50,000,000 CYBER.sol',
+        'share' => '5% of supply',
+        'body' => '50,000,000 CYBER.sol, 5% of the supply, are locked and unlock at once on this day, and all of it goes to the DAO fund. Every milestone below is due on or before the unlock, and the roadmap is reviewed in public the same week.',
+        'href' => 'https://app.streamflow.finance/contract/solana/mainnet/GCvmxEr4cAiSVeye9iD2tF8GsTHDyM4CB3n9AUrjkmFd',
+    ],
 
     'thesis' => 'Open source built the internet. Cyberia is building the chain that pays it back.',
 
@@ -75,6 +96,12 @@ return [
     | `links` are the receipts. External links are marked so the page can say
     | so rather than opening a new tab without warning.
     |
+    | `window` is the span of months (YYYY-MM) the phase's open items are
+    | scheduled into. It may run past the unlock — milestones may not — and a
+    | `to` of null means open-ended, past the unlock. `after` is work that
+    | starts only after the unlock (the vision among it — a direction, not a
+    | task); null is a phase whose remaining items are upkeep.
+    |
     */
 
     'phases' => [
@@ -82,6 +109,7 @@ return [
             'numeral' => 'I',
             'title' => 'Genesis: token, community, public building',
             'status' => 'live',
+            'window' => null,
             'focus' => 'Genesis, $CYBER, community, building in the open',
             'outcome' => 'The identity and the thesis established',
             'summary' => 'Cyberia began as a public experiment around open-source software, community coordination and a builder-first ideology.',
@@ -103,6 +131,7 @@ return [
             'numeral' => 'II',
             'title' => 'Open-source foundation: the Singularity repository',
             'status' => 'live',
+            'window' => null,
             'focus' => 'The public repository and a contribution path into it',
             'outcome' => 'The system is inspectable',
             'summary' => 'A chain built for open source has to be open source itself. Everything that runs — consensus config, contracts, backend, frontends, services, scripts — is in one public repository.',
@@ -126,6 +155,7 @@ return [
             'numeral' => 'III',
             'title' => 'Cyber Chain launch',
             'status' => 'live',
+            'window' => ['from' => '2026-11', 'to' => '2027-01'],
             'focus' => 'The L1 itself',
             'outcome' => 'A live EVM-compatible chain',
             'summary' => 'Cyberia crossed from a token narrative into live infrastructure by launching its own EVM-compatible L1, with the network configuration public.',
@@ -137,6 +167,7 @@ return [
             ],
             'next' => [
                 'A second node: a non-validating full/RPC follower, prepared and not yet deployed',
+                'Nodes run by outside operators who hold at least 5% of the supply (50,000,000 CYBER.sol)',
             ],
             'line' => 'Cyberia is not trying to launch a chain someday. The chain is live now.',
             'links' => [
@@ -148,6 +179,7 @@ return [
             'numeral' => 'IV',
             'title' => 'Core network applications',
             'status' => 'live',
+            'window' => null,
             'focus' => 'Explorer, bridge, DAO, lending, market, farming',
             'outcome' => 'A functioning native app stack',
             'summary' => 'The surfaces an on-chain economy needs, all reachable from cyberia.church rather than from a list of contract addresses.',
@@ -173,6 +205,7 @@ return [
             'numeral' => 'V',
             'title' => 'Solana to Cyber Chain migration',
             'status' => 'live',
+            'window' => ['from' => '2026-11', 'to' => '2026-11'],
             'focus' => 'A path from $CYBER on Solana to the native coin',
             'outcome' => 'A fixed-rate conversion, open to anyone holding the token',
             'summary' => 'The Solana-issued token is the entry point; the native coin is the destination. The two are different assets and the page that converts them says so before it converts anything.',
@@ -195,6 +228,7 @@ return [
             'numeral' => 'VI',
             'title' => 'Cross-asset liquidity',
             'status' => 'progress',
+            'window' => ['from' => '2026-10', 'to' => '2027-02'],
             'focus' => 'Familiar assets, bridged in',
             'outcome' => 'An economy rather than isolated infrastructure',
             'summary' => 'A chain with one asset is a demo. The bridge carries value in from the networks people already hold it on, and every corridor is listed with the state it is actually in.',
@@ -216,8 +250,9 @@ return [
         ],
         [
             'numeral' => 'VII',
-            'title' => 'Native DeFi',
+            'title' => 'Native DeFi: farming, staking, lending, predictions',
             'status' => 'progress',
+            'window' => ['from' => '2026-11', 'to' => '2027-06'],
             'focus' => 'Lending, farming, collateral, dashboards',
             'outcome' => 'A financial layer rather than a set of separate products',
             'summary' => 'Lending and farming exist; the work is turning them into one layer the rest of the economy can lean on.',
@@ -242,6 +277,7 @@ return [
             'numeral' => 'VIII',
             'title' => 'Real-world assets',
             'status' => 'progress',
+            'window' => ['from' => '2026-12', 'to' => '2027-02'],
             'focus' => 'Metals and tokenised equities',
             'outcome' => 'Real-world value, settled on chain',
             'summary' => 'Gold and silver trade on Cyberia; fifty-three tokenised shares and funds trade on Robinhood Chain and are listed in the wallet. The issuer quote and the price a trade actually pays are never blurred together.',
@@ -263,6 +299,7 @@ return [
             'numeral' => 'IX',
             'title' => 'DAO governance and treasury',
             'status' => 'progress',
+            'window' => ['from' => '2026-11', 'to' => '2027-03'],
             'focus' => 'Proposals, votes, treasuries',
             'outcome' => 'A community-directed allocation engine',
             'summary' => 'Governance as running software: on-chain organisations with proposals, votes, comments and treasuries — the layer that will eventually fund the work.',
@@ -274,6 +311,8 @@ return [
                 'A treasury dashboard and an archived proposal history',
                 'DAO-funded contributor reward rounds',
                 'Parameter votes for core application settings',
+                'A DAO treasury on Cyberia receiving the services\' fees in place of a personal address',
+                'The DAO developing the services it earns from: launchpad, farming, staking, lending, predictions, NFT market',
             ],
             'line' => 'A DAO should not vote on vibes. This one should become the funding layer for open-source work.',
             'links' => [
@@ -284,9 +323,10 @@ return [
             'numeral' => 'X',
             'title' => 'The open-source reward engine',
             'status' => 'planned',
+            'window' => 'after',
             'focus' => 'Contribution, tracked and paid',
             'outcome' => 'GitHub-linked rewards claimable on chain',
-            'summary' => 'The most important phase in the document: turning open-source contribution into claimable on-chain value. Nothing here ships until the anti-sybil half of it does.',
+            'summary' => 'The most important phase in the document: turning open-source contribution into claimable on-chain value. Nothing here ships until the anti-sybil half of it does, and it is scheduled after the unlock: node operators are paid first.',
             'done' => [],
             'next' => [
                 'GitHub account linking and repository verification',
@@ -300,8 +340,9 @@ return [
         ],
         [
             'numeral' => 'XI',
-            'title' => 'A launch layer tied to work',
+            'title' => 'A launch layer tied to work, and an AI launchpad',
             'status' => 'progress',
+            'window' => ['from' => '2026-11', 'to' => '2027-06'],
             'focus' => 'Launches backed by code and contribution',
             'outcome' => 'Launch pages that show the work behind a project',
             'summary' => 'The launchpad exists and is deliberately plain: at least 10 CYBER paired against 100% of a new supply, with the LP tokens burned in the same call. The phase is about connecting a launch to the repository behind it.',
@@ -314,6 +355,7 @@ return [
                 'Launch pages showing code, commits, contributors and roadmap',
                 'Contributor allocations',
                 'DAO-reviewed launch categories',
+                'An AI launchpad: a LainOS agent launches its own token and DAO',
             ],
             'line' => 'Launches here should be tied to work, code and public proof.',
             'links' => [
@@ -324,6 +366,7 @@ return [
             'numeral' => 'XII',
             'title' => 'The developer economy',
             'status' => 'progress',
+            'window' => ['from' => '2026-11', 'to' => '2027-03'],
             'focus' => 'Docs, SDKs, grants, bounties',
             'outcome' => 'Cyberia useful to a developer before they hold anything',
             'summary' => 'A chain earns developers by being useful to them first. Some of this is already standing: documentation, an inference API gated on holding rather than on a credit card, and an agent framework that runs against the chain.',
@@ -337,6 +380,7 @@ return [
                 'Deployment guides',
                 'Grants, hackathons and bug bounties',
                 'An open-source project directory',
+                'chaos-mcp: one MCP server over the chain, LainOS and the market, opened with a LainOS key',
             ],
             'line' => 'Developers should not just publish code on Cyberia. They should build economies around it.',
             'links' => [
@@ -348,6 +392,7 @@ return [
             'numeral' => 'XIII',
             'title' => 'Identity and reputation',
             'status' => 'progress',
+            'window' => ['from' => '2026-11', 'to' => '2027-01'],
             'focus' => 'A contribution graph the rewards can trust',
             'outcome' => 'Wallet-linked builder reputation',
             'summary' => 'Rewards need reputation, or they pay noise. On-chain nicknames and achievements exist; the contribution half does not yet.',
@@ -360,6 +405,8 @@ return [
                 'Maintainer and contributor badges',
                 'Anti-sybil scoring',
                 'Contribution-weighted governance experiments',
+                'chaos.fm: a community board with wallet sign-in',
+                'Pioneer Season 1, every mission verified on chain',
             ],
             'line' => 'Wallets show assets. GitHub shows work. Cyberia should connect both.',
             'links' => [
@@ -369,8 +416,9 @@ return [
         ],
         [
             'numeral' => 'XIV',
-            'title' => 'Marketplace expansion',
+            'title' => 'NFT market and marketplace expansion',
             'status' => 'progress',
+            'window' => ['from' => '2026-11', 'to' => null],
             'focus' => 'A market for internet labour, not only internet objects',
             'outcome' => 'Digital assets, services and open-source primitives',
             'summary' => 'The NFT market is live. The long-term market expands into code, services, access, reputation and bounties.',
@@ -380,6 +428,7 @@ return [
             ],
             'next' => [
                 'Creator and project tools',
+                'NFT market fees paid to the DAO treasury',
                 'Open-source licence NFTs',
                 'Bounties, paid audits, API access and service listings',
             ],
@@ -391,8 +440,9 @@ return [
         ],
         [
             'numeral' => 'XV',
-            'title' => 'Cyberia OS and self-upgrading infrastructure',
+            'title' => 'Cyberia OS, node operators and self-upgrading infrastructure',
             'status' => 'progress',
+            'window' => ['from' => '2026-10', 'to' => '2027-03'],
             'focus' => 'A full open-source system around the chain',
             'outcome' => 'Infrastructure that maintains and upgrades itself',
             'summary' => 'An experiment rather than a product line: Linux artefacts, self-hosted services, automated deployment, and an agent that reads the repository and commits to it.',
@@ -402,6 +452,7 @@ return [
                 'LainOS writes commits and its own upgrades against the live repository',
             ],
             'next' => [
+                'A node operator program: holding at least 5% of the CYBER.sol supply (50,000,000, the locked tokens counted in) to run a node, operators paid first',
                 'Node operation tooling for outside operators',
                 'Local developer environments',
                 'Public system upgrade logs',
@@ -413,13 +464,16 @@ return [
         ],
         [
             'numeral' => 'XVI',
-            'title' => 'Grants and an open-source treasury',
+            'title' => 'The DAO fund, grants and an open-source treasury',
             'status' => 'planned',
+            'window' => ['from' => '2026-11', 'to' => '2027-03'],
             'focus' => 'Repeatable funding for maintainers',
             'outcome' => 'A funding machine rather than a one-off grant round',
             'summary' => 'The DAO and the reward engine converge here: protocol fees funding the people who maintain the software.',
             'done' => [],
             'next' => [
+                'The DAO fund: the 50,000,000 unlocked CYBER.sol, for the growth and circulation of CYBER — nodes first, then service development',
+                'A fund charter voted by the DAO: what the fund does, what it never does, who signs',
                 'An open-source treasury',
                 'Retroactive public-goods funding',
                 'Maintainer support and repository sponsorships',
@@ -432,6 +486,7 @@ return [
             'numeral' => 'XVII',
             'title' => 'Transparency layer',
             'status' => 'progress',
+            'window' => ['from' => '2026-10', 'to' => '2027-03'],
             'focus' => 'Clean operating numbers',
             'outcome' => 'Every claim on this site checkable from a dashboard',
             'summary' => 'The brand can be a temple; the numbers have to be clean. Where a figure cannot be measured the surfaces here print a dash rather than a zero, because an unmeasured number and an empty one read identically otherwise.',
@@ -455,6 +510,7 @@ return [
             'numeral' => 'XVIII',
             'title' => 'The open-source settlement layer',
             'status' => 'vision',
+            'window' => 'after',
             'focus' => 'The final form',
             'outcome' => 'A chain where open-source contribution is measured, funded and governed',
             'summary' => 'Projects launch here, contributors build public reputation, the DAO funds useful work, protocol fees support the rewards, and maintainers receive recurring funding.',
@@ -469,6 +525,41 @@ return [
             'line' => 'The internet was built by open source. Cyberia is the chain where the builders finally get paid.',
             'links' => [],
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Milestones
+    |--------------------------------------------------------------------------
+    |
+    | The dated half of the roadmap: one deliverable per row, each tied to the
+    | phase it advances, ordered by date and none later than the horizon. A
+    | row is a target, not a receipt; it moves to `done` in its phase when it
+    | ships, and a missed date is changed here in the open rather than quietly
+    | dropped.
+    |
+    */
+
+    'milestones' => [
+        ['date' => '2026-10-31', 'phase' => 'XVII', 'title' => 'Dated roadmap and lock disclosure on /whitepaper and /cyber: 50M CYBER.sol, one unlock on 2027-03-10, all of it to the DAO fund'],
+        ['date' => '2026-11-07', 'phase' => 'XIII', 'title' => 'chaos.fm opens: a community board with wallet sign-in'],
+        ['date' => '2026-11-14', 'phase' => 'V', 'title' => 'Public counter of CYBER.sol migrated to native CYBER'],
+        ['date' => '2026-11-21', 'phase' => 'XIII', 'title' => 'Pioneer Season 1 opens, every mission verified on chain'],
+        ['date' => '2026-11-28', 'phase' => 'III', 'title' => 'Our second Cyberia node (RPC follower) in service, the reference setup for operators'],
+        ['date' => '2026-11-28', 'phase' => 'IX', 'title' => 'DAO treasury on Cyberia; NFT market, LaunchpadV3, prediction market fees and lending reserves move from a personal address to it'],
+        ['date' => '2026-12-05', 'phase' => 'XV', 'title' => 'Node operator program published: 5% of CYBER.sol supply, how holding is proven, what is paid and from what'],
+        ['date' => '2026-12-12', 'phase' => 'XII', 'title' => 'chaos-mcp released: one MCP server over the chain, LainOS and the market'],
+        ['date' => '2026-12-19', 'phase' => 'IX', 'title' => 'Treasury dashboard with revenue per service'],
+        ['date' => '2027-01-09', 'phase' => 'XIII', 'title' => 'Pioneer Season 1 results published'],
+        ['date' => '2027-01-16', 'phase' => 'XV', 'title' => 'Node registry and the 5% check live; first outside operator node connected'],
+        ['date' => '2027-01-23', 'phase' => 'XI', 'title' => 'AI launchpad spec: a LainOS agent launches its own token and DAO'],
+        ['date' => '2027-01-30', 'phase' => 'XV', 'title' => 'First payment to a node operator, on chain'],
+        ['date' => '2027-02-01', 'phase' => 'XVI', 'title' => 'DAO fund charter: what the fund does with the 50M (nodes, service development), what it never does, who signs'],
+        ['date' => '2027-02-06', 'phase' => 'XI', 'title' => 'GitHub-verified launches on the launchpad'],
+        ['date' => '2027-02-13', 'phase' => 'XVI', 'title' => 'Fund address deployed and tested; first DAO vote on the charter'],
+        ['date' => '2027-02-20', 'phase' => 'XVII', 'title' => 'Bridge, lending and farming dashboards'],
+        ['date' => '2027-03-06', 'phase' => 'XI', 'title' => 'First LainOS agent launched through the AI launchpad'],
+        ['date' => '2027-03-10', 'phase' => 'XVI', 'title' => 'Unlock: the 50M moved into the DAO fund, roadmap report and the next roadmap'],
     ],
 
     /*

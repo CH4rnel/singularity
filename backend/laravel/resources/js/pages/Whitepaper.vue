@@ -22,7 +22,10 @@ type Phase = {
     next: string[];
     line: string;
     links: Reference[];
+    window: { from: string; to: string | null } | 'after' | null;
 };
+
+type Milestone = { date: string; phase: string; title: string };
 
 defineProps<{
     thesis: string;
@@ -32,6 +35,8 @@ defineProps<{
     document: { href: string; date: string };
     reviewedAt: string;
     tally: Record<Status, number>;
+    horizon: { date: string; title: string; body: string; href: string };
+    milestones: Milestone[];
 }>();
 
 /**
@@ -76,6 +81,28 @@ const readable = (iso: string): string =>
     });
 
 const anchor = (numeral: string): string => `phase-${numeral.toLowerCase()}`;
+
+const month = (ym: string): string =>
+    new Date(`${ym}-01T00:00:00Z`).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        timeZone: 'UTC',
+    });
+
+/** "Nov 2026 – Feb 2027", or one month when the window is a single one. */
+const span = (window: Phase['window']): string =>
+    window === null
+        ? '—'
+        : window === 'after'
+          ? 'After the unlock'
+          : window.to === null
+            ? `${month(window.from)} – after the unlock`
+            : window.from === window.to
+              ? month(window.from)
+              : `${month(window.from)} – ${month(window.to)}`;
+
+/** Read once per render: a milestone is past or not by today's date, not by a flag in a file. */
+const today = new Date().toISOString().slice(0, 10);
 </script>
 
 <template>
@@ -178,6 +205,9 @@ const anchor = (numeral: string): string => `phase-${numeral.toLowerCase()}`;
                                 Outcome
                             </th>
                             <th class="px-4 py-2 text-left font-medium">
+                                When
+                            </th>
+                            <th class="px-4 py-2 text-left font-medium">
                                 State
                             </th>
                         </tr>
@@ -206,6 +236,11 @@ const anchor = (numeral: string): string => `phase-${numeral.toLowerCase()}`;
                             >
                                 {{ phase.outcome }}
                             </td>
+                            <td
+                                class="px-4 py-2 align-top font-mono text-xs whitespace-nowrap text-muted-foreground"
+                            >
+                                {{ span(phase.window) }}
+                            </td>
                             <td class="px-4 py-2 align-top">
                                 <span
                                     class="rounded px-1.5 py-0.5 text-xs whitespace-nowrap"
@@ -218,6 +253,57 @@ const anchor = (numeral: string): string => `phase-${numeral.toLowerCase()}`;
                     </tbody>
                 </table>
             </div>
+        </section>
+
+        <!-- The dated half of the roadmap. Every row is due on or before the
+             unlock, and the unlock itself is a link to the lock, so the one
+             date the rest hangs on can be checked rather than believed. -->
+        <section class="space-y-4">
+            <h2 class="text-xl font-bold">Milestones to the unlock</h2>
+            <p class="max-w-2xl text-sm text-muted-foreground">
+                {{ horizon.body }}
+            </p>
+
+            <ol class="rounded border border-border">
+                <li
+                    v-for="milestone in milestones"
+                    :key="`${milestone.date}-${milestone.title}`"
+                    class="flex gap-4 border-b border-border/60 px-4 py-2 text-sm last:border-0"
+                    :class="
+                        milestone.date < today ? 'text-muted-foreground' : ''
+                    "
+                >
+                    <span
+                        class="w-24 shrink-0 font-mono text-xs leading-5 text-muted-foreground"
+                    >
+                        {{ milestone.date }}
+                    </span>
+                    <a
+                        :href="`#${anchor(milestone.phase)}`"
+                        class="w-10 shrink-0 font-mono text-xs leading-5 text-brand-cyan hover:underline"
+                    >
+                        {{ milestone.phase }}
+                    </a>
+                    <span>{{ milestone.title }}</span>
+                </li>
+                <li
+                    class="flex gap-4 bg-brand-magenta/5 px-4 py-2 text-sm font-semibold"
+                >
+                    <span class="w-24 shrink-0 font-mono text-xs leading-5">
+                        {{ horizon.date }}
+                    </span>
+                    <span class="w-10 shrink-0" />
+                    <a
+                        :href="horizon.href"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-1 hover:underline"
+                    >
+                        {{ horizon.title }}
+                        <ExternalLink class="h-3.5 w-3.5" />
+                    </a>
+                </li>
+            </ol>
         </section>
 
         <!-- Every phase that claims to be finished carries the address of the
@@ -241,6 +327,12 @@ const anchor = (numeral: string): string => `phase-${numeral.toLowerCase()}`;
                         :class="STATUS[phase.status].chip"
                     >
                         {{ STATUS[phase.status].label }}
+                    </span>
+                    <span
+                        v-if="phase.window"
+                        class="font-mono text-xs text-muted-foreground"
+                    >
+                        {{ span(phase.window) }}
                     </span>
                 </div>
 
@@ -364,8 +456,10 @@ const anchor = (numeral: string): string => `phase-${numeral.toLowerCase()}`;
                 own server is one you cannot keep a copy of.
             </p>
             <p class="mt-2 text-sm text-muted-foreground">
-                It describes intent, not a schedule. Nothing here is a delivery
-                date, and a phase marked planned is work that has not started.
+                The months on each phase and the milestone dates are targets set
+                on {{ readable(reviewedAt) }}, not receipts. A date that moves
+                is changed on this page in the open, and a phase marked planned
+                is work that has not started.
             </p>
             <a
                 :href="document.href"

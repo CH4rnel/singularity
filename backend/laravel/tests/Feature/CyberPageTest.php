@@ -31,7 +31,11 @@ it('renders without the indexer and reports unknown figures as null', function (
             ->where('market.price', null)
             ->where('market.pools', null)
             ->where('market.locked', null)
-            ->where('market.locked_usd', null));
+            ->where('market.locked_usd', null)
+            // The unlock is stated with the roadmap's own date, never a copy.
+            ->where('lock.date', config('whitepaper.horizon.date'))
+            ->where('lock.amount', config('whitepaper.horizon.amount'))
+            ->where('lock.href', fn (string $href) => str_starts_with($href, 'https://app.streamflow.finance/')));
 
     expect(file_get_contents(resource_path('js/pages/Cyber.vue')))
         ->toContain('https://docs.cyberia.church/user-guide/cyber');

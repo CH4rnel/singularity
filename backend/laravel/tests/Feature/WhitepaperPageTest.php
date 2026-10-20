@@ -58,3 +58,49 @@ it('sends the landing page to the page rather than to the file', function () {
         ->toContain('href="/whitepaper"')
         ->not->toContain('Cyberia_Roadmap.docx');
 });
+
+it('keeps every milestone on or before the horizon and every phase window well-formed', function () {
+    $this->get('/whitepaper')
+        ->assertOk()
+        ->assertInertia(function (Assert $page) {
+            $props = $page->component('Whitepaper')->toArray()['props'];
+            $phases = collect($props['phases']);
+            $milestones = collect($props['milestones']);
+            $horizon = $props['horizon']['date'];
+
+            expect($horizon)->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+                ->and($milestones)->not->toBeEmpty()
+                ->and($milestones->pluck('date')->all())
+                ->toBe($milestones->pluck('date')->sort()->values()->all());
+
+            // A milestone pointing at a phase that does not exist, or due after
+            // the unlock, is a promise the page cannot keep by construction.
+            foreach ($milestones as $milestone) {
+                expect($milestone['date'])->toMatch('/^\d{4}-\d{2}-\d{2}$/')
+                    ->and($milestone['date'] <= $horizon)->toBeTrue($milestone['title'])
+                    ->and($phases->pluck('numeral'))->toContain($milestone['phase']);
+            }
+
+            // A window is either months starting inside the horizon or an
+            // explicit "after"; the vision is never drawn with a date, because a date
+            // there would promise one.
+            foreach ($phases as $phase) {
+                $window = $phase['window'];
+
+                if ($phase['status'] === 'vision') {
+                    expect($window)->toBe('after');
+
+                    continue;
+                }
+
+                if ($window === null || $window === 'after') {
+                    continue;
+                }
+
+                // A window may run past the unlock (a null end is open-ended);
+                // it has to start inside the plan and not end before it starts.
+                expect($window['from'] <= substr($horizon, 0, 7))->toBeTrue("phase {$phase['numeral']}")
+                    ->and($window['to'] === null || $window['from'] <= $window['to'])->toBeTrue("phase {$phase['numeral']}");
+            }
+        });
+});

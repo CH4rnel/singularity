@@ -43,7 +43,23 @@ class WhitepaperController extends Controller
             ],
             'reviewedAt' => (string) config('whitepaper.reviewed_at'),
             'tally' => $this->tally($phases),
+            'horizon' => (array) config('whitepaper.horizon'),
+            'milestones' => $this->milestones((array) config('whitepaper.milestones', [])),
         ]);
+    }
+
+    /**
+     * The milestones in date order, whatever order the file lists them in —
+     * a timeline drawn out of order reads as a schedule that slipped.
+     *
+     * @param  list<array{date: string, phase: string, title: string}>  $milestones
+     * @return list<array{date: string, phase: string, title: string}>
+     */
+    private function milestones(array $milestones): array
+    {
+        usort($milestones, fn (array $a, array $b): int => strcmp($a['date'], $b['date']));
+
+        return $milestones;
     }
 
     /**
