@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080b10">
+  <meta name="description" content="Cyberia Research: impossible spaces and impossible matter. Two interactive GPU experiments.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%23080b10%27/%3E%3Cpath d=%27M21 4L11 28%27 stroke=%27%23ffb56b%27 stroke-width=%273%27/%3E%3C/svg%3E">
+  <title>CYBERIA RESEARCH — Impossible Matter</title>
+  <link rel="stylesheet" href="./lab.css">
+</head>
+<body data-world="reliquary">
+  <canvas id="viewport" aria-label="Interactive three-dimensional experiment. Drag to look around; use the controls to alter the scene."></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+  <header class="chrome">
+    <a class="brand" href="https://cyberia.church">C<span class="brand-mark">/</span>R <span class="brand-name">CYBERIA<br>RESEARCH</span></a>
+    <nav aria-label="Experiments">
+      <button class="world active" data-world="reliquary" aria-pressed="true"><span>02</span> RELIQUARY</button>
+      <button class="world" data-world="mercury" aria-pressed="false"><span>03</span> MERCURY</button>
+      <a href="../signal/"><span>01</span> SIGNAL ↗</a>
+    </nav>
+    <button id="hide" class="plain" title="Hide interface (H)">IMMERSIVE <span>⤢</span></button>
+  </header>
+  <main class="chrome">
+    <div class="eyebrow"><span class="dot"></span> STUDIES IN IMPOSSIBLE MATTER</div>
+    <div class="title-line"><span id="number">002</span><h1 id="title">Reliquary</h1></div>
+    <p id="description">A place that goes on<br>after space runs out.</p>
+    <button id="impulse">BEND REALITY <span>↗</span></button>
+  </main>
+  <aside class="readout chrome" aria-label="Scene information">
+    <span id="medium">RECURSIVE ARCHITECTURE</span>
+    <div class="readout-line"></div>
+    <span id="coordinates">Z +0000.00</span>
+    <span>GPU / REAL TIME</span>
+  </aside>
+  <section class="instruments chrome" aria-label="Experiment controls">
+    <div class="instrument-header"><span>FIELD CONTROLS</span><span class="live" id="live">● LIVE</span></div>
+    <label for="intensity"><span id="intensity-label">FOLD</span><output id="intensity-value" for="intensity">35%</output></label>
+    <input id="intensity" type="range" min="0" max="100" value="35">
+    <label for="speed"><span>TIME FLOW</span><output id="speed-value" for="speed">1.0×</output></label>
+    <input id="speed" type="range" min="0" max="200" value="100">
+    <div class="instrument-bottom"><button id="pause" aria-pressed="false">Ⅱ PAUSE</button><label class="quality-label">DETAIL <select id="quality" aria-label="Rendering quality"><option value="low">LOW</option><option value="balanced" selected>MED</option><option value="high">HIGH</option></select></label></div>
+  </section>
+  <footer class="chrome">
+    <div class="instructions">DRAG TO LOOK · SCROLL TO APPROACH<span>SPACE — IMPULSE &nbsp; / &nbsp; H — HIDE &nbsp; / &nbsp; S — FRAME</span></div>
+    <div class="footer-tools"><button id="reset">RESET VIEW</button><button id="save">SAVE FRAME ↓</button></div>
+    <span class="edition">NOTHING HERE IS SOLID.</span>
+  </footer>
+  <button id="restore" aria-label="Restore interface" hidden>↙ CONTROLS</button>
+  <div id="status" role="status" aria-live="polite">INITIALIZING FIELD…</div>
+  <script type="module" src="./lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#050708">
+<meta name="description" content="An interactive gravitational signal. Enter the Cyberia field.">
+<title>CYBERIA — SIGNAL / 001</title>
+<link rel="stylesheet" href="./signal.css">
+</head>
+<body>
+<canvas id="field" aria-label="Interactive three-dimensional gravitational field"></canvas>
+<div class="grain" aria-hidden="true"></div>
+<header><a class="brand" href="https://cyberia.church">CYBERIA<span>独立した現実</span></a><div class="edition">EXPERIMENTAL SYSTEMS<br>VOL. 001 — THE SIGNAL</div><button id="clean" title="Hide interface (H)">CLEAN VIEW ↗</button></header>
+<main><div class="eyebrow"><i></i> TRANSMISSION FROM THE OTHER SIDE</div><h1>Something<br>is <em>listening.</em></h1><p>A small disturbance.<br>An irreversible connection.</p><div class="actions"><button id="pulse">SEND A SIGNAL <span>↗</span></button><button id="mode" aria-pressed="false">ENTER THE RIFT</button></div></main>
+<aside class="coordinates"><span>FIELD 49° 40′ 06″</span><span id="state" role="status">AWAITING INPUT</span><span>NO CENTER. NO EDGE.</span></aside>
+<footer><div class="caption">MOVE TO DISTORT · CLICK TO TRANSMIT<br><span>SPACE — PULSE / H — HIDE / S — SAVE FRAME</span></div><div class="tools"><button id="save">SAVE FRAME ↓</button><button id="motion" aria-pressed="false">PAUSE</button></div><div class="counter">SIGNALS SENT <b id="count">000</b></div></footer>
+<div id="notice" role="status"></div>
+<script type="module" src="./signal.js"></script>
+</body>
+</html>
