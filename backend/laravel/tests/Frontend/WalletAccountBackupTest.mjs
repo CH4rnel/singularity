@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { accountBackupPhrase } from '@/lib/wallet/accounts';
+import { Keypair } from '@solana/web3.js';
+import { knownChain, walletChains } from '@/lib/wallet';
+import { encodeBase58 } from '@/lib/wallet/base58check';
+import { accountBackupPhrase, accountDisplayName } from '@/lib/wallet/accounts';
 
 test('backup follows the selected account and never substitutes the vault phrase', () => {
     const seed = { id: 'seed-0', kind: 'seed', index: 0, label: null };
@@ -34,5 +37,43 @@ test('backup follows the selected account and never substitutes the vault phrase
     assert.throws(
         () => accountBackupPhrase('vault backup', null),
         /no seed phrase/,
+    );
+});
+
+test('a Solana key can be brought in while Solana is still switched off', () => {
+    // A new wallet has only the home chain on, which is what the import screen
+    // used to offer — and a Phantom key pasted onto Cyberia was refused as EVM.
+    assert.deepEqual(
+        walletChains().map((chain) => chain.id),
+        ['cyberia'],
+    );
+
+    const keypair = Keypair.generate();
+    const solana = knownChain('solana');
+
+    assert.equal(
+        solana?.importKey?.(encodeBase58(keypair.secretKey)),
+        keypair.publicKey.toBase58(),
+    );
+    assert.throws(() =>
+        knownChain('cyberia').importKey(encodeBase58(keypair.secretKey)),
+    );
+    assert.equal(knownChain('no-such-network'), null);
+
+    // Switched off again later, the account still has a name instead of taking
+    // the accounts screen down with an unknown-chain throw.
+    assert.equal(
+        accountDisplayName(
+            {
+                id: 'key-solana',
+                kind: 'key',
+                chain: 'solana',
+                secret: '',
+                address: keypair.publicKey.toBase58(),
+                label: null,
+            },
+            (key, params) => `${key}:${params?.chain}`,
+        ),
+        'accountKeyName:Solana',
     );
 });

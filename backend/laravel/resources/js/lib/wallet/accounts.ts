@@ -1,4 +1,4 @@
-import { walletChain } from '@/lib/wallet/chains';
+import { knownChain } from '@/lib/wallet/chains';
 import type { WalletChainId } from '@/lib/wallet/chains';
 
 /**
@@ -179,7 +179,7 @@ export const accountDisplayName = (
             return t('accountPhraseName');
         }
 
-        const chain = walletChain(entry.chain).label;
+        const chain = knownChain(entry.chain)?.label ?? entry.chain;
 
         return entry.kind === 'key'
             ? t('accountKeyName', { chain })

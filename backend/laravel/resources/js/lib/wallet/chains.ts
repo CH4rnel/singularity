@@ -1426,6 +1426,18 @@ export const walletChains = (): readonly WalletChain[] => [
     ...customChains,
 ];
 
+/**
+ * A network by id, switched on or not.
+ *
+ * For the two places a network that is off still has to answer: the import
+ * screen, which switches one on by bringing an account to it, and an imported
+ * account's name, which has to survive its network being switched back off.
+ */
+export const knownChain = (id: WalletChainId): WalletChain | null =>
+    walletChains().find((candidate) => candidate.id === id) ??
+    SHIPPED_CHAINS.find((candidate) => candidate.id === id) ??
+    null;
+
 export const walletChain = (id: WalletChainId): WalletChain => {
     const chain = walletChains().find((candidate) => candidate.id === id);
 
