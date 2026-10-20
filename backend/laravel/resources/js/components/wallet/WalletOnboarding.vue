@@ -39,6 +39,7 @@ const emit = defineEmits<{
 }>();
 
 const props = defineProps<{ busy: boolean }>();
+const passwordRequired = import.meta.env?.VITE_DESKTOP_WALLET === 'true';
 
 const { t } = useLocale(walletMessages);
 
@@ -113,6 +114,7 @@ const submit = (): void => {
  * single account.
  */
 const skipPassword = (): void => {
+    if (passwordRequired) return;
     adopt(null);
 };
 
@@ -335,6 +337,7 @@ onBeforeUnmount(() => {
           is saying what it costs, which the sentence under this button does.
         -->
         <button
+            v-if="!passwordRequired"
             type="button"
             class="cw-back"
             style="margin-top: 14px; align-self: center"
@@ -344,6 +347,7 @@ onBeforeUnmount(() => {
             {{ t('skipPassword') }}
         </button>
         <p
+            v-if="!passwordRequired"
             class="cw-label"
             style="
                 margin-top: 8px;

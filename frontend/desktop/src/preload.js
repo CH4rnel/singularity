@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('cyberiaNative', {
     shell: info.shell,
     platform: info.platform,
     version: info.version,
+    localWallet: info.localWallet === true,
     url: info.url,
     proxy: info.proxy,
     tray: info.tray === true,

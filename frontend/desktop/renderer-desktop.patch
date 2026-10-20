@@ -1,0 +1,94 @@
+diff --git a/backend/laravel/resources/js/components/wallet/WalletBrowse.vue b/backend/laravel/resources/js/components/wallet/WalletBrowse.vue
+index 072d807..ad1a8c6 100644
+--- a/backend/laravel/resources/js/components/wallet/WalletBrowse.vue
++++ b/backend/laravel/resources/js/components/wallet/WalletBrowse.vue
+@@ -128,6 +128,7 @@ type View =
+     | { kind: 'host'; name: string; url: string }
+     | { kind: 'http'; url: string }
+     | { kind: 'own'; url: string }
++    | { kind: 'external'; url: string }
+     | { kind: 'invalid' }
+     | { kind: 'error'; message: string };
+ 
+@@ -188,6 +189,10 @@ const frameFor = (src: string): View => {
+         return { kind: 'invalid' };
+     }
+ 
++    if (import.meta.env?.VITE_DESKTOP_WALLET === 'true') {
++        return { kind: 'external', url: src };
++    }
++
+     // A page of this very site is not framed at all: without
+     // `allow-same-origin` it cannot start (its own storage throws), and with
+     // it, it could read the vault. It is a link instead.
+@@ -519,8 +524,18 @@ onMounted(async () => {
+                         })
+                     }}
+                 </p>
+-                <template v-else-if="view.kind === 'own'">
+-                    <p class="cw-prose">{{ t('browserOwnSite') }}</p>
++                <template
++                    v-else-if="view.kind === 'own' || view.kind === 'external'"
++                >
++                    <p class="cw-prose">
++                        {{
++                            t(
++                                view.kind === 'external'
++                                    ? 'browserDesktopSite'
++                                    : 'browserOwnSite',
++                            )
++                        }}
++                    </p>
+                     <a
+                         class="cw-btn cw-btn-primary"
+                         style="
+diff --git a/backend/laravel/resources/js/components/wallet/WalletOnboarding.vue b/backend/laravel/resources/js/components/wallet/WalletOnboarding.vue
+index adf9b8a..bc97ff5 100644
+--- a/backend/laravel/resources/js/components/wallet/WalletOnboarding.vue
++++ b/backend/laravel/resources/js/components/wallet/WalletOnboarding.vue
+@@ -39,6 +39,7 @@ const emit = defineEmits<{
+ }>();
+ 
+ const props = defineProps<{ busy: boolean }>();
++const passwordRequired = import.meta.env?.VITE_DESKTOP_WALLET === 'true';
+ 
+ const { t } = useLocale(walletMessages);
+ 
+@@ -113,6 +114,7 @@ const submit = (): void => {
+  * single account.
+  */
+ const skipPassword = (): void => {
++    if (passwordRequired) return;
+     adopt(null);
+ };
+ 
+@@ -335,6 +337,7 @@ onBeforeUnmount(() => {
+           is saying what it costs, which the sentence under this button does.
+         -->
+         <button
++            v-if="!passwordRequired"
+             type="button"
+             class="cw-back"
+             style="margin-top: 14px; align-self: center"
+@@ -344,6 +347,7 @@ onBeforeUnmount(() => {
+             {{ t('skipPassword') }}
+         </button>
+         <p
++            v-if="!passwordRequired"
+             class="cw-label"
+             style="
+                 margin-top: 8px;
+diff --git a/backend/laravel/resources/js/lib/wallet/vault.ts b/backend/laravel/resources/js/lib/wallet/vault.ts
+index 8c902ca..f6ebbd0 100644
+--- a/backend/laravel/resources/js/lib/wallet/vault.ts
++++ b/backend/laravel/resources/js/lib/wallet/vault.ts
+@@ -322,6 +322,9 @@ export const saveOpenVault = async (
+     storage: VaultStorage = defaultStorage(),
+     backedUp = true,
+ ): Promise<OpenedVault> => {
++    if (import.meta.env?.VITE_DESKTOP_WALLET === 'true') {
++        throw new Error('The desktop wallet requires a vault password');
++    }
+     const contents = freshContents(validPhrase(phrase), backedUp);
+ 
+     write(contents, storage);

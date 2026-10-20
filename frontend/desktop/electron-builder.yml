@@ -8,6 +8,7 @@ directories:
 
 files:
     - src/**/*
+    - wallet-dist/**/*
     - package.json
 
 # The window and tray both need the same icon at runtime. Build resources are

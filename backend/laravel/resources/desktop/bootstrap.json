@@ -1,0 +1,888 @@
+{
+  "bridge": {
+    "chains": [
+      {
+        "key": "cyberia",
+        "label": "Cyberia EVM",
+        "type": "evm",
+        "addressType": "evm",
+        "wallet": "evm",
+        "evmChainId": 49406,
+        "rpcUrl": "https://rpc.cyberia.church",
+        "explorerTx": "https://explorer.cyberia.church/tx/{hash}",
+        "explorerTxFallbacks": [],
+        "nativeCurrency": {
+          "name": "Cyber",
+          "symbol": "CYBER",
+          "decimals": 18
+        },
+        "depositAddress": "0xfA41267C5E2390E941A12b0b8e566448539A5179"
+      },
+      {
+        "key": "solana",
+        "label": "Solana",
+        "type": "solana",
+        "addressType": "solana",
+        "wallet": "solana",
+        "evmChainId": null,
+        "rpcUrl": "https://cyberia.church/api/solana/rpc",
+        "explorerTx": "https://solscan.io/tx/{hash}",
+        "explorerTxFallbacks": [],
+        "nativeCurrency": null,
+        "depositAddress": "E6E8AeKoT6i2zmwrGyDF2LwfEfjX9Xg8LfEj2Fu8Yf7w"
+      },
+      {
+        "key": "ton",
+        "label": "TON",
+        "type": "ton",
+        "addressType": "ton",
+        "wallet": "ton",
+        "evmChainId": null,
+        "rpcUrl": null,
+        "explorerTx": "https://tonviewer.com/transaction/{hash}",
+        "explorerTxFallbacks": [],
+        "nativeCurrency": null,
+        "depositAddress": null
+      },
+      {
+        "key": "bnb",
+        "label": "BNB Chain",
+        "type": "evm",
+        "addressType": "evm",
+        "wallet": "evm",
+        "evmChainId": 56,
+        "rpcUrl": "https://bsc-dataseed.binance.org",
+        "explorerTx": "https://bscscan.com/tx/{hash}",
+        "explorerTxFallbacks": [],
+        "nativeCurrency": {
+          "name": "BNB",
+          "symbol": "BNB",
+          "decimals": 18
+        },
+        "depositAddress": "0xfA41267C5E2390E941A12b0b8e566448539A5179"
+      },
+      {
+        "key": "base",
+        "label": "Base",
+        "type": "evm",
+        "addressType": "evm",
+        "wallet": "evm",
+        "evmChainId": 8453,
+        "rpcUrl": "https://mainnet.base.org",
+        "explorerTx": "https://basescan.org/tx/{hash}",
+        "explorerTxFallbacks": [],
+        "nativeCurrency": {
+          "name": "Ethereum",
+          "symbol": "ETH",
+          "decimals": 18
+        },
+        "depositAddress": "0xfA41267C5E2390E941A12b0b8e566448539A5179"
+      },
+      {
+        "key": "robinhood",
+        "label": "Robinhood Chain",
+        "type": "evm",
+        "addressType": "evm",
+        "wallet": "evm",
+        "evmChainId": 4663,
+        "rpcUrl": "https://rpc.mainnet.chain.robinhood.com",
+        "explorerTx": "https://robinhoodchain.blockscout.com/tx/{hash}",
+        "explorerTxFallbacks": [],
+        "nativeCurrency": {
+          "name": "Ethereum",
+          "symbol": "ETH",
+          "decimals": 18
+        },
+        "depositAddress": "0xfA41267C5E2390E941A12b0b8e566448539A5179"
+      },
+      {
+        "key": "monero",
+        "label": "Monero",
+        "type": "monero",
+        "addressType": "monero",
+        "wallet": "manual",
+        "evmChainId": null,
+        "rpcUrl": null,
+        "explorerTx": "https://xmrchain.net/tx/{hash}",
+        "explorerTxFallbacks": [],
+        "nativeCurrency": null,
+        "depositAddress": null
+      }
+    ],
+    "routes": [
+      {
+        "direction": "sol_to_evm",
+        "source": "solana",
+        "destination": "cyberia",
+        "sourceLabel": "Solana",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "solana",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "CYBER.sol",
+          "USDC",
+          "USDG",
+          "JupUSD",
+          "USDT",
+          "HATCHER",
+          "ORBV",
+          "SOL"
+        ]
+      },
+      {
+        "direction": "evm_to_sol",
+        "source": "cyberia",
+        "destination": "solana",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "Solana",
+        "sourceWallet": "evm",
+        "destinationAddressType": "solana",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "CYBER.sol",
+          "USDC",
+          "USDG",
+          "JupUSD",
+          "USDT",
+          "HATCHER",
+          "ORBV",
+          "SOL"
+        ]
+      },
+      {
+        "direction": "ton_to_evm",
+        "source": "ton",
+        "destination": "cyberia",
+        "sourceLabel": "TON",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "ton",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": false,
+        "unavailableReason": "Operator setup pending",
+        "tokens": [
+          "TON",
+          "KRSQ",
+          "GOAL"
+        ]
+      },
+      {
+        "direction": "evm_to_ton",
+        "source": "cyberia",
+        "destination": "ton",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "TON",
+        "sourceWallet": "evm",
+        "destinationAddressType": "ton",
+        "autoProcess": true,
+        "operational": false,
+        "unavailableReason": "Operator setup pending",
+        "tokens": [
+          "TON",
+          "KRSQ",
+          "GOAL"
+        ]
+      },
+      {
+        "direction": "bnb_to_evm",
+        "source": "bnb",
+        "destination": "cyberia",
+        "sourceLabel": "BNB Chain",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "evm",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "USDT",
+          "BNB"
+        ]
+      },
+      {
+        "direction": "evm_to_bnb",
+        "source": "cyberia",
+        "destination": "bnb",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "BNB Chain",
+        "sourceWallet": "evm",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "USDT",
+          "BNB"
+        ]
+      },
+      {
+        "direction": "base_to_evm",
+        "source": "base",
+        "destination": "cyberia",
+        "sourceLabel": "Base",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "evm",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "USDC",
+          "ETH"
+        ]
+      },
+      {
+        "direction": "evm_to_base",
+        "source": "cyberia",
+        "destination": "base",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "Base",
+        "sourceWallet": "evm",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "USDC",
+          "ETH"
+        ]
+      },
+      {
+        "direction": "robinhood_to_evm",
+        "source": "robinhood",
+        "destination": "cyberia",
+        "sourceLabel": "Robinhood Chain",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "evm",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "USDG",
+          "ETH",
+          "SPY",
+          "CYBER"
+        ]
+      },
+      {
+        "direction": "evm_to_robinhood",
+        "source": "cyberia",
+        "destination": "robinhood",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "Robinhood Chain",
+        "sourceWallet": "evm",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "USDG",
+          "ETH",
+          "SPY",
+          "CYBER"
+        ]
+      },
+      {
+        "direction": "yenten_to_evm",
+        "source": "yenten",
+        "destination": "cyberia",
+        "sourceLabel": "Yenten",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "manual",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": false,
+        "unavailableReason": "Coming soon",
+        "tokens": [
+          "YTN"
+        ]
+      },
+      {
+        "direction": "evm_to_yenten",
+        "source": "cyberia",
+        "destination": "yenten",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "Yenten",
+        "sourceWallet": "evm",
+        "destinationAddressType": "yenten",
+        "autoProcess": true,
+        "operational": false,
+        "unavailableReason": "Coming soon",
+        "tokens": [
+          "YTN"
+        ]
+      },
+      {
+        "direction": "btc_to_evm",
+        "source": "bitcoin",
+        "destination": "cyberia",
+        "sourceLabel": "Bitcoin",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "manual",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": false,
+        "unavailableReason": "Coming soon",
+        "tokens": [
+          "BTC"
+        ]
+      },
+      {
+        "direction": "evm_to_btc",
+        "source": "cyberia",
+        "destination": "bitcoin",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "Bitcoin",
+        "sourceWallet": "evm",
+        "destinationAddressType": "bitcoin",
+        "autoProcess": true,
+        "operational": false,
+        "unavailableReason": "Coming soon",
+        "tokens": [
+          "BTC"
+        ]
+      },
+      {
+        "direction": "ltc_to_evm",
+        "source": "litecoin",
+        "destination": "cyberia",
+        "sourceLabel": "Litecoin",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "manual",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": false,
+        "unavailableReason": "Coming soon",
+        "tokens": [
+          "LTC"
+        ]
+      },
+      {
+        "direction": "evm_to_ltc",
+        "source": "cyberia",
+        "destination": "litecoin",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "Litecoin",
+        "sourceWallet": "evm",
+        "destinationAddressType": "litecoin",
+        "autoProcess": true,
+        "operational": false,
+        "unavailableReason": "Coming soon",
+        "tokens": [
+          "LTC"
+        ]
+      },
+      {
+        "direction": "xmr_to_evm",
+        "source": "monero",
+        "destination": "cyberia",
+        "sourceLabel": "Monero",
+        "destinationLabel": "Cyberia EVM",
+        "sourceWallet": "manual",
+        "destinationAddressType": "evm",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "XMR"
+        ]
+      },
+      {
+        "direction": "evm_to_xmr",
+        "source": "cyberia",
+        "destination": "monero",
+        "sourceLabel": "Cyberia EVM",
+        "destinationLabel": "Monero",
+        "sourceWallet": "evm",
+        "destinationAddressType": "monero",
+        "autoProcess": true,
+        "operational": true,
+        "unavailableReason": null,
+        "tokens": [
+          "XMR"
+        ]
+      }
+    ],
+    "tokens": [
+      {
+        "symbol": "CYBER.sol",
+        "model": "native",
+        "chains": {
+          "cyberia": {
+            "address": "0x7DcDa19Cf984ca708E5fA228AC148e7d82D508BA",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "solana": {
+            "address": null,
+            "mint": "E67WWiQY4s9SZbCyFVTh2CEjorEYbhuVJQUZb3Mbpump",
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": "token-2022"
+          }
+        }
+      },
+      {
+        "symbol": "USDC",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0xdc25597B19799010047F17e9591EFE08EFd40077",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": null
+          },
+          "solana": {
+            "address": null,
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": "token"
+          },
+          "base": {
+            "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "USDG",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0xDaDa615b767120cC0767067f075Ac799957508Da",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": null
+          },
+          "solana": {
+            "address": null,
+            "mint": "2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH",
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": "token-2022"
+          },
+          "robinhood": {
+            "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "JupUSD",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x03EB2fb8473C0370c8F6463efEE5f5Cf4EC011c7",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": null
+          },
+          "solana": {
+            "address": null,
+            "mint": "JuprjznTrTSp2UFa3ZBUFgwdAmtZCq4MQCwysN55USD",
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": "token"
+          }
+        }
+      },
+      {
+        "symbol": "USDT",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x94845aF24a3E431593A2b941b2b31836dE45185D",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": null
+          },
+          "solana": {
+            "address": null,
+            "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": "token"
+          },
+          "bnb": {
+            "address": "0x55d398326f99059fF775485246999027B3197955",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "HATCHER",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x621021F18b6404123f98b1395c418868418ACF36",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 9,
+            "tokenProgram": null
+          },
+          "solana": {
+            "address": null,
+            "mint": "Cntmo5DJNQkB2vYyS4mUx2UoTW4mPrHgWefz8miZpump",
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": "token-2022"
+          }
+        }
+      },
+      {
+        "symbol": "ORBV",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x19E92D8475522FF6c8f3660372B9dc6674d85cC8",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": null
+          },
+          "solana": {
+            "address": null,
+            "mint": "HQJwmK24WN3e87aQzNHnUVK4SaNgYfrR3tDkGgWTpump",
+            "master": null,
+            "native": false,
+            "decimals": 6,
+            "tokenProgram": "token-2022"
+          }
+        }
+      },
+      {
+        "symbol": "SOL",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x53450B1d205f1e41d10B653FBBDEa74160dafFf4",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 9,
+            "tokenProgram": null
+          },
+          "solana": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 9,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "TON",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x92aBF73698383176Aa2894F1f7263807C3a4e6e6",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "ton": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 9,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "KRSQ",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x4945419ccEEF0Dc70B054700DE2750A056B03eE3",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "ton": {
+            "address": null,
+            "mint": null,
+            "master": "EQBcumfGKvl8jD1eAjRMggu7xf0JV7D1n5mj4zfYTOnuCXhp",
+            "native": false,
+            "decimals": 9,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "GOAL",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0xEb91EC10462a249b9922D6D62FB2BE73Bd084ADe",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "ton": {
+            "address": null,
+            "mint": null,
+            "master": "EQBofbbpUhtSvnZxOsPmzAv84fq1bG0-Mf79OPB4FrEXsT0I",
+            "native": false,
+            "decimals": 9,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "YTN",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x3a5820Be90c3fB9c5F3Fb47a4859544193B0f8C6",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "yenten": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 8,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "BTC",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x9332081f308BC978fe259237850fA253131b46Fa",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 8,
+            "tokenProgram": null
+          },
+          "bitcoin": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 8,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "LTC",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x001AFD19C9d890b0cf0fcd6D654f9BFe4f264F14",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 8,
+            "tokenProgram": null
+          },
+          "litecoin": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 8,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "XMR",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0xe2E8D51C18d6e0FDDbb9Ff4BF63235D688dd00Ae",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 12,
+            "tokenProgram": null
+          },
+          "monero": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 12,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "ETH",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0xFDa2F6EEB11f1aCc7ccAb559133E8F07d9F81986",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "base": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "robinhood": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 18,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "SPY",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0x1241FC4F06DB7268243D9439ef56B7a2708DC096",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "robinhood": {
+            "address": "0x117cc2133c37B721F49dE2A7a74833232B3B4C0C",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "CYBER",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "robinhood": {
+            "address": "0x753979e6585CCa139fbB1918966D563a25eEB3B2",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          }
+        }
+      },
+      {
+        "symbol": "BNB",
+        "model": "mint",
+        "chains": {
+          "cyberia": {
+            "address": "0xF7655664D5D4b0681fdD4529438A1b667bCDc7E5",
+            "mint": null,
+            "master": null,
+            "native": false,
+            "decimals": 18,
+            "tokenProgram": null
+          },
+          "bnb": {
+            "address": null,
+            "mint": null,
+            "master": null,
+            "native": true,
+            "decimals": 18,
+            "tokenProgram": null
+          }
+        }
+      }
+    ],
+    "relayer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+    "feeBps": 0,
+    "feeFlatUsd": 0.1
+  },
+  "lain": {
+    "enabled": true,
+    "tokenAddress": "0x05cd1afd5b2df3cca6ceab80cbc21168ec981e8b",
+    "minimumShareBps": 1000
+  },
+  "ipfs": {
+    "enabled": true,
+    "maxBytes": 10485760,
+    "gateway": "https://ipfs.io"
+  },
+  "sponsor": {
+    "enabled": true,
+    "chain": "cyberia"
+  },
+  "moneroPayoutAddress": null,
+  "quotes": {
+    "prices": {},
+    "tokens": {},
+    "fetchedAt": ""
+  }
+}

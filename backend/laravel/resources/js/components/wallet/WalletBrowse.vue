@@ -128,6 +128,7 @@ type View =
     | { kind: 'host'; name: string; url: string }
     | { kind: 'http'; url: string }
     | { kind: 'own'; url: string }
+    | { kind: 'external'; url: string }
     | { kind: 'invalid' }
     | { kind: 'error'; message: string };
 
@@ -186,6 +187,10 @@ const frameFor = (src: string): View => {
             new URL(src).origin === window.location.origin;
     } catch {
         return { kind: 'invalid' };
+    }
+
+    if (import.meta.env?.VITE_DESKTOP_WALLET === 'true') {
+        return { kind: 'external', url: src };
     }
 
     // A page of this very site is not framed at all: without
@@ -519,8 +524,18 @@ onMounted(async () => {
                         })
                     }}
                 </p>
-                <template v-else-if="view.kind === 'own'">
-                    <p class="cw-prose">{{ t('browserOwnSite') }}</p>
+                <template
+                    v-else-if="view.kind === 'own' || view.kind === 'external'"
+                >
+                    <p class="cw-prose">
+                        {{
+                            t(
+                                view.kind === 'external'
+                                    ? 'browserDesktopSite'
+                                    : 'browserOwnSite',
+                            )
+                        }}
+                    </p>
                     <a
                         class="cw-btn cw-btn-primary"
                         style="

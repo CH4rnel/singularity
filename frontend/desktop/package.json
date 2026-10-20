@@ -1,8 +1,8 @@
 {
     "name": "cyberia-desktop",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "private": true,
-    "description": "Cyberia desktop application shell",
+    "description": "Cyberia desktop wallet with a bundled local interface",
     "homepage": "https://cyberia.church",
     "author": "Cyberia <noreply@cyberia.church>",
     "desktopName": "Cyberia.desktop",
@@ -11,11 +11,21 @@
     "main": "src/main.js",
     "scripts": {
         "start": "electron .",
+        "build:renderer": "node scripts/build-renderer.mjs",
+        "sign:release": "node scripts/sign-release.mjs",
+        "prestart": "npm run build:renderer",
         "test": "node --test test/*.test.js",
+        "test:renderer": "electron scripts/check-renderer.cjs",
+        "test:package": "node scripts/check-package.mjs",
         "dist": "electron-builder",
+        "predist": "npm run build:renderer",
         "dist:linux": "electron-builder --linux",
+        "predist:linux": "npm run build:renderer",
         "dist:win": "electron-builder --win",
+        "predist:win": "npm run build:renderer",
         "dist:mac": "electron-builder --mac",
+        "predist:mac": "npm run build:renderer",
+        "prepack": "npm run build:renderer",
         "pack": "electron-builder --dir"
     },
     "devDependencies": {

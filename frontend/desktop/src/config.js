@@ -3,13 +3,12 @@
 /**
  * Shared configuration for the desktop shell.
  *
- * The shell renders the live Cyberia site (a server-driven Inertia app), so
- * everything it needs is derived from one URL. Override it with CYBERIA_APP_URL
- * or `--url=https://staging.example` when running a non-production build.
+ * The installed wallet is local. CYBERIA_APP_URL / --url selects its backend
+ * and public website, never the source of executable wallet code.
  *
  * The app is the Cyberia wallet first: it opens on the wallet rather than on
- * the site home, and the rest of the site stays one link away inside it.
- * Override the landing route with CYBERIA_APP_PATH or `--path=/swap`.
+ * the site home; other pages open in the system browser. The wallet's launch
+ * query can be supplied through CYBERIA_APP_PATH or --path=/wallet?section=security.
  */
 
 const DEFAULT_APP_URL = 'https://cyberia.church';

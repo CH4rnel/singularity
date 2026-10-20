@@ -1,0 +1,17 @@
+/* The account bar is the desktop window's drag surface. The wallet already
+ * names itself in the rail, so the shell does not need a second masthead. */
+html[data-native-shell='desktop'] .cw-masthead {
+    display: none;
+}
+
+html[data-native-shell='desktop'] .cw-shell-native {
+    border-radius: var(--cw-radius-shell);
+}
+
+html[data-native-shell='desktop'] .cw-context {
+    -webkit-app-region: drag;
+}
+
+html[data-native-shell='desktop'] .cw-context :is(a, button, input, select, textarea) {
+    -webkit-app-region: no-drag;
+}

@@ -1,16 +1,13 @@
 'use strict';
 
 /**
- * Cyberia desktop shell.
+ * Cyberia desktop wallet.
  *
  * The app is the Cyberia wallet: the window opens on `/wallet`, which renders
- * without the site chrome inside a native shell, and the rest of Cyberia is
- * reachable from inside it. Everything is still the live site inside a
- * persistent session, so a login survives restarts exactly like in a browser.
+ * from the bundled wallet-dist directory on an app-only origin. Network
+ * services supply data; they cannot replace the installed HTML or scripts.
  *
- * Anything that is not Cyberia (wallet deep links, explorer links,
- * `target="_blank"`) is handed to the system browser instead of being opened
- * inside the app frame.
+ * Other pages, including the Cyberia site, open in the system browser.
  *
  * The window is deliberately undecorated: one frameless window whose only
  * view is the site. The wallet masthead is its drag region, so no browser-like
@@ -19,6 +16,7 @@
  */
 
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const {
     BaseWindow,
     BrowserWindow,
@@ -39,9 +37,7 @@ const {
     PROTOCOL,
     describeProxy,
     hasProxyFlag,
-    isAppHost,
     isExternallyOpenable,
-    isNavigable,
     normalizeProxySetting,
     resolveAppUrl,
     resolveProxyDecision,
@@ -53,10 +49,10 @@ const { loadProxySetting, saveProxySetting } = require('./proxy-settings');
 const torrent = require('./torrent');
 const { STREAM_SCHEME } = require('./torrent-rules');
 const { loadWindowState, trackWindowState } = require('./window-state');
+const { isLocalWallet, localStartUrl, publicUrl, blocksRemoteCode, createLocalHandler } = require('./local-wallet');
 
 const APP_URL = resolveAppUrl(process.env, process.argv);
-const START_URL = resolveStartUrl(process.env, process.argv);
-const APP_HOST = new URL(APP_URL).hostname;
+const START_URL = localStartUrl(resolveStartUrl(process.env, process.argv));
 const OFFLINE_PAGE = path.join(__dirname, 'offline.html');
 
 /*
@@ -158,7 +154,7 @@ function isTrustedPageEvent(event) {
     try {
         const url = new URL(event.senderFrame?.url || event.sender.getURL());
 
-        return isAppHost(url.hostname, APP_HOST);
+        return isLocalWallet(url.href);
     } catch {
         return false;
     }
@@ -194,7 +190,13 @@ function openExternal(target) {
 }
 
 function loadApp(target = START_URL) {
-    void pageContents()?.loadURL(target);
+    const url = new URL(target);
+    if ((isLocalWallet(target) || url.origin === new URL(APP_URL).origin) &&
+        ['/', '/wallet'].includes(url.pathname)) {
+        void pageContents()?.loadURL(localStartUrl(target));
+    } else {
+        openExternal(publicUrl(target, APP_URL));
+    }
 }
 
 function showOffline(error = '') {
@@ -311,7 +313,7 @@ async function applyProxySetting(payload) {
 
     await pinProxy(decision.proxy);
 
-    const probe = await probeConnection(START_URL);
+    const probe = await probeConnection(APP_URL);
 
     if (!probe.ok) {
         await pinProxy(previous);
@@ -410,8 +412,8 @@ function zoomPage(command) {
  */
 const COMMANDS = {
     wallet: () => loadApp(),
-    site: () => loadApp(APP_URL),
-    browser: () => openExternal(pageContents()?.getURL() || START_URL),
+    site: () => openExternal(APP_URL),
+    browser: () => openExternal(publicUrl(pageContents()?.getURL() || START_URL, APP_URL)),
     proxy: () => openProxyWindow(),
     back: () => pageContents()?.navigationHistory.goBack(),
     forward: () => pageContents()?.navigationHistory.goForward(),
@@ -588,6 +590,25 @@ function watchKeys(contents) {
 async function configureSession() {
     shellSession = session.fromPartition(PARTITION);
 
+    shellSession.protocol.handle('https', createLocalHandler({
+        root: path.join(__dirname, '..', 'wallet-dist'),
+        siteUrl: APP_URL,
+        fetchRemote: (input, init) => shellSession.fetch(input, init),
+        csrfToken: async () => {
+            let cookies = await shellSession.cookies.get({ url: APP_URL, name: 'XSRF-TOKEN' });
+            if (!cookies.length) {
+                await shellSession.fetch(`${APP_URL}/sanctum/csrf-cookie`, {
+                    credentials: 'include', bypassCustomProtocolHandlers: true,
+                });
+                cookies = await shellSession.cookies.get({ url: APP_URL, name: 'XSRF-TOKEN' });
+            }
+            return cookies[0] ? decodeURIComponent(cookies[0].value) : '';
+        },
+    }));
+    shellSession.webRequest.onBeforeRequest((details, callback) => {
+        callback({ cancel: blocksRemoteCode(details) });
+    });
+
     // Registered on the shell's own session rather than globally: nothing but
     // the site's own page has any business asking for a stream.
     shellSession.protocol.handle(STREAM_SCHEME, (request) =>
@@ -604,12 +625,12 @@ async function configureSession() {
         await pinProxy(decision.proxy);
     }
 
-    shellSession.setPermissionRequestHandler((_contents, permission, callback) => {
-        callback(ALLOWED_PERMISSIONS.has(permission));
+    shellSession.setPermissionRequestHandler((contents, permission, callback) => {
+        callback(isLocalWallet(contents.getURL()) && ALLOWED_PERMISSIONS.has(permission));
     });
 
-    shellSession.setPermissionCheckHandler((_contents, permission) =>
-        ALLOWED_PERMISSIONS.has(permission),
+    shellSession.setPermissionCheckHandler((_contents, permission, origin) =>
+        isLocalWallet(origin) && ALLOWED_PERMISSIONS.has(permission),
     );
 
     // Hardware wallets over WebHID/WebUSB are not wired up yet; refuse the
@@ -681,19 +702,21 @@ function createWindow() {
     watchKeys(contents);
 
     contents.setWindowOpenHandler(({ url }) => {
-        openExternal(url);
+        openExternal(publicUrl(url, APP_URL));
 
         return { action: 'deny' };
     });
 
-    contents.on('will-navigate', (event, url) => {
-        if (isNavigable(url, APP_HOST) || url.startsWith('file://')) {
+    const guardNavigation = (event, url) => {
+        if (isLocalWallet(url) || url.startsWith(pathToFileURL(OFFLINE_PAGE).href)) {
             return;
         }
 
         event.preventDefault();
-        openExternal(url);
-    });
+        openExternal(publicUrl(url, APP_URL));
+    };
+    contents.on('will-navigate', guardNavigation);
+    contents.on('will-redirect', guardNavigation);
 
     contents.on('did-fail-load', (_event, errorCode, description, _url, isMainFrame) => {
         if (isMainFrame && errorCode !== ERR_ABORTED) {
@@ -983,6 +1006,7 @@ if (!app.requestSingleInstanceLock()) {
                 platform: process.platform,
                 version: app.getVersion(),
                 url: START_URL,
+                localWallet: true,
                 proxy: describeProxy(activeProxy),
                 startup: autostart.state(),
                 tray: Boolean(tray),
@@ -1015,7 +1039,7 @@ if (!app.requestSingleInstanceLock()) {
         torrent.register({
             getWindow: () => mainWindow,
             getContents: () => pageContents(),
-            isTrusted: (url) => isNavigable(url, APP_HOST),
+            isTrusted: isLocalWallet,
             // The tracker a torrent created here announces to is this app's
             // own site, derived rather than accepted from the page.
             appUrl: APP_URL,

@@ -1,2 +1,4 @@
 node_modules/
 dist/
+wallet-dist/
+.renderer-source/

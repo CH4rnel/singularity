@@ -1,29 +1,54 @@
 # Cyberia Desktop
 
-Electron shell that ships the Cyberia site (`backend/laravel`) as a desktop
-application for Linux, Windows, and macOS.
+Standalone Electron wallet for Linux, Windows, and macOS. Vite compiles the
+existing Vue wallet from `backend/laravel` into `wallet-dist/`, which is included
+in the installed application. Its HTML, JavaScript and CSS are served locally
+on `https://wallet.cyberia.invalid`, an origin handled only inside the app.
+Opening the wallet and unlocking its vault work without a server connection.
 
-The site is a server-driven Inertia app, so the shell does not bundle a copy of
-it: it renders `https://cyberia.church` in a persistent session. That keeps the
-app permanently in sync with production — a deploy is a shipped update — and
-means the whole shell is a handful of small files in `src/`.
+When building from another worktree, set `CYBERIA_WALLET_SOURCE` to its
+`backend/laravel` directory. The current interface lives on `ux/program`;
+the older `feat/wallet-networks-crosschain` checkout is refused. The build copies
+the chosen frontend into an isolated staging directory, applies the desktop
+integration, and records the source revision and input hashes in `source.json`.
+It never edits the selected worktree.
+
+RPC, prices and other services still need the network. A same-origin gateway
+forwards API requests to `CYBERIA_APP_URL` and returns JSON; an account refresh
+extracts the site's Inertia data and always uses the installed Wallet component.
+Remote scripts, stylesheets and frames are blocked. A server deploy cannot
+replace the installed executable wallet code.
 
 The app is fully frameless: there is no operating-system decoration and no
 second title/menu strip drawn above the wallet — see [The window](#the-window).
 
 **The app is the Cyberia wallet.** The window opens on `/wallet`, which renders
 without the site header and footer inside a native shell and fills the frame
-instead. The rest of Cyberia is a link away in the wallet's masthead and under
-_File → Cyberia Site_; every other route keeps the normal site chrome. The
-wallet needs no Cyberia account — the keys are generated and encrypted in the
-browser — so the app is usable straight after install.
+instead. The masthead and _File → Cyberia Site_ open the public site in the
+system browser. The wallet needs no Cyberia account. First launch creates or
+imports a password-encrypted vault; creating a wallet generates 24 words locally.
+The password cannot be skipped in this build.
+
+The vault uses AES-256-GCM and PBKDF2-SHA-256 (310,000 iterations). It remains in
+the local renderer's storage and memory, rather than an isolated native signing
+service. Existing browser and older-shell vaults stay on their original origin;
+this build does not silently migrate or overwrite them.
+
+`backend/laravel/resources/desktop/bootstrap.json` is a checked-in snapshot of
+public service/bridge configuration. It contains no account, session or secret.
+Prices are refreshed through the API, and unavailable network reads remain unknown.
 
 ## Commands
 
 ```bash
+npm --prefix ../../backend/laravel ci
+# With Laravel dependencies installed, generate route helpers in backend/laravel:
+# php artisan wayfinder:generate --with-form
 npm install
-npm start            # run the shell against production
+npm start            # compile and run the bundled wallet
 npm test             # navigation rules (no display or Electron binary needed)
+npm run build:renderer
+npm run test:renderer # offline boot, encrypted creation and password on restart
 npm run dist:linux   # dist/Cyberia-<version>.AppImage + .deb
 npm run dist:win     # dist/*.exe (NSIS installer + portable)
 npm run dist:mac     # dist/*.dmg + .zip
@@ -56,13 +81,40 @@ File names carry **no version** — `Cyberia-Setup-x64.exe`,
 address. Renaming one is a three-file change: `electron-builder.yml`, the workflow
 notes, and `config/downloads.php` in the Laravel app.
 
+### SSH-signed local Linux builds
+
+```bash
+CYBERIA_WALLET_SOURCE=/home/lain/random/singularity-ux/backend/laravel \
+  npm run dist:linux -- --config.directories.output=dist/local-wallet-1.2.0
+npm run test:renderer
+npm run test:package
+npm run sign:release -- dist/local-wallet-1.2.0 ~/.ssh/id_ed25519.pub
+```
+
+Signing uses the matching key in `ssh-agent`. Each installer and `SHA256SUMS.txt`
+gets a detached OpenSSH `.sig` in the `cyberia-release` namespace. The directory
+also contains the public key, `allowed_signers`, and `RELEASE.json` with the
+source revision, working-tree state and hashes of the compiled renderer assets.
+These are SSH signatures verified separately from Debian package installation.
+Use a separate versioned directory for each release to preserve old installers
+and signatures. The package check and signing commands default to the version
+in `package.json`.
+
+From the release directory, verify the expected public-key fingerprint, then:
+
+```bash
+ssh-keygen -lf SIGNING_KEY.pub
+ssh-keygen -Y verify -f allowed_signers -I cyberia-release -n cyberia-release -s SHA256SUMS.txt.sig < SHA256SUMS.txt
+sha256sum -c SHA256SUMS.txt
+```
+
 ## Configuration
 
 | Variable / flag   | Default                  | Purpose                              |
 | ----------------- | ------------------------ | ------------------------------------ |
-| `CYBERIA_APP_URL`  | `https://cyberia.church` | Site the window renders              |
+| `CYBERIA_APP_URL`  | `https://cyberia.church` | Backend and external website              |
 | `--url=<url>`      | —                        | Same, as a command-line switch       |
-| `CYBERIA_APP_PATH` | `/wallet`                | Route the window opens on            |
+| `CYBERIA_APP_PATH` | `/wallet`                | Wallet launch query            |
 | `--path=<path>`    | —                        | Same, as a command-line switch       |
 | `CYBERIA_PROXY`    | —                        | Proxy for the shell, wins over `*_proxy` |
 | `--proxy=<url>`    | —                        | Same, as a command-line switch, and pins this run |
@@ -75,7 +127,7 @@ packaged install has instead of a command line — see [Proxies](#proxies).
 
 ```bash
 CYBERIA_APP_URL=http://localhost:8000 npm start
-npm start -- --url=http://localhost:8000 --path=/swap
+npm start -- --url=http://localhost:8000 --path=/wallet?section=security
 ```
 
 Anything that is not `http`/`https` falls back to production, so a bad override
@@ -173,10 +225,9 @@ again. It is there for a window manager that decorates windows its own way.
 
 - **Persistent session** — cookies and local storage live in the `persist:cyberia`
   partition, so a login survives restarts.
-- **Link discipline** — only `cyberia.church`, its subdomains, and the OAuth
-  providers the site redirects through may take over the window. Everything else
-  (`target="_blank"`, explorer links, `wc:`/`metamask:` wallet schemes) is handed
-  to the system browser or the registered app.
+- **Link discipline** — only the bundled wallet may occupy the window. The
+  public site, OAuth providers, explorer links and wallet schemes open in the
+  system browser or their registered app.
 - **Offline fallback** — `src/offline.html` replaces the network error page (in
   English or Russian, following the system language), names the failure —
   including the proxy that refused the connection — and reloads the site by
