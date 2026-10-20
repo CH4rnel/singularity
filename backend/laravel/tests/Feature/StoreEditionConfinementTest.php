@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -22,7 +23,12 @@ it('sends a store build back to the wallet from any other page', function () {
         ->get('/store-probe')
         ->assertRedirect('/wallet');
 
-    $this->withHeaders(['User-Agent' => STORE_EDITION_PLAY_UA, 'X-Inertia' => 'true'])
+    // The current asset version, or Inertia answers a 409 wherever a build exists (CI builds first).
+    $this->withHeaders([
+        'User-Agent' => STORE_EDITION_PLAY_UA,
+        'X-Inertia' => 'true',
+        'X-Inertia-Version' => (string) app(HandleInertiaRequests::class)->version(request()),
+    ])
         ->get('/store-probe')
         ->assertRedirect('/wallet');
 });
