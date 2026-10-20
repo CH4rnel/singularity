@@ -9,6 +9,16 @@ server {
     server_name  localhost;
     proxy_http_version 1.1;
 
+    location = /assets/configs/network_logo.png {
+        alias /usr/share/nginx/explorer-brand/cyberia-logo.png;
+        add_header Cache-Control "public, max-age=300";
+    }
+
+    location = /assets/configs/network_logo_dark.png {
+        alias /usr/share/nginx/explorer-brand/cyberia-logo.png;
+        add_header Cache-Control "public, max-age=300";
+    }
+
     location ~ ^/(api(?!-docs$)|socket|sitemap.xml|auth/auth0|auth/auth0/callback|auth/logout) {
         proxy_pass            ${BACK_PROXY_PASS};
         proxy_http_version    1.1;

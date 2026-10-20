@@ -8,8 +8,8 @@ services:
       - 'host.docker.internal:host-gateway'
     volumes:
       - "../proxy:/etc/nginx/templates"
+      - "../branding:/usr/share/nginx/explorer-brand:ro"
       - "/root/singularity/frontend/landing:/usr/share/nginx/landing:ro"
-      - "/root/dex-frontend:/usr/share/nginx/dex:ro"
       - "/root/cyberia-blog:/usr/share/nginx/blog:ro"
       - "/root/singularity/docs/.vitepress/dist:/usr/share/nginx/docs:ro"
       - "/root/certbot/conf:/etc/letsencrypt:ro"

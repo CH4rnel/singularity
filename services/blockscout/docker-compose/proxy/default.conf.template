@@ -110,7 +110,7 @@ server {
     }
 
     location / {
-        return 301 https://swap.cyberia.church$request_uri;
+        return 301 https://cyberia.church/swap$is_args$args;
     }
 }
 
@@ -121,11 +121,8 @@ server {
     ssl_certificate /etc/letsencrypt/live/swap.cyberia.church/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/swap.cyberia.church/privkey.pem;
 
-    root /usr/share/nginx/dex;
-    index index.html;
-
     location / {
-        try_files $uri $uri/ /index.html;
+        return 301 https://cyberia.church/swap$is_args$args;
     }
 }
 
@@ -178,6 +175,16 @@ server {
     listen       80;
     server_name  explorer.cyberia.church;
     proxy_http_version 1.1;
+
+    location = /assets/configs/network_logo.png {
+        alias /usr/share/nginx/explorer-brand/cyberia-logo.png;
+        add_header Cache-Control "public, max-age=300";
+    }
+
+    location = /assets/configs/network_logo_dark.png {
+        alias /usr/share/nginx/explorer-brand/cyberia-logo.png;
+        add_header Cache-Control "public, max-age=300";
+    }
 
     location ~ ^/(api(?!-docs$)|socket|sitemap.xml|auth/auth0|auth/auth0/callback|auth/logout) {
         proxy_pass            ${BACK_PROXY_PASS};
@@ -275,6 +282,16 @@ server {
         sub_filter_once       off;
         sub_filter_types      text/html;
         sub_filter '</head>' '<style>img[src*="/assets/configs/network_logo"]{width:140px!important;height:50px!important;max-width:140px!important;object-fit:contain!important}:has(>img[src*="/assets/configs/network_logo"]){height:50px!important;max-height:none!important;width:auto!important;overflow:visible!important}</style></head>';
+    }
+
+    location = /assets/configs/network_logo.png {
+        alias /usr/share/nginx/explorer-brand/cyberia-logo.png;
+        add_header Cache-Control "public, max-age=300";
+    }
+
+    location = /assets/configs/network_logo_dark.png {
+        alias /usr/share/nginx/explorer-brand/cyberia-logo.png;
+        add_header Cache-Control "public, max-age=300";
     }
 }
 
