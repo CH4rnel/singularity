@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\Api\ContributionsController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\MoneroWalletController;
@@ -311,6 +312,8 @@ Route::prefix('arena')->name('arena.')->group(function () {
 // Public XP ranking — social proof for the progression system and the
 // entry point into member profiles.
 Route::get('leaderboard', LeaderboardController::class)->name('leaderboard');
+// The open-source reward engine's public page; its data is /api/contributions.
+Route::get('contribute', fn () => Inertia::render('Contribute'))->name('contribute');
 
 Route::post('login/web3', Web3LoginController::class)->name('web3.login');
 // Inside the Telegram Mini App: Telegram's signed launch data is the login.
@@ -421,6 +424,20 @@ Route::prefix('api/wallet/lain')->name('wallet.lain.')->group(function () {
         ->middleware('throttle:30,1')->name('verify');
     Route::post('chat', [WalletLainController::class, 'chat'])
         ->middleware('throttle:10,1')->name('chat');
+});
+
+/**
+ * The open-source reward engine (ContributionsController, config/contributions.php).
+ *
+ * A web route for the same reason as the daily board: the board is public, but
+ * "my contributions" is about the account that linked a GitHub login, which
+ * only the session knows. Proofs are keyed by address and need no session.
+ */
+Route::prefix('api/contributions')->name('contributions.')->group(function () {
+    Route::get('/', [ContributionsController::class, 'show'])
+        ->middleware('throttle:60,1')->name('show');
+    Route::get('claims/{address}', [ContributionsController::class, 'claims'])
+        ->middleware('throttle:60,1')->name('claims');
 });
 
 /**

@@ -1,0 +1,4 @@
+{
+  "chainId": 49406,
+  "_doc": "Enrolls this repository in the Cyberia open-source reward engine (backend/laravel/config/contributions.php). Delete this file to stop rewards for work merged here."
+}

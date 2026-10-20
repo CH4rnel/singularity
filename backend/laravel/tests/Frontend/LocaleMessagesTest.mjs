@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { arenaMessages } from '@/lib/arenaMessages';
 import { consoleMessages } from '@/lib/consoleMessages';
+import { contributeMessages } from '@/lib/contributeMessages';
 import { downloadMessages } from '@/lib/downloadMessages';
 import { progressMessages } from '@/lib/progressMessages';
 import { trackerMessages } from '@/lib/trackerMessages';
@@ -24,6 +25,7 @@ const DICTS = {
     downloadMessages,
     progressMessages,
     trackerMessages,
+    contributeMessages,
     // Operator-facing and therefore en/ru only, but the failure mode is the
     // same one: a Russian console with an English cell in the middle of it.
     consoleMessages,

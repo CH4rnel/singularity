@@ -134,3 +134,8 @@ Schedule::command('launchpad:watch')->everyMinute()->withoutOverlapping();
 // This is a cron tick, not a queue worker. It never backfills model decisions.
 Schedule::command('arena:tick')->everyMinute()->withoutOverlapping(3)
     ->when(fn (): bool => (bool) config('arena.enabled') && (bool) config('arena.automation.enabled'));
+
+// The open-source reward engine: merged work out of every verified repository.
+// Epochs are built and published by hand (contributions:epoch), because a root
+// is a promise of money and somebody should read it before it is made.
+Schedule::command('contributions:sync')->hourly()->withoutOverlapping();

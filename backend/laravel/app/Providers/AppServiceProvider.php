@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Services\Ai\Providers\AiProviderRegistry;
+use App\Services\Contributions\ContributionScorer;
+use App\Services\Contributions\SybilGuard;
 use App\Services\Monitoring\ScheduledTaskLog;
 use App\Services\TonApiService;
 use App\Support\Environment;
@@ -36,6 +38,11 @@ class AppServiceProvider extends ServiceProvider
         // providers read config when they are built, and a test that rewrites
         // `ai.providers.*` must be able to see its own change.
         $this->app->scoped(AiProviderRegistry::class);
+
+        // The reward engine's rules are plain config arrays, kept out of the
+        // constructors so the rules themselves can be tested without a container.
+        $this->app->bind(ContributionScorer::class, fn () => ContributionScorer::fromConfig());
+        $this->app->bind(SybilGuard::class, fn () => SybilGuard::fromConfig());
     }
 
     /**
