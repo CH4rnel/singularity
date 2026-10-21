@@ -177,7 +177,9 @@ services:
       php artisan storage:link --relative --force || true;
       php artisan serve --host=0.0.0.0 --port=9001"
     ports:
-      - "9001:9001"
+      # Loopback only: the proxy reaches this container over the docker network,
+      # and `php artisan serve` must never face the internet directly.
+      - "127.0.0.1:9001:9001"
     env_file:
       - /root/singularity/backend/laravel/.env
     # Two networks, and the second one exists for a single link. The bridge's
