@@ -267,7 +267,10 @@ const statusColor = (status: string) => {
                                 <!-- Explorer links: source deposit tx and, once
                                      settled, the destination payout tx. -->
                                 <div
-                                    v-if="item.sourceUrl || item.destinationUrl"
+                                    v-if="
+                                        item.source_tx_hash ||
+                                        item.destination_tx_hash
+                                    "
                                     class="mt-1 flex items-center gap-2 text-[10px]"
                                 >
                                     <a
@@ -281,8 +284,16 @@ const statusColor = (status: string) => {
                                         <ExternalLink class="h-3 w-3" />
                                     </a>
                                     <span
+                                        v-else-if="item.source_tx_hash"
+                                        :title="item.source_tx_hash"
+                                        class="font-mono text-muted-foreground"
+                                    >
+                                        {{ formatHash(item.source_tx_hash) }}
+                                    </span>
+                                    <span
                                         v-if="
-                                            item.sourceUrl && item.destinationUrl
+                                            item.source_tx_hash &&
+                                            item.destination_tx_hash
                                         "
                                         class="text-muted-foreground"
                                     >
@@ -296,10 +307,21 @@ const statusColor = (status: string) => {
                                         class="inline-flex items-center gap-1 font-mono text-primary hover:underline"
                                     >
                                         {{
-                                            formatHash(item.destination_tx_hash!)
+                                            formatHash(
+                                                item.destination_tx_hash!,
+                                            )
                                         }}
                                         <ExternalLink class="h-3 w-3" />
                                     </a>
+                                    <span
+                                        v-else-if="item.destination_tx_hash"
+                                        :title="item.destination_tx_hash"
+                                        class="font-mono text-muted-foreground"
+                                    >
+                                        {{
+                                            formatHash(item.destination_tx_hash)
+                                        }}
+                                    </span>
                                 </div>
                             </div>
                             <component

@@ -1054,6 +1054,8 @@ const resumeActiveRequest = (request: ActiveBridgeRequest): void => {
             v-model:convert-to-native="flow.context.convertToNative"
             :convert-enabled="props.convertConfig.enabled"
             :convert-rate="props.convertConfig.rate"
+            :fee-config="props.feeConfig"
+            :cyber-sol-usd="props.cyberSolUsd"
             :source-wallet-connected="sourceWalletConnected"
             :source-wallet-address="sourceWalletAddress"
             :source-wallet-connecting="sourceWalletConnecting"

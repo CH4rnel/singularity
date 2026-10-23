@@ -7,12 +7,25 @@ import { bridgeRoute, isManualBridgeRoute } from '@/lib/addressValidation';
 import { validateDestination } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
 import type { DestinationCapacity } from '@/lib/bridgeCapacity';
-import { capacityVerdict } from '@/lib/bridgeCapacity';
-import { tokensForRoute } from '@/lib/bridgeConfig';
+import { capacityVerdict, toRawUnits } from '@/lib/bridgeCapacity';
+import {
+    bridgeConversionRate,
+    bridgeRouteTokenDecimals,
+    tokensForRoute,
+} from '@/lib/bridgeConfig';
+import {
+    bridgePayoutAmount,
+    bridgeSourceAmount,
+    computeFee,
+    feeTokenAmount,
+} from '@/lib/bridgeFee';
+import type { BridgeFeeConfig } from '@/lib/bridgeFee';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 
 const props = defineProps<{
     direction: BridgeDirection;
+    feeConfig: BridgeFeeConfig;
+    cyberSolUsd: number | null;
     token: BridgeTokenSymbol;
     amount: string;
     sourceTxHash: string;
@@ -250,9 +263,13 @@ const sourceWalletLabel = computed(() =>
         : `Open ${route.value.sourceLabel} web wallet`,
 );
 
-const amountNum = computed(() => parseFloat(localAmount.value));
-
-const amountValid = computed(() => amountNum.value > 0);
+const routeDecimals = computed(() =>
+    bridgeRouteTokenDecimals(props.direction, props.token),
+);
+const amountValid = computed(
+    () =>
+        (toRawUnits(localAmount.value, routeDecimals.value.source) ?? 0n) > 0n,
+);
 
 const manualFieldsValid = computed(
     () =>
@@ -262,14 +279,17 @@ const manualFieldsValid = computed(
 );
 
 const amountExceedsBalance = computed(() => {
-    const available = parseFloat(
+    const available = toRawUnits(
         props.sourceMaxAmount ?? props.sourceBalance ?? '0',
+        routeDecimals.value.source,
     );
+    const entered = toRawUnits(localAmount.value, routeDecimals.value.source);
 
     return (
         props.sourceBalance !== null &&
-        amountNum.value > 0 &&
-        amountNum.value > available
+        available !== null &&
+        entered !== null &&
+        entered > available
     );
 });
 
@@ -288,8 +308,36 @@ const maxReservesGas = computed(
  * 492836888 lamports and the boundary is where this decision matters. See
  * `@/lib/bridgeCapacity`.
  */
+const payoutAmount = computed(() =>
+    bridgePayoutAmount(
+        props.direction,
+        props.token,
+        localAmount.value,
+        feeTokenAmount(
+            computeFee(
+                props.token,
+                localAmount.value,
+                { cyberSolUsd: props.cyberSolUsd },
+                props.feeConfig,
+                props.direction,
+            ).feeToken,
+        ),
+    ),
+);
+const conversionRate = computed(() =>
+    bridgeConversionRate(props.direction, props.token),
+);
+const hasConversion = computed(
+    () =>
+        conversionRate.value !== null &&
+        conversionRate.value.numerator !== conversionRate.value.denominator,
+);
 const capacity = computed(() =>
-    capacityVerdict(props.destinationCapacity, localAmount.value),
+    payoutAmount.value === null
+        ? localAmount.value.trim() === ''
+            ? capacityVerdict(props.destinationCapacity, '')
+            : 'unavailable'
+        : capacityVerdict(props.destinationCapacity, payoutAmount.value),
 );
 
 const overCapacity = computed(() => capacity.value === 'exceeded');
@@ -306,9 +354,22 @@ const capacityCeiling = computed(() =>
 );
 
 const setMax = () => {
-    const limits = [props.sourceMaxAmount, capacityCeiling.value]
+    const sourceCeiling =
+        capacityCeiling.value === null
+            ? null
+            : bridgeSourceAmount(
+                  props.direction,
+                  props.token,
+                  capacityCeiling.value,
+              );
+    const limits = [props.sourceMaxAmount, sourceCeiling]
         .filter((v): v is string => v !== null)
-        .sort((a, b) => parseFloat(a) - parseFloat(b));
+        .sort((a, b) => {
+            const left = toRawUnits(a, routeDecimals.value.source) ?? 0n;
+            const right = toRawUnits(b, routeDecimals.value.source) ?? 0n;
+
+            return left < right ? -1 : left > right ? 1 : 0;
+        });
 
     if (limits.length > 0) {
         localAmount.value = limits[0];
@@ -600,9 +661,7 @@ const formatRelative = (ts: number): string => {
                 class="mb-1 text-xs text-[#706f6c] dark:text-[#A1A09A]"
             >
                 Deliverable to {{ destinationLabel ?? 'destination' }} now:
-                <span class="font-mono">{{
-                    parseFloat(capacityCeiling).toFixed(4)
-                }}</span>
+                <span class="font-mono">{{ capacityCeiling }}</span>
                 {{ token }}
             </p>
             <p
@@ -651,6 +710,16 @@ const formatRelative = (ts: number): string => {
                 {{ destinationLabel ?? 'the destination' }} right now
             </p>
         </div>
+
+        <p
+            v-if="hasConversion && conversionRate"
+            class="text-xs text-[#706f6c] dark:text-[#A1A09A]"
+        >
+            {{ conversionRate.denominator }} {{ token }} on
+            {{ route.sourceLabel }} = {{ conversionRate.numerator }}
+            {{ token }} on {{ route.destinationLabel }}. You receive
+            {{ payoutAmount ?? '—' }} {{ token }} after the source fee.
+        </p>
 
         <!-- Optional CYBER.sol -> native CYBER auto-conversion -->
         <div

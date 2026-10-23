@@ -4,7 +4,16 @@ import { computed } from 'vue';
 
 import { bridgeRoute, isManualBridgeRoute } from '@/lib/addressValidation';
 import type { BridgeDirection } from '@/lib/addressValidation';
-import { DEFAULT_FEE, computeFee, isFeeBearing } from '@/lib/bridgeFee';
+import { fromRawUnits, toRawUnits } from '@/lib/bridgeCapacity';
+import { bridgeConversionRate } from '@/lib/bridgeConfig';
+import {
+    DEFAULT_FEE,
+    bridgePayoutAmount,
+    computeFee,
+    convertBridgeUnits,
+    feeTokenAmount,
+    isFeeBearing,
+} from '@/lib/bridgeFee';
 import type { BridgeFeeConfig } from '@/lib/bridgeFee';
 import type { BridgeTokenSymbol } from '@/lib/bridgeTokens';
 import AddressDisplay from './AddressDisplay.vue';
@@ -67,23 +76,53 @@ const hasFee = computed(() =>
     isFeeBearing(props.token, props.direction, props.feeConfig),
 );
 
-const fee = computed(() => feeResult.value.feeToken.toFixed(6));
+const fee = computed(() => feeTokenAmount(feeResult.value.feeToken));
 
 const feeUsd = computed(() => feeResult.value.feeUsd.toFixed(2));
 
-const youReceive = computed(() => {
-    const amt = parseFloat(props.amount);
-    let after = amt - feeResult.value.feeToken;
+const conversionRate = computed(() =>
+    bridgeConversionRate(props.direction, props.token),
+);
+const hasConversion = computed(
+    () =>
+        conversionRate.value !== null &&
+        conversionRate.value.numerator !== conversionRate.value.denominator,
+);
 
-    if (props.convertToNative && props.convertRate > 0) {
-        after = after / props.convertRate;
+const youReceive = computed(() => {
+    const payout = bridgePayoutAmount(
+        props.direction,
+        props.token,
+        props.amount,
+        fee.value,
+    );
+
+    if (payout === null || !props.convertToNative) {
+        return payout;
     }
 
-    return after > 0 ? after.toFixed(6) : '0';
+    const raw = toRawUnits(payout, 18);
+
+    if (
+        raw === null ||
+        !Number.isSafeInteger(props.convertRate) ||
+        props.convertRate <= 0
+    ) {
+        return null;
+    }
+
+    const converted = convertBridgeUnits(raw, 18, 18, {
+        numerator: '1',
+        denominator: String(props.convertRate),
+    });
+
+    return converted === null ? null : fromRawUnits(converted, 18);
 });
 
-// The fee would consume the whole amount — nothing left to pay out.
-const receiveIsZero = computed(() => parseFloat(youReceive.value) <= 0);
+// Nothing can be delivered after fees or precision truncation.
+const receiveIsZero = computed(
+    () => youReceive.value === null || /^0(?:\.0*)?$/.test(youReceive.value),
+);
 
 const receiveToken = computed(() =>
     props.convertToNative ? 'CYBER (native)' : props.token,
@@ -168,9 +207,18 @@ const receiveToken = computed(() =>
                 <span
                     class="font-mono text-sm font-medium text-green-700 dark:text-green-400"
                 >
-                    {{ youReceive }} {{ receiveToken }}
+                    {{ youReceive ?? 'Unavailable' }} {{ receiveToken }}
                 </span>
             </div>
+            <p
+                v-if="hasConversion && conversionRate"
+                class="text-xs text-[#706f6c] dark:text-[#A1A09A]"
+            >
+                {{ conversionRate.denominator }} {{ token }} on
+                {{ sourceChain }} = {{ conversionRate.numerator }}
+                {{ token }} on {{ destChain }}. The fee is deducted on
+                {{ sourceChain }} before conversion.
+            </p>
             <div
                 v-if="convertToNative"
                 class="flex items-start gap-2 rounded border border-orange-500/30 bg-orange-500/10 p-2 text-xs text-orange-700 dark:text-orange-300"
@@ -230,7 +278,10 @@ const receiveToken = computed(() =>
             :disabled="!localConfirmed || receiveIsZero"
             @click="$emit('confirm')"
         >
-            <template v-if="receiveIsZero">Amount does not cover the fee</template>
+            <template v-if="youReceive === null">Payout unavailable</template>
+            <template v-else-if="receiveIsZero"
+                >Amount does not cover the fee</template
+            >
             <template v-else>{{
                 manualRoute ? 'Submit request' : 'Confirm and sign'
             }}</template>

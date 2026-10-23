@@ -92,7 +92,8 @@ export const parseCapacity = (payload: unknown): DestinationCapacity => {
         !/^\d+$/.test(availableRaw) ||
         typeof decimals !== 'number' ||
         !Number.isInteger(decimals) ||
-        decimals < 0
+        decimals < 0 ||
+        decimals > 255
     ) {
         return unreadableCapacity('capacity answer carried no usable number');
     }
@@ -117,6 +118,10 @@ export const parseCapacity = (payload: unknown): DestinationCapacity => {
  * Returns null for anything that is not a plain positive decimal.
  */
 export const toRawUnits = (amount: string, decimals: number): bigint | null => {
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
+        return null;
+    }
+
     const trimmed = amount.trim();
 
     if (!/^\d*\.?\d*$/.test(trimmed) || trimmed === '' || trimmed === '.') {
@@ -127,7 +132,10 @@ export const toRawUnits = (amount: string, decimals: number): bigint | null => {
     const padded = (fraction + '0'.repeat(decimals)).slice(0, decimals);
 
     try {
-        return BigInt(whole || '0') * 10n ** BigInt(decimals) + BigInt(padded || '0');
+        return (
+            BigInt(whole || '0') * 10n ** BigInt(decimals) +
+            BigInt(padded || '0')
+        );
     } catch {
         return null;
     }
@@ -182,3 +190,14 @@ export const capacityAllowsSigning = (
     capacity: DestinationCapacity,
     amount: string,
 ): boolean => capacityVerdict(capacity, amount) === 'ok';
+
+/** Format raw units without rounding through a JavaScript number. */
+export const fromRawUnits = (amount: bigint, decimals: number): string => {
+    const scale = 10n ** BigInt(decimals);
+    const fraction = (amount % scale)
+        .toString()
+        .padStart(decimals, '0')
+        .replace(/0+$/, '');
+
+    return `${amount / scale}${fraction ? `.${fraction}` : ''}`;
+};

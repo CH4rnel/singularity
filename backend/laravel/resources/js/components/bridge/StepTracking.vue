@@ -42,7 +42,7 @@ const convertRequested = ref(false);
 const converted = ref<boolean | null>(null);
 const pollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
-const explorerUrl = (chain: string, txHash: string): string =>
+const explorerUrl = (chain: string, txHash: string): string | null =>
     explorerTxUrl(chain, txHash);
 
 const sourceExplorer = computed(() =>
@@ -50,7 +50,10 @@ const sourceExplorer = computed(() =>
 );
 
 const sourceExplorerFallbacks = computed(() =>
-    explorerTxFallbackUrls(bridgeRoute(props.direction).source, sourceTxHash.value),
+    explorerTxFallbackUrls(
+        bridgeRoute(props.direction).source,
+        sourceTxHash.value,
+    ),
 );
 
 const destExplorer = computed(() => {
@@ -281,6 +284,7 @@ const steps = computed(() => [
                     >Source tx:</span
                 >
                 <a
+                    v-if="sourceExplorer"
                     :href="sourceExplorer"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -289,6 +293,9 @@ const steps = computed(() => [
                     {{ sourceTxHash.slice(0, 10) }}…
                     <ExternalLink class="h-3 w-3" />
                 </a>
+                <span v-else :title="sourceTxHash" class="font-mono break-all">
+                    {{ sourceTxHash }}
+                </span>
                 <a
                     v-for="url in sourceExplorerFallbacks"
                     :key="url"
@@ -314,11 +321,12 @@ const steps = computed(() => [
                     there is no transaction hash to look up.
                 </span>
             </div>
-            <div v-if="destExplorer" class="flex items-center gap-2">
+            <div v-if="destinationTxHash" class="flex items-center gap-2">
                 <span class="text-[#706f6c] dark:text-[#A1A09A]">
                     Destination tx:
                 </span>
                 <a
+                    v-if="destExplorer"
                     :href="destExplorer"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -327,6 +335,13 @@ const steps = computed(() => [
                     {{ destinationTxHash!.slice(0, 10) }}…
                     <ExternalLink class="h-3 w-3" />
                 </a>
+                <span
+                    v-else
+                    :title="destinationTxHash"
+                    class="font-mono break-all"
+                >
+                    {{ destinationTxHash }}
+                </span>
                 <a
                     v-for="url in destExplorerFallbacks"
                     :key="url"

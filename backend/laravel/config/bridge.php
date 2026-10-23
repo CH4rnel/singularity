@@ -1,5 +1,9 @@
 <?php
 
+$migrationReserveCyber = env('BRIDGE_CYBERIA_MIGRATION_RESERVE_CYBER');
+$migrationReserveConfigured = is_string($migrationReserveCyber)
+    && preg_match('/^(?:0|[1-9][0-9]{0,35})(?:\.[0-9]{1,18})?$/D', $migrationReserveCyber) === 1;
+
 return [
 
     /*
@@ -23,6 +27,10 @@ return [
     */
 
     'home_chain' => 'cyberia',
+
+    // The public Fuji RPC forwards to this private upstream. It must never
+    // default to its own public URL, which would recurse through the proxy.
+    'fuji_rpc_upstream' => env('BRIDGE_CYBERIA_FUJI_UPSTREAM_RPC_URL', ''),
 
     /*
     |--------------------------------------------------------------------------
@@ -206,6 +214,34 @@ return [
             // browser cannot reach, which silently zeroed out source balances.
             'public_rpc_url' => env('BRIDGE_EVM_PUBLIC_RPC_URL', 'https://rpc.cyberia.church'),
             'explorer_tx' => 'https://explorer.cyberia.church/tx/{hash}',
+            'native_currency' => ['name' => 'Cyber', 'symbol' => 'CYBER', 'decimals' => 18],
+            'deposit_address' => null,
+        ],
+        'avalanche_fuji' => [
+            'key' => 'avalanche_fuji',
+            'label' => 'Avalanche Fuji (testnet)',
+            'type' => 'evm',
+            'address_type' => 'evm',
+            'wallet' => 'evm',
+            'enabled' => filter_var(env('BRIDGE_AVALANCHE_FUJI_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'evm_chain_id' => 43113,
+            'rpc_url' => env('BRIDGE_AVALANCHE_FUJI_RPC_URL', 'https://api.avax-test.network/ext/bc/C/rpc'),
+            'public_rpc_url' => env('BRIDGE_AVALANCHE_FUJI_PUBLIC_RPC_URL', 'https://api.avax-test.network/ext/bc/C/rpc'),
+            'explorer_tx' => 'https://subnets-test.avax.network/c-chain/tx/{hash}',
+            'native_currency' => ['name' => 'Fuji AVAX', 'symbol' => 'AVAX', 'decimals' => 18],
+            'deposit_address' => null,
+        ],
+        'cyberia_fuji' => [
+            'key' => 'cyberia_fuji',
+            'label' => 'Cyberia Fuji (testnet)',
+            'type' => 'evm',
+            'address_type' => 'evm',
+            'wallet' => 'evm',
+            'enabled' => filter_var(env('BRIDGE_CYBERIA_FUJI_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'evm_chain_id' => 49407,
+            'rpc_url' => env('BRIDGE_CYBERIA_FUJI_RPC_URL', 'https://cyberia.church/api/fuji/rpc'),
+            'public_rpc_url' => env('BRIDGE_CYBERIA_FUJI_PUBLIC_RPC_URL', 'https://cyberia.church/api/fuji/rpc'),
+            'explorer_tx' => env('BRIDGE_CYBERIA_FUJI_EXPLORER_TX'),
             'native_currency' => ['name' => 'Cyber', 'symbol' => 'CYBER', 'decimals' => 18],
             'deposit_address' => null,
         ],
@@ -470,6 +506,62 @@ return [
     */
 
     'routes' => [
+        'avalanche_fuji_to_evm' => [
+            'direction' => 'avalanche_fuji_to_evm',
+            'source_chain' => 'avalanche_fuji',
+            'destination_chain' => 'cyberia',
+            'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_AVALANCHE_FUJI_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'evm_to_avalanche_fuji' => [
+            'direction' => 'evm_to_avalanche_fuji',
+            'source_chain' => 'cyberia',
+            'destination_chain' => 'avalanche_fuji',
+            'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_AVALANCHE_FUJI_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'evm_to_cyberia_fuji' => [
+            'direction' => 'evm_to_cyberia_fuji',
+            'source_chain' => 'cyberia',
+            'destination_chain' => 'cyberia_fuji',
+            'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_EVM_TO_CYBERIA_FUJI_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'conversion_rates' => [
+                'CYBER' => ['numerator' => '1000', 'denominator' => '1'],
+            ],
+        ],
+        'cyberia_fuji_to_evm' => [
+            'direction' => 'cyberia_fuji_to_evm',
+            'source_chain' => 'cyberia_fuji',
+            'destination_chain' => 'cyberia',
+            'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_CYBERIA_FUJI_TO_EVM_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+            'allowed_tokens' => $migrationReserveConfigured
+                && filter_var(env('BRIDGE_CYBERIA_FUJI_REVERSE_ENABLED', false), FILTER_VALIDATE_BOOLEAN)
+                ? ['AVAX.FUJI', 'CYBER']
+                : ['AVAX.FUJI'],
+            // New-chain genesis CYBER must never spend the old hot wallet's
+            // operational/Robinhood reserve. Only the balance above this
+            // explicit baseline, minus payout gas, is migration inventory.
+            'native_destination_reserve_floor' => ['CYBER' => $migrationReserveCyber],
+            'conversion_rates' => [
+                'CYBER' => ['numerator' => '1', 'denominator' => '1000'],
+            ],
+        ],
+        'avalanche_fuji_to_cyberia_fuji' => [
+            'direction' => 'avalanche_fuji_to_cyberia_fuji',
+            'source_chain' => 'avalanche_fuji',
+            'destination_chain' => 'cyberia_fuji',
+            'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_AVALANCHE_FUJI_TO_CYBERIA_FUJI_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'cyberia_fuji_to_avalanche_fuji' => [
+            'direction' => 'cyberia_fuji_to_avalanche_fuji',
+            'source_chain' => 'cyberia_fuji',
+            'destination_chain' => 'avalanche_fuji',
+            'auto_process' => true,
+            'enabled' => filter_var(env('BRIDGE_ROUTE_CYBERIA_FUJI_TO_AVALANCHE_FUJI_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        ],
         'sol_to_evm' => [
             'direction' => 'sol_to_evm',
             'source_chain' => 'solana',
@@ -842,13 +934,27 @@ return [
         // non-home chain: outbound MINTS it to the recipient against the
         // native CYBER the user deposited on the relayer EOA on Cyberia, and
         // inbound deposits are BURNED before the native CYBER payout — supply
-        // stays 1:1 with the Cyberia-side reserve.
+        // stays 1:1 with the Cyberia-side reserve. Native CYBER on Cyberia
+        // Fuji uses the route's explicit 1:1000 rate and a measured coin
+        // reserve on both sides, never wrapper minting.
         'CYBER' => [
             'symbol' => 'CYBER',
             'model' => 'mint',
             'chains' => [
                 'cyberia' => ['native' => true, 'decimals' => 18],
+                'cyberia_fuji' => ['native' => true, 'decimals' => 18],
                 'robinhood' => ['address' => env('BRIDGE_CYBER_ROBINHOOD_ADDRESS', '0x753979e6585CCa139fbB1918966D563a25eEB3B2'), 'decimals' => 18, 'owned' => true],
+            ],
+        ],
+        // Faucet AVAX belongs to Fuji testnet. Its wrappers deliberately use
+        // a distinct symbol so they cannot be presented as mainnet AVAX.
+        'AVAX.FUJI' => [
+            'symbol' => 'AVAX.FUJI',
+            'model' => 'mint',
+            'chains' => [
+                'cyberia' => ['address' => env('BRIDGE_AVAX_FUJI_WRAPPER_ADDRESS', ''), 'decimals' => 18],
+                'avalanche_fuji' => ['native' => true, 'decimals' => 18],
+                'cyberia_fuji' => ['address' => env('BRIDGE_AVAX_CYBERIA_FUJI_WRAPPER_ADDRESS', ''), 'decimals' => 18, 'owned' => true],
             ],
         ],
         // Native BNB bridged into a Cyberia wrapper (deployed via

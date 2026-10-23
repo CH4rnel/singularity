@@ -212,6 +212,15 @@
       "artifact": "contracts/USDG.sol/USDG.json",
       "address": "0xDaDa615b767120cC0767067f075Ac799957508Da",
       "burnable": true
+    },
+    {
+      "symbol": "AVAX.FUJI",
+      "contract": "AVAXFuji",
+      "artifact": "contracts/AVAXFuji.sol/AVAXFuji.json",
+      "address": "0x8852335B8a54e1616abb77AC5B392a8B566568A0",
+      "burnable": true,
+      "originChainId": 43113,
+      "testnet": true
     }
   ]
 }

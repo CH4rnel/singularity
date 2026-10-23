@@ -137,6 +137,11 @@ class BridgeConfigService
         $tokens = [];
 
         foreach (config('bridge.tokens', []) as $symbol => $token) {
+            if (array_key_exists('allowed_tokens', $route)
+                && (! is_array($route['allowed_tokens']) || ! in_array($symbol, $route['allowed_tokens'], true))) {
+                continue;
+            }
+
             if ($this->tokenOnChain($symbol, $route['source_chain']) === null) {
                 continue;
             }
@@ -241,6 +246,7 @@ class BridgeConfigService
                     default => 'Operator setup pending',
                 },
                 'tokens' => array_keys($this->tokensForRoute($direction)),
+                'conversionRates' => $route['conversion_rates'] ?? [],
             ];
         }
 

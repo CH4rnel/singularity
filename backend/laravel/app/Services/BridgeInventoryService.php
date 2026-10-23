@@ -197,6 +197,22 @@ class BridgeInventoryService
         // gas the payout retains, so the shown max is actually deliverable.
         if ($entry['native'] ?? false) {
             $reserveRaw = TokenAmount::toRaw($this->fee->nativePayoutFee($direction, $token), $decimals);
+            $floors = config('bridge.routes', [])[$direction]['native_destination_reserve_floor'] ?? [];
+
+            if (! is_array($floors)) {
+                return BridgeCapacity::unavailable('native destination reserve floor is invalid', $decimals);
+            }
+
+            if (array_key_exists($token, $floors)) {
+                $floor = $floors[$token];
+
+                if (! is_string($floor)
+                    || preg_match('/^(?:0|[1-9][0-9]{0,35})(?:\.[0-9]{1,'.$decimals.'})?$/D', $floor) !== 1) {
+                    return BridgeCapacity::unavailable('native destination reserve floor is not configured', $decimals);
+                }
+
+                $reserveRaw = bcadd($reserveRaw, TokenAmount::toRaw($floor, $decimals), 0);
+            }
 
             return BridgeCapacity::available(bcsub($balanceRaw, $reserveRaw, 0), $decimals);
         }

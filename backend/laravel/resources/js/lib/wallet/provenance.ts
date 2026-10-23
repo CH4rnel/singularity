@@ -32,6 +32,10 @@ const ROBINHOOD = 4663;
 
 const registry: Record<number, Record<string, Provenance>> = {
     [CYBERIA]: {
+        '0x8852335b8a54e1616abb77ac5b392a8b566568a0': {
+            kind: 'bridged',
+            symbol: 'AVAX.FUJI',
+        },
         '0x78272aad03e4b9d7a9134e874ba6d419b534f6c9': {
             kind: 'wrapped',
             symbol: 'WCYBER',
@@ -123,6 +127,12 @@ const registry: Record<number, Record<string, Provenance>> = {
         '0xeb91ec10462a249b9922d6d62fb2be73bd084ade': {
             kind: 'issued',
             symbol: 'GOAL',
+        },
+    },
+    49407: {
+        '0xa084bcd3a16be2cf141b62ea94b330f2db818a1d': {
+            kind: 'bridged',
+            symbol: 'AVAX.FUJI',
         },
     },
     [ROBINHOOD]: {
