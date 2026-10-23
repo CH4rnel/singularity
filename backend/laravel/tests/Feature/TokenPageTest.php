@@ -59,6 +59,15 @@ it('404s on an unknown symbol', function () {
     $this->get('/token/NOTATOKEN')->assertNotFound();
 });
 
+it('identifies bridged Fuji AVAX as a testnet asset', function () {
+    $this->get('/token/AVAX.FUJI')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('Token')
+            ->where('token.address', '0x8852335b8a54e1616abb77ac5b392a8b566568a0')
+            ->where('token.symbol', 'AVAX.FUJI')
+            ->where('token.name', 'Avalanche Fuji Test AVAX')
+            ->where('token.what', fn ($text) => str_contains($text, 'separate from mainnet AVAX')));
+});
+
 it('prices a token and lists its pools from the DEX pool graph', function () {
     DB::statement('CREATE TABLE dex_pools (
         pair_address TEXT PRIMARY KEY, token0 TEXT, token1 TEXT,

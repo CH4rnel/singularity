@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\BridgeRequest;
 use App\Models\BridgeReservation;
+use App\Support\BridgeAmount;
 use App\Support\BridgeCapacity;
 use App\Support\TokenAmount;
 use Illuminate\Contracts\Cache\Lock;
@@ -81,7 +82,7 @@ class BridgeAdmissionService
      *
      * @return array{fee: string, net: string, net_raw: string, decimals: int}|null
      */
-    public function quote(string $direction, string $token, string $amount): ?array
+    public function quote(string $direction, string $token, string $amount, ?BridgeRequest $request = null): ?array
     {
         $decimals = $this->inventory->destinationDecimals($direction, $token);
 
@@ -89,8 +90,8 @@ class BridgeAdmissionService
             return null;
         }
 
-        $fee = (string) $this->fee->feeForBridge($token, $amount, $direction)['fee_amount'];
-        $net = bcsub($amount, $fee, 18);
+        $fee = (string) ($request?->fee_amount ?? $this->fee->feeForBridge($token, $amount, $direction)['fee_amount']);
+        $net = BridgeAmount::destination($direction, $token, bcsub($amount, $fee, 18), $request);
 
         if (bccomp($net, '0', 18) <= 0) {
             return null;
@@ -215,7 +216,7 @@ class BridgeAdmissionService
             return null;
         }
 
-        $quote = $this->quote($request->direction, $request->token, (string) $request->amount);
+        $quote = $this->quote($request->direction, $request->token, (string) $request->amount, $request);
         $netRaw = $quote['net_raw'] ?? '0';
         $decimals = $quote['decimals'] ?? ($this->inventory->destinationDecimals($request->direction, $request->token) ?? 18);
 

@@ -4,6 +4,7 @@ import type {
     PublicRouteData,
     PublicToken,
 } from '@/lib/bridgeConfig';
+import { convertBridgeUnits } from '@/lib/bridgeFee';
 import { evmSigner } from '@/lib/wallet/keys';
 import type { WalletKeySource } from '@/lib/wallet/keys';
 import { submit } from '@/routes/bridge';
@@ -52,6 +53,7 @@ export type BridgeConfig = {
     relayer: string | null;
     feeBps: number;
     feeFlatUsd: number;
+    nativeRouteFees?: Record<string, Record<string, number>>;
 };
 
 /** Why a corridor cannot be used from this wallet, or 'ok'. */
@@ -75,6 +77,7 @@ export type BridgeOption = {
     block: BridgeBlock;
     /** The server's own words for a corridor it is not currently running. */
     unavailableReason: string | null;
+    conversionRates: PublicRouteData['conversionRates'];
 };
 
 const chainOf = (config: BridgeConfig, key: string): PublicChain | null =>
@@ -164,6 +167,7 @@ export const bridgeOptions = (
             tokens: route.tokens ?? [],
             block: bridgeBlockFor(config, route, null, walletChainIds),
             unavailableReason: route.unavailableReason ?? null,
+            conversionRates: route.conversionRates,
         };
     });
 
@@ -176,6 +180,31 @@ export const bridgeOptions = (
  */
 export const bridgeRateFee = (amount: bigint, feeBps: number): bigint =>
     feeBps <= 0 ? 0n : (amount * BigInt(feeBps)) / 10_000n;
+
+/** The amount paid out, in destination units; the deposit stays in source units. */
+export const bridgePayoutUnits = (
+    config: BridgeConfig,
+    direction: string,
+    symbol: string,
+    amount: bigint,
+    sourceFee = 0n,
+): bigint | null => {
+    const route = config.routes.find((entry) => entry.direction === direction);
+    const token = tokenOf(config, symbol);
+    const source = route ? token?.chains[route.source] : null;
+    const destination = route ? token?.chains[route.destination] : null;
+
+    if (!route || !source || !destination || sourceFee < 0n) {
+        return null;
+    }
+
+    return convertBridgeUnits(
+        amount > sourceFee ? amount - sourceFee : 0n,
+        source.decimals,
+        destination.decimals,
+        route.conversionRates?.[symbol],
+    );
+};
 
 /* -------------------------------------------------------------- writing -- */
 

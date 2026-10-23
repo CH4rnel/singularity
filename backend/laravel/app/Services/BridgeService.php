@@ -6,6 +6,7 @@ use App\Models\BridgeRequest;
 use App\Services\Bitcoin\EsploraApiService;
 use App\Services\Bitcoin\UtxoPool;
 use App\Services\Monero\MoneroWalletRpc;
+use App\Support\BridgeAmount;
 use App\Support\BridgeCapacity;
 use App\Support\Environment;
 use App\Support\TokenAmount;
@@ -71,6 +72,8 @@ class BridgeService
         ?string $depositWif = null,
         string $status = 'pending',
     ): BridgeRequest {
+        $rate = BridgeAmount::rate($direction, $token);
+
         return BridgeRequest::create([
             'user_id' => $userId,
             'direction' => $direction,
@@ -84,6 +87,8 @@ class BridgeService
             'deposit_wif' => $depositWif,
             'amount' => $amount,
             'fee_amount' => $feeAmount,
+            'conversion_numerator' => $rate['numerator'],
+            'conversion_denominator' => $rate['denominator'],
             'fee_usd' => $feeUsd,
             'gas_drop_planned' => $gasDropPlanned,
             'gas_drop_amount' => $gasDropAmount,
@@ -580,10 +585,8 @@ class BridgeService
             }
 
             $feeAmount = (string) ($request->fee_amount ?: '0');
-            $nativeGasFee = app(BridgeFeeService::class)->nativePayoutFee(
-                $request->direction,
-                $request->token,
-            );
+            $nativeGasFee = BridgeAmount::sourceFee($request->direction, $request->token,
+                app(BridgeFeeService::class)->nativePayoutFee($request->direction, $request->token), $request);
 
             if (bccomp($nativeGasFee, $feeAmount, 18) > 0) {
                 $feeAmount = $nativeGasFee;
@@ -645,7 +648,15 @@ class BridgeService
             $request->markSourceVerified();
             app(BridgeAdmissionService::class)->commit($request, null);
 
-            return $this->deliver($request, $context, $netAmount, $claimedRaw);
+            $destinationNet = BridgeAmount::destination($request->direction, $request->token, $netAmount, $request);
+
+            if (bccomp($destinationNet, '0', 18) <= 0) {
+                $this->failRelay($request, 'Converted destination amount is below one atomic unit');
+
+                return false;
+            }
+
+            return $this->deliver($request, $context, $destinationNet, $claimedRaw);
         } catch (\Throwable $e) {
             $this->failRelay($request, $e->getMessage());
             Log::error('Bridge: direct relay failed', [

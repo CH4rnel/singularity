@@ -15,6 +15,8 @@ import {
 import type { BaseWallet } from 'ethers';
 import {
     CYBERIA_CHAIN_ID,
+    CYBERIA_FUJI_CHAIN_ID,
+    AVALANCHE_FUJI_CHAIN_ID,
     EVM_CHAINS,
     cyberiaReadRpcUrl,
 } from '@/lib/evmChains';
@@ -87,6 +89,8 @@ import type { UtxoNetwork } from '@/lib/wallet/utxo';
 
 export type WalletBuiltinChainId =
     | 'cyberia'
+    | 'cyberia_fuji'
+    | 'avalanche_fuji'
     | 'robinhood'
     | 'bnb'
     | 'base'
@@ -1052,6 +1056,20 @@ const SHIPPED_CHAINS: readonly WalletChain[] = [
         // The node rejects anything under its pool floor outright.
         minGasPrice: 1_500_000_000n,
         note: 'One address for every EVM network below — same key, same string.',
+    }),
+    evmChain({
+        id: 'cyberia_fuji',
+        chainId: CYBERIA_FUJI_CHAIN_ID,
+        label: 'Cyberia Fuji',
+        mark: { tag: 'CF', hue: 'var(--cw-net-cyberia)', shape: 'square' },
+        historyNote: 'historyNoIndexer',
+    }),
+    evmChain({
+        id: 'avalanche_fuji',
+        chainId: AVALANCHE_FUJI_CHAIN_ID,
+        label: 'Avalanche Fuji (testnet)',
+        mark: { tag: 'AF', hue: 'var(--cw-net-cyberia)', shape: 'square' },
+        historyNote: 'historyNoIndexer',
     }),
     evmChain({
         id: 'robinhood',

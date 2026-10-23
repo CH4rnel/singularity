@@ -30,6 +30,9 @@ export const chainIdHex = (chainId: number): string =>
     '0x' + chainId.toString(16);
 
 export const CYBERIA_CHAIN_ID = 49406;
+export const CYBERIA_FUJI_CHAIN_ID = 49407;
+export const AVALANCHE_FUJI_CHAIN_ID = 43113;
+export const CYBERIA_FUJI_PUBLIC_RPC = 'https://cyberia.church/api/fuji/rpc';
 export const CYBERIA_CHAIN_ID_HEX = chainIdHex(CYBERIA_CHAIN_ID);
 export const CYBERIA_RPC = '/api/rpc/cyberia';
 export const CYBERIA_PUBLIC_RPC = 'https://rpc.cyberia.church';
@@ -50,6 +53,21 @@ export const CYBERIA_CHAIN: EvmChain = {
  */
 export const EVM_CHAINS: readonly EvmChain[] = [
     CYBERIA_CHAIN,
+    {
+        chainId: CYBERIA_FUJI_CHAIN_ID,
+        name: 'Cyberia Fuji',
+        nativeCurrency: { name: 'Cyber', symbol: 'CYBER', decimals: 18 },
+        rpcUrls: [CYBERIA_FUJI_PUBLIC_RPC],
+        status: 'live',
+    },
+    {
+        chainId: AVALANCHE_FUJI_CHAIN_ID,
+        name: 'Avalanche Fuji (testnet)',
+        nativeCurrency: { name: 'Avalanche', symbol: 'AVAX', decimals: 18 },
+        rpcUrls: ['https://api.avax-test.network/ext/bc/C/rpc'],
+        blockExplorerUrls: ['https://testnet.snowtrace.io'],
+        status: 'live',
+    },
     {
         chainId: 4663,
         name: 'Robinhood Chain',

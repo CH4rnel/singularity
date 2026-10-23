@@ -5,6 +5,8 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { analytics, errorCode } from '@/lib/analytics';
+import { toRawUnits } from '@/lib/bridgeCapacity';
+import { computeFee, feeTokenAmount } from '@/lib/bridgeFee';
 import { withBridgeReservation } from '@/lib/bridgeReservation';
 import {
     ERC20_TRANSFER_GAS_CAP,
@@ -17,7 +19,7 @@ import type { WalletChainId } from '@/lib/wallet';
 import {
     bridgeBlockFor,
     bridgeOptions,
-    bridgeRateFee,
+    bridgePayoutUnits,
     depositAddressFor,
     submitBridge,
 } from '@/lib/wallet/bridge';
@@ -260,14 +262,44 @@ const amountUnits = computed(() => {
     }
 });
 
-const fee = computed(() =>
-    amountUnits.value > 0n
-        ? bridgeRateFee(amountUnits.value, props.config.feeBps)
-        : 0n,
+const feeConfig = computed(() => ({
+    flatUsd: props.config.feeFlatUsd,
+    rateBps: props.config.feeBps,
+    nativeRouteFees: props.config.nativeRouteFees,
+}));
+const quotedFee = computed(() =>
+    computeFee(
+        symbol.value ?? '',
+        amount.value,
+        { cyberSolUsd: null },
+        feeConfig.value,
+        direction.value ?? undefined,
+    ),
 );
+const fee = computed(
+    () =>
+        toRawUnits(feeTokenAmount(quotedFee.value.feeToken), decimals.value) ??
+        0n,
+);
+const hasFlatFee = computed(() => quotedFee.value.feeUsd > 0);
+const destinationDecimals = computed(() => {
+    const key = route.value?.destination;
 
+    return key ? (token.value?.chains[key]?.decimals ?? 18) : 18;
+});
+const conversionRate = computed(
+    () => route.value?.conversionRates?.[symbol.value ?? ''] ?? null,
+);
 const received = computed(() =>
-    amountUnits.value > 0n ? amountUnits.value - fee.value : 0n,
+    direction.value && symbol.value && amountUnits.value > 0n
+        ? bridgePayoutUnits(
+              props.config,
+              direction.value,
+              symbol.value,
+              amountUnits.value,
+              fee.value,
+          )
+        : 0n,
 );
 
 /** The gas the lock will be signed for, which depends on what it is. */
@@ -315,7 +347,11 @@ const refusal = computed<Refusal>(() => {
         return 'blocked';
     }
 
-    if (amountUnits.value <= 0n) {
+    if (
+        amountUnits.value <= 0n ||
+        received.value === null ||
+        received.value <= 0n
+    ) {
         return 'noAmount';
     }
 
@@ -783,17 +819,35 @@ const sign = async (): Promise<void> => {
                             })
                         }}</span>
                         <span class="cw-kv-val"
-                            >{{ formatUnits(received, decimals, 6) }}
+                            >{{
+                                received === null
+                                    ? '—'
+                                    : formatUnits(
+                                          received,
+                                          destinationDecimals,
+                                          destinationDecimals,
+                                      )
+                            }}
                             {{ symbol }}</span
+                        >
+                    </div>
+                    <div v-if="conversionRate" class="cw-kv">
+                        <span class="cw-kv-key"
+                            >{{ route.sourceLabel }} →
+                            {{ route.destinationLabel }}</span
+                        >
+                        <span class="cw-kv-val"
+                            >{{ conversionRate.denominator }} {{ symbol }} =
+                            {{ conversionRate.numerator }} {{ symbol }}</span
                         >
                     </div>
                     <div class="cw-kv">
                         <span class="cw-kv-key">{{ t('bridgeFee') }}</span>
                         <span class="cw-kv-val">
-                            {{ formatUnits(fee, decimals, 6) }} {{ symbol }}
-                            <template v-if="config.feeFlatUsd > 0">
-                                +
-                                {{ formatUsd(config.feeFlatUsd, locale) }}
+                            {{ formatUnits(fee, decimals, decimals) }}
+                            {{ symbol }}
+                            <template v-if="hasFlatFee">
+                                ({{ formatUsd(quotedFee.feeUsd, locale) }})
                             </template>
                         </span>
                     </div>

@@ -125,6 +125,20 @@ return [
 
         // ---- Bridged crypto ----------------------------------------------
 
+        '0x8852335b8a54e1616abb77ac5b392a8b566568a0' => [
+            'symbol' => 'AVAX.FUJI',
+            'name' => 'Avalanche Fuji Test AVAX',
+            'decimals' => 18,
+            'logo' => '/avax-fuji.svg',
+            'category' => 'crypto',
+            'tagline' => 'Test AVAX from Avalanche Fuji, bridged to Cyberia.',
+            'what' => 'AVAX.FUJI represents test AVAX deposited on Avalanche Fuji C-Chain (43113). It is a testnet asset, separate from mainnet AVAX, and has no mainnet AVAX redemption.',
+            'why' => 'It lets you test transfers between Avalanche Fuji, the existing Cyberia chain (49406), and the new Cyberia Fuji network (49407). The bridge mints against confirmed deposits and burns deposited wrappers after the destination payout.',
+            'links' => [
+                ['label' => 'Bridge test AVAX', 'url' => '/bridge'],
+            ],
+        ],
+
         '0x9332081f308bc978fe259237850fa253131b46fa' => [
             'symbol' => 'BTC',
             'name' => 'Bitcoin',

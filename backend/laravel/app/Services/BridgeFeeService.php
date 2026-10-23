@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\BridgeAmount;
 use App\Support\TokenAmount;
 use Illuminate\Support\Facades\Http;
 
@@ -38,7 +39,7 @@ class BridgeFeeService
         }
 
         $nativeGasFee = $direction
-            ? $this->nativePayoutFee($direction, $token)
+            ? BridgeAmount::sourceFee($direction, $token, $this->nativePayoutFee($direction, $token))
             : '0';
 
         if (bccomp($nativeGasFee, $feeAmount, 18) > 0) {
@@ -170,7 +171,8 @@ class BridgeFeeService
                     continue;
                 }
 
-                $fee = $this->nativePayoutFee((string) $direction, (string) $token, false);
+                $fee = BridgeAmount::sourceFee((string) $direction, (string) $token,
+                    $this->nativePayoutFee((string) $direction, (string) $token, false));
 
                 if (bccomp($fee, '0', 18) > 0) {
                     $fees[(string) $direction][(string) $token] = (float) $fee;

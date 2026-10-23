@@ -27,7 +27,14 @@ export type PublicChain = {
     depositAddress: string | null;
 };
 
+export type BridgeConversionRate = {
+    numerator: string;
+    denominator: string;
+};
+
 export type PublicRouteData = BridgeRoute & {
+    /** Destination tokens per source token, after fees in source units. */
+    conversionRates?: Record<string, BridgeConversionRate>;
     /** Whether the server will currently accept submissions for this route. */
     operational?: boolean;
     /** Optional operator-facing reason for a visible but disabled route. */
@@ -61,7 +68,9 @@ export function initBridgeConfig(
     tokens: PublicToken[] | undefined,
 ): void {
     if (chains?.length) {
-        chainMap = Object.fromEntries(chains.map((chain) => [chain.key, chain]));
+        chainMap = Object.fromEntries(
+            chains.map((chain) => [chain.key, chain]),
+        );
     }
 
     if (routes?.length) {
@@ -70,7 +79,9 @@ export function initBridgeConfig(
     }
 
     if (tokens?.length) {
-        tokenMap = Object.fromEntries(tokens.map((token) => [token.symbol, token]));
+        tokenMap = Object.fromEntries(
+            tokens.map((token) => [token.symbol, token]),
+        );
     }
 }
 
@@ -80,6 +91,7 @@ const FALLBACK_EXPLORERS: Record<string, string> = {
     solana: 'https://solscan.io/tx/{hash}',
     ton: 'https://tonviewer.com/transaction/{hash}',
     bnb: 'https://bscscan.com/tx/{hash}',
+    avalanche_fuji: 'https://testnet.snowtrace.io/tx/{hash}',
     base: 'https://basescan.org/tx/{hash}',
     robinhood: 'https://robinhoodchain.blockscout.com/tx/{hash}',
     yenten: 'https://explorer.yentencoin.info/tx/{hash}',
@@ -100,6 +112,22 @@ const FALLBACK_CHAINS: Record<string, Partial<PublicChain>> = {
         evmChainId: 49406,
         rpcUrl: 'https://rpc.cyberia.church',
         nativeCurrency: { name: 'Cyber', symbol: 'CYBER', decimals: 18 },
+    },
+    cyberia_fuji: {
+        label: 'Cyberia Fuji',
+        type: 'evm',
+        wallet: 'evm',
+        evmChainId: 49407,
+        rpcUrl: 'https://cyberia.church/api/fuji/rpc',
+        nativeCurrency: { name: 'Cyber', symbol: 'CYBER', decimals: 18 },
+    },
+    avalanche_fuji: {
+        label: 'Avalanche Fuji (testnet)',
+        type: 'evm',
+        wallet: 'evm',
+        evmChainId: 43113,
+        rpcUrl: 'https://api.avax-test.network/ext/bc/C/rpc',
+        nativeCurrency: { name: 'Avalanche', symbol: 'AVAX', decimals: 18 },
     },
     bnb: {
         label: 'BNB Chain',
@@ -175,13 +203,16 @@ export function bridgeDepositAddress(chainKey: BridgeChain): string | null {
     return chainMap?.[chainKey]?.depositAddress ?? null;
 }
 
-export function explorerTxUrl(chainKey: BridgeChain, hash: string): string {
-    const template =
-        chainMap?.[chainKey]?.explorerTx ??
-        FALLBACK_EXPLORERS[chainKey] ??
-        FALLBACK_EXPLORERS.cyberia;
+export function explorerTxUrl(
+    chainKey: BridgeChain,
+    hash: string,
+): string | null {
+    const chain = chainMap?.[chainKey];
+    const template = chain
+        ? chain.explorerTx
+        : (FALLBACK_EXPLORERS[chainKey] ?? null);
 
-    return template.replace('{hash}', hash);
+    return template?.replace('{hash}', hash) ?? null;
 }
 
 export function explorerTxFallbackUrls(
@@ -273,4 +304,31 @@ export function tokenOnChain(
     }
 
     return null;
+}
+
+/** No configured rate means one source token becomes one destination token. */
+export function bridgeConversionRate(
+    direction: BridgeDirection,
+    symbol: string,
+): BridgeConversionRate | null {
+    const rate = routeList?.find((entry) => entry.direction === direction)
+        ?.conversionRates?.[symbol];
+
+    return rate === undefined ? { numerator: '1', denominator: '1' } : rate;
+}
+
+export function bridgeRouteTokenDecimals(
+    direction: BridgeDirection,
+    symbol: string,
+): { source: number; destination: number } {
+    const route = routeList?.find((entry) => entry.direction === direction);
+
+    return {
+        source: route
+            ? (tokenOnChain(symbol, route.source)?.decimals ?? 18)
+            : 18,
+        destination: route
+            ? (tokenOnChain(symbol, route.destination)?.decimals ?? 18)
+            : 18,
+    };
 }

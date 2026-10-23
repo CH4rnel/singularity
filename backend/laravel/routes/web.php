@@ -71,6 +71,7 @@ use App\Http\Controllers\WhitepaperController;
 use App\Http\Middleware\EnsureBridgeAdmin;
 use App\Http\Middleware\EnsureCrmAdmin;
 use App\Services\BridgeConfigService;
+use App\Services\BridgeFeeService;
 use App\Services\BridgeRelayerService;
 use App\Services\DexAprService;
 use App\Services\GasSponsorService;
@@ -397,6 +398,7 @@ Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatS
         'relayer' => app(BridgeRelayerService::class)->evmAddress(),
         'feeBps' => (int) config('bridge.fee.rate_bps', 0),
         'feeFlatUsd' => (float) config('bridge.fee.flat_usd', 0.1),
+        'nativeRouteFees' => app(BridgeFeeService::class)->frontendNativeFees(),
     ],
 ]))->name('wallet');
 

@@ -124,6 +124,8 @@ class BridgeRequest extends Model
         'payout_confirmed_at',
         'amount',
         'fee_amount',
+        'conversion_numerator',
+        'conversion_denominator',
         'fee_usd',
         'gas_drop_planned',
         'gas_drop_amount',

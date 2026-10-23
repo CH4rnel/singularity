@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AnalyticsIngestController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
 use App\Http\Controllers\Api\CrmTaskIngestController;
+use App\Http\Controllers\Api\FujiRpcController;
 use App\Http\Controllers\Api\IrcLainController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\NFTController;
@@ -150,6 +151,9 @@ Route::prefix('analytics')->group(function () {
 Route::post('solana/rpc/{cluster?}', SolanaRpcController::class)
     ->whereAlpha('cluster')
     ->middleware('throttle:240,1');
+
+Route::post('fuji/rpc', FujiRpcController::class)
+    ->middleware('throttle:120,1')->name('api.fuji.rpc');
 
 // Solana wallet auth (Phantom)
 Route::prefix('solana-wallet')->group(function () {
