@@ -16,7 +16,7 @@ it('never exposes shared bridge wallets — only personal addresses appear', fun
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Profile')
-            ->has('depositChains', count(config('bridge.chains')))
+            ->has('depositChains', count(array_filter(config('bridge.chains'), fn ($chain) => ($chain['enabled'] ?? true) !== false)))
             ->where('depositChains.0.key', 'cyberia')
             ->where('depositChains.0.address', null)
             ->where('depositChains.0.personal', false)
@@ -38,7 +38,7 @@ it('drops disabled chains from the deposit list', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Profile')
-            ->has('depositChains', count(config('bridge.chains')) - 4)
+            ->has('depositChains', count(array_filter(config('bridge.chains'), fn ($chain) => ($chain['enabled'] ?? true) !== false)))
             ->where('depositChains', fn ($chains) => collect($chains)
                 ->pluck('key')
                 ->intersect(['yenten', 'bitcoin', 'litecoin', 'monero'])

@@ -91,7 +91,7 @@ class BridgeAdmissionService
         }
 
         $fee = (string) ($request?->fee_amount ?? $this->fee->feeForBridge($token, $amount, $direction)['fee_amount']);
-        $net = BridgeAmount::destination($direction, $token, bcsub($amount, $fee, 18), $request);
+        $net = bcadd(BridgeAmount::destination($direction, $token, bcsub($amount, $fee, 18), $request), '0', 18);
 
         if (bccomp($net, '0', 18) <= 0) {
             return null;
