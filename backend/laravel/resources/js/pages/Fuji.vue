@@ -8,12 +8,13 @@ import { Spinner } from '@/components/ui/spinner';
 import PageHero from '@/components/web3/PageHero.vue';
 import { useLocale } from '@/composables/useLocale';
 import { ensureEvmChain } from '@/lib/evmChains';
-import type { EvmChain } from '@/lib/evmChains';
 import {
     getEvmProvider,
     getMetaMaskProvider,
     requestEvmWalletProviders,
 } from '@/lib/evmProvider';
+import { fujiChain } from '@/lib/fujiChain';
+import type { FujiNetwork } from '@/lib/fujiChain';
 import { fujiMessages } from '@/lib/fujiMessages';
 import { rpc as fujiRpc } from '@/routes/api/fuji';
 import {
@@ -21,14 +22,6 @@ import {
     status as faucetStatus,
 } from '@/routes/api/fuji/faucet';
 import type { EthereumProvider } from '@/types/global';
-
-type Network = {
-    chainId: number;
-    name: string;
-    rpcUrl: string;
-    currency: { name: string; symbol: string; decimals: number };
-    explorerTx: string | null;
-};
 
 type FaucetStatus = {
     enabled: boolean;
@@ -45,17 +38,11 @@ type ClaimResult =
     | { ok: true; txHash: string; confirmed: boolean }
     | { ok: false; reason: string; wait?: number };
 
-const props = defineProps<{ network: Network; treasury: string }>();
+const props = defineProps<{ network: FujiNetwork; treasury: string }>();
 
 const { t } = useLocale(fujiMessages);
 
-const chain = computed<EvmChain>(() => ({
-    chainId: props.network.chainId,
-    name: props.network.name,
-    nativeCurrency: props.network.currency,
-    rpcUrls: [props.network.rpcUrl],
-    status: 'live',
-}));
+const chain = computed(() => fujiChain(props.network));
 
 /* ------------------------------------------------------------- amounts --- */
 
