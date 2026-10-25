@@ -1,0 +1,88 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+    NATIVE,
+    OTC_ASSETS,
+    affordable,
+    fillAllowed,
+    isOpen,
+    payFor,
+} from '@/lib/wallet/otc';
+
+/**
+ * The OTC offer arithmetic, restated in the browser so a buyer can read what
+ * they will pay before the hold. It must agree with `CyberiaOTC.quote()` to
+ * the wei: a payment one wei short reverts, and that number is also the
+ * `maxPay` the transaction carries.
+ */
+
+const E18 = 10n ** 18n;
+
+test('payFor is the stated price, rounded up in the seller’s favour', () => {
+    const order = { priceSell: 100_000n * E18, priceBuy: 1_000n * E18 };
+    assert.equal(payFor(order, 25_000n * E18), 250n * E18);
+    assert.equal(payFor(order, order.priceSell), order.priceBuy);
+
+    // 3 for 10: one unit costs 3.33…, so 4.
+    assert.equal(payFor({ priceSell: 3n, priceBuy: 10n }, 1n), 4n);
+    assert.equal(payFor({ priceSell: 3n, priceBuy: 10n }, 3n), 10n);
+    assert.equal(payFor({ priceSell: 3n, priceBuy: 10n }, 0n), 0n);
+});
+
+test('affordable never exceeds the budget or what remains', () => {
+    const order = { priceSell: 100n, priceBuy: 1n, remaining: 1_000n };
+    assert.equal(affordable(order, 3n), 300n);
+    assert.ok(payFor(order, affordable(order, 3n)) <= 3n);
+    assert.equal(affordable(order, 50n), 1_000n);
+    assert.equal(
+        affordable({ priceSell: 3n, priceBuy: 10n, remaining: 9n }, 7n),
+        2n,
+    );
+});
+
+test('fillAllowed mirrors the contract: all-or-nothing, minFill, the remainder', () => {
+    const whole = { remaining: 100n, minFill: 0n, partialFill: false };
+    assert.equal(fillAllowed(whole, 100n), true);
+    assert.equal(fillAllowed(whole, 50n), false);
+
+    const parts = { remaining: 100n, minFill: 20n, partialFill: true };
+    assert.equal(fillAllowed(parts, 20n), true);
+    assert.equal(fillAllowed(parts, 19n), false);
+    assert.equal(fillAllowed(parts, 101n), false);
+    assert.equal(fillAllowed(parts, 0n), false);
+    // What remains can always be taken, even below minFill.
+    assert.equal(fillAllowed({ ...parts, remaining: 10n }, 10n), true);
+});
+
+test('isOpen drops closed, sold-out and expired offers', () => {
+    const now = 1_000;
+    assert.equal(
+        isOpen({ closed: false, remaining: 1n, expiry: 0n }, now),
+        true,
+    );
+    assert.equal(
+        isOpen({ closed: false, remaining: 1n, expiry: 1_001n }, now),
+        true,
+    );
+    assert.equal(
+        isOpen({ closed: false, remaining: 1n, expiry: 1_000n }, now),
+        false,
+    );
+    assert.equal(
+        isOpen({ closed: true, remaining: 1n, expiry: 0n }, now),
+        false,
+    );
+    assert.equal(
+        isOpen({ closed: false, remaining: 0n, expiry: 0n }, now),
+        false,
+    );
+});
+
+test('the picker starts with the coin and lists every asset once', () => {
+    assert.equal(OTC_ASSETS[0].address, NATIVE);
+    const addresses = OTC_ASSETS.map((asset) => asset.address.toLowerCase());
+    assert.equal(new Set(addresses).size, addresses.length);
+    assert.ok(
+        OTC_ASSETS.every((asset) => /^0x[0-9a-fA-F]{40}$/.test(asset.address)),
+    );
+});

@@ -4,6 +4,7 @@ import {
     CreditCard,
     Download,
     Fuel,
+    Handshake,
     Landmark,
     Settings,
     Swords,
@@ -44,6 +45,7 @@ const emit = defineEmits<{
     back: [];
     buy: [];
     gas: [];
+    otc: [];
     wrap: [];
     torrent: [];
     dao: [];
@@ -104,6 +106,11 @@ const { simple } = useWalletMode();
                 <CreditCard :size="20" :stroke-width="1.5" aria-hidden="true" />
                 <span style="flex: 1">{{ t('tileBuy') }}</span>
                 <span class="cw-label" style="color: var(--cw-faint)">WIP</span>
+            </button>
+            <button type="button" class="cw-line-row" @click="emit('otc')">
+                <Handshake :size="20" :stroke-width="1.5" aria-hidden="true" />
+                <span style="flex: 1">{{ t('otcTitle') }}</span>
+                <span class="cw-label">P2P</span>
             </button>
             <button type="button" class="cw-line-row" @click="emit('gas')">
                 <Fuel :size="20" :stroke-width="1.5" aria-hidden="true" />

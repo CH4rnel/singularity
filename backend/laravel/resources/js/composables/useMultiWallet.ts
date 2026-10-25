@@ -124,6 +124,8 @@ import type {
 } from '@/lib/wallet/liquidity';
 import { mintNft as submitMint } from '@/lib/wallet/nft';
 import type { MintQuote } from '@/lib/wallet/nft';
+import { executeOtc } from '@/lib/wallet/otc';
+import type { OtcAction } from '@/lib/wallet/otc';
 import { executeSwap } from '@/lib/wallet/swap';
 import type { SwapQuote, SwapReceipt } from '@/lib/wallet/swap';
 import { executeWrap } from '@/lib/wallet/wrap';
@@ -1639,6 +1641,24 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         }
     };
 
+    /** One OTC offer action, on the network the desk lives on (49407). */
+    const otc = async (action: OtcAction): Promise<string> => {
+        const chainId: WalletChainId = 'cyberia_fuji';
+        const source = sourceFor(chainId);
+
+        busy.value = true;
+
+        try {
+            return await executeOtc(source, {
+                action,
+                gasPrice: await gasPrice(chainId),
+                rpcUrl: rpcFor(chainId),
+            });
+        } finally {
+            busy.value = false;
+        }
+    };
+
     /**
      * Launch a token: deploy it and pair its whole supply with the coin in
      * `quote`, for good. Through the same door as every other signature — the
@@ -2156,6 +2176,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         pool,
         bridgeDeposit,
         wrap,
+        otc,
         launchToken,
         domains,
         chainAdmin,

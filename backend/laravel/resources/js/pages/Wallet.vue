@@ -53,6 +53,7 @@ import WalletNetworks from '@/components/wallet/WalletNetworks.vue';
 import WalletNft from '@/components/wallet/WalletNft.vue';
 import WalletNftMint from '@/components/wallet/WalletNftMint.vue';
 import WalletOnboarding from '@/components/wallet/WalletOnboarding.vue';
+import WalletOtc from '@/components/wallet/WalletOtc.vue';
 import type { WalletPlace } from '@/components/wallet/WalletPlaces.vue';
 import WalletPlayer from '@/components/wallet/WalletPlayer.vue';
 import WalletPortfolio from '@/components/wallet/WalletPortfolio.vue';
@@ -231,6 +232,7 @@ type Section =
     | 'proxy'
     | 'earn'
     | 'liquidity'
+    | 'otc'
     | 'stocks'
     | 'bridge'
     | 'buy'
@@ -357,6 +359,7 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
             { id: 'earn', label: () => t('earnTitle') },
             { id: 'liquidity', label: () => t('poolTitle') },
             { id: 'arena', label: () => arenaT('nav') },
+            { id: 'otc', label: () => t('otcTitle') },
             { id: 'daily', label: () => t('dailyTitle') },
             { id: 'browse', label: () => t('browseTitle') },
             { id: 'gas', label: () => t('gasStation') },
@@ -438,6 +441,7 @@ const TAB_OF: Record<Section, Section> = {
     proxy: 'portfolio',
     earn: 'portfolio',
     liquidity: 'portfolio',
+    otc: 'portfolio',
     stocks: 'portfolio',
     bridge: 'portfolio',
     buy: 'portfolio',
@@ -701,9 +705,12 @@ const profileAddress = ref<string | null>(null);
  * later should open on whatever thread was last read.
  */
 const chatPeer = ref<string | null>(null);
+/** What the composer should already hold for that peer, e.g. an OTC offer. */
+const chatDraft = ref<string | null>(null);
 
-const openChatWith = (address: string): void => {
+const openChatWith = (address: string, draft: string | null = null): void => {
     chatPeer.value = address;
+    chatDraft.value = draft;
     openSection('chat');
 };
 
@@ -732,6 +739,7 @@ const PARENTS: Partial<Record<Section, Section>> = {
     // rather than skipping the screen the person was actually on.
     buy: 'more',
     gas: 'more',
+    otc: 'more',
     preferences: 'portfolio',
     accounts: 'preferences',
     developer: 'preferences',
@@ -2265,6 +2273,7 @@ watch(
                         v-else-if="section === 'chat'"
                         :wallet="wallet"
                         :open-with="chatPeer"
+                        :open-with-draft="chatDraft"
                         @opened="chatPeer = null"
                     />
 
@@ -2317,6 +2326,7 @@ watch(
                         @back="openSection('portfolio')"
                         @buy="openSection('buy')"
                         @gas="openSection('gas')"
+                        @otc="openSection('otc')"
                         @wrap="openWrap('wrap', 'cyberia')"
                         @torrent="openNftPlace('torrent', 'more')"
                         @dao="openSection('dao')"
@@ -2379,6 +2389,17 @@ watch(
                       appears mid-transaction: what the station is, and why it
                       said no, are questions asked when nobody is signing.
                     -->
+                    <!--
+                      Fixed-price offers wallet to wallet: the trade a pool
+                      would price against itself.
+                    -->
+                    <WalletOtc
+                        v-else-if="section === 'otc'"
+                        :wallet="wallet"
+                        @back="openSection('more')"
+                        @discuss="openChatWith"
+                    />
+
                     <WalletGasStation
                         v-else-if="section === 'gas'"
                         :wallet="wallet"

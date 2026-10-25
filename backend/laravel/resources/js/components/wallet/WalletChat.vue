@@ -92,6 +92,8 @@ const props = defineProps<{
      * because the chat may already be on screen when the request arrives.
      */
     openWith?: string | null;
+    /** A line to leave in the composer of that thread, unsent. */
+    openWithDraft?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -1077,6 +1079,10 @@ watch(
 
         if (/^0x[0-9a-fA-F]{40}$/.test(wanted)) {
             openThread(wanted);
+
+            if (props.openWithDraft) {
+                draft.value = props.openWithDraft;
+            }
         }
     },
     { immediate: true },
