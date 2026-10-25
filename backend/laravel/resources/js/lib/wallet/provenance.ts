@@ -128,6 +128,63 @@ const registry: Record<number, Record<string, Provenance>> = {
             kind: 'issued',
             symbol: 'GOAL',
         },
+        // The fourteen service tokens, launched on LaunchpadV3 on 2026-10-25.
+        '0x8bb022060e4946b9498d11f3e87666dc7129ccbc': {
+            kind: 'issued',
+            symbol: 'NFT',
+        },
+        '0xba6bdda1988e72e796032c1cebfc4192ac5a8497': {
+            kind: 'issued',
+            symbol: 'LEND',
+        },
+        '0x0a2d855d70728fea342c338f3668b91ecc330cb5': {
+            kind: 'issued',
+            symbol: 'PRED',
+        },
+        '0x9ba523b368fd338d45594616b4515f6d421b21d2': {
+            kind: 'issued',
+            symbol: 'FARM',
+        },
+        '0x0f5cee1f315a84e109b5817839b5474e0ca7431d': {
+            kind: 'issued',
+            symbol: 'STAKE',
+        },
+        '0xe17f466e3501d80650f955c66a8ad4336bfd17c8': {
+            kind: 'issued',
+            symbol: 'LAUNCH',
+        },
+        '0x82708a8d873ca89f9f341307cca949a4a5a240f3': {
+            kind: 'issued',
+            symbol: 'BRIDGE',
+        },
+        '0xbf763e079584a35d19968fd5e2d528087d9bc3fe': {
+            kind: 'issued',
+            symbol: 'WALLET',
+        },
+        '0xdb003b50dd2f5e9dcd1d177ca07d85cf3e3c6b48': {
+            kind: 'issued',
+            symbol: 'CLOUD',
+        },
+        '0xdd390535a353317625bcd8c27582abcc5e151186': {
+            kind: 'issued',
+            symbol: 'INFER',
+        },
+        '0x28084a351a87f20219ef04e596b6d3b84dd0afd3': {
+            kind: 'issued',
+            symbol: 'IPFS',
+        },
+        '0x7d01915b2ef0c5931f2520b7fa2523d1bd6b0cb5': {
+            kind: 'issued',
+            symbol: 'SEED',
+        },
+        '0xde99a012a910419736e4c33228df6972fbcf0e72': {
+            kind: 'issued',
+            symbol: 'SCAN',
+        },
+        '0x7911085dc26825349b0ce2518b72d49ff4a26ee8': {
+            kind: 'issued',
+            symbol: 'GAS',
+        },
     },
     49407: {
         '0xa084bcd3a16be2cf141b62ea94b330f2db818a1d': {
