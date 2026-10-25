@@ -118,6 +118,8 @@ test('a verified reverse deposit cannot reach payout while only the protected ba
 
     $request = app(BridgeService::class)->createRequest(null, 'cyberia_fuji_to_evm', 'cyberia_fuji', '0xsource', 0,
         $sender, '0x'.str_repeat('c', 40), '1000', 'CYBER', '0.126');
+    // B03: a recipient other than the sender pays out only once it is proven.
+    $request->forceFill(['recipient_proof' => 'signature', 'recipient_proven_at' => now()])->save();
 
     expect(app(BridgeService::class)->processDirectRelay($request))->toBeFalse()
         ->and($request->refresh()->status)->toBe(BridgeRequest::AWAITING_LIQUIDITY)
@@ -145,6 +147,8 @@ test('a verified reverse deposit pays only the converted amount above the protec
 
     $request = app(BridgeService::class)->createRequest(null, 'cyberia_fuji_to_evm', 'cyberia_fuji', '0xsource', 0,
         $sender, '0x'.str_repeat('c', 40), '1000.126', 'CYBER', '0.126');
+    // B03: a recipient other than the sender pays out only once it is proven.
+    $request->forceFill(['recipient_proof' => 'signature', 'recipient_proven_at' => now()])->save();
 
     expect(app(BridgeService::class)->processDirectRelay($request))->toBeTrue()
         ->and($request->refresh()->status)->toBe(BridgeRequest::COMPLETED)

@@ -67,6 +67,8 @@ test('relay pays converted CYBER once and never burns native deposits', function
     }]));
     $request = app(BridgeService::class)->createRequest(null, 'evm_to_cyberia_fuji', 'cyberia', '0xsource', 0,
         $sender, '0x'.str_repeat('c', 40), '1', 'CYBER', '0');
+    // B03: a recipient other than the sender pays out only once it is proven.
+    $request->forceFill(['recipient_proof' => 'signature', 'recipient_proven_at' => now()])->save();
     expect(app(BridgeService::class)->processDirectRelay($request))->toBeTrue()
         ->and($request->refresh()->status)->toBe(BridgeRequest::COMPLETED)
         ->and($request->wrapper_burned)->toBeFalse();
