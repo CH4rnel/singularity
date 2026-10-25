@@ -45,6 +45,7 @@ use App\Http\Controllers\CyberController;
 use App\Http\Controllers\DaoController;
 use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\FediverseController;
+use App\Http\Controllers\FujiController;
 use App\Http\Controllers\LainChatController;
 use App\Http\Controllers\LeaderboardController;
 use App\Http\Controllers\LinkController;
@@ -227,6 +228,10 @@ Route::get('/cyber', CyberController::class)->name('cyber');
 // file stays in public/ and the page links to it.
 Route::get('/whitepaper', WhitepaperController::class)->name('whitepaper');
 Route::get('/changelog', ChangelogController::class)->name('changelog');
+// Cyberia's new chain, the Avalanche L1 on Fuji: add it to MetaMask and take
+// test CYBER from the faucet. /faucet is the name people will type.
+Route::get('/fuji', FujiController::class)->name('fuji');
+Route::redirect('/faucet', '/fuji');
 // Where the native apps come from. /download/<platform> is the short link worth
 // pasting into a message; it redirects to the current file for that platform.
 Route::get('/download', [DownloadController::class, 'index'])->name('download');

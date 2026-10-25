@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AnalyticsIngestController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
 use App\Http\Controllers\Api\CrmTaskIngestController;
+use App\Http\Controllers\Api\FujiFaucetController;
 use App\Http\Controllers\Api\FujiRpcController;
 use App\Http\Controllers\Api\IrcLainController;
 use App\Http\Controllers\Api\LaunchpadController;
@@ -154,6 +155,13 @@ Route::post('solana/rpc/{cluster?}', SolanaRpcController::class)
 
 Route::post('fuji/rpc', FujiRpcController::class)
     ->middleware('throttle:120,1')->name('api.fuji.rpc');
+
+// Test CYBER on Cyberia Fuji, from the faucet's own wallet. Unsigned on
+// purpose, like the gas station. See FujiFaucetService.
+Route::get('fuji/faucet', [FujiFaucetController::class, 'status'])
+    ->middleware('throttle:60,1')->name('api.fuji.faucet.status');
+Route::post('fuji/faucet', [FujiFaucetController::class, 'claim'])
+    ->middleware('throttle:6,1')->name('api.fuji.faucet.claim');
 
 // Solana wallet auth (Phantom)
 Route::prefix('solana-wallet')->group(function () {

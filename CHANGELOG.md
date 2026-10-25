@@ -12,6 +12,7 @@ vYYYY.MM.DD
 
 ### Added
 
+- Cyberia Fuji (`/fuji`, also `/faucet`): the new chain, Cyberia's Avalanche L1 on the Fuji testnet, added to MetaMask in one click, with its parameters listed for any other wallet. A faucet on the same page sends 10,000 test CYBER per address once a day from its own wallet. Fees there cost what an Ethereum mainnet transfer costs, counted in CYBER (about 151 CYBER for a transfer), and every fee goes to the DAO treasury; the page reads both from the chain itself.
 - The swap page trades the new concentrated-liquidity pools as well as the old ones: both are asked what a trade pays and the better answer wins, with the venue and the pool's real fee shown beside the quote. Nothing moved — the old pools keep working and keep their liquidity.
 - Swapping Monero, quoted two ways at once: through Cyberia's own bridge, and through a partner exchanger. Both are priced after every fee, the better one is marked, and the route that cannot run right now says why instead of disappearing.
 - Launching a token on Cyberia now lets its creator set the trading fee themselves — anything up to 10%, decided at launch, on top of the 1% the protocol takes. Until now every launch charged whatever tier it landed in and the creator earned nothing from it.

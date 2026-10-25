@@ -6,6 +6,7 @@ import {
     download,
     farm,
     feed,
+    fuji,
     launchpad,
     leaderboard,
     lending,
@@ -97,6 +98,7 @@ export const navGroups: Web3NavGroup[] = [
             { title: '$CYBER', href: cyber().url },
             { title: 'Whitepaper', href: whitepaper().url },
             { title: 'Analytics', href: analytics().url },
+            { title: 'Fuji testnet', href: fuji().url },
             {
                 title: 'Explorer',
                 href: 'https://explorer.cyberia.church/',

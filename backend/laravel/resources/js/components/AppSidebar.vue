@@ -51,6 +51,7 @@ import {
     dashboard,
     download as downloadRoute,
     feed,
+    fuji as fujiRoute,
     leaderboard,
     staking,
     wallet as walletRoute,
@@ -162,6 +163,11 @@ const exploreNavItems: NavItem[] = [
         title: 'Analytics',
         href: '/analytics',
         icon: ChartColumn,
+    },
+    {
+        title: 'Fuji testnet',
+        href: fujiRoute().url,
+        icon: Droplets,
     },
     {
         title: 'NFT Market',
