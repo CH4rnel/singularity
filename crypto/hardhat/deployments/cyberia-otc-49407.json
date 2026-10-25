@@ -1,0 +1,10 @@
+{
+  "chainId": 49407,
+  "rpc": "https://cyberia.church/api/fuji/rpc",
+  "CyberiaOTC": "0xd199e6ae74b992f017f8940b26fa18a7dd30ee86",
+  "owner": "0x96cd117786EBC0fDbef56a6559FEB2bd2BaE3393",
+  "deployer": "0xfA41267C5E2390E941A12b0b8e566448539A5179",
+  "deployTx": "0xcd82ce567b1be01752ca7273bb71726a937aa0336a74d4245fb2d8575c90b710",
+  "block": 134,
+  "timestamp": "2026-10-25T23:00:58.937Z"
+}

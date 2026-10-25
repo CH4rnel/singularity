@@ -21,9 +21,10 @@ import type { WalletKeySource } from '@/lib/wallet/keys';
  * A deal discussed in chat becomes binding as a private offer: one side
  * escrows its half and names the other side's address as the only taker.
  *
- * Until the contract is deployed `OTC_ADDRESS` is null and the screen says so.
+ * Deployed 2026-10-25, block 134 (crypto/hardhat/deployments/cyberia-otc-49407.json).
  */
-export const OTC_ADDRESS: string | null = null;
+export const OTC_ADDRESS: string | null =
+    '0xD199e6ae74B992F017f8940B26Fa18A7dD30eE86';
 
 /** The desk lives on the new network, Cyberia Fuji L1. */
 export const OTC_CHAIN_ID = CYBERIA_FUJI_CHAIN_ID;
