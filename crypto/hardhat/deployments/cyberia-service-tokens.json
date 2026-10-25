@@ -1,0 +1,152 @@
+{
+  "chainId": 49406,
+  "_doc": "Service tokens launched through LaunchpadV3 by scripts/launch-service-tokens.ts. A row with an address is already launched and is skipped. 'treasury' (optional) receives the creator fee via LaunchLocker.setCreator right after the launch; null keeps it on the launching key until the DAO treasury exists. CVPN, IRC, DNS, SMTP and LAIN already exist on the launchpad, and the DEX has ASH, so they are not listed.",
+  "defaults": {
+    "supply": "1000000000000000000000000",
+    "liquidityCyber": "10000000000000000000",
+    "creatorFee": 10000,
+    "holdersShareBps": 5000
+  },
+  "tokens": [
+    {
+      "symbol": "NFT",
+      "name": "Cyberia NFT Market",
+      "service": "nft-market",
+      "treasury": null,
+      "address": "0x8bb022060e4946B9498D11f3e87666dc7129CcbC",
+      "pool": "0x6C1285bAB925dD66C23f78Aa8520f5b438cBe889",
+      "positionId": "12",
+      "tx": "0xcd8cc6ad2293b63e94cca974a073fa181ad5f2d786caafb3b0f4c33db2019447"
+    },
+    {
+      "symbol": "LEND",
+      "name": "Cyberia Lending",
+      "service": "lending",
+      "treasury": null,
+      "address": "0xba6BDDa1988E72e796032C1cEBFc4192aC5A8497",
+      "pool": "0x3A88E3902f349a22e855802647fd73D556A3f943",
+      "positionId": "13",
+      "tx": "0xa2800109000e6f569f8cddf8acd697876ff5dd25b34e6581a58f930daeea62fd"
+    },
+    {
+      "symbol": "PRED",
+      "name": "Cyberia Predictions",
+      "service": "predictions",
+      "treasury": null,
+      "address": "0x0A2d855D70728fEA342C338f3668b91ECc330CB5",
+      "pool": "0x0c3f1F39cfa6a3F807458FD8fbA13DD048EF323b",
+      "positionId": "14",
+      "tx": "0xfc345a4238d9f6ebbad490d9b9cf161c7ed1980b5cbb82881a75afcfbcf9f48a"
+    },
+    {
+      "symbol": "FARM",
+      "name": "Cyberia Farm",
+      "service": "farming",
+      "treasury": null,
+      "address": "0x9ba523B368Fd338D45594616b4515f6D421b21d2",
+      "pool": "0x88Aff6f4033c3AF9F09fbaaD8b5394b27480Bc85",
+      "positionId": "15",
+      "tx": "0xc6285aa8b9db8673a93908a17e42db14de3b8e3bb57975bfb87c9b31ade6eb21"
+    },
+    {
+      "symbol": "STAKE",
+      "name": "Cyberia Staking",
+      "service": "staking",
+      "treasury": null,
+      "address": "0x0F5CEE1F315A84E109B5817839B5474E0ca7431d",
+      "pool": "0xF21cA08b7D697104DBc84B1921AA648dBcD02998",
+      "positionId": "16",
+      "tx": "0x8b10731aa1a273400ba29e878a523bd9959142352d549d236be5159d7b1dd864"
+    },
+    {
+      "symbol": "LAUNCH",
+      "name": "Cyberia Launchpad",
+      "service": "launchpad",
+      "treasury": null,
+      "address": "0xE17f466E3501d80650F955C66a8AD4336BfD17C8",
+      "pool": "0xD1d69c20dD68e0ef743bBD4874007f9b6a54EaD0",
+      "positionId": "17",
+      "tx": "0x3b2a2290b38a39a64d027d13b3da3539dc66a42843cd3940fb9b7e9a11d0c536"
+    },
+    {
+      "symbol": "BRIDGE",
+      "name": "Cyberia Bridge",
+      "service": "bridge",
+      "treasury": null,
+      "address": "0x82708a8d873CA89F9F341307ccA949a4a5a240F3",
+      "pool": "0xc477BDB9518123FE91D768081b8DC0cc5622c0f1",
+      "positionId": "18",
+      "tx": "0xa1ca5464ffba09763175062da1d99bf0b7d1cd7735def97ba8203f0c174a432d"
+    },
+    {
+      "symbol": "WALLET",
+      "name": "Cyberia Wallet",
+      "service": "wallet",
+      "treasury": null,
+      "address": "0xBf763e079584a35d19968FD5e2D528087D9bc3FE",
+      "pool": "0xf03A9cD1f72941b35114dCad3C2483d892dFB7D5",
+      "positionId": "19",
+      "tx": "0xd77b5a6e81a3ce7a826fcdb81305df037f35970d8f78c36cd5f4705ebf210937"
+    },
+    {
+      "symbol": "CLOUD",
+      "name": "Cyberia Cloud",
+      "service": "cloud-hosting",
+      "treasury": null,
+      "address": "0xdb003B50DD2f5E9dcD1D177cA07d85cf3E3c6b48",
+      "pool": "0x0Ba19B90eb86C8a91955Fc3B3CB76c02AF03d4f8",
+      "positionId": "20",
+      "tx": "0x5ead08408d3d2fee3917b62c514032feb51cea8b01f06406ea898f883adea2de"
+    },
+    {
+      "symbol": "INFER",
+      "name": "Cyberia AI API",
+      "service": "ai-api",
+      "treasury": null,
+      "address": "0xdd390535a353317625bCD8c27582abcc5e151186",
+      "pool": "0x2AFD8E239928d8692a41F118A420dfd5AE25fa47",
+      "positionId": "21",
+      "tx": "0x1e464268892294a98dfb969a4128b50e7ab4670f644f25ebc4d59f302c93f456"
+    },
+    {
+      "symbol": "IPFS",
+      "name": "Cyberia IPFS",
+      "service": "ipfs",
+      "treasury": null,
+      "address": "0x28084A351a87F20219EF04e596B6d3b84dd0Afd3",
+      "pool": "0x4A23490f3E51379C5fE8252a2F93137086D76bDb",
+      "positionId": "22",
+      "tx": "0x193812f60a5ae67f809f0d52b1431e9d3b779cc9c240fb13431e3bfdb5042888"
+    },
+    {
+      "symbol": "SEED",
+      "name": "Cyberia Tracker",
+      "service": "tracker",
+      "treasury": null,
+      "address": "0x7d01915b2ef0C5931f2520b7fa2523d1bD6B0CB5",
+      "pool": "0x05AdffFb726EeC6fC7C04613Def40A76038e7Ef5",
+      "positionId": "23",
+      "tx": "0xbb88c03e8834642316e4963de50d5d162efda9d7949fea2f64b32a83626a6a7b"
+    },
+    {
+      "symbol": "SCAN",
+      "name": "Cyberia Explorer",
+      "service": "explorer",
+      "treasury": null,
+      "address": "0xDE99A012A910419736E4c33228DF6972fBcF0E72",
+      "pool": "0x419A8B61958B3d88c163b9b294F0C15313697699",
+      "positionId": "24",
+      "tx": "0xc7b63032bbddda6c145431aae0127e4088cea96db17152a91ece8257801ff971"
+    },
+    {
+      "symbol": "GAS",
+      "name": "Cyberia Gas Station",
+      "service": "gas-station",
+      "treasury": null,
+      "address": "0x7911085dc26825349b0ce2518b72D49fF4a26Ee8",
+      "pool": "0x79a9Da0F153490529BcF344928B0B0E03CA655B5",
+      "positionId": "25",
+      "tx": "0x46171cf4f87f000b716ce686fca5292826b8e5d5394bbc18ead30fd261865c35"
+    }
+  ]
+}
