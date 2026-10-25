@@ -63,6 +63,7 @@ import WalletProxy from '@/components/wallet/WalletProxy.vue';
 import WalletReceive from '@/components/wallet/WalletReceive.vue';
 import WalletSecurity from '@/components/wallet/WalletSecurity.vue';
 import WalletSend from '@/components/wallet/WalletSend.vue';
+import WalletShop from '@/components/wallet/WalletShop.vue';
 import WalletStocks from '@/components/wallet/WalletStocks.vue';
 import WalletSwap from '@/components/wallet/WalletSwap.vue';
 import WalletToken from '@/components/wallet/WalletToken.vue';
@@ -241,6 +242,7 @@ type Section =
     | 'daily'
     | 'browse'
     | 'domains'
+    | 'shop'
     | 'developer'
     | 'chain'
     | 'experiments'
@@ -377,6 +379,7 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
             { id: 'launchpad', label: () => t('launchpad') },
             { id: 'nft', label: () => t('nftTitle') },
             { id: 'domains', label: () => t('domainsTitle') },
+            { id: 'shop', label: () => t('shopTitle') },
             { id: 'tracker', label: () => t('trackerTitle') },
             { id: 'dao', label: () => t('dao') },
             // Listed even for wallets that hold no $LAIN: the room says what it
@@ -464,6 +467,7 @@ const TAB_OF: Record<Section, Section> = {
     nft: 'nft',
     nftMint: 'nft',
     domains: 'nft',
+    shop: 'nft',
     ipfs: 'nft',
     torrent: 'nft',
     tracker: 'nft',
@@ -751,6 +755,7 @@ const PARENTS: Partial<Record<Section, Section>> = {
     doctrine: 'preferences',
     profile: 'feed',
     nftMint: 'nft',
+    shop: 'nft',
     ipfs: 'nft',
     torrent: 'nft',
     trackerPublish: 'tracker',
@@ -2583,6 +2588,16 @@ watch(
                         @torrents="openNftPlace('torrent', 'nft')"
                         @tracker="openNftPlace('tracker', 'nft')"
                         @domains="openDomains(null)"
+                        @shop="openSection('shop')"
+                    />
+
+                    <!--
+                      Digital goods through escrow: keys, subscriptions,
+                      accounts, domains, hosting, AI credits.
+                    -->
+                    <WalletShop
+                        v-else-if="section === 'shop' && !hiddenInStore('shop')"
+                        :wallet="wallet"
                     />
 
                     <!--

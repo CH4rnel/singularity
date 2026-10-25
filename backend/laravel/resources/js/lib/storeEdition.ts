@@ -32,11 +32,12 @@ export type StoreEdition = 'play' | 'appstore';
 const STORE_TOKEN = /\bCyberiaStore\/(play|appstore)\b/;
 
 const HIDDEN: Record<StoreEdition, readonly string[]> = {
-    play: ['launchpad', 'stocks', 'arena'],
+    play: ['launchpad', 'stocks', 'arena', 'shop'],
     appstore: [
         'launchpad',
         'stocks',
         'arena',
+        'shop',
         'torrent',
         'tracker',
         'trackerPublish',
