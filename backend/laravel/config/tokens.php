@@ -23,6 +23,7 @@
 |   why      - why it exists on Cyberia / what it's for
 |   links    - optional extra call-to-action links ([label, url]); the trade and
 |              explorer links are added automatically for every token.
+|   service  - service tokens only: name, url, label, utility (list), notice
 |
 */
 
@@ -31,11 +32,17 @@ return [
     // Token icons ship with the site and do not depend on the retired DEX UI.
     'logo_base' => env('CYBERIA_TOKEN_LOGO_BASE', '/token-icons'),
 
+    // ServiceHub (crypto/hardhat/contracts/ServiceHub.sol) once deployed: the
+    // contract that ties each service token to its service. Unset = the
+    // landings say it is not live yet.
+    'service_hub' => env('CYBERIA_SERVICE_HUB_ADDRESS'),
+
     // Ordered category labels. The token pages render groups in this order.
     'categories' => [
         'native' => 'Native & DEX',
         'partner' => 'Partner tokens',
         'launchpad' => 'Cyberia launchpad',
+        'service' => 'Cyberia services',
         'stablecoin' => 'Stablecoins',
         'crypto' => 'Bridged crypto',
         'commodity' => 'Commodities',
@@ -302,6 +309,294 @@ return [
             'why' => 'A launchpad-born token for the gaming corner of Cyberia; trade and pool it on Cyberia.',
             'links' => [
                 ['label' => 'Cyberia launchpad', 'url' => '/launchpad'],
+            ],
+        ],
+
+        // ---- Cyberia services ---------------------------------------------
+        // One token per service, launched on LaunchpadV3 on 2026-10-25 (DAO 29-42).
+        // `service` drives the landing block on /token/{symbol}; the DAO link is
+        // resolved by address, the hub link from `service_hub` above.
+
+        '0x8bb022060e4946b9498d11f3e87666dc7129ccbc' => [
+            'symbol' => 'NFT',
+            'name' => 'Cyberia NFT market',
+            'decimals' => 18,
+            'logo' => '/services/NFT.svg',
+            'category' => 'service',
+            'tagline' => 'The token of NFT market on Cyberia. Buy, sell and mint NFTs on Cyberia.',
+            'what' => 'NFT is the service token of the NFT market where any CyberiaNFT or ERC-721 on the chain is listed and sold for CYBER or tokens. 1,000,000 NFT were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding NFT is a say in how nft market is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'NFT market',
+                'url' => '/market',
+                'label' => 'Cyberia NFT market',
+                'utility' => [
+                    'Vote in the NFT DAO on listings and the market fee',
+                    'Stake NFT in the service hub for a share of what the hub actually receives for this service',
+                    'Staked holders get the market\'s holder discount once it is wired to the hub',
+                ],
+            ],
+        ],
+
+        '0xba6bdda1988e72e796032c1cebfc4192ac5a8497' => [
+            'symbol' => 'LEND',
+            'name' => 'Cyberia Lending',
+            'decimals' => 18,
+            'logo' => '/services/LEND.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Lending on Cyberia. Borrow and lend against collateral on Cyberia.',
+            'what' => 'LEND is the service token of the lending market: supply assets to earn interest, borrow against collateral, liquidate unhealthy positions. 1,000,000 LEND were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding LEND is a say in how lending is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Lending',
+                'url' => '/lending',
+                'label' => 'Cyberia lending',
+                'utility' => [
+                    'Vote in the LEND DAO on market parameters (LTV, rates, listed assets)',
+                    'Stake LEND in the service hub for a share of what the hub receives for lending',
+                ],
+            ],
+        ],
+
+        '0x0a2d855d70728fea342c338f3668b91ecc330cb5' => [
+            'symbol' => 'PRED',
+            'name' => 'Cyberia Prediction markets',
+            'decimals' => 18,
+            'logo' => '/services/PRED.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Prediction markets on Cyberia. Parimutuel YES/NO markets in native CYBER.',
+            'what' => 'PRED is the service token of parimutuel YES/NO prediction markets settled in native CYBER, most of them answered by a price feed. 1,000,000 PRED were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding PRED is a say in how prediction markets is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Prediction markets',
+                'url' => '/predictions',
+                'label' => 'Cyberia predictions',
+                'utility' => [
+                    'Vote in the PRED DAO on new markets and disputed free-form outcomes',
+                    'Stake PRED in the service hub for a share of what the hub receives for predictions',
+                ],
+            ],
+        ],
+
+        '0x9ba523b368fd338d45594616b4515f6d421b21d2' => [
+            'symbol' => 'FARM',
+            'name' => 'Cyberia Farming',
+            'decimals' => 18,
+            'logo' => '/services/FARM.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Farming on Cyberia. Stake LP tokens, earn ASH.',
+            'what' => 'FARM is the service token of liquidity farms: stake a pool\'s LP token and earn ASH. 1,000,000 FARM were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding FARM is a say in how farming is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Farming',
+                'url' => '/farm',
+                'label' => 'Cyberia farms',
+                'utility' => [
+                    'Vote in the FARM DAO on which pools are farmed and their ASH weights',
+                    'Stake FARM in the service hub for a share of what the hub receives for farming',
+                ],
+            ],
+        ],
+
+        '0x0f5cee1f315a84e109b5817839b5474e0ca7431d' => [
+            'symbol' => 'STAKE',
+            'name' => 'Cyberia Staking',
+            'decimals' => 18,
+            'logo' => '/services/STAKE.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Staking on Cyberia. Single-asset staking on Cyberia.',
+            'what' => 'STAKE is the service token of single-asset staking pools. 1,000,000 STAKE were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding STAKE is a say in how staking is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Staking',
+                'url' => '/staking',
+                'label' => 'Cyberia staking',
+                'utility' => [
+                    'Vote in the STAKE DAO on staking rewards',
+                    'Stake STAKE in the service hub for a share of what the hub receives for staking',
+                ],
+            ],
+        ],
+
+        '0xe17f466e3501d80650f955c66a8ad4336bfd17c8' => [
+            'symbol' => 'LAUNCH',
+            'name' => 'Cyberia Launchpad',
+            'decimals' => 18,
+            'logo' => '/services/LAUNCH.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Launchpad on Cyberia. Fair launches with locked liquidity.',
+            'what' => 'LAUNCH is the service token of the launchpad: fair launches into locked v3 liquidity, each with its own DAO, from the site, the wallet or LainOS. 1,000,000 LAUNCH were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding LAUNCH is a say in how launchpad is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Launchpad',
+                'url' => '/launchpad',
+                'label' => 'Cyberia launchpad',
+                'utility' => [
+                    'Vote in the LAUNCH DAO on launchpad parameters',
+                    'Stake LAUNCH in the service hub for a share of what the hub receives for the launchpad',
+                ],
+            ],
+        ],
+
+        '0x82708a8d873ca89f9f341307cca949a4a5a240f3' => [
+            'symbol' => 'BRIDGE',
+            'name' => 'Cyberia Bridge',
+            'decimals' => 18,
+            'logo' => '/services/BRIDGE.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Bridge on Cyberia. Move assets between Cyberia and other chains.',
+            'what' => 'BRIDGE is the service token of the bridge between Cyberia, Solana, EVM chains, Bitcoin, Litecoin and Monero. 1,000,000 BRIDGE were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding BRIDGE is a say in how bridge is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Bridge',
+                'url' => '/bridge',
+                'label' => 'Cyberia bridge',
+                'utility' => [
+                    'Vote in the BRIDGE DAO on corridors and bridge fees',
+                    'Stake BRIDGE in the service hub for a share of what the hub receives for the bridge',
+                ],
+                'notice' => 'The bridge is under a safety fix (B03). Do not bridge large amounts until it ships; the token itself trades normally.',
+            ],
+        ],
+
+        '0xbf763e079584a35d19968fd5e2d528087d9bc3fe' => [
+            'symbol' => 'WALLET',
+            'name' => 'Cyberia Wallet',
+            'decimals' => 18,
+            'logo' => '/services/WALLET.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Wallet on Cyberia. One phrase, every chain.',
+            'what' => 'WALLET is the service token of the non-custodial multichain wallet: web, desktop, mobile, Telegram and the browser extension. 1,000,000 WALLET were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding WALLET is a say in how wallet is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Wallet',
+                'url' => '/wallet',
+                'label' => 'Cyberia wallet',
+                'utility' => [
+                    'Vote in the WALLET DAO on the wallet roadmap',
+                    'Stake WALLET in the service hub for a share of what the hub receives for the wallet',
+                ],
+            ],
+        ],
+
+        '0xdb003b50dd2f5e9dcd1d177ca07d85cf3e3c6b48' => [
+            'symbol' => 'CLOUD',
+            'name' => 'Cyberia Cloud hosting',
+            'decimals' => 18,
+            'logo' => '/services/CLOUD.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Cloud hosting on Cyberia. Services that pay for their own containers.',
+            'what' => 'CLOUD is the service token of self-paying cloud hosting: a service\'s treasury pays a node operator per second in CYBER for its container (in development). 1,000,000 CLOUD were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding CLOUD is a say in how cloud hosting is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Cloud hosting',
+                'url' => null,
+                'label' => 'Cyberia cloud',
+                'utility' => [
+                    'Vote in the CLOUD DAO on vCPU/GB prices and the provider bond',
+                    'Stake CLOUD in the service hub for a share of what the hub receives for hosting',
+                ],
+                'notice' => 'Cloud hosting is in development: the token and its DAO exist, the service does not yet.',
+            ],
+        ],
+
+        '0xdd390535a353317625bcd8c27582abcc5e151186' => [
+            'symbol' => 'INFER',
+            'name' => 'Cyberia AI inference API',
+            'decimals' => 18,
+            'logo' => '/services/INFER.svg',
+            'category' => 'service',
+            'tagline' => 'The token of AI inference API on Cyberia. OpenAI-compatible inference, paid with a holding or x402.',
+            'what' => 'INFER is the service token of the OpenAI-compatible inference API at /api/ai/v1, open to holders or paid per call over x402. 1,000,000 INFER were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding INFER is a say in how ai inference api is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'AI inference API',
+                'url' => 'https://github.com/cyberia-temple/singularity/blob/main/backend/laravel/docs/ai-api.md',
+                'label' => 'AI API docs',
+                'utility' => [
+                    'Vote in the INFER DAO on the model catalogue',
+                    'Stake INFER in the service hub for a share of what the hub receives for inference',
+                ],
+            ],
+        ],
+
+        '0x28084a351a87f20219ef04e596b6d3b84dd0afd3' => [
+            'symbol' => 'IPFS',
+            'name' => 'Cyberia IPFS pinning',
+            'decimals' => 18,
+            'logo' => '/services/IPFS.svg',
+            'category' => 'service',
+            'tagline' => 'The token of IPFS pinning on Cyberia. Pin files and sites to IPFS.',
+            'what' => 'IPFS is the service token of IPFS pinning for files, token sites and NFT metadata. 1,000,000 IPFS were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding IPFS is a say in how ipfs pinning is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'IPFS pinning',
+                'url' => '/wallet?section=nft',
+                'label' => 'Pin in the wallet',
+                'utility' => [
+                    'Vote in the IPFS DAO on pinning limits',
+                    'Stake IPFS in the service hub for a share of what the hub receives for pinning',
+                ],
+            ],
+        ],
+
+        '0x7d01915b2ef0c5931f2520b7fa2523d1bd6b0cb5' => [
+            'symbol' => 'SEED',
+            'name' => 'Cyberia Tracker',
+            'decimals' => 18,
+            'logo' => '/services/SEED.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Tracker on Cyberia. A BitTorrent tracker where every release is an NFT.',
+            'what' => 'SEED is the service token of the BitTorrent tracker where a release exists because somebody minted it. 1,000,000 SEED were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding SEED is a say in how tracker is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Tracker',
+                'url' => '/tracker',
+                'label' => 'Cyberia tracker',
+                'utility' => [
+                    'Vote in the SEED DAO on release moderation',
+                    'Stake SEED in the service hub for a share of what the hub receives for the tracker',
+                ],
+            ],
+        ],
+
+        '0xde99a012a910419736e4c33228df6972fbcf0e72' => [
+            'symbol' => 'SCAN',
+            'name' => 'Cyberia Explorer',
+            'decimals' => 18,
+            'logo' => '/services/SCAN.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Explorer on Cyberia. The Blockscout explorer for Cyberia.',
+            'what' => 'SCAN is the service token of the Blockscout explorer and its public API. 1,000,000 SCAN were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding SCAN is a say in how explorer is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Explorer',
+                'url' => 'https://explorer.cyberia.church',
+                'label' => 'Cyberia explorer',
+                'utility' => [
+                    'Vote in the SCAN DAO on explorer hosting',
+                    'Stake SCAN in the service hub for a share of what the hub receives for the explorer',
+                ],
+            ],
+        ],
+
+        '0x7911085dc26825349b0ce2518b72d49ff4a26ee8' => [
+            'symbol' => 'GAS',
+            'name' => 'Cyberia Gas station',
+            'decimals' => 18,
+            'logo' => '/services/GAS.svg',
+            'category' => 'service',
+            'tagline' => 'The token of Gas station on Cyberia. A drip of CYBER for an address that has tokens but no gas.',
+            'what' => 'GAS is the service token of the gas station that drips CYBER to an address holding tokens but no coin to pay fees with. 1,000,000 GAS were minted at launch, all of it into a CYBER pool whose liquidity is locked forever; nothing else was or can be minted.',
+            'why' => 'Holding GAS is a say in how gas station is run and, once the service hub is live, a claim on what this service really earns: the creator share of its pool fees and payments made through the hub. Nothing is promised beyond those flows, and no CYBER is emitted to pay anyone.',
+            'service' => [
+                'name' => 'Gas station',
+                'url' => '/wallet?section=gas',
+                'label' => 'Gas station',
+                'utility' => [
+                    'Vote in the GAS DAO on the drip size and station limits',
+                    'Stake GAS in the service hub for a share of what the hub receives for the station',
+                ],
             ],
         ],
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Dao;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -109,4 +110,33 @@ it('ships every token directory icon locally and links wrapping to the wallet', 
         ->assertInertia(fn (Assert $page) => $page
             ->where('token.links.0.url', '/wallet?wrap=wrap')
             ->where('token.links.0.external', false));
+});
+
+it('renders a service token landing with its service, DAO and warning', function () {
+    $dao = Dao::query()->create([
+        'address' => '0x82708a8d873ca89f9f341307cca949a4a5a240f3',
+        'name' => 'Cyberia Bridge',
+    ]);
+
+    $this->get('/token/bridge')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Token')
+            ->where('token.categoryKey', 'service')
+            ->where('token.service.name', 'Bridge')
+            ->where('token.service.url', '/bridge')
+            ->where('token.service.daoUrl', '/dao/'.$dao->id)
+            ->where('token.service.hub', null)
+            ->where('token.service.notice', fn ($text) => str_contains($text, 'B03')));
+});
+
+it('lists all fourteen service tokens and leaves the DAO out until one exists', function () {
+    $services = collect(config('tokens.list'))->where('category', 'service');
+
+    expect($services)->toHaveCount(14);
+
+    $this->get('/token/GAS')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('token.service.daoUrl', null)
+            ->where('token.service.url', '/wallet?section=gas'));
 });

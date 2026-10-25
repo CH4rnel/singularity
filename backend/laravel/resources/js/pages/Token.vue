@@ -10,6 +10,18 @@ type TokenLink = {
     external: boolean;
 };
 
+type ServiceInfo = {
+    name: string;
+    url: string | null;
+    label: string | null;
+    external: boolean;
+    utility: string[];
+    notice: string | null;
+    daoUrl: string | null;
+    launchpadUrl: string;
+    hub: string | null;
+};
+
 type Token = {
     address: string;
     symbol: string | null;
@@ -24,6 +36,7 @@ type Token = {
     isKnown: boolean;
     price: number | null;
     links: TokenLink[];
+    service: ServiceInfo | null;
 };
 
 type Pool = {
@@ -81,7 +94,10 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
                         {{ token.category }}
                     </span>
                 </div>
-                <p v-if="token.tagline" class="mt-1 text-sm text-muted-foreground">
+                <p
+                    v-if="token.tagline"
+                    class="mt-1 text-sm text-muted-foreground"
+                >
                     {{ token.tagline }}
                 </p>
                 <a
@@ -112,6 +128,96 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
             You can still view its live price, pools and contract below.
         </section>
 
+        <!-- Service token landing -->
+        <section
+            v-if="token.service"
+            class="space-y-4 rounded border border-border p-5"
+        >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-lg font-semibold">
+                    Service: {{ token.service.name }}
+                </h2>
+                <span
+                    class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                >
+                    1,000,000 supply · liquidity locked
+                </span>
+            </div>
+            <p
+                v-if="token.service.notice"
+                class="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400"
+            >
+                {{ token.service.notice }}
+            </p>
+            <div class="space-y-2">
+                <h3 class="text-sm font-semibold">What holding it does</h3>
+                <ul
+                    class="list-disc space-y-1 pl-5 text-sm text-muted-foreground"
+                >
+                    <li v-for="line in token.service.utility" :key="line">
+                        {{ line }}
+                    </li>
+                    <li>
+                        Holders are already paid by the token itself: part of
+                        every swap in its pool arrives as CYBER, claimable at
+                        any time.
+                    </li>
+                </ul>
+            </div>
+            <p class="text-xs text-muted-foreground">
+                <template v-if="token.service.hub">
+                    Service hub:
+                    <a
+                        :href="`${explorerUrl}/address/${token.service.hub}`"
+                        target="_blank"
+                        rel="noopener"
+                        class="font-mono hover:underline"
+                        >{{ shortAddress(token.service.hub) }}</a
+                    >
+                    — payments and pool fees for this service are split there
+                    between holders and the service treasury.
+                </template>
+                <template v-else>
+                    The service hub that routes this service's revenue to its
+                    token is not deployed yet.
+                </template>
+            </p>
+            <div class="flex flex-wrap gap-2">
+                <template v-if="token.service.url">
+                    <a
+                        v-if="token.service.external"
+                        :href="token.service.url"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex items-center gap-1 rounded bg-foreground px-4 py-2 text-sm text-background"
+                    >
+                        {{ token.service.label ?? 'Open the service' }}
+                        <ExternalLink class="h-3 w-3" />
+                    </a>
+                    <Link
+                        v-else
+                        :href="token.service.url"
+                        class="inline-flex items-center gap-1 rounded bg-foreground px-4 py-2 text-sm text-background"
+                    >
+                        {{ token.service.label ?? 'Open the service' }}
+                    </Link>
+                </template>
+                <Link
+                    v-if="token.service.daoUrl"
+                    :href="token.service.daoUrl"
+                    class="inline-flex items-center gap-1 rounded border border-border px-4 py-2 text-sm transition hover:border-input"
+                >
+                    {{ token.symbol }} DAO
+                </Link>
+                <Link
+                    :href="token.service.launchpadUrl"
+                    class="inline-flex items-center gap-1 rounded border border-border px-4 py-2 text-sm transition hover:border-input"
+                >
+                    Launchpad
+                </Link>
+            </div>
+        </section>
+
         <!-- What / why -->
         <section
             v-if="token.what || token.why"
@@ -119,17 +225,13 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
         >
             <div v-if="token.what" class="space-y-2">
                 <h2 class="text-lg font-semibold">What is it?</h2>
-                <p
-                    class="text-sm leading-relaxed text-muted-foreground"
-                >
+                <p class="text-sm leading-relaxed text-muted-foreground">
                     {{ token.what }}
                 </p>
             </div>
             <div v-if="token.why" class="space-y-2">
                 <h2 class="text-lg font-semibold">Why is it on Cyberia?</h2>
-                <p
-                    class="text-sm leading-relaxed text-muted-foreground"
-                >
+                <p class="text-sm leading-relaxed text-muted-foreground">
                     {{ token.why }}
                 </p>
             </div>
@@ -159,27 +261,19 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
 
         <!-- Quick facts -->
         <section class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div
-                class="rounded border border-border p-4"
-            >
+            <div class="rounded border border-border p-4">
                 <p class="text-xs text-muted-foreground">Symbol</p>
                 <p class="font-mono">{{ token.symbol ?? '—' }}</p>
             </div>
-            <div
-                class="rounded border border-border p-4"
-            >
+            <div class="rounded border border-border p-4">
                 <p class="text-xs text-muted-foreground">Decimals</p>
                 <p class="font-mono">{{ token.decimals ?? '—' }}</p>
             </div>
-            <div
-                class="rounded border border-border p-4"
-            >
+            <div class="rounded border border-border p-4">
                 <p class="text-xs text-muted-foreground">Standard</p>
                 <p class="font-mono">ERC-20</p>
             </div>
-            <div
-                class="rounded border border-border p-4"
-            >
+            <div class="rounded border border-border p-4">
                 <p class="text-xs text-muted-foreground">Chain</p>
                 <p class="font-mono">Cyberia</p>
             </div>
@@ -188,9 +282,7 @@ const title = props.token.symbol ?? shortAddress(props.token.address);
         <!-- Pools -->
         <section v-if="pools.length > 0" class="space-y-3">
             <h2 class="text-lg font-semibold">Pools</h2>
-            <div
-                class="overflow-x-auto rounded border border-border"
-            >
+            <div class="overflow-x-auto rounded border border-border">
                 <table class="min-w-full text-sm">
                     <thead class="bg-muted/50">
                         <tr>

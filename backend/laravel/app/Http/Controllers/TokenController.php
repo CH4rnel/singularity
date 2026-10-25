@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Dao;
 use App\Services\CyberiaPrices;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -205,6 +206,43 @@ class TokenController extends Controller
             'isKnown' => $known,
             'price' => $price,
             'links' => $this->links($addr, $meta),
+            'service' => $this->service($addr, $meta),
+        ];
+    }
+
+    /**
+     * The landing block of a service token: which service it belongs to, what
+     * holding it does, its DAO and the hub that ties the two together.
+     *
+     * The DAO is looked up by the token's address, the way the launch watcher
+     * opened it, so a DAO id is never copied into config by hand.
+     *
+     * @param  array<string, mixed>  $meta
+     * @return array<string, mixed>|null
+     */
+    private function service(string $addr, array $meta): ?array
+    {
+        if (! isset($meta['service']) || ! is_array($meta['service'])) {
+            return null;
+        }
+
+        $service = $meta['service'];
+        $daoId = Schema::hasTable('daos')
+            ? Dao::query()->whereRaw('lower(address) = ?', [$addr])->oldest('id')->value('id')
+            : null;
+        $hub = config('tokens.service_hub');
+        $url = $service['url'] ?? null;
+
+        return [
+            'name' => (string) $service['name'],
+            'url' => $url,
+            'label' => $service['label'] ?? null,
+            'external' => is_string($url) && str_starts_with($url, 'http'),
+            'utility' => array_values((array) ($service['utility'] ?? [])),
+            'notice' => $service['notice'] ?? null,
+            'daoUrl' => $daoId !== null ? route('dao.show', $daoId, absolute: false) : null,
+            'launchpadUrl' => route('launchpad', absolute: false),
+            'hub' => is_string($hub) && $hub !== '' ? $hub : null,
         ];
     }
 
