@@ -226,6 +226,44 @@ const balanceOf = (asset: SwapAsset | null): bigint | null => {
     );
 };
 
+/**
+ * Read a chosen token's balance off the chain when the list no longer has it.
+ *
+ * The token list drops an indexed token the moment its balance reaches zero,
+ * and depositing all of it is exactly that — so the asset still sitting in the
+ * box lost its balance with it, Max disappeared, and there was nothing left
+ * to refuse the same deposit a second time. A failed read leaves it unknown;
+ * the quote reads it again before anything can be signed.
+ */
+const readUnknownSides = async (): Promise<void> => {
+    await Promise.all(
+        [first.value, second.value].map(async (asset) => {
+            if (
+                asset === null ||
+                asset.address === null ||
+                balanceOf(asset) !== null
+            ) {
+                return;
+            }
+
+            try {
+                const read = await props.wallet.readToken(
+                    active.value,
+                    asset.address,
+                );
+
+                if (read) {
+                    readTokens.value[asset.address.toLowerCase()] = read;
+                }
+            } catch {
+                // Still unknown, and the quote is what decides.
+            }
+        }),
+    );
+};
+
+watch([first, second, held], () => void readUnknownSides());
+
 const priceOf = (asset: SwapAsset | null): number | null => {
     if (asset === null) {
         return null;
@@ -443,14 +481,19 @@ const quoting = ref(false);
 let sequence = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
+/*
+ * Once a quote exists its balances are the ones to weigh against: they were
+ * read from the chain a moment ago, while `balanceOf` is the token list, which
+ * lags the indexer and forgets a token the moment it reaches zero.
+ */
 const refusal = computed(() =>
     canAddLiquidity({
         first: first.value,
         second: second.value,
         amountFirst: unitsFirst.value,
         amountSecond: unitsSecond.value,
-        balanceFirst: balanceOf(first.value),
-        balanceSecond: balanceOf(second.value),
+        balanceFirst: quote.value?.balances[0] ?? balanceOf(first.value),
+        balanceSecond: quote.value?.balances[1] ?? balanceOf(second.value),
     }),
 );
 
@@ -562,7 +605,7 @@ const amountLabel = (asset: SwapAsset | null, value: string): string =>
 
 /** One plain sentence for what is about to be signed. */
 const sentence = computed(() => {
-    if (quote.value === null) {
+    if (quote.value === null || refusal.value !== 'ok') {
         return '';
     }
 
@@ -678,7 +721,17 @@ const add = async (): Promise<void> => {
         // position somebody is about to go looking for.
         forgetPairs();
         await Promise.all([loadPair(), loadPositions()]);
+
+        // A balance read off the chain before this deposit is the one figure
+        // on the screen it certainly changed.
+        for (const asset of [answer.first, answer.second]) {
+            if (asset.address !== null) {
+                delete readTokens.value[asset.address.toLowerCase()];
+            }
+        }
+
         await props.wallet.refreshBalances();
+        await readUnknownSides();
     } catch (failure) {
         error.value =
             failure instanceof Error ? failure.message : String(failure);

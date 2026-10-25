@@ -376,6 +376,12 @@ export type AddLiquidityQuote = {
     /** Whether the fee above came from the node or from the static ceiling. */
     estimated: boolean;
     /**
+     * What the account holds of each side, in the caller's order, read from
+     * the chain beside the allowances. The screen weighs the deposit against
+     * these rather than against the token list it drew the boxes from.
+     */
+    balances: [bigint, bigint];
+    /**
      * What the router still has to be allowed to pull, one entry per side.
      *
      * `reset` marks a token that refuses to move a non-zero allowance in one
@@ -473,6 +479,27 @@ export const quoteAddLiquidity = async (request: {
     const needed = approvals.filter(
         (entry): entry is NonNullable<typeof entry> => entry !== null,
     );
+
+    /*
+     * The balances, from the chain and not from the screen.
+     *
+     * The screen's figure is the explorer's token list, which lags the chain
+     * by however long its indexer takes and drops a token outright the moment
+     * its balance reaches zero — which is exactly what depositing all of it
+     * does. The same deposit pressed a second time then had nothing to be
+     * weighed against, passed the refusal, and was signed: two approvals and a
+     * deposit that reverted on its first transfer. The estimate below cannot
+     * catch it either, because it is skipped while an approval is pending.
+     */
+    const balances = (await Promise.all(
+        [request.first, request.second].map((asset) =>
+            asset.address === null
+                ? rpc.getBalance(request.account)
+                : (new Contract(asset.address, ERC20_ABI, rpc).balanceOf(
+                      request.account,
+                  ) as Promise<bigint>),
+        ),
+    )) as [bigint, bigint];
 
     const kind: AddLiquidityQuote['kind'] =
         request.first.address === null
@@ -583,6 +610,7 @@ export const quoteAddLiquidity = async (request: {
         fee: gasLimit * request.gasPrice,
         approvalFee,
         estimated: estimate !== null,
+        balances,
         approvals: needed,
         kind,
     };
