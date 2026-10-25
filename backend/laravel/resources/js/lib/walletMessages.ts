@@ -409,6 +409,38 @@ export const walletMessages: Messages = {
         proxyTransport: 'Transport',
         proxyModeSystem: 'System settings',
         proxyModeDirect: 'Direct',
+        vpnTitle: 'Cyberia VPN',
+        vpnBody:
+            'VLESS + Reality: to a filter it looks like an ordinary visit to a big website, which is why it keeps working where WireGuard is throttled. Paid in CYBER by the day; the nodes are paid out of it.',
+        vpnNotDeployed:
+            'The pass contract is not deployed yet, so nothing can be bought here.',
+        vpnUnreadable:
+            'The pass contract could not be read. Try again in a minute.',
+        vpnNoNodes:
+            'No node is listed yet. Passes go on sale with the first one, so no day is paid for before it can be used.',
+        vpnActiveUntil: 'Active until {date} · {days} d left',
+        vpnInactive: 'No running pass',
+        vpnPlanDays: '{days} days',
+        vpnTotal: '{amount} CYBER · until {date}',
+        vpnPriceNote:
+            '{price} CYBER a day. Days are added to what is left. {fee}% of each payment goes to the protocol, the rest to the nodes.',
+        vpnPaused: 'Sales are paused. Passes already bought keep working.',
+        vpnWatchOnly: 'A watch-only account cannot buy or sign.',
+        vpnNotEnough: 'Not enough CYBER for this plan and its fee.',
+        vpnBought: 'Paid. Your days are on the chain.',
+        vpnSignNote:
+            'The node asks you to sign a sentence that spends nothing: that is how it knows this address is yours.',
+        vpnGetLink: 'Get my link',
+        vpnLinkReady:
+            'Import it into Hiddify, v2rayN, v2rayNG or Streisand. It is your key: anyone holding it rides on your pass.',
+        vpnCopy: 'Copy link',
+        vpnError_noPass:
+            'The node does not see a running pass for this address yet. Try again in half a minute.',
+        vpnError_badSignature: 'The node did not accept the signature.',
+        vpnError_staleChallenge: 'The request expired. Press again.',
+        vpnError_unreachable: 'The node did not answer.',
+        vpnError_failed:
+            'The transaction did not go through. Nothing was charged except, possibly, gas.',
         proxyDesktopRouted:
             'The app is sending its requests through this relay. If it stops answering, requests fail rather than quietly falling back to your own line.',
         proxyDesktopDirect:
@@ -2969,6 +3001,38 @@ export const walletMessages: Messages = {
         proxyTransport: 'Транспорт',
         proxyModeSystem: 'Системные настройки',
         proxyModeDirect: 'Напрямую',
+        vpnTitle: 'Cyberia VPN',
+        vpnBody:
+            'VLESS + Reality: для фильтра это выглядит как обычный заход на большой сайт, поэтому работает там, где WireGuard режут. Оплата в CYBER по дням, из неё платят нодам.',
+        vpnNotDeployed:
+            'Контракт подписки ещё не развёрнут, купить пока нельзя.',
+        vpnUnreadable:
+            'Не удалось прочитать контракт подписки. Попробуйте через минуту.',
+        vpnNoNodes:
+            'Пока нет ни одной ноды. Продажи откроются вместе с первой, чтобы не платить за дни, которыми нельзя воспользоваться.',
+        vpnActiveUntil: 'Активна до {date} · осталось {days} дн.',
+        vpnInactive: 'Подписки нет',
+        vpnPlanDays: '{days} дн.',
+        vpnTotal: '{amount} CYBER · до {date}',
+        vpnPriceNote:
+            '{price} CYBER в день. Дни добавляются к оставшимся. {fee}% каждого платежа идёт протоколу, остальное нодам.',
+        vpnPaused: 'Продажи на паузе. Купленные подписки работают.',
+        vpnWatchOnly:
+            'Аккаунт только для просмотра не может покупать и подписывать.',
+        vpnNotEnough: 'Не хватает CYBER на этот срок и комиссию сети.',
+        vpnBought: 'Оплачено. Дни записаны в блокчейн.',
+        vpnSignNote:
+            'Нода попросит подписать фразу, которая ничего не тратит: так она узнаёт, что адрес ваш.',
+        vpnGetLink: 'Получить ссылку',
+        vpnLinkReady:
+            'Импортируйте её в Hiddify, v2rayN, v2rayNG или Streisand. Это ваш ключ: у кого он есть, тот пользуется вашей подпиской.',
+        vpnCopy: 'Скопировать ссылку',
+        vpnError_noPass:
+            'Нода пока не видит подписку этого адреса. Повторите через полминуты.',
+        vpnError_badSignature: 'Нода не приняла подпись.',
+        vpnError_staleChallenge: 'Запрос устарел. Нажмите ещё раз.',
+        vpnError_unreachable: 'Нода не отвечает.',
+        vpnError_failed: 'Транзакция не прошла. Списаться мог только газ.',
         proxyDesktopRouted:
             'Приложение отправляет запросы через этот релей. Если он перестанет отвечать, запросы будут падать с ошибкой, а не тихо уходить по вашей собственной линии.',
         proxyDesktopDirect:
@@ -5437,6 +5501,34 @@ export const walletMessages: Messages = {
         proxyTransport: '传输',
         proxyModeSystem: '系统设置',
         proxyModeDirect: '直连',
+        vpnTitle: 'Cyberia VPN',
+        vpnBody:
+            'VLESS + Reality：在过滤器看来只是访问一个大型网站，因此在 WireGuard 被限速的地方依然可用。按天以 CYBER 付费，节点从中获得报酬。',
+        vpnNotDeployed: '通行证合约尚未部署，暂时无法购买。',
+        vpnUnreadable: '无法读取通行证合约，请稍后再试。',
+        vpnNoNodes:
+            '尚无节点。第一个节点上线时开始销售，避免为无法使用的天数付费。',
+        vpnActiveUntil: '有效期至 {date} · 剩余 {days} 天',
+        vpnInactive: '没有有效的通行证',
+        vpnPlanDays: '{days} 天',
+        vpnTotal: '{amount} CYBER · 至 {date}',
+        vpnPriceNote:
+            '每天 {price} CYBER。天数累加到剩余时间上。每笔付款的 {fee}% 归协议，其余归节点。',
+        vpnPaused: '销售已暂停。已购买的通行证继续有效。',
+        vpnWatchOnly: '仅观察账户无法购买或签名。',
+        vpnNotEnough: 'CYBER 不足以支付此套餐和网络费用。',
+        vpnBought: '已支付。天数已记录在链上。',
+        vpnSignNote:
+            '节点会请你签署一句不花费任何东西的话：这样它才知道这个地址属于你。',
+        vpnGetLink: '获取我的链接',
+        vpnLinkReady:
+            '导入到 Hiddify、v2rayN、v2rayNG 或 Streisand。这是你的密钥：持有它的人可以使用你的通行证。',
+        vpnCopy: '复制链接',
+        vpnError_noPass: '节点还没有看到此地址的通行证，请半分钟后重试。',
+        vpnError_badSignature: '节点不接受该签名。',
+        vpnError_staleChallenge: '请求已过期，请再按一次。',
+        vpnError_unreachable: '节点没有响应。',
+        vpnError_failed: '交易未成功。最多只消耗了 gas。',
         proxyDesktopRouted:
             '应用正通过这个中继发送请求。中继一旦不再应答，请求会直接失败，而不会悄悄退回你自己的线路。',
         proxyDesktopDirect:
