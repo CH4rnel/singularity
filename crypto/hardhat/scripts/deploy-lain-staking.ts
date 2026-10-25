@@ -7,6 +7,10 @@
  *   tier 2 — 30 days,  ×1.60
  *   tier 3 — 90 days,  ×2.00
  *
+ * and a cap of LAIN_STAKING_CAP principal per address (default 1,000,000
+ * LAIN), so one large holder cannot take the stream from the small ones.
+ * The cap is immutable: it is part of the deal every staker signs up to.
+ *
  * The stream is started separately, by the owner, once the rewards are in:
  *
  *   1. transfer the reward LAIN to the vault (a plain ERC-20 transfer)
@@ -20,6 +24,7 @@
  * env:
  *   DEPLOYER_PK          — pays for the deploy
  *   LAIN_STAKING_OWNER   — owner of the vault; defaults to the deployer
+ *   LAIN_STAKING_CAP     — principal per address, whole LAIN; default 1000000
  *   ROBINHOOD_RPC_URL    — defaults to https://rpc.mainnet.chain.robinhood.com
  */
 import "dotenv/config";
@@ -55,13 +60,15 @@ const wallet = new ethers.Wallet(pk, provider);
 
 async function main() {
   const owner = process.env.LAIN_STAKING_OWNER ?? wallet.address;
+  const cap = ethers.parseEther(process.env.LAIN_STAKING_CAP ?? "1000000");
   console.log("Deploying LainStakingVault on Robinhood Chain...");
   console.log("  Deployer:", wallet.address);
   console.log("  Owner:   ", owner);
+  console.log("  Cap:     ", ethers.formatEther(cap), "LAIN per address");
 
   // The deployer adds the tiers, so it owns the vault until they are in.
   const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, wallet);
-  const vault = await factory.deploy(LAIN, wallet.address);
+  const vault = await factory.deploy(LAIN, wallet.address, cap);
   await vault.waitForDeployment();
   const address = await vault.getAddress();
   console.log("  Vault:   ", address);

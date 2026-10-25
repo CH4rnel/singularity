@@ -25,6 +25,10 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.
 /// A lock that has run out stops earning its boost: anybody may `kick` it into
 /// the flexible tier, and the owner of the position may `restake` it into any
 /// tier for a fresh lock.
+///
+/// Each address may stake at most `maxStakePerAddress` of principal (what it
+/// put in; what the stream compounds on top is not counted), so one large
+/// holder cannot take the whole stream from everybody holding 100k–1M.
 contract LainStakingVault is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -39,6 +43,7 @@ contract LainStakingVault is Ownable, ReentrancyGuard {
         uint8 tier;
         uint64 unlockAt;
         uint256 shares;
+        uint256 principal;
     }
 
     uint256 public constant MAX_TIERS = 8;
@@ -56,9 +61,13 @@ contract LainStakingVault is Ownable, ReentrancyGuard {
     uint256 internal constant VIRTUAL_ASSETS = 1;
 
     IERC20 public immutable token;
+    /// Principal one address may have staked at once.
+    uint256 public immutable maxStakePerAddress;
 
     Tier[] internal _tiers;
     mapping(address => Position[]) internal _positions;
+    /// Principal an address has staked across its open positions.
+    mapping(address => uint256) public principalOf;
 
     /// Sum of every tier's assets: staked principal plus everything streamed so far.
     uint256 public totalStaked;
@@ -73,9 +82,11 @@ contract LainStakingVault is Ownable, ReentrancyGuard {
     event Withdrawn(address indexed user, uint256 indexed id, uint256 tier, uint256 assets);
     event Moved(address indexed user, uint256 indexed id, uint256 fromTier, uint256 toTier, uint256 assets, uint64 unlockAt);
 
-    constructor(IERC20 token_, address owner_) {
+    constructor(IERC20 token_, address owner_, uint256 maxStakePerAddress_) {
         require(address(token_) != address(0), "token");
+        require(maxStakePerAddress_ >= MIN_DEPOSIT, "cap");
         token = token_;
+        maxStakePerAddress = maxStakePerAddress_;
         _transferOwnership(owner_);
         // Tier 0 is always the flexible one: no lock, no boost. `kick` lands here.
         _tiers.push(Tier({lockSeconds: 0, boostBps: uint32(BPS), assets: 0, shares: 0}));
@@ -122,6 +133,8 @@ contract LainStakingVault is Ownable, ReentrancyGuard {
         uint256 before = token.balanceOf(address(this));
         token.safeTransferFrom(msg.sender, address(this), amount);
         uint256 received = token.balanceOf(address(this)) - before;
+        require(principalOf[msg.sender] + received <= maxStakePerAddress, "cap");
+        principalOf[msg.sender] += received;
 
         Tier storage t = _tiers[tierId];
         uint256 shares = _toShares(t, received);
@@ -132,7 +145,7 @@ contract LainStakingVault is Ownable, ReentrancyGuard {
 
         uint64 unlockAt = uint64(block.timestamp) + t.lockSeconds;
         id = _positions[msg.sender].length;
-        _positions[msg.sender].push(Position({tier: uint8(tierId), unlockAt: unlockAt, shares: shares}));
+        _positions[msg.sender].push(Position({tier: uint8(tierId), unlockAt: unlockAt, shares: shares, principal: received}));
         emit Deposited(msg.sender, id, tierId, received, shares, unlockAt);
     }
 
@@ -143,6 +156,8 @@ contract LainStakingVault is Ownable, ReentrancyGuard {
         _update();
 
         uint256 tierId = p.tier;
+        principalOf[msg.sender] -= p.principal;
+        p.principal = 0;
         assets = _redeem(p);
         totalStaked -= assets;
         token.safeTransfer(msg.sender, assets);

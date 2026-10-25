@@ -24,10 +24,11 @@ contract LainStakingVaultTest is Test {
 
     uint256 constant REWARDS = 7_500_000 ether;
     uint256 constant SIX_MONTHS = 182 days;
+    uint256 constant CAP = 2_000_000 ether;
 
     function setUp() public {
         lain = new MockLain();
-        vault = new LainStakingVault(lain, owner);
+        vault = new LainStakingVault(lain, owner, CAP);
 
         vm.startPrank(owner);
         vault.addTier(7 days, 12_500);
@@ -199,6 +200,38 @@ contract LainStakingVaultTest is Test {
         vm.prank(bob);
         vault.deposit(0, 1000 ether);
         assertApproxEqAbs(_assets(bob, 0), 1000 ether, 1e9);
+    }
+
+    function test_capCountsPrincipalNotEarnings() public {
+        vm.prank(alice);
+        vault.deposit(0, 1_500_000 ether);
+        vm.prank(alice);
+        vm.expectRevert(bytes("cap"));
+        vault.deposit(3, 500_001 ether);
+        vm.prank(alice);
+        vault.deposit(3, 500_000 ether);
+        assertEq(vault.principalOf(alice), CAP);
+
+        _fund();
+        vm.warp(block.timestamp + 30 days);
+        assertGt(_assets(alice, 0), 1_500_000 ether);
+
+        vm.prank(alice);
+        vault.withdraw(0);
+        assertEq(vault.principalOf(alice), 500_000 ether);
+        vm.prank(alice);
+        vault.deposit(0, 1_500_000 ether);
+    }
+
+    function test_capSurvivesARestake() public {
+        vm.prank(bob);
+        vault.deposit(0, CAP);
+        vm.prank(bob);
+        vault.restake(0, 3);
+        assertEq(vault.principalOf(bob), CAP);
+        vm.prank(bob);
+        vm.expectRevert(bytes("cap"));
+        vault.deposit(0, 1 ether);
     }
 
     function test_tiersAreBounded() public {
