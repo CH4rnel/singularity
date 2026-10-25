@@ -6,7 +6,11 @@ import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { formatUnits } from '@/lib/wallet';
 import { formatUsd, shortAddress } from '@/lib/wallet/format';
-import { fetchLaunches, launchpadChains } from '@/lib/wallet/launchpad';
+import {
+    byMarketCap,
+    fetchLaunches,
+    launchpadChains,
+} from '@/lib/wallet/launchpad';
 import type { WalletLaunch } from '@/lib/wallet/launchpad';
 import { fetchUnderground } from '@/lib/wallet/underground';
 import type { UndergroundEntry } from '@/lib/wallet/underground';
@@ -50,6 +54,15 @@ const selected = ref<string | null>(null);
 const creating = ref(false);
 const loading = ref(true);
 const failure = ref<string | null>(null);
+/**
+ * Newest reads one page; by market cap reads every launch, because a ranking
+ * of the newest twelve is not a ranking of the launchpad.
+ */
+const order = ref<'new' | 'cap'>('new');
+
+const shown = computed(() =>
+    order.value === 'cap' ? byMarketCap(launches.value) : launches.value,
+);
 
 const chain = computed(() => launchpadChains()[0] ?? null);
 
@@ -121,12 +134,29 @@ const load = async (): Promise<void> => {
     failure.value = null;
     void loadHomepages();
 
+    const wanted = order.value;
+
     try {
-        launches.value = await fetchLaunches();
+        const read = await fetchLaunches(
+            undefined,
+            wanted === 'cap' ? Infinity : undefined,
+        );
+
+        // A slower read for the order just left must not replace this one.
+        if (wanted === order.value) {
+            launches.value = read;
+        }
     } catch (error) {
         failure.value = error instanceof Error ? error.message : String(error);
     } finally {
         loading.value = false;
+    }
+};
+
+const sortBy = (next: 'new' | 'cap'): void => {
+    if (order.value !== next) {
+        order.value = next;
+        void load();
     }
 };
 
@@ -344,6 +374,21 @@ onMounted(load);
                 {{ t('launchNewOpen') }}
             </button>
 
+            <div class="cw-seg" style="margin-top: 18px">
+                <button
+                    v-for="option in ['new', 'cap'] as const"
+                    :key="option"
+                    type="button"
+                    class="cw-seg-item"
+                    :aria-pressed="order === option"
+                    @click="sortBy(option)"
+                >
+                    {{
+                        t(option === 'new' ? 'launchSortNew' : 'launchSortCap')
+                    }}
+                </button>
+            </div>
+
             <p
                 v-if="failure"
                 class="cw-note cw-note-bad"
@@ -373,7 +418,7 @@ onMounted(load);
 
             <div v-else class="cw-stack" style="gap: 8px; margin-top: 18px">
                 <button
-                    v-for="launch in launches"
+                    v-for="launch in shown"
                     :key="launch.address"
                     type="button"
                     class="cw-card cw-card-button"

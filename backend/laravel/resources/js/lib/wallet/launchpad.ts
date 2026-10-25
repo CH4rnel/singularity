@@ -366,6 +366,30 @@ const readVenue = async (
     );
 };
 
+/**
+ * Launches ordered by market cap, largest first. A launch with no readable
+ * price has no market cap rather than one of zero, so it goes last instead of
+ * being ranked as the smallest; ties and unpriced launches keep their order.
+ */
+export const byMarketCap = (launches: WalletLaunch[]): WalletLaunch[] =>
+    launches
+        .map((launch, index) => ({ launch, index }))
+        .sort((a, b) => {
+            const left = a.launch.marketCapNative;
+            const right = b.launch.marketCapNative;
+
+            if (left === null || right === null) {
+                return left === right
+                    ? a.index - b.index
+                    : left === null
+                      ? 1
+                      : -1;
+            }
+
+            return right - left || a.index - b.index;
+        })
+        .map(({ launch }) => launch);
+
 /** Chains with a launchpad deployed — the only ones with anything to list. */
 export const launchpadChains = (): LaunchpadChain[] =>
     LAUNCHPAD_CHAINS.filter((entry) => entry.launchpad !== null);

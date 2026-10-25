@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AbiCoder, Interface, ZeroAddress, parseUnits } from 'ethers';
 import {
+    byMarketCap,
     feeSplit,
     launchProblem,
     launchTerms,
@@ -154,5 +155,22 @@ test('the metadata message is the one LaunchpadController accepts', () => {
             at,
         ),
         'Edit Cyberia Launchpad metadata for 0xabcdef0000000000000000000000000000000001 on chain 49406 at 2026-09-22T10:00:00.000Z',
+    );
+});
+
+test('market cap order is largest first, unpriced last, ties stable', () => {
+    const launch = (symbol, marketCapNative) => ({ symbol, marketCapNative });
+    const sorted = byMarketCap([
+        launch('A', 5),
+        launch('B', null),
+        launch('C', 50),
+        launch('D', 0),
+        launch('E', 5),
+        launch('F', null),
+    ]);
+
+    assert.deepEqual(
+        sorted.map((entry) => entry.symbol),
+        ['C', 'A', 'E', 'D', 'B', 'F'],
     );
 });

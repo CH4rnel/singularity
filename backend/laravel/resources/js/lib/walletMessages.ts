@@ -1588,6 +1588,8 @@ export const walletMessages: Messages = {
         launchpadUnreadable:
             'The Cyberia node did not answer. The launches are on chain either way.',
         launchLocked: 'locked',
+        launchSortNew: 'Newest',
+        launchSortCap: 'By market cap',
         launchPrice: 'Price',
         launchValue: 'Price in USD',
         launchLiquidity: 'Locked liquidity',
@@ -3855,6 +3857,8 @@ export const walletMessages: Messages = {
         launchpadUnreadable:
             'Нода Cyberia не ответила. На запуски в сети это никак не влияет.',
         launchLocked: 'заблокировано',
+        launchSortNew: 'Новые',
+        launchSortCap: 'По капитализации',
         launchPrice: 'Цена',
         launchValue: 'Цена в USD',
         launchLiquidity: 'Заблокированная ликвидность',
@@ -6027,6 +6031,8 @@ export const walletMessages: Messages = {
         launchpadUnreadable:
             'Cyberia 节点没有回应。不管怎样，这些发射都在链上。',
         launchLocked: '已锁定',
+        launchSortNew: '最新',
+        launchSortCap: '按市值',
         launchPrice: '价格',
         launchValue: '美元价格',
         launchLiquidity: '锁定的流动性',
