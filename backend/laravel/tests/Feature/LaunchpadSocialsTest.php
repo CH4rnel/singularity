@@ -67,16 +67,33 @@ it('takes a link down when the field is sent blank', function () {
         ->assertJsonPath('token.telegram_handle', 'lain');
 });
 
-it('refuses a website that is not a URL', function () {
-    postSocials(['website' => 'javascript:alert(1)'])
-        ->assertStatus(422)
-        ->assertJsonValidationErrors('website');
+it('refuses websites that are not HTTP links with upload guidance', function (string $website) {
+    postSocials(['website' => $website])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('website')
+        ->assertJsonPath('errors.website.0', 'Use an http:// or https:// website URL. To publish a local HTML file, leave Website empty and select it under HTML page.');
 
     expect(LaunchpadToken::where('address', SOCIALS_TOKEN)->exists())->toBeFalse();
-});
+})->with([
+    'local HTML file' => 'file:///home/CH4rnel_exe/Projects/CyberiaVPN/docs/launchpad/cvpn.html',
+    'local path' => '/home/creator/cvpn.html',
+    'javascript' => 'javascript:alert(1)',
+    'FTP' => 'ftp://example.com/cvpn.html',
+    'malformed URL' => 'not a URL',
+]);
 
-it('keeps a website the creator gave', function () {
-    postSocials(['website' => 'https://cyberia.church'])
+it('keeps a website the creator gave', function (string $website) {
+    postSocials(['website' => $website])
+        ->assertOk()
+        ->assertJsonPath('token.website_url', $website);
+})->with(['http://cyberia.church', 'https://cyberia.church']);
+
+it('preserves an omitted website and removes one explicitly left empty', function () {
+    postSocials(['website' => 'https://cyberia.church'])->assertOk();
+    postSocials(['description' => 'updated'])
         ->assertOk()
         ->assertJsonPath('token.website_url', 'https://cyberia.church');
+    postSocials(['website' => ''])
+        ->assertOk()
+        ->assertJsonPath('token.website_url', null);
 });

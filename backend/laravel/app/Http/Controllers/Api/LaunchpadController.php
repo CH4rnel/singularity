@@ -66,7 +66,7 @@ class LaunchpadController extends Controller
             // and collapsed to the bare handle on the way in.
             'x' => ['nullable', 'string', 'max:200'],
             'telegram' => ['nullable', 'string', 'max:200'],
-            'website' => ['nullable', 'string', 'max:255', 'url'],
+            'website' => ['nullable', 'string', 'max:255', 'url:http,https'],
             'image' => ['nullable', 'image', 'max:2048'],
             'html' => ['nullable', 'file', 'mimes:html,htm,txt', 'max:2048'],
             'site_subdomain' => [
@@ -76,6 +76,8 @@ class LaunchpadController extends Controller
                 'regex:/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/',
                 Rule::notIn(config('launchpad.reserved_subdomains')),
             ],
+        ], [
+            'website.url' => 'Use an http:// or https:// website URL. To publish a local HTML file, leave Website empty and select it under HTML page.',
         ]);
 
         $address = Str::lower($data['address']);

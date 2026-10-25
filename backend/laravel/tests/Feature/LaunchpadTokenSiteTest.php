@@ -52,10 +52,12 @@ it('publishes uploaded token html on its chosen subdomain', function () {
         'signature' => VALID_SIGNATURE,
         'name' => 'Lain',
         'symbol' => 'LAIN',
+        'website' => '',
         'html' => UploadedFile::fake()->createWithContent('index.html', $html),
         'site_subdomain' => 'Lain',
     ], ['Accept' => 'application/json'])
         ->assertOk()
+        ->assertJsonPath('token.website_url', null)
         ->assertJsonPath('token.site_subdomain', 'lain')
         ->assertJsonPath('token.site_url', 'https://lain.cyberia.church/')
         ->assertJsonPath('token.ipfs_cid', SITE_CID)

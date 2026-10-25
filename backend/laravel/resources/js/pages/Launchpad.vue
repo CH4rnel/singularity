@@ -29,6 +29,10 @@ import {
 } from '@/lib/launchpadChains';
 import type { LaunchpadChain } from '@/lib/launchpadChains';
 import type { TokenCandle } from '@/lib/launchpadChart';
+import {
+    launchpadWebsiteError,
+    uploadLaunchpadMetadata,
+} from '@/lib/launchpadMetadata';
 import { sqrtPriceQuote } from '@/lib/wallet/launchpad';
 
 // LaunchpadNative — fair launches paid in the chain's native coin, burned into
@@ -202,6 +206,7 @@ const description = ref('');
 const xHandle = ref('');
 const telegramHandle = ref('');
 const websiteUrl = ref('');
+const websiteError = computed(() => launchpadWebsiteError(websiteUrl.value));
 const siteSubdomain = ref('');
 /**
  * What a trade through this launch will cost, in percent, and how much of it
@@ -542,6 +547,7 @@ const canLaunch = computed(
         symbol.value.trim().length > 0 &&
         pendingTargets.value.length > 0 &&
         selectedTargets.value.every((target) => targetIssue(target) === null) &&
+        websiteError.value === null &&
         !siteSubdomainInvalid.value &&
         (!siteSubdomain.value.trim() || htmlFile.value !== null),
 );
@@ -1493,19 +1499,7 @@ const submitMetadata = async (
         form.append('site_subdomain', normalizedSubdomain(siteSubdomain.value));
     }
 
-    const res = await fetch('/api/launchpad/tokens', {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-        body: form,
-    });
-
-    if (!res.ok) {
-        const text = await res.text().catch(() => '');
-
-        throw new Error(
-            `Metadata upload failed: HTTP ${res.status} ${text.slice(0, 300)}`,
-        );
-    }
+    await uploadLaunchpadMetadata(form);
 };
 
 const swapUrlFor = (tokenAddress: string): string =>
@@ -1569,6 +1563,9 @@ const editDescription = ref('');
 const editXHandle = ref('');
 const editTelegramHandle = ref('');
 const editWebsiteUrl = ref('');
+const editWebsiteError = computed(() =>
+    launchpadWebsiteError(editWebsiteUrl.value),
+);
 const editSiteSubdomain = ref('');
 const editImageFile = ref<File | null>(null);
 const editImagePreview = ref<string | null>(null);
@@ -1675,9 +1672,23 @@ const saveEditor = async (t: LaunchedToken): Promise<void> => {
             );
         }
 
+        if (editWebsiteError.value) {
+            throw new Error(editWebsiteError.value);
+        }
+
         if (editSiteSubdomainInvalid.value) {
             throw new Error(
                 'Subdomain may contain only lowercase letters, digits, and internal hyphens.',
+            );
+        }
+
+        if (
+            editSiteSubdomain.value.trim() &&
+            !editHtmlFile.value &&
+            !t.siteUrl
+        ) {
+            throw new Error(
+                'Select the HTML page that this subdomain will host.',
             );
         }
 
@@ -1721,17 +1732,7 @@ const saveEditor = async (t: LaunchedToken): Promise<void> => {
             );
         }
 
-        const res = await fetch('/api/launchpad/tokens', {
-            method: 'POST',
-            headers: { Accept: 'application/json' },
-            body: form,
-        });
-
-        if (!res.ok) {
-            const text = await res.text();
-
-            throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
-        }
+        await uploadLaunchpadMetadata(form);
 
         closeEditor();
         await loadRecent();
@@ -1867,6 +1868,10 @@ const handleLaunch = async (): Promise<void> => {
     const siteChainId = selectedTargets.value[0]?.chainId ?? null;
 
     try {
+        if (websiteError.value) {
+            throw new Error(websiteError.value);
+        }
+
         for (const target of queue) {
             const withSite = target.chainId === siteChainId;
 
@@ -2246,10 +2251,26 @@ onMounted(async () => {
                         <span>Website (optional)</span>
                         <Input
                             v-model="websiteUrl"
+                            type="url"
+                            inputmode="url"
                             maxlength="255"
                             placeholder="https://…"
                             autocomplete="off"
+                            :aria-invalid="websiteError !== null"
+                            aria-describedby="launch-website-help"
                         />
+                        <span id="launch-website-help" class="small muted">
+                            A link to an existing website. To publish a local
+                            HTML file, leave this empty and choose it under HTML
+                            page below.
+                        </span>
+                        <span
+                            v-if="websiteError"
+                            class="small hint--err"
+                            role="alert"
+                        >
+                            {{ websiteError }}
+                        </span>
                     </label>
                     <template v-if="usesV3">
                         <label>
@@ -2642,10 +2663,32 @@ onMounted(async () => {
                                     <span>Website</span>
                                     <Input
                                         v-model="editWebsiteUrl"
+                                        type="url"
+                                        inputmode="url"
                                         maxlength="255"
                                         placeholder="https://…"
                                         autocomplete="off"
+                                        :aria-invalid="
+                                            editWebsiteError !== null
+                                        "
+                                        aria-describedby="edit-website-help"
                                     />
+                                    <span
+                                        id="edit-website-help"
+                                        class="small muted"
+                                    >
+                                        A link to an existing website. To
+                                        publish a local HTML file, leave this
+                                        empty and choose it under HTML page
+                                        below.
+                                    </span>
+                                    <span
+                                        v-if="editWebsiteError"
+                                        class="small hint--err"
+                                        role="alert"
+                                    >
+                                        {{ editWebsiteError }}
+                                    </span>
                                 </label>
                                 <label>
                                     <span>Image (≤ 2 MB)</span>
@@ -2707,6 +2750,17 @@ onMounted(async () => {
                                         Use letters, digits, and internal
                                         hyphens only.
                                     </span>
+                                    <span
+                                        v-else-if="
+                                            editSiteSubdomain.trim() &&
+                                            !editHtmlFile &&
+                                            !t.siteUrl
+                                        "
+                                        class="small hint--err"
+                                    >
+                                        Select the HTML page that this subdomain
+                                        will host.
+                                    </span>
                                 </label>
                                 <div v-if="editError" class="hint hint--err">
                                     {{ editError }}
@@ -2716,7 +2770,12 @@ onMounted(async () => {
                                         class="ctaBtn ctaBtn--sm"
                                         type="button"
                                         :disabled="
-                                            editBusy || editSiteSubdomainInvalid
+                                            editBusy ||
+                                            editWebsiteError !== null ||
+                                            editSiteSubdomainInvalid ||
+                                            (editSiteSubdomain.trim() !== '' &&
+                                                !editHtmlFile &&
+                                                !t.siteUrl)
                                         "
                                         @click="saveEditor(t)"
                                     >
