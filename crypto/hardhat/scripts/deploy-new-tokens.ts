@@ -11,10 +11,16 @@ import { mainnet } from "viem/chains";
  * deployments/cyberia-tokens.json.
  *
  * Env: DEPLOYER_PK (required), CYBERIA_RPC_URL (optional),
- *      TOKEN_OWNER (optional, defaults to deployer).
+ *      TOKEN_OWNER (optional, defaults to deployer),
+ *      TOKENS (optional, comma-separated subset, e.g. TOKENS=TMON).
+ * Without TOKENS, a symbol whose registry entry already has an address is
+ * skipped, so adding one fund later never redeploys the live ones.
  */
 
-const SYMBOLS = ["RUB", "SILVER", "TRUR", "TGLD", "TMOS", "TOFZ"] as const;
+const ALL_SYMBOLS = ["RUB", "SILVER", "TRUR", "TGLD", "TMOS", "TOFZ", "TMON"];
+const SYMBOLS = process.env.TOKENS
+  ? process.env.TOKENS.split(",").map((s) => s.trim()).filter((s) => ALL_SYMBOLS.includes(s))
+  : ALL_SYMBOLS;
 
 const DEPLOYER_PK = process.env.DEPLOYER_PK;
 if (!DEPLOYER_PK) throw new Error("DEPLOYER_PK not set");
@@ -41,6 +47,11 @@ const registryPath = path.resolve("deployments/cyberia-tokens.json");
 const registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
 
 for (const symbol of SYMBOLS) {
+  const existing = registry.tokens.find((t: { symbol: string }) => t.symbol === symbol);
+  if (!process.env.TOKENS && existing?.address) {
+    console.log(`\nSkipping ${symbol}: already at ${existing.address}`);
+    continue;
+  }
   console.log(`\nDeploying ${symbol}...`);
   const artifactPath = path.resolve(`artifacts/contracts/${symbol}.sol/${symbol}.json`);
   const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));

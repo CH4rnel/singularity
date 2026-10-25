@@ -88,6 +88,13 @@
       "burnable": true
     },
     {
+      "symbol": "TMON",
+      "contract": "TMON",
+      "artifact": "contracts/TMON.sol/TMON.json",
+      "address": null,
+      "burnable": true
+    },
+    {
       "symbol": "HERMES",
       "contract": "HERMES",
       "artifact": "contracts/HERMES.sol/HERMES.json",
