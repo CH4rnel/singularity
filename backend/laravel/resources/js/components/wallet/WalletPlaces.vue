@@ -18,10 +18,12 @@ import {
     PieChart,
     Rocket,
     Route,
+    Swords,
 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import type { Component } from 'vue';
 import { useLocale } from '@/composables/useLocale';
+import { arcadeMessages } from '@/lib/arcadeMessages';
 import { visibleInStore } from '@/lib/storeEdition';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -48,6 +50,7 @@ export type WalletPlace =
     | 'dao'
     | 'nft'
     | 'lain'
+    | 'arena'
     | 'more';
 
 const props = defineProps<{
@@ -62,6 +65,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useLocale(walletMessages);
+const { t: arcadeT } = useLocale(arcadeMessages);
 
 const PLACES: Record<WalletPlace, { icon: Component; label: () => string }> = {
     tokens: { icon: Coins, label: () => t('tokens') },
@@ -81,6 +85,7 @@ const PLACES: Record<WalletPlace, { icon: Component; label: () => string }> = {
     dao: { icon: Landmark, label: () => t('dao') },
     nft: { icon: Images, label: () => t('nftTitle') },
     lain: { icon: Bot, label: () => t('navLain') },
+    arena: { icon: Swords, label: () => arcadeT('nav') },
     more: { icon: MoreHorizontal, label: () => t('navMore') },
 };
 </script>

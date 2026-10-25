@@ -44,7 +44,7 @@ from bot.nft import (
 from bot.handlers import (
     start_command, help_command, set_wallet_command, unset_wallet_command,
     wallet_command, cancel_command, balance_command, claim_command, token_command,
-    github_command, website_command, app_command, open_command, create_token_command,
+    github_command, website_command, app_command, open_command, arena_command, create_token_command,
     set_rewards_interval_command, reward_now_command, whois_command,
     whale_command, x_command, ca_command, stats_command,
     pending_input_handler, pending_create_token_handler, track_chat_member,
@@ -86,6 +86,7 @@ async def post_init(application: Application):
             BotCommand("website", "Open the project website"),
             BotCommand("app", "Download the Cyberia wallet app"),
             BotCommand("open", "Open the wallet inside Telegram"),
+            BotCommand("arcade", "On-chain rock–paper–scissors for CYBER"),
             BotCommand("x", "Show X (Twitter) and Telegram links"),
             BotCommand("ca", "Show this chat's token contract address"),
             BotCommand("stats", "This chat's market data or activity digest"),
@@ -290,6 +291,7 @@ def run_dispatcher():
     application.add_handler(CommandHandler("website", website_command))
     application.add_handler(CommandHandler("app", app_command))
     application.add_handler(CommandHandler("open", open_command))
+    application.add_handler(CommandHandler("arcade", arena_command))
     application.add_handler(CommandHandler("create_token", create_token_command))
     application.add_handler(CommandHandler("set_rewards_interval", set_rewards_interval_command))
     application.add_handler(CommandHandler("reward_now", reward_now_command))

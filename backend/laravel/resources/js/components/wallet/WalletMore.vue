@@ -6,12 +6,14 @@ import {
     Fuel,
     Landmark,
     Settings,
+    Swords,
 } from 'lucide-vue-next';
 import WalletPlaces from '@/components/wallet/WalletPlaces.vue';
 import type { WalletPlace } from '@/components/wallet/WalletPlaces.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import { useWalletMode } from '@/composables/useWalletMode';
+import { arcadeMessages } from '@/lib/arcadeMessages';
 import { hiddenInStore } from '@/lib/storeEdition';
 import { walletMessages } from '@/lib/walletMessages';
 
@@ -50,6 +52,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useLocale(walletMessages);
+const { t: arcadeT } = useLocale(arcadeMessages);
 
 const { simple } = useWalletMode();
 </script>
@@ -81,6 +84,7 @@ const { simple } = useWalletMode();
                 'analytics',
                 'tracker',
                 'ipfs',
+                'arena',
             ]"
             style="margin-top: 0"
             @place="emit('place', $event)"
@@ -117,6 +121,15 @@ const { simple } = useWalletMode();
             <button type="button" class="cw-line-row" @click="emit('dao')">
                 <Landmark :size="20" :stroke-width="1.5" aria-hidden="true" />
                 <span style="flex: 1">{{ t('dao') }}</span>
+            </button>
+            <button
+                v-if="!simple && !hiddenInStore('arena')"
+                type="button"
+                class="cw-line-row"
+                @click="emit('place', 'arena')"
+            >
+                <Swords :size="20" :stroke-width="1.5" aria-hidden="true" />
+                <span style="flex: 1">{{ arcadeT('nav') }}</span>
             </button>
         </div>
 

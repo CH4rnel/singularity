@@ -9,8 +9,8 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from bot.config import WALLET_MINI_APP_URL
-from bot.handlers import mini_app_markup, open_command
+from bot.config import ARENA_MINI_APP_URL, WALLET_MINI_APP_URL
+from bot.handlers import arena_command, mini_app_markup, open_command
 
 
 def _update(chat_type: str = "private") -> MagicMock:
@@ -70,3 +70,26 @@ class OpenCommandTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ArcadeCommandTests(unittest.TestCase):
+    def test_private_chat_opens_the_wallet_on_the_rps_screen(self):
+        update = _update()
+        asyncio.run(arena_command(update, MagicMock()))
+
+        _, kwargs = update.message.reply_text.call_args
+        button = kwargs["reply_markup"].inline_keyboard[0][0]
+
+        self.assertEqual(button.web_app.url, ARENA_MINI_APP_URL)
+        self.assertTrue(ARENA_MINI_APP_URL.endswith("/wallet?screen=arena"))
+        self.assertIsNone(button.url)
+
+    def test_group_reply_carries_a_link_instead(self):
+        update = _update("supergroup")
+        asyncio.run(arena_command(update, MagicMock()))
+
+        _, kwargs = update.message.reply_text.call_args
+        button = kwargs["reply_markup"].inline_keyboard[0][0]
+
+        self.assertIsNone(button.web_app)
+        self.assertEqual(button.url, ARENA_MINI_APP_URL)

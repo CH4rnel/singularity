@@ -18,6 +18,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import WalletAccounts from '@/components/wallet/WalletAccounts.vue';
 import WalletAddNetwork from '@/components/wallet/WalletAddNetwork.vue';
 import WalletAnalytics from '@/components/wallet/WalletAnalytics.vue';
+import WalletArena from '@/components/wallet/WalletArena.vue';
 import WalletBridge from '@/components/wallet/WalletBridge.vue';
 import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
 import WalletBuy from '@/components/wallet/WalletBuy.vue';
@@ -78,6 +79,7 @@ import { useWalletExperiments } from '@/composables/useWalletExperiments';
 import { useWalletMode } from '@/composables/useWalletMode';
 import { useWalletTheme } from '@/composables/useWalletTheme';
 import { analytics } from '@/lib/analytics';
+import { arcadeMessages } from '@/lib/arcadeMessages';
 import { isNativeShell, nativeShell } from '@/lib/native';
 import { hiddenInStore, storeEdition } from '@/lib/storeEdition';
 import {
@@ -139,6 +141,12 @@ const props = defineProps<{
         tokenAddress: string;
         minimumShareBps: number;
     };
+    arena: {
+        enabled: boolean;
+        contractAddress: string;
+        rpcUrl: string;
+        explorerUrl: string;
+    };
     /** Which bridge corridors exist, which are open, and where deposits go. */
     bridge: BridgeConfig;
     /** The limits this server pins under, so the screens can say them first. */
@@ -150,6 +158,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useLocale(walletMessages);
+const { t: arenaT } = useLocale(arcadeMessages);
 
 // Only Solana takes an override: the server picks that endpoint, while every
 // other chain carries its own public default in the registry.
@@ -225,6 +234,7 @@ type Section =
     | 'bridge'
     | 'buy'
     | 'crosschain'
+    | 'arena'
     | 'daily'
     | 'browse'
     | 'domains'
@@ -236,7 +246,12 @@ type Section =
     | 'doctrine';
 type Overlay = 'send' | 'receive' | 'swap' | 'addNetwork';
 
-const section = ref<Section>('portfolio');
+const requestedScreen = new URLSearchParams(window.location.search).get(
+    'screen',
+);
+const section = ref<Section>(
+    requestedScreen === 'arena' ? 'arena' : 'portfolio',
+);
 const overlay = ref<Overlay | null>(null);
 const chain = ref<WalletChainId>('cyberia');
 const prices = ref(props.quotes.prices);
@@ -337,6 +352,7 @@ const RAIL: { heading: () => string; items: RailEntry[] }[] = [
             { id: 'crosschain', label: () => t('crossTile') },
             { id: 'earn', label: () => t('earnTitle') },
             { id: 'liquidity', label: () => t('poolTitle') },
+            { id: 'arena', label: () => arenaT('nav') },
             { id: 'daily', label: () => t('dailyTitle') },
             { id: 'browse', label: () => t('browseTitle') },
             { id: 'gas', label: () => t('gasStation') },
@@ -422,6 +438,7 @@ const TAB_OF: Record<Section, Section> = {
     bridge: 'portfolio',
     buy: 'portfolio',
     crosschain: 'portfolio',
+    arena: 'portfolio',
     daily: 'portfolio',
     browse: 'portfolio',
     developer: 'portfolio',
@@ -2243,6 +2260,13 @@ watch(
                         :wallet="wallet"
                         :open-with="chatPeer"
                         @opened="chatPeer = null"
+                    />
+
+                    <WalletArena
+                        v-else-if="section === 'arena'"
+                        :wallet="wallet"
+                        :config="props.arena"
+                        @back="openSection('portfolio')"
                     />
 
                     <WalletAccounts

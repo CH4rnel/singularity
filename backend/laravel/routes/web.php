@@ -379,6 +379,14 @@ Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatS
         'tokenAddress' => (string) config('services.lain.token_address'),
         'minimumShareBps' => (int) config('services.lain.minimum_share_bps', 1000),
     ],
+    // Public chain coordinates only. The browser signs every Arena action;
+    // Laravel never receives a move secret, seed phrase or private key.
+    'arena' => [
+        'enabled' => preg_match('/^0x[a-fA-F0-9]{40}$/', (string) config('arcade.contract_address')) === 1,
+        'contractAddress' => (string) config('arcade.contract_address'),
+        'rpcUrl' => (string) config('arcade.rpc_url'),
+        'explorerUrl' => rtrim((string) config('arcade.explorer_url'), '/'),
+    ],
     // Pinning is the one thing in the wallet this server actually performs, so
     // the limits it will enforce are stated up front rather than discovered by
     // uploading something too large and reading the rejection.
@@ -415,6 +423,8 @@ Route::get('wallet', fn (Request $request, WalletPriceService $prices, LainChatS
         'nativeRouteFees' => app(BridgeFeeService::class)->frontendNativeFees(),
     ],
 ]))->name('wallet');
+
+Route::get('arcade', fn () => redirect('/wallet?screen=arena'))->name('arcade');
 
 /**
  * The $LAIN holders' room inside that wallet (WalletLainController).

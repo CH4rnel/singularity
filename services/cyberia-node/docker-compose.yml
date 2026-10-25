@@ -13,11 +13,15 @@
 #
 # Differences vs the production validator service on purpose:
 #   --seal=false          this node is a follower, not a sealer
-#   --nat=192.168.0.255 advertise its real public IP to peers
+#   --nat=213.135.146.117  advertise its real public IP to peers (NAT_IP)
+#   127.0.0.1:8545        RPC stays on loopback until it is put behind a proxy
 #   ./data + ./genesis.json are local bind mounts so the dir is self-contained
 services:
   cyberia-node:
-    image: 0xpolygon/polygon-edge:latest
+    # Pin to the image the production validator actually runs (its digest,
+    # see docs/developers/running-a-node.md); `latest` is mutable and the
+    # upstream repository is archived.
+    image: ${POLYGON_EDGE_IMAGE:-0xpolygon/polygon-edge:latest}
     container_name: cyberia-node
     restart: unless-stopped
     user: "0:0"
@@ -25,8 +29,7 @@ services:
       - ./data:/data
       - ./genesis.json:/genesis.json:ro
     ports:
-      - "8545:8545"
-      - "8546:8546"
+      - "127.0.0.1:8545:8545"
       - "1337:1337"
     environment:
       - POLYGON_EDGE_DATA_DIR=/data
@@ -45,6 +48,6 @@ services:
       --json-rpc-block-range-limit=1000
       --block-gas-target=0x1C9C380
       --libp2p=0.0.0.0:1337
-      --nat=${NAT_IP:-192.168.0.255}
+      --nat=${NAT_IP:-213.135.146.117}
       --seal=false
       --price-limit=1000000000
