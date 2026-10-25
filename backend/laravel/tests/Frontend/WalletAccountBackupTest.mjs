@@ -41,11 +41,12 @@ test('backup follows the selected account and never substitutes the vault phrase
 });
 
 test('a Solana key can be brought in while Solana is still switched off', () => {
-    // A new wallet has only the home chain on, which is what the import screen
-    // used to offer — and a Phantom key pasted onto Cyberia was refused as EVM.
+    // A new wallet has only the core chains on — Cyberia and Cyberia 2.0 —
+    // which is what the import screen used to offer, and a Phantom key pasted
+    // onto Cyberia was refused as EVM.
     assert.deepEqual(
         walletChains().map((chain) => chain.id),
-        ['cyberia'],
+        ['cyberia', 'cyberia_fuji'],
     );
 
     const keypair = Keypair.generate();

@@ -199,8 +199,10 @@ export type {
 export { evmChatKey, keySource, seedSource } from '@/lib/wallet/keys';
 export type { WalletKeySource } from '@/lib/wallet/keys';
 export {
+    CORE_CHAINS,
     EVM_CONTRACT_SEND_GAS_CAP,
     HOME_CHAIN,
+    isCoreChain,
     shippedChainByEvmId,
     shippedChains,
     setShippedWalletChains,

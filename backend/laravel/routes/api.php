@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AnalyticsIngestController;
 use App\Http\Controllers\Api\BridgeController;
 use App\Http\Controllers\Api\BridgeEventController;
 use App\Http\Controllers\Api\CrmTaskIngestController;
+use App\Http\Controllers\Api\FujiChainController;
 use App\Http\Controllers\Api\FujiFaucetController;
 use App\Http\Controllers\Api\FujiRpcController;
 use App\Http\Controllers\Api\IrcLainController;
@@ -162,6 +163,11 @@ Route::get('fuji/faucet', [FujiFaucetController::class, 'status'])
     ->middleware('throttle:60,1')->name('api.fuji.faucet.status');
 Route::post('fuji/faucet', [FujiFaucetController::class, 'claim'])
     ->middleware('throttle:6,1')->name('api.fuji.faucet.claim');
+
+// The wallet's chain panel: fees, rewards, the validator's runway, the wallets
+// that keep services alive. Read-only; the admin's wallet signs any change.
+Route::get('fuji/chain', FujiChainController::class)
+    ->middleware('throttle:60,1')->name('api.fuji.chain');
 
 // Solana wallet auth (Phantom)
 Route::prefix('solana-wallet')->group(function () {

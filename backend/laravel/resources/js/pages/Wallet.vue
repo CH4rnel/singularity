@@ -22,6 +22,7 @@ import WalletArena from '@/components/wallet/WalletArena.vue';
 import WalletBridge from '@/components/wallet/WalletBridge.vue';
 import WalletBrowse from '@/components/wallet/WalletBrowse.vue';
 import WalletBuy from '@/components/wallet/WalletBuy.vue';
+import WalletChainControl from '@/components/wallet/WalletChainControl.vue';
 import WalletChart from '@/components/wallet/WalletChart.vue';
 import WalletChat from '@/components/wallet/WalletChat.vue';
 import WalletChatToast from '@/components/wallet/WalletChatToast.vue';
@@ -239,6 +240,7 @@ type Section =
     | 'browse'
     | 'domains'
     | 'developer'
+    | 'chain'
     | 'experiments'
     | 'gallery'
     | 'underground'
@@ -444,6 +446,7 @@ const TAB_OF: Record<Section, Section> = {
     daily: 'portfolio',
     browse: 'portfolio',
     developer: 'portfolio',
+    chain: 'portfolio',
     experiments: 'portfolio',
     gallery: 'portfolio',
     underground: 'portfolio',
@@ -732,6 +735,7 @@ const PARENTS: Partial<Record<Section, Section>> = {
     preferences: 'portfolio',
     accounts: 'preferences',
     developer: 'preferences',
+    chain: 'preferences',
     experiments: 'preferences',
     gallery: 'preferences',
     underground: 'preferences',
@@ -2706,6 +2710,13 @@ watch(
                         @workshop="openWorkshop(null, 'doctrine')"
                     />
 
+                    <!-- Cyberia 2.0's own panel, under Settings beside Networks. -->
+                    <WalletChainControl
+                        v-else-if="section === 'chain'"
+                        :wallet="wallet"
+                        @back="openSection('preferences')"
+                    />
+
                     <WalletPreferences
                         v-else-if="section === 'preferences'"
                         :wallet="wallet"
@@ -2715,6 +2726,7 @@ watch(
                         @security="openSection('security')"
                         @accounts="openSection('accounts')"
                         @networks="openSection('networks')"
+                        @chain="openSection('chain')"
                         @proxy="openSection('proxy')"
                         @developer="openSection('developer')"
                         @back="openSection('portfolio')"

@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue';
+import { CYBERIA_FUJI_PUBLIC_RPC } from '@/lib/evmChains';
 import { nftChain } from '@/lib/nftChains';
 import {
     PRIMARY_ACCOUNT_ID,
@@ -48,7 +49,7 @@ import {
     setCatalogueWalletChains,
     setShippedWalletChains,
     shippedChains,
-    HOME_CHAIN,
+    isCoreChain,
     setCustomWalletChains,
     settleArenaGame,
     unsealVault,
@@ -90,6 +91,8 @@ import type {
 import { accountBackupPhrase } from '@/lib/wallet/accounts';
 import { lockOnEvm } from '@/lib/wallet/bridge';
 import type { BridgeLock } from '@/lib/wallet/bridge';
+import { submitFeeConfig, submitFeeRecipient } from '@/lib/wallet/chainAdmin';
+import type { FeeConfig } from '@/lib/wallet/chainAdmin';
 import { executeCrossSwap } from '@/lib/wallet/crosschain';
 import type {
     CrossQuote,
@@ -383,7 +386,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         enabledNetworks.value = ids;
         setShippedWalletChains(
             shippedChains().filter(
-                (chain) => chain.id === HOME_CHAIN || ids.includes(chain.id),
+                (chain) => isCoreChain(chain.id) || ids.includes(chain.id),
             ),
         );
         setCatalogueWalletChains(catalogueWalletChains(ids));
@@ -455,7 +458,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
      * ignores one.
      */
     const setNetwork = (id: WalletChainId, on: boolean): void => {
-        if (id === HOME_CHAIN) {
+        if (isCoreChain(id)) {
             return;
         }
 
@@ -1701,6 +1704,54 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
             ),
     };
 
+    /* ------------------------------------------------- chain administration --- */
+
+    /**
+     * Cyberia 2.0's own rules — what gas costs and where fees go — changed by
+     * an account the chain lists as allowed to. Signed through the same closure
+     * as every other signature; the chain refuses anyone it does not list.
+     */
+    const chainWrite = async <T>(
+        write: (source: WalletKeySource, rpcUrl: string) => Promise<T>,
+    ): Promise<T> => {
+        const source = sourceFor('cyberia_fuji');
+
+        busy.value = true;
+
+        try {
+            return await write(
+                source,
+                rpcFor('cyberia_fuji') ?? CYBERIA_FUJI_PUBLIC_RPC,
+            );
+        } finally {
+            busy.value = false;
+        }
+    };
+
+    const chainAdmin = {
+        setFeeConfig: (
+            config: FeeConfig,
+            latestBaseFee: bigint,
+        ): Promise<{ hash: string; nudge: string | null }> =>
+            chainWrite((source, rpcUrl) =>
+                submitFeeConfig(source, { config, latestBaseFee, rpcUrl }),
+            ),
+        /** One address for every fee, or null for each block's producer. */
+        setFeeRecipient: (
+            recipient: string | null,
+            latestBaseFee: bigint,
+            minBaseFee: bigint,
+        ): Promise<string> =>
+            chainWrite((source, rpcUrl) =>
+                submitFeeRecipient(source, {
+                    recipient,
+                    latestBaseFee,
+                    minBaseFee,
+                    rpcUrl,
+                }),
+            ),
+    };
+
     /* ---------------------------------------------------------------- chat --- */
 
     /**
@@ -2107,6 +2158,7 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
         wrap,
         launchToken,
         domains,
+        chainAdmin,
         /** Encrypted chat: the public identity, and sealing under it. */
         chatIdentity,
         chatSeal,

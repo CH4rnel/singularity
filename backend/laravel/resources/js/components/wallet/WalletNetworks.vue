@@ -4,7 +4,7 @@ import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import { useLocale } from '@/composables/useLocale';
 import type { MultiWallet } from '@/composables/useMultiWallet';
 import {
-    HOME_CHAIN,
+    isCoreChain,
     NETWORK_CATALOGUE,
     catalogueMark,
     shippedChains,
@@ -100,7 +100,7 @@ const all = computed<Row[]>(() => {
         indexed: chain.readToken !== undefined,
         explorer: chain.explorerTxUrl('0x0') !== null,
         on: on.includes(chain.id),
-        home: chain.id === HOME_CHAIN,
+        home: isCoreChain(chain.id),
     }));
 
     const catalogue = NETWORK_CATALOGUE.map<Row>((network) => ({

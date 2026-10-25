@@ -1060,9 +1060,10 @@ const SHIPPED_CHAINS: readonly WalletChain[] = [
     evmChain({
         id: 'cyberia_fuji',
         chainId: CYBERIA_FUJI_CHAIN_ID,
-        label: 'Cyberia Fuji',
-        mark: { tag: 'CF', hue: 'var(--cw-net-cyberia)', shape: 'square' },
+        label: 'Cyberia 2.0',
+        mark: { tag: 'C2', hue: 'var(--cw-net-cyberia)', shape: 'square' },
         historyNote: 'historyNoIndexer',
+        note: 'The new Cyberia: an Avalanche L1, on the Fuji testnet for now. The old Cyberia stays as it is.',
     }),
     evmChain({
         id: 'avalanche_fuji',
@@ -1359,8 +1360,24 @@ const SHIPPED_CHAINS: readonly WalletChain[] = [
     }),
 ];
 
-/** The chain this wallet is for. Always on, and the one network with no switch. */
+/** The chain this wallet is for. Always on, with no switch. */
 export const HOME_CHAIN: WalletChainId = 'cyberia';
+
+/**
+ * Cyberia, and Cyberia 2.0 beside it.
+ *
+ * The new chain (the Avalanche L1, on Fuji for now) arrives as a second home
+ * rather than a replacement: both are on from the first second and neither has
+ * a switch, because a wallet that quietly stopped showing the old Cyberia
+ * would look like it had lost the coins that are still there.
+ */
+export const CORE_CHAINS: readonly WalletChainId[] = [
+    HOME_CHAIN,
+    'cyberia_fuji',
+];
+
+export const isCoreChain = (id: WalletChainId): boolean =>
+    CORE_CHAINS.includes(id);
 
 /** Every network the wallet ships knowing, whether or not it is switched on. */
 export const shippedChains = (): readonly WalletChain[] => SHIPPED_CHAINS;
@@ -1396,8 +1413,8 @@ let customChains: readonly WalletChain[] = [];
  * balance read. Until the composable says otherwise the home chain is the whole
  * of it, which is the state a wallet opens in.
  */
-let shippedOn: readonly WalletChain[] = SHIPPED_CHAINS.filter(
-    (chain) => chain.id === HOME_CHAIN,
+let shippedOn: readonly WalletChain[] = SHIPPED_CHAINS.filter((chain) =>
+    isCoreChain(chain.id),
 );
 
 /**

@@ -56,6 +56,7 @@ defineEmits<{
     security: [];
     accounts: [];
     networks: [];
+    chain: [];
     proxy: [];
     developer: [];
 }>();
@@ -404,6 +405,14 @@ onBeforeUnmount(unsubscribe);
                 @click="$emit('networks')"
             >
                 {{ t('networksSection') }} →
+            </button>
+            <button
+                type="button"
+                class="cw-line-row"
+                data-test="chain-door"
+                @click="$emit('chain')"
+            >
+                {{ t('chainDoor') }} →
             </button>
             <button type="button" class="cw-line-row" @click="$emit('proxy')">
                 {{ t('proxyTitle') }} →

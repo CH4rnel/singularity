@@ -24,6 +24,36 @@ return [
      */
     'treasury' => (string) env('FUJI_DAO_TREASURY', '0x96cd117786EBC0fDbef56a6559FEB2bd2BaE3393'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | The chain panel (wallet → Settings → Cyberia Fuji)
+    |--------------------------------------------------------------------------
+    |
+    | What the panel reads besides the precompiles themselves: the validator
+    | whose P-Chain balance keeps the L1 alive, the addresses that must not run
+    | dry, and the market prices behind "fees like an Ethereum transfer".
+    |
+    */
+
+    'chain' => [
+
+        /** The L1 validator; its balance pays the P-Chain fee by the second. */
+        'validation_id' => (string) env('FUJI_VALIDATION_ID', '2KZnTnX6QqZ1WNAFd7BCp9cKgXWYd3MXoj1zpccdSfVG14ULLJ'),
+        'pchain_rpc_url' => (string) env('FUJI_PCHAIN_RPC_URL', 'https://api.avax-test.network/ext/bc/P'),
+
+        /** Admin of FeeManager and RewardManager in genesis. */
+        'operator' => (string) env('FUJI_OPERATOR_ADDRESS', '0xae8F9c21b082d09857622824ADA365D71b18B44B'),
+
+        /** Pays Teleporter deliveries on the L1. */
+        'icm_relayer' => (string) env('FUJI_ICM_RELAYER_ADDRESS', '0xEc2D561301e9A9cfd07DAB3524Aa6be6a5988480'),
+
+        /** Who NativeMinter lets mint CYBER: the ICTT NativeTokenRemote only. */
+        'native_minters' => ['0x386F2a822653F4Af8a35774d3FBE80Bf87AdC71f'],
+
+        /** Mainnet gas price for the "same fee as Ethereum" reference. */
+        'ethereum_rpc_url' => (string) env('FUJI_ETHEREUM_RPC_URL', 'https://ethereum-rpc.publicnode.com'),
+    ],
+
     'faucet' => [
 
         /** Off means the page says the faucet is closed, not that it errors. */

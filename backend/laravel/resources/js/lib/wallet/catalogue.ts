@@ -1,4 +1,4 @@
-import { HOME_CHAIN, evmChain, shippedChains } from '@/lib/wallet/chains';
+import { CORE_CHAINS, evmChain, shippedChains } from '@/lib/wallet/chains';
 import type {
     WalletChain,
     WalletChainId,
@@ -1311,9 +1311,10 @@ export const writeNetworkChoices = (choices: NetworkChoices): void => {
  * hundred and twenty starts, since the only thing being on decides is whether
  * a balance is read for it on every refresh.
  *
- * The home chain is added whatever the record says. It is the chain this wallet
- * is for, it has no switch on the networks screen, and a wallet showing no
- * Cyberia card is not a state worth being able to reach by mistake.
+ * The core chains, Cyberia and Cyberia 2.0, are added whatever the record says.
+ * They are what this wallet is for, they have no switch on the networks screen,
+ * and a wallet showing no Cyberia card is not a state worth being able to reach
+ * by mistake.
  */
 export const networksOn = (choices: NetworkChoices): WalletChainId[] => {
     const on = [
@@ -1321,7 +1322,7 @@ export const networksOn = (choices: NetworkChoices): WalletChainId[] => {
         ...NETWORK_CATALOGUE.map((network) => network.id),
     ].filter((id) => choices[id] === true);
 
-    return [...new Set([HOME_CHAIN, ...on])];
+    return [...new Set([...CORE_CHAINS, ...on])];
 };
 
 /**

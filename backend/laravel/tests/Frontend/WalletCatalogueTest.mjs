@@ -56,9 +56,9 @@ test('nothing in the catalogue collides with anything else', () => {
     const tags = new Set(shippedChains().map((chain) => chain.mark.tag));
     const shippedIds = new Set(shippedChains().map((chain) => chain.id));
     const builtinChainIds = new Set(
-        shippedChains().map((chain) => chain.chainId).filter(
-            (id) => id !== undefined,
-        ),
+        shippedChains()
+            .map((chain) => chain.chainId)
+            .filter((id) => id !== undefined),
     );
 
     for (const network of NETWORK_CATALOGUE) {
@@ -274,23 +274,28 @@ test('only the choices that differ from the default are stored', () => {
     }
 });
 
-test('a wallet that has chosen nothing is one network', () => {
-    // The whole point of the switches: a wallet opens reading one balance, on
-    // the chain it is for, and every other network is something its owner asked
-    // for. Eight was the shipped default once, and seven of those were read on
-    // every refresh for somebody who had never named one of them.
-    assert.deepEqual(networksOn({}), ['cyberia']);
+test('a wallet that has chosen nothing is the two Cyberias', () => {
+    // The whole point of the switches: a wallet opens reading the chains it is
+    // for — Cyberia and Cyberia 2.0 beside it — and every other network is
+    // something its owner asked for. Eight was the shipped default once, and
+    // most of those were read on every refresh for somebody who had never
+    // named one of them.
+    assert.deepEqual(networksOn({}), ['cyberia', 'cyberia_fuji']);
 
     // A record left by the older rule — shipped networks arrived on, and only
     // one switched off was written down — reads as off now, which is what the
     // absence of an entry says too.
-    assert.deepEqual(networksOn({ bnb: false }), ['cyberia']);
+    assert.deepEqual(networksOn({ bnb: false }), ['cyberia', 'cyberia_fuji']);
 
-    // And the home chain is never absent, whatever the record says about it.
-    assert.deepEqual(networksOn({ cyberia: false }), ['cyberia']);
+    // And the core chains are never absent, whatever the record says.
+    assert.deepEqual(networksOn({ cyberia: false, cyberia_fuji: false }), [
+        'cyberia',
+        'cyberia_fuji',
+    ]);
 
     assert.deepEqual(networksOn({ solana: true, 'arbitrum-one': true }), [
         'cyberia',
+        'cyberia_fuji',
         'solana',
         'arbitrum-one',
     ]);

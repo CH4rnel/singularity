@@ -8,7 +8,6 @@ use App\Support\TokenAmount;
 use Elliptic\EC;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
@@ -62,6 +61,8 @@ class FujiFaucetService
     private const CURRENT_REWARD_ADDRESS = '0xe915608b';
 
     private const TRANSFER_GAS = '21000';
+
+    public function __construct(private FujiRpc $rpc) {}
 
     public function enabled(): bool
     {
@@ -118,7 +119,7 @@ class FujiFaucetService
 
         $status = [
             'enabled' => $enabled,
-            'chainId' => $this->chainId(),
+            'chainId' => $this->rpc->chainId(),
             'gasPrice' => $network['gasPrice'],
             'feeRecipient' => $network['feeRecipient'],
             'faucet' => $enabled ? $this->faucetAddress() : null,
@@ -258,18 +259,15 @@ class FujiFaucetService
     private function network(): array
     {
         return Cache::remember('fuji.faucet:network', 15, function (): array {
-            $gasPrice = $this->rpc('eth_gasPrice');
-            $reward = $this->rpc('eth_call', [
-                ['to' => self::REWARD_MANAGER, 'data' => self::CURRENT_REWARD_ADDRESS],
-                'latest',
-            ]);
+            $gasPrice = $this->rpc->quantity('eth_gasPrice');
+            $reward = $this->rpc->call(self::REWARD_MANAGER, self::CURRENT_REWARD_ADDRESS);
 
             $recipient = is_string($reward) && strlen($reward) >= 42
                 ? '0x'.substr($reward, -40)
                 : null;
 
             return [
-                'gasPrice' => $gasPrice !== null ? TokenAmount::hexToDec($gasPrice) : null,
+                'gasPrice' => $gasPrice,
                 // A zero reward address means fees go to each block's producer.
                 'feeRecipient' => $recipient !== null && $recipient !== '0x'.str_repeat('0', 40) ? $recipient : null,
             ];
@@ -290,9 +288,7 @@ class FujiFaucetService
 
     private function balance(string $address): ?string
     {
-        $result = $this->rpc('eth_getBalance', [$address, 'latest']);
-
-        return $result !== null ? TokenAmount::hexToDec($result) : null;
+        return $this->rpc->balance($address);
     }
 
     private function cooldownRemaining(string $address): int
@@ -336,8 +332,8 @@ class FujiFaucetService
             $result = Process::path($hardhatDir)
                 ->env([
                     'BRIDGE_RELAYER_PRIVATE_KEY' => (string) config('fuji.faucet.private_key'),
-                    'EVM_RPC_URL' => $this->rpcUrl(),
-                    'EVM_CHAIN_ID' => (string) $this->chainId(),
+                    'EVM_RPC_URL' => $this->rpc->url(),
+                    'EVM_CHAIN_ID' => (string) $this->rpc->chainId(),
                     'EVM_NETWORK_NAME' => 'cyberia-fuji',
                 ])
                 ->timeout(90)
@@ -382,34 +378,6 @@ class FujiFaucetService
         }
 
         return ['txHash' => $hash, 'confirmed' => $confirmed !== null];
-    }
-
-    private function rpc(string $method, array $params = []): ?string
-    {
-        try {
-            $result = Http::connectTimeout(3)->timeout(10)->post($this->rpcUrl(), [
-                'jsonrpc' => '2.0',
-                'id' => 1,
-                'method' => $method,
-                'params' => $params,
-            ])->json('result');
-
-            return is_string($result) && str_starts_with($result, '0x') ? $result : null;
-        } catch (\Throwable $e) {
-            Log::warning('Fuji faucet RPC read failed', ['method' => $method, 'error' => $e->getMessage()]);
-
-            return null;
-        }
-    }
-
-    private function rpcUrl(): string
-    {
-        return (string) config('bridge.chains.cyberia_fuji.rpc_url', 'https://cyberia.church/api/fuji/rpc');
-    }
-
-    private function chainId(): int
-    {
-        return (int) config('bridge.chains.cyberia_fuji.evm_chain_id', 49407);
     }
 
     private function ipHash(?string $ip): ?string
