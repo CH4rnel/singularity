@@ -33,7 +33,7 @@ import type { WalletKeySource } from '@/lib/wallet/keys';
  *
  * Until the contract is deployed `SHOP_ADDRESS` is null and the screen says so.
  */
-export const SHOP_ADDRESS: string | null = null;
+export const SHOP_ADDRESS: string | null = '0xb0ac30907c04b61f1482e62ea66ef4562a690917';
 
 export const SHOP_CHAIN_ID = CYBERIA_FUJI_CHAIN_ID;
 

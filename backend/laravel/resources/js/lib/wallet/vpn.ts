@@ -17,7 +17,7 @@ import type { WalletKeySource } from '@/lib/wallet/keys';
  * Until the contract is deployed `VPN_PASS_ADDRESS` is null, and until a node
  * is listed `VPN_NODES` is empty; the screen says which.
  */
-export const VPN_PASS_ADDRESS: string | null = null;
+export const VPN_PASS_ADDRESS: string | null = '0x3a7b1aF57EbF55a607344333E6Ba9023C405BeC7';
 
 /** The pass lives on Cyberia, where CYBER is the coin that pays for it. */
 export const VPN_CHAIN_ID = CYBERIA_CHAIN_ID;
