@@ -1,25 +1,16 @@
 import { CYBERIA_CHAIN_ID } from '@/lib/evmChains';
 import { walletChain, walletChains } from '@/lib/wallet/chains';
 import type { WalletChain, WalletChainId } from '@/lib/wallet/chains';
+import { exchangeListing } from '@/lib/wallet/exchangeCandles';
 
 /**
- * What the wallet can draw a price history for, and where that history comes
- * from.
- *
- * Two sources, and they are never blurred, because they answer with different
- * authority. An asset that trades on exchanges has a real order book somewhere
- * and TradingView already draws it better than this wallet ever will. An asset
- * that trades only in this chain's own pools has no book at all — its history
- * exists as `Sync` events and nothing else — so those candles are rebuilt from
- * the chain, hop by hop, by `lib/marketCandles.ts`.
- *
- * Neither source is offered as the other. A pair with no exchange listing does
- * not get an empty TradingView frame, and a pair whose pools this browser
- * cannot read does not get a flat line: it says which of the two it is.
+ * Exchange OHLCV and routed pool history share a bundled chart renderer.
+ * Their sources stay explicit: an exchange listing is never substituted for
+ * this chain's own token, and an unreadable pool never becomes a flat line.
  */
 
 export type MarketSource =
-    /** Drawn by TradingView, from a real exchange's book. */
+    /** Read from the named exchange and drawn with Lightweight Charts. */
     | 'exchange'
     /** Rebuilt here from the pools' own `Sync` events. */
     | 'onchain'
@@ -38,11 +29,7 @@ export type Market = {
     source: MarketSource;
     /** The network whose colour and tag the row wears. */
     chain: WalletChainId;
-    /**
-     * TradingView's own symbol, exchange included. Present only when `source`
-     * is `exchange`, and never guessed: an id TradingView does not know renders
-     * as an empty chart with no error, which is worse than saying we have none.
-     */
+    /** Verified exchange listing, also used for the public candle feed. */
     tvSymbol?: string;
     /** ERC-20 contract, for the markets priced from this chain's pools. */
     address?: string;
@@ -83,52 +70,6 @@ const EXCHANGE_SYMBOLS: Partial<Record<WalletChainId, string>> = {
 export const exchangeSymbol = (chain: WalletChainId): string | null =>
     EXCHANGE_SYMBOLS[chain] ?? null;
 
-/**
- * The URL of TradingView's embedded chart.
- *
- * It is loaded as an `iframe` pointing at TradingView's own origin, and never
- * as their `tv.js` loader. The loader injects a script into the page that
- * embeds it, and this page is a wallet: it decrypts a seed phrase into memory
- * and keeps a vault in this origin's localStorage. Third-party script here
- * would run with all of that in reach, and no chart is worth that. In an iframe
- * the same widget is a different origin and can reach none of it.
- */
-export const exchangeChartUrl = (
-    tvSymbol: string,
-    options: { theme: 'light' | 'dark'; locale: string; interval?: string },
-): string => {
-    const params = new URLSearchParams({
-        symbol: tvSymbol,
-        interval: options.interval ?? '60',
-        theme: options.theme,
-        style: '1',
-        locale: options.locale,
-        hide_side_toolbar: '1',
-        allow_symbol_change: '0',
-        save_image: '0',
-        withdateranges: '1',
-        timezone: 'Etc/UTC',
-    });
-
-    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-};
-
-/**
- * TradingView localises its own chrome, and answers an unknown locale in
- * English. Only the languages the wallet itself speaks are mapped.
- */
-export const exchangeChartLocale = (locale: string): string => {
-    if (locale === 'ru') {
-        return 'ru';
-    }
-
-    if (locale === 'zh') {
-        return 'zh_CN';
-    }
-
-    return 'en';
-};
-
 /** Whether this network's own coin can be charted, and how. */
 const coinSource = (chain: WalletChain): MarketSource => {
     if (exchangeSymbol(chain.id)) {
@@ -156,7 +97,9 @@ export const coinMarkets = (): Market[] =>
             id: `coin:${chain.id}`,
             symbol: chain.symbol,
             label: chain.label,
-            quote: 'USD',
+            quote:
+                exchangeListing(exchangeSymbol(chain.id) ?? undefined)?.quote ??
+                'USD',
             source,
             chain: chain.id,
             tvSymbol: exchangeSymbol(chain.id) ?? undefined,

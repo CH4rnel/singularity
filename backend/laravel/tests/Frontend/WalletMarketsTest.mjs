@@ -3,8 +3,6 @@ import test from 'node:test';
 import { setShippedWalletChains, shippedChains } from '@/lib/wallet';
 import {
     coinMarkets,
-    exchangeChartLocale,
-    exchangeChartUrl,
     exchangeSymbol,
     marketChainId,
     searchMarkets,
@@ -109,31 +107,28 @@ test('search reads a ticker, a name and a pasted contract', () => {
 
     assert.equal(searchMarkets(markets, 'lain').length, 1);
     assert.equal(searchMarkets(markets, 'BTC').length, 1);
-    assert.equal(searchMarkets(markets, '0xABC00000000000000000000000000000000000').length, 1);
+    assert.equal(
+        searchMarkets(markets, '0xABC00000000000000000000000000000000000')
+            .length,
+        1,
+    );
     assert.equal(searchMarkets(markets, '   ').length, markets.length);
     assert.equal(searchMarkets(markets, 'nothing').length, 0);
 });
 
-test('the embed points at TradingView and carries the wallet theme', () => {
-    const url = new URL(
-        exchangeChartUrl('BINANCE:BTCUSDT', { theme: 'light', locale: 'ru' }),
+test('the chart names the exchange quote currency rather than relabelling USDT as USD', () => {
+    const markets = coinMarkets();
+
+    assert.equal(
+        markets.find((market) => market.chain === 'bitcoin').quote,
+        'USDT',
     );
-
-    // The origin is the whole security argument: the widget runs there, not in
-    // the page holding the vault.
-    assert.equal(url.origin, 'https://s.tradingview.com');
-    assert.equal(url.pathname, '/widgetembed/');
-    assert.equal(url.searchParams.get('symbol'), 'BINANCE:BTCUSDT');
-    assert.equal(url.searchParams.get('theme'), 'light');
-    assert.equal(url.searchParams.get('locale'), 'ru');
-    // Nothing in the frame may change which market is being shown.
-    assert.equal(url.searchParams.get('allow_symbol_change'), '0');
-});
-
-test('only the languages the wallet speaks are passed to the widget', () => {
-    assert.equal(exchangeChartLocale('ru'), 'ru');
-    assert.equal(exchangeChartLocale('zh'), 'zh_CN');
-    assert.equal(exchangeChartLocale('en'), 'en');
-    // An unmapped locale is English rather than a code TradingView will reject.
-    assert.equal(exchangeChartLocale('pt'), 'en');
+    assert.equal(
+        markets.find((market) => market.chain === 'monero').quote,
+        'USD',
+    );
+    assert.equal(
+        markets.find((market) => market.chain === 'cyberia').quote,
+        'USD',
+    );
 });

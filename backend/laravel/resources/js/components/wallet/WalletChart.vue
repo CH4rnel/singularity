@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import NetworkMark from '@/components/wallet/NetworkMark.vue';
 import WalletCandles from '@/components/wallet/WalletCandles.vue';
+import WalletExchangeChart from '@/components/wallet/WalletExchangeChart.vue';
 import { useLocale } from '@/composables/useLocale';
 import { liquidityChainById } from '@/lib/liquidityChains';
 import type { LiquidityChainConfig } from '@/lib/liquidityChains';
@@ -19,30 +20,11 @@ import {
     routeSpot,
 } from '@/lib/wallet/marketHistory';
 import type { MarketRoute } from '@/lib/wallet/marketHistory';
-import {
-    exchangeChartLocale,
-    exchangeChartUrl,
-    marketChainId,
-} from '@/lib/wallet/markets';
+import { marketChainId } from '@/lib/wallet/markets';
 import type { Market } from '@/lib/wallet/markets';
 import { walletMessages } from '@/lib/walletMessages';
 
-/**
- * One market's price history.
- *
- * Which chart you get is decided by what actually exists, never by preference.
- * An asset with an exchange listing gets TradingView's own widget — a real book
- * with real depth, drawn by people whose whole product that is. An asset that
- * trades only in this chain's pools gets candles rebuilt from those pools,
- * because there is no book to draw and a wallet that showed an empty
- * TradingView frame for CYBER would be claiming the market does not exist.
- *
- * TradingView arrives as an `iframe` on TradingView's origin and never as their
- * script tag. Their loader executes in the embedding page, and this page holds
- * a decrypted seed in memory and a vault in this origin's localStorage; no
- * chart is worth handing a third party that reach. In a frame the same widget
- * is another origin and can touch none of it.
- */
+/** One local renderer for exchange OHLCV and this chain's routed pool history. */
 
 const props = defineProps<{
     market: Market;
@@ -56,19 +38,6 @@ const props = defineProps<{
 const emit = defineEmits<{ back: []; swap: [market: Market] }>();
 
 const { locale, t } = useLocale(walletMessages);
-
-/* --------------------------------------------------------- exchange --- */
-
-const frameUrl = computed(() =>
-    props.market.tvSymbol
-        ? exchangeChartUrl(props.market.tvSymbol, {
-              theme: props.scheme,
-              locale: exchangeChartLocale(locale.value),
-          })
-        : null,
-);
-
-/* ---------------------------------------------------------- on chain --- */
 
 const route = ref<MarketRoute | null>(null);
 const history = ref<MarketHistory | null>(null);
@@ -194,6 +163,9 @@ const load = async (): Promise<void> => {
 watch(
     () => props.market.id,
     () => {
+        inFlight?.abort();
+        loading.value = false;
+        failed.value = false;
         route.value = null;
         history.value = null;
         rangePinned.value = false;
@@ -251,25 +223,8 @@ const changePct = computed(() => {
         : null;
 });
 
-/**
- * The price above the chart is the price *in* the chart, never a second
- * opinion beside it.
- *
- * On an on-chain market the two are different numbers and always will be: the
- * wallet's USD quote for CYBER comes from the CYBER.sol feed on Solana, while
- * this chart is the routed WCYBER/USDC rate on Cyberia, and they have been
- * three orders of magnitude apart. Printing the feed over the pool's own
- * candles put two prices for one asset on one screen with nothing saying which
- * was which — so the routed spot wins here, and the feed keeps the portfolio.
- *
- * On an exchange market there is no such conflict: TradingView draws its own
- * book and the wallet's quote is the same asset from the same kind of venue.
- */
 const headline = computed(() => {
-    const shown =
-        props.market.source === 'onchain'
-            ? (spot.value ?? props.price)
-            : (props.price ?? spot.value);
+    const shown = spot.value ?? props.price;
 
     return shown === null ? '—' : formatUsdPrice(shown, locale.value);
 });
@@ -309,6 +264,7 @@ const routeSymbols = computed(() =>
         </div>
 
         <div
+            v-if="market.source !== 'exchange'"
             style="
                 display: flex;
                 align-items: baseline;
@@ -329,36 +285,11 @@ const routeSymbols = computed(() =>
             >
         </div>
 
-        <!--
-          Exchange book, in a frame on TradingView's own origin.
-
-          The link under it is not a nicety. A cross-origin frame cannot be
-          inspected from here, so a widget that loads its scripts and then
-          paints nothing — which is what their free embed does for a referrer it
-          does not like — is indistinguishable from one still loading, and there
-          is no event to hang a fallback on. The way out is stated instead of
-          detected.
-        -->
-        <iframe
-            v-if="market.source === 'exchange' && frameUrl"
-            :key="frameUrl"
-            class="cw-chart-frame"
-            :src="frameUrl"
-            :title="`${market.symbol} / ${market.quote}`"
-            loading="lazy"
-            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-        ></iframe>
-
-        <a
-            v-if="market.source === 'exchange' && market.tvSymbol"
-            class="cw-back"
-            style="margin-top: 8px; text-decoration: none"
-            :href="`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(market.tvSymbol)}`"
-            target="_blank"
-            rel="noopener noreferrer"
-        >
-            {{ t('marketOpenOnTv') }}
-        </a>
+        <WalletExchangeChart
+            v-if="market.source === 'exchange'"
+            :market="market"
+            :scheme="scheme"
+        />
 
         <!-- Rebuilt from this chain's own pools. -->
         <template v-else-if="market.source === 'onchain'">
@@ -398,6 +329,7 @@ const routeSymbols = computed(() =>
 
             <WalletCandles
                 v-else-if="candles.length > 0"
+                :key="`${market.id}:${rangeKey}`"
                 :candles="candles"
                 :base-symbol="market.symbol"
                 :quote-symbol="market.quote"

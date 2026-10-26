@@ -17,7 +17,7 @@ import { formatNum, formatPrice } from '@/lib/dexFormat';
 import type { MarketCandle } from '@/lib/marketCandles';
 
 /**
- * Candles for a market that exists only in this chain's pools.
+ * Bundled Lightweight Charts renderer for exchange and on-chain candles.
  *
  * The renderer is the same library the site's `/swap` chart uses and the data
  * is the same replay of `Sync` events — what is different here is that the
@@ -61,6 +61,7 @@ const legend = ref<Legend | null>(null);
 let chart: IChartApi | null = null;
 let candleSeries: ISeriesApi<'Candlestick'> | null = null;
 let volumeSeries: ISeriesApi<'Histogram'> | null = null;
+let fitted = false;
 
 /**
  * The wallet's tokens, resolved to real colours. `getComputedStyle` and not the
@@ -80,6 +81,7 @@ const token = (name: string, fallback: string): string => {
 const chartOptions = () => ({
     layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
+        attributionLogo: true,
         textColor: token('--cw-dim', '#5a636c'),
         fontSize: 10,
         fontFamily: token('--cw-mono', 'monospace'),
@@ -146,19 +148,22 @@ const applyData = (): void => {
         })),
     );
 
-    // `fitContent()` puts the first and last bars flush against the frame,
-    // which slices them in half; widen by a bar on each side.
-    const timeScale = chart.timeScale();
+    // Fit on opening a market/range, then keep the reader's zoom on refresh.
+    if (!fitted && props.candles.length > 0) {
+        const timeScale = chart.timeScale();
 
-    timeScale.fitContent();
+        timeScale.fitContent();
 
-    const visible = timeScale.getVisibleLogicalRange();
+        const visible = timeScale.getVisibleLogicalRange();
 
-    if (visible) {
-        timeScale.setVisibleLogicalRange({
-            from: visible.from - 1,
-            to: visible.to + 1,
-        });
+        if (visible) {
+            timeScale.setVisibleLogicalRange({
+                from: visible.from - 1,
+                to: visible.to + 1,
+            });
+        }
+
+        fitted = true;
     }
 
     const last = props.candles[props.candles.length - 1];
@@ -297,5 +302,18 @@ onBeforeUnmount(() => {
             role="img"
             :aria-label="`${baseSymbol}/${quoteSymbol}`"
         ></div>
+        <a
+            class="cw-rowdata"
+            style="
+                display: inline-block;
+                margin-top: 6px;
+                text-decoration: none;
+            "
+            href="https://www.tradingview.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >TradingView Lightweight Charts™ · Copyright (с) 2025 TradingView,
+            Inc.</a
+        >
     </div>
 </template>
