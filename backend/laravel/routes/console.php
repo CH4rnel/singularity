@@ -37,6 +37,9 @@ Schedule::command('launchpad:pin-sites')->hourly()->withoutOverlapping();
 // answer can drift from the question; cheap because a run with nothing to
 // settle is one eth_call and a cached quote, and signs nothing.
 Schedule::command('predictions:resolve')->everyFiveMinutes()->withoutOverlapping();
+// The market map on /heatmap: CoinGecko's market plus a price snapshot of
+// every Cyberia launch, from which the 24h change is read.
+Schedule::command('heatmap:snapshot')->everyTenMinutes()->withoutOverlapping()->runInBackground();
 // Deposits that land on an address instead of arriving as a signed
 // transaction: nothing notifies this server, so it looks. Every two minutes
 // because that is a Monero block — polling faster asks the same question

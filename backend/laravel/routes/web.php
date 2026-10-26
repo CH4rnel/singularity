@@ -48,6 +48,7 @@ use App\Http\Controllers\DaoController;
 use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\FediverseController;
 use App\Http\Controllers\FujiController;
+use App\Http\Controllers\HeatmapController;
 use App\Http\Controllers\LainChatController;
 use App\Http\Controllers\LeaderboardController;
 use App\Http\Controllers\LinkController;
@@ -226,6 +227,8 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 // Public token directory + per-token pages the analytics list links into.
 // {token} accepts a 0x address or a symbol (e.g. /token/CYBER.sol).
 Route::get('/tokens', [TokenController::class, 'index'])->name('tokens.index');
+// Market map: crypto by sector and Cyberia's own tokens, sized by market cap.
+Route::get('/heatmap', HeatmapController::class)->name('heatmap');
 Route::get('/token/{token}', [TokenController::class, 'show'])->name('tokens.show');
 // What the coin is for, with the contract behind every claim — and the list of
 // things it deliberately does not do yet. Cited by the token pages and the nav.
