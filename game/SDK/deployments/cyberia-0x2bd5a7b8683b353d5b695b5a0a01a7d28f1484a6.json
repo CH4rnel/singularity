@@ -6,9 +6,7 @@
   "transactionHash": "0x046e62a4f6c5a9b3398fe7c6a20f4cb34fbfbb2cf8b524ea03ac45bd702eca6a",
   "blockNumber": 21933764,
   "blockHash": "0xb36b456a2ee8f15e8ae53c4b9e7cab9ffbd72e3008dff81c58a6b62f79df26ce",
-  "constructorArguments": [
-    "0x54BB8a86Fc001d5BB3e6C7ad2e2f153E5Fa6d7f6"
-  ],
+  "constructorArguments": ["0x54BB8a86Fc001d5BB3e6C7ad2e2f153E5Fa6d7f6"],
   "rulesVersion": 2,
   "phaseDuration": 600,
   "treasury": "0x54BB8a86Fc001d5BB3e6C7ad2e2f153E5Fa6d7f6",
