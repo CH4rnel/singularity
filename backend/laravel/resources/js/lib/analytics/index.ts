@@ -42,6 +42,7 @@ import type {
 import { isNativeShell, nativeShell } from '@/lib/native';
 import { replayEvent } from '@/lib/sessionReplay';
 import { telegramStartParam } from '@/lib/telegram';
+import { statsEvent } from '@/lib/webStats';
 
 export type { AnalyticsEventName, AnalyticsProperties };
 export { errorCode } from '@/lib/analytics/errors';
@@ -553,6 +554,8 @@ export const analytics = {
             // The name alone, so a recording can be found by what happened
             // in it; the properties stay in our own tables.
             replayEvent(event);
+            // And the dashboard's funnels, with what the allowlist kept.
+            statsEvent(event, sanitizeProperties(properties));
         } catch {
             /* Analytics is never the reason something failed. */
         }

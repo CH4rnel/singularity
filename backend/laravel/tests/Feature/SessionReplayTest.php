@@ -52,8 +52,9 @@ it('records the static landing page too', function () {
         ->and(strpos($html, '/replay/recorder.js'))->toBeLessThan(strpos($html, '</head>'));
 });
 
-it('serves the landing page untouched when recording is off', function () {
+it('serves the landing page untouched when recording and counting are off', function () {
     config()->set('replay.enabled', false);
+    config()->set('analytics.umami.enabled', false);
 
     expect($this->get(route('home'))->assertOk()->getContent())
         ->toBe(file_get_contents(resource_path('views/landing/index.html')));
