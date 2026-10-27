@@ -34,6 +34,7 @@ use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
 use App\Http\Controllers\ConsolePushController;
 use App\Http\Controllers\ConsoleReplayController;
+use App\Http\Controllers\ConsoleStatsController;
 use App\Http\Controllers\ConsoleStrategyController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
@@ -727,6 +728,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('replays/{session}/events', [ConsoleReplayController::class, 'events'])
             ->whereUuid('session')
             ->name('replays.events');
+
+        // Web analytics (Umami on this host): traffic, sources, funnels,
+        // retention. Not a lens but a door — it signs the operator into the
+        // dashboard and leaves.
+        Route::get('stats', ConsoleStatsController::class)->name('stats');
 
         // The editable content plan is framed like the frozen mockup, but its
         // working copy lives on the private disk and changes on an operator action.

@@ -324,6 +324,21 @@ string, and every string scrubbed of address-, hash- and key-shaped values
 before it is sent. Settings and the console are paused. Recordings are kept
 `replay.keep_days` (30) and then deleted with their rows by `replay:prune`.
 
+### Web analytics (Umami)
+
+Traffic — visits, sources and campaigns, countries, devices, funnels,
+retention, journeys, Web Vitals — is counted for every visitor by Umami
+(`services/umami/`, dashboard `stats.cyberia.church`, opened signed in from
+`/crm/stats`), on this host and nowhere else. It answers a question these
+tables refuse by design: they count installations of the wallet, while Umami
+counts browsers reading pages. It is skipped for exactly the people the recorder
+skips. It honours the same refusal and passes the installation id as its
+distinct id. It keeps only `utm_*` and `ref` from a query string and drops the
+referrer's query. Each event this client records is mirrored there by name,
+with the properties the allowlist kept, so a funnel can be built from wallet
+milestones. Its numbers are not this document's numbers. A Umami "visitor" is a
+browser, and nothing there knows whether a wallet was funded.
+
 ### Referrers and landing paths
 
 Referrers are reduced to `scheme://host` before storage; landing paths have

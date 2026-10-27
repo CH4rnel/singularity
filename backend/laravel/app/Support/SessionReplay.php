@@ -43,21 +43,7 @@ class SessionReplay
     {
         $script = public_path('replay/recorder.js');
 
-        if (! config('replay.enabled') || ! is_file($script)) {
-            return null;
-        }
-
-        if (EnsureCrmAdmin::allows($request->user())) {
-            return null;
-        }
-
-        $agent = (string) $request->userAgent();
-
-        if (str_contains($agent, 'CyberiaStore/') || str_contains($agent, 'CyberiaDesktop/')) {
-            return null;
-        }
-
-        if (config('analytics.respect_dnt') && ($request->header('DNT') === '1' || $request->header('Sec-GPC') === '1')) {
+        if (! config('replay.enabled') || ! is_file($script) || ! self::observes($request)) {
             return null;
         }
 
@@ -70,6 +56,26 @@ class SessionReplay
             'data-installation' => 'cyberia.analytics.uid',
             'data-who' => $user ? self::who((int) $user->getKey()) : null,
         ]);
+    }
+
+    /**
+     * Whether this visitor is observed at all — recorded here, counted by the
+     * page counter (`WebStats`). The list above is the same for both: a person
+     * the recorder leaves alone is not counted behind its back either.
+     */
+    public static function observes(Request $request): bool
+    {
+        if (EnsureCrmAdmin::allows($request->user())) {
+            return false;
+        }
+
+        $agent = (string) $request->userAgent();
+
+        if (str_contains($agent, 'CyberiaStore/') || str_contains($agent, 'CyberiaDesktop/')) {
+            return false;
+        }
+
+        return ! (config('analytics.respect_dnt') && ($request->header('DNT') === '1' || $request->header('Sec-GPC') === '1'));
     }
 
     /**
