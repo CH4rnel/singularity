@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use App\Support\SessionReplay;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 
 /**
@@ -80,15 +81,16 @@ it('never records an operator', function () {
         ->assertDontSee('/replay/recorder.js', false);
 });
 
-it('respects the browser and the shells that declare no recording', function (array $headers) {
-    $this->withHeaders($headers)->get(route('changelog'))
-        ->assertOk()
-        ->assertDontSee('/replay/recorder.js', false);
+it('respects the browser and the shells that declare no recording', function (array $server) {
+    // Asked of the gate itself: a store build is confined to /wallet, so a
+    // page request from one is a redirect before any layout renders.
+    expect(SessionReplay::for(Request::create('/changelog', 'GET', server: $server)))->toBeNull()
+        ->and(SessionReplay::for(Request::create('/changelog')))->not->toBeNull();
 })->with([
-    'do not track' => [['DNT' => '1']],
-    'global privacy control' => [['Sec-GPC' => '1']],
-    'store build' => [['User-Agent' => 'Mozilla/5.0 CyberiaStore/play']],
-    'desktop shell' => [['User-Agent' => 'Mozilla/5.0 CyberiaDesktop/1.0']],
+    'do not track' => [['HTTP_DNT' => '1']],
+    'global privacy control' => [['HTTP_SEC_GPC' => '1']],
+    'store build' => [['HTTP_USER_AGENT' => 'Mozilla/5.0 CyberiaStore/play']],
+    'desktop shell' => [['HTTP_USER_AGENT' => 'Mozilla/5.0 CyberiaDesktop/1.0']],
 ]);
 
 it('loads nothing when the recorder was not built', function () {
