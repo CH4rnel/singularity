@@ -84,6 +84,7 @@ use App\Services\LainChatService;
 use App\Services\SolanaRpcProxy;
 use App\Services\WalletPriceService;
 use App\Support\ProfileHandle;
+use App\Support\SessionReplay;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -123,8 +124,8 @@ Route::get('/{path?}', [LaunchpadController::class, 'showSubdomain'])
     ])
     ->name('launchpad.subdomain-site');
 
-Route::get('/', fn () => response()->file(resource_path('views/landing/index.html')))->name('home');
-Route::get('/thesis', fn () => response()->file(resource_path('views/landing/index1.html')))->name('thesis');
+Route::get('/', fn () => SessionReplay::page(resource_path('views/landing/index.html')))->name('home');
+Route::get('/thesis', fn () => SessionReplay::page(resource_path('views/landing/index1.html')))->name('thesis');
 Route::redirect('/underground', config('launchpad.underground_url'))->name('underground');
 Route::get('/robinhood-chain', function (BridgeConfigService $bridgeConfig) {
     $routes = array_values(array_filter(
