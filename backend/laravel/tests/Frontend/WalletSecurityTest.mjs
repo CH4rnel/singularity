@@ -45,6 +45,8 @@ function mountSecurity(reveal = async () => 'test backup') {
                     },
                 };
             if (name.includes('walletMessages')) return { walletMessages: {} };
+            if (name.includes('sessionReplay'))
+                return { setReplayEnabled() {} };
             throw new Error(`Unexpected import: ${name}`);
         },
         setTimeout(callback, delay) {

@@ -808,7 +808,8 @@ export const walletMessages: Messages = {
 
         gasStation: 'Gas station',
         otcTitle: 'OTC desk',
-        otcIntro: 'Trades at a price somebody names, wallet to wallet, on Cyberia Fuji. The seller puts the asset in escrow and states the price for all of it; a buyer pays exactly that. No pool, so no slippage, and no platform fee: the seller gets the whole payment, and gas is the only cost.',
+        otcIntro:
+            'Trades at a price somebody names, wallet to wallet, on Cyberia Fuji. The seller puts the asset in escrow and states the price for all of it; a buyer pays exactly that. No pool, so no slippage, and no platform fee: the seller gets the whole payment, and gas is the only cost.',
         otcNotDeployed: 'The OTC contract is not deployed on Cyberia Fuji yet.',
         otcBook: 'Offers',
         otcNew: 'New offer',
@@ -833,7 +834,8 @@ export const walletMessages: Messages = {
         otcExpiry: 'Expires',
         otcNever: 'Never',
         otcDays: '{days} d',
-        otcEscrowNote: 'What you sell leaves this wallet into the contract now and stays there until it is bought, you take it back, or it expires and is returned to you. No platform fee — only gas.',
+        otcEscrowNote:
+            'What you sell leaves this wallet into the contract now and stays there until it is bought, you take it back, or it expires and is returned to you. No platform fee — only gas.',
         otcYou: 'you',
         otcMinFill: 'Part from {amount}',
         otcExpired: 'expired',
@@ -1364,9 +1366,9 @@ export const walletMessages: Messages = {
         notificationsUnsupported: 'This browser cannot receive notifications.',
         notificationsUnavailable:
             'Needs anonymous statistics on: there is nothing to attach a subscription to without it.',
-        analyticsRow: 'Anonymous usage statistics',
+        analyticsRow: 'Usage statistics and session recordings',
         analyticsHint:
-            'Which screens are used and whether actions succeed. Never your seed phrase, keys, password, addresses or amounts.',
+            "Which screens are used, whether actions succeed, and recordings of taps and pointer movement with the wallet's text hidden. Never your seed phrase, keys, password, addresses or amounts.",
         analyticsBlocked: 'Off — your browser asks sites not to track you',
         networksSection: 'Networks',
         vettedEndpoints: 'Endpoints we checked',
@@ -3381,7 +3383,8 @@ export const walletMessages: Messages = {
 
         gasStation: 'Газовая станция',
         otcTitle: 'OTC-биржа',
-        otcIntro: 'Сделки по цене, которую назвал человек, из кошелька в кошелёк, в сети Cyberia Fuji. Продавец кладёт актив в эскроу и называет цену за весь объём, покупатель платит ровно её. Пула нет, поэтому нет проскальзывания, и нет комиссии площадки: продавец получает всю оплату, платится только газ.',
+        otcIntro:
+            'Сделки по цене, которую назвал человек, из кошелька в кошелёк, в сети Cyberia Fuji. Продавец кладёт актив в эскроу и называет цену за весь объём, покупатель платит ровно её. Пула нет, поэтому нет проскальзывания, и нет комиссии площадки: продавец получает всю оплату, платится только газ.',
         otcNotDeployed: 'Контракт OTC ещё не развёрнут в Cyberia Fuji.',
         otcBook: 'Предложения',
         otcNew: 'Новое предложение',
@@ -3406,7 +3409,8 @@ export const walletMessages: Messages = {
         otcExpiry: 'Срок',
         otcNever: 'Бессрочно',
         otcDays: '{days} дн.',
-        otcEscrowNote: 'То, что вы продаёте, сразу уходит из кошелька в контракт и лежит там, пока его не купят, вы его не заберёте или срок не выйдет и оно не вернётся к вам. Комиссии площадки нет, только газ.',
+        otcEscrowNote:
+            'То, что вы продаёте, сразу уходит из кошелька в контракт и лежит там, пока его не купят, вы его не заберёте или срок не выйдет и оно не вернётся к вам. Комиссии площадки нет, только газ.',
         otcYou: 'вы',
         otcMinFill: 'Частями от {amount}',
         otcExpired: 'срок вышел',
@@ -3916,9 +3920,9 @@ export const walletMessages: Messages = {
         notificationsUnsupported: 'Этот браузер не умеет получать уведомления.',
         notificationsUnavailable:
             'Нужна включённая анонимная статистика: без неё подписку не к чему привязать.',
-        analyticsRow: 'Анонимная статистика использования',
+        analyticsRow: 'Статистика и записи сессий',
         analyticsHint:
-            'Какими экранами пользуются и удаются ли действия. Никогда — сид-фраза, ключи, пароль, адреса и суммы.',
+            'Какими экранами пользуются, удаются ли действия, и записи нажатий и движений мыши со скрытым текстом кошелька. Никогда — сид-фраза, ключи, пароль, адреса и суммы.',
         analyticsBlocked: 'Выключено — браузер просит сайты не отслеживать вас',
         networksSection: 'Сети',
         vettedEndpoints: 'Эндпоинты, которые мы проверили',
@@ -5858,7 +5862,8 @@ export const walletMessages: Messages = {
 
         gasStation: '加油站',
         otcTitle: '场外交易',
-        otcIntro: '在 Cyberia Fuji 上，钱包对钱包、按对方报价成交。卖方将资产托管并为全部数量定价，买方按价支付。没有资金池，因此没有滑点；也没有平台手续费：卖方收到全部款项，只需支付 Gas。',
+        otcIntro:
+            '在 Cyberia Fuji 上，钱包对钱包、按对方报价成交。卖方将资产托管并为全部数量定价，买方按价支付。没有资金池，因此没有滑点；也没有平台手续费：卖方收到全部款项，只需支付 Gas。',
         otcNotDeployed: 'OTC 合约尚未部署到 Cyberia Fuji。',
         otcBook: '报价',
         otcNew: '新报价',
@@ -5883,7 +5888,8 @@ export const walletMessages: Messages = {
         otcExpiry: '有效期',
         otcNever: '永久',
         otcDays: '{days} 天',
-        otcEscrowNote: '您出售的资产会立即转入合约，直到被购买、您取回，或到期后退还给您。没有平台手续费，只有 Gas。',
+        otcEscrowNote:
+            '您出售的资产会立即转入合约，直到被购买、您取回，或到期后退还给您。没有平台手续费，只有 Gas。',
         otcYou: '您',
         otcMinFill: '最少购买 {amount}',
         otcExpired: '已过期',
@@ -6360,9 +6366,9 @@ export const walletMessages: Messages = {
         notificationsDenied: '已在浏览器中屏蔽 — 请在设置中允许本站发送通知。',
         notificationsUnsupported: '此浏览器无法接收通知。',
         notificationsUnavailable: '需要开启匿名统计：否则订阅无处可依。',
-        analyticsRow: '匿名使用统计',
+        analyticsRow: '使用统计与会话录制',
         analyticsHint:
-            '记录使用了哪些界面以及操作是否成功。绝不包含助记词、私钥、密码、地址或金额。',
+            '记录使用了哪些界面、操作是否成功，以及隐藏钱包文字后的点击和指针移动录制。绝不包含助记词、私钥、密码、地址或金额。',
         analyticsBlocked: '已关闭 — 你的浏览器要求网站不要追踪你',
         networksSection: '网络',
         vettedEndpoints: '我们核验过的端点',

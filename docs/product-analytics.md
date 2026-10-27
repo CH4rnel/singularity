@@ -306,6 +306,19 @@ The User Explorer shows a **count** of linked addresses, never the addresses.
 queue and forgets the installation id, so opting back in starts a new anonymous
 user rather than resuming a profile.
 
+### Session recordings
+
+Replays, heatmaps and rage/dead clicks come from Microsoft Clarity, which is a
+different system with a different promise: it records *how* screens are used,
+these tables record *what* happened. The two share one refusal — the notice's
+"Don't record" and the switch above both write `cyberia.analytics.optout`, and
+the Clarity tag never loads while it is set — and Clarity hears the event
+*names* from this client, never their properties. What it may see and who it
+never records is decided in `App\Support\SessionReplay`: the wallet's text,
+the person's own addresses and every input are masked in code (not in the
+Clarity dashboard), settings and the console are paused, and operators, store
+builds, the desktop shell and DNT/GPC browsers are never sent the tag.
+
 ### Referrers and landing paths
 
 Referrers are reduced to `scheme://host` before storage; landing paths have

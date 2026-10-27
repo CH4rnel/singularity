@@ -13,11 +13,14 @@ import SettingsLayout from '@/layouts/settings/Layout.vue';
 import WalletFrameLayout from '@/layouts/WalletFrameLayout.vue';
 import Web3Layout from '@/layouts/Web3Layout.vue';
 import {
+    analytics,
     configureAnalytics,
     initializeAnalytics,
+    installationId,
     rememberAttribution,
 } from '@/lib/analytics';
 import { initializeNativeShell, isNativeShell } from '@/lib/native';
+import { followReplayPage, onReplayRefused } from '@/lib/sessionReplay';
 import { initializeTelegram } from '@/lib/telegram';
 import { track } from '@/lib/track';
 
@@ -136,6 +139,10 @@ const hasVault = (): boolean => {
 const isWalletSurface = (component: string): boolean =>
     WALLET_COMPONENTS.includes(component) || isNativeShell() || hasVault();
 
+// "Don't record" on the recording notice is the same refusal as Wallet →
+// Security's statistics switch, so it also forgets the installation id.
+onReplayRefused(() => analytics.setEnabled(false));
+
 // Funnel: one page_view per Inertia navigation (initial load included).
 router.on('navigate', (event) => {
     track('page_view', {
@@ -168,4 +175,8 @@ router.on('navigate', (event) => {
     if (isWalletSurface(event.detail.page.component)) {
         initializeAnalytics();
     }
+
+    // Session recording: paused on the screens that hold secrets, tagged with
+    // the screen and the installation everywhere else.
+    followReplayPage(event.detail.page, installationId());
 });
