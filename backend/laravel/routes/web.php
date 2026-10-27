@@ -33,6 +33,7 @@ use App\Http\Controllers\ConsoleController;
 use App\Http\Controllers\ConsoleMockupController;
 use App\Http\Controllers\ConsoleNumbersController;
 use App\Http\Controllers\ConsolePushController;
+use App\Http\Controllers\ConsoleReplayController;
 use App\Http\Controllers\ConsoleStrategyController;
 use App\Http\Controllers\CrmContactController;
 use App\Http\Controllers\CrmController;
@@ -714,6 +715,18 @@ Route::middleware(['auth'])->group(function () {
         // answer lived in a tinker session.
         Route::get('push', [ConsolePushController::class, 'index'])->name('push');
         Route::post('push', [ConsolePushController::class, 'store'])->name('push.send');
+
+        // Session recordings, kept on this server: where people click in rage
+        // or on nothing, the errors their browsers threw, a heat map per page
+        // and the player. Static addresses before {session}.
+        Route::get('replays', [ConsoleReplayController::class, 'index'])->name('replays');
+        Route::get('replays/heatmap', [ConsoleReplayController::class, 'heatmap'])->name('replays.heatmap');
+        Route::get('replays/{session}', [ConsoleReplayController::class, 'show'])
+            ->whereUuid('session')
+            ->name('replays.show');
+        Route::get('replays/{session}/events', [ConsoleReplayController::class, 'events'])
+            ->whereUuid('session')
+            ->name('replays.events');
 
         // The editable content plan is framed like the frozen mockup, but its
         // working copy lives on the private disk and changes on an operator action.

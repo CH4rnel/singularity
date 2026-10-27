@@ -283,7 +283,7 @@ onMounted(() => scrollToBottom(false));
     <Head title="Talk to Lain" />
 
     <!-- A conversation is not something to watch over somebody's shoulder. -->
-    <PageShell size="wide" data-clarity-mask="True">
+    <PageShell size="wide" data-replay-mask>
         <template #hero>
             <PageHero
                 eyebrow="LainOS / personal agent"
