@@ -11,7 +11,8 @@
 #                   fixed ids the sites' tags already carry
 #   5. certificate  stats.cyberia.church through the webroot, so the existing
 #                   `certbot renew` cron keeps it (the wildcard lineage is
-#                   renewed by hand and would take this host down with it)
+#                   renewed by hand and would take this host down with it),
+#                   and readable by the group nginx's workers run as
 #   6. console      the admin password into Laravel's .env, so /crm/stats can
 #                   sign an operator in without anybody typing it
 #
@@ -128,6 +129,25 @@ if [ ! -s "$CERTBOT_DIR/conf/live/$HOST/fullchain.pem" ]; then
         certbot/certbot certonly --webroot -w /var/www/certbot -d "$HOST" \
         --non-interactive --agree-tos --register-unsafely-without-email \
         || echo "umami: no certificate for $HOST yet" >&2
+fi
+
+# nginx reads this certificate per handshake (proxy/stats.conf.template), which
+# happens in a worker running as the image's nginx user, not as root. Certbot
+# leaves live/ and archive/ 0700 and the key 0600, so this one lineage is opened
+# to that group; certbot carries a key's group bits over to its renewal.
+NGINX_GID=${NGINX_GID:-101}
+if [ -s "$CERTBOT_DIR/conf/live/$HOST/fullchain.pem" ]; then
+    for dir in live archive; do
+        chgrp "$NGINX_GID" "$CERTBOT_DIR/conf/$dir" "$CERTBOT_DIR/conf/$dir/$HOST"
+        chmod g+rx "$CERTBOT_DIR/conf/$dir" "$CERTBOT_DIR/conf/$dir/$HOST"
+    done
+    chgrp "$NGINX_GID" "$CERTBOT_DIR/conf/archive/$HOST/"*.pem
+    chmod g+r "$CERTBOT_DIR/conf/archive/$HOST/"*.pem
+
+    if docker exec proxy test -e /etc/nginx/conf.d/stats.conf 2>/dev/null \
+        && ! docker exec -u nginx proxy cat "/etc/letsencrypt/live/$HOST/privkey.pem" >/dev/null 2>&1; then
+        echo "umami: nginx workers cannot read the certificate for $HOST" >&2
+    fi
 fi
 
 if [ -f "$LARAVEL_ENV" ]; then

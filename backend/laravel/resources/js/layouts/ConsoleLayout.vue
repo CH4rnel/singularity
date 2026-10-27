@@ -13,6 +13,7 @@ import {
     usd,
 } from '@/lib/console';
 import { consoleMessages } from '@/lib/consoleMessages';
+import crm from '@/routes/crm';
 import profile from '@/routes/crm/profile';
 
 /**
@@ -165,7 +166,7 @@ const LENSES = [
     // this host. A door out of the console rather than a lens of it.
     {
         key: 'stats',
-        href: '/crm/stats',
+        href: crm.stats().url,
         label: 'nav.stats',
         badge: null,
         phone: false,
