@@ -67,6 +67,7 @@ async function toggleTheme() {
     const previous = theme.value;
     theme.value = theme.value === 'cyberia' ? 'yotsuba' : 'cyberia';
     themeForm.theme = theme.value;
+
     try {
         await themeForm.submit(profile.theme());
     } catch {
@@ -148,6 +149,15 @@ const LENSES = [
         key: 'push',
         href: '/crm/push',
         label: 'nav.push',
+        badge: null,
+        phone: false,
+    },
+    // Why, after the numbers said what: recordings, heat maps, rage and dead
+    // clicks. A desk lens — nobody watches a replay on a phone.
+    {
+        key: 'replays',
+        href: '/crm/replays',
+        label: 'nav.replays',
         badge: null,
         phone: false,
     },

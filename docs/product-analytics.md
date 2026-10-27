@@ -308,16 +308,21 @@ user rather than resuming a profile.
 
 ### Session recordings
 
-Replays, heatmaps and rage/dead clicks come from Microsoft Clarity, which is a
-different system with a different promise: it records *how* screens are used,
-these tables record *what* happened. The two share one refusal — the notice's
-"Don't record" and the switch above both write `cyberia.analytics.optout`, and
-the Clarity tag never loads while it is set — and Clarity hears the event
-*names* from this client, never their properties. What it may see and who it
-never records is decided in `App\Support\SessionReplay`: the wallet's text,
-the person's own addresses and every input are masked in code (not in the
-Clarity dashboard), settings and the console are paused, and operators, store
-builds, the desktop shell and DNT/GPC browsers are never sent the tag.
+Replays, click heat maps and rage/dead clicks are a different system with a
+different promise: they record *how* screens are used, these tables record
+*what* happened. They are recorded by rrweb in the browser and kept on this
+server (`/api/replay` → `replay_*` tables and gzip chunks on the private disk,
+read at `/crm/replays`); nothing is sent to a third party, which is why this is
+not a hosted tool. The two systems share one refusal — the recorder's notice
+and the switch above both write `cyberia.analytics.optout`, and the recorder
+records nothing while it is set — and recordings hear the event *names* from
+this client, never their properties. Who is never sent the recorder is decided
+in `App\Support\SessionReplay` (operators, store builds, the desktop shell,
+DNT/GPC). What leaves a recorded page: every input masked, text under
+`data-replay-mask` as asterisks, `data-replay-block` as an empty box, no query
+string, and every string scrubbed of address-, hash- and key-shaped values
+before it is sent. Settings and the console are paused. Recordings are kept
+`replay.keep_days` (30) and then deleted with their rows by `replay:prune`.
 
 ### Referrers and landing paths
 

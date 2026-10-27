@@ -232,14 +232,4 @@ return [
         'contract_address' => env('CYBERIA_PROFILE_ADDRESS', '0xa9101ee859850c037b0867156b3535F78A387C0d'),
     ],
 
-    // Microsoft Clarity: session replays, heatmaps, rage/dead clicks. The
-    // project id is public (it is in every recorded page's HTML), so it may
-    // live here rather than only in .env. Production only unless
-    // CLARITY_ENABLED says otherwise, so local work never lands in the
-    // recordings. Who is excluded and what is masked: App\Support\SessionReplay.
-    'clarity' => [
-        'enabled' => (bool) env('CLARITY_ENABLED', env('APP_ENV') === 'production'),
-        'project_id' => env('CLARITY_PROJECT_ID', ''),
-    ],
-
 ];

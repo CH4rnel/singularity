@@ -16,11 +16,10 @@ import {
     analytics,
     configureAnalytics,
     initializeAnalytics,
-    installationId,
     rememberAttribution,
 } from '@/lib/analytics';
 import { initializeNativeShell, isNativeShell } from '@/lib/native';
-import { followReplayPage, onReplayRefused } from '@/lib/sessionReplay';
+import { onReplayRefused } from '@/lib/sessionReplay';
 import { initializeTelegram } from '@/lib/telegram';
 import { track } from '@/lib/track';
 
@@ -175,8 +174,4 @@ router.on('navigate', (event) => {
     if (isWalletSurface(event.detail.page.component)) {
         initializeAnalytics();
     }
-
-    // Session recording: paused on the screens that hold secrets, tagged with
-    // the screen and the installation everywhere else.
-    followReplayPage(event.detail.page, installationId());
 });

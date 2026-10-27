@@ -332,7 +332,7 @@ async function copy(key: string, value: string | null | undefined) {
     <Head title="Profile" />
 
     <!-- Deposit addresses and the person's own wallets: never in a recording. -->
-    <div class="mx-auto max-w-4xl px-4 py-8" data-clarity-mask="True">
+    <div class="mx-auto max-w-4xl px-4 py-8" data-replay-mask>
         <!-- Profile hero -->
         <header
             class="mb-6 flex flex-col items-start gap-4 rounded-lg border border-border/70 bg-card p-6 sm:flex-row sm:items-center"

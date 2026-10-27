@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\IrcLainController;
 use App\Http\Controllers\Api\LaunchpadController;
 use App\Http\Controllers\Api\NFTController;
 use App\Http\Controllers\Api\OpsHeartbeatController;
+use App\Http\Controllers\Api\ReplayIngestController;
 use App\Http\Controllers\Api\SlotsController;
 use App\Http\Controllers\Api\SolanaRpcController;
 use App\Http\Controllers\Api\SolanaWalletAuthController;
@@ -118,6 +119,14 @@ Route::prefix('wallet')->group(function () {
  */
 Route::post('wallet/onramp/webhook/{name}', [WalletOnrampController::class, 'webhook'])
     ->middleware('throttle:120,1');
+
+/*
+ * Session recordings from cyberia.church, lain-os.com and chaos.fm — the
+ * recorder's chunks, kept on this server and read at /crm/replays. Open to
+ * other origins like the rest of /api; which site a chunk belongs to is read
+ * from the browser's Origin, never from the body. See ReplayIngestController.
+ */
+Route::post('replay', [ReplayIngestController::class, 'store'])->middleware('throttle:120,1')->name('api.replay');
 
 /*
  * Product analytics for the wallet: acquisition, onboarding, funding,

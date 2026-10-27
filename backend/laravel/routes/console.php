@@ -65,6 +65,9 @@ Schedule::command('crm:chat-prune')->daily()->withoutOverlapping();
 // The inference API's metering log is a quota and an invoice, not an archive
 // of who asked what — drop rows once they are past the retention window.
 Schedule::command('ai:prune-usage')->daily()->withoutOverlapping();
+// Session recordings are for finding what is broken this month: a month of
+// everybody's pointer is kept, then the files and their rows go together.
+Schedule::command('replay:prune')->dailyAt('04:30')->withoutOverlapping();
 // Sponsored fees fail silently: when the tank or the operator key runs dry the
 // button simply stops working, and nobody reports a wallet that never offered
 // them anything. Reads only, and it shouts at most once every six hours.
