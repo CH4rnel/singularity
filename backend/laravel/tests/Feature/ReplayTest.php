@@ -156,11 +156,24 @@ it('forgets a session the visitor refused', function () {
     Storage::disk('local')->assertMissing("replay/{$id}/1.json.gz");
 });
 
+it('never takes a refusal for anything but a session id', function () {
+    $id = (string) Str::uuid();
+    sendReplay(replayChunk($id, 1))->assertStatus(202);
+
+    foreach (['.', '..', '../replay', 'x/../..', ''] as $path) {
+        sendReplay(['v' => 1, 's' => $path, 'forget' => true])->assertStatus(202);
+    }
+
+    Storage::disk('local')->assertExists("replay/{$id}/1.json.gz");
+    expect(ReplaySession::find($id))->not->toBeNull()
+        ->and(fn () => ReplaySession::directory('..'))->toThrow(InvalidArgumentException::class);
+});
+
 it('shows recordings to operators only', function () {
     $id = (string) Str::uuid();
     sendReplay(replayChunk($id, 1))->assertStatus(202);
 
-    $this->get('/crm/replays')->assertNotFound();
+    $this->get('/crm/replays')->assertRedirect();
     $this->actingAs(User::factory()->create())->get('/crm/replays')->assertNotFound();
 
     $operator = User::factory()->create();

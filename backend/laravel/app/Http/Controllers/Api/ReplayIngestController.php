@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 /**
  * Where the session recorder sends what it saw: cyberia.church, lain-os.com
@@ -226,13 +227,16 @@ class ReplayIngestController extends Controller
      */
     private function forget(array $payload, string $site): JsonResponse
     {
-        $id = is_string($payload['s'] ?? null) ? strtolower($payload['s']) : '';
-        $session = preg_match('/^[0-9a-f-]{36}$/', $id) ? ReplaySession::query()->find($id) : null;
+        $id = $payload['s'] ?? null;
 
-        if ($session && $session->site === $site) {
-            $session->forget();
-        } elseif ($session === null && $id !== '') {
-            Storage::disk('local')->deleteDirectory(ReplaySession::directory($id));
+        // Only ever a session id: anything else would name a path on disk.
+        // A chunk written without its row is left to `replay:prune`.
+        if (is_string($id) && Str::isUuid($id)) {
+            $session = ReplaySession::query()->find(strtolower($id));
+
+            if ($session && $session->site === $site) {
+                $session->forget();
+            }
         }
 
         return response()->json(['ok' => true], 202);

@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 /**
  * One recorded tab: counters here, rrweb's events in gzip chunks on the
@@ -38,6 +40,11 @@ class ReplaySession extends Model
 
     public static function directory(string $id): string
     {
+        // The id becomes a path, and a path is what gets deleted.
+        if (! Str::isUuid($id)) {
+            throw new InvalidArgumentException('A replay session id is a UUID.');
+        }
+
         return 'replay/'.$id;
     }
 
