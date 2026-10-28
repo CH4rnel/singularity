@@ -45,6 +45,7 @@ test('both stores leave out the launchpad and tokenised stocks', () => {
     for (const edition of ['play', 'appstore']) {
         assert.equal(isHiddenIn(edition, 'launchpad'), true);
         assert.equal(isHiddenIn(edition, 'stocks'), true);
+
         // The wallet itself stays whole.
         for (const section of ['portfolio', 'bridge', 'earn', 'nft', 'dao', 'chat', 'feed']) {
             assert.equal(isHiddenIn(edition, section), false, `${edition}:${section}`);

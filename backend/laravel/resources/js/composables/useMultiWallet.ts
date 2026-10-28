@@ -130,6 +130,8 @@ import { executeShop } from '@/lib/wallet/shop';
 import type { ShopAction } from '@/lib/wallet/shop';
 import { executeSwap } from '@/lib/wallet/swap';
 import type { SwapQuote, SwapReceipt } from '@/lib/wallet/swap';
+import type { AdminRequest } from '@/lib/wallet/tokenAdmin';
+import { submitOperation } from '@/lib/wallet/tokenAdmin';
 import { buyVpnPass } from '@/lib/wallet/vpn';
 import { executeWrap } from '@/lib/wallet/wrap';
 import type { WrapQuote } from '@/lib/wallet/wrap';
@@ -1792,6 +1794,8 @@ export const useMultiWallet = (rpc: WalletRpcEndpoints = {}) => {
     };
 
     const chainAdmin = {
+        tokenOperation: (request: AdminRequest): Promise<string> =>
+            chainWrite((source, rpcUrl) => submitOperation(source, request, rpcUrl)),
         setFeeConfig: (
             config: FeeConfig,
             latestBaseFee: bigint,

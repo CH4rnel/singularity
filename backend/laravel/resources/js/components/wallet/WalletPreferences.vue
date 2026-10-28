@@ -21,6 +21,7 @@ import {
     setNativeStartup,
 } from '@/lib/native';
 import { storeEdition } from '@/lib/storeEdition';
+import { tokenAdminMessages } from '@/lib/tokenAdminMessages';
 import {
     enableWalletNotifications,
     playWalletSound,
@@ -57,11 +58,13 @@ defineEmits<{
     accounts: [];
     networks: [];
     chain: [];
+    tokenAdmin: [];
     proxy: [];
     developer: [];
 }>();
 
 const { t, locale, available, setLocale } = useLocale(walletMessages);
+const { t: tokenAdminText } = useLocale(tokenAdminMessages);
 
 /*
  * Appearance, which used to be two controls bolted to other people's chrome:
@@ -413,6 +416,9 @@ onBeforeUnmount(unsubscribe);
                 @click="$emit('chain')"
             >
                 {{ t('chainDoor') }} →
+            </button>
+            <button type="button" class="cw-line-row" @click="$emit('tokenAdmin')">
+                {{ tokenAdminText('door') }} →
             </button>
             <button type="button" class="cw-line-row" @click="$emit('proxy')">
                 {{ t('proxyTitle') }} →

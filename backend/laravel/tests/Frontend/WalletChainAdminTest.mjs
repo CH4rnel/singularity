@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Interface } from 'ethers';
+import { networksOn } from '@/lib/wallet/catalogue';
 import {
     FEE_FIELDS,
     canManage,
@@ -11,7 +12,6 @@ import {
     transferCost,
     transfersLeft,
 } from '@/lib/wallet/chainAdmin';
-import { networksOn } from '@/lib/wallet/catalogue';
 import { isCoreChain, shippedChainByEvmId } from '@/lib/wallet/chains';
 
 const ETH_PRICED_MIN = 7_200_000_000_000_000n;
@@ -100,12 +100,20 @@ test('connected fee changes reject a different wallet account before sending', a
     const provider = {
         async request({ method }) {
             methods.push(method);
-            if (method === 'eth_chainId') return '0xc0ff';
-            if (method === 'eth_accounts') return ['0x0000000000000000000000000000000000000001'];
+
+            if (method === 'eth_chainId') {
+return '0xc0ff';
+}
+
+            if (method === 'eth_accounts') {
+return ['0x0000000000000000000000000000000000000001'];
+}
+
             throw new Error(`Unexpected request: ${method}`);
         },
     };
     selectEvmWalletProvider({ id: 'test', name: 'test', source: 'legacy', provider });
+
     try {
         await assert.rejects(
             submitConnectedFeeConfig('0x0000000000000000000000000000000000000002', {

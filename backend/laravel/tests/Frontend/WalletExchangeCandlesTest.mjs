@@ -68,6 +68,7 @@ test('malformed bars, impossible OHLC, and bars outside the selected window are 
     const bad = (index, value) => {
         const row = binanceRow();
         row[index] = value;
+
         return row;
     };
     const bars = parseExchangeCandles(
@@ -127,6 +128,7 @@ test('the public Binance feed sends only an allowlisted pair and period with no 
         assert.equal(options.credentials, 'omit');
         assert.equal(options.referrerPolicy, 'no-referrer');
         assert.ok(options.signal instanceof AbortSignal);
+
         return new Response(
             JSON.stringify([binanceRow(Math.floor(Date.now() / 1000))]),
         );
@@ -149,6 +151,7 @@ test('Monero uses Kraken and the year window requests daily candles', async (t) 
             Number(url.searchParams.get('since')) <
                 Date.now() / 1000 - 364 * 86400,
         );
+
         return new Response(
             JSON.stringify({
                 error: [],
@@ -199,6 +202,7 @@ test('HTTP errors, empty feeds, and cancelled requests reject instead of display
     );
     mock.mock.mockImplementation(async (_url, options) => {
         options.signal.throwIfAborted();
+
         throw new Error('Unexpected non-aborted request');
     });
     await assert.rejects(
