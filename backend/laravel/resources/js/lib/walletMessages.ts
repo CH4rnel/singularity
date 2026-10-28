@@ -2605,9 +2605,11 @@ export const walletMessages: Messages = {
         chainMinterAllowed: 'allowed',
         chainMinterNot: 'not allowed',
         chainMintersNote: 'Nobody else can create CYBER on this chain.',
+        chainConnectPhone: 'Connect phone wallet (WalletConnect)',
+        chainConnectedPhone: 'Connected wallet: {address}',
         chainAdmin: 'Admin controls',
         chainAdminNone:
-            'Only an account the chain lists as its admin can change the rules (now {address}). Import that key into this wallet and the controls appear here.',
+            'Only an account the chain lists as its admin can change the rules (now {address}). Connect that account to reveal the controls.',
         chainAdminYou:
             'This account is the chain’s admin. Every change is a transaction it signs, and the chain applies it in the next block.',
         chainSetFee: 'Transfer price',
@@ -5124,9 +5126,11 @@ export const walletMessages: Messages = {
         chainMinterAllowed: 'разрешено',
         chainMinterNot: 'не разрешено',
         chainMintersNote: 'Больше никто не может создавать CYBER в этой сети.',
+        chainConnectPhone: 'Подключить кошелёк на телефоне (WalletConnect)',
+        chainConnectedPhone: 'Подключённый кошелёк: {address}',
         chainAdmin: 'Управление',
         chainAdminNone:
-            'Менять правила может только аккаунт, который сеть записала админом (сейчас {address}). Импортируйте его ключ в этот кошелёк, и здесь появятся кнопки.',
+            'Менять правила может только аккаунт, который сеть записала админом (сейчас {address}). Подключите этот аккаунт, чтобы увидеть кнопки.',
         chainAdminYou:
             'Этот аккаунт — админ сети. Каждое изменение — транзакция, которую он подписывает; сеть применяет её в следующем блоке.',
         chainSetFee: 'Цена перевода',
@@ -7507,9 +7511,11 @@ export const walletMessages: Messages = {
         chainMinterAllowed: '允许',
         chainMinterNot: '不允许',
         chainMintersNote: '在这条链上没有其他人可以创造 CYBER。',
+        chainConnectPhone: '连接手机钱包（WalletConnect）',
+        chainConnectedPhone: '已连接钱包：{address}',
         chainAdmin: '管理',
         chainAdminNone:
-            '只有链上登记为管理员的账户可以修改规则（当前为 {address}）。把该密钥导入这个钱包，按钮就会出现在这里。',
+            '只有链上登记为管理员的账户可以修改规则（当前为 {address}）。连接该账户后即可显示按钮。',
         chainAdminYou:
             '这个账户是链的管理员。每次修改都是它签名的一笔交易，链会在下一个区块生效。',
         chainSetFee: '转账价格',
