@@ -42,6 +42,7 @@ it('records an ordinary visitor with our own recorder', function () {
         ->assertSee('src="/replay/recorder.js?v=', false)
         ->assertSee('data-endpoint="'.url('/api/replay').'"', false)
         ->assertSee('data-paused="/crm,/settings,/teams,/admin"', false)
+        ->assertSee('data-hide-notice="true"', false)
         ->assertDontSee('clarity.ms', false);
 });
 
@@ -49,6 +50,7 @@ it('records the static landing page too', function () {
     $html = $this->get(route('home'))->assertOk()->getContent();
 
     expect($html)->toContain('/replay/recorder.js')
+        ->toContain('data-hide-notice="true"')
         ->and(strpos($html, '/replay/recorder.js'))->toBeLessThan(strpos($html, '</head>'));
 });
 

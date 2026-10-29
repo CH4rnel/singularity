@@ -694,7 +694,9 @@ const boot = (): void => {
     };
 
     start();
-    showNotice();
+    if (options.hideNotice !== 'true') {
+        showNotice();
+    }
 };
 
 if (document.readyState === 'loading') {

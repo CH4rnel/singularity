@@ -54,6 +54,7 @@ class SessionReplay
             'data-endpoint' => url('/api/replay'),
             'data-paused' => implode(',', config('replay.paused_paths')),
             'data-installation' => 'cyberia.analytics.uid',
+            'data-hide-notice' => 'true',
             'data-who' => $user ? self::who((int) $user->getKey()) : null,
         ]);
     }
