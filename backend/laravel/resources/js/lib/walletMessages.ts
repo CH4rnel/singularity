@@ -98,6 +98,7 @@ export const walletMessages: Messages = {
 
         // Local app preferences
         preferencesTitle: 'Settings',
+        privacyPolicy: 'Privacy policy',
         preferencesBody:
             'Accounts, security, networks and proxies, plus appearance and notifications — all wallet settings in one place.',
         preferencesNotifications: 'System notifications',
@@ -2716,6 +2717,7 @@ export const walletMessages: Messages = {
 
         // Локальные настройки приложения
         preferencesTitle: 'Настройки',
+        privacyPolicy: 'Политика конфиденциальности',
         preferencesBody:
             'Счета, безопасность, сети и прокси, а также внешний вид и уведомления — все настройки кошелька в одном месте.',
         preferencesNotifications: 'Системные уведомления',
@@ -5236,6 +5238,7 @@ export const walletMessages: Messages = {
 
         // 本地应用设置
         preferencesTitle: '设置',
+        privacyPolicy: '隐私政策',
         preferencesBody:
             '账户、安全、网络和代理，以及外观与通知 — 所有钱包设置集中在这里。',
         preferencesNotifications: '系统通知',

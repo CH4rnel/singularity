@@ -423,6 +423,14 @@ onBeforeUnmount(unsubscribe);
             <button type="button" class="cw-line-row" @click="$emit('proxy')">
                 {{ t('proxyTitle') }} →
             </button>
+            <a
+                class="cw-line-row"
+                href="https://cyberia.church/privacy/cyberia-wallet-app.html"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                {{ t('privacyPolicy') }} ↗
+            </a>
         </div>
 
         <WalletSync
